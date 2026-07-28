@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.db.AnnotationKind
+import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
@@ -17,14 +20,20 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.exportNotebookMarkdown
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -38,6 +47,7 @@ import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.streamer.PublicationOpener
+import java.util.UUID
 
 class ReaderViewModel(
     private val bookUrl: AbsoluteUrl,
@@ -50,6 +60,7 @@ class ReaderViewModel(
     private val assetRetriever: AssetRetriever,
     private val publicationOpener: PublicationOpener,
     private val progressDao: ReadingProgressDao,
+    private val annotationDao: BookAnnotationDao,
     private val library: LocalLibraryRepository,
     private val prefsRepo: ReaderPreferencesRepository,
 ) : ViewModel() {
@@ -77,6 +88,18 @@ class ReaderViewModel(
 
     /** Offer to return to where reading was before the last jump. */
     val jumpBack: StateFlow<JumpBack?> = _jumpBack.asStateFlow()
+
+    /** Highlights, notes and bookmarks in this book, in reading order. */
+    val annotations: StateFlow<List<BookAnnotation>> = annotationDao.observe(bookId)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /**
+     * Raised when the reader selects text in the page. The navigator knows
+     * where the selection is, so the screen picks the details up from there
+     * rather than the view model carrying a reference to it.
+     */
+    private val _selectionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val selectionRequests: SharedFlow<Unit> = _selectionRequests.asSharedFlow()
 
     private var publication: Publication? = null
     private var bookPositions: BookPositions? = null
@@ -236,6 +259,116 @@ class ReaderViewModel(
         )
     }
 
+    /** Called by the navigator when the reader has selected some text. */
+    fun onTextSelected() {
+        _selectionRequests.tryEmit(Unit)
+    }
+
+    /** Marks a passage, or recolours a mark that is already there. */
+    fun highlight(locator: Locator, tint: HighlightTint, existingId: String? = null) {
+        val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
+        save(
+            annotation(locator, AnnotationKind.HIGHLIGHT).copy(
+                id = existing?.id ?: UUID.randomUUID().toString(),
+                note = existing?.note,
+                tint = tint.name,
+                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                kind = existing?.kind ?: AnnotationKind.HIGHLIGHT.name,
+            ),
+        )
+    }
+
+    /** Attaches the reader's own words to a passage. */
+    fun addNote(locator: Locator, note: String, existingId: String? = null) {
+        val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
+        save(
+            annotation(locator, AnnotationKind.NOTE).copy(
+                id = existing?.id ?: UUID.randomUUID().toString(),
+                note = note,
+                tint = existing?.tint ?: HighlightTint.DEFAULT.name,
+                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    /** The mark covering this locator, if the reader tapped an existing one. */
+    fun annotationAt(locator: Locator): BookAnnotation? {
+        val progression = locator.locations.totalProgression ?: return null
+        return annotations.value
+            .filter { it.kind != AnnotationKind.BOOKMARK.name }
+            .firstOrNull {
+                val other = it.totalProgression ?: return@firstOrNull false
+                kotlin.math.abs(other - progression) < EPSILON
+            }
+    }
+
+    /** Puts a bookmark on the current page, or takes it off again. */
+    fun toggleBookmark() {
+        val locator = lastLocator ?: return
+        val existing = bookmarkForCurrentPage()
+        if (existing != null) {
+            viewModelScope.launch { annotationDao.delete(existing) }
+        } else {
+            save(annotation(locator, AnnotationKind.BOOKMARK))
+        }
+    }
+
+    /**
+     * True when the page on screen is already bookmarked. It has to watch
+     * the position as well as the marks, or the ribbon would stay out for
+     * the rest of the book once a single page was bookmarked.
+     */
+    val bookmarked: StateFlow<Boolean> = combine(annotations, _progress) { list, _ ->
+        list.any { it.kind == AnnotationKind.BOOKMARK.name && it.isHere() }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private fun bookmarkForCurrentPage(): BookAnnotation? =
+        annotations.value.firstOrNull {
+            it.kind == AnnotationKind.BOOKMARK.name && it.isHere()
+        }
+
+    private fun BookAnnotation.isHere(): Boolean {
+        val page = _progress.value?.position
+        if (page != null && position != null) return position == page
+        val here = lastLocator?.locations?.totalProgression ?: return false
+        val there = totalProgression ?: return false
+        return kotlin.math.abs(here - there) < EPSILON
+    }
+
+    fun remove(annotation: BookAnnotation) {
+        viewModelScope.launch { annotationDao.delete(annotation) }
+    }
+
+    /** The notebook as Markdown, ready to be shared. */
+    fun notebookMarkdown(): String =
+        exportNotebookMarkdown(
+            title = publication?.metadata?.title.orEmpty(),
+            author = publication?.metadata?.authors?.firstOrNull()?.name,
+            annotations = annotations.value,
+        )
+
+    private fun save(annotation: BookAnnotation) {
+        viewModelScope.launch { annotationDao.upsert(annotation) }
+    }
+
+    private fun annotation(locator: Locator, kind: AnnotationKind): BookAnnotation {
+        val progression = locator.locations.totalProgression
+        val position = locator.locations.position
+            ?: progression?.let { bookPositions?.positionAtProgression(it.toFloat()) }
+        return BookAnnotation(
+            id = UUID.randomUUID().toString(),
+            bookId = bookId,
+            kind = kind.name,
+            locatorJson = locator.toJSON().toString(),
+            text = locator.text.highlight?.takeIf { it.isNotBlank() },
+            tint = if (kind == AnnotationKind.BOOKMARK) null else HighlightTint.DEFAULT.name,
+            chapter = position?.let { chapterTitleAtPosition(it) } ?: locator.title,
+            position = position,
+            totalProgression = progression,
+            createdAt = System.currentTimeMillis(),
+        )
+    }
+
     fun setFont(font: ReaderFont) = viewModelScope.launch { prefsRepo.setFont(font) }
 
     fun setFontSize(size: Double) = viewModelScope.launch { prefsRepo.setFontSize(size) }
@@ -278,6 +411,7 @@ class ReaderViewModel(
                     assetRetriever = container.assetRetriever,
                     publicationOpener = container.publicationOpener,
                     progressDao = container.database.readingProgressDao(),
+                    annotationDao = container.database.annotationDao(),
                     library = container.libraryRepository,
                     prefsRepo = container.readerPreferences,
                 )

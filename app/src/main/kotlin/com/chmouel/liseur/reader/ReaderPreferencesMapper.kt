@@ -1,5 +1,8 @@
 package com.chmouel.liseur.reader
 
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
 import androidx.compose.ui.graphics.toArgb
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -37,13 +40,38 @@ fun ReaderPrefs.toEpubPreferences(): EpubPreferences =
     )
 
 /**
- * Navigator configuration declaring the bundled reading fonts,
- * served from the app's assets.
+ * Navigator configuration declaring the bundled reading fonts, served from
+ * the app's assets, and taking over what happens when text is selected.
+ *
+ * The system's own selection menu is refused so the app can put its own
+ * bar next to the words instead: the platform bar floats where it likes,
+ * offers actions a book has no use for, and cannot show highlight colours.
  */
 @OptIn(ExperimentalReadiumApi::class)
-fun epubNavigatorConfiguration(): EpubNavigatorFragment.Configuration =
+fun epubNavigatorConfiguration(
+    onTextSelected: () -> Unit = {},
+): EpubNavigatorFragment.Configuration =
     EpubNavigatorFragment.Configuration {
         servedAssets = listOf("fonts/.*")
+        selectionActionModeCallback = object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                onTextSelected()
+                // The mode has to be accepted or the web view drops the
+                // selection along with it; emptying the menu is what keeps
+                // the platform bar from ever being drawn.
+                menu.clear()
+                return true
+            }
+
+            override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+                menu.clear()
+                return true
+            }
+
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem) = false
+
+            override fun onDestroyActionMode(mode: ActionMode) = Unit
+        }
 
         addFontFamilyDeclaration(FontFamily(checkNotNull(ReaderFont.LITERATA.cssName))) {
             addFontFace {

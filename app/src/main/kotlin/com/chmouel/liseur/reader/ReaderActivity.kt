@@ -68,7 +68,9 @@ class ReaderActivity : FragmentActivity() {
                             s.navigatorFactory.createFragmentFactory(
                                 initialLocator = viewModel.lastLocator ?: s.initialLocator,
                                 initialPreferences = viewModel.prefs.value.toEpubPreferences(),
-                                configuration = epubNavigatorConfiguration(),
+                                configuration = epubNavigatorConfiguration(
+                                    onTextSelected = viewModel::onTextSelected,
+                                ),
                             ).also { supportFragmentManager.fragmentFactory = it }
                         }
                         ReaderScreen(
@@ -100,6 +102,19 @@ class ReaderActivity : FragmentActivity() {
                                     chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
                                     positionAtProgression = viewModel::positionAtProgression,
                                     locatorAtPosition = viewModel::locatorAtPosition,
+                                )
+                            },
+                            annotationsFlow = viewModel.annotations,
+                            bookmarkedFlow = viewModel.bookmarked,
+                            selectionRequests = viewModel.selectionRequests,
+                            onAnnotationAction = remember {
+                                ReaderAnnotationActions(
+                                    highlight = viewModel::highlight,
+                                    addNote = viewModel::addNote,
+                                    annotationAt = viewModel::annotationAt,
+                                    toggleBookmark = viewModel::toggleBookmark,
+                                    remove = viewModel::remove,
+                                    notebookMarkdown = viewModel::notebookMarkdown,
                                 )
                             },
                             onBack = ::finish,

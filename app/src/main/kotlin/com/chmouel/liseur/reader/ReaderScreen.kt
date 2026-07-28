@@ -56,7 +56,24 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.compose.AndroidFragment
+import android.graphics.RectF
+import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.reader.annotations.BookmarkRibbon
+import com.chmouel.liseur.reader.annotations.DECORATION_GROUP
+import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.reader.annotations.NoteDialog
+import com.chmouel.liseur.reader.annotations.SelectionActions
+import com.chmouel.liseur.reader.annotations.SelectionPopup
+import com.chmouel.liseur.reader.annotations.locator
+import com.chmouel.liseur.reader.annotations.lookUp
+import com.chmouel.liseur.reader.annotations.shareText
+import com.chmouel.liseur.reader.annotations.webSearch
+import com.chmouel.liseur.reader.annotations.toDecorations
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -72,6 +89,7 @@ import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
@@ -95,6 +113,10 @@ fun ReaderScreen(
     onPageTurnerChanged: (PageTurner?) -> Unit,
     onPrefsAction: ReaderPrefsActions,
     onProgressAction: ReaderProgressActions,
+    annotationsFlow: StateFlow<List<BookAnnotation>>,
+    bookmarkedFlow: StateFlow<Boolean>,
+    selectionRequests: SharedFlow<Unit>,
+    onAnnotationAction: ReaderAnnotationActions,
     onBack: () -> Unit,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
@@ -105,7 +127,12 @@ fun ReaderScreen(
     val prefs by prefsFlow.collectAsStateWithLifecycle()
     val progress by progressFlow.collectAsStateWithLifecycle()
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
+    val annotations by annotationsFlow.collectAsStateWithLifecycle()
+    val bookmarked by bookmarkedFlow.collectAsStateWithLifecycle()
+    var selection by remember { mutableStateOf<ActiveSelection?>(null) }
+    var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     val view = LocalView.current
+    val context = LocalContext.current
     val effectScope = rememberCoroutineScope()
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
     val pageTurner = remember {
@@ -127,6 +154,26 @@ fun ReaderScreen(
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
         prefsFlow.collect { nav.submitPreferences(it.toEpubPreferences()) }
+    }
+
+    // Picking the selection up from the navigator when it tells us the
+    // reader made one, and turning it into a place to put the action bar.
+    LaunchedEffect(navigator) {
+        val nav = navigator ?: return@LaunchedEffect
+        selectionRequests.collect {
+            val current = nav.currentSelection() ?: return@collect
+            selection = ActiveSelection(
+                locator = current.locator,
+                rect = current.rect,
+                existing = onAnnotationAction.annotationAt(current.locator),
+            )
+        }
+    }
+
+    // Draw the marks the reader has made over the page.
+    LaunchedEffect(navigator, annotations) {
+        val nav = navigator ?: return@LaunchedEffect
+        nav.applyDecorations(annotations.toDecorations(), DECORATION_GROUP)
     }
 
     DisposableEffect(navigator) {
@@ -172,6 +219,19 @@ fun ReaderScreen(
         }
 
         PageTurnOverlay(pageTurnEffect)
+
+        BookmarkRibbon(
+            bookmarked = bookmarked,
+            theme = prefs.theme,
+            onToggle = {
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                onAnnotationAction.toggleBookmark()
+            },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(end = 10.dp),
+        )
 
         Column(
             Modifier
@@ -263,6 +323,59 @@ fun ReaderScreen(
         }
     }
 
+    selection?.let { active ->
+        SelectionPopup(
+            offset = active.popupOffset(),
+            activeTint = active.existing?.tint?.let(HighlightTint::fromName),
+            actions = remember(active) {
+                SelectionActions(
+                    onHighlight = { tint ->
+                        onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
+                        navigator?.clearSelection()
+                        selection = null
+                    },
+                    onNote = {
+                        noteFor = active
+                        navigator?.clearSelection()
+                        selection = null
+                    },
+                    onSearch = {
+                        context.webSearch(active.text)
+                        selection = null
+                    },
+                    onLookUp = {
+                        context.lookUp(active.text)
+                        selection = null
+                    },
+                    onShare = {
+                        context.shareText(active.text, publication.metadata.title)
+                        selection = null
+                    },
+                    onDelete = active.existing?.let { existing ->
+                        {
+                            onAnnotationAction.remove(existing)
+                            navigator?.clearSelection()
+                            selection = null
+                        }
+                    },
+                )
+            },
+            onDismiss = { selection = null },
+        )
+    }
+
+    noteFor?.let { active ->
+        NoteDialog(
+            passage = active.text,
+            initialNote = active.existing?.note.orEmpty(),
+            onSave = { note ->
+                onAnnotationAction.addNote(active.locator, note, active.existing?.id)
+                noteFor = null
+            },
+            onDismiss = { noteFor = null },
+        )
+    }
+
     if (showTypography) {
         TypographySheet(
             prefs = prefs,
@@ -285,6 +398,22 @@ fun ReaderScreen(
             publication = publication,
             theme = prefs.theme,
             currentHref = here?.value?.href?.toString(),
+            annotations = annotations,
+            onAnnotationSelected = { annotation ->
+                annotation.locator()?.let {
+                    showToc = false
+                    chromeVisible = false
+                    onProgressAction.onJump()
+                    navigator?.go(it, animated = false)
+                }
+            },
+            onAnnotationDeleted = onAnnotationAction.remove,
+            onExport = {
+                context.shareText(
+                    onAnnotationAction.notebookMarkdown(),
+                    publication.metadata.title,
+                )
+            },
             onClose = { showToc = false },
             onEntrySelected = { link ->
                 showToc = false
@@ -298,7 +427,41 @@ fun ReaderScreen(
     }
 }
 
-/** Bundle of preference setters passed down to the reader chrome. */class ReaderPrefsActions(
+/** A passage the reader has just selected, and any mark already on it. */
+private data class ActiveSelection(
+    val locator: Locator,
+    val rect: RectF?,
+    val existing: BookAnnotation?,
+) {
+    val text: String get() = locator.text.highlight.orEmpty()
+
+    /**
+     * Where to put the action bar: above the selection when it fits, below
+     * it otherwise, so the words being acted on are never covered.
+     */
+    fun popupOffset(): IntOffset {
+        val r = rect ?: return IntOffset(0, 0)
+        val above = r.top - POPUP_HEIGHT_PX
+        val y = if (above > 0) above else r.bottom + POPUP_GAP_PX
+        return IntOffset(0, y.toInt())
+    }
+}
+
+private const val POPUP_HEIGHT_PX = 160f
+private const val POPUP_GAP_PX = 24f
+
+/** Bundle of annotation actions passed down to the reader chrome. */
+class ReaderAnnotationActions(
+    val highlight: (Locator, HighlightTint, String?) -> Unit,
+    val addNote: (Locator, String, String?) -> Unit,
+    val annotationAt: (Locator) -> BookAnnotation?,
+    val toggleBookmark: () -> Unit,
+    val remove: (BookAnnotation) -> Unit,
+    val notebookMarkdown: () -> String,
+)
+
+/** Bundle of preference setters passed down to the reader chrome. */
+class ReaderPrefsActions(
     val setFont: (ReaderFont) -> Unit,
     val setFontSize: (Double) -> Unit,
     val setTheme: (ReaderTheme) -> Unit,

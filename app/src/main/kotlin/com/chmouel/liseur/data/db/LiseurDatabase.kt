@@ -7,8 +7,14 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 
 @Database(
-    entities = [ReadingProgress::class, Book::class, LibraryFolder::class, CalibreServer::class],
-    version = 5,
+    entities = [
+        ReadingProgress::class,
+        Book::class,
+        LibraryFolder::class,
+        CalibreServer::class,
+        BookAnnotation::class,
+    ],
+    version = 6,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -16,6 +22,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun calibreServerDao(): CalibreServerDao
+    abstract fun annotationDao(): BookAnnotationDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -72,6 +79,34 @@ abstract class LiseurDatabase : RoomDatabase() {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE reading_progress ADD COLUMN status TEXT")
                 connection.execSQL("ALTER TABLE reading_progress ADD COLUMN synced_at INTEGER")
+            }
+        }
+
+        /** Adds highlights, notes and bookmarks. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `annotations` (
+                        `id` TEXT NOT NULL,
+                        `book_id` TEXT NOT NULL,
+                        `kind` TEXT NOT NULL,
+                        `locator_json` TEXT NOT NULL,
+                        `text` TEXT,
+                        `note` TEXT,
+                        `tint` TEXT,
+                        `chapter` TEXT,
+                        `position` INTEGER,
+                        `total_progression` REAL,
+                        `created_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_annotations_book_id` " +
+                        "ON `annotations` (`book_id`)",
+                )
             }
         }
     }
