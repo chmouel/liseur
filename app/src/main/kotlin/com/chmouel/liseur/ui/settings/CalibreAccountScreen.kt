@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,6 +53,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.calibre.PositionSyncStatus
 import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.db.CalibreServer
 
@@ -70,6 +72,7 @@ fun CalibreAccountScreen(
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
     onDisconnect: () -> Unit,
+    onSyncNow: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -113,6 +116,8 @@ fun CalibreAccountScreen(
                 ConnectedCard(
                     server = server,
                     storage = state.storage,
+                    syncStatus = state.syncStatus,
+                    onSyncNow = onSyncNow,
                     busy = state.connecting,
                     onRetryCapabilities = onRetryCapabilities,
                     onKoboToken = onKoboToken,
@@ -230,10 +235,12 @@ private fun ConnectForm(
 private fun ConnectedCard(
     server: CalibreServer,
     storage: StorageUse,
+    syncStatus: PositionSyncStatus,
     busy: Boolean,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
     onDisconnect: () -> Unit,
+    onSyncNow: () -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -289,6 +296,20 @@ private fun ConnectedCard(
         },
         tone = if (server.canSync) NoticeTone.GOOD else NoticeTone.NEUTRAL,
     )
+
+    if (server.canSync) {
+        Text(
+            text = syncStatus.describe(server.positionSyncedAt),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(
+            onClick = onSyncNow,
+            enabled = syncStatus != PositionSyncStatus.Syncing,
+        ) {
+            Text(stringResource(R.string.calibre_sync_now))
+        }
+    }
 
     AdvancedSection(server = server, onKoboToken = onKoboToken)
 
@@ -370,3 +391,19 @@ private fun AccountError.messageRes(): Int = when (this) {
     AccountError.UNREACHABLE -> R.string.calibre_error_unreachable
     AccountError.UNREACHABLE_TRY_HTTP -> R.string.calibre_error_https
 }
+
+/** Plain words for how the last position sync went. */
+@Composable
+private fun PositionSyncStatus.describe(lastSyncedAt: Long?): String = when (this) {
+    PositionSyncStatus.Syncing -> stringResource(R.string.calibre_sync_running)
+    PositionSyncStatus.Offline -> stringResource(R.string.calibre_sync_offline)
+    PositionSyncStatus.Unavailable -> stringResource(R.string.calibre_sync_off)
+    is PositionSyncStatus.Synced -> stringResource(R.string.calibre_sync_last, relative(at))
+    PositionSyncStatus.Idle -> lastSyncedAt
+        ?.let { stringResource(R.string.calibre_sync_last, relative(it)) }
+        ?: stringResource(R.string.calibre_sync_never)
+}
+
+@Composable
+private fun relative(at: Long): CharSequence =
+    DateUtils.getRelativeTimeSpanString(at, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)

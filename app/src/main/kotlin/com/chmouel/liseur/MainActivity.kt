@@ -68,6 +68,7 @@ private fun CalibreAccountRoute(
         onRetryCapabilities = viewModel::retryCapabilities,
         onKoboToken = viewModel::setKoboToken,
         onDisconnect = viewModel::disconnect,
+        onSyncNow = viewModel::syncPositions,
         onBack = onBack,
     )
 }

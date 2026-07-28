@@ -8,7 +8,7 @@ import androidx.sqlite.execSQL
 
 @Database(
     entities = [ReadingProgress::class, Book::class, LibraryFolder::class, CalibreServer::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -64,6 +64,14 @@ abstract class LiseurDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE books ADD COLUMN download_href TEXT")
+            }
+        }
+
+        /** Remembers how a reading position stands with the server. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN status TEXT")
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN synced_at INTEGER")
             }
         }
     }

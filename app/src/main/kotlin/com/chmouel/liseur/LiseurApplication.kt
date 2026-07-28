@@ -9,6 +9,7 @@ import coil3.disk.directory
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.chmouel.liseur.data.calibre.CalibreAuthInterceptor
+import com.chmouel.liseur.sync.PositionSyncWorker
 
 class LiseurApplication : Application(), SingletonImageLoader.Factory {
     lateinit var container: AppContainer
@@ -17,6 +18,8 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        PositionSyncWorker.syncNow(this)
+        PositionSyncWorker.schedulePeriodic(this)
     }
 
     /**

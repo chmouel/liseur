@@ -55,6 +55,11 @@
     <string name="calibre_password_storage_note">Your password is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it, as calibre-web requires.</string>
     <string name="book_on_server">On the server</string>
     <string name="book_not_downloaded">This book is still on the server.</string>
+    <string name="calibre_sync_now">Sync reading positions now</string>
+    <string name="calibre_sync_running">Syncing reading positions…</string>
+    <string name="calibre_sync_offline">Could not reach the server; positions will sync later.</string>
+    <string name="calibre_sync_never">Reading positions have not synced yet.</string>
+    <string name="calibre_sync_last">Reading positions synced %1$s</string>
     <string name="show_password">Show password</string>
     <string name="hide_password">Hide password</string>
     <string name="calibre_storage_empty">No books downloaded yet</string>

@@ -15,6 +15,8 @@ import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.domain.EPSILON
+import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
@@ -107,9 +109,23 @@ class ReaderViewModel(
                     _state.value = UiState.Failure(it.message)
                     return@launch
                 }
-            val initialLocator = progressDao.get(bookId)
+            val stored = progressDao.get(bookId)
                 ?.also { speed = ReadingSpeedEstimator(it.readingSpeed) }
-                ?.let { Locator.fromJSON(JSONObject(it.locatorJson)) }
+            var initialLocator = stored?.locatorJson
+                ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+
+            // A position that came from another device is only a
+            // percentage, so it no longer matches the locator saved here.
+            // Turning it into a real place means laying the book out
+            // before showing it: a moment's wait, but only on the first
+            // open after syncing.
+            val wanted = stored?.totalProgression
+            if (wanted != null && !initialLocator.isAt(wanted)) {
+                val positions = BookPositions.of(publication)
+                bookPositions = positions
+                positions.locatorAt(positions.positionAtProgression(wanted.toFloat()))
+                    ?.let { initialLocator = it }
+            }
             lastLocator = initialLocator
             library.markOpened(bookId)
             this@ReaderViewModel.publication = publication
@@ -120,9 +136,15 @@ class ReaderViewModel(
             )
             // Computing positions parses the whole book, so it runs
             // after the reader is on screen.
-            bookPositions = BookPositions.of(publication)
+            if (bookPositions == null) bookPositions = BookPositions.of(publication)
             lastLocator?.let { _progress.value = progressAt(it) }
         }
+    }
+
+    /** True when this locator already sits at [progression] within a page. */
+    private fun Locator?.isAt(progression: Double): Boolean {
+        val here = this?.locations?.totalProgression ?: return false
+        return kotlin.math.abs(here - progression) < EPSILON
     }
 
     fun onLocatorChanged(locator: Locator) {
@@ -144,6 +166,10 @@ class ReaderViewModel(
                     totalProgression = locator.locations.totalProgression,
                     readingSpeed = speed.speed,
                     updatedAt = System.currentTimeMillis(),
+                    status = ReadingStatus.forProgression(
+                        locator.locations.totalProgression,
+                    ).wireName,
+                    syncedAt = progressDao.get(bookId)?.syncedAt,
                 ),
             )
         }

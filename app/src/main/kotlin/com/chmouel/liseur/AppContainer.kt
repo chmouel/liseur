@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
+import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -36,6 +37,7 @@ class AppContainer(context: Context) {
             LiseurDatabase.MIGRATION_1_2,
             LiseurDatabase.MIGRATION_2_3,
             LiseurDatabase.MIGRATION_3_4,
+            LiseurDatabase.MIGRATION_4_5,
         )
         .build()
 
@@ -54,6 +56,12 @@ class AppContainer(context: Context) {
     val bookDownloads = BookDownloadRepository(
         context = context.applicationContext,
         bookDao = database.bookDao(),
+    )
+
+    val koboSync = KoboSyncRepository(
+        serverDao = database.calibreServerDao(),
+        bookDao = database.bookDao(),
+        progressDao = database.readingProgressDao(),
     )
 
     val calibreCatalog = CalibreCatalogRepository(

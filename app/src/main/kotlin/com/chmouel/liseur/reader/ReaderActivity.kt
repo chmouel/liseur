@@ -13,6 +13,7 @@ import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.reader.chrome.PageTurner
+import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -110,6 +111,13 @@ class ReaderActivity : FragmentActivity() {
     }
 
     /** Volume keys turn pages, like the Kindle app's optional setting. */
+    override fun onStop() {
+        super.onStop()
+        // Leaving the book is the moment the position is worth sending:
+        // it is settled, and the reader is likely to pick up elsewhere.
+        PositionSyncWorker.pushBook(this, bookId)
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val turner = pageTurner ?: return super.onKeyDown(keyCode, event)
         return when (keyCode) {

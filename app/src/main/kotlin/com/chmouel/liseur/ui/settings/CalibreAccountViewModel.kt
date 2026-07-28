@@ -9,6 +9,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.calibre.KoboSyncRepository
+import com.chmouel.liseur.data.calibre.PositionSyncStatus
 import com.chmouel.liseur.data.calibre.SetupFailure
 import com.chmouel.liseur.data.calibre.SetupResult
 import com.chmouel.liseur.data.calibre.StorageUse
@@ -35,11 +37,13 @@ data class CalibreAccountUiState(
     val connecting: Boolean = false,
     val error: AccountError? = null,
     val storage: StorageUse = StorageUse(count = 0, bytes = 0),
+    val syncStatus: PositionSyncStatus = PositionSyncStatus.Idle,
 )
 
 class CalibreAccountViewModel(
     private val repository: CalibreAccountRepository,
     downloads: BookDownloadRepository,
+    private val koboSync: KoboSyncRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CalibreAccountUiState())
@@ -56,6 +60,16 @@ class CalibreAccountViewModel(
                 _state.update { it.copy(storage = use) }
             }
         }
+        viewModelScope.launch {
+            koboSync.status.collect { status ->
+                _state.update { it.copy(syncStatus = status) }
+            }
+        }
+    }
+
+    /** Reconciles reading positions now, for the "Sync now" button. */
+    fun syncPositions() {
+        viewModelScope.launch { koboSync.sync() }
     }
 
     fun setUrl(value: String) = _state.update { it.copy(url = value, error = null) }
@@ -121,6 +135,7 @@ class CalibreAccountViewModel(
                 CalibreAccountViewModel(
                     repository = container.calibreAccount,
                     downloads = container.bookDownloads,
+                    koboSync = container.koboSync,
                 )
             }
         }
