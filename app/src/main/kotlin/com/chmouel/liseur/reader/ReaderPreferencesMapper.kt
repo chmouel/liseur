@@ -27,8 +27,13 @@ fun ReaderPrefs.toEpubPreferences(): EpubPreferences =
         textColor = if (theme == ReaderTheme.BLACK) Color(theme.foreground.toArgb()) else null,
         lineHeight = lineHeight,
         pageMargins = pageMargins,
-        // Line height and margins only apply when publisher styles are off.
-        publisherStyles = if (lineHeight != null || pageMargins != null) false else null,
+        // Readium CSS only applies font-size and advanced settings (line
+        // height, margins…) when publisher styles are turned off.
+        publisherStyles = if (fontSize != 1.0 || lineHeight != null || pageMargins != null) {
+            false
+        } else {
+            null
+        },
     )
 
 /**

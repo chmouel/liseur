@@ -2,6 +2,7 @@ package com.chmouel.liseur.reader
 
 import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -65,6 +66,9 @@ import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 
+/** Duration of the gentle chrome show/hide animation. */
+private const val CHROME_ANIM_MS = 300
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalReadiumApi::class)
 @Composable
 fun ReaderScreen(
@@ -127,8 +131,8 @@ fun ReaderScreen(
 
         AnimatedVisibility(
             visible = chromeVisible,
-            enter = slideInVertically { -it } + fadeIn(),
-            exit = slideOutVertically { -it } + fadeOut(),
+            enter = slideInVertically(tween(CHROME_ANIM_MS)) { -it } + fadeIn(tween(CHROME_ANIM_MS)),
+            exit = slideOutVertically(tween(CHROME_ANIM_MS)) { -it } + fadeOut(tween(CHROME_ANIM_MS)),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             TopAppBar(

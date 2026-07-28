@@ -14,14 +14,15 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  * │          chrome           │  ← top strip reveals the menu
  * ├─────────┬────────┬────────┤
  * │         │        │        │
- * │  back   │forward │forward │  ← sides turn pages
+ * │  back   │ chrome │forward │  ← center also reveals the menu
  * │         │        │        │
  * └─────────┴────────┴────────┘
  * ```
  *
- * The top strip reveals the chrome (bars/menu) while reading fullscreen;
- * the left side goes back a page and the rest goes forward. When the
- * chrome is showing, any tap on the page dismisses it.
+ * Tapping the top strip or the center of the page gently reveals the
+ * chrome (menu), as fullscreen reading apps do; the left side goes
+ * back a page and the rest goes forward. When the chrome is showing,
+ * any tap on the page dismisses it.
  */
 @OptIn(ExperimentalReadiumApi::class)
 class ReaderTapZones(
@@ -44,7 +45,7 @@ class ReaderTapZones(
         val x = event.point.x / width
         val y = event.point.y / height
         return when {
-            y < CHROME_ZONE -> {
+            y < CHROME_ZONE || (x in CHROME_X && y in CHROME_Y) -> {
                 onShowChrome()
                 true
             }
@@ -69,6 +70,10 @@ class ReaderTapZones(
     companion object {
         /** Top strip of the screen that reveals the chrome. */
         const val CHROME_ZONE = 0.14f
+
+        /** Center box of the page that also reveals the chrome. */
+        val CHROME_X = 0.3f..0.7f
+        val CHROME_Y = 0.3f..0.7f
 
         /** Left portion of the screen that turns back a page. */
         const val BACK_ZONE = 0.3f

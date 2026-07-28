@@ -17,11 +17,17 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.BrightnessHigh
 import androidx.compose.material.icons.outlined.BrightnessLow
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -31,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,7 +76,7 @@ fun TypographySheet(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             ThemeRow(selected = prefs.theme, onSelected = onThemeSelected)
-            FontList(selected = prefs.font, onSelected = onFontSelected)
+            FontDropdown(selected = prefs.font, onSelected = onFontSelected)
             FontSizeSlider(value = prefs.fontSize, onChanged = onFontSizeChanged)
             BrightnessSlider(value = prefs.brightness, onChanged = onBrightnessChanged)
             LayoutControls(
@@ -126,31 +133,54 @@ private fun ThemeRow(selected: ReaderTheme, onSelected: (ReaderTheme) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FontList(selected: ReaderFont, onSelected: (ReaderFont) -> Unit) {
+private fun FontDropdown(selected: ReaderFont, onSelected: (ReaderFont) -> Unit) {
     val context = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionLabel("Font")
-        ReaderFont.entries.forEach { font ->
-            val family = remember(font) { font.composeFamily(context.assets) }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+        ) {
+            OutlinedTextField(
+                value = selected.displayName,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(
+                    fontFamily = remember(selected) { selected.composeFamily(context.assets) },
+                    fontSize = 18.sp,
+                ),
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onSelected(font) }
-                    .padding(vertical = 10.dp),
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
             ) {
-                Text(
-                    text = font.displayName,
-                    fontFamily = family,
-                    fontSize = 18.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                if (font == selected) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                ReaderFont.entries.forEach { font ->
+                    val family = remember(font) { font.composeFamily(context.assets) }
+                    DropdownMenuItem(
+                        text = {
+                            Text(font.displayName, fontFamily = family, fontSize = 18.sp)
+                        },
+                        trailingIcon = {
+                            if (font == selected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        },
+                        onClick = {
+                            onSelected(font)
+                            expanded = false
+                        },
                     )
                 }
             }
