@@ -18,6 +18,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -107,7 +113,11 @@ import org.readium.r2.shared.publication.Publication
 /** Duration of the gentle chrome show/hide animation. */
 private const val CHROME_ANIM_MS = 300
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalReadiumApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalReadiumApi::class,
+    ExperimentalLayoutApi::class,
+)
 @Composable
 fun ReaderScreen(
     publication: Publication,
@@ -243,9 +253,17 @@ fun ReaderScreen(
         // The page keeps its own breathing room: Readium's own padding
         // is switched off (see dimens.xml) because it is applied after
         // the page is laid out, which cuts the last line in half.
+        //
+        // The bars and the cutout are measured *ignoring visibility*, so
+        // hiding the chrome does not change the height Readium paginates
+        // against. Otherwise every page would be re-laid-out on each tap,
+        // and a line would end up hidden under the gesture bar or the
+        // notch — close enough to fit that the page becomes scrollable by
+        // a few pixels, which is exactly the itch we are scratching.
         AndroidFragment<EpubNavigatorFragment>(
             modifier = Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(readerInsets())
                 .padding(top = 12.dp, bottom = 26.dp),
         ) { fragment ->
             navigator = fragment
@@ -262,7 +280,7 @@ fun ReaderScreen(
             },
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .windowInsetsPadding(WindowInsets.statusBars)
+                .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
                 .padding(end = 10.dp),
         )
 
@@ -270,7 +288,7 @@ fun ReaderScreen(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars),
+                .windowInsetsPadding(WindowInsets.navigationBarsIgnoringVisibility),
         ) {
             jumpBack?.let { target ->
                 JumpBackPill(
@@ -661,3 +679,12 @@ fun ReaderErrorScreen(message: String, onBack: () -> Unit) {
         }
     }
 }
+
+/**
+ * The space a page of text may actually use: everything but the system bars
+ * and the display cutout, whether or not the bars happen to be on screen.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun readerInsets(): WindowInsets =
+    WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
