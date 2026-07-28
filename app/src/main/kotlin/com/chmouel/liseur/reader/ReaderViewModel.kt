@@ -10,9 +10,16 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.ReaderTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
@@ -29,6 +36,7 @@ class ReaderViewModel(
     private val publicationOpener: PublicationOpener,
     private val progressDao: ReadingProgressDao,
     private val library: LocalLibraryRepository,
+    private val prefsRepo: ReaderPreferencesRepository,
 ) : ViewModel() {
 
     sealed interface UiState {
@@ -46,6 +54,9 @@ class ReaderViewModel(
     private val _state = MutableStateFlow<UiState>(UiState.Loading)
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    val prefs: StateFlow<ReaderPrefs> = prefsRepo.prefs
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
+
     /** Most recent position, used to persist progress and to survive recreation. */
     var lastLocator: Locator? = null
         private set
@@ -56,6 +67,9 @@ class ReaderViewModel(
 
     private fun open() {
         viewModelScope.launch {
+            // Make sure saved preferences are loaded before the navigator is
+            // created, so the book opens directly with the user's settings.
+            prefsRepo.prefs.first()
             val asset = assetRetriever.retrieve(bookUrl).getOrElse {
                 _state.value = UiState.Failure(it.message)
                 return@launch
@@ -92,6 +106,18 @@ class ReaderViewModel(
         }
     }
 
+    fun setFont(font: ReaderFont) = viewModelScope.launch { prefsRepo.setFont(font) }
+
+    fun setFontSize(size: Double) = viewModelScope.launch { prefsRepo.setFontSize(size) }
+
+    fun setTheme(theme: ReaderTheme) = viewModelScope.launch { prefsRepo.setTheme(theme) }
+
+    fun setLineHeight(value: Double?) = viewModelScope.launch { prefsRepo.setLineHeight(value) }
+
+    fun setPageMargins(value: Double?) = viewModelScope.launch { prefsRepo.setPageMargins(value) }
+
+    fun setBrightness(value: Float?) = viewModelScope.launch { prefsRepo.setBrightness(value) }
+
     override fun onCleared() {
         (_state.value as? UiState.Ready)?.publication?.close()
     }
@@ -106,6 +132,7 @@ class ReaderViewModel(
                     publicationOpener = container.publicationOpener,
                     progressDao = container.database.readingProgressDao(),
                     library = container.libraryRepository,
+                    prefsRepo = container.readerPreferences,
                 )
             }
         }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -36,6 +37,8 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         folderDao = database.libraryFolderDao(),
     )
+
+    val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
 }
 
 val Context.container: AppContainer

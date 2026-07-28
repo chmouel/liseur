@@ -12,6 +12,7 @@ readium = "3.3.0"
 room = "2.8.4"
 coil = "3.5.0"
 documentfile = "1.1.0"
+datastore = "1.2.1"
 desugar = "2.1.5"
 junit = "4.13.2"
 
@@ -38,6 +39,7 @@ room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar" }
 junit = { module = "junit:junit", version.ref = "junit" }
 

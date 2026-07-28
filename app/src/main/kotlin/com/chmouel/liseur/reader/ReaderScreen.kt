@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -50,7 +51,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.compose.AndroidFragment
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
+import com.chmouel.liseur.reader.chrome.TypographySheet
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -62,20 +69,30 @@ import org.readium.r2.shared.publication.Publication
 @Composable
 fun ReaderScreen(
     publication: Publication,
+    prefsFlow: StateFlow<ReaderPrefs>,
     onLocatorChanged: (Locator) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
+    onPrefsAction: ReaderPrefsActions,
     onBack: () -> Unit,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     var chromeVisible by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
+    var showTypography by remember { mutableStateOf(false) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
+    val prefs by prefsFlow.collectAsStateWithLifecycle()
 
     LaunchedEffect(navigator) {
         onNavigatorChanged(navigator)
         // The navigator replays its current locator on subscription; only
         // subsequent changes need persisting.
         navigator?.currentLocator?.drop(1)?.collect(onLocatorChanged)
+    }
+
+    // Apply preference changes to the rendered book as they happen.
+    LaunchedEffect(navigator) {
+        val nav = navigator ?: return@LaunchedEffect
+        prefsFlow.collect { nav.submitPreferences(it.toEpubPreferences()) }
     }
 
     DisposableEffect(navigator) {
@@ -95,11 +112,12 @@ fun ReaderScreen(
     }
 
     ImmersiveMode(hideSystemBars = !chromeVisible)
+    ScreenBrightness(brightness = prefs.brightness)
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(prefs.theme.background),
     ) {
         AndroidFragment<EpubNavigatorFragment>(
             modifier = Modifier.fillMaxSize(),
@@ -131,6 +149,12 @@ fun ReaderScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showTypography = true }) {
+                        Text(
+                            text = "Aa",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                     IconButton(onClick = { showToc = true }) {
                         Icon(
                             Icons.AutoMirrored.Outlined.List,
@@ -139,10 +163,26 @@ fun ReaderScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                    containerColor = prefs.theme.background,
+                    titleContentColor = prefs.theme.foreground,
+                    navigationIconContentColor = prefs.theme.foreground,
+                    actionIconContentColor = prefs.theme.foreground,
                 ),
             )
         }
+    }
+
+    if (showTypography) {
+        TypographySheet(
+            prefs = prefs,
+            onFontSelected = onPrefsAction.setFont,
+            onFontSizeChanged = onPrefsAction.setFontSize,
+            onThemeSelected = onPrefsAction.setTheme,
+            onLineHeightChanged = onPrefsAction.setLineHeight,
+            onPageMarginsChanged = onPrefsAction.setPageMargins,
+            onBrightnessChanged = onPrefsAction.setBrightness,
+            onDismiss = { showTypography = false },
+        )
     }
 
     if (showToc) {
@@ -157,6 +197,16 @@ fun ReaderScreen(
         )
     }
 }
+
+/** Bundle of preference setters passed down to the reader chrome. */
+class ReaderPrefsActions(
+    val setFont: (ReaderFont) -> Unit,
+    val setFontSize: (Double) -> Unit,
+    val setTheme: (ReaderTheme) -> Unit,
+    val setLineHeight: (Double?) -> Unit,
+    val setPageMargins: (Double?) -> Unit,
+    val setBrightness: (Float?) -> Unit,
+)
 
 /** Hides the status and navigation bars while the chrome is hidden. */
 @Composable
@@ -178,6 +228,25 @@ private fun ImmersiveMode(hideSystemBars: Boolean) {
             val window = (view.context as? Activity)?.window ?: return@onDispose
             WindowCompat.getInsetsController(window, view)
                 .show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+}
+
+/** Applies the brightness override to the reader window; null follows the system. */
+@Composable
+private fun ScreenBrightness(brightness: Float?) {
+    val view = LocalView.current
+    DisposableEffect(brightness) {
+        val window = (view.context as? Activity)?.window
+        if (window != null) {
+            window.attributes = window.attributes.apply {
+                screenBrightness = brightness ?: -1f
+            }
+        }
+        onDispose {
+            if (window != null) {
+                window.attributes = window.attributes.apply { screenBrightness = -1f }
+            }
         }
     }
 }
@@ -251,6 +320,7 @@ fun ReaderErrorScreen(message: String, onBack: () -> Unit) {
             text = message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontStyle = FontStyle.Italic,
         )
         IconButton(onClick = onBack) {
             Icon(

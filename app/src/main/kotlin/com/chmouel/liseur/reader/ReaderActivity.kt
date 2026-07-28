@@ -61,12 +61,25 @@ class ReaderActivity : FragmentActivity() {
                         remember(s.navigatorFactory) {
                             s.navigatorFactory.createFragmentFactory(
                                 initialLocator = viewModel.lastLocator ?: s.initialLocator,
+                                initialPreferences = viewModel.prefs.value.toEpubPreferences(),
+                                configuration = epubNavigatorConfiguration(),
                             ).also { supportFragmentManager.fragmentFactory = it }
                         }
                         ReaderScreen(
                             publication = s.publication,
+                            prefsFlow = viewModel.prefs,
                             onLocatorChanged = viewModel::onLocatorChanged,
                             onNavigatorChanged = { navigator = it },
+                            onPrefsAction = remember {
+                                ReaderPrefsActions(
+                                    setFont = viewModel::setFont,
+                                    setFontSize = viewModel::setFontSize,
+                                    setTheme = viewModel::setTheme,
+                                    setLineHeight = viewModel::setLineHeight,
+                                    setPageMargins = viewModel::setPageMargins,
+                                    setBrightness = viewModel::setBrightness,
+                                )
+                            },
                             onBack = ::finish,
                         )
                     }
