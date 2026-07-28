@@ -97,4 +97,19 @@
     <string name="annotation_share">Share</string>
     <string name="annotation_delete">Delete</string>
     <string name="annotation_export">Export as Markdown</string>
+    <string name="reader_search">Search in book</string>
+    <string name="search_hint">Search in this book</string>
+    <string name="search_prompt">Type a word or phrase to find it anywhere in the book.</string>
+    <string name="search_no_results">Nothing found for \u201C%1$s\u201D.</string>
+    <string name="search_failed">This book could not be searched.</string>
+    <plurals name="search_result_count">
+        <item quantity="one">%1$d result</item>
+        <item quantity="other">%1$d results</item>
+    </plurals>
+    <string name="dictionary_loading">Looking it up…</string>
+    <string name="dictionary_not_found">No Wiktionary entry for “%1$s”.</string>
+    <string name="dictionary_failed">Could not reach Wiktionary.</string>
+    <string name="dictionary_failed_reason">Could not reach Wiktionary: %1$s</string>
+    <string name="dictionary_other_app">Dictionary app</string>
+    <string name="dictionary_open_wiktionary">Full entry</string>
 </resources>

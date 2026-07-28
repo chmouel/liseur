@@ -43,6 +43,7 @@ import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.indexOfFirstWithHref
+import org.readium.r2.shared.publication.services.search.search
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
@@ -259,6 +260,82 @@ class ReaderViewModel(
         )
     }
 
+    /** How an in-book search is going. */
+    sealed interface SearchState {
+        data object Idle : SearchState
+
+        data class Running(val query: String, val hits: List<Locator>) : SearchState
+
+        data class Done(
+            val query: String,
+            val hits: List<Locator>,
+            val truncated: Boolean = false,
+        ) : SearchState
+
+        data class Failure(val message: String) : SearchState
+    }
+
+    private val _search = MutableStateFlow<SearchState>(SearchState.Idle)
+
+    /** Results of searching inside the book. */
+    val search: StateFlow<SearchState> = _search.asStateFlow()
+
+    private var searchJob: Job? = null
+
+    /**
+     * Searches the whole book for [query].
+     *
+     * Results arrive resource by resource, so they are published as they
+     * come in rather than after the last chapter has been read: on a long
+     * book the first hits are usable well before the search finishes.
+     */
+    fun search(query: String) {
+        searchJob?.cancel()
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            _search.value = SearchState.Idle
+            return
+        }
+        val publication = publication ?: return
+        searchJob = viewModelScope.launch {
+            _search.value = SearchState.Running(trimmed, emptyList())
+            // A publication without a search service cannot be searched;
+            // the reader is told rather than left with an empty result.
+            val iterator = publication.search(trimmed) ?: run {
+                _search.value = SearchState.Failure("")
+                return@launch
+            }
+            val hits = mutableListOf<Locator>()
+            try {
+                while (true) {
+                    val page = iterator.next().getOrElse {
+                        _search.value = SearchState.Failure(it.message)
+                        return@launch
+                    } ?: break
+                    hits += page.locators
+                    if (hits.size >= MAX_SEARCH_HITS) {
+                        _search.value = SearchState.Done(
+                            query = trimmed,
+                            hits = hits.take(MAX_SEARCH_HITS),
+                            truncated = true,
+                        )
+                        return@launch
+                    }
+                    _search.value = SearchState.Running(trimmed, hits.toList())
+                }
+                _search.value = SearchState.Done(trimmed, hits.toList())
+            } finally {
+                iterator.close()
+            }
+        }
+    }
+
+    fun clearSearch() {
+        searchJob?.cancel()
+        searchJob = null
+        _search.value = SearchState.Idle
+    }
+
     /** Called by the navigator when the reader has selected some text. */
     fun onTextSelected() {
         _selectionRequests.tryEmit(Unit)
@@ -401,6 +478,12 @@ class ReaderViewModel(
 
     companion object {
         private const val JUMP_BACK_TIMEOUT_MS = 30_000L
+
+        /**
+         * Enough hits that no real search runs out, few enough that a
+         * one-letter query on a long book does not fill memory.
+         */
+        private const val MAX_SEARCH_HITS = 500
 
         fun factory(bookUrl: AbsoluteUrl, bookId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {

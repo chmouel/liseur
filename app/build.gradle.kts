@@ -120,4 +120,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
+    // The app uses the platform's org.json; unit tests need a real implementation
+    // of it because android.jar's is a stub. Test-only, never shipped.
+    testImplementation(libs.json)
 }

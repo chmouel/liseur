@@ -105,6 +105,7 @@ class ReaderActivity : FragmentActivity() {
                                 )
                             },
                             annotationsFlow = viewModel.annotations,
+                            searchFlow = viewModel.search,
                             bookmarkedFlow = viewModel.bookmarked,
                             selectionRequests = viewModel.selectionRequests,
                             onAnnotationAction = remember {
@@ -115,6 +116,12 @@ class ReaderActivity : FragmentActivity() {
                                     toggleBookmark = viewModel::toggleBookmark,
                                     remove = viewModel::remove,
                                     notebookMarkdown = viewModel::notebookMarkdown,
+                                )
+                            },
+                            onSearchAction = remember {
+                                ReaderSearchActions(
+                                    search = viewModel::search,
+                                    clear = viewModel::clearSearch,
                                 )
                             },
                             onBack = ::finish,

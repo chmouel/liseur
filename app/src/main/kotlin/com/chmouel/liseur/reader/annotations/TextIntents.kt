@@ -17,28 +17,26 @@ fun Context.shareText(text: String, subject: String?) {
     startActivity(Intent.createChooser(send, null))
 }
 
-/** Looks a passage up on the web, the way the browser's own search does. */
-fun Context.webSearch(text: String) {
-    if (text.isBlank()) return
-    val search = Intent(Intent.ACTION_WEB_SEARCH)
-        .putExtra("query", text.trim())
-    runCatching { startActivity(search) }
-}
-
 /**
- * Asks another app to define a word.
+ * Hands a word to a dictionary app.
  *
  * `PROCESS_TEXT` is what dictionary apps register for, so this works with
  * whatever the reader already has installed — no dictionary is bundled, and
  * nothing proprietary is required. When nothing handles it, fall back to
  * Wiktionary in the browser, which is free content and needs no account.
  */
-fun Context.lookUp(text: String) {
+fun Context.lookUpExternally(text: String) {
     val word = text.trim().takeIf { it.isNotBlank() } ?: return
     val process = Intent(Intent.ACTION_PROCESS_TEXT).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_PROCESS_TEXT, word)
         putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
+    }
+    // A chooser with nothing in it still opens, so ask first rather than
+    // showing the reader an empty sheet when no dictionary is installed.
+    if (packageManager.queryIntentActivities(process, 0).isEmpty()) {
+        openWiktionary(word)
+        return
     }
     try {
         startActivity(Intent.createChooser(process, null))
@@ -47,7 +45,8 @@ fun Context.lookUp(text: String) {
     }
 }
 
-private fun Context.openWiktionary(word: String) {
+/** Opens the word's full Wiktionary entry in a browser. */
+fun Context.openWiktionary(word: String) {
     val url: Uri = "https://en.wiktionary.org/wiki/${Uri.encode(word.substringBefore(' '))}"
         .toUri()
     runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }

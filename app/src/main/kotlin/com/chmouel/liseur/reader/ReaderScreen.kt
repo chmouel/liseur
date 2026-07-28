@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
@@ -70,10 +72,12 @@ import com.chmouel.liseur.reader.annotations.NoteDialog
 import com.chmouel.liseur.reader.annotations.SelectionActions
 import com.chmouel.liseur.reader.annotations.SelectionPopup
 import com.chmouel.liseur.reader.annotations.locator
-import com.chmouel.liseur.reader.annotations.lookUp
+import com.chmouel.liseur.reader.annotations.lookUpExternally
+import com.chmouel.liseur.reader.annotations.openWiktionary
 import com.chmouel.liseur.reader.annotations.shareText
-import com.chmouel.liseur.reader.annotations.webSearch
 import com.chmouel.liseur.reader.annotations.toDecorations
+import com.chmouel.liseur.reader.dictionary.DefinitionSheet
+import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -88,10 +92,12 @@ import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
+import com.chmouel.liseur.reader.search.SearchScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
+import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Link
@@ -114,23 +120,29 @@ fun ReaderScreen(
     onPrefsAction: ReaderPrefsActions,
     onProgressAction: ReaderProgressActions,
     annotationsFlow: StateFlow<List<BookAnnotation>>,
+    searchFlow: StateFlow<ReaderViewModel.SearchState>,
     bookmarkedFlow: StateFlow<Boolean>,
     selectionRequests: SharedFlow<Unit>,
     onAnnotationAction: ReaderAnnotationActions,
+    onSearchAction: ReaderSearchActions,
     onBack: () -> Unit,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     var chromeVisible by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
+    var searchFor by remember { mutableStateOf<String?>(null) }
+    var searchHit by remember { mutableStateOf<Locator?>(null) }
     var showTypography by remember { mutableStateOf(false) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
     val progress by progressFlow.collectAsStateWithLifecycle()
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
     val annotations by annotationsFlow.collectAsStateWithLifecycle()
+    val searchState by searchFlow.collectAsStateWithLifecycle()
     val bookmarked by bookmarkedFlow.collectAsStateWithLifecycle()
     var selection by remember { mutableStateOf<ActiveSelection?>(null) }
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
+    var defineWord by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
     val context = LocalContext.current
     val effectScope = rememberCoroutineScope()
@@ -168,6 +180,27 @@ fun ReaderScreen(
                 existing = onAnnotationAction.annotationAt(current.locator),
             )
         }
+    }
+
+    // Keep the hit you jumped to marked on the page, so the eye lands on
+    // it rather than hunting the paragraph for the word that matched.
+    LaunchedEffect(navigator, searchHit) {
+        val nav = navigator ?: return@LaunchedEffect
+        nav.applyDecorations(
+            listOfNotNull(
+                searchHit?.let {
+                    Decoration(
+                        id = "search-hit",
+                        locator = it,
+                        style = Decoration.Style.Highlight(
+                            tint = SEARCH_HIT_TINT.toArgb(),
+                            isActive = false,
+                        ),
+                    )
+                },
+            ),
+            SEARCH_DECORATION_GROUP,
+        )
     }
 
     // Draw the marks the reader has made over the page.
@@ -300,6 +333,12 @@ fun ReaderScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { searchFor = "" }) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = stringResource(R.string.reader_search),
+                        )
+                    }
                     IconButton(onClick = { showTypography = true }) {
                         Text(
                             text = "Aa",
@@ -340,11 +379,13 @@ fun ReaderScreen(
                         selection = null
                     },
                     onSearch = {
-                        context.webSearch(active.text)
+                        searchFor = active.text
+                        navigator?.clearSelection()
                         selection = null
                     },
                     onLookUp = {
-                        context.lookUp(active.text)
+                        defineWord = active.text
+                        navigator?.clearSelection()
                         selection = null
                     },
                     onShare = {
@@ -361,6 +402,24 @@ fun ReaderScreen(
                 )
             },
             onDismiss = { selection = null },
+        )
+    }
+
+    defineWord?.let { word ->
+        DefinitionSheet(
+            word = word,
+            languages = remember(publication) {
+                WiktionaryClient.languagesFor(publication.metadata.languages.firstOrNull())
+            },
+            onOpenInDictionaryApp = {
+                context.lookUpExternally(it)
+                defineWord = null
+            },
+            onOpenInBrowser = {
+                context.openWiktionary(it)
+                defineWord = null
+            },
+            onDismiss = { defineWord = null },
         )
     }
 
@@ -388,6 +447,32 @@ fun ReaderScreen(
             onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
             onFooterModeChanged = onProgressAction.setFooterMode,
             onDismiss = { showTypography = false },
+        )
+    }
+
+    searchFor?.let { initial ->
+        BackHandler {
+            searchFor = null
+            searchHit = null
+            onSearchAction.clear()
+        }
+        SearchScreen(
+            state = searchState,
+            theme = prefs.theme,
+            initialQuery = initial,
+            onSearch = onSearchAction.search,
+            onHitSelected = { hit ->
+                searchFor = null
+                searchHit = hit
+                chromeVisible = false
+                onProgressAction.onJump()
+                navigator?.go(hit, animated = false)
+            },
+            onClose = {
+                searchFor = null
+                searchHit = null
+                onSearchAction.clear()
+            },
         )
     }
 
@@ -447,8 +532,18 @@ private data class ActiveSelection(
     }
 }
 
+/** Decorations for search hits live apart from the reader's own marks. */
+private const val SEARCH_DECORATION_GROUP = "search"
+private val SEARCH_HIT_TINT = Color(0xFF80CBC4)
+
 private const val POPUP_HEIGHT_PX = 160f
 private const val POPUP_GAP_PX = 24f
+
+/** Bundle of in-book search actions passed down to the reader chrome. */
+class ReaderSearchActions(
+    val search: (String) -> Unit,
+    val clear: () -> Unit,
+)
 
 /** Bundle of annotation actions passed down to the reader chrome. */
 class ReaderAnnotationActions(
