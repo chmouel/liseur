@@ -55,6 +55,7 @@ data class Book(
     @ColumnInfo(name = "download_state") val downloadState: DownloadState = DownloadState.DOWNLOADED,
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
     @ColumnInfo(name = "downloaded_at") val downloadedAt: Long? = null,
+    @ColumnInfo(name = "file_modified_at") val fileModifiedAt: Long? = null,
 ) {
     /** The URL to hand to Readium, or null when the file is not here yet. */
     val openableUrl: String? get() = localUri ?: url.takeIf { downloadState == DownloadState.DOWNLOADED }
@@ -112,6 +113,23 @@ interface BookDao {
         state: DownloadState,
         localUri: String?,
         downloadedAt: Long? = null,
+    )
+
+    /** Refreshes what we read out of a file that changed on disk. */
+    @Query(
+        """
+        UPDATE books
+        SET title = :title, author = :author, cover_path = :coverPath,
+            file_modified_at = :fileModifiedAt
+        WHERE url = :url
+        """,
+    )
+    suspend fun refreshIndexedFile(
+        url: String,
+        title: String,
+        author: String?,
+        coverPath: String?,
+        fileModifiedAt: Long?,
     )
 
     @Query("UPDATE books SET cover_path = :coverPath WHERE url = :url")

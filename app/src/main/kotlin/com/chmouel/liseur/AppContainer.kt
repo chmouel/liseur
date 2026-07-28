@@ -40,6 +40,7 @@ class AppContainer(context: Context) {
             LiseurDatabase.MIGRATION_4_5,
             LiseurDatabase.MIGRATION_5_6,
             LiseurDatabase.MIGRATION_6_7,
+            LiseurDatabase.MIGRATION_7_8,
         )
         .build()
 

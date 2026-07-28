@@ -108,18 +108,56 @@ class LocalLibraryRepository(
         for (file in walk(root)) {
             val url = file.uri.toAbsoluteUrl() ?: continue
             foundUrls += url.toString()
-            if (url.toString() !in knownUrls && bookDao.getByUrl(url.toString()) == null) {
-                indexBook(url, source = treeUri.toString())
+            val modifiedAt = file.lastModified().takeIf { it > 0 }
+            val existing = bookDao.getByUrl(url.toString())
+            when {
+                existing == null -> indexBook(url, source = treeUri.toString(), modifiedAt)
+                // The path is the same but the file behind it is not, so the
+                // title and cover we cached are no longer the book's.
+                modifiedAt != null && existing.fileModifiedAt != modifiedAt ->
+                    reindexBook(url, modifiedAt)
             }
         }
 
         bookDao.deleteByUrls((knownUrls - foundUrls).toList())
     }
 
+    /**
+     * Re-reads a file that changed on disk, keeping the library row so the
+     * reader's place, its annotations and when it was added all survive.
+     */
+    private suspend fun reindexBook(url: AbsoluteUrl, modifiedAt: Long?) {
+        val asset = assetRetriever.retrieve(url).getOrElse { return }
+        val publication = publicationOpener.open(asset, allowUserInteraction = false)
+            .getOrElse {
+                asset.close()
+                return
+            }
+        try {
+            bookDao.refreshIndexedFile(
+                url = url.toString(),
+                title = publication.metadata.title
+                    ?: url.filename?.removeSuffix(".epub")
+                    ?: "Untitled",
+                author = publication.metadata.authors
+                    .joinToString(", ") { it.name }
+                    .ifBlank { null },
+                coverPath = saveCover(publication, url.toString()),
+                fileModifiedAt = modifiedAt,
+            )
+        } finally {
+            publication.close()
+        }
+    }
+
     private fun DocumentFile.isEpub(): Boolean =
         type == "application/epub+zip" || name.orEmpty().endsWith(".epub", ignoreCase = true)
 
-    private suspend fun indexBook(url: AbsoluteUrl, source: String?): Book? {
+    private suspend fun indexBook(
+        url: AbsoluteUrl,
+        source: String?,
+        modifiedAt: Long? = null,
+    ): Book? {
         val asset = assetRetriever.retrieve(url).getOrElse { return null }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
@@ -139,6 +177,7 @@ class LocalLibraryRepository(
                 source = source,
                 addedAt = System.currentTimeMillis(),
                 lastOpenedAt = null,
+                fileModifiedAt = modifiedAt,
             )
             val id = bookDao.upsert(book)
             book.copy(id = id)

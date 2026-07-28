@@ -14,7 +14,7 @@ import androidx.sqlite.execSQL
         CalibreServer::class,
         BookAnnotation::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -86,6 +86,12 @@ abstract class LiseurDatabase : RoomDatabase() {
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE books ADD COLUMN downloaded_at INTEGER")
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE books ADD COLUMN file_modified_at INTEGER")
             }
         }
 

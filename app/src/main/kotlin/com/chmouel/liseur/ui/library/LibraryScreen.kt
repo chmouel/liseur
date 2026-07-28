@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -79,6 +80,7 @@ fun LibraryScreen(
     onDownload: (Book) -> Unit,
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -126,38 +128,38 @@ fun LibraryScreen(
             )
         },
     ) { padding ->
-        when {
-            state.loading -> Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            )
+        PullToRefreshBox(
+            isRefreshing = state.refreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            when {
+                state.loading -> Box(Modifier.fillMaxSize())
 
-            state.books.isEmpty() -> EmptyLibrary(
-                onOpenBook = onOpenBook,
-                onAddFolder = onAddFolder,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            )
+                state.books.isEmpty() -> EmptyLibrary(
+                    onOpenBook = onOpenBook,
+                    onAddFolder = onAddFolder,
+                    modifier = Modifier.fillMaxSize(),
+                )
 
-            else -> BookGrid(
-                state = state,
-                onBookSelected = { book ->
-                    when {
-                        book.openableUrl != null -> onBookSelected(book)
-                        book.url in state.downloads ->
-                            scope.launch { snackbarHost.showSnackbar(downloading) }
-                        !state.canDownload ->
-                            scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
-                        else -> onDownload(book)
-                    }
-                },
-                onBookLongPress = { sheetBook = it },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            )
+                else -> BookGrid(
+                    state = state,
+                    onBookSelected = { book ->
+                        when {
+                            book.openableUrl != null -> onBookSelected(book)
+                            book.url in state.downloads ->
+                                scope.launch { snackbarHost.showSnackbar(downloading) }
+                            !state.canDownload ->
+                                scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
+                            else -> onDownload(book)
+                        }
+                    },
+                    onBookLongPress = { sheetBook = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 
