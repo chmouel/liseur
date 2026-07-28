@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Single-fill silhouette for Android 13+ Material You themed icons.
+     The system tints this layer; keep it flat black at varying alpha. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Open book silhouette with center gutter carved out (evenOdd). -->
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M54,41 C46.5,35 37,33 28,34.6 C26.5,34.85 25.4,36.15 25.4,37.7 L25.4,69.4 C25.4,71.2 27.05,72.55 28.8,72.25 C37.1,71 45.9,72.75 54,78 C62.1,72.75 70.9,71 79.2,72.25 C80.95,72.55 82.6,71.2 82.6,69.4 L82.6,37.7 C82.6,36.15 81.5,34.85 80,34.6 C71,33 61.5,35 54,41 Z M53,45 L55,45 L55,75 L53,75 Z" />
+
+    <!-- Ribbon bookmark. -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M67.5,33.5 L74.5,32.4 L74.5,58 L71,54.2 L67.5,58 Z" />
+</vector>

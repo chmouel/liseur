@@ -1,38 +1,114 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Open book glyph, centered in the adaptive-icon safe zone. -->
+<!-- Elegant open book with curved pages, gilded spine and a draped silk ribbon.
+     Centered within the adaptive-icon safe zone (viewport 108, visual ~66dp). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group>
-        <!-- Book covers/pages: two mirrored leaves meeting at the spine. -->
-        <path
-            android:fillColor="#4A2E1A"
-            android:pathData="M54,40 C47.5,34.5 38,32.5 29,34 C27.6,34.2 26.5,35.4 26.5,36.8 L26.5,68.2 C26.5,69.9 28.1,71.2 29.8,70.9 C37.8,69.7 46.2,71.6 52,76.5 C53.2,77.5 54.8,77.5 56,76.5 C61.8,71.6 70.2,69.7 78.2,70.9 C79.9,71.2 81.5,69.9 81.5,68.2 L81.5,36.8 C81.5,35.4 80.4,34.2 79,34 C70,32.5 60.5,34.5 54,40 Z" />
-        <!-- Page split: hairline at the spine in the background paper tone. -->
-        <path
-            android:fillColor="#F2E4CB"
-            android:pathData="M52.75,41.5 L55.25,41.5 L55.25,74 L52.75,74 Z" />
-        <!-- Text lines on the left page. -->
-        <path
-            android:fillColor="#F2E4CB"
-            android:pathData="M32.5,42.5 C37.5,41.5 43.5,42.5 48,45.5 L48,48.5 C43.5,45.5 37.5,44.5 32.5,45.5 Z" />
-        <path
-            android:fillColor="#F2E4CB"
-            android:pathData="M32.5,50.5 C37.5,49.5 43.5,50.5 48,53.5 L48,56.5 C43.5,53.5 37.5,52.5 32.5,53.5 Z" />
-        <path
-            android:fillColor="#F2E4CB"
-            android:pathData="M32.5,58.5 C37.5,57.5 43.5,58.5 48,61.5 L48,64.5 C43.5,61.5 37.5,60.5 32.5,61.5 Z" />
-        <!-- Text lines on the right page. -->
-        <path
-            android:fillColor="#F2E4CB"
-            android:pathData="M75.5,42.5 C70.5,41.5 64.5,42.5 60,45.5 L60,48.5 C64.5,45.5 70.5,44.5 75.5,45.5 Z" />
-        <path
-            android:fillColor="#F2E4CB"
-            android:pathData="M75.5,50.5 C70.5,49.5 64.5,50.5 60,53.5 L60,56.5 C64.5,53.5 70.5,52.5 75.5,53.5 Z" />
-        <path
-            android:fillColor="#F2E4CB"
-            android:pathData="M75.5,58.5 C70.5,57.5 64.5,58.5 60,61.5 L60,64.5 C64.5,61.5 70.5,60.5 75.5,61.5 Z" />
-    </group>
+
+    <!-- Soft ambient shadow beneath the book for gentle Material elevation. -->
+    <path
+        android:fillColor="#2C2219"
+        android:fillAlpha="0.16"
+        android:pathData="M27,74.5 C36,71 46,72 54,77 C62,72 72,71 81,74.5 C81,78.5 70,82 54,82 C38,82 27,78.5 27,74.5 Z" />
+
+    <!-- LEFT COVER -->
+    <path android:pathData="M54,41 C46.5,35 37,33 28,34.6 C26.5,34.85 25.4,36.15 25.4,37.7 L25.4,69.4 C25.4,71.2 27.05,72.55 28.8,72.25 C37.1,71 45.9,72.75 54,78 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="25.4" android:startY="34"
+                android:endX="54" android:endY="78"
+                android:type="linear">
+                <item android:color="#3A2C1F" android:offset="0.0" />
+                <item android:color="#2C2219" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- RIGHT COVER -->
+    <path android:pathData="M54,41 C61.5,35 71,33 80,34.6 C81.5,34.85 82.6,36.15 82.6,37.7 L82.6,69.4 C82.6,71.2 80.95,72.55 79.2,72.25 C70.9,71 62.1,72.75 54,78 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="82.6" android:startY="34"
+                android:endX="54" android:endY="78"
+                android:type="linear">
+                <item android:color="#3A2C1F" android:offset="0.0" />
+                <item android:color="#241B13" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- LEFT PAGES (inset parchment leaf with curved fore-edge). -->
+    <path android:pathData="M54,44 C47,38.8 38.7,37 30.6,38.3 C29.6,38.45 28.9,39.3 28.9,40.3 L28.9,68 C28.9,69.2 30,70.1 31.2,69.9 C38.6,68.7 46.6,70.3 54,75 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="28.9" android:startY="40"
+                android:endX="54" android:endY="74"
+                android:type="linear">
+                <item android:color="#FBF7EE" android:offset="0.0" />
+                <item android:color="#EFE6D3" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- RIGHT PAGES. -->
+    <path android:pathData="M54,44 C61,38.8 69.3,37 77.4,38.3 C78.4,38.45 79.1,39.3 79.1,40.3 L79.1,68 C79.1,69.2 78,70.1 76.8,69.9 C69.4,68.7 61.4,70.3 54,75 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="79.1" android:startY="40"
+                android:endX="54" android:endY="74"
+                android:type="linear">
+                <item android:color="#FDFAF3" android:offset="0.0" />
+                <item android:color="#F2EAD9" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- GILDED SPINE highlight down the center gutter. -->
+    <path android:pathData="M52.4,42.5 L55.6,42.5 L55.6,76.5 L52.4,76.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="52.4" android:startY="42"
+                android:endX="55.6" android:endY="42"
+                android:type="linear">
+                <item android:color="#E9BE79" android:offset="0.0" />
+                <item android:color="#D49B53" android:offset="0.5" />
+                <item android:color="#B87E3C" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Left page text lines. -->
+    <path android:fillColor="#C9B89A" android:fillAlpha="0.85"
+        android:pathData="M34,45.5 C39,44.6 45,45.6 49.5,48.4 L49.5,50.7 C45,47.9 39,46.9 34,47.8 Z" />
+    <path android:fillColor="#C9B89A" android:fillAlpha="0.85"
+        android:pathData="M34,52 C39,51.1 45,52.1 49.5,54.9 L49.5,57.2 C45,54.4 39,53.4 34,54.3 Z" />
+    <path android:fillColor="#C9B89A" android:fillAlpha="0.85"
+        android:pathData="M34,58.5 C39,57.6 45,58.6 49.5,61.4 L49.5,63.7 C45,60.9 39,59.9 34,60.8 Z" />
+
+    <!-- Right page text lines. -->
+    <path android:fillColor="#C9B89A" android:fillAlpha="0.85"
+        android:pathData="M74,45.5 C69,44.6 63,45.6 58.5,48.4 L58.5,50.7 C63,47.9 69,46.9 74,47.8 Z" />
+    <path android:fillColor="#C9B89A" android:fillAlpha="0.85"
+        android:pathData="M74,52 C69,51.1 63,52.1 58.5,54.9 L58.5,57.2 C63,54.4 69,53.4 74,54.3 Z" />
+    <path android:fillColor="#C9B89A" android:fillAlpha="0.85"
+        android:pathData="M74,58.5 C69,57.6 63,58.6 58.5,61.4 L58.5,63.7 C63,60.9 69,59.9 74,60.8 Z" />
+
+    <!-- SILK RIBBON bookmark draped from the top of the right cover. -->
+    <path android:pathData="M67.5,33.5 L74.5,32.4 L74.5,58 L71,54.2 L67.5,58 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="67.5" android:startY="33"
+                android:endX="74.5" android:endY="58"
+                android:type="linear">
+                <item android:color="#D9633E" android:offset="0.0" />
+                <item android:color="#C05030" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Ribbon inner fold shading for silk depth. -->
+    <path android:fillColor="#A6401F" android:fillAlpha="0.6"
+        android:pathData="M71,32.85 L74.5,32.4 L74.5,58 L71,54.2 Z" />
 </vector>
