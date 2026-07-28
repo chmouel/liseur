@@ -118,6 +118,9 @@ class ReaderViewModel(
 
     fun setBrightness(value: Float?) = viewModelScope.launch { prefsRepo.setBrightness(value) }
 
+    fun setPageTurnAnimation(enabled: Boolean) =
+        viewModelScope.launch { prefsRepo.setPageTurnAnimation(enabled) }
+
     override fun onCleared() {
         (_state.value as? UiState.Ready)?.publication?.close()
     }

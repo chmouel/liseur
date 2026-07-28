@@ -22,12 +22,14 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  * Tapping the top strip or the center of the page gently reveals the
  * chrome (menu), as fullscreen reading apps do; the left side goes
  * back a page and the rest goes forward. When the chrome is showing,
- * any tap on the page dismisses it.
+ * any tap on the page dismisses it. Page turns are delegated to
+ * [onTurnPage] so they can run the page-turn effect.
  */
 @OptIn(ExperimentalReadiumApi::class)
 class ReaderTapZones(
     private val navigator: OverflowableNavigator,
     private val isChromeVisible: () -> Boolean,
+    private val onTurnPage: (forward: Boolean) -> Unit,
     private val onShowChrome: () -> Unit,
     private val onHideChrome: () -> Unit,
 ) : InputListener {
@@ -42,30 +44,17 @@ class ReaderTapZones(
         val height = navigator.publicationView.height.toFloat()
         if (width <= 0f || height <= 0f) return false
 
+        val rtl = navigator.overflow.value.readingProgression == ReadingProgression.RTL
         val x = event.point.x / width
         val y = event.point.y / height
-        return when {
-            y < CHROME_ZONE || (x in CHROME_X && y in CHROME_Y) -> {
-                onShowChrome()
-                true
-            }
+        when {
+            y < CHROME_ZONE || (x in CHROME_X && y in CHROME_Y) -> onShowChrome()
 
-            x < BACK_ZONE -> navigator.goLeftward()
-            else -> navigator.goRightward()
+            x < BACK_ZONE -> onTurnPage(rtl)
+            else -> onTurnPage(!rtl)
         }
+        return true
     }
-
-    private fun OverflowableNavigator.goLeftward(): Boolean =
-        when (overflow.value.readingProgression) {
-            ReadingProgression.LTR -> goBackward(animated = true)
-            ReadingProgression.RTL -> goForward(animated = true)
-        }
-
-    private fun OverflowableNavigator.goRightward(): Boolean =
-        when (overflow.value.readingProgression) {
-            ReadingProgression.LTR -> goForward(animated = true)
-            ReadingProgression.RTL -> goBackward(animated = true)
-        }
 
     companion object {
         /** Top strip of the screen that reveals the chrome. */

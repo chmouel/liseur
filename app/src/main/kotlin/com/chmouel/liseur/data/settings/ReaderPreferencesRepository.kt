@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.settings
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -25,6 +26,7 @@ class ReaderPreferencesRepository(private val context: Context) {
         val LINE_HEIGHT = doublePreferencesKey("line_height")
         val PAGE_MARGINS = doublePreferencesKey("page_margins")
         val BRIGHTNESS = floatPreferencesKey("brightness")
+        val PAGE_TURN_ANIMATION = booleanPreferencesKey("page_turn_animation")
     }
 
     val prefs: Flow<ReaderPrefs> = context.readerPrefsStore.data.map { p ->
@@ -35,6 +37,7 @@ class ReaderPreferencesRepository(private val context: Context) {
             lineHeight = p[Keys.LINE_HEIGHT],
             pageMargins = p[Keys.PAGE_MARGINS],
             brightness = p[Keys.BRIGHTNESS],
+            pageTurnAnimation = p[Keys.PAGE_TURN_ANIMATION] ?: true,
         )
     }
 
@@ -68,5 +71,9 @@ class ReaderPreferencesRepository(private val context: Context) {
         context.readerPrefsStore.edit {
             if (value == null) it.remove(Keys.BRIGHTNESS) else it[Keys.BRIGHTNESS] = value.coerceIn(0f, 1f)
         }
+    }
+
+    suspend fun setPageTurnAnimation(enabled: Boolean) {
+        context.readerPrefsStore.edit { it[Keys.PAGE_TURN_ANIMATION] = enabled }
     }
 }

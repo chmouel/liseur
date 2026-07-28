@@ -49,6 +49,7 @@ enum class ReaderTheme(
  * @param lineHeight Line height multiplier (1.0–2.0), null keeps publisher styles.
  * @param pageMargins Page margin multiplier (0.5–2.0), null keeps publisher styles.
  * @param brightness Screen brightness override 0.0–1.0, null follows the system.
+ * @param pageTurnAnimation Slide animation when turning pages; instant jump when off.
  */
 data class ReaderPrefs(
     val font: ReaderFont = ReaderFont.Default,
@@ -57,6 +58,7 @@ data class ReaderPrefs(
     val lineHeight: Double? = null,
     val pageMargins: Double? = null,
     val brightness: Float? = null,
+    val pageTurnAnimation: Boolean = true,
 ) {
     companion object {
         const val MIN_FONT_SIZE = 0.6

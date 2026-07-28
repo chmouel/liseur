@@ -12,15 +12,16 @@ import androidx.compose.runtime.remember
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.toAbsoluteUrl
 
 class ReaderActivity : FragmentActivity() {
 
     private var navigator: EpubNavigatorFragment? = null
+    private var pageTurner: PageTurner? = null
 
     private val bookUrl: AbsoluteUrl? by lazy {
         (intent.getStringExtra(EXTRA_URL)?.toUri() ?: intent.data)?.toAbsoluteUrl()
@@ -70,6 +71,7 @@ class ReaderActivity : FragmentActivity() {
                             prefsFlow = viewModel.prefs,
                             onLocatorChanged = viewModel::onLocatorChanged,
                             onNavigatorChanged = { navigator = it },
+                            onPageTurnerChanged = { pageTurner = it },
                             onPrefsAction = remember {
                                 ReaderPrefsActions(
                                     setFont = viewModel::setFont,
@@ -78,6 +80,7 @@ class ReaderActivity : FragmentActivity() {
                                     setLineHeight = viewModel::setLineHeight,
                                     setPageMargins = viewModel::setPageMargins,
                                     setBrightness = viewModel::setBrightness,
+                                    setPageTurnAnimation = viewModel::setPageTurnAnimation,
                                 )
                             },
                             onBack = ::finish,
@@ -89,17 +92,16 @@ class ReaderActivity : FragmentActivity() {
     }
 
     /** Volume keys turn pages, like the Kindle app's optional setting. */
-    @OptIn(ExperimentalReadiumApi::class)
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val nav = navigator ?: return super.onKeyDown(keyCode, event)
+        val turner = pageTurner ?: return super.onKeyDown(keyCode, event)
         return when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                nav.goForward(animated = true)
+                turner.turn(forward = true)
                 true
             }
 
             KeyEvent.KEYCODE_VOLUME_UP -> {
-                nav.goBackward(animated = true)
+                turner.turn(forward = false)
                 true
             }
 

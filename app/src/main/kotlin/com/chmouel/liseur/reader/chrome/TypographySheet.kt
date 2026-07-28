@@ -33,6 +33,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -65,6 +66,7 @@ fun TypographySheet(
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
     onBrightnessChanged: (Float?) -> Unit,
+    onPageTurnAnimationChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -84,6 +86,10 @@ fun TypographySheet(
                 pageMargins = prefs.pageMargins,
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
+            )
+            PageTurnAnimationToggle(
+                enabled = prefs.pageTurnAnimation,
+                onChanged = onPageTurnAnimationChanged,
             )
         }
     }
@@ -258,6 +264,23 @@ private fun BrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PageTurnAnimationToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onChanged(!enabled) },
+    ) {
+        Text(
+            text = "Page turn animation",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = enabled, onCheckedChange = onChanged)
     }
 }
 

@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +56,9 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.reader.chrome.PageTurnEffectState
+import com.chmouel.liseur.reader.chrome.PageTurnOverlay
+import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,6 +80,7 @@ fun ReaderScreen(
     prefsFlow: StateFlow<ReaderPrefs>,
     onLocatorChanged: (Locator) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
+    onPageTurnerChanged: (PageTurner?) -> Unit,
     onPrefsAction: ReaderPrefsActions,
     onBack: () -> Unit,
 ) {
@@ -85,6 +90,16 @@ fun ReaderScreen(
     var showTypography by remember { mutableStateOf(false) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
+    val view = LocalView.current
+    val effectScope = rememberCoroutineScope()
+    val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
+    val pageTurner = remember {
+        PageTurner(
+            effect = pageTurnEffect,
+            isAnimated = { prefsFlow.value.pageTurnAnimation },
+            isEffectSuppressed = { chromeVisibleNow },
+        )
+    }
 
     LaunchedEffect(navigator) {
         onNavigatorChanged(navigator)
@@ -101,16 +116,23 @@ fun ReaderScreen(
 
     DisposableEffect(navigator) {
         val nav = navigator
+        pageTurner.navigator = nav
+        pageTurner.window = (view.context as? Activity)?.window
+        onPageTurnerChanged(if (nav != null) pageTurner else null)
         val listener = nav?.let {
             ReaderTapZones(
                 navigator = it,
                 isChromeVisible = { chromeVisibleNow },
+                onTurnPage = pageTurner::turn,
                 onShowChrome = { chromeVisible = true },
                 onHideChrome = { chromeVisible = false },
             ).also(it::addInputListener)
         }
         onDispose {
             if (nav != null && listener != null) nav.removeInputListener(listener)
+            pageTurner.navigator = null
+            pageTurner.window = null
+            onPageTurnerChanged(null)
             onNavigatorChanged(null)
         }
     }
@@ -128,6 +150,8 @@ fun ReaderScreen(
         ) { fragment ->
             navigator = fragment
         }
+
+        PageTurnOverlay(pageTurnEffect)
 
         AnimatedVisibility(
             visible = chromeVisible,
@@ -185,6 +209,7 @@ fun ReaderScreen(
             onLineHeightChanged = onPrefsAction.setLineHeight,
             onPageMarginsChanged = onPrefsAction.setPageMargins,
             onBrightnessChanged = onPrefsAction.setBrightness,
+            onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
             onDismiss = { showTypography = false },
         )
     }
@@ -210,6 +235,7 @@ class ReaderPrefsActions(
     val setLineHeight: (Double?) -> Unit,
     val setPageMargins: (Double?) -> Unit,
     val setBrightness: (Float?) -> Unit,
+    val setPageTurnAnimation: (Boolean) -> Unit,
 )
 
 /** Hides the status and navigation bars while the chrome is hidden. */
