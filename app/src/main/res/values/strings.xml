@@ -11,4 +11,22 @@
     <string name="reader_back">Back</string>
     <string name="reader_contents">Contents</string>
     <string name="reader_open_failed">Couldn\'t open this book</string>
+    <string name="dismiss">Dismiss</string>
+
+    <string name="footer_left_in_chapter">%s left in chapter</string>
+    <string name="footer_left_in_book">%s left in book</string>
+    <string name="footer_page">Page %1$d of %2$d</string>
+    <string name="footer_percent">%d%%</string>
+    <string name="duration_under_minute">Less than a minute</string>
+    <string name="duration_hours_and_minutes">%1$s %2$s</string>
+    <plurals name="duration_minutes">
+        <item quantity="one">%d min</item>
+        <item quantity="other">%d mins</item>
+    </plurals>
+    <plurals name="duration_hours">
+        <item quantity="one">%d hr</item>
+        <item quantity="other">%d hrs</item>
+    </plurals>
+    <string name="jump_back">Back</string>
+    <string name="jump_back_to_page">Back to page %d</string>
 </resources>

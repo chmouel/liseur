@@ -28,7 +28,9 @@ class AppContainer(context: Context) {
         ),
     )
 
-    val database = Room.databaseBuilder(context, LiseurDatabase::class.java, "liseur.db").build()
+    val database = Room.databaseBuilder(context, LiseurDatabase::class.java, "liseur.db")
+        .addMigrations(LiseurDatabase.MIGRATION_1_2)
+        .build()
 
     val libraryRepository = LocalLibraryRepository(
         context = context.applicationContext,

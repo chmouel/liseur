@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Readium pads the page after the web view has measured itself,
+      which both wastes screen and cuts the last line in half. The
+      reader view is inset in Compose instead, before the page loads.
+    -->
+    <dimen name="readium_navigator_epub_vertical_padding">0dp</dimen>
+</resources>

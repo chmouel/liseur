@@ -42,6 +42,24 @@ enum class ReaderTheme(
     }
 }
 
+/** What the reading footer shows; tapping it cycles through these. */
+enum class FooterMode(val id: String) {
+    TIME_LEFT_CHAPTER("time_chapter"),
+    TIME_LEFT_BOOK("time_book"),
+    PAGE("page"),
+    PERCENT("percent"),
+    NONE("none"),
+    ;
+
+    fun next(): FooterMode = entries[(ordinal + 1) % entries.size]
+
+    companion object {
+        val Default = TIME_LEFT_CHAPTER
+
+        fun fromId(id: String?): FooterMode = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
 /**
  * User reading preferences.
  *
@@ -50,6 +68,7 @@ enum class ReaderTheme(
  * @param pageMargins Page margin multiplier (0.5–2.0), null keeps publisher styles.
  * @param brightness Screen brightness override 0.0–1.0, null follows the system.
  * @param pageTurnAnimation Slide animation when turning pages; instant jump when off.
+ * @param footerMode What the reading footer shows.
  */
 data class ReaderPrefs(
     val font: ReaderFont = ReaderFont.Default,
@@ -59,6 +78,7 @@ data class ReaderPrefs(
     val pageMargins: Double? = null,
     val brightness: Float? = null,
     val pageTurnAnimation: Boolean = true,
+    val footerMode: FooterMode = FooterMode.Default,
 ) {
     companion object {
         const val MIN_FONT_SIZE = 0.6

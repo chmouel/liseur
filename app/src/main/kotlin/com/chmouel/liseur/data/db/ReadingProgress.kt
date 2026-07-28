@@ -17,6 +17,7 @@ data class ReadingProgress(
     @PrimaryKey @ColumnInfo(name = "book_url") val bookUrl: String,
     @ColumnInfo(name = "locator_json") val locatorJson: String,
     @ColumnInfo(name = "total_progression") val totalProgression: Double?,
+    @ColumnInfo(name = "reading_speed") val readingSpeed: Double? = null,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
 

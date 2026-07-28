@@ -69,6 +69,8 @@ class ReaderActivity : FragmentActivity() {
                         ReaderScreen(
                             publication = s.publication,
                             prefsFlow = viewModel.prefs,
+                            progressFlow = viewModel.progress,
+                            jumpBackFlow = viewModel.jumpBack,
                             onLocatorChanged = viewModel::onLocatorChanged,
                             onNavigatorChanged = { navigator = it },
                             onPageTurnerChanged = { pageTurner = it },
@@ -81,6 +83,18 @@ class ReaderActivity : FragmentActivity() {
                                     setPageMargins = viewModel::setPageMargins,
                                     setBrightness = viewModel::setBrightness,
                                     setPageTurnAnimation = viewModel::setPageTurnAnimation,
+                                )
+                            },
+                            onProgressAction = remember {
+                                ReaderProgressActions(
+                                    cycleFooterMode = viewModel::cycleFooterMode,
+                                    setFooterMode = viewModel::setFooterMode,
+                                    onJump = viewModel::onJump,
+                                    dismissJumpBack = viewModel::dismissJumpBack,
+                                    chapterTicks = viewModel::chapterTicks,
+                                    chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
+                                    positionAtProgression = viewModel::positionAtProgression,
+                                    locatorAtPosition = viewModel::locatorAtPosition,
                                 )
                             },
                             onBack = ::finish,

@@ -12,9 +12,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -53,14 +56,19 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.compose.AndroidFragment
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
 import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
+import com.chmouel.liseur.reader.chrome.ReadingFooter
+import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.TypographySheet
+import com.chmouel.liseur.reader.progress.ReaderProgress
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
@@ -78,10 +86,13 @@ private const val CHROME_ANIM_MS = 300
 fun ReaderScreen(
     publication: Publication,
     prefsFlow: StateFlow<ReaderPrefs>,
+    progressFlow: StateFlow<ReaderProgress?>,
+    jumpBackFlow: StateFlow<ReaderViewModel.JumpBack?>,
     onLocatorChanged: (Locator) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onPageTurnerChanged: (PageTurner?) -> Unit,
     onPrefsAction: ReaderPrefsActions,
+    onProgressAction: ReaderProgressActions,
     onBack: () -> Unit,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
@@ -90,6 +101,8 @@ fun ReaderScreen(
     var showTypography by remember { mutableStateOf(false) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
+    val progress by progressFlow.collectAsStateWithLifecycle()
+    val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
     val view = LocalView.current
     val effectScope = rememberCoroutineScope()
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
@@ -145,13 +158,61 @@ fun ReaderScreen(
             .fillMaxSize()
             .background(prefs.theme.background),
     ) {
+        // The page keeps its own breathing room: Readium's own padding
+        // is switched off (see dimens.xml) because it is applied after
+        // the page is laid out, which cuts the last line in half.
         AndroidFragment<EpubNavigatorFragment>(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 12.dp, bottom = 26.dp),
         ) { fragment ->
             navigator = fragment
         }
 
         PageTurnOverlay(pageTurnEffect)
+
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars),
+        ) {
+            jumpBack?.let { target ->
+                JumpBackPill(
+                    position = target.position,
+                    theme = prefs.theme,
+                    onJumpBack = {
+                        onProgressAction.dismissJumpBack()
+                        navigator?.go(target.locator, animated = false)
+                    },
+                    onDismiss = onProgressAction.dismissJumpBack,
+                )
+            }
+            if (chromeVisible) {
+                ReadingScrubber(
+                    progress = progress,
+                    theme = prefs.theme,
+                    chapterTicks = remember(progress?.totalPositions) {
+                        onProgressAction.chapterTicks()
+                    },
+                    titleAtPosition = onProgressAction.chapterTitleAtPosition,
+                    positionAtProgression = onProgressAction.positionAtProgression,
+                    onSeek = { position ->
+                        onProgressAction.locatorAtPosition(position)?.let {
+                            onProgressAction.onJump()
+                            navigator?.go(it, animated = false)
+                        }
+                    },
+                )
+            } else if (jumpBack == null) {
+                ReadingFooter(
+                    progress = progress,
+                    mode = prefs.footerMode,
+                    theme = prefs.theme,
+                    onCycleMode = onProgressAction.cycleFooterMode,
+                )
+            }
+        }
 
         AnimatedVisibility(
             visible = chromeVisible,
@@ -210,6 +271,7 @@ fun ReaderScreen(
             onPageMarginsChanged = onPrefsAction.setPageMargins,
             onBrightnessChanged = onPrefsAction.setBrightness,
             onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
+            onFooterModeChanged = onProgressAction.setFooterMode,
             onDismiss = { showTypography = false },
         )
     }
@@ -221,14 +283,16 @@ fun ReaderScreen(
             onEntrySelected = { link ->
                 showToc = false
                 chromeVisible = false
-                publication.locatorFromLink(link)?.let { navigator?.go(it, animated = false) }
+                publication.locatorFromLink(link)?.let {
+                    onProgressAction.onJump()
+                    navigator?.go(it, animated = false)
+                }
             },
         )
     }
 }
 
-/** Bundle of preference setters passed down to the reader chrome. */
-class ReaderPrefsActions(
+/** Bundle of preference setters passed down to the reader chrome. */class ReaderPrefsActions(
     val setFont: (ReaderFont) -> Unit,
     val setFontSize: (Double) -> Unit,
     val setTheme: (ReaderTheme) -> Unit,
@@ -236,6 +300,18 @@ class ReaderPrefsActions(
     val setPageMargins: (Double?) -> Unit,
     val setBrightness: (Float?) -> Unit,
     val setPageTurnAnimation: (Boolean) -> Unit,
+)
+
+/** Bundle of progress and navigation actions for the reader chrome. */
+class ReaderProgressActions(
+    val cycleFooterMode: () -> Unit,
+    val setFooterMode: (FooterMode) -> Unit,
+    val onJump: () -> Unit,
+    val dismissJumpBack: () -> Unit,
+    val chapterTicks: () -> List<Float>,
+    val chapterTitleAtPosition: (Int) -> String?,
+    val positionAtProgression: (Float) -> Int,
+    val locatorAtPosition: (Int) -> Locator?,
 )
 
 /** Hides the status and navigation bars while the chrome is hidden. */

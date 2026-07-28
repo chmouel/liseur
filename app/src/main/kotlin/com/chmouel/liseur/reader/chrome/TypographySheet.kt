@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
@@ -67,6 +68,7 @@ fun TypographySheet(
     onPageMarginsChanged: (Double?) -> Unit,
     onBrightnessChanged: (Float?) -> Unit,
     onPageTurnAnimationChanged: (Boolean) -> Unit,
+    onFooterModeChanged: (FooterMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -87,6 +89,7 @@ fun TypographySheet(
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
             )
+            FooterModeDropdown(selected = prefs.footerMode, onSelected = onFooterModeChanged)
             PageTurnAnimationToggle(
                 enabled = prefs.pageTurnAnimation,
                 onChanged = onPageTurnAnimationChanged,
@@ -193,6 +196,62 @@ private fun FontDropdown(selected: ReaderFont, onSelected: (ReaderFont) -> Unit)
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FooterModeDropdown(selected: FooterMode, onSelected: (FooterMode) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionLabel("Progress")
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+        ) {
+            OutlinedTextField(
+                value = selected.label,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                FooterMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(mode.label) },
+                        trailingIcon = {
+                            if (mode == selected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        },
+                        onClick = {
+                            onSelected(mode)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val FooterMode.label: String
+    get() = when (this) {
+        FooterMode.TIME_LEFT_CHAPTER -> "Time left in chapter"
+        FooterMode.TIME_LEFT_BOOK -> "Time left in book"
+        FooterMode.PAGE -> "Page number"
+        FooterMode.PERCENT -> "Percentage read"
+        FooterMode.NONE -> "Nothing"
+    }
 
 private fun ReaderFont.composeFamily(assets: android.content.res.AssetManager): FontFamily? =
     when (this) {
