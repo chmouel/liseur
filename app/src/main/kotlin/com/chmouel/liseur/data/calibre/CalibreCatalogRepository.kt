@@ -106,6 +106,7 @@ class CalibreCatalogRepository(
                     remoteUuid = remote.uuid,
                     remoteBookId = remote.bookId,
                     coverUrl = remote.coverHref?.let { CalibreUrl.resolve(baseUrl, it) },
+                    downloadHref = remote.downloadHref,
                     downloadState = existing?.downloadState ?: DownloadState.REMOTE,
                     remoteUpdatedAt = remote.updatedAt,
                 ),

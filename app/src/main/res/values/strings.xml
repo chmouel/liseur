@@ -55,5 +55,18 @@
     <string name="calibre_password_storage_note">Your password is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it, as calibre-web requires.</string>
     <string name="book_on_server">On the server</string>
     <string name="book_not_downloaded">This book is still on the server.</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    <string name="calibre_storage_empty">No books downloaded yet</string>
+    <string name="download_in_progress">Downloading…</string>
+    <string name="downloads_not_allowed">Your calibre-web account can\'t download books. Ask the server\'s admin to tick “Allow Downloads” for you.</string>
+    <string name="download_book">Download</string>
+    <string name="cancel_download">Cancel download</string>
+    <string name="remove_download">Remove download</string>
+    <string name="no_book_actions">Nothing to do here yet.</string>
     <string name="calibre_credentials_lost">Sign in to your calibre-web server again.</string>
+    <plurals name="calibre_storage">
+        <item quantity="one">%1$d book downloaded · %2$s</item>
+        <item quantity="other">%1$d books downloaded · %2$s</item>
+    </plurals>
 </resources>

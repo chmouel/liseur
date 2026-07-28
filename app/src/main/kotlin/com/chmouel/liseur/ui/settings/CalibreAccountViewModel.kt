@@ -8,8 +8,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
+import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.SetupFailure
 import com.chmouel.liseur.data.calibre.SetupResult
+import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.db.CalibreServer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,10 +34,12 @@ data class CalibreAccountUiState(
     val password: String = "",
     val connecting: Boolean = false,
     val error: AccountError? = null,
+    val storage: StorageUse = StorageUse(count = 0, bytes = 0),
 )
 
 class CalibreAccountViewModel(
     private val repository: CalibreAccountRepository,
+    downloads: BookDownloadRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CalibreAccountUiState())
@@ -45,6 +49,11 @@ class CalibreAccountViewModel(
         viewModelScope.launch {
             repository.server.collect { server ->
                 _state.update { it.copy(server = server) }
+            }
+        }
+        viewModelScope.launch {
+            downloads.storage.collect { use ->
+                _state.update { it.copy(storage = use) }
             }
         }
     }
@@ -109,7 +118,10 @@ class CalibreAccountViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container
-                CalibreAccountViewModel(container.calibreAccount)
+                CalibreAccountViewModel(
+                    repository = container.calibreAccount,
+                    downloads = container.bookDownloads,
+                )
             }
         }
     }

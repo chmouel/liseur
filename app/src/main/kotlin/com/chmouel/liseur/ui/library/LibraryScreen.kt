@@ -1,12 +1,15 @@
 package com.chmouel.liseur.ui.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +29,7 @@ import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -33,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -41,8 +46,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +64,7 @@ import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.CatalogStatus
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
 import kotlinx.coroutines.launch
 
@@ -67,10 +76,16 @@ fun LibraryScreen(
     onAddFolder: () -> Unit,
     onBookSelected: (Book) -> Unit,
     onOpenAccount: () -> Unit,
+    onDownload: (Book) -> Unit,
+    onCancelDownload: (Book) -> Unit,
+    onRemoveDownload: (Book) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbarHost = remember { SnackbarHostState() }
+    val downloading = stringResource(R.string.download_in_progress)
+    val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
+    var sheetBook by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
     val notYetHere = stringResource(R.string.book_not_downloaded)
     val credentialsLost = stringResource(R.string.calibre_credentials_lost)
@@ -129,16 +144,89 @@ fun LibraryScreen(
             else -> BookGrid(
                 state = state,
                 onBookSelected = { book ->
-                    if (book.openableUrl == null) {
-                        scope.launch { snackbarHost.showSnackbar(notYetHere) }
-                    } else {
-                        onBookSelected(book)
+                    when {
+                        book.openableUrl != null -> onBookSelected(book)
+                        book.url in state.downloads ->
+                            scope.launch { snackbarHost.showSnackbar(downloading) }
+                        !state.canDownload ->
+                            scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
+                        else -> onDownload(book)
                     }
                 },
+                onBookLongPress = { sheetBook = it },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
             )
+        }
+    }
+
+    sheetBook?.let { book ->
+        BookActionsSheet(
+            book = book,
+            downloading = book.url in state.downloads,
+            onDismiss = { sheetBook = null },
+            canDownload = state.canDownload,
+            onDownload = { onDownload(book); sheetBook = null },
+            onCancelDownload = { onCancelDownload(book); sheetBook = null },
+            onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
+        )
+    }
+}
+
+/** Long-press actions for a book: chiefly, freeing the space it takes. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BookActionsSheet(
+    book: Book,
+    downloading: Boolean,
+    canDownload: Boolean,
+    onDismiss: () -> Unit,
+    onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onRemoveDownload: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 32.dp)) {
+            Text(book.title, style = MaterialTheme.typography.titleMedium)
+            book.author?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            when {
+                downloading -> Button(
+                    onClick = onCancelDownload,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.cancel_download))
+                }
+
+                book.downloadState == DownloadState.DOWNLOADED && book.remoteUuid != null ->
+                    OutlinedButton(
+                        onClick = onRemoveDownload,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.remove_download))
+                    }
+
+                book.remoteUuid != null -> Button(
+                    onClick = onDownload,
+                    enabled = canDownload,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.download_book))
+                }
+
+                else -> Text(
+                    text = stringResource(R.string.no_book_actions),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -147,6 +235,7 @@ fun LibraryScreen(
 private fun BookGrid(
     state: LibraryUiState,
     onBookSelected: (Book) -> Unit,
+    onBookLongPress: (Book) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalGrid(
@@ -165,7 +254,12 @@ private fun BookGrid(
             }
         }
         items(state.books, key = { it.id }) { book ->
-            BookCard(book = book, onClick = { onBookSelected(book) })
+            BookCard(
+                book = book,
+                progress = state.downloads[book.url],
+                onClick = { onBookSelected(book) },
+                onLongClick = { onBookLongPress(book) },
+            )
         }
     }
 }
@@ -231,13 +325,18 @@ private fun ContinueReadingCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BookCard(
     book: Book,
+    progress: DownloadProgress?,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.clickable(onClick = onClick)) {
+    Column(
+        modifier = modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
+    ) {
         Box {
             BookCover(
                 book = book,
@@ -245,8 +344,14 @@ private fun BookCard(
                     .fillMaxWidth()
                     .aspectRatio(2f / 3f),
             )
-            if (book.downloadState != DownloadState.DOWNLOADED) {
-                OnServerBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
+            when {
+                progress != null -> DownloadOverlay(
+                    fraction = progress.fraction,
+                    modifier = Modifier.matchParentSize(),
+                )
+
+                book.downloadState != DownloadState.DOWNLOADED ->
+                    OnServerBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
             }
         }
         Text(
@@ -293,6 +398,28 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier) {
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(8.dp),
+            )
+        }
+    }
+}
+
+/** Dims the cover and shows how far the download has got. */
+@Composable
+private fun DownloadOverlay(fraction: Float?, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        val color = MaterialTheme.colorScheme.inverseOnSurface
+        if (fraction == null) {
+            CircularProgressIndicator(color = color, modifier = Modifier.size(32.dp))
+        } else {
+            CircularProgressIndicator(
+                progress = { fraction },
+                color = color,
+                modifier = Modifier.size(32.dp),
             )
         }
     }

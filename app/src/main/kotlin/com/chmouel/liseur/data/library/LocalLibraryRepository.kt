@@ -71,6 +71,26 @@ class LocalLibraryRepository(
         bookDao.touchLastOpened(url, System.currentTimeMillis())
     }
 
+    /**
+     * Pulls the cover out of a book that has just been downloaded, so the
+     * library keeps showing it once the server is out of reach. [identity]
+     * is the book's permanent URL, not the file's, so the cover survives
+     * the download being removed.
+     */
+    suspend fun extractCover(fileUrl: AbsoluteUrl, identity: String): String? {
+        val asset = assetRetriever.retrieve(fileUrl).getOrElse { return null }
+        val publication = publicationOpener.open(asset, allowUserInteraction = false)
+            .getOrElse {
+                asset.close()
+                return null
+            }
+        return try {
+            saveCover(publication, identity)
+        } finally {
+            publication.close()
+        }
+    }
+
     private suspend fun scanFolder(treeUri: Uri) = withContext(Dispatchers.IO) {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext
         val knownUrls = bookDao.urlsForSource(treeUri.toString()).toMutableSet()
@@ -115,7 +135,7 @@ class LocalLibraryRepository(
                 author = publication.metadata.authors
                     .joinToString(", ") { it.name }
                     .ifBlank { null },
-                coverPath = saveCover(publication, url),
+                coverPath = saveCover(publication, url.toString()),
                 source = source,
                 addedAt = System.currentTimeMillis(),
                 lastOpenedAt = null,
@@ -127,10 +147,10 @@ class LocalLibraryRepository(
         }
     }
 
-    private suspend fun saveCover(publication: Publication, url: AbsoluteUrl): String? {
+    private suspend fun saveCover(publication: Publication, identity: String): String? {
         val cover = publication.cover() ?: return null
         val dir = File(context.filesDir, "covers").apply { mkdirs() }
-        val file = File(dir, "${sha1Hex(url.toString())}.jpg")
+        val file = File(dir, "${sha1Hex(identity)}.jpg")
         return withContext(Dispatchers.IO) {
             runCatching {
                 file.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, 85, it) }

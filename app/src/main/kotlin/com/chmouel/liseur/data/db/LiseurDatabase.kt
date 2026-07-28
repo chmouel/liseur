@@ -8,7 +8,7 @@ import androidx.sqlite.execSQL
 
 @Database(
     entities = [ReadingProgress::class, Book::class, LibraryFolder::class, CalibreServer::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -57,6 +57,13 @@ abstract class LiseurDatabase : RoomDatabase() {
                 connection.execSQL(
                     "ALTER TABLE books ADD COLUMN download_state TEXT NOT NULL DEFAULT 'DOWNLOADED'",
                 )
+            }
+        }
+
+        /** Remembers which catalog link a book is downloaded from. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE books ADD COLUMN download_href TEXT")
             }
         }
     }

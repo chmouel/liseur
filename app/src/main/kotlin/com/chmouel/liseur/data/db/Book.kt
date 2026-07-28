@@ -51,6 +51,7 @@ data class Book(
     @ColumnInfo(name = "remote_uuid") val remoteUuid: String? = null,
     @ColumnInfo(name = "remote_book_id") val remoteBookId: Int? = null,
     @ColumnInfo(name = "cover_url") val coverUrl: String? = null,
+    @ColumnInfo(name = "download_href") val downloadHref: String? = null,
     @ColumnInfo(name = "download_state") val downloadState: DownloadState = DownloadState.DOWNLOADED,
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
 ) {
@@ -84,6 +85,12 @@ interface BookDao {
         "UPDATE books SET download_state = :state, local_uri = :localUri WHERE url = :url",
     )
     suspend fun setDownloadState(url: String, state: DownloadState, localUri: String?)
+
+    @Query("UPDATE books SET cover_path = :coverPath WHERE url = :url")
+    suspend fun setCoverPath(url: String, coverPath: String)
+
+    @Query("SELECT * FROM books WHERE local_uri IS NOT NULL")
+    fun observeDownloaded(): Flow<List<Book>>
 
     @Upsert
     suspend fun upsert(book: Book): Long

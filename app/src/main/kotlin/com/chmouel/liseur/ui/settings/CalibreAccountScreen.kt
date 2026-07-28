@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -43,9 +46,13 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.db.CalibreServer
 
 /**
@@ -105,6 +112,7 @@ fun CalibreAccountScreen(
             } else {
                 ConnectedCard(
                     server = server,
+                    storage = state.storage,
                     busy = state.connecting,
                     onRetryCapabilities = onRetryCapabilities,
                     onKoboToken = onKoboToken,
@@ -156,13 +164,32 @@ private fun ConnectForm(
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
         modifier = Modifier.fillMaxWidth(),
     )
+    var passwordShown by rememberSaveable { mutableStateOf(false) }
     OutlinedTextField(
         value = state.password,
         onValueChange = onPasswordChange,
         label = { Text(stringResource(R.string.calibre_password)) },
         singleLine = true,
         enabled = !state.connecting,
-        visualTransformation = PasswordVisualTransformation(),
+        visualTransformation = if (passwordShown) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
+        trailingIcon = {
+            IconButton(onClick = { passwordShown = !passwordShown }) {
+                Icon(
+                    imageVector = if (passwordShown) {
+                        Icons.Outlined.VisibilityOff
+                    } else {
+                        Icons.Outlined.Visibility
+                    },
+                    contentDescription = stringResource(
+                        if (passwordShown) R.string.hide_password else R.string.show_password,
+                    ),
+                )
+            }
+        },
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Password,
             imeAction = ImeAction.Done,
@@ -202,6 +229,7 @@ private fun ConnectForm(
 @Composable
 private fun ConnectedCard(
     server: CalibreServer,
+    storage: StorageUse,
     busy: Boolean,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
@@ -224,6 +252,20 @@ private fun ConnectedCard(
             Text(
                 server.username,
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = if (storage.count == 0) {
+                    stringResource(R.string.calibre_storage_empty)
+                } else {
+                    pluralStringResource(
+                        R.plurals.calibre_storage,
+                        storage.count,
+                        storage.count,
+                        Formatter.formatShortFileSize(LocalContext.current, storage.bytes),
+                    )
+                },
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

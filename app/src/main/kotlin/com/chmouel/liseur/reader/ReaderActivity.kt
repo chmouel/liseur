@@ -27,8 +27,12 @@ class ReaderActivity : FragmentActivity() {
         (intent.getStringExtra(EXTRA_URL)?.toUri() ?: intent.data)?.toAbsoluteUrl()
     }
 
+    private val bookId: String by lazy {
+        intent.getStringExtra(EXTRA_ID) ?: checkNotNull(bookUrl).toString()
+    }
+
     private val viewModel: ReaderViewModel by viewModels {
-        ReaderViewModel.factory(checkNotNull(bookUrl))
+        ReaderViewModel.factory(checkNotNull(bookUrl), bookId)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,8 +138,11 @@ class ReaderActivity : FragmentActivity() {
 
     companion object {
         private const val EXTRA_URL = "url"
+        private const val EXTRA_ID = "id"
 
-        fun intent(context: Context, url: String): Intent =
-            Intent(context, ReaderActivity::class.java).putExtra(EXTRA_URL, url)
+        fun intent(context: Context, url: String, id: String = url): Intent =
+            Intent(context, ReaderActivity::class.java)
+                .putExtra(EXTRA_URL, url)
+                .putExtra(EXTRA_ID, id)
     }
 }

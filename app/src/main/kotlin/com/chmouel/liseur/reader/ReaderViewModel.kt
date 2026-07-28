@@ -39,6 +39,12 @@ import org.readium.r2.streamer.PublicationOpener
 
 class ReaderViewModel(
     private val bookUrl: AbsoluteUrl,
+    /**
+     * The book's permanent identity in the library, which for a book from
+     * calibre-web is not the file it currently lives in — so where you got
+     * to survives the download being removed and fetched again.
+     */
+    private val bookId: String,
     private val assetRetriever: AssetRetriever,
     private val publicationOpener: PublicationOpener,
     private val progressDao: ReadingProgressDao,
@@ -101,11 +107,11 @@ class ReaderViewModel(
                     _state.value = UiState.Failure(it.message)
                     return@launch
                 }
-            val initialLocator = progressDao.get(bookUrl.toString())
+            val initialLocator = progressDao.get(bookId)
                 ?.also { speed = ReadingSpeedEstimator(it.readingSpeed) }
                 ?.let { Locator.fromJSON(JSONObject(it.locatorJson)) }
             lastLocator = initialLocator
-            library.markOpened(bookUrl.toString())
+            library.markOpened(bookId)
             this@ReaderViewModel.publication = publication
             _state.value = UiState.Ready(
                 publication = publication,
@@ -133,7 +139,7 @@ class ReaderViewModel(
         viewModelScope.launch {
             progressDao.upsert(
                 ReadingProgress(
-                    bookUrl = bookUrl.toString(),
+                    bookUrl = bookId,
                     locatorJson = locator.toJSON().toString(),
                     totalProgression = locator.locations.totalProgression,
                     readingSpeed = speed.speed,
@@ -237,11 +243,12 @@ class ReaderViewModel(
     companion object {
         private const val JUMP_BACK_TIMEOUT_MS = 30_000L
 
-        fun factory(bookUrl: AbsoluteUrl): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(bookUrl: AbsoluteUrl, bookId: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container
                 ReaderViewModel(
                     bookUrl = bookUrl,
+                    bookId = bookId,
                     assetRetriever = container.assetRetriever,
                     publicationOpener = container.publicationOpener,
                     progressDao = container.database.readingProgressDao(),
