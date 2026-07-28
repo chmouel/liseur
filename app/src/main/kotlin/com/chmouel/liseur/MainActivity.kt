@@ -8,10 +8,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chmouel.liseur.reader.ReaderActivity
 import com.chmouel.liseur.ui.library.LibraryScreen
+import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.theme.LiseurTheme
 
 class MainActivity : ComponentActivity() {
@@ -21,17 +25,20 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             LiseurTheme {
-                LibraryScreen(onOpenBook = rememberOpenBookAction())
+                LibraryRoute()
             }
         }
     }
 }
 
-/** SAF picker for an EPUB; keeps read access and hands off to the reader. */
 @Composable
-private fun rememberOpenBookAction(): () -> Unit {
+private fun LibraryRoute(
+    viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
+) {
     val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    val openBook = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
@@ -41,8 +48,23 @@ private fun rememberOpenBookAction(): () -> Unit {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                 )
             }
+            viewModel.importBook(uri)
             context.startActivity(ReaderActivity.intent(context, uri.toString()))
         }
     }
-    return { launcher.launch(arrayOf("application/epub+zip")) }
+
+    val addFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) viewModel.addFolder(uri)
+    }
+
+    LibraryScreen(
+        state = state,
+        onOpenBook = { openBook.launch(arrayOf("application/epub+zip")) },
+        onAddFolder = { addFolder.launch(null) },
+        onBookSelected = { book ->
+            context.startActivity(ReaderActivity.intent(context, book.url))
+        },
+    )
 }

@@ -111,5 +111,8 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    implementation(libs.coil.compose)
+    implementation(libs.androidx.documentfile)
+
     testImplementation(libs.junit)
 }

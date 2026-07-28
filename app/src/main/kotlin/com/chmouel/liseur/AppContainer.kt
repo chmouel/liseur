@@ -3,6 +3,7 @@ package com.chmouel.liseur
 import android.content.Context
 import androidx.room.Room
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.library.LocalLibraryRepository
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -27,6 +28,14 @@ class AppContainer(context: Context) {
     )
 
     val database = Room.databaseBuilder(context, LiseurDatabase::class.java, "liseur.db").build()
+
+    val libraryRepository = LocalLibraryRepository(
+        context = context.applicationContext,
+        assetRetriever = assetRetriever,
+        publicationOpener = publicationOpener,
+        bookDao = database.bookDao(),
+        folderDao = database.libraryFolderDao(),
+    )
 }
 
 val Context.container: AppContainer

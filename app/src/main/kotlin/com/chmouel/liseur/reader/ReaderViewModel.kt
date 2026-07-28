@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.library.LocalLibraryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +28,7 @@ class ReaderViewModel(
     private val assetRetriever: AssetRetriever,
     private val publicationOpener: PublicationOpener,
     private val progressDao: ReadingProgressDao,
+    private val library: LocalLibraryRepository,
 ) : ViewModel() {
 
     sealed interface UiState {
@@ -67,6 +69,7 @@ class ReaderViewModel(
             val initialLocator = progressDao.get(bookUrl.toString())
                 ?.let { Locator.fromJSON(JSONObject(it.locatorJson)) }
             lastLocator = initialLocator
+            library.markOpened(bookUrl.toString())
             _state.value = UiState.Ready(
                 publication = publication,
                 navigatorFactory = EpubNavigatorFactory(publication),
@@ -82,6 +85,7 @@ class ReaderViewModel(
                 ReadingProgress(
                     bookUrl = bookUrl.toString(),
                     locatorJson = locator.toJSON().toString(),
+                    totalProgression = locator.locations.totalProgression,
                     updatedAt = System.currentTimeMillis(),
                 ),
             )
@@ -101,6 +105,7 @@ class ReaderViewModel(
                     assetRetriever = container.assetRetriever,
                     publicationOpener = container.publicationOpener,
                     progressDao = container.database.readingProgressDao(),
+                    library = container.libraryRepository,
                 )
             }
         }

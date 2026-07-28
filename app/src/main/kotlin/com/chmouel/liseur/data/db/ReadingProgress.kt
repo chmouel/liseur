@@ -16,6 +16,7 @@ import androidx.room.Upsert
 data class ReadingProgress(
     @PrimaryKey @ColumnInfo(name = "book_url") val bookUrl: String,
     @ColumnInfo(name = "locator_json") val locatorJson: String,
+    @ColumnInfo(name = "total_progression") val totalProgression: Double?,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
 
@@ -23,6 +24,9 @@ data class ReadingProgress(
 interface ReadingProgressDao {
     @Query("SELECT * FROM reading_progress WHERE book_url = :bookUrl")
     suspend fun get(bookUrl: String): ReadingProgress?
+
+    @Query("SELECT total_progression FROM reading_progress WHERE book_url = :bookUrl")
+    fun observeTotalProgression(bookUrl: String): kotlinx.coroutines.flow.Flow<Double?>
 
     @Upsert
     suspend fun upsert(progress: ReadingProgress)
