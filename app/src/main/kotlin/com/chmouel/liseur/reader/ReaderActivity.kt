@@ -3,6 +3,7 @@ package com.chmouel.liseur.reader
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -12,10 +13,14 @@ import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.ui.theme.LiseurTheme
+import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.toAbsoluteUrl
 
 class ReaderActivity : FragmentActivity() {
+
+    private var navigator: EpubNavigatorFragment? = null
 
     private val bookUrl: AbsoluteUrl? by lazy {
         (intent.getStringExtra(EXTRA_URL)?.toUri() ?: intent.data)?.toAbsoluteUrl()
@@ -61,6 +66,7 @@ class ReaderActivity : FragmentActivity() {
                         ReaderScreen(
                             publication = s.publication,
                             onLocatorChanged = viewModel::onLocatorChanged,
+                            onNavigatorChanged = { navigator = it },
                             onBack = ::finish,
                         )
                     }
@@ -68,6 +74,34 @@ class ReaderActivity : FragmentActivity() {
             }
         }
     }
+
+    /** Volume keys turn pages, like the Kindle app's optional setting. */
+    @OptIn(ExperimentalReadiumApi::class)
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val nav = navigator ?: return super.onKeyDown(keyCode, event)
+        return when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                nav.goForward(animated = true)
+                true
+            }
+
+            KeyEvent.KEYCODE_VOLUME_UP -> {
+                nav.goBackward(animated = true)
+                true
+            }
+
+            else -> super.onKeyDown(keyCode, event)
+        }
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        when {
+            navigator != null &&
+                (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+            -> true
+
+            else -> super.onKeyUp(keyCode, event)
+        }
 
     companion object {
         private const val EXTRA_URL = "url"

@@ -1,5 +1,11 @@
 package com.chmouel.liseur.reader
 
+import android.app.Activity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,40 +31,70 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.compose.AndroidFragment
 import com.chmouel.liseur.R
+import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import kotlinx.coroutines.flow.drop
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalReadiumApi::class)
 @Composable
 fun ReaderScreen(
     publication: Publication,
     onLocatorChanged: (Locator) -> Unit,
+    onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onBack: () -> Unit,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
+    var chromeVisible by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
+    val chromeVisibleNow by rememberUpdatedState(chromeVisible)
 
     LaunchedEffect(navigator) {
+        onNavigatorChanged(navigator)
         // The navigator replays its current locator on subscription; only
         // subsequent changes need persisting.
         navigator?.currentLocator?.drop(1)?.collect(onLocatorChanged)
     }
+
+    DisposableEffect(navigator) {
+        val nav = navigator
+        val listener = nav?.let {
+            ReaderTapZones(
+                navigator = it,
+                isChromeVisible = { chromeVisibleNow },
+                onShowChrome = { chromeVisible = true },
+                onHideChrome = { chromeVisible = false },
+            ).also(it::addInputListener)
+        }
+        onDispose {
+            if (nav != null && listener != null) nav.removeInputListener(listener)
+            onNavigatorChanged(null)
+        }
+    }
+
+    ImmersiveMode(hideSystemBars = !chromeVisible)
 
     Box(
         Modifier
@@ -71,35 +107,42 @@ fun ReaderScreen(
             navigator = fragment
         }
 
-        TopAppBar(
-            title = {
-                Text(
-                    text = publication.metadata.title.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.reader_back),
+        AnimatedVisibility(
+            visible = chromeVisible,
+            enter = slideInVertically { -it } + fadeIn(),
+            exit = slideOutVertically { -it } + fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = publication.metadata.title.orEmpty(),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                }
-            },
-            actions = {
-                IconButton(onClick = { showToc = true }) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.List,
-                        contentDescription = stringResource(R.string.reader_contents),
-                    )
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-            ),
-        )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.reader_back),
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showToc = true }) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.List,
+                            contentDescription = stringResource(R.string.reader_contents),
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                ),
+            )
+        }
     }
 
     if (showToc) {
@@ -108,9 +151,34 @@ fun ReaderScreen(
             onDismiss = { showToc = false },
             onEntrySelected = { link ->
                 showToc = false
+                chromeVisible = false
                 publication.locatorFromLink(link)?.let { navigator?.go(it, animated = false) }
             },
         )
+    }
+}
+
+/** Hides the status and navigation bars while the chrome is hidden. */
+@Composable
+private fun ImmersiveMode(hideSystemBars: Boolean) {
+    val view = LocalView.current
+    LaunchedEffect(hideSystemBars) {
+        val window = (view.context as? Activity)?.window ?: return@LaunchedEffect
+        val controller = WindowCompat.getInsetsController(window, view)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (hideSystemBars) {
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            val window = (view.context as? Activity)?.window ?: return@onDispose
+            WindowCompat.getInsetsController(window, view)
+                .show(WindowInsetsCompat.Type.systemBars())
+        }
     }
 }
 
