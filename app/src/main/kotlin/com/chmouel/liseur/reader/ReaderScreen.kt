@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -67,6 +68,7 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
+import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -277,9 +279,13 @@ fun ReaderScreen(
     }
 
     if (showToc) {
-        TableOfContentsSheet(
+        BackHandler { showToc = false }
+        val here = navigator?.currentLocator?.collectAsStateWithLifecycle()
+        ContentsScreen(
             publication = publication,
-            onDismiss = { showToc = false },
+            theme = prefs.theme,
+            currentHref = here?.value?.href?.toString(),
+            onClose = { showToc = false },
             onEntrySelected = { link ->
                 showToc = false
                 chromeVisible = false
@@ -356,45 +362,6 @@ private fun ScreenBrightness(brightness: Float?) {
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TableOfContentsSheet(
-    publication: Publication,
-    onDismiss: () -> Unit,
-    onEntrySelected: (Link) -> Unit,
-) {
-    val entries = remember(publication) { publication.tableOfContents.flattenWithDepth() }
-
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text(
-            text = stringResource(R.string.reader_contents),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-        )
-        LazyColumn {
-            items(entries) { (depth, link) ->
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            text = link.title.orEmpty(),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onEntrySelected(link) }
-                        .padding(start = (depth * 16).dp),
-                )
-            }
-        }
-    }
-}
-
-private fun List<Link>.flattenWithDepth(depth: Int = 0): List<Pair<Int, Link>> =
-    flatMap { link -> listOf(depth to link) + link.children.flattenWithDepth(depth + 1) }
 
 @Composable
 fun ReaderLoadingScreen() {
