@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FileOpen
@@ -34,9 +35,14 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +54,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.calibre.CatalogStatus
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.DownloadState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,8 +70,19 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val snackbarHost = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val notYetHere = stringResource(R.string.book_not_downloaded)
+    val credentialsLost = stringResource(R.string.calibre_credentials_lost)
+
+    LaunchedEffect(state.catalogStatus) {
+        if (state.catalogStatus is CatalogStatus.CredentialsLost) {
+            snackbarHost.showSnackbar(credentialsLost)
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHost) },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
@@ -108,7 +128,13 @@ fun LibraryScreen(
 
             else -> BookGrid(
                 state = state,
-                onBookSelected = onBookSelected,
+                onBookSelected = { book ->
+                    if (book.openableUrl == null) {
+                        scope.launch { snackbarHost.showSnackbar(notYetHere) }
+                    } else {
+                        onBookSelected(book)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
@@ -212,12 +238,17 @@ private fun BookCard(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.clickable(onClick = onClick)) {
-        BookCover(
-            book = book,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f),
-        )
+        Box {
+            BookCover(
+                book = book,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f),
+            )
+            if (book.downloadState != DownloadState.DOWNLOADED) {
+                OnServerBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
+            }
+        }
         Text(
             text = book.title,
             style = MaterialTheme.typography.labelLarge,
@@ -240,9 +271,10 @@ private fun BookCard(
 @Composable
 private fun BookCover(book: Book, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(8.dp)
-    if (book.coverPath != null) {
+    val artwork = book.coverPath ?: book.coverUrl
+    if (artwork != null) {
         AsyncImage(
-            model = book.coverPath,
+            model = artwork,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = modifier.clip(shape),
@@ -263,6 +295,24 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier) {
                 modifier = Modifier.padding(8.dp),
             )
         }
+    }
+}
+
+/** Marks a book that is in the catalog but not yet on the device. */
+@Composable
+private fun OnServerBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f))
+            .padding(5.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.CloudDownload,
+            contentDescription = stringResource(R.string.book_on_server),
+            tint = MaterialTheme.colorScheme.inverseOnSurface,
+            modifier = Modifier.size(15.dp),
+        )
     }
 }
 

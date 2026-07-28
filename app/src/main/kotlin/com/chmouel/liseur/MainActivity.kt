@@ -106,7 +106,7 @@ private fun LibraryRoute(
         onOpenBook = { openBook.launch(arrayOf("application/epub+zip")) },
         onAddFolder = { addFolder.launch(null) },
         onBookSelected = { book ->
-            context.startActivity(ReaderActivity.intent(context, book.url))
+            book.openableUrl?.let { context.startActivity(ReaderActivity.intent(context, it)) }
         },
         onOpenAccount = onOpenAccount,
     )

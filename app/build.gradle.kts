@@ -106,7 +106,6 @@ dependencies {
     implementation(libs.readium.shared)
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
-    implementation(libs.readium.opds)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

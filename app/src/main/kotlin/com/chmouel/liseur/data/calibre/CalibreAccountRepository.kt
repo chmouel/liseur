@@ -11,12 +11,30 @@ class CalibreAccountRepository(
 ) {
     val server: Flow<CalibreServer?> = dao.observe()
 
+    /**
+     * Last known base URL and login, so callers that cannot suspend —
+     * the image loader, mainly — can still authenticate.
+     */
+    @Volatile
+    private var cached: Pair<String, CalibreCredentials>? = null
+
     suspend fun current(): CalibreServer? = dao.get()
 
     suspend fun credentials(): CalibreCredentials? {
-        val server = dao.get() ?: return null
+        val server = dao.get() ?: run {
+            cached = null
+            return null
+        }
         val password = CredentialCipher.decrypt(server.passwordCipher) ?: return null
-        return CalibreCredentials(server.username, password)
+        return CalibreCredentials(server.username, password).also {
+            cached = server.baseUrl to it
+        }
+    }
+
+    /** The login to use for [url], or null when it is not our server. */
+    fun credentialsForUrl(url: String): CalibreCredentials? {
+        val (baseUrl, credentials) = cached ?: return null
+        return credentials.takeIf { url.startsWith(baseUrl) }
     }
 
     /** Probes the server and, if it answers, saves it as the account. */
@@ -64,5 +82,8 @@ class CalibreAccountRepository(
         dao.setKoboToken(token)
     }
 
-    suspend fun disconnect() = dao.delete()
+    suspend fun disconnect() {
+        cached = null
+        dao.delete()
+    }
 }

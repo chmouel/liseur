@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
+import com.chmouel.liseur.data.calibre.CatalogStatus
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
@@ -27,11 +29,13 @@ data class LibraryUiState(
     val loading: Boolean = true,
     val books: List<Book> = emptyList(),
     val continueReading: ContinueReading? = null,
+    val catalogStatus: CatalogStatus = CatalogStatus.Idle,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
     private val library: LocalLibraryRepository,
+    private val catalog: CalibreCatalogRepository,
     progressDao: ReadingProgressDao,
 ) : ViewModel() {
 
@@ -45,12 +49,26 @@ class LibraryViewModel(
     }
 
     val state: StateFlow<LibraryUiState> =
-        combine(library.books, continueReading) { books, recent ->
-            LibraryUiState(loading = false, books = books, continueReading = recent)
+        combine(
+            library.books,
+            continueReading,
+            catalog.status,
+        ) { books, recent, catalogStatus ->
+            LibraryUiState(
+                loading = false,
+                books = books,
+                continueReading = recent,
+                catalogStatus = catalogStatus,
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
     init {
         viewModelScope.launch { library.rescanAll() }
+        refreshCatalog()
+    }
+
+    fun refreshCatalog() {
+        viewModelScope.launch { catalog.refresh() }
     }
 
     fun addFolder(treeUri: Uri) {
@@ -68,6 +86,7 @@ class LibraryViewModel(
                 val container = checkNotNull(this[APPLICATION_KEY]).container
                 LibraryViewModel(
                     library = container.libraryRepository,
+                    catalog = container.calibreCatalog,
                     progressDao = container.database.readingProgressDao(),
                 )
             }

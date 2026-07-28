@@ -53,4 +53,7 @@
     <string name="calibre_save_token">Save token</string>
     <string name="calibre_token_help">Liseur normally picks this up for you. If reading positions are not syncing, paste the Kobo sync URL from your calibre-web profile page here.</string>
     <string name="calibre_password_storage_note">Your password is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it, as calibre-web requires.</string>
+    <string name="book_on_server">On the server</string>
+    <string name="book_not_downloaded">This book is still on the server.</string>
+    <string name="calibre_credentials_lost">Sign in to your calibre-web server again.</string>
 </resources>
