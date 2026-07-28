@@ -76,9 +76,9 @@ fun TypographySheet(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             ThemeRow(selected = prefs.theme, onSelected = onThemeSelected)
-            FontDropdown(selected = prefs.font, onSelected = onFontSelected)
             FontSizeSlider(value = prefs.fontSize, onChanged = onFontSizeChanged)
             BrightnessSlider(value = prefs.brightness, onChanged = onBrightnessChanged)
+            FontDropdown(selected = prefs.font, onSelected = onFontSelected)
             LayoutControls(
                 lineHeight = prefs.lineHeight,
                 pageMargins = prefs.pageMargins,
