@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Open book glyph, centered in the adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group>
+        <!-- Book covers/pages: two mirrored leaves meeting at the spine. -->
+        <path
+            android:fillColor="#4A2E1A"
+            android:pathData="M54,40 C47.5,34.5 38,32.5 29,34 C27.6,34.2 26.5,35.4 26.5,36.8 L26.5,68.2 C26.5,69.9 28.1,71.2 29.8,70.9 C37.8,69.7 46.2,71.6 52,76.5 C53.2,77.5 54.8,77.5 56,76.5 C61.8,71.6 70.2,69.7 78.2,70.9 C79.9,71.2 81.5,69.9 81.5,68.2 L81.5,36.8 C81.5,35.4 80.4,34.2 79,34 C70,32.5 60.5,34.5 54,40 Z" />
+        <!-- Page split: hairline at the spine in the background paper tone. -->
+        <path
+            android:fillColor="#F2E4CB"
+            android:pathData="M52.75,41.5 L55.25,41.5 L55.25,74 L52.75,74 Z" />
+        <!-- Text lines on the left page. -->
+        <path
+            android:fillColor="#F2E4CB"
+            android:pathData="M32.5,42.5 C37.5,41.5 43.5,42.5 48,45.5 L48,48.5 C43.5,45.5 37.5,44.5 32.5,45.5 Z" />
+        <path
+            android:fillColor="#F2E4CB"
+            android:pathData="M32.5,50.5 C37.5,49.5 43.5,50.5 48,53.5 L48,56.5 C43.5,53.5 37.5,52.5 32.5,53.5 Z" />
+        <path
+            android:fillColor="#F2E4CB"
+            android:pathData="M32.5,58.5 C37.5,57.5 43.5,58.5 48,61.5 L48,64.5 C43.5,61.5 37.5,60.5 32.5,61.5 Z" />
+        <!-- Text lines on the right page. -->
+        <path
+            android:fillColor="#F2E4CB"
+            android:pathData="M75.5,42.5 C70.5,41.5 64.5,42.5 60,45.5 L60,48.5 C64.5,45.5 70.5,44.5 75.5,45.5 Z" />
+        <path
+            android:fillColor="#F2E4CB"
+            android:pathData="M75.5,50.5 C70.5,49.5 64.5,50.5 60,53.5 L60,56.5 C64.5,53.5 70.5,52.5 75.5,53.5 Z" />
+        <path
+            android:fillColor="#F2E4CB"
+            android:pathData="M75.5,58.5 C70.5,57.5 64.5,58.5 60,61.5 L60,64.5 C64.5,61.5 70.5,60.5 75.5,61.5 Z" />
+    </group>
+</vector>

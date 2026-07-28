@@ -1,0 +1,9 @@
+Liseur is a beautiful, modern ebook reader for Android.
+
+Features (in development):
+
+* First-class local EPUB reading, built on the Readium toolkit
+* Kindle-grade reading ergonomics: tap zones, page-turn animations, typography controls, Light/Sepia/Dark/Black themes, brightness gesture, time left in chapter
+* Local library indexed from folders you choose, with covers, highlights, notes, bookmarks, and in-book search
+* calibre-web client: browse, search, and download over OPDS; sync reading positions via the Kobo sync protocol
+* Free software: no trackers, no analytics. Network access is used only for your own calibre-web server and opt-in dictionary lookups.
