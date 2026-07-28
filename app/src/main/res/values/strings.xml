@@ -2,6 +2,11 @@
     <string name="app_name">Liseur</string>
 
     <string name="library_title">Library</string>
+    <string name="open_book">Open a book</string>
     <string name="empty_library_title">Your library is empty</string>
     <string name="empty_library_subtitle">Add EPUB books from your device, or connect a calibre-web server to browse and download your collection.</string>
+
+    <string name="reader_back">Back</string>
+    <string name="reader_contents">Contents</string>
+    <string name="reader_open_failed">Couldn\'t open this book</string>
 </resources>

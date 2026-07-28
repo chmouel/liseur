@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -25,7 +27,10 @@ import com.chmouel.liseur.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(modifier: Modifier = Modifier) {
+fun LibraryScreen(
+    onOpenBook: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -34,6 +39,13 @@ fun LibraryScreen(modifier: Modifier = Modifier) {
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.library_title)) },
                 scrollBehavior = scrollBehavior,
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onOpenBook,
+                icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
+                text = { Text(stringResource(R.string.open_book)) },
             )
         },
     ) { padding ->
