@@ -54,6 +54,7 @@ data class Book(
     @ColumnInfo(name = "download_href") val downloadHref: String? = null,
     @ColumnInfo(name = "download_state") val downloadState: DownloadState = DownloadState.DOWNLOADED,
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
+    @ColumnInfo(name = "downloaded_at") val downloadedAt: Long? = null,
 ) {
     /** The URL to hand to Readium, or null when the file is not here yet. */
     val openableUrl: String? get() = localUri ?: url.takeIf { downloadState == DownloadState.DOWNLOADED }
@@ -61,7 +62,25 @@ data class Book(
 
 @Dao
 interface BookDao {
-    @Query("SELECT * FROM books ORDER BY title")
+    /**
+     * The library in the order people actually reach for books: what you
+     * were reading, then what is on the device, then everything else,
+     * newest first within each. Title breaks ties so the grid never
+     * shuffles between launches.
+     */
+    @Query(
+        """
+        SELECT * FROM books
+        ORDER BY
+            CASE
+                WHEN last_opened_at IS NOT NULL THEN 0
+                WHEN download_state = 'DOWNLOADED' THEN 1
+                ELSE 2
+            END,
+            COALESCE(last_opened_at, downloaded_at, added_at) DESC,
+            title COLLATE NOCASE
+        """,
+    )
     fun observeAll(): Flow<List<Book>>
 
     @Query(
@@ -82,9 +101,18 @@ interface BookDao {
     suspend fun urlsForSource(source: String): List<String>
 
     @Query(
-        "UPDATE books SET download_state = :state, local_uri = :localUri WHERE url = :url",
+        """
+        UPDATE books
+        SET download_state = :state, local_uri = :localUri, downloaded_at = :downloadedAt
+        WHERE url = :url
+        """,
     )
-    suspend fun setDownloadState(url: String, state: DownloadState, localUri: String?)
+    suspend fun setDownloadState(
+        url: String,
+        state: DownloadState,
+        localUri: String?,
+        downloadedAt: Long? = null,
+    )
 
     @Query("UPDATE books SET cover_path = :coverPath WHERE url = :url")
     suspend fun setCoverPath(url: String, coverPath: String)

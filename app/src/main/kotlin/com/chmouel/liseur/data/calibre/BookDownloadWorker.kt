@@ -52,7 +52,12 @@ class BookDownloadWorker(
         return when (outcome) {
             is DownloadOutcome.Done -> {
                 val localUri = downloads.localUriFor(uuid)
-                bookDao.setDownloadState(bookUrl, DownloadState.DOWNLOADED, localUri)
+                bookDao.setDownloadState(
+                    bookUrl,
+                    DownloadState.DOWNLOADED,
+                    localUri,
+                    System.currentTimeMillis(),
+                )
                 AbsoluteUrl(localUri)?.let { fileUrl ->
                     container.libraryRepository.extractCover(fileUrl, bookUrl)?.let { cover ->
                         bookDao.setCoverPath(bookUrl, cover)
