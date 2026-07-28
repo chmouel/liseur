@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material3.Button
@@ -56,6 +57,7 @@ fun LibraryScreen(
     onOpenBook: () -> Unit,
     onAddFolder: () -> Unit,
     onBookSelected: (Book) -> Unit,
+    onOpenAccount: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -66,6 +68,12 @@ fun LibraryScreen(
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.library_title)) },
                 actions = {
+                    IconButton(onClick = onOpenAccount) {
+                        Icon(
+                            Icons.Outlined.CloudQueue,
+                            contentDescription = stringResource(R.string.calibre_account),
+                        )
+                    }
                     IconButton(onClick = onAddFolder) {
                         Icon(
                             Icons.Outlined.CreateNewFolder,

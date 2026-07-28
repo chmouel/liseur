@@ -9,10 +9,30 @@ import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
+/** Where a book's file is, from the library's point of view. */
+enum class DownloadState {
+    /** Known from the server catalog, not on the device. */
+    REMOTE,
+    QUEUED,
+    DOWNLOADING,
+    /** On the device: either a local file or a completed download. */
+    DOWNLOADED,
+    FAILED,
+}
+
 /**
- * A book known to the library. [url] points at the EPUB itself; [source]
- * is the tree URL of the library folder it was found in, or null for
- * books imported individually.
+ * A book known to the library.
+ *
+ * [url] is the book's permanent identity and never changes: the file URL
+ * for local books, and `calibre:<uuid>` for books that came from the
+ * server. The file itself lives in [localUri], which is filled in when a
+ * download completes and cleared when it is removed. Keeping the two
+ * apart matters because `reading_progress` is keyed by URL — reusing the
+ * file URL as the identity would lose the reader's place every time a
+ * book is downloaded or removed.
+ *
+ * [source] is the tree URL of the library folder a local book was found
+ * in, or null for books imported individually.
  */
 @Entity(
     tableName = "books",
@@ -27,7 +47,16 @@ data class Book(
     val source: String?,
     @ColumnInfo(name = "added_at") val addedAt: Long,
     @ColumnInfo(name = "last_opened_at") val lastOpenedAt: Long?,
-)
+    @ColumnInfo(name = "local_uri") val localUri: String? = null,
+    @ColumnInfo(name = "remote_uuid") val remoteUuid: String? = null,
+    @ColumnInfo(name = "remote_book_id") val remoteBookId: Int? = null,
+    @ColumnInfo(name = "cover_url") val coverUrl: String? = null,
+    @ColumnInfo(name = "download_state") val downloadState: DownloadState = DownloadState.DOWNLOADED,
+    @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
+) {
+    /** The URL to hand to Readium, or null when the file is not here yet. */
+    val openableUrl: String? get() = localUri ?: url.takeIf { downloadState == DownloadState.DOWNLOADED }
+}
 
 @Dao
 interface BookDao {
@@ -42,8 +71,19 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE url = :url")
     suspend fun getByUrl(url: String): Book?
 
+    @Query("SELECT * FROM books WHERE remote_uuid = :uuid")
+    suspend fun getByRemoteUuid(uuid: String): Book?
+
+    @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL")
+    suspend fun allRemote(): List<Book>
+
     @Query("SELECT url FROM books WHERE source = :source")
     suspend fun urlsForSource(source: String): List<String>
+
+    @Query(
+        "UPDATE books SET download_state = :state, local_uri = :localUri WHERE url = :url",
+    )
+    suspend fun setDownloadState(url: String, state: DownloadState, localUri: String?)
 
     @Upsert
     suspend fun upsert(book: Book): Long

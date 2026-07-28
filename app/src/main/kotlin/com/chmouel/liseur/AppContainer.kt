@@ -2,6 +2,7 @@ package com.chmouel.liseur
 
 import android.content.Context
 import androidx.room.Room
+import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -29,7 +30,7 @@ class AppContainer(context: Context) {
     )
 
     val database = Room.databaseBuilder(context, LiseurDatabase::class.java, "liseur.db")
-        .addMigrations(LiseurDatabase.MIGRATION_1_2)
+        .addMigrations(LiseurDatabase.MIGRATION_1_2, LiseurDatabase.MIGRATION_2_3)
         .build()
 
     val libraryRepository = LocalLibraryRepository(
@@ -41,6 +42,8 @@ class AppContainer(context: Context) {
     )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
+
+    val calibreAccount = CalibreAccountRepository(database.calibreServerDao())
 }
 
 val Context.container: AppContainer

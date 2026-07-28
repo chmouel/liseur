@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Plain HTTP is allowed because a self-hosted calibre-web often lives on
+    a home network with no certificate. Liseur always tries HTTPS first and
+    only falls back after the user explicitly asks it to.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

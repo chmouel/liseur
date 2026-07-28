@@ -106,12 +106,17 @@ dependencies {
     implementation(libs.readium.shared)
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
+    implementation(libs.readium.opds)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    implementation(libs.okhttp)
+    implementation(libs.androidx.work.runtime.ktx)
+
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.datastore.preferences)
 

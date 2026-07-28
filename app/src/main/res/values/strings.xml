@@ -29,4 +29,28 @@
     </plurals>
     <string name="jump_back">Back</string>
     <string name="jump_back_to_page">Back to page %d</string>
+    <string name="back">Back</string>
+    <string name="calibre_account">calibre-web</string>
+    <string name="calibre_title">calibre-web</string>
+    <string name="calibre_intro">Give the address of your calibre-web server and the login you use for it. Liseur works out the rest on its own.</string>
+    <string name="calibre_url">Server address</string>
+    <string name="calibre_username">Username</string>
+    <string name="calibre_password">Password</string>
+    <string name="calibre_connect">Connect</string>
+    <string name="calibre_disconnect">Disconnect</string>
+    <string name="calibre_check_again">Check again</string>
+    <string name="calibre_try_http">Connect without encryption</string>
+    <string name="calibre_error_credentials">That username or password was refused by the server.</string>
+    <string name="calibre_error_not_calibre">No calibre-web catalog answered at that address. Check the address, including any folder it is served from.</string>
+    <string name="calibre_error_unreachable">The server did not answer. Check the address and that you are online.</string>
+    <string name="calibre_error_https">The server did not answer over a secure connection.</string>
+    <string name="calibre_no_download_right">This account is not allowed to download books. Ask whoever runs the server to tick \"Allow Downloads\" for your user in calibre-web, then check again.</string>
+    <string name="calibre_sync_on">Your reading position will follow you between devices.</string>
+    <string name="calibre_sync_off">Reading positions are not synced. The server may have Kobo sync switched off.</string>
+    <string name="calibre_show_advanced">Advanced</string>
+    <string name="calibre_hide_advanced">Hide advanced</string>
+    <string name="calibre_token">Kobo sync token or URL</string>
+    <string name="calibre_save_token">Save token</string>
+    <string name="calibre_token_help">Liseur normally picks this up for you. If reading positions are not syncing, paste the Kobo sync URL from your calibre-web profile page here.</string>
+    <string name="calibre_password_storage_note">Your password is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it, as calibre-web requires.</string>
 </resources>
