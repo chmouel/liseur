@@ -1,5 +1,6 @@
 package com.chmouel.liseur
 
+import android.app.ActivityOptions
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -21,7 +22,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.lifecycleScope
+import com.chmouel.liseur.domain.ResumeCandidate
+import com.chmouel.liseur.domain.shouldResume
 import com.chmouel.liseur.reader.ReaderActivity
+import kotlinx.coroutines.launch
 import com.chmouel.liseur.ui.library.LibraryScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.CalibreAccountScreen
@@ -29,15 +34,65 @@ import com.chmouel.liseur.ui.settings.CalibreAccountViewModel
 import com.chmouel.liseur.ui.theme.LiseurTheme
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Whether we still have to decide between the library and the book you
+     * were reading. The splash screen stays up while we do, which takes one
+     * small database read, so nobody sees the library flash past.
+     */
+    private var deciding = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splash = installSplashScreen()
+        splash.setKeepOnScreenCondition { deciding }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Only a genuinely cold start resumes a book: coming back from the
+        // reader must land on the library, not bounce straight back in.
+        if (savedInstanceState != null) deciding = false
+
         setContent {
             LiseurTheme {
                 LiseurApp()
             }
         }
+
+        if (deciding) {
+            lifecycleScope.launch {
+                resumeLastBook()
+                deciding = false
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Being here means the library is what you left the app on.
+        lifecycleScope.launch { container.sessionState.setLeftFromReader(false) }
+    }
+
+    private suspend fun resumeLastBook() {
+        val container = container
+        val leftFromReader = container.sessionState.leftFromReader()
+        val book = container.database.bookDao().mostRecentlyOpened()
+        val candidate = book?.openableUrl?.let { fileUrl ->
+            ResumeCandidate(
+                identity = book.url,
+                fileUrl = fileUrl,
+                totalProgression = container.database.readingProgressDao()
+                    .get(book.url)
+                    ?.totalProgression,
+            )
+        }
+        if (!shouldResume(candidate, leftFromReader) || candidate == null) return
+        // No animation: as far as the reader is concerned the app simply
+        // opened on their book, and a cross-fade from a library they never
+        // asked for would give the game away.
+        startActivity(
+            ReaderActivity.intent(this, candidate.fileUrl, candidate.identity),
+            ActivityOptions.makeCustomAnimation(this, 0, 0).toBundle(),
+        )
     }
 }
 

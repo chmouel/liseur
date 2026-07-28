@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.settings.SessionStateRepository
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -53,6 +54,8 @@ class AppContainer(context: Context) {
     )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
+
+    val sessionState = SessionStateRepository(context.applicationContext)
 
     val calibreAccount = CalibreAccountRepository(database.calibreServerDao())
 

@@ -89,6 +89,11 @@ interface BookDao {
     )
     fun observeMostRecent(): Flow<Book?>
 
+    @Query(
+        "SELECT * FROM books WHERE last_opened_at IS NOT NULL ORDER BY last_opened_at DESC LIMIT 1",
+    )
+    suspend fun mostRecentlyOpened(): Book?
+
     @Query("SELECT * FROM books WHERE url = :url")
     suspend fun getByUrl(url: String): Book?
 

@@ -14,7 +14,10 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.sync.PositionSyncWorker
+import androidx.lifecycle.lifecycleScope
+import com.chmouel.liseur.container
 import com.chmouel.liseur.ui.theme.LiseurTheme
+import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.toAbsoluteUrl
@@ -50,6 +53,8 @@ class ReaderActivity : FragmentActivity() {
         }
 
         enableEdgeToEdge()
+        // Reading is what the app should come back to next time it opens.
+        lifecycleScope.launch { container.sessionState.setLeftFromReader(true) }
         setContent {
             LiseurTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
