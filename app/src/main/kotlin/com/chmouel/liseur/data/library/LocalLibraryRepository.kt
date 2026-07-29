@@ -10,6 +10,10 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.LibraryFolderDao
+import com.chmouel.liseur.data.db.BookAnnotationDao
+import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.domain.isSameWork
+import com.chmouel.liseur.domain.workIdOf
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +37,8 @@ class LocalLibraryRepository(
     private val publicationOpener: PublicationOpener,
     private val bookDao: BookDao,
     private val folderDao: LibraryFolderDao,
+    private val progressDao: ReadingProgressDao,
+    private val annotationDao: BookAnnotationDao,
 ) {
     val books: Flow<List<Book>> = bookDao.observeAll()
     val mostRecent: Flow<Book?> = bookDao.observeMostRecent()
@@ -130,7 +136,7 @@ class LocalLibraryRepository(
                 // The path is the same but the file behind it is not, so the
                 // title and cover we cached are no longer the book's.
                 modifiedAt != null && existing.fileModifiedAt != modifiedAt ->
-                    reindexBook(url, modifiedAt)
+                    reindexBook(url, modifiedAt, existing.workId)
             }
         }
 
@@ -138,10 +144,18 @@ class LocalLibraryRepository(
     }
 
     /**
-     * Re-reads a file that changed on disk, keeping the library row so the
-     * reader's place, its annotations and when it was added all survive.
+     * Re-reads a file that changed on disk.
+     *
+     * The library row stays, so a book rewritten in place keeps your
+     * place in it, everything you marked in it and when you added it.
+     * If the file turns out to hold a different book, none of that
+     * describes anything that is still there, so it goes.
      */
-    private suspend fun reindexBook(url: AbsoluteUrl, modifiedAt: Long?) {
+    private suspend fun reindexBook(
+        url: AbsoluteUrl,
+        modifiedAt: Long?,
+        previousWorkId: String?,
+    ) {
         val asset = assetRetriever.retrieve(url).getOrElse { return }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
@@ -149,17 +163,27 @@ class LocalLibraryRepository(
                 return
             }
         try {
+            val title = publication.metadata.title
+                ?: url.filename?.removeSuffix(".epub")
+                ?: "Untitled"
+            val author = publication.metadata.authors
+                .joinToString(", ") { it.name }
+                .ifBlank { null }
+            val workId = workIdOf(publication.metadata.identifier, title, author)
             bookDao.refreshIndexedFile(
                 url = url.toString(),
-                title = publication.metadata.title
-                    ?: url.filename?.removeSuffix(".epub")
-                    ?: "Untitled",
-                author = publication.metadata.authors
-                    .joinToString(", ") { it.name }
-                    .ifBlank { null },
+                title = title,
+                author = author,
                 coverPath = saveCover(publication, url.toString()),
                 fileModifiedAt = modifiedAt,
+                workId = workId,
             )
+            if (!isSameWork(previousWorkId, workId)) {
+                Log.i(TAG, "A different book took over a path; starting it fresh")
+                progressDao.forget(url.toString())
+                annotationDao.deleteForBook(url.toString())
+                bookDao.forgetReadingHistory(url.toString())
+            }
         } finally {
             publication.close()
         }
@@ -180,19 +204,22 @@ class LocalLibraryRepository(
                 return null
             }
         return try {
+            val title = publication.metadata.title
+                ?: url.filename?.removeSuffix(".epub")
+                ?: "Untitled"
+            val author = publication.metadata.authors
+                .joinToString(", ") { it.name }
+                .ifBlank { null }
             val book = Book(
                 url = url.toString(),
-                title = publication.metadata.title
-                    ?: url.filename?.removeSuffix(".epub")
-                    ?: "Untitled",
-                author = publication.metadata.authors
-                    .joinToString(", ") { it.name }
-                    .ifBlank { null },
+                title = title,
+                author = author,
                 coverPath = saveCover(publication, url.toString()),
                 source = source,
                 addedAt = System.currentTimeMillis(),
                 lastOpenedAt = null,
                 fileModifiedAt = modifiedAt,
+                workId = workIdOf(publication.metadata.identifier, title, author),
             )
             val id = bookDao.upsert(book)
             book.copy(id = id)

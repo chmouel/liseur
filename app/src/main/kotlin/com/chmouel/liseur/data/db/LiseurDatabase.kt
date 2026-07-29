@@ -15,7 +15,7 @@ import androidx.sqlite.execSQL
         CalibreServer::class,
         BookAnnotation::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -234,6 +234,17 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Remembers which work each file actually contains, so that a
+         * file replaced at the same path can be told apart from the same
+         * book downloaded again.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE books ADD COLUMN work_id TEXT")
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -249,6 +260,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_9_10,
             MIGRATION_10_11,
             MIGRATION_11_12,
+            MIGRATION_12_13,
         )
     }
 }

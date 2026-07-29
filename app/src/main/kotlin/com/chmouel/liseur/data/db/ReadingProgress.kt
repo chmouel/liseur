@@ -86,6 +86,15 @@ data class BookReadAt(
 
 @Dao
 abstract class ReadingProgressDao {
+    /**
+     * Throws away everything remembered about a book: where you were, the
+     * baseline both sides agreed on, and anything the server reported.
+     * For when the file at a path turns out to hold a different book, so
+     * none of it describes anything that still exists.
+     */
+    @Query("DELETE FROM reading_progress WHERE book_url = :bookUrl")
+    abstract suspend fun forget(bookUrl: String)
+
     @Query("SELECT * FROM reading_progress WHERE book_url = :bookUrl")
     abstract suspend fun get(bookUrl: String): ReadingProgress?
 

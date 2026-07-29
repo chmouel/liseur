@@ -56,6 +56,12 @@ data class Book(
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
     @ColumnInfo(name = "downloaded_at") val downloadedAt: Long? = null,
     @ColumnInfo(name = "file_modified_at") val fileModifiedAt: Long? = null,
+    /**
+     * What the file itself says it is: the EPUB's own identifier, falling
+     * back to title and author. Lets a file replaced at the same path be
+     * told apart from the same book fetched again.
+     */
+    @ColumnInfo(name = "work_id") val workId: String? = null,
     /** When the book was marked read, by hand or by reaching the end. */
     @ColumnInfo(name = "finished_at") val finishedAt: Long? = null,
 ) {
@@ -135,7 +141,7 @@ interface BookDao {
         """
         UPDATE books
         SET title = :title, author = :author, cover_path = :coverPath,
-            file_modified_at = :fileModifiedAt
+            file_modified_at = :fileModifiedAt, work_id = :workId
         WHERE url = :url
         """,
     )
@@ -145,7 +151,15 @@ interface BookDao {
         author: String?,
         coverPath: String?,
         fileModifiedAt: Long?,
+        workId: String?,
     )
+
+    /**
+     * Forgets that this book was ever opened, for when the file at a path
+     * turns out to hold a different book entirely.
+     */
+    @Query("UPDATE books SET last_opened_at = NULL, finished_at = NULL WHERE url = :url")
+    suspend fun forgetReadingHistory(url: String)
 
     @Query("UPDATE books SET cover_path = :coverPath WHERE url = :url")
     suspend fun setCoverPath(url: String, coverPath: String)

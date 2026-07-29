@@ -47,6 +47,8 @@ class AppContainer(context: Context) {
         publicationOpener = publicationOpener,
         bookDao = database.bookDao(),
         folderDao = database.libraryFolderDao(),
+        progressDao = database.readingProgressDao(),
+        annotationDao = database.annotationDao(),
     )
 
     /** The one answer to whether a book is read, shared by everything that asks. */

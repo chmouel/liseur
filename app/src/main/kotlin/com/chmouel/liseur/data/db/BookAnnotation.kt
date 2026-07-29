@@ -60,4 +60,8 @@ interface BookAnnotationDao {
 
     @Query("DELETE FROM annotations WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    /** Drops every mark on a book, for when the file no longer holds it. */
+    @Query("DELETE FROM annotations WHERE book_id = :bookId")
+    suspend fun deleteForBook(bookId: String)
 }
