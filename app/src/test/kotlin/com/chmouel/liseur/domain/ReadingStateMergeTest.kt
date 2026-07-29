@@ -1,6 +1,7 @@
 package com.chmouel.liseur.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -83,5 +84,31 @@ class ReadingStateMergeTest {
         }
         assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.fromWire(null))
         assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.fromWire("Nonsense"))
+    }
+
+    @Test
+    fun `a book the feed did not mention is left where it is`() {
+        assertFalse(needsReconciling(reported = null, localUpdatedAt = 100, lastSyncedAt = 100))
+    }
+
+    @Test
+    fun `reading on since the last sync is worth sending`() {
+        assertTrue(needsReconciling(reported = null, localUpdatedAt = 200, lastSyncedAt = 100))
+    }
+
+    @Test
+    fun `a position never sent is worth sending`() {
+        assertTrue(needsReconciling(reported = null, localUpdatedAt = 200, lastSyncedAt = null))
+    }
+
+    @Test
+    fun `a book with no position of its own waits to be told`() {
+        assertFalse(needsReconciling(reported = null, localUpdatedAt = null, lastSyncedAt = null))
+    }
+
+    @Test
+    fun `anything the server mentions is always looked at`() {
+        val remote = ReadingState(0.4, ReadingStatus.READING, updatedAt = 50)
+        assertTrue(needsReconciling(remote, localUpdatedAt = 100, lastSyncedAt = 100))
     }
 }

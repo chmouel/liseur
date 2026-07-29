@@ -3,11 +3,13 @@ package com.chmouel.liseur.data.calibre
 import android.util.Log
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.CalibreServerDao
+import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.domain.ReadingState
 import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.mergeReadingState
+import com.chmouel.liseur.domain.needsReconciling
 import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +26,24 @@ sealed interface PositionSyncStatus {
 
     /** The server has no Kobo sync set up, so positions stay on this device. */
     data object Unavailable : PositionSyncStatus
+}
+
+/**
+ * What came of asking to sync.
+ *
+ * Worth keeping apart, because only one of these is worth trying again:
+ * a phone with no calibre-web account will still have none in ten
+ * minutes, and scheduling a backed-off retry for it just burns battery.
+ */
+sealed interface SyncOutcome {
+    /** Positions were exchanged, or both sides already agreed. */
+    data object Success : SyncOutcome
+
+    /** Nothing to do and nothing wrong: no account, no sync, nothing to send. */
+    data object NotApplicable : SyncOutcome
+
+    /** The server or the network was not there. Ask again later. */
+    data object TransientFailure : SyncOutcome
 }
 
 /**
@@ -47,19 +67,21 @@ class KoboSyncRepository(
 
     /**
      * Reconciles every book that has a position on either side.
-     * Returns false when nothing could be done, e.g. the server is not
-     * reachable or sync was never set up.
+     *
+     * [SyncOutcome.NotApplicable] covers the settled cases — no account,
+     * no Kobo token, a sync already running — which are not failures and
+     * will not become successes by being retried.
      */
-    suspend fun sync(): Boolean {
-        if (!syncing.tryLock()) return false
+    suspend fun sync(): SyncOutcome {
+        if (!syncing.tryLock()) return SyncOutcome.NotApplicable
         try {
             val server = serverDao.get() ?: run {
                 _status.value = PositionSyncStatus.Idle
-                return false
+                return SyncOutcome.NotApplicable
             }
             val token = server.koboToken ?: run {
                 _status.value = PositionSyncStatus.Unavailable
-                return false
+                return SyncOutcome.NotApplicable
             }
 
             _status.value = PositionSyncStatus.Syncing
@@ -74,11 +96,11 @@ class KoboSyncRepository(
                     server.copy(syncToken = page.syncToken, positionSyncedAt = now),
                 )
                 _status.value = PositionSyncStatus.Synced(now)
-                true
+                SyncOutcome.Success
             } catch (e: IOException) {
                 Log.i(TAG, "Could not sync reading positions", e)
                 _status.value = PositionSyncStatus.Offline
-                false
+                SyncOutcome.TransientFailure
             }
         } finally {
             syncing.unlock()
@@ -87,72 +109,88 @@ class KoboSyncRepository(
 
     /**
      * Sends one book's position straight away, for the moment a book is
-     * closed. Falls back to nothing if sync is not set up; the next full
-     * sync will carry the position instead.
+     * closed. A book that is not on the server, or a server without sync,
+     * is nothing to worry about: there is simply nowhere to send it.
      */
-    suspend fun pushOne(bookUrl: String): Boolean {
-        val server = serverDao.get() ?: return false
-        val token = server.koboToken ?: return false
-        val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return false
-        val local = localState(bookUrl) ?: return false
+    suspend fun pushOne(bookUrl: String): SyncOutcome {
+        val server = serverDao.get() ?: return SyncOutcome.NotApplicable
+        val token = server.koboToken ?: return SyncOutcome.NotApplicable
+        val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return SyncOutcome.NotApplicable
+        val local = localState(bookUrl) ?: return SyncOutcome.NotApplicable
 
         return try {
-            val pushed = client.pushState("${server.baseUrl}/kobo/$token", uuid, local)
-            if (pushed) progressDao.markSynced(bookUrl, System.currentTimeMillis())
-            pushed
+            if (client.pushState("${server.baseUrl}/kobo/$token", uuid, local)) {
+                progressDao.markSynced(bookUrl, System.currentTimeMillis())
+                SyncOutcome.Success
+            } else {
+                SyncOutcome.TransientFailure
+            }
         } catch (e: IOException) {
             Log.i(TAG, "Could not send the position for $bookUrl", e)
-            false
+            SyncOutcome.TransientFailure
         }
     }
 
+    /**
+     * Settles each book against what the server reported.
+     *
+     * The sync feed is incremental: it carries only what changed since the
+     * last token. A book it does not mention is not a book with no remote
+     * position, it is a book the server has nothing new to say about — so
+     * the only reason to send anything is if this device has moved on since
+     * it last agreed with the server.
+     */
     private suspend fun reconcile(base: String, remote: Map<String, ReadingState>) {
-        val books = bookDao.allRemote().associateBy { it.remoteUuid }
-        val uuids = remote.keys + books.values.mapNotNull { it.remoteUuid }
+        for (book in bookDao.allRemote()) {
+            val uuid = book.remoteUuid ?: continue
+            val stored = progressDao.get(book.url)
+            val reported = remote[uuid]
+            if (!needsReconciling(reported, stored?.updatedAt, stored?.syncedAt)) continue
 
-        for (uuid in uuids) {
-            val book = books[uuid] ?: continue
-            val local = localState(book.url)
-            when (val decision = mergeReadingState(local, remote[uuid])) {
+            when (val decision = mergeReadingState(stored?.asReadingState(), reported)) {
                 SyncDecision.InSync -> Unit
 
-                is SyncDecision.Pull -> {
-                    adopt(book.url, decision.state)
-                    progressDao.markSynced(book.url, System.currentTimeMillis())
-                }
+                is SyncDecision.Pull ->
+                    if (adopt(book.url, decision.state)) {
+                        progressDao.markSynced(book.url, System.currentTimeMillis())
+                    }
 
-                is SyncDecision.Push -> {
+                is SyncDecision.Push ->
                     if (client.pushState(base, uuid, decision.state)) {
                         progressDao.markSynced(book.url, System.currentTimeMillis())
                     }
-                }
             }
         }
     }
 
-    private suspend fun localState(bookUrl: String): ReadingState? {
-        val stored = progressDao.get(bookUrl) ?: return null
-        return ReadingState(
-            progression = stored.totalProgression,
-            status = stored.status?.let { ReadingStatus.fromWire(it) }
-                ?: ReadingStatus.forProgression(stored.totalProgression),
-            updatedAt = stored.updatedAt,
-        )
-    }
+    private fun ReadingProgress.asReadingState() = ReadingState(
+        progression = totalProgression,
+        status = status?.let { ReadingStatus.fromWire(it) }
+            ?: ReadingStatus.forProgression(totalProgression),
+        updatedAt = updatedAt,
+    )
+
+    private suspend fun localState(bookUrl: String): ReadingState? =
+        progressDao.get(bookUrl)?.asReadingState()
 
     /**
-     * Takes the server's position for a book.
+     * Takes the server's position for a book. False when there was nothing
+     * worth recording, so the row is not marked agreed on when it is not.
      *
      * Only a percentage comes over the wire, so the stored locator is
      * left as it was and the percentage is what changes. The reader
      * notices the two no longer agree and works out the real place in
      * the book once it knows how the book is laid out.
+     *
+     * A remote change can be status alone — someone marking a book read on
+     * another device without opening it. That is worth keeping too, so the
+     * progression already stored stands in for the one the server omitted.
      */
-    private suspend fun adopt(bookUrl: String, state: ReadingState) {
-        val progression = state.progression ?: return
+    private suspend fun adopt(bookUrl: String, state: ReadingState): Boolean {
         val existing = progressDao.get(bookUrl)
+        val progression = state.progression ?: existing?.totalProgression ?: return false
         progressDao.upsert(
-            com.chmouel.liseur.data.db.ReadingProgress(
+            ReadingProgress(
                 bookUrl = bookUrl,
                 locatorJson = existing?.locatorJson ?: EMPTY_LOCATOR,
                 totalProgression = progression,
@@ -162,6 +200,7 @@ class KoboSyncRepository(
                 syncedAt = System.currentTimeMillis(),
             ),
         )
+        return true
     }
 
     private companion object {

@@ -13,6 +13,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.calibre.SyncOutcome
 import java.util.concurrent.TimeUnit
 
 /**
@@ -31,8 +32,13 @@ class PositionSyncWorker(
 
         // Closing a book sends just that book, which is quick and keeps
         // the common case off the network for longer than it needs.
-        val done = if (bookUrl != null) sync.pushOne(bookUrl) else sync.sync()
-        return if (done) Result.success() else Result.retry()
+        return when (if (bookUrl != null) sync.pushOne(bookUrl) else sync.sync()) {
+            // Retry schedules a backed-off run, so it is only for things
+            // that might work later. A phone with no calibre-web account
+            // has nothing to sync now and will have nothing in an hour.
+            SyncOutcome.TransientFailure -> Result.retry()
+            SyncOutcome.Success, SyncOutcome.NotApplicable -> Result.success()
+        }
     }
 
     companion object {

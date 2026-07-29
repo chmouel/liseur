@@ -83,3 +83,20 @@ private fun sameSpot(local: ReadingState, remote: ReadingState): Boolean {
  * percentage point.
  */
 const val EPSILON = 0.005
+
+/**
+ * Whether a sync has any reason to touch this book at all.
+ *
+ * The Kobo sync feed is incremental: with a token in hand, the server
+ * sends only what changed since last time. Silence about a book therefore
+ * means "nothing new here", not "no position on the server" — so the only
+ * reason to speak up is if this device has read on since the two sides
+ * last agreed. Without that distinction every book with a position gets
+ * pushed again on every sync, forever.
+ */
+fun needsReconciling(
+    reported: ReadingState?,
+    localUpdatedAt: Long?,
+    lastSyncedAt: Long?,
+): Boolean = reported != null ||
+    (localUpdatedAt != null && localUpdatedAt > (lastSyncedAt ?: 0L))
