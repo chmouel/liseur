@@ -1,0 +1,1 @@
+Fixes a bug that dropped a line of text at every page turn on phones with a display cutout: window insets were applied twice, so the bottom of each page was laid out below the visible area and never drawn. Landscape reading also gets its full page height back. Nothing was lost from your books, but the words you never saw are now there.
