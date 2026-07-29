@@ -3,12 +3,14 @@ package com.chmouel.liseur.data.calibre
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.CalibreServer
 import com.chmouel.liseur.data.db.CalibreServerDao
+import com.chmouel.liseur.data.db.ReadingProgressDao
 import kotlinx.coroutines.flow.Flow
 
 /** Stores the calibre-web account and hands out its credentials. */
 class CalibreAccountRepository(
     private val dao: CalibreServerDao,
     private val bookDao: BookDao,
+    private val progressDao: ReadingProgressDao,
     private val setupClient: CalibreSetupClient = CalibreSetupClient(),
 ) {
     val server: Flow<CalibreServer?> = dao.observe()
@@ -49,10 +51,24 @@ class CalibreAccountRepository(
         val result = setupClient.connect(url, username, password, allowHttp)
         if (result is SetupResult.Success) {
             val capabilities = result.capabilities
-            // Reconnecting to the same server is a refresh, not a new
-            // account: keeping the sync token means the next sync asks
-            // for what changed rather than replaying the whole library.
-            val existing = dao.get()?.takeIf { it.baseUrl == capabilities.baseUrl }
+            val stored = dao.get()
+            // Reconnecting as the *same person* to the same server is a
+            // refresh: keeping the sync token means the next sync asks for
+            // what changed rather than replaying the whole library.
+            //
+            // Signing in as someone else is not. calibre-web keeps Kobo
+            // reading state per user, so the previous account's token and
+            // sync marker describe a world this login cannot see — reusing
+            // them would have this device syncing one person's reading
+            // into another person's account.
+            val sameAccount = stored != null &&
+                stored.baseUrl == capabilities.baseUrl &&
+                stored.username == username &&
+                (stored.userId == capabilities.userId || capabilities.userId == null)
+            val existing = stored?.takeIf { sameAccount }
+
+            if (stored != null && !sameAccount) retireForAccountSwitch()
+
             dao.upsert(
                 CalibreServer(
                     baseUrl = capabilities.baseUrl,
@@ -70,6 +86,20 @@ class CalibreAccountRepository(
             )
         }
         return result
+    }
+
+    /**
+     * Puts down everything that belonged to the account being left.
+     *
+     * The reading itself stays, and so does the note of who did it: that
+     * is exactly what the reader has to be asked about before anything is
+     * handed over. What goes is the agreed baseline and any unsettled
+     * remote state, because they describe a library this new login cannot
+     * see. Nothing is left looking unsent, so signing in as someone else
+     * never quietly uploads the last person's reading into their account.
+     */
+    private suspend fun retireForAccountSwitch() {
+        progressDao.retireAccountState()
     }
 
     /** Re-runs the probes for the saved account, e.g. after a permission change. */

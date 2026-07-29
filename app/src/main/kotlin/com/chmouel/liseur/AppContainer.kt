@@ -2,6 +2,7 @@ package com.chmouel.liseur
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.withTransaction
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
@@ -11,6 +12,7 @@ import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.SessionStateRepository
+import com.chmouel.liseur.sync.PositionSyncCoordinator
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -45,6 +47,7 @@ class AppContainer(context: Context) {
             LiseurDatabase.MIGRATION_7_8,
             LiseurDatabase.MIGRATION_8_9,
             LiseurDatabase.MIGRATION_9_10,
+            LiseurDatabase.MIGRATION_10_11,
         )
         .build()
 
@@ -62,7 +65,11 @@ class AppContainer(context: Context) {
 
     val sessionState = SessionStateRepository(context.applicationContext)
 
-    val calibreAccount = CalibreAccountRepository(database.calibreServerDao(), database.bookDao())
+    val calibreAccount = CalibreAccountRepository(
+        dao = database.calibreServerDao(),
+        bookDao = database.bookDao(),
+        progressDao = database.readingProgressDao(),
+    )
 
     val bookDownloads = BookDownloadRepository(
         context = context.applicationContext,
@@ -73,7 +80,12 @@ class AppContainer(context: Context) {
         serverDao = database.calibreServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
+        // What the server reported and the token that stops it being
+        // reported again have to land together or not at all.
+        inTransaction = { work -> database.withTransaction { work() } },
     )
+
+    val positionSync = PositionSyncCoordinator(koboSync)
 
     val calibreCatalog = CalibreCatalogRepository(
         account = calibreAccount,

@@ -184,18 +184,18 @@ class ReaderViewModel(
         }
         _progress.value = progressAt(locator)
         viewModelScope.launch {
-            progressDao.upsert(
-                ReadingProgress(
-                    bookUrl = bookId,
-                    locatorJson = locator.toJSON().toString(),
-                    totalProgression = locator.locations.totalProgression,
-                    readingSpeed = speed.speed,
-                    updatedAt = System.currentTimeMillis(),
-                    status = ReadingStatus.forProgression(
-                        locator.locations.totalProgression,
-                    ).wireName,
-                    syncedAt = progressDao.get(bookId)?.syncedAt,
-                ),
+            // One statement, so two page turns cannot interleave and a
+            // stale acknowledgement cannot be carried back over a fresh
+            // one. Everything about the server is left to the sync.
+            progressDao.recordLocal(
+                bookUrl = bookId,
+                locatorJson = locator.toJSON().toString(),
+                progression = locator.locations.totalProgression,
+                readingSpeed = speed.speed,
+                status = ReadingStatus.forProgression(
+                    locator.locations.totalProgression,
+                ).wireName,
+                updatedAt = System.currentTimeMillis(),
             )
             // Reaching the end marks the book read, so the library shows it
             // as done and the app stops dropping you back into it. Marking

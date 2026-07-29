@@ -15,7 +15,7 @@ import androidx.sqlite.execSQL
         CalibreServer::class,
         BookAnnotation::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -160,5 +160,49 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Gives reading positions what they need to be reconciled with a
+         * server without guessing: a revision counter instead of a wall
+         * clock, the last state both sides agreed on, and a durable place
+         * to land what the server reported before its token moves past it.
+         *
+         * The backfill treats an already-synced row as agreed at its
+         * current position, which is what it is. Rows never synced get no
+         * baseline, so the first sync establishes one rather than
+         * inventing a disagreement.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(connection: SQLiteConnection) {
+                val added = listOf(
+                    "local_revision INTEGER NOT NULL DEFAULT 0",
+                    "acked_revision INTEGER NOT NULL DEFAULT 0",
+                    "agreed_progression REAL",
+                    "agreed_status TEXT",
+                    "agreed_account TEXT",
+                    "pending_progression REAL",
+                    "pending_status TEXT",
+                    "pending_updated_at INTEGER",
+                    "pending_account TEXT",
+                    "owner_account TEXT",
+                    "remote_updated_at INTEGER",
+                )
+                for (column in added) {
+                    connection.execSQL("ALTER TABLE reading_progress ADD COLUMN $column")
+                }
+                // Everything already here counts as one local write. A row
+                // the server has confirmed is level; one it has not is a
+                // revision behind, which is exactly what dirty means.
+                connection.execSQL(
+                    """
+                    UPDATE reading_progress SET
+                        local_revision = 1,
+                        acked_revision = CASE WHEN synced_at IS NULL THEN 0 ELSE 1 END,
+                        agreed_progression =
+                            CASE WHEN synced_at IS NULL THEN NULL ELSE total_progression END,
+                        agreed_status = CASE WHEN synced_at IS NULL THEN NULL ELSE status END
+                    """.trimIndent(),
+                )
+            }
+        }
     }
 }

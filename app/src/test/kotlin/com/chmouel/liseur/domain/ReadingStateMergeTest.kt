@@ -7,108 +7,250 @@ import org.junit.Test
 
 class ReadingStateMergeTest {
 
+    private fun state(
+        progression: Double?,
+        status: ReadingStatus = ReadingStatus.READING,
+        at: Long = 1_000L,
+    ) = ReadingState(progression, status, at)
+
+    private fun baseline(
+        progression: Double?,
+        status: ReadingStatus = ReadingStatus.READING,
+    ) = ReadingBaseline(progression, status)
+
     @Test
-    fun `nothing on either side is nothing to do`() {
-        assertEquals(SyncDecision.InSync, mergeReadingState(null, null))
+    fun `nothing anywhere is nothing to do`() {
+        assertEquals(
+            SyncDecision.InSync,
+            reconcileReadingState(null, null, null, localDirty = false),
+        )
     }
 
     @Test
-    fun `a book only read elsewhere is pulled`() {
-        val remote = ReadingState(0.4, ReadingStatus.READING, updatedAt = 100)
-        assertEquals(SyncDecision.Pull(remote), mergeReadingState(null, remote))
+    fun `a book only the server knows is taken`() {
+        val decision = reconcileReadingState(
+            local = null,
+            remote = state(0.4),
+            baseline = null,
+            localDirty = false,
+        )
+        assertEquals(0.4, (decision as SyncDecision.Pull).state.progression)
     }
 
     @Test
-    fun `a book only read here is pushed`() {
-        val local = ReadingState(0.4, ReadingStatus.READING, updatedAt = 100)
-        assertEquals(SyncDecision.Push(local), mergeReadingState(local, null))
+    fun `a book only this device knows is sent, if it owes it`() {
+        val decision = reconcileReadingState(
+            local = state(0.4),
+            remote = null,
+            baseline = null,
+            localDirty = true,
+        )
+        assertEquals(0.4, (decision as SyncDecision.Push).state.progression)
     }
 
     @Test
-    fun `the newer side wins`() {
-        val local = ReadingState(0.2, ReadingStatus.READING, updatedAt = 100)
-        val remote = ReadingState(0.8, ReadingStatus.READING, updatedAt = 200)
-        assertEquals(SyncDecision.Pull(remote), mergeReadingState(local, remote))
-        val newerLocal = local.copy(updatedAt = 300)
-        assertEquals(SyncDecision.Push(newerLocal), mergeReadingState(newerLocal, remote))
+    fun `a book the server was silent about and that owes nothing is left alone`() {
+        assertEquals(
+            SyncDecision.InSync,
+            reconcileReadingState(
+                local = state(0.4),
+                remote = null,
+                baseline = baseline(0.4),
+                localDirty = false,
+            ),
+        )
     }
 
     @Test
-    fun `rounding to a whole percent does not count as a move`() {
-        // calibre-web stores 42.3% as 42%, which must not look like reading.
-        val local = ReadingState(0.423, ReadingStatus.READING, updatedAt = 300)
-        val remote = ReadingState(0.42, ReadingStatus.READING, updatedAt = 100)
-        assertEquals(SyncDecision.InSync, mergeReadingState(local, remote))
+    fun `positions within a page of each other count as the same place`() {
+        assertEquals(
+            SyncDecision.InSync,
+            reconcileReadingState(
+                local = state(0.5),
+                remote = state(0.502),
+                baseline = baseline(0.5),
+                localDirty = true,
+            ),
+        )
     }
 
     @Test
-    fun `a real page turn is not swallowed by the epsilon`() {
-        val local = ReadingState(0.5, ReadingStatus.READING, updatedAt = 300)
-        val remote = ReadingState(0.42, ReadingStatus.READING, updatedAt = 100)
-        assertTrue(mergeReadingState(local, remote) is SyncDecision.Push)
+    fun `only the server moved, so its position is taken`() {
+        val decision = reconcileReadingState(
+            local = state(0.3),
+            remote = state(0.7),
+            baseline = baseline(0.3),
+            localDirty = false,
+        )
+        assertEquals(0.7, (decision as SyncDecision.Pull).state.progression)
     }
 
     @Test
-    fun `finishing a book counts even at the same page`() {
-        val local = ReadingState(0.99, ReadingStatus.FINISHED, updatedAt = 300)
-        val remote = ReadingState(0.99, ReadingStatus.READING, updatedAt = 100)
-        assertEquals(SyncDecision.Push(local), mergeReadingState(local, remote))
+    fun `only this device moved, so its position is sent`() {
+        val decision = reconcileReadingState(
+            local = state(0.7),
+            remote = state(0.3),
+            baseline = baseline(0.3),
+            localDirty = true,
+        )
+        assertEquals(0.7, (decision as SyncDecision.Push).state.progression)
     }
 
     @Test
-    fun `an unread book on both sides is left alone`() {
-        val local = ReadingState(null, ReadingStatus.READY_TO_READ, updatedAt = 100)
-        val remote = ReadingState(null, ReadingStatus.READY_TO_READ, updatedAt = 200)
-        assertEquals(SyncDecision.InSync, mergeReadingState(local, remote))
+    fun `going back to reread is sent, not overwritten by the further server`() {
+        // The whole reason a baseline is stored. Both sides were at 90%;
+        // this device deliberately went back to the first chapter. Without
+        // the baseline this is indistinguishable from the other device
+        // having read on, and "prefer the further position" would throw
+        // the reread away.
+        val decision = reconcileReadingState(
+            local = state(0.02),
+            remote = state(0.9),
+            baseline = baseline(0.9),
+            localDirty = true,
+        )
+        assertEquals(0.02, (decision as SyncDecision.Push).state.progression)
     }
 
     @Test
-    fun `a position beats no position when it is newer`() {
-        val local = ReadingState(null, ReadingStatus.READY_TO_READ, updatedAt = 100)
-        val remote = ReadingState(0.3, ReadingStatus.READING, updatedAt = 200)
-        assertEquals(SyncDecision.Pull(remote), mergeReadingState(local, remote))
+    fun `both sides moved, so neither is chosen`() {
+        val decision = reconcileReadingState(
+            local = state(0.6),
+            remote = state(0.8),
+            baseline = baseline(0.3),
+            localDirty = true,
+        )
+        val conflict = (decision as SyncDecision.Conflict)
+        assertEquals(0.6, conflict.local.progression)
+        assertEquals(0.8, conflict.remote.progression)
     }
 
     @Test
-    fun `status follows how far through the book you are`() {
-        assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.forProgression(null))
-        assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.forProgression(0.0))
+    fun `the further position does not win a conflict on its own`() {
+        val decision = reconcileReadingState(
+            local = state(0.1),
+            remote = state(0.95),
+            baseline = baseline(0.05),
+            localDirty = true,
+        )
+        (decision as SyncDecision.Conflict)
+    }
+
+    @Test
+    fun `a newer clock does not win a conflict either`() {
+        // calibre-web stamps its own time and ignores ours, so the two
+        // timestamps are not on the same scale and cannot be compared.
+        val decision = reconcileReadingState(
+            local = state(0.6, at = 10L),
+            remote = state(0.8, at = 9_999_999L),
+            baseline = baseline(0.3),
+            localDirty = true,
+        )
+        (decision as SyncDecision.Conflict)
+    }
+
+    @Test
+    fun `no baseline and a divergent server is a conflict, not a guess`() {
+        val decision = reconcileReadingState(
+            local = state(0.6),
+            remote = state(0.8),
+            baseline = null,
+            localDirty = true,
+        )
+        (decision as SyncDecision.Conflict)
+    }
+
+    @Test
+    fun `no baseline and nothing owed takes the server's position`() {
+        val decision = reconcileReadingState(
+            local = state(0.6),
+            remote = state(0.8),
+            baseline = null,
+            localDirty = false,
+        )
+        assertEquals(0.8, (decision as SyncDecision.Pull).state.progression)
+    }
+
+    @Test
+    fun `a status with no position keeps the local position`() {
+        val decision = reconcileReadingState(
+            local = state(0.42, ReadingStatus.READING),
+            remote = state(null, ReadingStatus.FINISHED),
+            baseline = baseline(0.42),
+            localDirty = false,
+        )
+        assertEquals(
+            ReadingStatus.FINISHED,
+            (decision as SyncDecision.AdoptStatus).status,
+        )
+    }
+
+    @Test
+    fun `a status with no position that already matches is nothing to do`() {
+        assertEquals(
+            SyncDecision.InSync,
+            reconcileReadingState(
+                local = state(0.42, ReadingStatus.READING),
+                remote = state(null, ReadingStatus.READING),
+                baseline = baseline(0.42),
+                localDirty = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `marking a book unread here beats a stale finished on the server`() {
+        val decision = reconcileReadingState(
+            local = state(0.99, ReadingStatus.READY_TO_READ),
+            remote = state(0.99, ReadingStatus.FINISHED),
+            baseline = baseline(0.99, ReadingStatus.FINISHED),
+            localDirty = true,
+            localUnreadOverride = true,
+        )
+        assertEquals(
+            ReadingStatus.READY_TO_READ,
+            (decision as SyncDecision.Push).state.status,
+        )
+    }
+
+    @Test
+    fun `a status change on its own is a move`() {
+        val decision = reconcileReadingState(
+            local = state(0.99, ReadingStatus.READING),
+            remote = state(0.99, ReadingStatus.FINISHED),
+            baseline = baseline(0.99, ReadingStatus.READING),
+            localDirty = false,
+        )
+        assertEquals(
+            ReadingStatus.FINISHED,
+            (decision as SyncDecision.Pull).state.status,
+        )
+    }
+
+    @Test
+    fun `a book the feed was silent about and that owes nothing is skipped`() {
+        assertFalse(
+            needsReconciling(reported = false, hasPending = false, localDirty = false),
+        )
+    }
+
+    @Test
+    fun `a book with reading the server has not seen is looked at`() {
+        assertTrue(needsReconciling(reported = false, hasPending = false, localDirty = true))
+    }
+
+    @Test
+    fun `a state left over from an interrupted run is looked at`() {
+        // The sync token has already moved past it, so if this were
+        // skipped the server would never mention it again.
+        assertTrue(needsReconciling(reported = false, hasPending = true, localDirty = false))
+    }
+
+    @Test
+    fun `a status derived from the position marks a finished book`() {
+        assertEquals(ReadingStatus.FINISHED, ReadingStatus.forProgression(0.995))
         assertEquals(ReadingStatus.READING, ReadingStatus.forProgression(0.5))
-        assertEquals(ReadingStatus.FINISHED, ReadingStatus.forProgression(1.0))
-    }
-
-    @Test
-    fun `wire names round trip`() {
-        for (status in ReadingStatus.entries) {
-            assertEquals(status, ReadingStatus.fromWire(status.wireName))
-        }
-        assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.fromWire(null))
-        assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.fromWire("Nonsense"))
-    }
-
-    @Test
-    fun `a book the feed did not mention is left where it is`() {
-        assertFalse(needsReconciling(reported = null, localUpdatedAt = 100, lastSyncedAt = 100))
-    }
-
-    @Test
-    fun `reading on since the last sync is worth sending`() {
-        assertTrue(needsReconciling(reported = null, localUpdatedAt = 200, lastSyncedAt = 100))
-    }
-
-    @Test
-    fun `a position never sent is worth sending`() {
-        assertTrue(needsReconciling(reported = null, localUpdatedAt = 200, lastSyncedAt = null))
-    }
-
-    @Test
-    fun `a book with no position of its own waits to be told`() {
-        assertFalse(needsReconciling(reported = null, localUpdatedAt = null, lastSyncedAt = null))
-    }
-
-    @Test
-    fun `anything the server mentions is always looked at`() {
-        val remote = ReadingState(0.4, ReadingStatus.READING, updatedAt = 50)
-        assertTrue(needsReconciling(remote, localUpdatedAt = 100, lastSyncedAt = 100))
+        assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.forProgression(0.0))
+        assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.forProgression(null))
     }
 }

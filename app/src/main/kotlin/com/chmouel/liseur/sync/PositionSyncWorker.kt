@@ -27,16 +27,20 @@ class PositionSyncWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val sync = applicationContext.container.koboSync
+        val coordinator = applicationContext.container.positionSync
         val bookUrl = inputData.getString(KEY_BOOK_URL)
 
-        // Closing a book sends just that book, which is quick and keeps
-        // the common case off the network for longer than it needs.
-        return when (if (bookUrl != null) sync.pushOne(bookUrl) else sync.sync()) {
+        // Closing a book reconciles just that book, which is quick and
+        // keeps the common case off the network for longer than it needs.
+        val scope = bookUrl?.let { SyncScope.Book(it) } ?: SyncScope.Full
+
+        return when (coordinator.request(scope)) {
             // Retry schedules a backed-off run, so it is only for things
             // that might work later. A phone with no calibre-web account
             // has nothing to sync now and will have nothing in an hour.
-            SyncOutcome.TransientFailure -> Result.retry()
+            // A partial run leaves the books it could not settle marked
+            // as owing the server something, so a retry picks them up.
+            SyncOutcome.TransientFailure, SyncOutcome.Partial -> Result.retry()
             SyncOutcome.Success, SyncOutcome.NotApplicable -> Result.success()
         }
     }

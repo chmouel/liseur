@@ -41,33 +41,112 @@ data class ReadingState(
     val updatedAt: Long,
 )
 
+/**
+ * The last state both sides agreed on.
+ *
+ * The whole reason this is stored. Comparing two positions to each other
+ * tells you they differ, not who moved — so going back to reread chapter
+ * one looks exactly like the other device being at the end. Comparing
+ * each side to what they last agreed on tells you which of them actually
+ * moved, which is the only sound question to ask. The two clocks
+ * involved are not comparable: calibre-web stamps its own time and
+ * ignores ours.
+ */
+data class ReadingBaseline(
+    val progression: Double?,
+    val status: ReadingStatus,
+)
+
 /** What to do once the two sides have been compared. */
 sealed interface SyncDecision {
     /** The two sides agree closely enough to leave alone. */
     data object InSync : SyncDecision
 
-    /** The server is ahead: adopt its position locally. */
+    /** The server moved and this device did not: adopt its position. */
     data class Pull(val state: ReadingState) : SyncDecision
 
-    /** This device is ahead: send its position to the server. */
+    /** This device moved and the server did not: send it. */
     data class Push(val state: ReadingState) : SyncDecision
+
+    /**
+     * The server reported a status without a position — someone marking a
+     * book read elsewhere without opening it. Worth keeping, but a missing
+     * progression is not a progression of zero, so the local position
+     * stands.
+     */
+    data class AdoptStatus(val status: ReadingStatus) : SyncDecision
+
+    /**
+     * Both sides moved since they last agreed. Preserve both, choose
+     * neither.
+     *
+     * There is deliberately no automatic winner. Taking the further
+     * position would silently throw away a deliberate reread; taking the
+     * newer one would trust two clocks that cannot be compared. The
+     * remote state stays on disk until someone who knows which device
+     * they last held is asked.
+     */
+    data class Conflict(val local: ReadingState, val remote: ReadingState) : SyncDecision
 }
 
 /**
- * Decides which of two reading positions wins.
+ * Works out what should happen to one book.
  *
- * Newest wins, because the server does no conflict detection and the
- * person reading is the only one who knows which device they last held.
- * Positions closer than [EPSILON] count as the same page, so opening a
- * book on a second device does not bounce a pointless write back.
+ * [localDirty] comes from the revision counters rather than a timestamp,
+ * so it survives a clock that jumps backwards and cannot be confused by
+ * the server stamping its own time on what it sends back.
+ *
+ * [localUnreadOverride] is set when the reader deliberately marked the
+ * book unread here. That is an act, not an absence, and it outranks a
+ * stale `Finished` still sitting on the server.
  */
-fun mergeReadingState(local: ReadingState?, remote: ReadingState?): SyncDecision = when {
-    local == null && remote == null -> SyncDecision.InSync
-    local == null -> SyncDecision.Pull(checkNotNull(remote))
-    remote == null -> SyncDecision.Push(local)
-    sameSpot(local, remote) -> SyncDecision.InSync
-    remote.updatedAt > local.updatedAt -> SyncDecision.Pull(remote)
-    else -> SyncDecision.Push(local)
+fun reconcileReadingState(
+    local: ReadingState?,
+    remote: ReadingState?,
+    baseline: ReadingBaseline?,
+    localDirty: Boolean,
+    localUnreadOverride: Boolean = false,
+): SyncDecision {
+    if (local == null && remote == null) return SyncDecision.InSync
+    if (local == null) return SyncDecision.Pull(checkNotNull(remote))
+    if (remote == null) {
+        return if (localDirty) SyncDecision.Push(local) else SyncDecision.InSync
+    }
+
+    if (sameSpot(local, remote)) return SyncDecision.InSync
+
+    // A deliberate "not read after all" here beats a leftover flag there.
+    if (localUnreadOverride && remote.status == ReadingStatus.FINISHED) {
+        return SyncDecision.Push(local)
+    }
+
+    // Status alone travelled; the position it came with is simply absent.
+    if (remote.progression == null) {
+        return if (remote.status == local.status) {
+            SyncDecision.InSync
+        } else {
+            SyncDecision.AdoptStatus(remote.status)
+        }
+    }
+
+    val localMoved = localDirty && movedFrom(baseline, local)
+    val remoteMoved = movedFrom(baseline, remote)
+
+    return when {
+        !localMoved && remoteMoved -> SyncDecision.Pull(remote)
+        localMoved && !remoteMoved -> SyncDecision.Push(local)
+        localMoved && remoteMoved -> SyncDecision.Conflict(local, remote)
+        else -> SyncDecision.InSync
+    }
+}
+
+/** Whether a side has genuinely left the place both sides agreed on. */
+private fun movedFrom(baseline: ReadingBaseline?, state: ReadingState): Boolean {
+    if (baseline == null) return true
+    if (baseline.status != state.status) return true
+    val agreed = baseline.progression ?: return state.progression != null
+    val now = state.progression ?: return true
+    return kotlin.math.abs(agreed - now) >= EPSILON
 }
 
 private fun sameSpot(local: ReadingState, remote: ReadingState): Boolean {
@@ -90,13 +169,12 @@ const val EPSILON = 0.005
  * The Kobo sync feed is incremental: with a token in hand, the server
  * sends only what changed since last time. Silence about a book therefore
  * means "nothing new here", not "no position on the server" — so the only
- * reason to speak up is if this device has read on since the two sides
- * last agreed. Without that distinction every book with a position gets
- * pushed again on every sync, forever.
+ * reasons to speak up are that the server just said something, that it
+ * said something earlier which was never settled, or that this device has
+ * read on since the two last agreed.
  */
 fun needsReconciling(
-    reported: ReadingState?,
-    localUpdatedAt: Long?,
-    lastSyncedAt: Long?,
-): Boolean = reported != null ||
-    (localUpdatedAt != null && localUpdatedAt > (lastSyncedAt ?: 0L))
+    reported: Boolean,
+    hasPending: Boolean,
+    localDirty: Boolean,
+): Boolean = reported || hasPending || localDirty

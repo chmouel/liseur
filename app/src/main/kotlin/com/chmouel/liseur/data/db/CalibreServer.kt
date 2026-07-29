@@ -42,6 +42,17 @@ data class CalibreServer(
     @get:Ignore
     val canSync: Boolean get() = koboTokenCipher != null
 
+    /**
+     * Who this account is, for stamping reading positions with.
+     *
+     * calibre-web keeps Kobo reading state per user, so the same server
+     * signed into as two people is two separate worlds. Anything derived
+     * from a server is tagged with this, and a tag from someone else is
+     * never treated as our own.
+     */
+    @get:Ignore
+    val accountKey: String get() = "$baseUrl|$username|${userId ?: -1}"
+
     companion object {
         const val SINGLE_ID = 1L
 
