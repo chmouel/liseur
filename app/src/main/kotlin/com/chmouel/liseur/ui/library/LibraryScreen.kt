@@ -84,6 +84,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -628,22 +629,33 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Badges sit on cover artwork, not on a themed surface, so they carry their
+ * own colours. The Material scheme is no help here: its `inverseOnSurface`
+ * is dark in the dark theme, which left the badge invisible against the
+ * scrim behind it and against a dark cover.
+ */
+private val CoverBadgeScrim = Color.Black.copy(alpha = 0.6f)
+private val CoverBadgeContent = Color.White
+
 /** Dims the cover and shows how far the download has got. */
 @Composable
 private fun DownloadOverlay(fraction: Float?, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)),
+            .background(CoverBadgeScrim),
         contentAlignment = Alignment.Center,
     ) {
-        val color = MaterialTheme.colorScheme.inverseOnSurface
         if (fraction == null) {
-            CircularProgressIndicator(color = color, modifier = Modifier.size(32.dp))
+            CircularProgressIndicator(
+                color = CoverBadgeContent,
+                modifier = Modifier.size(32.dp),
+            )
         } else {
             CircularProgressIndicator(
                 progress = { fraction },
-                color = color,
+                color = CoverBadgeContent,
                 modifier = Modifier.size(32.dp),
             )
         }
@@ -655,14 +667,15 @@ private fun DownloadOverlay(fraction: Float?, modifier: Modifier = Modifier) {
 private fun OnServerBadge(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f))
-            .padding(5.dp),
+            .size(24.dp)
+            .clip(CircleShape)
+            .background(CoverBadgeScrim),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Outlined.CloudDownload,
             contentDescription = stringResource(R.string.book_on_server),
-            tint = MaterialTheme.colorScheme.inverseOnSurface,
+            tint = CoverBadgeContent,
             modifier = Modifier.size(15.dp),
         )
     }
