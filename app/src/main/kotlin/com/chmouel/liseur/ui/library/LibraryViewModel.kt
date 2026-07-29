@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -41,7 +42,15 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import com.chmouel.liseur.domain.displayAuthor
+import com.chmouel.liseur.domain.displayTitle
 import kotlinx.coroutines.launch
+
+enum class LibraryFilter {
+    ALL,
+    DOWNLOADED,
+    UNREAD,
+}
 
 data class ContinueReading(val book: Book, val progression: Double?)
 
@@ -55,6 +64,9 @@ data class LibraryUiState(
     val refreshing: Boolean = false,
     val sort: LibrarySort = LibrarySort.Default,
     val sortReversed: Boolean = false,
+    val searchQuery: String = "",
+    val filter: LibraryFilter = LibraryFilter.ALL,
+    val isSearchActive: Boolean = false,
 )
 
 /**
@@ -66,6 +78,7 @@ data class DeleteFailure(val book: Book, val onServer: Boolean)
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
     private val library: LocalLibraryRepository,
+    private val finishedState: FinishedState,
     private val catalog: CalibreCatalogRepository,
     private val positionSync: PositionSyncCoordinator,
     private val downloads: BookDownloadRepository,
@@ -111,6 +124,9 @@ class LibraryViewModel(
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
     private val _refreshing = MutableStateFlow(false)
+    private val _searchQuery = MutableStateFlow("")
+    private val _filter = MutableStateFlow(LibraryFilter.ALL)
+    private val _isSearchActive = MutableStateFlow(false)
     private var lastScanAt = 0L
 
     private val continueReading = library.mostRecent.flatMapLatest { book ->
@@ -124,45 +140,85 @@ class LibraryViewModel(
 
     val state: StateFlow<LibraryUiState> =
         combine(
-            library.books,
-            continueReading,
-            catalog.status,
-            downloads.progress,
-            account.server,
-            _refreshing,
-            appSettings.settings,
-            progressDao.observeReadAt(),
-        ) { values ->
+            combine(
+                library.books,
+                continueReading,
+                catalog.status,
+                downloads.progress,
+                account.server,
+                _refreshing,
+                appSettings.settings,
+                progressDao.observeReadAt(),
+            ) { values -> values },
+            _searchQuery,
+            _filter,
+            _isSearchActive,
+        ) { baseValues, query, filter, searchActive ->
             @Suppress("UNCHECKED_CAST")
-            val books = values[0] as List<Book>
-            val recent = values[1] as ContinueReading?
-            val catalogStatus = values[2] as CatalogStatus
+            val books = baseValues[0] as List<Book>
+            val recent = baseValues[1] as ContinueReading?
+            val catalogStatus = baseValues[2] as CatalogStatus
             @Suppress("UNCHECKED_CAST")
-            val running = values[3] as Map<String, DownloadProgress>
-            val server = values[4] as CalibreServer?
-            val refreshing = values[5] as Boolean
-            val settings = values[6] as AppSettings
+            val running = baseValues[3] as Map<String, DownloadProgress>
+            val server = baseValues[4] as CalibreServer?
+            val refreshing = baseValues[5] as Boolean
+            val settings = baseValues[6] as AppSettings
             @Suppress("UNCHECKED_CAST")
-            val readAt = (values[7] as List<BookReadAt>).associate { it.bookUrl to it.updatedAt }
+            val readAtList = baseValues[7] as List<BookReadAt>
+            val readAt = readAtList.associate { it.bookUrl to it.updatedAt }
+
+            val sortedBooks = books.arrangedBy(
+                settings.librarySort,
+                settings.librarySortReversed,
+                readAt,
+            )
+
+            val filteredBooks = sortedBooks
+                .filter { book ->
+                    when (filter) {
+                        LibraryFilter.ALL -> true
+                        LibraryFilter.DOWNLOADED -> book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED
+                        LibraryFilter.UNREAD -> !book.finished
+                    }
+                }
+                .filter { book ->
+                    if (query.isBlank()) true
+                    else {
+                        book.displayTitle.contains(query, ignoreCase = true) ||
+                            (book.displayAuthor?.contains(query, ignoreCase = true) == true)
+                    }
+                }
+
             LibraryUiState(
                 loading = false,
-                books = books.arrangedBy(
-                    settings.librarySort,
-                    settings.librarySortReversed,
-                    readAt,
-                ),
+                books = filteredBooks,
                 continueReading = recent,
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
-                // A catalog fetch started elsewhere — by connecting an
-                // account, most often — counts as refreshing here too,
-                // so the library says it is working on it.
                 refreshing = refreshing || catalogStatus is CatalogStatus.Refreshing,
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
+                searchQuery = query,
+                filter = filter,
+                isSearchActive = searchActive,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun setFilter(filter: LibraryFilter) {
+        _filter.value = filter
+    }
+
+    fun setSearchActive(active: Boolean) {
+        _isSearchActive.value = active
+        if (!active) {
+            _searchQuery.value = ""
+        }
+    }
 
     init {
         refresh()
@@ -282,7 +338,7 @@ class LibraryViewModel(
     }
 
     fun setFinished(book: Book, finished: Boolean) {
-        viewModelScope.launch { library.setFinished(book.url, finished) }
+        viewModelScope.launch { finishedState.setFinished(book.url, finished) }
     }
 
     fun addFolder(treeUri: Uri) {
@@ -302,6 +358,7 @@ class LibraryViewModel(
                 val container = checkNotNull(this[APPLICATION_KEY]).container
                 LibraryViewModel(
                     library = container.libraryRepository,
+                    finishedState = container.finishedState,
                     catalog = container.calibreCatalog,
                     positionSync = container.positionSync,
                     downloads = container.bookDownloads,

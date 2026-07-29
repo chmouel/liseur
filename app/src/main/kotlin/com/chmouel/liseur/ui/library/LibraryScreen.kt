@@ -1,7 +1,9 @@
 package com.chmouel.liseur.ui.library
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.LinearEasing
@@ -38,10 +40,15 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FileOpen
@@ -49,14 +56,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.displayAuthor
+import com.chmouel.liseur.domain.displayTitle
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
@@ -120,6 +133,9 @@ fun LibraryScreen(
     onDownloadAndOpen: (Book) -> Unit,
     failedOpens: Flow<Book>,
     onPendingOpenHandled: () -> Unit,
+    onSearchQueryChange: (String) -> Unit = {},
+    onSetFilter: (LibraryFilter) -> Unit = {},
+    onSetSearchActive: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -158,30 +174,96 @@ fun LibraryScreen(
         snackbarHost = { SnackbarHost(snackbarHost) },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
-                title = { Text(stringResource(R.string.library_title)) },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            Icons.Outlined.Settings,
-                            contentDescription = stringResource(R.string.settings),
+            if (state.isSearchActive) {
+                TopAppBar(
+                    title = {
+                        OutlinedTextField(
+                            value = state.searchQuery,
+                            onValueChange = onSearchQueryChange,
+                            placeholder = { Text(stringResource(R.string.search_books)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                    }
-                    IconButton(onClick = onAddFolder) {
-                        Icon(
-                            Icons.Outlined.CreateNewFolder,
-                            contentDescription = stringResource(R.string.add_folder),
-                        )
-                    }
-                    IconButton(onClick = onOpenBook) {
-                        Icon(
-                            Icons.Outlined.FileOpen,
-                            contentDescription = stringResource(R.string.open_book),
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { onSetSearchActive(false) }) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                            )
+                        }
+                    },
+                    actions = {
+                        if (state.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { onSearchQueryChange("") }) {
+                                Icon(
+                                    Icons.Outlined.Close,
+                                    contentDescription = stringResource(R.string.clear),
+                                )
+                            }
+                        }
+                    },
+                )
+            } else {
+                LargeTopAppBar(
+                    title = { Text(stringResource(R.string.library_title)) },
+                    actions = {
+                        IconButton(onClick = { onSetSearchActive(true) }) {
+                            Icon(
+                                Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.search_books),
+                            )
+                        }
+                        var addMenuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { addMenuOpen = true }) {
+                                Icon(
+                                    Icons.Outlined.Add,
+                                    contentDescription = stringResource(R.string.add_books),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = addMenuOpen,
+                                onDismissRequest = { addMenuOpen = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.add_folder)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.CreateNewFolder,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        addMenuOpen = false
+                                        onAddFolder()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.open_book)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.FileOpen,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        addMenuOpen = false
+                                        onOpenBook()
+                                    },
+                                )
+                            }
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(
+                                Icons.Outlined.Settings,
+                                contentDescription = stringResource(R.string.settings),
+                            )
+                        }
+                    },
+                    scrollBehavior = scrollBehavior,
+                )
+            }
         },
     ) { padding ->
         PullToRefreshBox(
@@ -204,6 +286,7 @@ fun LibraryScreen(
                     state = state,
                     onSetSort = onSetSort,
                     onToggleSortDirection = onToggleSortDirection,
+                    onSetFilter = onSetFilter,
                     onBookSelected = { book ->
                         when {
                             book.openableUrl != null -> onBookSelected(book)
@@ -354,6 +437,7 @@ private fun BookGrid(
     onBookLongPress: (Book) -> Unit,
     onSetSort: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
+    onSetFilter: (LibraryFilter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalGrid(
@@ -372,12 +456,34 @@ private fun BookGrid(
             }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
-            SortRow(
-                sort = state.sort,
-                reversed = state.sortReversed,
-                onSetSort = onSetSort,
-                onToggleDirection = onToggleSortDirection,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SortRow(
+                    sort = state.sort,
+                    reversed = state.sortReversed,
+                    onSetSort = onSetSort,
+                    onToggleDirection = onToggleSortDirection,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip(
+                        selected = state.filter == LibraryFilter.ALL,
+                        onClick = { onSetFilter(LibraryFilter.ALL) },
+                        label = { Text(stringResource(R.string.filter_all)) },
+                    )
+                    FilterChip(
+                        selected = state.filter == LibraryFilter.DOWNLOADED,
+                        onClick = { onSetFilter(LibraryFilter.DOWNLOADED) },
+                        label = { Text(stringResource(R.string.filter_downloaded)) },
+                    )
+                    FilterChip(
+                        selected = state.filter == LibraryFilter.UNREAD,
+                        onClick = { onSetFilter(LibraryFilter.UNREAD) },
+                        label = { Text(stringResource(R.string.filter_unread)) },
+                    )
+                }
+            }
         }
         items(state.books, key = { it.id }) { book ->
             BookCard(
@@ -415,12 +521,12 @@ private fun ContinueReadingCard(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = entry.book.title,
+                    text = entry.book.displayTitle,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                entry.book.author?.let {
+                entry.book.displayAuthor?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,
@@ -500,21 +606,26 @@ private fun BookCard(
                 FinishedBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
         }
-        Text(
-            text = book.title,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
-        )
-        book.author?.let {
+        Column(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .heightIn(min = 52.dp),
+        ) {
             Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                text = book.displayTitle,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            book.displayAuthor?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -583,42 +694,49 @@ private const val SKELETON_COUNT = 9
 /** The tick that says you have read this one. */
 @Composable
 private fun FinishedBadge(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary),
-        contentAlignment = Alignment.Center,
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+        modifier = modifier.size(28.dp),
     ) {
-        Icon(
-            imageVector = Icons.Outlined.Check,
-            contentDescription = stringResource(R.string.book_finished),
-            tint = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(16.dp),
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Outlined.Check,
+                contentDescription = stringResource(R.string.book_finished),
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
 @Composable
 private fun BookCover(book: Book, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(10.dp)
     val artwork = book.coverPath ?: book.coverUrl
+    val borderModifier = modifier
+        .clip(shape)
+        .border(
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            shape,
+        )
     if (artwork != null) {
         AsyncImage(
             model = artwork,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = modifier.clip(shape),
+            modifier = borderModifier,
         )
     } else {
         Box(
-            modifier = modifier
-                .clip(shape)
+            modifier = borderModifier
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = book.title,
+                text = book.displayTitle,
                 style = MaterialTheme.typography.labelMedium,
                 textAlign = TextAlign.Center,
                 maxLines = 4,
@@ -665,19 +783,21 @@ private fun DownloadOverlay(fraction: Float?, modifier: Modifier = Modifier) {
 /** Marks a book that is in the catalog but not yet on the device. */
 @Composable
 private fun OnServerBadge(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .background(CoverBadgeScrim),
-        contentAlignment = Alignment.Center,
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+        contentColor = MaterialTheme.colorScheme.primary,
+        tonalElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        modifier = modifier.size(28.dp),
     ) {
-        Icon(
-            imageVector = Icons.Outlined.CloudDownload,
-            contentDescription = stringResource(R.string.book_on_server),
-            tint = CoverBadgeContent,
-            modifier = Modifier.size(15.dp),
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Outlined.CloudDownload,
+                contentDescription = stringResource(R.string.book_on_server),
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 

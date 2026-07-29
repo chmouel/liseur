@@ -264,5 +264,8 @@ private fun LibraryRoute(
         onDownloadAndOpen = viewModel::downloadAndOpen,
         failedOpens = viewModel.failedOpens,
         onPendingOpenHandled = viewModel::forgetPendingOpen,
+        onSearchQueryChange = viewModel::setSearchQuery,
+        onSetFilter = viewModel::setFilter,
+        onSetSearchActive = viewModel::setSearchActive,
     )
 }
