@@ -59,12 +59,23 @@ data class ReadingProgress(
     @ColumnInfo(name = "owner_account") val ownerAccount: String? = null,
     /** The server's own timestamp, for display. Never compared with ours. */
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
+    /**
+     * Whether someone has said outright that this book is read or unread,
+     * as opposed to its position implying it. Stored as the ordinal of
+     * [com.chmouel.liseur.domain.FinishedOverride].
+     */
+    @ColumnInfo(name = "finished_override", defaultValue = "0")
+    val finishedOverride: Int = 0,
 ) {
     /** True when this device has read on since the server last confirmed. */
     val isDirty: Boolean get() = localRevision > ackedRevision
 
     /** True when a remote state is waiting to be settled. */
     val hasPending: Boolean get() = pendingAccount != null
+
+    /** What someone has said about this book being read, if anything. */
+    val override: com.chmouel.liseur.domain.FinishedOverride
+        get() = com.chmouel.liseur.domain.FinishedOverride.fromStored(finishedOverride)
 }
 
 /** When a book was last read, on this device or another one. */
@@ -331,6 +342,10 @@ abstract class ReadingProgressDao {
      * The revisions are untouched on purpose. Nothing was said about the
      * position, so a position this device has not yet sent is still owed
      * to the server after this.
+     *
+     * A status said outright on this device is never overwritten: the
+     * update stops at a row carrying an override, and the pending state is
+     * left in place so the disagreement is still there to be settled.
      */
     @Transaction
     open suspend fun adoptStatus(
@@ -338,9 +353,11 @@ abstract class ReadingProgressDao {
         status: String,
         account: String,
         now: Long,
-    ) {
+    ): Boolean {
+        if ((overrideFor(bookUrl) ?: 0) != 0) return false
         setStatusOnly(bookUrl, status, account, now)
         clearPending(bookUrl)
+        return true
     }
 
     @Query(
@@ -360,6 +377,43 @@ abstract class ReadingProgressDao {
         account: String,
         now: Long,
     )
+
+    // -- What someone said, as opposed to what the position implies -------
+
+    /**
+     * Records that a book was marked read, or put back on the pile, by
+     * hand.
+     *
+     * This bumps the revision, because it is a genuine local act that the
+     * server has not been told about — marking a book read here should
+     * show up on the other device. The row is created if the book has
+     * never been opened, so a book can be marked read straight from the
+     * library.
+     */
+    @Query(
+        """
+        INSERT INTO reading_progress (
+            book_url, locator_json, total_progression, updated_at,
+            status, finished_override, local_revision, acked_revision
+        )
+        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 0)
+        ON CONFLICT(book_url) DO UPDATE SET
+            status = :status,
+            finished_override = :override,
+            updated_at = :now,
+            local_revision = local_revision + 1
+        """,
+    )
+    abstract suspend fun setFinishedOverride(
+        bookUrl: String,
+        override: Int,
+        status: String,
+        progression: Double?,
+        now: Long,
+    )
+
+    @Query("SELECT finished_override FROM reading_progress WHERE book_url = :bookUrl")
+    abstract suspend fun overrideFor(bookUrl: String): Int?
 
     // -- Account identity -------------------------------------------------
 

@@ -82,21 +82,6 @@ class LocalLibraryRepository(
         return indexBook(url, source = null)
     }
 
-    /** Marks a book read, or puts it back on the pile. */
-    suspend fun setFinished(url: String, finished: Boolean) {
-        bookDao.setFinishedAt(url, if (finished) System.currentTimeMillis() else null)
-    }
-
-    /**
-     * Marks a book read the first time it is finished, and never again —
-     * so putting it back on the pile by hand is not undone by re-opening
-     * the last page.
-     */
-    suspend fun markFinishedOnce(url: String) {
-        val book = bookDao.getByUrl(url) ?: return
-        if (book.finishedAt == null) bookDao.setFinishedAt(url, System.currentTimeMillis())
-    }
-
     suspend fun markOpened(url: String) {
         bookDao.touchLastOpened(url, System.currentTimeMillis())
     }

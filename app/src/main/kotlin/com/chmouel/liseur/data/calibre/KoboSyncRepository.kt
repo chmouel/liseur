@@ -6,11 +6,14 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.CalibreServerDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingBaseline
 import com.chmouel.liseur.domain.ReadingState
 import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
+import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.reconcileReadingState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +87,7 @@ class KoboSyncRepository(
     private val bookDao: BookDao,
     private val progressDao: ReadingProgressDao,
     private val client: KoboClient = KoboClient(),
+    private val finishedState: FinishedState,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     private val _status = MutableStateFlow<PositionSyncStatus>(PositionSyncStatus.Idle)
@@ -226,6 +230,7 @@ class KoboSyncRepository(
             remote = remote,
             baseline = stored?.baselineFor(account),
             localDirty = dirty,
+            localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
         )
         return apply(base, uuid, book.url, account, stored, decision)
     }
@@ -274,6 +279,9 @@ class KoboSyncRepository(
                         now = now,
                     )
                 }
+                // Taking the server's word for it can finish a book, and
+                // the library has to agree with the reader about that.
+                finishedState.refreshFromProgress(bookUrl)
                 null
             }
 
@@ -296,7 +304,12 @@ class KoboSyncRepository(
             }
 
             is SyncDecision.AdoptStatus -> {
-                progressDao.adoptStatus(bookUrl, decision.status.wireName, account, now)
+                // Refused means someone here said outright that this book
+                // is read, or is not. That outranks a flag on the server,
+                // and the disagreement stays on disk to be settled.
+                if (progressDao.adoptStatus(bookUrl, decision.status.wireName, account, now)) {
+                    finishedState.refreshFromProgress(bookUrl)
+                }
                 null
             }
 
@@ -311,7 +324,7 @@ class KoboSyncRepository(
 
     private fun ReadingProgress.statusOrDerived(): ReadingStatus =
         status?.let { ReadingStatus.fromWire(it) }
-            ?: ReadingStatus.forProgression(totalProgression)
+            ?: readingStatusFor(totalProgression, override)
 
     private fun ReadingProgress.asReadingState() = ReadingState(
         progression = totalProgression,

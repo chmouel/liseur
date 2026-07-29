@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -48,6 +49,7 @@ class AppContainer(context: Context) {
             LiseurDatabase.MIGRATION_8_9,
             LiseurDatabase.MIGRATION_9_10,
             LiseurDatabase.MIGRATION_10_11,
+            LiseurDatabase.MIGRATION_11_12,
         )
         .build()
 
@@ -57,6 +59,13 @@ class AppContainer(context: Context) {
         publicationOpener = publicationOpener,
         bookDao = database.bookDao(),
         folderDao = database.libraryFolderDao(),
+    )
+
+    /** The one answer to whether a book is read, shared by everything that asks. */
+    val finishedState = FinishedState(
+        bookDao = database.bookDao(),
+        progressDao = database.readingProgressDao(),
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
@@ -80,6 +89,7 @@ class AppContainer(context: Context) {
         serverDao = database.calibreServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
+        finishedState = finishedState,
         // What the server reported and the token that stops it being
         // reported again have to land together or not at all.
         inTransaction = { work -> database.withTransaction { work() } },

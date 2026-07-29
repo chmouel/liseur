@@ -15,7 +15,7 @@ import androidx.sqlite.execSQL
         CalibreServer::class,
         BookAnnotation::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -200,6 +200,34 @@ abstract class LiseurDatabase : RoomDatabase() {
                         agreed_progression =
                             CASE WHEN synced_at IS NULL THEN NULL ELSE total_progression END,
                         agreed_status = CASE WHEN synced_at IS NULL THEN NULL ELSE status END
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        /**
+         * Adds the record of a book having been marked read, or put back
+         * on the pile, by hand.
+         *
+         * Only the unambiguous case is filled in: a book marked read while
+         * its position is nowhere near the end can only have been said so
+         * outright. A book at the end with no mark is left alone, because
+         * that is just as likely to be a book finished on another device
+         * as one deliberately put back.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE reading_progress " +
+                        "ADD COLUMN finished_override INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    """
+                    UPDATE reading_progress SET finished_override = 1
+                    WHERE COALESCE(total_progression, 0) < 0.97
+                      AND book_url IN (
+                          SELECT url FROM books WHERE finished_at IS NOT NULL
+                      )
                     """.trimIndent(),
                 )
             }

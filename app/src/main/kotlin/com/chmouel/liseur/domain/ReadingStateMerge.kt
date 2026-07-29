@@ -22,15 +22,65 @@ enum class ReadingStatus {
             else -> READY_TO_READ
         }
 
-        /** What a given progression means, so a finished book marks itself. */
+        /**
+         * What a given progression means on its own, before anyone has
+         * said otherwise. [FINISHED_PROGRESSION] is the one threshold —
+         * the same number decides whether a book is worth resuming, so
+         * two answers to "is this finished?" cannot drift apart.
+         */
         fun forProgression(progression: Double?): ReadingStatus = when {
             progression == null || progression <= 0.0 -> READY_TO_READ
-            progression >= FINISHED_AT -> FINISHED
+            progression >= FINISHED_PROGRESSION -> FINISHED
             else -> READING
         }
-
-        private const val FINISHED_AT = 0.99
     }
+}
+
+/**
+ * What someone has said about a book, as opposed to what its position
+ * implies.
+ *
+ * A book marked unread by hand sits at the last page, so anything that
+ * derives the status from the position alone re-marks it finished the
+ * moment it is looked at. `finishedAt = null` cannot tell that apart from
+ * a book nobody has ever finished, so the intent is stored outright.
+ */
+enum class FinishedOverride {
+    /** Nobody has said; the position decides. */
+    NONE,
+
+    /** Marked read by hand, wherever the position happens to be. */
+    FINISHED,
+
+    /** Put back on the pile by hand, even though the position is at the end. */
+    UNREAD,
+    ;
+
+    companion object {
+        fun fromStored(value: Int?): FinishedOverride =
+            entries.getOrNull(value ?: 0) ?: NONE
+    }
+}
+
+/**
+ * The one place a reading status is decided.
+ *
+ * The reader, the library and sync all ask this, so a book cannot be
+ * finished in one part of the app and unfinished in another.
+ */
+fun readingStatusFor(
+    progression: Double?,
+    override: FinishedOverride = FinishedOverride.NONE,
+): ReadingStatus = when (override) {
+    FinishedOverride.FINISHED -> ReadingStatus.FINISHED
+    FinishedOverride.UNREAD ->
+        if ((progression ?: 0.0) <= 0.0) {
+            ReadingStatus.READY_TO_READ
+        } else {
+            ReadingStatus.READING
+        }
+
+    FinishedOverride.NONE -> ReadingStatus.forProgression(progression)
 }
 
 /** Where a book was left, on this device or on the server. */
