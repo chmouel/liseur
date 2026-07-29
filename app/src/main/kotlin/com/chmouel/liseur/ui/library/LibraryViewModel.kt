@@ -144,7 +144,10 @@ class LibraryViewModel(
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
-                refreshing = refreshing,
+                // A catalog fetch started elsewhere — by connecting an
+                // account, most often — counts as refreshing here too,
+                // so the library says it is working on it.
+                refreshing = refreshing || catalogStatus is CatalogStatus.Refreshing,
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
             )

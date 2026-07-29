@@ -6,9 +6,13 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.CalibreServerDao
 import com.chmouel.liseur.data.db.DownloadState
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -34,11 +38,25 @@ class CalibreCatalogRepository(
     private val serverDao: CalibreServerDao,
     private val bookDao: BookDao,
     private val client: CalibreCatalogClient = CalibreCatalogClient(),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     private val _status = MutableStateFlow<CatalogStatus>(CatalogStatus.Idle)
     val status: StateFlow<CatalogStatus> = _status.asStateFlow()
 
     private val refreshing = Mutex()
+
+    /**
+     * Starts a refresh that outlives the screen that asked for it.
+     *
+     * Connecting an account is a way of saying "show me these books",
+     * and the settings screen is usually left the moment it turns green
+     * — long before a catalog of any size has been read. Tying the fetch
+     * to that screen's lifetime is how the library ends up empty until
+     * the app is restarted.
+     */
+    fun refreshDetached() {
+        scope.launch { refresh() }
+    }
 
     /** Pulls the catalog and folds it into the library. Safe to call often. */
     suspend fun refresh(): Boolean {

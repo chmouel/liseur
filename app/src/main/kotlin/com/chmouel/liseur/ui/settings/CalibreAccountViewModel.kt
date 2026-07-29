@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.calibre.PositionSyncStatus
 import com.chmouel.liseur.data.calibre.SetupFailure
@@ -44,6 +45,7 @@ class CalibreAccountViewModel(
     private val repository: CalibreAccountRepository,
     downloads: BookDownloadRepository,
     private val koboSync: KoboSyncRepository,
+    private val catalog: CalibreCatalogRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CalibreAccountUiState())
@@ -90,6 +92,7 @@ class CalibreAccountViewModel(
                 password = current.password,
                 allowHttp = allowHttp,
             )
+            if (result is SetupResult.Success) catalog.refreshDetached()
             _state.update {
                 when (result) {
                     is SetupResult.Success -> it.copy(connecting = false, password = "")
@@ -105,7 +108,9 @@ class CalibreAccountViewModel(
         if (_state.value.connecting) return
         _state.update { it.copy(connecting = true, error = null) }
         viewModelScope.launch {
-            repository.refreshCapabilities()
+            if (repository.refreshCapabilities() is SetupResult.Success) {
+                catalog.refreshDetached()
+            }
             _state.update { it.copy(connecting = false) }
         }
     }
@@ -136,6 +141,7 @@ class CalibreAccountViewModel(
                     repository = container.calibreAccount,
                     downloads = container.bookDownloads,
                     koboSync = container.koboSync,
+                    catalog = container.calibreCatalog,
                 )
             }
         }
