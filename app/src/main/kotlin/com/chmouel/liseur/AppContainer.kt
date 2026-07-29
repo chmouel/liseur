@@ -44,6 +44,7 @@ class AppContainer(context: Context) {
             LiseurDatabase.MIGRATION_6_7,
             LiseurDatabase.MIGRATION_7_8,
             LiseurDatabase.MIGRATION_8_9,
+            LiseurDatabase.MIGRATION_9_10,
         )
         .build()
 
@@ -61,7 +62,7 @@ class AppContainer(context: Context) {
 
     val sessionState = SessionStateRepository(context.applicationContext)
 
-    val calibreAccount = CalibreAccountRepository(database.calibreServerDao())
+    val calibreAccount = CalibreAccountRepository(database.calibreServerDao(), database.bookDao())
 
     val bookDownloads = BookDownloadRepository(
         context = context.applicationContext,

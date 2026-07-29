@@ -107,6 +107,21 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL")
     suspend fun allRemote(): List<Book>
 
+    /** Forgets remote books that were never downloaded, e.g. on disconnect. */
+    @Query("DELETE FROM books WHERE remote_uuid IS NOT NULL AND local_uri IS NULL")
+    suspend fun deleteRemoteNotDownloaded()
+
+    /**
+     * Cuts downloaded books loose from the server they came from. The file
+     * is yours now, so it stays; what goes is the link that would make it
+     * sync against whichever server is connected next.
+     */
+    @Query(
+        "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
+            "download_href = NULL, remote_updated_at = NULL WHERE remote_uuid IS NOT NULL",
+    )
+    suspend fun unlinkDownloadedFromRemote()
+
     @Query("SELECT url FROM books WHERE source = :source")
     suspend fun urlsForSource(source: String): List<String>
 

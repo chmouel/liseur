@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
+import com.chmouel.liseur.data.calibre.CredentialCipher
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
 
@@ -14,7 +15,7 @@ import androidx.sqlite.execSQL
         CalibreServer::class,
         BookAnnotation::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -98,6 +99,35 @@ abstract class LiseurDatabase : RoomDatabase() {
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE books ADD COLUMN finished_at INTEGER")
+            }
+        }
+
+
+        /**
+         * Puts the Kobo sync token behind the same Keystore key as the
+         * password. It is a bearer credential that never expires, so it
+         * had no business sitting in the database in the clear.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(connection: SQLiteConnection) {
+                val plain = connection.prepare(
+                    "SELECT id, kobo_token FROM calibre_server WHERE kobo_token IS NOT NULL",
+                ).use { statement ->
+                    buildList {
+                        while (statement.step()) {
+                            add(statement.getLong(0) to statement.getText(1))
+                        }
+                    }
+                }
+                for ((id, token) in plain) {
+                    connection.prepare(
+                        "UPDATE calibre_server SET kobo_token = ? WHERE id = ?",
+                    ).use { statement ->
+                        statement.bindText(1, CredentialCipher.encrypt(token))
+                        statement.bindLong(2, id)
+                        statement.step()
+                    }
+                }
             }
         }
 

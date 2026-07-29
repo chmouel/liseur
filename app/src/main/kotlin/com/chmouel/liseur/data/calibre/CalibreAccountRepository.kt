@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.CalibreServer
 import com.chmouel.liseur.data.db.CalibreServerDao
 import kotlinx.coroutines.flow.Flow
@@ -7,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 /** Stores the calibre-web account and hands out its credentials. */
 class CalibreAccountRepository(
     private val dao: CalibreServerDao,
+    private val bookDao: BookDao,
     private val setupClient: CalibreSetupClient = CalibreSetupClient(),
 ) {
     val server: Flow<CalibreServer?> = dao.observe()
@@ -47,18 +49,23 @@ class CalibreAccountRepository(
         val result = setupClient.connect(url, username, password, allowHttp)
         if (result is SetupResult.Success) {
             val capabilities = result.capabilities
+            // Reconnecting to the same server is a refresh, not a new
+            // account: keeping the sync token means the next sync asks
+            // for what changed rather than replaying the whole library.
+            val existing = dao.get()?.takeIf { it.baseUrl == capabilities.baseUrl }
             dao.upsert(
                 CalibreServer(
                     baseUrl = capabilities.baseUrl,
                     username = username,
                     passwordCipher = CredentialCipher.encrypt(password),
                     userId = capabilities.userId,
-                    koboToken = capabilities.koboToken,
+                    koboTokenCipher = CalibreServer.sealToken(capabilities.koboToken)
+                        ?: existing?.koboTokenCipher,
                     canDownload = capabilities.canDownload,
-                    addedAt = System.currentTimeMillis(),
-                    catalogSyncedAt = null,
-                    positionSyncedAt = null,
-                    syncToken = null,
+                    addedAt = existing?.addedAt ?: System.currentTimeMillis(),
+                    catalogSyncedAt = existing?.catalogSyncedAt,
+                    positionSyncedAt = existing?.positionSyncedAt,
+                    syncToken = existing?.syncToken,
                 ),
             )
         }
@@ -79,11 +86,19 @@ class CalibreAccountRepository(
                 value.length == 32 && value.all(Character::isLetterOrDigit)
             }?.lowercase()
         }
-        dao.setKoboToken(token)
+        dao.setKoboTokenCipher(CalibreServer.sealToken(token))
     }
 
+    /**
+     * Forgets the account. Books that only ever lived on the server go
+     * with it; anything downloaded stays on the device as an ordinary
+     * book, cut loose so it cannot be synced against a different server
+     * later on.
+     */
     suspend fun disconnect() {
         cached = null
+        bookDao.deleteRemoteNotDownloaded()
+        bookDao.unlinkDownloadedFromRemote()
         dao.delete()
     }
 }
