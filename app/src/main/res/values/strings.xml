@@ -112,4 +112,5 @@
     <string name="dictionary_failed_reason">Could not reach Wiktionary: %1$s</string>
     <string name="dictionary_other_app">Dictionary app</string>
     <string name="dictionary_open_wiktionary">Full entry</string>
+    <string name="download_failed_open">Could not download “%1$s”.</string>
 </resources>

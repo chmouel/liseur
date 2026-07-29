@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -145,7 +146,11 @@ private fun LibraryRoute(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshIfStale()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.refreshIfStale()
+                Lifecycle.Event.ON_STOP -> viewModel.forgetPendingOpen()
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -172,6 +177,16 @@ private fun LibraryRoute(
         if (uri != null) viewModel.addFolder(uri)
     }
 
+    // A book tapped while it was still on the server opens by itself once
+    // the download lands; walking away from the library calls it off.
+    LaunchedEffect(viewModel) {
+        viewModel.openRequests.collect { book ->
+            viewModel.forgetPendingOpen()
+            book.openableUrl?.let {
+                context.startActivity(ReaderActivity.intent(context, it, book.url))
+            }
+        }
+    }
     LibraryScreen(
         state = state,
         onOpenBook = { openBook.launch(arrayOf("application/epub+zip")) },
@@ -186,5 +201,8 @@ private fun LibraryRoute(
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,
         onRefresh = viewModel::refresh,
+        onDownloadAndOpen = viewModel::downloadAndOpen,
+        failedOpens = viewModel.failedOpens,
+        onPendingOpenHandled = viewModel::forgetPendingOpen,
     )
 }

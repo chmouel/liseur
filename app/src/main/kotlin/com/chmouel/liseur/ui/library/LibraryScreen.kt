@@ -40,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import kotlinx.coroutines.flow.Flow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -81,6 +82,9 @@ fun LibraryScreen(
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
     onRefresh: () -> Unit,
+    onDownloadAndOpen: (Book) -> Unit,
+    failedOpens: Flow<Book>,
+    onPendingOpenHandled: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -91,6 +95,14 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     val notYetHere = stringResource(R.string.book_not_downloaded)
     val credentialsLost = stringResource(R.string.calibre_credentials_lost)
+
+    val downloadFailed = stringResource(R.string.download_failed_open)
+    LaunchedEffect(failedOpens) {
+        failedOpens.collect { book ->
+            onPendingOpenHandled()
+            snackbarHost.showSnackbar(downloadFailed.format(book.title))
+        }
+    }
 
     LaunchedEffect(state.catalogStatus) {
         if (state.catalogStatus is CatalogStatus.CredentialsLost) {
@@ -153,7 +165,7 @@ fun LibraryScreen(
                                 scope.launch { snackbarHost.showSnackbar(downloading) }
                             !state.canDownload ->
                                 scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
-                            else -> onDownload(book)
+                            else -> onDownloadAndOpen(book)
                         }
                     },
                     onBookLongPress = { sheetBook = it },

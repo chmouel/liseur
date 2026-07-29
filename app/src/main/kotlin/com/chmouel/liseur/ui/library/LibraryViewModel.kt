@@ -14,11 +14,17 @@ import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.calibre.CatalogStatus
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.chmouel.liseur.data.db.CalibreServer
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -48,6 +54,37 @@ class LibraryViewModel(
     private val account: CalibreAccountRepository,
     progressDao: ReadingProgressDao,
 ) : ViewModel() {
+
+    /**
+     * The book someone tapped to read while it was still on the server.
+     * Tapping means "read this", so once the file lands the reader opens by
+     * itself; downloads started any other way never do this.
+     */
+    private val awaitingOpen = MutableStateFlow<String?>(null)
+
+    /** Books that have finished downloading and were asked for by name. */
+    val openRequests: Flow<Book> = awaitingOpen.flatMapLatest { url ->
+        if (url == null) {
+            emptyFlow()
+        } else {
+            library.books
+                .mapNotNull { books -> books.firstOrNull { it.url == url } }
+                .filter { it.openableUrl != null }
+                .take(1)
+        }
+    }
+
+    /** Downloads that were meant to be read right away and could not be. */
+    val failedOpens: Flow<Book> = awaitingOpen.flatMapLatest { url ->
+        if (url == null) {
+            emptyFlow()
+        } else {
+            library.books
+                .mapNotNull { books -> books.firstOrNull { it.url == url } }
+                .filter { it.downloadState == DownloadState.FAILED }
+                .take(1)
+        }
+    }
 
     private val _refreshing = MutableStateFlow(false)
     private var lastScanAt = 0L
@@ -128,7 +165,19 @@ class LibraryViewModel(
         viewModelScope.launch { downloads.enqueue(book) }
     }
 
+    /** Fetch a book and open it as soon as it is here. */
+    fun downloadAndOpen(book: Book) {
+        awaitingOpen.value = book.url
+        viewModelScope.launch { downloads.enqueue(book) }
+    }
+
+    /** The book arrived, or the reader's attention went elsewhere. */
+    fun forgetPendingOpen() {
+        awaitingOpen.value = null
+    }
+
     fun cancelDownload(book: Book) {
+        if (awaitingOpen.value == book.url) awaitingOpen.value = null
         viewModelScope.launch { downloads.cancel(book) }
     }
 
