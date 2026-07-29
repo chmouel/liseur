@@ -21,15 +21,20 @@ readonly REQUIRED_SECRETS=(
 usage() {
     cat <<'EOF'
 Usage:
-  hack/release [--yes] VERSION RELEASE NOTES...
+  hack/release [--yes] [--no-fdroid] VERSION RELEASE NOTES...
   hack/release --fdroid-only VERSION
   hack/release --sync-secrets
 
 Examples:
   hack/release 0.2.0 "Add in-book search and a Wiktionary lookup card."
   hack/release --yes 0.2.1 "Fix page fitting on tall screens."
+  hack/release --no-fdroid 0.1.0 "The first release."
   hack/release --fdroid-only 0.2.1
   hack/release --sync-secrets
+
+Until Liseur is in F-Droid there is no metadata to update, so the first
+release wants --no-fdroid. Once the inclusion request is merged, run
+hack/release --fdroid-only VERSION to catch that release up.
 
 The signing key lives in pass, under android/liseur.keystore.p12,
 android/liseur.keystore-password and android/liseur.keystore-alias. Any
@@ -237,6 +242,7 @@ update_fdroid_submission() (
 
 assume_yes=false
 fdroid_only=false
+skip_fdroid=false
 sync_secrets_only=false
 
 while [[ $# -gt 0 ]]; do
@@ -247,6 +253,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --fdroid-only)
             fdroid_only=true
+            shift
+            ;;
+        --no-fdroid)
+            skip_fdroid=true
             shift
             ;;
         --sync-secrets)
@@ -273,6 +283,8 @@ done
 if [[ "$sync_secrets_only" == true ]]; then
     [[ "$fdroid_only" == false ]] ||
         die "--sync-secrets and --fdroid-only are mutually exclusive"
+    [[ "$skip_fdroid" == false ]] ||
+        die "--sync-secrets and --no-fdroid are mutually exclusive"
     [[ $# -eq 0 ]] || die "--sync-secrets does not take any argument"
     for command in gh pass; do
         require_command "$command"
@@ -306,6 +318,8 @@ git fetch --quiet origin main --tags
 tag="v$version"
 
 if [[ "$fdroid_only" == true ]]; then
+    [[ "$skip_fdroid" == false ]] ||
+        die "--fdroid-only and --no-fdroid are mutually exclusive"
     [[ -z "$release_notes" ]] || die "--fdroid-only does not accept release notes"
     remote_tag_refs=$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")
     [[ -n "$remote_tag_refs" ]] || die "tag $tag does not exist on origin"
@@ -412,8 +426,17 @@ else
     changelog_path="$CHANGELOG_DIR/$current_version_code.txt"
     [[ -s "$changelog_path" ]] || die "missing changelog: $changelog_path"
     if ! git rev-parse "$tag" >/dev/null 2>&1; then
-        [[ $(git log -1 --format=%s) == "chore: release $tag" ]] ||
-            die "version is already $version but HEAD is not its release commit"
+        # A release normally bumps the version and tags the commit that
+        # did it. The very first one has nothing to bump: the tree
+        # already declares the version being shipped, so the tag belongs
+        # on HEAD. Anything later than that must come from its own
+        # release commit.
+        if [[ $(git log -1 --format=%s) != "chore: release $tag" ]]; then
+            [[ -z $(git tag -l) ]] ||
+                die "version is already $version but HEAD is not its release commit"
+            printf 'First release: tagging HEAD, which already declares %s.\n' \
+                "$version"
+        fi
         git tag "$tag"
     fi
     tag_commit=$(git rev-parse "$tag^{commit}")
@@ -445,7 +468,12 @@ else
     printf 'GitHub: published %s; approve the release environment deployment to build the APK.\n' "$tag"
 fi
 
-update_fdroid_submission "$version" "$release_version_code" "$commit_sha"
+if [[ "$skip_fdroid" == true ]]; then
+    printf 'F-Droid: skipped; run --fdroid-only %s once the metadata is up.\n' \
+        "$version"
+else
+    update_fdroid_submission "$version" "$release_version_code" "$commit_sha"
+fi
 
 if [[ "$new_release" == true ]]; then
     printf 'Release %s is ready.\n' "$tag"
