@@ -49,17 +49,19 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
         password: String,
         allowHttp: Boolean = false,
     ): SetupResult = withContext(Dispatchers.IO) {
-        val baseUrl = CalibreUrl.normaliseBaseUrl(rawUrl)
+        val requested = CalibreUrl.normaliseBaseUrl(rawUrl)
             ?: return@withContext SetupResult.Failure(SetupFailure.NotCalibreWeb)
         val credentials = CalibreCredentials(username, password)
 
-        val feed = when (val probe = fetchCatalog(baseUrl, credentials)) {
+        val (baseUrl, probe) = probeCatalog(requested, credentials, allowHttp)
+
+        val feed = when (probe) {
             is Probe.Ok -> probe.body
             is Probe.Failed -> {
-                val overHttp = !allowHttp && baseUrl.startsWith("https://") &&
+                val offerHttp = !allowHttp && requested.startsWith("https://") &&
                     probe.reason is SetupFailure.Unreachable
                 return@withContext SetupResult.Failure(
-                    if (overHttp) {
+                    if (offerHttp) {
                         SetupFailure.Unreachable(
                             (probe.reason as SetupFailure.Unreachable).message,
                             httpMayWork = true,
@@ -82,6 +84,34 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
                 koboToken = kobo?.second,
             ),
         )
+    }
+
+    /**
+     * Looks for the catalog, and drops to plain HTTP if that is the only
+     * way to reach it and the user has said they are willing.
+     *
+     * HTTPS is always tried first, even when HTTP is allowed: a saved
+     * account refreshes itself with [allowHttp] on, and an https server
+     * must not be quietly downgraded just because it was briefly
+     * unreachable. Returns the URL that answered along with the result.
+     */
+    private fun probeCatalog(
+        requested: String,
+        credentials: CalibreCredentials,
+        allowHttp: Boolean,
+    ): Pair<String, Probe> {
+        val first = fetchCatalog(requested, credentials)
+        val worthRetrying = first is Probe.Failed &&
+            first.reason is SetupFailure.Unreachable &&
+            requested.startsWith("https://")
+        if (!allowHttp || !worthRetrying) return requested to first
+
+        val overHttp = CalibreUrl.withHttp(requested)
+        return when (val retry = fetchCatalog(overHttp, credentials)) {
+            is Probe.Ok -> overHttp to retry
+            // Report why HTTPS failed; that is the more useful complaint.
+            is Probe.Failed -> requested to first
+        }
     }
 
     private sealed interface Probe {

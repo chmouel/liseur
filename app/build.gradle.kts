@@ -77,6 +77,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests {
+            // The calibre-web clients log with android.util.Log, which is a
+            // stub in android.jar; without this every call throws.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 kotlin {
@@ -127,4 +135,7 @@ dependencies {
     // The app uses the platform's org.json; unit tests need a real implementation
     // of it because android.jar's is a stub. Test-only, never shipped.
     testImplementation(libs.json)
+    // Lets the calibre-web clients be tested against a real socket, which is
+    // the only way to cover redirects, failed logins and refused deletes.
+    testImplementation(libs.mockwebserver)
 }

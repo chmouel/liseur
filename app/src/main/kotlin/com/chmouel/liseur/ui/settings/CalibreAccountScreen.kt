@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -208,8 +209,31 @@ private fun ConnectForm(
             tone = NoticeTone.PROBLEM,
         )
         if (error == AccountError.UNREACHABLE_TRY_HTTP) {
-            TextButton(onClick = { onConnect(true) }) {
+            var confirmingHttp by rememberSaveable { mutableStateOf(false) }
+            TextButton(onClick = { confirmingHttp = true }) {
                 Text(stringResource(R.string.calibre_try_http))
+            }
+            if (confirmingHttp) {
+                AlertDialog(
+                    onDismissRequest = { confirmingHttp = false },
+                    title = { Text(stringResource(R.string.calibre_http_title)) },
+                    text = { Text(stringResource(R.string.calibre_http_warning)) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                confirmingHttp = false
+                                onConnect(true)
+                            },
+                        ) {
+                            Text(stringResource(R.string.calibre_http_confirm))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmingHttp = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    },
+                )
             }
         }
     }

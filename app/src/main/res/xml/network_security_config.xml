@@ -2,8 +2,16 @@
 <!--
     Plain HTTP is allowed because a self-hosted calibre-web often lives on
     a home network with no certificate. Liseur always tries HTTPS first and
-    only falls back after the user explicitly asks it to.
+    only falls back after the user explicitly asks it to, having been told
+    what they are giving up.
+
+    That permission cannot be narrowed to the server itself — it can be at
+    any address the user types — but it can be kept away from everything
+    else the app talks to, which is what the domain rules below do.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">wiktionary.org</domain>
+    </domain-config>
 </network-security-config>

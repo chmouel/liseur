@@ -40,6 +40,9 @@
     <string name="calibre_disconnect">Disconnect</string>
     <string name="calibre_check_again">Check again</string>
     <string name="calibre_try_http">Connect without encryption</string>
+    <string name="calibre_http_title">Connect without encryption?</string>
+    <string name="calibre_http_warning">Liseur will talk to this server over plain HTTP. Your username and password are sent with every request, and anyone else on the network — or anywhere between you and the server — can read them, read what you are reading, and change what comes back. Only do this on a network you trust.</string>
+    <string name="calibre_http_confirm">Connect anyway</string>
     <string name="calibre_error_credentials">That username or password was refused by the server.</string>
     <string name="calibre_error_not_calibre">No calibre-web catalog answered at that address. Check the address, including any folder it is served from.</string>
     <string name="calibre_error_unreachable">The server did not answer. Check the address and that you are online.</string>
