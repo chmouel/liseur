@@ -210,4 +210,8 @@
     <string name="state_finished">Finished</string>
     <string name="state_on_server">On the server</string>
     <string name="state_on_device">On this device</string>
+    <string name="filter_archived">Put away</string>
+    <string name="everything_put_away">Every book is put away.</string>
+    <string name="archive_book">Put away</string>
+    <string name="unarchive_book">Put back on the shelf</string>
 </resources>

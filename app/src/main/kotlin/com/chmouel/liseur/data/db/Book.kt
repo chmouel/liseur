@@ -64,8 +64,15 @@ data class Book(
     @ColumnInfo(name = "work_id") val workId: String? = null,
     /** When the book was marked read, by hand or by reaching the end. */
     @ColumnInfo(name = "finished_at") val finishedAt: Long? = null,
+    /**
+     * When the book was put away: off the shelf, but still here, still
+     * synced, and still holding your place. Null while it is on the shelf.
+     */
+    @ColumnInfo(name = "archived_at") val archivedAt: Long? = null,
 ) {
     val finished: Boolean get() = finishedAt != null
+
+    val archived: Boolean get() = archivedAt != null
 
     /** The URL to hand to Readium, or null when the file is not here yet. */
     val openableUrl: String? get() = localUri ?: url.takeIf { downloadState == DownloadState.DOWNLOADED }
@@ -97,6 +104,10 @@ interface BookDao {
 
     @Query("SELECT * FROM books WHERE url = :url")
     suspend fun getByUrl(url: String): Book?
+
+    /** Puts a book away, or brings it back to the shelf. */
+    @Query("UPDATE books SET archived_at = :archivedAt WHERE url = :url")
+    suspend fun setArchived(url: String, archivedAt: Long?)
 
     @Query("SELECT * FROM books WHERE remote_uuid = :uuid")
     suspend fun getByRemoteUuid(uuid: String): Book?
@@ -183,8 +194,11 @@ interface BookDao {
         const val MOST_RECENT = """
             SELECT books.* FROM books
             LEFT JOIN reading_progress ON reading_progress.book_url = books.url
-            WHERE books.last_opened_at IS NOT NULL
-               OR reading_progress.total_progression IS NOT NULL
+            WHERE books.archived_at IS NULL
+              AND (
+                  books.last_opened_at IS NOT NULL
+                  OR reading_progress.total_progression IS NOT NULL
+              )
             ORDER BY MAX(
                 COALESCE(books.last_opened_at, 0),
                 COALESCE(reading_progress.updated_at, 0)

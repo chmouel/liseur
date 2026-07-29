@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.calibre.ServerDeleteResult
 import com.chmouel.liseur.data.calibre.CatalogStatus
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgressDao
@@ -51,6 +52,29 @@ enum class LibraryFilter {
     ALL,
     DOWNLOADED,
     UNREAD,
+
+    /**
+     * The books put away. Its own view rather than a chip beside the
+     * others, because everything else means "of the books on the shelf",
+     * and these are not on it.
+     */
+    ARCHIVED,
+    ;
+
+    /**
+     * Whether a book belongs in this view.
+     *
+     * Put-away books are out of every other view, not merely absent from
+     * a chip of their own: the whole point of putting one away is not to
+     * meet it again while looking for something else.
+     */
+    fun accepts(book: Book): Boolean = when (this) {
+        ARCHIVED -> book.archived
+        ALL -> !book.archived
+        DOWNLOADED -> !book.archived &&
+            (book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED)
+        UNREAD -> !book.archived && !book.finished
+    }
 }
 
 data class ContinueReading(val book: Book, val progression: Double?)
@@ -75,6 +99,8 @@ data class LibraryUiState(
      * changing.
      */
     val libraryIsEmpty: Boolean = true,
+    /** Whether anything has been put away, so the way to it is only offered when there is one. */
+    val hasArchived: Boolean = false,
 )
 
 /**
@@ -93,6 +119,7 @@ class LibraryViewModel(
     private val account: CalibreAccountRepository,
     private val appSettings: AppSettingsRepository,
     private val progressDao: ReadingProgressDao,
+    private val bookDao: BookDao,
 ) : ViewModel() {
 
     /**
@@ -182,13 +209,7 @@ class LibraryViewModel(
             )
 
             val filteredBooks = sortedBooks
-                .filter { book ->
-                    when (filter) {
-                        LibraryFilter.ALL -> true
-                        LibraryFilter.DOWNLOADED -> book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED
-                        LibraryFilter.UNREAD -> !book.finished
-                    }
-                }
+                .filter { filter.accepts(it) }
                 .filter { book ->
                     matchesLibrarySearch(query, book.displayTitle, book.displayAuthor)
                 }
@@ -206,7 +227,8 @@ class LibraryViewModel(
                 searchQuery = query,
                 filter = filter,
                 isSearchActive = searchActive,
-                libraryIsEmpty = books.isEmpty(),
+                libraryIsEmpty = books.none { !it.archived },
+                hasArchived = books.any { it.archived },
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
@@ -346,6 +368,16 @@ class LibraryViewModel(
         viewModelScope.launch { finishedState.setFinished(book.url, finished) }
     }
 
+    /**
+     * Puts a book away, or brings it back. Nothing is deleted and nothing
+     * stops syncing: the book is simply not on the shelf.
+     */
+    fun setArchived(book: Book, archived: Boolean) {
+        viewModelScope.launch {
+            bookDao.setArchived(book.url, if (archived) System.currentTimeMillis() else null)
+        }
+    }
+
     fun addFolder(treeUri: Uri) {
         viewModelScope.launch { library.addFolder(treeUri) }
     }
@@ -370,6 +402,7 @@ class LibraryViewModel(
                     account = container.calibreAccount,
                     appSettings = container.appSettings,
                     progressDao = container.database.readingProgressDao(),
+                    bookDao = container.database.bookDao(),
                 )
             }
         }

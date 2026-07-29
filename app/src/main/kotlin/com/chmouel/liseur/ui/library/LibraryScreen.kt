@@ -124,6 +124,7 @@ fun LibraryScreen(
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
     onSetFinished: (Book, Boolean) -> Unit,
+    onSetArchived: (Book, Boolean) -> Unit,
     onDeleteLocal: (Book) -> Unit,
     onDeleteFromServer: (Book) -> Unit,
     deleteFailures: Flow<DeleteFailure>,
@@ -276,6 +277,15 @@ fun LibraryScreen(
             when {
                 state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
 
+                // Everything on the shelf has been put away. Not an
+                // empty library, and saying so would be alarming — the
+                // books are all still here, behind one tap.
+                state.books.isEmpty() && state.libraryIsEmpty && state.hasArchived ->
+                    EverythingPutAway(
+                        onShowArchived = { onSetFilter(LibraryFilter.ARCHIVED) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
                 state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
                     onOpenBook = onOpenBook,
                     onAddFolder = onAddFolder,
@@ -352,6 +362,7 @@ fun LibraryScreen(
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
             onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
             onSetFinished = { onSetFinished(book, it); sheetBook = null },
+            onSetArchived = { onSetArchived(book, it); sheetBook = null },
             onDeleteLocal = { onDeleteLocal(book); sheetBook = null },
             onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
         )
@@ -370,6 +381,7 @@ private fun BookActionsSheet(
     onCancelDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
     onSetFinished: (Boolean) -> Unit,
+    onSetArchived: (Boolean) -> Unit,
     onDeleteLocal: () -> Unit,
     onDeleteFromServer: () -> Unit,
 ) {
@@ -424,6 +436,16 @@ private fun BookActionsSheet(
                 Text(
                     stringResource(
                         if (book.finished) R.string.mark_unread else R.string.mark_read,
+                    ),
+                )
+            }
+            TextButton(
+                onClick = { onSetArchived(!book.archived) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(
+                        if (book.archived) R.string.unarchive_book else R.string.archive_book,
                     ),
                 )
             }
@@ -496,6 +518,23 @@ private fun BookGrid(
                         onClick = { onSetFilter(LibraryFilter.UNREAD) },
                         label = { Text(stringResource(R.string.filter_unread)) },
                     )
+                    // Offered only once something has been put away: an
+                    // empty drawer is not worth a permanent chip.
+                    if (state.hasArchived || state.filter == LibraryFilter.ARCHIVED) {
+                        FilterChip(
+                            selected = state.filter == LibraryFilter.ARCHIVED,
+                            onClick = {
+                                onSetFilter(
+                                    if (state.filter == LibraryFilter.ARCHIVED) {
+                                        LibraryFilter.ALL
+                                    } else {
+                                        LibraryFilter.ARCHIVED
+                                    },
+                                )
+                            },
+                            label = { Text(stringResource(R.string.filter_archived)) },
+                        )
+                    }
                 }
             }
         }
@@ -897,6 +936,39 @@ private fun NothingMatched(
             )
             TextButton(onClick = onClear) {
                 Text(stringResource(R.string.show_all_books))
+            }
+        }
+    }
+}
+
+/**
+ * What the library says once every book on it has been put away.
+ *
+ * It has to lead somewhere, because the only way back to those books is
+ * a chip that lives in the grid this screen is standing in for.
+ */
+@Composable
+private fun EverythingPutAway(
+    onShowArchived: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .heightIn(min = maxHeight)
+                .padding(horizontal = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        ) {
+            Text(
+                text = stringResource(R.string.everything_put_away),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = onShowArchived) {
+                Text(stringResource(R.string.filter_archived))
             }
         }
     }

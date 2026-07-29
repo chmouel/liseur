@@ -89,6 +89,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 14
+        const val LATEST = 15
     }
 }

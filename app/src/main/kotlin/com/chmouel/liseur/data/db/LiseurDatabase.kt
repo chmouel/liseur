@@ -16,7 +16,7 @@ import androidx.sqlite.execSQL
         BookAnnotation::class,
         BookTypography::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -263,6 +263,13 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Lets a book be put away without deleting anything. */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE books ADD COLUMN archived_at INTEGER")
+            }
+        }
+
         /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
@@ -281,6 +288,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_11_12,
             MIGRATION_12_13,
             MIGRATION_13_14,
+            MIGRATION_14_15,
         )
     }
 }

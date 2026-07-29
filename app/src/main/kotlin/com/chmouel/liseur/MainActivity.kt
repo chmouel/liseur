@@ -255,6 +255,7 @@ private fun LibraryRoute(
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,
         onSetFinished = viewModel::setFinished,
+        onSetArchived = viewModel::setArchived,
         onDeleteLocal = viewModel::deleteLocalBook,
         onDeleteFromServer = viewModel::deleteFromServer,
         deleteFailures = viewModel.deleteFailures,
