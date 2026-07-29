@@ -18,6 +18,7 @@ work = "2.11.2"
 desugar = "2.1.5"
 json = "20260719"
 coroutines = "1.10.2"
+robolectric = "4.16"
 junit = "4.13.2"
 
 [libraries]
@@ -42,6 +43,8 @@ readium-navigator = { module = "org.readium.kotlin-toolkit:readium-navigator", v
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-core = { module = "androidx.test:core", version = "1.7.0" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }

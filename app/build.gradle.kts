@@ -83,6 +83,7 @@ android {
             // The calibre-web clients log with android.util.Log, which is a
             // stub in android.jar; without this every call throws.
             isReturnDefaultValues = true
+            isIncludeAndroidResources = true
         }
     }
 }
@@ -142,4 +143,9 @@ dependencies {
     // Gives the sync coordinator's tests a clock they control, which is
     // the only way to pin down what happens when two requests overlap.
     testImplementation(libs.coroutines.test)
+    // Runs the real Room database on the JVM, so the reading-position
+    // state machine is tested by the same SQL that ships. CI runs unit
+    // tests only, so an androidTest source set would never be exercised.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }
