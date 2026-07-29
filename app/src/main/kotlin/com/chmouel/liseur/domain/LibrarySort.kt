@@ -63,15 +63,32 @@ fun sortKey(text: String?): String {
  * How near the top of the shelf a book sits in [LibrarySort.RECENT]:
  * something you are part way through, then something you could open right
  * now, then everything else.
+ *
+ * A book with a reading position counts as started even if it has never
+ * been opened on this device, which is how a book picked up on another
+ * phone finds its way to the front of this one's shelf.
  */
-private fun Book.recentRank(): Int = when {
-    lastOpenedAt != null -> 0
+private fun Book.recentRank(readAt: Long?): Int = when {
+    lastOpenedAt != null || readAt != null -> 0
     downloadState == DownloadState.DOWNLOADED -> 1
     else -> 2
 }
 
-/** The moment a book was last worth looking at, for [LibrarySort.RECENT]. */
-private fun Book.recentAt(): Long = lastOpenedAt ?: downloadedAt ?: addedAt
+/**
+ * The moment a book was last worth looking at, for [LibrarySort.RECENT].
+ *
+ * Opening a book here and reading it elsewhere are both reasons for it
+ * to rise, so the later of the two wins. Opening without reading still
+ * counts, and so does reading without ever having opened it here.
+ */
+private fun Book.recentAt(readAt: Long?): Long {
+    val opened = lastOpenedAt
+    val read = readAt
+    return when {
+        opened != null && read != null -> maxOf(opened, read)
+        else -> opened ?: read ?: downloadedAt ?: addedAt
+    }
+}
 
 /**
  * Puts the library in the asked-for order.
@@ -85,12 +102,16 @@ private fun Book.recentAt(): Long = lastOpenedAt ?: downloadedAt ?: addedAt
  * unknown author is not a name, and pretending it sorts before A only
  * buries the books that do have one.
  */
-fun List<Book>.arrangedBy(sort: LibrarySort, reversed: Boolean = false): List<Book> {
+fun List<Book>.arrangedBy(
+    sort: LibrarySort,
+    reversed: Boolean = false,
+    readAt: Map<String, Long> = emptyMap(),
+): List<Book> {
     val byTitle = compareBy<Book> { sortKey(it.title) }
 
     val comparator = when (sort) {
-        LibrarySort.RECENT -> compareBy<Book> { it.recentRank() }
-            .thenByDescending { it.recentAt() }
+        LibrarySort.RECENT -> compareBy<Book> { it.recentRank(readAt[it.url]) }
+            .thenByDescending { it.recentAt(readAt[it.url]) }
             .let { if (reversed) it.reversed() else it }
             .then(byTitle)
 

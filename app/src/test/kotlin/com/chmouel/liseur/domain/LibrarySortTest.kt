@@ -137,4 +137,59 @@ class LibrarySortTest {
             assertEquals(sort, LibrarySort.fromId(sort.id))
         }
     }
+
+    @Test
+    fun `a book read on another device counts as started`() {
+        val here = book("Opened Here", lastOpenedAt = 100)
+        val elsewhere = book("Read Elsewhere")
+        val untouched = book("Untouched", state = DownloadState.DOWNLOADED, downloadedAt = 900)
+
+        val ordered = listOf(untouched, here, elsewhere).arrangedBy(
+            LibrarySort.RECENT,
+            readAt = mapOf(elsewhere.url to 200L),
+        )
+
+        assertEquals(
+            listOf("Read Elsewhere", "Opened Here", "Untouched"),
+            ordered.titles(),
+        )
+    }
+
+    @Test
+    fun `reading elsewhere lifts a book above one merely opened here`() {
+        val stale = book("Stale", lastOpenedAt = 500)
+        val fresh = book("Fresh", lastOpenedAt = 100)
+
+        val ordered = listOf(stale, fresh).arrangedBy(
+            LibrarySort.RECENT,
+            readAt = mapOf(fresh.url to 900L),
+        )
+
+        assertEquals(listOf("Fresh", "Stale"), ordered.titles())
+    }
+
+    @Test
+    fun `opening a book without reading it still lifts it`() {
+        val opened = book("Opened", lastOpenedAt = 900)
+        val read = book("Read", lastOpenedAt = 100)
+
+        val ordered = listOf(read, opened).arrangedBy(
+            LibrarySort.RECENT,
+            readAt = mapOf(read.url to 500L),
+        )
+
+        assertEquals(listOf("Opened", "Read"), ordered.titles())
+    }
+
+    @Test
+    fun `with no positions at all the order is unchanged`() {
+        val a = book("A", lastOpenedAt = 300)
+        val b = book("B", state = DownloadState.DOWNLOADED, downloadedAt = 200)
+        val c = book("C", addedAt = 100)
+
+        assertEquals(
+            listOf("A", "B", "C"),
+            listOf(c, b, a).arrangedBy(LibrarySort.RECENT).titles(),
+        )
+    }
 }

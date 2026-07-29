@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.calibre.ServerDeleteResult
 import com.chmouel.liseur.data.calibre.CatalogStatus
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
@@ -67,7 +68,7 @@ class LibraryViewModel(
     private val downloads: BookDownloadRepository,
     private val account: CalibreAccountRepository,
     private val appSettings: AppSettingsRepository,
-    progressDao: ReadingProgressDao,
+    private val progressDao: ReadingProgressDao,
 ) : ViewModel() {
 
     /**
@@ -127,6 +128,7 @@ class LibraryViewModel(
             account.server,
             _refreshing,
             appSettings.settings,
+            progressDao.observeReadAt(),
         ) { values ->
             @Suppress("UNCHECKED_CAST")
             val books = values[0] as List<Book>
@@ -137,9 +139,15 @@ class LibraryViewModel(
             val server = values[4] as CalibreServer?
             val refreshing = values[5] as Boolean
             val settings = values[6] as AppSettings
+            @Suppress("UNCHECKED_CAST")
+            val readAt = (values[7] as List<BookReadAt>).associate { it.bookUrl to it.updatedAt }
             LibraryUiState(
                 loading = false,
-                books = books.arrangedBy(settings.librarySort, settings.librarySortReversed),
+                books = books.arrangedBy(
+                    settings.librarySort,
+                    settings.librarySortReversed,
+                    readAt,
+                ),
                 continueReading = recent,
                 catalogStatus = catalogStatus,
                 downloads = running,

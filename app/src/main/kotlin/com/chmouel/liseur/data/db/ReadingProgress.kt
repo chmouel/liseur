@@ -25,6 +25,12 @@ data class ReadingProgress(
     @ColumnInfo(name = "synced_at") val syncedAt: Long? = null,
 )
 
+/** When a book was last read, on this device or another one. */
+data class BookReadAt(
+    @ColumnInfo(name = "book_url") val bookUrl: String,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)
+
 @Dao
 interface ReadingProgressDao {
     @Query("SELECT * FROM reading_progress WHERE book_url = :bookUrl")
@@ -35,6 +41,14 @@ interface ReadingProgressDao {
 
     @Query("SELECT * FROM reading_progress")
     suspend fun getAll(): List<ReadingProgress>
+
+    /**
+     * When each book was last read. The position is written both by
+     * turning a page here and by taking one from the server, so this is
+     * the last time a book was read anywhere, not just on this device.
+     */
+    @Query("SELECT book_url, updated_at FROM reading_progress")
+    fun observeReadAt(): kotlinx.coroutines.flow.Flow<List<BookReadAt>>
 
     @Query("UPDATE reading_progress SET synced_at = :syncedAt WHERE book_url = :bookUrl")
     suspend fun markSynced(bookUrl: String, syncedAt: Long)
