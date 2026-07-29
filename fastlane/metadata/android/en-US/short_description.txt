@@ -1,1 +1,1 @@
-A quiet EPUB reader, and a calibre-web client
+An open-source EPUB reader and calibre-web client

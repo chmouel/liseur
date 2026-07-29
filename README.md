@@ -1,7 +1,7 @@
 # Liseur
 
-A quiet place to read your books: a modern Android EPUB reader that is
-equally at home with the files on your phone and with a
+An open-source EPUB reader and calibre-web client for Android: a modern
+reader that is equally at home with the files on your phone and with a
 [calibre-web](https://github.com/janeczku/calibre-web) server.
 
 <p align="center">
