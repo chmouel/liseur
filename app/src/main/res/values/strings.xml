@@ -111,6 +111,7 @@
         <item quantity="one">%1$d book downloaded · %2$s</item>
         <item quantity="other">%1$d books downloaded · %2$s</item>
     </plurals>
+    <string name="calibre_lost_to_restore">Your calibre-web account was signed out. Passwords are encrypted with a key that never leaves the phone it was made on, so one restored from a backup or moved to a new device can\'t be read. Sign in again to get it back.</string>
     <string name="calibre_sync_identity">Positions sync as %1$s. Reading done under another login stays on this device.</string>
     <string name="calibre_sync_moved_both">Last sync: %1$d brought here, %2$d sent up</string>
     <plurals name="calibre_sync_pulled">
@@ -158,6 +159,7 @@
         <item quantity="one">%1$d result</item>
         <item quantity="other">%1$d results</item>
     </plurals>
+    <string name="search_result_count_capped">First %1$d results — search for something narrower to see the rest</string>
     <string name="dictionary_loading">Looking it up…</string>
     <string name="dictionary_not_found">No Wiktionary entry for “%1$s”.</string>
     <string name="dictionary_failed">Could not reach Wiktionary.</string>

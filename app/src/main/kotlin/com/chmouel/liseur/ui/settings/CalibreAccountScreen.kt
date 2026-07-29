@@ -109,6 +109,12 @@ fun CalibreAccountScreen(
         ) {
             val server = state.server
             if (server == null) {
+                if (state.lostToRestore) {
+                    Notice(
+                        text = stringResource(R.string.calibre_lost_to_restore),
+                        tone = NoticeTone.PROBLEM,
+                    )
+                }
                 ConnectForm(
                     state = state,
                     onUrlChange = onUrlChange,

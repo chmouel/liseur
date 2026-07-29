@@ -59,6 +59,22 @@ class AppSettingsRepository(private val context: Context) {
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val LIBRARY_SORT = stringPreferencesKey("library_sort")
         val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
+        val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
+    }
+
+    /**
+     * Whether a calibre-web account was dropped because its password
+     * arrived from another device and could not be decrypted.
+     *
+     * Kept apart from [settings] because it is a one-off message rather
+     * than a preference: it is raised once and cleared as soon as it has
+     * been read, or as soon as an account is connected again.
+     */
+    val accountLostToRestore: Flow<Boolean> =
+        context.appSettingsStore.data.map { it[Keys.ACCOUNT_LOST] ?: false }
+
+    suspend fun setAccountLostToRestore(lost: Boolean) {
+        context.appSettingsStore.edit { it[Keys.ACCOUNT_LOST] = lost }
     }
 
     val settings: Flow<AppSettings> = context.appSettingsStore.data.map { p ->

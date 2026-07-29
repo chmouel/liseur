@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.calibre.SyncIdentity
 import com.chmouel.liseur.data.calibre.SyncReport
 import com.chmouel.liseur.data.db.CalibreServer
+import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +46,7 @@ data class CalibreAccountUiState(
     val syncStatus: PositionSyncStatus = PositionSyncStatus.Idle,
     val syncReport: SyncReport = SyncReport(),
     val identity: SyncIdentity? = null,
+    val lostToRestore: Boolean = false,
 )
 
 class CalibreAccountViewModel(
@@ -53,6 +55,7 @@ class CalibreAccountViewModel(
     private val koboSync: KoboSyncRepository,
     private val positionSync: PositionSyncCoordinator,
     private val catalog: CalibreCatalogRepository,
+    private val appSettings: AppSettingsRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CalibreAccountUiState())
@@ -75,6 +78,11 @@ class CalibreAccountViewModel(
                 // Every settled run can change who owns what and what is
                 // left over, so the answer is re-read rather than cached.
                 refreshDiagnostics()
+            }
+        }
+        viewModelScope.launch {
+            appSettings.accountLostToRestore.collect { lost ->
+                _state.update { it.copy(lostToRestore = lost) }
             }
         }
         viewModelScope.launch {
@@ -112,7 +120,10 @@ class CalibreAccountViewModel(
                 password = current.password,
                 allowHttp = allowHttp,
             )
-            if (result is SetupResult.Success) catalog.refreshDetached()
+            if (result is SetupResult.Success) {
+                catalog.refreshDetached()
+                appSettings.setAccountLostToRestore(false)
+            }
             _state.update {
                 when (result) {
                     is SetupResult.Success -> it.copy(connecting = false, password = "")
@@ -163,6 +174,7 @@ class CalibreAccountViewModel(
                     koboSync = container.koboSync,
                     positionSync = container.positionSync,
                     catalog = container.calibreCatalog,
+                    appSettings = container.appSettings,
                 )
             }
         }

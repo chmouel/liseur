@@ -78,14 +78,15 @@ interface BookDao {
     @Query("SELECT * FROM books ORDER BY title COLLATE NOCASE")
     fun observeAll(): Flow<List<Book>>
 
-    @Query(
-        "SELECT * FROM books WHERE last_opened_at IS NOT NULL ORDER BY last_opened_at DESC LIMIT 1",
-    )
+    /**
+     * The book to carry on with: the one read most recently anywhere,
+     * not merely the one opened last on this device. Reading arriving
+     * from another phone counts, which is the whole point of syncing it.
+     */
+    @Query(MOST_RECENT)
     fun observeMostRecent(): Flow<Book?>
 
-    @Query(
-        "SELECT * FROM books WHERE last_opened_at IS NOT NULL ORDER BY last_opened_at DESC LIMIT 1",
-    )
+    @Query(MOST_RECENT)
     suspend fun mostRecentlyOpened(): Book?
 
     @Query("SELECT * FROM books WHERE url = :url")
@@ -163,6 +164,20 @@ interface BookDao {
 
     @Query("UPDATE books SET last_opened_at = :at WHERE url = :url")
     suspend fun touchLastOpened(url: String, at: Long)
+
+    companion object {
+        const val MOST_RECENT = """
+            SELECT books.* FROM books
+            LEFT JOIN reading_progress ON reading_progress.book_url = books.url
+            WHERE books.last_opened_at IS NOT NULL
+               OR reading_progress.total_progression IS NOT NULL
+            ORDER BY MAX(
+                COALESCE(books.last_opened_at, 0),
+                COALESCE(reading_progress.updated_at, 0)
+            ) DESC
+            LIMIT 1
+        """
+    }
 }
 
 /** A user-picked SAF folder that is scanned for EPUB files. */

@@ -31,7 +31,11 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
         // A restored backup brings the account with it but not the key
         // that unlocks it, so check before anything tries to use it.
         appScope.launch {
-            container.calibreAccount.forgetUnreadableAccount()
+            // Dropping it silently looks exactly like the account never
+            // existing, so the calibre screen is left something to say.
+            if (container.calibreAccount.forgetUnreadableAccount()) {
+                container.appSettings.setAccountLostToRestore(true)
+            }
         }
         PositionSyncWorker.schedulePeriodic(this)
         syncWhenBroughtToTheFore()

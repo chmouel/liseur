@@ -133,7 +133,12 @@ fun SearchScreen(
                 .padding(padding),
         ) {
             when {
-                hits.isNotEmpty() -> HitList(hits, theme, onHitSelected)
+                hits.isNotEmpty() -> HitList(
+                    hits = hits,
+                    capped = (state as? SearchState.Done)?.truncated == true,
+                    theme = theme,
+                    onHitSelected = onHitSelected,
+                )
 
                 state is SearchState.Done ->
                     Message(theme, stringResource(R.string.search_no_results, state.query))
@@ -152,12 +157,20 @@ fun SearchScreen(
 @Composable
 private fun HitList(
     hits: List<Locator>,
+    capped: Boolean,
     theme: ReaderTheme,
     onHitSelected: (Locator) -> Unit,
 ) {
     Column {
         Text(
-            text = pluralStringResource(R.plurals.search_result_count, hits.size, hits.size),
+            // A common word in a long book can out-run the limit, and a
+            // list that simply stops is indistinguishable from one that
+            // finished, so a capped count says so rather than lying.
+            text = if (capped) {
+                stringResource(R.string.search_result_count_capped, hits.size)
+            } else {
+                pluralStringResource(R.plurals.search_result_count, hits.size, hits.size)
+            },
             style = MaterialTheme.typography.labelMedium,
             color = theme.foreground.copy(alpha = 0.6f),
             modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 4.dp),
