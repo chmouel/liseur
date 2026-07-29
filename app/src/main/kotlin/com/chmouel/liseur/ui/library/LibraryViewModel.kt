@@ -23,6 +23,7 @@ import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.matchesLibrarySearch
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
@@ -67,6 +68,13 @@ data class LibraryUiState(
     val searchQuery: String = "",
     val filter: LibraryFilter = LibraryFilter.ALL,
     val isSearchActive: Boolean = false,
+    /**
+     * Whether the shelf itself is bare, as opposed to a search or a
+     * filter having hidden everything on it. The two need saying very
+     * differently: one wants books adding, the other wants the search
+     * changing.
+     */
+    val libraryIsEmpty: Boolean = true,
 )
 
 /**
@@ -182,11 +190,7 @@ class LibraryViewModel(
                     }
                 }
                 .filter { book ->
-                    if (query.isBlank()) true
-                    else {
-                        book.displayTitle.contains(query, ignoreCase = true) ||
-                            (book.displayAuthor?.contains(query, ignoreCase = true) == true)
-                    }
+                    matchesLibrarySearch(query, book.displayTitle, book.displayAuthor)
                 }
 
             LibraryUiState(
@@ -202,6 +206,7 @@ class LibraryViewModel(
                 searchQuery = query,
                 filter = filter,
                 isSearchActive = searchActive,
+                libraryIsEmpty = books.isEmpty(),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 

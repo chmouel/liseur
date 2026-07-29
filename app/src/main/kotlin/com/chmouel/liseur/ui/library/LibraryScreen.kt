@@ -276,9 +276,21 @@ fun LibraryScreen(
             when {
                 state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
 
-                state.books.isEmpty() -> EmptyLibrary(
+                state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
                     onOpenBook = onOpenBook,
                     onAddFolder = onAddFolder,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                // Books exist, they are simply all hidden. Offering to
+                // add a folder here would be answering a question nobody
+                // asked, and would suggest the shelf had been lost.
+                state.books.isEmpty() -> NothingMatched(
+                    searching = state.isSearchActive && state.searchQuery.isNotBlank(),
+                    onClear = {
+                        onSearchQueryChange("")
+                        onSetFilter(LibraryFilter.ALL)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -447,7 +459,9 @@ private fun BookGrid(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        state.continueReading?.let { recent ->
+        // Not a search result, so it has no business sitting above them
+        // and pushing the real answers off the screen.
+        state.continueReading?.takeIf { !state.isSearchActive }?.let { recent ->
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ContinueReadingCard(
                     entry = recent,
@@ -843,6 +857,46 @@ private fun EmptyLibrary(
             }
             OutlinedButton(onClick = onOpenBook) {
                 Text(stringResource(R.string.open_book))
+            }
+        }
+    }
+}
+
+/**
+ * Shown when the shelf has books on it but a search or a filter is
+ * hiding every one of them.
+ */
+@Composable
+private fun NothingMatched(
+    searching: Boolean,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .heightIn(min = maxHeight)
+                .padding(horizontal = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Search,
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = stringResource(
+                    if (searching) R.string.no_books_match else R.string.no_books_in_filter,
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = onClear) {
+                Text(stringResource(R.string.show_all_books))
             }
         }
     }

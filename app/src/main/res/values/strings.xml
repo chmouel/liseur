@@ -159,6 +159,9 @@
         <item quantity="one">%1$d result</item>
         <item quantity="other">%1$d results</item>
     </plurals>
+    <string name="no_books_match">No books match your search</string>
+    <string name="no_books_in_filter">No books here</string>
+    <string name="show_all_books">Show all books</string>
     <string name="search_result_count_capped">First %1$d results — search for something narrower to see the rest</string>
     <string name="dictionary_loading">Looking it up…</string>
     <string name="dictionary_not_found">No Wiktionary entry for “%1$s”.</string>
