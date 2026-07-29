@@ -84,24 +84,53 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /** Adds highlights, notes and bookmarks. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `annotations` (
+                        `id` TEXT NOT NULL,
+                        `book_id` TEXT NOT NULL,
+                        `kind` TEXT NOT NULL,
+                        `locator_json` TEXT NOT NULL,
+                        `text` TEXT,
+                        `note` TEXT,
+                        `tint` TEXT,
+                        `chapter` TEXT,
+                        `position` INTEGER,
+                        `total_progression` REAL,
+                        `created_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_annotations_book_id` " +
+                        "ON `annotations` (`book_id`)",
+                )
+            }
+        }
+
+        /** Records when a book was downloaded, for sorting by it. */
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE books ADD COLUMN downloaded_at INTEGER")
             }
         }
 
+        /** Notes the file's timestamp, so a swapped file can be spotted. */
         val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE books ADD COLUMN file_modified_at INTEGER")
             }
         }
 
+        /** Records when a book was marked read. */
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE books ADD COLUMN finished_at INTEGER")
             }
         }
-
 
         /**
          * Puts the Kobo sync token behind the same Keystore key as the
@@ -131,31 +160,5 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(connection: SQLiteConnection) {
-                connection.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS `annotations` (
-                        `id` TEXT NOT NULL,
-                        `book_id` TEXT NOT NULL,
-                        `kind` TEXT NOT NULL,
-                        `locator_json` TEXT NOT NULL,
-                        `text` TEXT,
-                        `note` TEXT,
-                        `tint` TEXT,
-                        `chapter` TEXT,
-                        `position` INTEGER,
-                        `total_progression` REAL,
-                        `created_at` INTEGER NOT NULL,
-                        PRIMARY KEY(`id`)
-                    )
-                    """.trimIndent(),
-                )
-                connection.execSQL(
-                    "CREATE INDEX IF NOT EXISTS `index_annotations_book_id` " +
-                        "ON `annotations` (`book_id`)",
-                )
-            }
-        }
     }
 }
