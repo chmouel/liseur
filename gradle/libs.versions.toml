@@ -1,6 +1,6 @@
 [versions]
-agp = "9.3.0"
-kotlinComposePlugin = "2.4.0"
+agp = "9.3.1"
+kotlinComposePlugin = "2.4.10"
 ksp = "2.3.10"
 coreKtx = "1.19.0"
 splashscreen = "1.2.0"
@@ -16,7 +16,7 @@ datastore = "1.2.1"
 okhttp = "5.4.0"
 work = "2.11.2"
 desugar = "2.1.5"
-json = "20250107"
+json = "20260719"
 junit = "4.13.2"
 
 [libraries]
