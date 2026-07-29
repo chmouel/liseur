@@ -420,9 +420,6 @@ update_fdroid_submission() (
             print "    subdir: app"
             print "    gradle:"
             print "      - yes"
-            print "    prebuild: sed -i "
-            print "      \047s/jvmToolchain(17)/compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)/\047"
-            print "      build.gradle.kts"
             print ""
             inserted = 1
         }

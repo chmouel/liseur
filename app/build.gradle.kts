@@ -1,5 +1,6 @@
 import java.io.FileInputStream
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -88,8 +89,16 @@ android {
     }
 }
 
+// F-Droid's buildserver runs Gradle with auto-download of toolchains
+// switched off, so asking for a toolchain it does not already have fails
+// the build. Pinning the JVM target instead needs no toolchain lookup and
+// matches the source/target compatibility set in compileOptions above, so
+// the F-Droid recipe can build the app as-is rather than patching this
+// file from a prebuild step.
 kotlin {
-    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 ksp {
