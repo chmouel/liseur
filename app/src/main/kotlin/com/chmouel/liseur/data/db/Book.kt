@@ -56,7 +56,11 @@ data class Book(
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
     @ColumnInfo(name = "downloaded_at") val downloadedAt: Long? = null,
     @ColumnInfo(name = "file_modified_at") val fileModifiedAt: Long? = null,
+    /** When the book was marked read, by hand or by reaching the end. */
+    @ColumnInfo(name = "finished_at") val finishedAt: Long? = null,
 ) {
+    val finished: Boolean get() = finishedAt != null
+
     /** The URL to hand to Readium, or null when the file is not here yet. */
     val openableUrl: String? get() = localUri ?: url.takeIf { downloadState == DownloadState.DOWNLOADED }
 }
@@ -148,6 +152,9 @@ interface BookDao {
 
     @Query("DELETE FROM books WHERE url IN (:urls)")
     suspend fun deleteByUrls(urls: List<String>)
+
+    @Query("UPDATE books SET finished_at = :at WHERE url = :url")
+    suspend fun setFinishedAt(url: String, at: Long?)
 
     @Query("UPDATE books SET last_opened_at = :at WHERE url = :url")
     suspend fun touchLastOpened(url: String, at: Long)

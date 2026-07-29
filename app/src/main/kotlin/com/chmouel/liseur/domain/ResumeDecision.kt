@@ -7,6 +7,8 @@ data class ResumeCandidate(
     /** The file to open. */
     val fileUrl: String,
     val totalProgression: Double?,
+    /** Marked read, by hand or by having been finished. */
+    val finished: Boolean = false,
 )
 
 /**
@@ -19,6 +21,7 @@ data class ResumeCandidate(
  */
 fun shouldResume(candidate: ResumeCandidate?, leftFromReader: Boolean): Boolean {
     if (candidate == null || !leftFromReader) return false
+    if (candidate.finished) return false
     val progression = candidate.totalProgression ?: return true
     return progression < FINISHED_PROGRESSION
 }

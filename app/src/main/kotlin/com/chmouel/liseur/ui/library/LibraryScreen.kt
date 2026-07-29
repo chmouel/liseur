@@ -21,10 +21,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FileOpen
@@ -40,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
 import kotlinx.coroutines.flow.Flow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
@@ -55,6 +58,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -81,6 +85,7 @@ fun LibraryScreen(
     onDownload: (Book) -> Unit,
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
+    onSetFinished: (Book, Boolean) -> Unit,
     onRefresh: () -> Unit,
     onDownloadAndOpen: (Book) -> Unit,
     failedOpens: Flow<Book>,
@@ -184,6 +189,7 @@ fun LibraryScreen(
             onDownload = { onDownload(book); sheetBook = null },
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
             onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
+            onSetFinished = { onSetFinished(book, it); sheetBook = null },
         )
     }
 }
@@ -199,6 +205,7 @@ private fun BookActionsSheet(
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
+    onSetFinished: (Boolean) -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 32.dp)) {
@@ -235,10 +242,17 @@ private fun BookActionsSheet(
                     Text(stringResource(R.string.download_book))
                 }
 
-                else -> Text(
-                    text = stringResource(R.string.no_book_actions),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                else -> Unit
+            }
+            Spacer(Modifier.height(8.dp))
+            TextButton(
+                onClick = { onSetFinished(!book.finished) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(
+                        if (book.finished) R.string.mark_unread else R.string.mark_read,
+                    ),
                 )
             }
         }
@@ -356,7 +370,10 @@ private fun BookCard(
                 book = book,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(2f / 3f),
+                    .aspectRatio(2f / 3f)
+                    // A book you have read should read as done at a glance,
+                    // without disappearing from the shelf.
+                    .alpha(if (book.finished) 0.55f else 1f),
             )
             when {
                 progress != null -> DownloadOverlay(
@@ -366,6 +383,9 @@ private fun BookCard(
 
                 book.downloadState != DownloadState.DOWNLOADED ->
                     OnServerBadge(Modifier.align(Alignment.TopEnd).padding(6.dp))
+            }
+            if (book.finished && progress == null) {
+                FinishedBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
         }
         Text(
@@ -384,6 +404,25 @@ private fun BookCard(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+/** The tick that says you have read this one. */
+@Composable
+private fun FinishedBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Check,
+            contentDescription = stringResource(R.string.book_finished),
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 

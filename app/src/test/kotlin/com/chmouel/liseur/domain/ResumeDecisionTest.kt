@@ -6,10 +6,11 @@ import org.junit.Test
 
 class ResumeDecisionTest {
 
-    private fun candidate(progression: Double?) = ResumeCandidate(
+    private fun candidate(progression: Double?, finished: Boolean = false) = ResumeCandidate(
         identity = "calibre:abc",
         fileUrl = "file:///books/abc.epub",
         totalProgression = progression,
+        finished = finished,
     )
 
     @Test
@@ -37,6 +38,11 @@ class ResumeDecisionTest {
     fun `back matter still counts as finished`() {
         assertFalse(shouldResume(candidate(FINISHED_PROGRESSION), leftFromReader = true))
         assertTrue(shouldResume(candidate(FINISHED_PROGRESSION - 0.01), leftFromReader = true))
+    }
+
+    @Test
+    fun `a book marked read never pulls you back in`() {
+        assertFalse(shouldResume(candidate(0.1, finished = true), leftFromReader = true))
     }
 
     @Test

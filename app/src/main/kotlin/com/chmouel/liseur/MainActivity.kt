@@ -84,6 +84,7 @@ class MainActivity : ComponentActivity() {
                 totalProgression = container.database.readingProgressDao()
                     .get(book.url)
                     ?.totalProgression,
+                finished = book.finished,
             )
         }
         if (!shouldResume(candidate, leftFromReader) || candidate == null) return
@@ -200,6 +201,7 @@ private fun LibraryRoute(
         onDownload = viewModel::download,
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,
+        onSetFinished = viewModel::setFinished,
         onRefresh = viewModel::refresh,
         onDownloadAndOpen = viewModel::downloadAndOpen,
         failedOpens = viewModel.failedOpens,

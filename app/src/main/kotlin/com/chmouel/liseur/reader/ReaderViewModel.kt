@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.domain.FINISHED_PROGRESSION
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -196,6 +197,12 @@ class ReaderViewModel(
                     syncedAt = progressDao.get(bookId)?.syncedAt,
                 ),
             )
+            // Reaching the end marks the book read, so the library shows it
+            // as done and the app stops dropping you back into it. Marking
+            // it unread by hand sticks: we only ever set this on the way in.
+            if ((totalProgression ?: 0.0) >= FINISHED_PROGRESSION) {
+                library.markFinishedOnce(bookId)
+            }
         }
     }
 

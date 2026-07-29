@@ -185,6 +185,10 @@ class LibraryViewModel(
         viewModelScope.launch { downloads.removeDownload(book) }
     }
 
+    fun setFinished(book: Book, finished: Boolean) {
+        viewModelScope.launch { library.setFinished(book.url, finished) }
+    }
+
     fun addFolder(treeUri: Uri) {
         viewModelScope.launch { library.addFolder(treeUri) }
     }

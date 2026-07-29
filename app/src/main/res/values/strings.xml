@@ -71,7 +71,6 @@
     <string name="download_book">Download</string>
     <string name="cancel_download">Cancel download</string>
     <string name="remove_download">Remove download</string>
-    <string name="no_book_actions">Nothing to do here yet.</string>
     <string name="calibre_credentials_lost">Sign in to your calibre-web server again.</string>
     <plurals name="calibre_storage">
         <item quantity="one">%1$d book downloaded · %2$s</item>
@@ -113,4 +112,7 @@
     <string name="dictionary_other_app">Dictionary app</string>
     <string name="dictionary_open_wiktionary">Full entry</string>
     <string name="download_failed_open">Could not download “%1$s”.</string>
+    <string name="mark_read">Mark as read</string>
+    <string name="mark_unread">Mark as unread</string>
+    <string name="book_finished">Read</string>
 </resources>
