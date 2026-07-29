@@ -47,6 +47,8 @@ fun SettingsScreen(
     onVolumeKeys: (Boolean) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onOpenAccount: () -> Unit,
+    onExportAnnotations: () -> Unit,
+    onImportAnnotations: () -> Unit,
     onOpenSource: () -> Unit,
     onOpenLicences: () -> Unit,
     onBack: () -> Unit,
@@ -129,6 +131,16 @@ fun SettingsScreen(
                 title = stringResource(R.string.calibre_account),
                 subtitle = stringResource(R.string.settings_account_detail),
                 onClick = onOpenAccount,
+            )
+            LinkRow(
+                title = stringResource(R.string.export_annotations),
+                subtitle = stringResource(R.string.export_annotations_detail),
+                onClick = onExportAnnotations,
+            )
+            LinkRow(
+                title = stringResource(R.string.import_annotations),
+                subtitle = stringResource(R.string.import_annotations_detail),
+                onClick = onImportAnnotations,
             )
 
             SectionTitle(stringResource(R.string.settings_about))

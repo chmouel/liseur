@@ -5,6 +5,8 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Entity
 import androidx.room.Index
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Upsert
@@ -52,8 +54,22 @@ interface BookAnnotationDao {
     @Query("SELECT COUNT(*) FROM annotations WHERE book_id = :bookId")
     suspend fun count(bookId: String): Int
 
+    /** Everything marked anywhere, for a backup. */
+    @Query("SELECT * FROM annotations ORDER BY book_id, created_at")
+    suspend fun all(): List<BookAnnotation>
+
     @Upsert
     suspend fun upsert(annotation: BookAnnotation)
+
+    /**
+     * Restores marks, leaving alone any that are already here.
+     *
+     * Ignoring rather than replacing is what makes importing the same
+     * file twice harmless, and what stops a stale backup undoing a note
+     * you have since rewritten on this device.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMissing(annotations: List<BookAnnotation>): List<Long>
 
     @Delete
     suspend fun delete(annotation: BookAnnotation)

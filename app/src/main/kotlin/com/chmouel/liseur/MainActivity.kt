@@ -26,6 +26,9 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import com.chmouel.liseur.data.library.BackupResult
 import com.chmouel.liseur.domain.ResumeCandidate
 import com.chmouel.liseur.domain.shouldResume
 import com.chmouel.liseur.reader.ReaderActivity
@@ -129,6 +132,7 @@ private fun LiseurApp(settings: AppSettings) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(context) { context.container.appSettings }
+    val annotationBackup = rememberAnnotationBackup()
 
     when (screen) {
         Screen.LIBRARY -> LibraryRoute(onOpenSettings = { screen = Screen.SETTINGS })
@@ -143,6 +147,8 @@ private fun LiseurApp(settings: AppSettings) {
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onOpenAccount = { screen = Screen.CALIBRE_ACCOUNT },
+                onExportAnnotations = annotationBackup.export,
+                onImportAnnotations = annotationBackup.restore,
                 onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
                 onOpenLicences = { screen = Screen.LICENCES },
                 onBack = { screen = Screen.LIBRARY },
@@ -158,6 +164,65 @@ private fun LiseurApp(settings: AppSettings) {
             BackHandler { screen = Screen.SETTINGS }
             LicencesScreen(onBack = { screen = Screen.SETTINGS })
         }
+    }
+}
+
+/** The two ways marks leave and return: a file written, a file read. */
+private class AnnotationBackupActions(val export: () -> Unit, val restore: () -> Unit)
+
+/**
+ * Wires saving and restoring marks to the system file picker.
+ *
+ * A file the user chooses, rather than somewhere of our own, because the
+ * whole point is to move it: onto another phone, into a backup, out of
+ * Liseur entirely if they would rather keep their reading elsewhere.
+ */
+@Composable
+private fun rememberAnnotationBackup(): AnnotationBackupActions {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val backup = remember(context) { context.container.annotationBackup }
+    // The application context on purpose: the message is put together in
+    // a callback that outlives the composition, and reading resources
+    // off the composition's own context there is a leak waiting to be.
+    val app = remember(context) { context.applicationContext }
+
+    fun report(result: BackupResult) {
+        val message = when (result) {
+            is BackupResult.Exported -> app.getString(
+                R.string.export_annotations_done,
+                result.annotations,
+                result.books,
+            )
+            BackupResult.NothingToExport -> app.getString(R.string.export_annotations_empty)
+            is BackupResult.Imported -> if (result.added == 0) {
+                app.getString(R.string.import_annotations_none)
+            } else {
+                app.getString(R.string.import_annotations_done, result.added)
+            }
+            is BackupResult.Failed -> result.reason
+                ?.let { app.getString(R.string.annotations_backup_failed, it) }
+                ?: app.getString(R.string.annotations_backup_failed_unknown)
+        }
+        Toast.makeText(app, message, Toast.LENGTH_LONG).show()
+    }
+
+    val save = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri -> uri?.let { scope.launch { report(backup.exportTo(it)) } } }
+
+    val open = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let { scope.launch { report(backup.importFrom(it)) } } }
+
+    return remember(save, open) {
+        AnnotationBackupActions(
+            export = { save.launch("liseur-highlights.json") },
+            // Not filtered to application/json: files copied between
+            // devices arrive labelled all sorts of things, and being told
+            // your own backup cannot be picked is maddening.
+            restore = { open.launch(arrayOf("*/*")) },
+        )
     }
 }
 

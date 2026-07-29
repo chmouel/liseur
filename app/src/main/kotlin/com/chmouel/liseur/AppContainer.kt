@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.data.library.AnnotationBackupRepository
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -49,6 +50,13 @@ class AppContainer(context: Context) {
         folderDao = database.libraryFolderDao(),
         progressDao = database.readingProgressDao(),
         annotationDao = database.annotationDao(),
+    )
+
+    /** Highlights and notes written to a file, and read back on another device. */
+    val annotationBackup = AnnotationBackupRepository(
+        context = context.applicationContext,
+        annotationDao = database.annotationDao(),
+        bookDao = database.bookDao(),
     )
 
     /** The one answer to whether a book is read, shared by everything that asks. */

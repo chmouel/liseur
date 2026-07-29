@@ -91,6 +91,9 @@ interface BookDao {
     @Query("SELECT * FROM books ORDER BY title COLLATE NOCASE")
     fun observeAll(): Flow<List<Book>>
 
+    @Query("SELECT * FROM books ORDER BY title COLLATE NOCASE")
+    suspend fun allOnce(): List<Book>
+
     /**
      * The book to carry on with: the one read most recently anywhere,
      * not merely the one opened last on this device. Reading arriving

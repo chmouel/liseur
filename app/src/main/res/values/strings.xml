@@ -214,4 +214,14 @@
     <string name="everything_put_away">Every book is put away.</string>
     <string name="archive_book">Put away</string>
     <string name="unarchive_book">Put back on the shelf</string>
+    <string name="export_annotations">Save highlights and notes</string>
+    <string name="export_annotations_detail">Write everything you have marked to a file you can keep or carry to another device.</string>
+    <string name="import_annotations">Restore highlights and notes</string>
+    <string name="import_annotations_detail">Read marks back in from a saved file. Anything already here is left alone.</string>
+    <string name="export_annotations_done">Saved %1$d marks from %2$d books.</string>
+    <string name="export_annotations_empty">Nothing has been marked yet.</string>
+    <string name="import_annotations_done">Restored %1$d marks.</string>
+    <string name="import_annotations_none">Every mark in that file was already here.</string>
+    <string name="annotations_backup_failed">That did not work: %1$s</string>
+    <string name="annotations_backup_failed_unknown">That did not work.</string>
 </resources>
