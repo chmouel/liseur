@@ -2,25 +2,26 @@
 #
 # Capture the screenshots used by the README and by F-Droid.
 #
-# Everything is driven through adb against a running emulator or device, so
-# the images can be regenerated after a UI change instead of drifting.
+#   hack/screenshots --setup      # build a demo shelf first, then capture
+#   hack/screenshots              # capture from a device already set up
+#   hack/screenshots --setup-only # build the shelf and stop, to check it
+#   hack/screenshots -s SERIAL    # pick a device when several are attached
 #
-#   hack/screenshots                 # use the only attached device
-#   hack/screenshots emulator-5554   # pick one explicitly
+# The screens are found by what they say — a button's label, a book's
+# title — rather than by where they happened to sit when this was
+# written. A moved control is then a control the script waits for and
+# fails on, instead of a tap into empty space and a screenshot of the
+# wrong thing.
 #
-# What the device needs first:
+# --setup builds the shelf from scratch: it downloads a handful of
+# Standard Ebooks editions (public domain, cover art included, which is
+# what makes them publishable), pushes them to the device, grants the
+# folder through the real picker, and leaves the first book part-read
+# with a highlight, a note and a bookmark on it. Everything the notebook
+# and the reader screens need is then really there.
 #
-#   * the app installed, with a library folder granted;
-#   * books whose covers can be published — the shelf ends up in the README
-#     and on F-Droid, so use public domain editions (Standard Ebooks is
-#     ideal) rather than whatever you happen to own;
-#   * the book that sorts first must be part-read and carry a few
-#     highlights, notes and bookmarks, because the notebook screens are
-#     captured from it;
-#   * calibre-web signed out, unless your server holds only books you are
-#     willing to publish a picture of.
-#
-# Nothing here writes to a server.
+# Nothing here writes to a calibre-web server. Sign out of one before
+# running if your server holds books you would not publish a picture of.
 
 set -euo pipefail
 
@@ -28,73 +29,624 @@ readonly APP_ID="com.chmouel.liseur"
 readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
 readonly OUT_DIR="docs/screenshots"
 readonly FASTLANE_DIR="fastlane/metadata/android/en-US/images/phoneScreenshots"
+readonly DEVICE_BOOKS="/sdcard/Books"
+readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/liseur-screenshots"
+
+# The shelf, in the order it is downloaded. Standard Ebooks serves the
+# file itself only with ?source=download; without it you get the "your
+# download has started" page, saved as a .epub that is not one.
+readonly -a DEMO_BOOKS=(
+    "herman-melville/moby-dick"
+    "robert-louis-stevenson/treasure-island"
+    "oscar-wilde/the-picture-of-dorian-gray"
+    "mary-shelley/frankenstein"
+    "mark-twain/the-adventures-of-huckleberry-finn"
+    "jane-austen/pride-and-prejudice"
+    "bram-stoker/dracula"
+    "charlotte-bronte/jane-eyre"
+    "h-g-wells/the-time-machine"
+)
+
+# The word held down to raise the selection popup, and the one searched
+# for in-book. Both are Moby Dick's, which is the book that opens first.
+readonly HIGHLIGHT_NOTE="The line that gives the book its weather."
+readonly SEARCH_TERM="whale"
+
+setup=0
+setup_only=0
+serial=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --setup) setup=1 ;;
+        --setup-only)
+            setup=1
+            setup_only=1
+            ;;
+        -s | --serial)
+            serial=${2:-}
+            shift
+            ;;
+        -h | --help)
+            sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            printf 'error: unknown argument %s\n' "$1" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 die() {
     printf 'error: %s\n' "$*" >&2
     exit 1
 }
 
-serial=${1:-}
+step() { printf '\n== %s\n' "$*"; }
+note() { printf '   %s\n' "$*"; }
+
+command -v adb >/dev/null || die "adb is not installed"
+command -v python3 >/dev/null || die "python3 is not installed"
+
 if [[ -z "$serial" ]]; then
     mapfile -t devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
     [[ ${#devices[@]} -eq 1 ]] ||
-        die "expected exactly one attached device, got ${#devices[@]}; pass a serial"
+        die "expected exactly one attached device, got ${#devices[@]}; pass --serial"
     serial=${devices[0]}
 fi
 
 adb() { command adb -s "$serial" "$@"; }
 
-shot() {
-    local name=$1
-    adb exec-out screencap -p > "$OUT_DIR/$name.png"
-    printf '  %s\n' "$OUT_DIR/$name.png"
-}
+adb shell pm path "$APP_ID" >/dev/null 2>&1 ||
+    die "$APP_ID is not installed on $serial"
 
-# Screen coordinates are computed from the real display size rather than
-# hard-coded, so this keeps working on a differently sized device.
 read -r width height < <(
     adb shell wm size | sed -nE 's/.*: ([0-9]+)x([0-9]+)/\1 \2/p' | tail -n 1
 )
 [[ -n "$width" && -n "$height" ]] || die "could not read the display size"
 
+work=$(mktemp -d)
+cleanup() {
+    adb shell am broadcast -a com.android.systemui.demo -e command exit >/dev/null 2>&1 || true
+    adb shell cmd uimode night no >/dev/null 2>&1 || true
+    adb shell rm -f /sdcard/liseur-ui.xml >/dev/null 2>&1 || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+# ---------------------------------------------------------------- the UI
+
+# The current window, as XML. uiautomator occasionally comes back empty
+# while a screen is still settling, so an empty dump is worth retrying.
+dump_ui() {
+    local i
+    for i in 1 2 3; do
+        if adb shell uiautomator dump /sdcard/liseur-ui.xml >/dev/null 2>&1 &&
+            adb shell cat /sdcard/liseur-ui.xml > "$work/ui.xml" 2>/dev/null &&
+            [[ -s "$work/ui.xml" ]]; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# Centre of the first node whose text or content-desc matches, printed as
+# "x y". Matching is case-insensitive and on a prefix, so a label that
+# gained a suffix still resolves.
+#
+#   find_node <needle> [exact]
+find_node() {
+    python3 - "$work/ui.xml" "$1" "${2:-prefix}" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+
+path, needle, mode = sys.argv[1], sys.argv[2].lower(), sys.argv[3]
+try:
+    root = ET.parse(path).getroot()
+except ET.ParseError:
+    sys.exit(1)
+
+def hit(value):
+    value = (value or "").strip().lower()
+    if not value:
+        return False
+    return value == needle if mode == "exact" else value.startswith(needle)
+
+for node in root.iter("node"):
+    if hit(node.get("text")) or hit(node.get("content-desc")):
+        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+        if not m:
+            continue
+        x1, y1, x2, y2 = (int(g) for g in m.groups())
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
+# Wait until something is on screen. Returns its centre.
+#
+#   wait_for <needle> [seconds] [exact]
+wait_for() {
+    local needle=$1 limit=${2:-25} mode=${3:-prefix} waited=0 found
+    while ((waited < limit)); do
+        if dump_ui && found=$(find_node "$needle" "$mode"); then
+            printf '%s\n' "$found"
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    return 1
+}
+
+# Tap what a thing says. The tap lands on the node's centre, which for a
+# Compose icon button is the icon itself.
+tap_on() {
+    local needle=$1 mode=${2:-prefix} at
+    at=$(wait_for "$needle" 25 "$mode") ||
+        die "never found \"$needle\" on screen (the layout may have changed)"
+    # shellcheck disable=SC2086
+    adb shell input tap $at
+    sleep 2
+}
+
+# Same, but a missing target is not fatal: for things that are only there
+# sometimes, like a permission dialog.
+tap_if_there() {
+    local needle=$1 mode=${2:-prefix} at
+    if dump_ui && at=$(find_node "$needle" "$mode"); then
+        # shellcheck disable=SC2086
+        adb shell input tap $at
+        sleep 2
+        return 0
+    fi
+    return 1
+}
+
+on_screen() { dump_ui && find_node "$1" >/dev/null; }
+
+# Tap something on the shelf, scrolling down to it if it is below the
+# fold. Only the shelf scrolls this way; a swipe in the reader turns a
+# page instead.
+tap_on_shelf() {
+    local needle=$1 i at
+    for i in 1 2 3 4 5 6; do
+        if dump_ui && at=$(find_node "$needle"); then
+            # shellcheck disable=SC2086
+            adb shell input tap $at
+            sleep 2
+            return 0
+        fi
+        adb shell input swipe "$(x 0.5)" "$(y 0.75)" "$(x 0.5)" "$(y 0.3)" 400
+        sleep 2
+    done
+    die "never found \"$needle\" on the shelf"
+}
+
+# Back to the top of the shelf, so a capture starts where the last one did.
+shelf_to_top() {
+    local i
+    for i in 1 2 3 4 5 6; do
+        adb shell input swipe "$(x 0.5)" "$(y 0.3)" "$(x 0.5)" "$(y 0.8)" 300
+        sleep 1
+    done
+    sleep 1
+}
+
+# The selection popup is a Compose popup, in a window uiautomator does not
+# report, so nothing in it can be found by what it says. Its four
+# highlight colours give it away in a screenshot instead, and the rest of
+# the row sits a fixed distance from the first of them.
+readonly TINTS="FFD54F,9CCC65,64B5F6,F06292"
+readonly POPUP_NOTE_DP=155
+readonly POPUP_DEFINE_DP=216
+
+density=$(adb shell wm density | sed -nE 's/.*density: ([0-9]+).*/\1/p' | tail -n 1)
+[[ -n "$density" ]] || density=420
+dp() { printf '%.0f' "$(awk "BEGIN { print $1 * $density / 160 }")"; }
+
+# Where the first highlight colour is, as "x y", or nothing if the popup
+# is not up. All four colours have to be there, side by side on one row:
+# a yellow highlight already on the page is otherwise indistinguishable
+# from the yellow chip, and mistaking one for the other means tapping the
+# page when the script believes it is tapping a button.
+find_popup() {
+    adb exec-out screencap -p > "$work/screen.png" 2>/dev/null || return 1
+    python3 - "$work/screen.png" "$TINTS" <<'PYEOF'
+import struct, sys, zlib
+
+path, wanted = sys.argv[1], sys.argv[2]
+targets = [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in wanted.split(",")]
+data = open(path, "rb").read()
+if data[:8] != b"\x89PNG\r\n\x1a\n":
+    sys.exit(1)
+
+pos, idat, width, height, colour = 8, b"", 0, 0, 0
+while pos < len(data):
+    length, typ = struct.unpack(">I4s", data[pos:pos + 8])
+    chunk = data[pos + 8:pos + 8 + length]
+    if typ == b"IHDR":
+        width, height, _, colour = struct.unpack(">IIBB", chunk[:10])
+    elif typ == b"IDAT":
+        idat += chunk
+    pos += 12 + length
+
+raw = zlib.decompress(idat)
+channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[colour]
+stride = width * channels
+out, prev, p = bytearray(), bytearray(stride), 0
+for _ in range(height):
+    f = raw[p]
+    p += 1
+    line = bytearray(raw[p:p + stride])
+    p += stride
+    if f == 1:
+        for i in range(channels, stride):
+            line[i] = (line[i] + line[i - channels]) & 255
+    elif f == 2:
+        for i in range(stride):
+            line[i] = (line[i] + prev[i]) & 255
+    elif f == 3:
+        for i in range(stride):
+            a = line[i - channels] if i >= channels else 0
+            line[i] = (line[i] + ((a + prev[i]) >> 1)) & 255
+    elif f == 4:
+        for i in range(stride):
+            a = line[i - channels] if i >= channels else 0
+            b = prev[i]
+            c = prev[i - channels] if i >= channels else 0
+            pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+            line[i] = (line[i] + (a if pa <= pb and pa <= pc else (b if pb <= pc else c))) & 255
+    out += line
+    prev = line
+
+found = []
+for target in targets:
+    xs, ys = [], []
+    for y in range(0, height, 3):
+        row = y * stride
+        for x in range(0, width, 3):
+            i = row + x * channels
+            if all(abs(out[i + n] - target[n]) < 12 for n in range(3)):
+                xs.append(x)
+                ys.append(y)
+    # A stray pixel of the right colour is not a chip; a chip is a disc.
+    if len(xs) < 100:
+        sys.exit(1)
+    found.append((sum(xs) // len(xs), sum(ys) // len(ys)))
+
+# Four discs of different colours, all on one line: that is the popup and
+# nothing else on a page of text looks like it.
+rows = [y for _, y in found]
+if max(rows) - min(rows) > 12:
+    sys.exit(1)
+print(min(x for x, _ in found), sum(rows) // len(rows))
+PYEOF
+}
+
 x() { printf '%.0f' "$(awk "BEGIN { print $width * $1 }")"; }
 y() { printf '%.0f' "$(awk "BEGIN { print $height * $1 }")"; }
-
 tap() { adb shell input tap "$(x "$1")" "$(y "$2")"; }
 back() { adb shell input keyevent KEYCODE_BACK; }
 
-# Landmarks, as fractions of the display.
-readonly TOP_BAR=0.092          # every top bar sits at the same height
-readonly LIB_FIRST_BOOK_X=0.18  # the first cover on the shelf
-readonly LIB_FIRST_BOOK_Y=0.32
-readonly LIB_SETTINGS_X=0.698
-readonly READER_SEARCH_X=0.696
-readonly READER_TYPOGRAPHY_X=0.815
-readonly READER_CONTENTS_X=0.932
-readonly SHEET_CLOSE_X=0.070
-readonly TABS_Y=0.152
-readonly TAB_HIGHLIGHTS_X=0.623
-readonly THEME_SWATCH_Y=0.614
-readonly THEME_LIGHT_X=0.126
-readonly THEME_DARK_X=0.476
-readonly SETTINGS_CALIBRE_Y=0.868
-# A word in the middle of the open page, and where the selection popup's
-# "Define" lands once that word is held down. Both are tied to the page
-# the first book reopens on, like the annotations are.
-readonly PAGE_WORD_X=0.433
-readonly PAGE_WORD_Y=0.435
-readonly POPUP_DEFINE_X=0.590
-readonly POPUP_DEFINE_Y=0.313
+# A long press: a swipe that barely moves, held long enough for the page
+# to treat it as a word being picked rather than a tap.
+hold() {
+    local px py
+    px=$(x "$1")
+    py=$(y "$2")
+    adb shell input swipe "$px" "$py" "$((px + 2))" "$((py + 2))" 1500
+    sleep 3
+}
 
-command -v adb >/dev/null || die "adb is not installed"
-adb shell pm path "$APP_ID" >/dev/null 2>&1 || die "$APP_ID is not installed"
+# Press a word until the selection popup appears, trying a few places
+# down the page: a press that lands in a margin selects nothing. An x
+# across the column can be given to land on a different word.
+select_a_word() {
+    local across=${1:-0.45}
+    local spot
+    for spot in 0.45 0.55 0.35 0.65; do
+        reader_chrome_down
+        hold "$across" "$spot"
+        if find_popup >/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# The word the definition card is about. The card puts it above
+# everything else, and it is the only text on that screen standing on its
+# own: the page behind it is paragraphs, and the sense headings come
+# after.
+dictionary_word() {
+    dump_ui || return 1
+    python3 - "$work/ui.xml" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+for node in ET.parse(sys.argv[1]).iter("node"):
+    text = (node.get("text") or "").strip()
+    if text and re.fullmatch(r"[A-Za-z'-]+", text):
+        print(text)
+        break
+PY
+}
+
+# How many marks the library holds, which is how a seeding step tells
+# whether it actually did anything.
+annotation_count() {
+    adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \
+        'select count(*) from annotations;'" 2>/dev/null | tr -d '\r'
+}
+
+# Let go of a selection. A popup left up from the last mark is the reason
+# a second one silently turns into a second tap on the first. A tap on
+# the page clears it; Back would leave the book altogether.
+dismiss_popup() {
+    local i
+    for i in 1 2 3; do
+        find_popup >/dev/null || return 0
+        tap 0.5 0.5
+        sleep 2
+        reader_chrome_down
+    done
+}
+
+# Tap something in the selection popup, given where the first colour is.
+tap_in_popup() {
+    local what=$1 at chip_x chip_y
+    at=$(find_popup) || return 1
+    chip_x=${at% *}
+    chip_y=${at#* }
+    case $what in
+        highlight) adb shell input tap "$chip_x" "$chip_y" ;;
+        note) adb shell input tap "$((chip_x + $(dp $POPUP_NOTE_DP)))" "$chip_y" ;;
+        define) adb shell input tap "$((chip_x + $(dp $POPUP_DEFINE_DP)))" "$chip_y" ;;
+    esac
+    sleep 2
+}
+
+shot() {
+    local name=$1
+    adb exec-out screencap -p > "$OUT_DIR/$name.png"
+    note "$OUT_DIR/$name.png"
+}
+
+# ------------------------------------------------------------- the app
+
+open_library() {
+    adb shell am force-stop "$APP_ID"
+    # A picker left open from an earlier run steals the launch.
+    adb shell am force-stop com.google.android.documentsui >/dev/null 2>&1 || true
+    adb shell am start -n "$MAIN_ACTIVITY" >/dev/null
+    sleep 6
+    # The app can open on the book you were reading; step back to the shelf.
+    if ! wait_for "Library" 20 exact >/dev/null; then
+        back
+        sleep 3
+        wait_for "Library" 20 exact >/dev/null || die "never reached the library"
+    fi
+}
+
+open_first_book() {
+    local title=$1
+    tap_on_shelf "$title"
+    # The reader takes a while to lay the publication out.
+    wait_for "Contents" 40 >/dev/null || sleep 8
+    sleep 3
+}
+
+# Forward, a page at a time. The chrome has to be down first: with it up,
+# a tap on the page edge only puts it away again, and the book stays
+# exactly where it was.
+turn_pages() {
+    local count=$1 direction=${2:-forward} edge=0.85 i
+    [[ $direction == back ]] && edge=0.15
+    reader_chrome_down
+    for ((i = 0; i < count; i++)); do
+        tap "$edge" 0.5
+        sleep 1
+    done
+    sleep 2
+}
+
+# The chrome comes and goes with a tap in the middle of the page.
+show_chrome() {
+    tap 0.5 0.5
+    sleep 2
+}
+
+reader_chrome_up() {
+    on_screen "Contents" || show_chrome
+}
+
+reader_chrome_down() {
+    if on_screen "Contents"; then
+        show_chrome
+    fi
+}
+
+# Pick a reading theme by name in the typography sheet, rather than
+# trusting whatever the device was left on: that is what stopped the
+# light set from quietly coming out dark on a rerun.
+choose_reading_theme() {
+    local theme=$1
+    # Opening the sheet is not always instant, and a dump taken while the
+    # reader is still settling can come back without it. Rather than tap
+    # where the swatch is meant to be, put the sheet away and open it
+    # again.
+    for _ in 1 2 3; do
+        reader_chrome_up
+        if tap_if_there "Aa" exact && wait_for "$theme" 15 exact >/dev/null; then
+            tap_on "$theme" exact
+            sleep 2
+            back
+            sleep 2
+            return 0
+        fi
+        back
+        sleep 3
+    done
+    die "could not pick the $theme reading theme"
+}
+
+# --------------------------------------------------------------- setup
+
+fetch_books() {
+    mkdir -p "$CACHE_DIR"
+    local slug file url
+    for slug in "${DEMO_BOOKS[@]}"; do
+        file="$CACHE_DIR/${slug//\//_}.epub"
+        if [[ -s "$file" ]]; then
+            note "have ${slug#*/}"
+            continue
+        fi
+        url="https://standardebooks.org/ebooks/$slug/downloads/${slug%%/*}_${slug#*/}.epub?source=download"
+        note "fetching ${slug#*/}"
+        curl -fsSL --retry 2 -o "$file.part" "$url" ||
+            die "could not download $slug from standardebooks.org"
+        # A download that turned into the interstitial page is not a book.
+        if ! head -c 2 "$file.part" | grep -q 'PK'; then
+            rm -f "$file.part"
+            die "standardebooks.org served a page rather than $slug"
+        fi
+        mv "$file.part" "$file"
+    done
+}
+
+push_books() {
+    adb shell mkdir -p "$DEVICE_BOOKS"
+    local file
+    for file in "$CACHE_DIR"/*.epub; do
+        adb push "$file" "$DEVICE_BOOKS/" >/dev/null
+    done
+    note "${#DEMO_BOOKS[@]} books in $DEVICE_BOOKS"
+}
+
+# Grant the folder through the real picker, because there is no other way
+# to hand a SAF tree to an app.
+grant_folder() {
+    if adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \
+        'select count(*) from library_folders;'" 2>/dev/null | grep -qE '^[1-9]'; then
+        note "a library folder is already granted"
+        return 0
+    fi
+    open_library
+    tap_on "Add books"
+    tap_on "Add a folder"
+    sleep 3
+    # The picker usually opens on the device's own storage already. When
+    # it does not, go out to the roots and come back in by the model name.
+    if ! on_screen "Books"; then
+        tap_if_there "Show roots" || true
+        local model
+        model=$(adb shell getprop ro.product.model | tr -d '\r')
+        tap_on "$model"
+    fi
+    tap_on "Books"
+    tap_on "USE THIS FOLDER"
+    # The permission dialog can take a moment to arrive, and tapping
+    # where it is about to be does nothing at all.
+    tap_on "ALLOW"
+    note "waiting for the shelf to fill"
+    local waited=0 count=0
+    while ((waited < 90)); do
+        count=$(adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \
+            'select count(*) from books;'" 2>/dev/null | tr -d '\r')
+        ((count >= ${#DEMO_BOOKS[@]})) && break
+        sleep 5
+        waited=$((waited + 5))
+    done
+    note "$count books on the shelf"
+}
+
+# The reader screens are captured from the first book, so it has to look
+# like a book someone has been reading: a few pages in, with marks on the
+# page it reopens on and a notebook worth showing.
+seed_reading() {
+    local marks
+    marks=$(adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \
+        'select count(*) from annotations;'" 2>/dev/null | tr -d '\r')
+    if [[ ${marks:-0} -gt 0 ]]; then
+        note "the shelf already carries marks; leaving them alone"
+        return 0
+    fi
+
+    open_library
+    open_first_book "Moby Dick"
+
+    # Far enough in that the page is prose rather than a title page.
+    turn_pages 10
+
+    # A mark on each of three pages, so the notebook has something to
+    # list. Each is checked against the database, because a highlight
+    # that quietly failed looks exactly like one that worked.
+    local before after
+    for _ in 1 2 3; do
+        dismiss_popup
+        before=$(annotation_count)
+        if select_a_word; then
+            tap_in_popup highlight
+            sleep 2
+            after=$(annotation_count)
+            if [[ ${after:-0} -gt ${before:-0} ]]; then
+                note "highlighted a passage"
+            else
+                note "the highlight did not take"
+            fi
+        fi
+        dismiss_popup
+        # Well clear of the mark just made: a selection that overlaps one
+        # edits it instead of adding another, and the count never moves.
+        turn_pages 2
+    done
+
+    # A note, on a page of its own.
+    dismiss_popup
+    turn_pages 2
+    before=$(annotation_count)
+    if select_a_word; then
+        tap_in_popup note
+        if wait_for "What did this make you think" 10 >/dev/null; then
+            # Save stays greyed out until the note has words in it, and
+            # typing only reaches the field once it holds the cursor.
+            tap_on "What did this make you think"
+            sleep 1
+            adb shell input text "${HIGHLIGHT_NOTE// /%s}"
+            sleep 1
+            tap_on "Save" exact
+            sleep 3
+            after=$(annotation_count)
+            if [[ ${after:-0} -gt ${before:-0} ]]; then
+                note "left a note"
+            else
+                note "the note did not take"
+            fi
+        fi
+    fi
+
+    dismiss_popup
+    reader_chrome_up
+    tap_if_there "Bookmark this page" && note "bookmarked the page"
+    reader_chrome_down
+
+    # Back to a page carrying a highlight, because that is the page the
+    # reader screenshots open on.
+    turn_pages 4 back
+}
+
+# ------------------------------------------------------------- capture
 
 mkdir -p "$OUT_DIR" "$FASTLANE_DIR"
 
 printf 'Capturing from %s (%sx%s)\n' "$serial" "$width" "$height"
 
 # A demo run should look like a considered library, not a debug session:
-# hide the clock's seconds, the notification icons and the network state.
+# a round clock, no notification icons, a full battery.
 adb shell settings put global sysui_demo_allowed 1
 adb shell am broadcast -a com.android.systemui.demo -e command enter >/dev/null
 adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 1000 >/dev/null
@@ -104,90 +656,56 @@ adb shell am broadcast -a com.android.systemui.demo -e command network \
 adb shell am broadcast -a com.android.systemui.demo -e command battery \
     -e level 100 -e plugged false >/dev/null
 
-restore_device() {
-    adb shell am broadcast -a com.android.systemui.demo -e command exit >/dev/null || true
-    adb shell cmd uimode night no >/dev/null || true
-}
-trap restore_device EXIT
+if ((setup)); then
+    step "Fetching the demo shelf"
+    fetch_books
+    push_books
+    step "Granting the folder"
+    grant_folder
+    step "Making the first book look read"
+    seed_reading
+fi
 
-open_library() {
-    adb shell am force-stop "$APP_ID"
-    adb shell am start -n "$MAIN_ACTIVITY" >/dev/null
-    sleep 8
-    # The app opens on the book you were reading; step back to the shelf.
-    if adb shell dumpsys activity activities | grep -q 'ReaderActivity.*t[0-9]'; then
-        back
-        sleep 3
-    fi
-}
+if ((setup_only)); then
+    printf '\nShelf ready. Run again without --setup to capture.\n'
+    exit 0
+fi
 
-# The first book on the shelf is the one read most recently, which is also
-# the one carrying the annotations, and it reopens where it was left.
-open_book() {
-    tap "$LIB_FIRST_BOOK_X" "$LIB_FIRST_BOOK_Y"
-    sleep 10
-}
-
-show_chrome() {
-    tap 0.5 0.5
-    sleep 2
-}
-
-# A long press is a swipe that goes nowhere.
-hold() {
-    local px py
-    px=$(x "$1")
-    py=$(y "$2")
-    adb shell input swipe "$px" "$py" "$px" "$py" 900
-}
-
-# Pick a reading theme by its swatch in the typography sheet. Doing this
-# explicitly rather than trusting whatever the device was left on is what
-# keeps a rerun from quietly capturing the light set on a dark page.
-choose_reading_theme() {
-    local swatch_x=$1
-    tap "$READER_TYPOGRAPHY_X" "$TOP_BAR"
-    sleep 3
-    tap "$swatch_x" "$THEME_SWATCH_Y"
-    sleep 2
-    back
-    sleep 2
-}
-
-printf 'Light\n'
+step "Light"
 
 open_library
+shelf_to_top
 shot 01-library
 
-open_book
-show_chrome
-choose_reading_theme "$THEME_LIGHT_X"
-show_chrome
+open_first_book "Moby Dick"
+choose_reading_theme "Light"
+reader_chrome_down
 shot 02-reading
 
-show_chrome
+reader_chrome_up
 shot 03-chrome
 
-tap "$READER_TYPOGRAPHY_X" "$TOP_BAR"
-sleep 3
+tap_on "Aa" exact
+wait_for "Theme" >/dev/null || sleep 2
 shot 04-typography
 back
 sleep 2
 
-tap "$READER_CONTENTS_X" "$TOP_BAR"
-sleep 3
+reader_chrome_up
+tap_on "Contents"
 shot 05-contents
 
-tap "$TAB_HIGHLIGHTS_X" "$TABS_Y"
+tap_on "Highlights"
 sleep 2
 shot 06-highlights
-tap "$SHEET_CLOSE_X" "$TOP_BAR"
-sleep 3
+back
+sleep 2
 
-# In-book search, with a word common enough to fill the results.
-tap "$READER_SEARCH_X" "$TOP_BAR"
-sleep 3
-adb shell input text "whale"
+step "In-book search"
+reader_chrome_up
+tap_on "Search in book"
+sleep 2
+adb shell input text "$SEARCH_TERM"
 sleep 1
 adb shell input keyevent KEYCODE_ENTER
 sleep 6
@@ -198,52 +716,65 @@ shot 07-search
 back
 sleep 3
 
-# Hold a word to get the selection popup, then look it up on Wiktionary.
-show_chrome
-hold "$PAGE_WORD_X" "$PAGE_WORD_Y"
-sleep 3
-tap "$POPUP_DEFINE_X" "$POPUP_DEFINE_Y"
-sleep 7
-shot 12-dictionary
-back
-sleep 2
+step "A definition"
+# "the" is a word with an entry, so the screen would be found and would
+# still be worth nothing to look at. Press elsewhere until the card is
+# about a word someone might actually look up.
+defined=0
+for across in 0.60 0.35 0.72 0.50 0.28; do
+    select_a_word "$across" || continue
+    tap_in_popup define
+    sleep 7
+    looked_up=$(dictionary_word)
+    if [[ ${#looked_up} -ge 6 ]]; then
+        note "looked up \"$looked_up\""
+        shot 12-dictionary
+        defined=1
+        back
+        sleep 2
+        break
+    fi
+    back
+    sleep 2
+done
+((defined)) || note "no word worth defining; keeping the old 12-dictionary.png"
 
+step "Settings"
 open_library
-tap "$LIB_SETTINGS_X" "$TOP_BAR"
-sleep 3
+tap_on "Settings"
+wait_for "Theme" >/dev/null || sleep 2
 shot 08-settings
 
-tap 0.5 "$SETTINGS_CALIBRE_Y"
+tap_on "calibre-web"
 sleep 3
 shot 09-calibre
 
-printf 'Dark\n'
+step "Dark"
 
 adb shell cmd uimode night yes >/dev/null
-sleep 2
+sleep 3
 
 open_library
+shelf_to_top
 shot 10-library-dark
 
-open_book
-show_chrome
-choose_reading_theme "$THEME_DARK_X"
-# Hide the chrome again: the point of this one is the page itself.
-show_chrome
+open_first_book "Moby Dick"
+choose_reading_theme "Dark"
+reader_chrome_down
 sleep 2
 shot 11-reading-dark
 
-# Put the reading theme back, so a rerun starts from the same place.
-show_chrome
-choose_reading_theme "$THEME_LIGHT_X"
+# Put the reading theme back, so a rerun starts where this one did.
+choose_reading_theme "Light"
+reader_chrome_down
 
-printf 'Copying the F-Droid set\n'
+step "The F-Droid set"
 i=1
 for name in 01-library 02-reading 06-highlights 04-typography 11-reading-dark 08-settings; do
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
-    printf '  %s/%s.png\n' "$FASTLANE_DIR" "$i"
+    note "$FASTLANE_DIR/$i.png"
     i=$((i + 1))
 done
 
-printf 'Done. Check the images before committing: the script drives the UI\n'
-printf 'blind, so a changed layout can quietly produce the wrong screen.\n'
+printf '\nDone. Look at the images before committing: a screen can be found\n'
+printf 'and still be showing the wrong thing.\n'

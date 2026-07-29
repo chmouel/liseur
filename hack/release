@@ -256,6 +256,23 @@ edit_release_notes() {
         die "the changelog is ${#release_notes} characters; 500 is the limit"
 }
 
+# The store listing is pictures of screens that may since have been
+# rearranged. This does not block a release — sometimes nothing visible
+# changed — it just refuses to let the pictures go stale unnoticed.
+warn_about_stale_screenshots() {
+    local shots screens
+    shots=$(git log -1 --format=%ct -- docs/screenshots 2>/dev/null || true)
+    screens=$(git log -1 --format=%ct -- \
+        app/src/main/kotlin/com/chmouel/liseur/ui \
+        app/src/main/kotlin/com/chmouel/liseur/reader 2>/dev/null || true)
+    [[ -n "$shots" && -n "$screens" ]] || return 0
+    ((screens > shots)) || return 0
+
+    printf 'The screens have changed since the screenshots were taken.\n'
+    printf 'Take them again before releasing, with a device attached:\n\n'
+    printf '  hack/screenshots --setup\n\n'
+}
+
 choose_release() {
     local current last_tag range choice
     current=$(read_version_name)
@@ -275,6 +292,8 @@ choose_release() {
     show_changes_since "$range"
     [[ -n $(git log "$range" --oneline) ]] ||
         die "nothing has landed since $last_tag"
+
+    warn_about_stale_screenshots
 
     choice=$(pick_one "Bump from $current" \
         "patch ($(bump_version "$current" patch))" \

@@ -102,7 +102,8 @@ hack/release
 ```
 
 It shows what has landed since the last release, grouped by commit type,
-offers the next patch, minor and major version, and opens an editor on a
+says so when the screens have changed since the screenshots were last
+taken, offers the next patch, minor and major version, and opens an editor on a
 changelog drafted from those same commits. Correct the draft, save, and
 confirm.
 
@@ -301,20 +302,36 @@ without it the release build is simply unsigned.
 Both are regenerated rather than maintained by hand:
 
 ```bash
-hack/screenshots            # docs/screenshots + fastlane phoneScreenshots
+hack/screenshots --setup    # build the demo shelf first, then capture
+hack/screenshots            # capture from a device already set up
+hack/screenshots --setup-only   # build the shelf and stop, to check it
 hack/icon                   # fastlane icon.png, from the vector drawables
 ```
 
-`hack/screenshots` drives a connected device through adb, so the device
-has to be prepared first: the app installed with a library folder
-granted, a shelf of books whose covers are safe to publish (the
-[Standard Ebooks](https://standardebooks.org) public domain editions are
-what the current set uses), the most recently read book carrying a few
-highlights, notes and bookmarks, and calibre-web signed out unless your
-server holds only books you would publish a picture of. It captures a
-light set and a dark set, and its output is worth looking at before
-committing, because a changed layout can silently produce the wrong
-screen.
+`hack/screenshots` drives a connected device through adb and writes both
+`docs/screenshots` and the fastlane `phoneScreenshots`. It finds controls
+by what they say rather than by where they sat when it was written, so a
+moved button is something it waits for and fails on, not a tap into empty
+space.
+
+`--setup` builds the shelf from nothing: it downloads a handful of
+[Standard Ebooks](https://standardebooks.org) public domain editions
+(their cover art is what makes the library screens publishable), pushes
+them to the device, grants the folder through the real picker, and leaves
+the first book part-read with three highlights, a note and a bookmark on
+it. Each of those is checked against the database afterwards, because a
+highlight that quietly failed looks exactly like one that worked. Run it
+once; later runs can drop `--setup` and take about ten minutes.
+
+Sign out of calibre-web first unless your server holds only books you
+would publish a picture of. The script itself never writes to one.
+
+Look at the images before committing. A screen can be found and still be
+showing the wrong thing:
+
+```bash
+montage docs/screenshots/*.png -tile 6x2 -geometry 320x+6+6 /tmp/sheet.png
+```
 
 ## F-Droid readiness
 
