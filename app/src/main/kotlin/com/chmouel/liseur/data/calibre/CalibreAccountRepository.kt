@@ -79,6 +79,23 @@ class CalibreAccountRepository(
         return connect(server.baseUrl, server.username, password, allowHttp = true)
     }
 
+    /**
+     * Forgets an account whose password can no longer be read.
+     *
+     * Credentials are encrypted with a key that lives in this device's
+     * Keystore and cannot leave it, so a database restored from a backup
+     * or moved to a new phone arrives with ciphertext nothing can open.
+     * Asking for the password again is better than looking connected
+     * while every request quietly fails.
+     */
+    suspend fun forgetUnreadableAccount(): Boolean {
+        val server = dao.get() ?: return false
+        if (CredentialCipher.decrypt(server.passwordCipher) != null) return false
+        cached = null
+        dao.delete()
+        return true
+    }
+
     /** Sets the Kobo sync token by hand when it could not be picked up. */
     suspend fun setKoboToken(tokenOrUrl: String?) {
         val token = tokenOrUrl?.let {

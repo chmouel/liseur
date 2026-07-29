@@ -10,6 +10,9 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.chmouel.liseur.data.calibre.CalibreAuthInterceptor
 import com.chmouel.liseur.sync.PositionSyncWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class LiseurApplication : Application(), SingletonImageLoader.Factory {
     lateinit var container: AppContainer
@@ -18,6 +21,11 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // A restored backup brings the account with it but not the key
+        // that unlocks it, so check before anything tries to use it.
+        CoroutineScope(Dispatchers.IO).launch {
+            container.calibreAccount.forgetUnreadableAccount()
+        }
         PositionSyncWorker.syncNow(this)
         PositionSyncWorker.schedulePeriodic(this)
     }

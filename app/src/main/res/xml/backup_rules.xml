@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  What is worth carrying to a new device: your library, where you are in
+  every book, your highlights and notes, and how you like to read.
+
+  Everything is listed explicitly, because an <include> turns backup into
+  an allowlist and because the two things that must not travel are large
+  or useless. Downloaded books (files/books) would blow through the 25 MB
+  backup quota and can be fetched again; covers (files/covers) are built
+  from the books themselves.
+-->
 <full-backup-content>
+    <!-- Room: library, reading positions, highlights and notes. -->
+    <include domain="database" path="liseur.db" />
+    <!-- DataStore: reading preferences, app settings, last session. -->
+    <include domain="file" path="datastore" />
     <include domain="sharedpref" path="." />
 </full-backup-content>
