@@ -12,7 +12,6 @@ import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.reconcileReadingState
-import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +21,9 @@ sealed interface PositionSyncStatus {
     data object Idle : PositionSyncStatus
     data object Syncing : PositionSyncStatus
     data class Synced(val at: Long) : PositionSyncStatus
-    data object Offline : PositionSyncStatus
+
+    /** It did not work, and this is why. */
+    data class Failed(val reason: SyncFailure) : PositionSyncStatus
 
     /** The server has no Kobo sync set up, so positions stay on this device. */
     data object Unavailable : PositionSyncStatus
@@ -43,15 +44,20 @@ sealed interface SyncOutcome {
      * Some books settled and some did not. The ones that did not are
      * still marked as having reading the server has not seen, so the next
      * run picks them up. Reported apart from success so a retry is
-     * scheduled and the settings screen does not claim all is well.
+     * scheduled and the settings screen does not claim all is well. The
+     * reason is the first thing that went wrong.
      */
-    data object Partial : SyncOutcome
+    data class Partial(val reason: SyncFailure) : SyncOutcome
 
     /** Nothing to do and nothing wrong: no account, no sync, nothing to send. */
     data object NotApplicable : SyncOutcome
 
-    /** The server or the network was not there. Ask again later. */
-    data object TransientFailure : SyncOutcome
+    /**
+     * It did not work. The reason is kept because it decides what happens
+     * next: being offline is worth trying again, an account that is not
+     * allowed to sync is not.
+     */
+    data class Failure(val reason: SyncFailure) : SyncOutcome
 }
 
 /**
@@ -103,25 +109,33 @@ class KoboSyncRepository(
         val base = "${server.baseUrl}/kobo/$token"
         val account = server.accountKey
 
-        return try {
-            // Anything the server has to say is written down and the token
-            // moved past it in one step, before a single decision is made.
-            val reported = land(base, server, account)
-
-            val books = bookDao.allRemote().filter { book == null || it.url == book }
-            var allSettled = true
-            for (candidate in books) {
-                if (!reconcileBook(base, account, candidate, reported)) allSettled = false
+        // Anything the server has to say is written down and the token
+        // moved past it in one step, before a single decision is made.
+        val reported = when (val landed = land(base, server, account)) {
+            is KoboResult.Ok -> landed.value
+            is KoboResult.Failed -> {
+                Log.i(TAG, "Could not read reading positions: ${landed.reason.label}")
+                _status.value = PositionSyncStatus.Failed(landed.reason)
+                return SyncOutcome.Failure(landed.reason)
             }
+        }
 
-            val now = System.currentTimeMillis()
-            serverDao.upsert(serverDao.get()?.copy(positionSyncedAt = now) ?: server)
+        val books = bookDao.allRemote().filter { book == null || it.url == book }
+        var firstFailure: SyncFailure? = null
+        for (candidate in books) {
+            val failure = reconcileBook(base, account, candidate, reported)
+            if (failure != null && firstFailure == null) firstFailure = failure
+        }
+
+        val now = System.currentTimeMillis()
+        serverDao.upsert(serverDao.get()?.copy(positionSyncedAt = now) ?: server)
+        return if (firstFailure == null) {
             _status.value = PositionSyncStatus.Synced(now)
-            if (allSettled) SyncOutcome.Success else SyncOutcome.Partial
-        } catch (e: IOException) {
-            Log.i(TAG, "Could not sync reading positions", e)
-            _status.value = PositionSyncStatus.Offline
-            SyncOutcome.TransientFailure
+            SyncOutcome.Success
+        } else {
+            Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
+            _status.value = PositionSyncStatus.Failed(firstFailure)
+            SyncOutcome.Partial(firstFailure)
         }
     }
 
@@ -138,8 +152,11 @@ class KoboSyncRepository(
         base: String,
         server: com.chmouel.liseur.data.db.CalibreServer,
         account: String,
-    ): Map<String, ReadingState> {
-        val page = client.pullReadingStates(base, server.syncToken)
+    ): KoboResult<Map<String, ReadingState>> {
+        val page = when (val pulled = client.pullReadingStates(base, server.syncToken)) {
+            is KoboResult.Ok -> pulled.value
+            is KoboResult.Failed -> return pulled
+        }
         val byUuid = bookDao.allRemote().mapNotNull { b -> b.remoteUuid?.let { it to b } }.toMap()
         val landed = mutableMapOf<String, ReadingState>()
         val now = System.currentTimeMillis()
@@ -159,11 +176,11 @@ class KoboSyncRepository(
             }
             serverDao.upsert(server.copy(syncToken = page.syncToken))
         }
-        return landed
+        return KoboResult.Ok(landed)
     }
 
     /**
-     * Settles one book, and says whether it ended up settled.
+     * Settles one book, and says what stopped it if anything did.
      *
      * The states this works from are whatever was just landed *plus*
      * whatever is still sitting on the row from an earlier run. That
@@ -176,30 +193,33 @@ class KoboSyncRepository(
         account: String,
         book: Book,
         landed: Map<String, ReadingState>,
-    ): Boolean {
-        val uuid = book.remoteUuid ?: return true
+    ): SyncFailure? {
+        val uuid = book.remoteUuid ?: return null
         var stored = progressDao.get(book.url)
         var remote = landed[book.url] ?: stored?.pendingStateFor(account)
 
         // A book the feed has never mentioned and that has no agreed
         // position yet is simply unknown, not absent — ask outright, once.
         if (remote == null && stored?.agreedAccountMatches(account) != true) {
-            remote = client.readState(base, uuid)?.also {
-                progressDao.persistPending(
-                    bookUrl = book.url,
-                    progression = it.progression,
-                    status = it.status.wireName,
-                    remoteUpdatedAt = it.updatedAt,
-                    account = account,
-                    now = System.currentTimeMillis(),
-                )
-                stored = progressDao.get(book.url)
+            when (val asked = client.readState(base, uuid)) {
+                is KoboResult.Failed -> return asked.reason
+                is KoboResult.Ok -> remote = asked.value?.also {
+                    progressDao.persistPending(
+                        bookUrl = book.url,
+                        progression = it.progression,
+                        status = it.status.wireName,
+                        remoteUpdatedAt = it.updatedAt,
+                        account = account,
+                        now = System.currentTimeMillis(),
+                    )
+                    stored = progressDao.get(book.url)
+                }
             }
         }
 
         val local = stored?.asReadingState()
         val dirty = stored?.isDirty == true
-        if (!needsReconciling(remote != null, stored?.hasPending == true, dirty)) return true
+        if (!needsReconciling(remote != null, stored?.hasPending == true, dirty)) return null
 
         val decision = reconcileReadingState(
             local = local,
@@ -217,7 +237,7 @@ class KoboSyncRepository(
         account: String,
         stored: ReadingProgress?,
         decision: SyncDecision,
-    ): Boolean {
+    ): SyncFailure? {
         val now = System.currentTimeMillis()
         return when (decision) {
             SyncDecision.InSync -> {
@@ -232,7 +252,7 @@ class KoboSyncRepository(
                         now = now,
                     )
                 }
-                true
+                null
             }
 
             is SyncDecision.Pull -> {
@@ -254,36 +274,37 @@ class KoboSyncRepository(
                         now = now,
                     )
                 }
-                true
+                null
             }
 
             is SyncDecision.Push -> {
                 val sent = stored?.localRevision ?: 0
-                if (!client.pushState(base, uuid, decision.state)) {
-                    false
-                } else {
-                    progressDao.ackPush(
-                        bookUrl = bookUrl,
-                        sentRevision = sent,
-                        progression = decision.state.progression,
-                        status = decision.state.status.wireName,
-                        account = account,
-                        now = now,
-                    )
-                    true
+                when (val pushed = client.pushState(base, uuid, decision.state)) {
+                    is KoboResult.Failed -> pushed.reason
+                    is KoboResult.Ok -> {
+                        progressDao.ackPush(
+                            bookUrl = bookUrl,
+                            sentRevision = sent,
+                            progression = decision.state.progression,
+                            status = decision.state.status.wireName,
+                            account = account,
+                            now = now,
+                        )
+                        null
+                    }
                 }
             }
 
             is SyncDecision.AdoptStatus -> {
                 progressDao.adoptStatus(bookUrl, decision.status.wireName, account, now)
-                true
+                null
             }
 
             is SyncDecision.Conflict -> {
                 // Preserve both, choose neither. The remote state is
                 // already on disk; leaving it there is the whole point.
-                Log.i(TAG, "Both sides moved for $bookUrl; leaving it to be asked about")
-                true
+                Log.i(TAG, "Both sides moved for a book; leaving it to be asked about")
+                null
             }
         }
     }

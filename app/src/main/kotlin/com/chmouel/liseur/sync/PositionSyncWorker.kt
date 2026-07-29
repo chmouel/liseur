@@ -34,13 +34,21 @@ class PositionSyncWorker(
         // keeps the common case off the network for longer than it needs.
         val scope = bookUrl?.let { SyncScope.Book(it) } ?: SyncScope.Full
 
-        return when (coordinator.request(scope)) {
+        return when (val outcome = coordinator.request(scope)) {
             // Retry schedules a backed-off run, so it is only for things
             // that might work later. A phone with no calibre-web account
-            // has nothing to sync now and will have nothing in an hour.
-            // A partial run leaves the books it could not settle marked
-            // as owing the server something, so a retry picks them up.
-            SyncOutcome.TransientFailure, SyncOutcome.Partial -> Result.retry()
+            // has nothing to sync now and will have nothing in an hour,
+            // and an account the server will not let sync will still be
+            // refused after a backoff — retrying either only spends
+            // battery. A partial run leaves the books it could not settle
+            // marked as owing the server something, so a retry picks them
+            // up when the reason is one that could pass.
+            is SyncOutcome.Failure ->
+                if (outcome.reason.worthRetrying) Result.retry() else Result.failure()
+
+            is SyncOutcome.Partial ->
+                if (outcome.reason.worthRetrying) Result.retry() else Result.failure()
+
             SyncOutcome.Success, SyncOutcome.NotApplicable -> Result.success()
         }
     }

@@ -70,6 +70,12 @@
     <string name="calibre_sync_now">Sync reading positions now</string>
     <string name="calibre_sync_running">Syncing reading positions…</string>
     <string name="calibre_sync_offline">Could not reach the server; positions will sync later.</string>
+    <string name="calibre_sync_timeout">The server took too long to answer; positions will sync later.</string>
+    <string name="calibre_sync_unauthorised">The server no longer accepts this sign-in. Reconnect the account to sync positions again.</string>
+    <string name="calibre_sync_forbidden">This account is not allowed to sync reading positions. Ask whoever runs the server for Kobo sync rights.</string>
+    <string name="calibre_sync_missing">The server no longer has one of these books, so its position could not be synced.</string>
+    <string name="calibre_sync_malformed">The server answered with something unexpected; positions will sync later.</string>
+    <string name="calibre_sync_server_error">The server ran into trouble; positions will sync later.</string>
     <string name="calibre_sync_never">Reading positions have not synced yet.</string>
     <string name="calibre_sync_last">Reading positions synced %1$s</string>
     <string name="show_password">Show password</string>

@@ -3,7 +3,6 @@ package com.chmouel.liseur.data.calibre
 import android.util.Log
 import com.chmouel.liseur.domain.ReadingState
 import com.chmouel.liseur.domain.ReadingStatus
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -38,7 +37,11 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
     suspend fun pullReadingStates(
         koboBaseUrl: String,
         syncToken: String?,
-    ): SyncPage = withContext(Dispatchers.IO) {
+    ): KoboResult<SyncPage> = withContext(Dispatchers.IO) {
+        koboCall { walkSyncFeed(koboBaseUrl, syncToken) }
+    }
+
+    private fun walkSyncFeed(koboBaseUrl: String, syncToken: String?): SyncPage {
         val states = mutableMapOf<String, ReadingState>()
         var token = syncToken
         var page = 0
@@ -48,35 +51,43 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
                 .apply { token?.let { header(SYNC_TOKEN_HEADER, it) } }
                 .build()
 
-            http.client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw IOException("Sync request failed with ${response.code}")
-                }
+            val finished = http.client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw KoboHttpFailure(failureForCode(response.code))
                 token = response.header(SYNC_TOKEN_HEADER) ?: token
-                val body = response.body?.string().orEmpty()
-                collectStates(body, into = states)
-
-                if (!response.header(CONTINUE_HEADER).equals("continue", ignoreCase = true)) {
-                    return@withContext SyncPage(states, token)
-                }
+                collectStates(response.body?.string().orEmpty(), into = states)
+                !response.header(CONTINUE_HEADER).equals("continue", ignoreCase = true)
             }
+            if (finished) return SyncPage(states, token)
             page++
         }
         Log.i(TAG, "Stopped following sync pages after $MAX_PAGES")
-        SyncPage(states, token)
+        return SyncPage(states, token)
     }
 
-    /** Reads back one book's position, for a book the sync feed did not mention. */
-    suspend fun readState(koboBaseUrl: String, uuid: String): ReadingState? =
+    /**
+     * Reads back one book's position, for a book the sync feed did not
+     * mention. A book the server has no position for is not a failure:
+     * that answer comes back as no state rather than as an error.
+     */
+    suspend fun readState(koboBaseUrl: String, uuid: String): KoboResult<ReadingState?> =
         withContext(Dispatchers.IO) {
-            val request = http.request("$koboBaseUrl/v1/library/$uuid/state", null).build()
-            http.client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext null
-                val body = response.body?.string().orEmpty()
-                // Reading one book back gives a bare array, while writing
-                // takes an object; only the read shape matters here.
-                runCatching { JSONArray(body) }.getOrNull()
-                    ?.let { readStates(it).firstOrNull() }
+            koboCall {
+                val request = http.request("$koboBaseUrl/v1/library/$uuid/state", null).build()
+                http.client.newCall(request).execute().use { response ->
+                    when {
+                        response.code == 404 -> null
+                        !response.isSuccessful ->
+                            throw KoboHttpFailure(failureForCode(response.code))
+
+                        else -> {
+                            // Reading one book back gives a bare array, while
+                            // writing takes an object; only the read shape
+                            // matters here.
+                            val body = response.body?.string().orEmpty()
+                            readStates(JSONArray(body)).firstOrNull()
+                        }
+                    }
+                }
             }
         }
 
@@ -93,35 +104,42 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
         koboBaseUrl: String,
         uuid: String,
         state: ReadingState,
-    ): Boolean = withContext(Dispatchers.IO) {
-        val percent = ((state.progression ?: 0.0) * 100).coerceIn(0.0, 100.0)
-        val bookmark = JSONObject()
-            .put("ProgressPercent", percent)
-            .put("ContentSourceProgressPercent", percent)
-            .put("Location", JSONObject.NULL)
-        val payload = JSONObject().put(
-            "ReadingStates",
-            JSONArray().put(
-                JSONObject()
-                    .put("CurrentBookmark", bookmark)
-                    .put("Statistics", JSONObject.NULL)
-                    .put("StatusInfo", JSONObject().put("Status", state.status.wireName)),
-            ),
-        )
+    ): KoboResult<Unit> = withContext(Dispatchers.IO) {
+        koboCall {
+            val percent = ((state.progression ?: 0.0) * 100).coerceIn(0.0, 100.0)
+            val bookmark = JSONObject()
+                .put("ProgressPercent", percent)
+                .put("ContentSourceProgressPercent", percent)
+                .put("Location", JSONObject.NULL)
+            val payload = JSONObject().put(
+                "ReadingStates",
+                JSONArray().put(
+                    JSONObject()
+                        .put("CurrentBookmark", bookmark)
+                        .put("Statistics", JSONObject.NULL)
+                        .put("StatusInfo", JSONObject().put("Status", state.status.wireName)),
+                ),
+            )
 
-        val request = http.request("$koboBaseUrl/v1/library/$uuid/state", null)
-            .put(payload.toString().toRequestBody(JSON))
-            .build()
-        http.client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                Log.i(TAG, "Could not save the position for $uuid: ${response.code}")
+            val request = http.request("$koboBaseUrl/v1/library/$uuid/state", null)
+                .put(payload.toString().toRequestBody(JSON))
+                .build()
+            http.client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw KoboHttpFailure(failureForCode(response.code))
+                }
             }
-            response.isSuccessful
         }
     }
 
+    /**
+     * Unreadable JSON here is deliberately fatal rather than treated as
+     * an empty feed. Shrugging it off would let the caller commit the new
+     * sync token, and the token is one-way: whatever that page held would
+     * never be offered again.
+     */
     private fun collectStates(body: String, into: MutableMap<String, ReadingState>) {
-        val entities = runCatching { JSONArray(body) }.getOrNull() ?: return
+        val entities = JSONArray(body)
         for (i in 0 until entities.length()) {
             val entity = entities.optJSONObject(i) ?: continue
             for (key in entity.keys()) {
