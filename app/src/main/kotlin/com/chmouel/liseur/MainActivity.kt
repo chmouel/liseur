@@ -259,6 +259,8 @@ private fun LibraryRoute(
         onDeleteFromServer = viewModel::deleteFromServer,
         deleteFailures = viewModel.deleteFailures,
         onRefresh = viewModel::refresh,
+        onSetSort = viewModel::setSort,
+        onToggleSortDirection = viewModel::toggleSortDirection,
         onDownloadAndOpen = viewModel::downloadAndOpen,
         failedOpens = viewModel.failedOpens,
         onPendingOpenHandled = viewModel::forgetPendingOpen,

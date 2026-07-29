@@ -1,6 +1,12 @@
 <resources>
     <string name="app_name">Liseur</string>
 
+    <string name="sort_recent">Recent</string>
+    <string name="sort_title">Title</string>
+    <string name="sort_author">Author</string>
+    <string name="sort_added">Recently added</string>
+    <string name="sort_normal">Reverse the order</string>
+    <string name="sort_reversed">Back to the usual order</string>
     <string name="library_title">Library</string>
     <string name="open_book">Open a book</string>
     <string name="add_folder">Add a folder</string>

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.chmouel.liseur.domain.LibrarySort
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -32,12 +33,16 @@ enum class ThemeMode(val id: String) {
  * @param dynamicColor Take the palette from the wallpaper (Android 12+).
  * @param volumeKeysTurnPages Volume keys page forward and back while reading.
  * @param resumeLastBook Opening the app goes back into the book you were in.
+ * @param librarySort How the library grid is arranged.
+ * @param librarySortReversed The library order read back to front.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
     val dynamicColor: Boolean = false,
     val volumeKeysTurnPages: Boolean = true,
     val resumeLastBook: Boolean = true,
+    val librarySort: LibrarySort = LibrarySort.Default,
+    val librarySortReversed: Boolean = false,
 )
 
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
@@ -52,6 +57,8 @@ class AppSettingsRepository(private val context: Context) {
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
+        val LIBRARY_SORT = stringPreferencesKey("library_sort")
+        val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
     }
 
     val settings: Flow<AppSettings> = context.appSettingsStore.data.map { p ->
@@ -60,6 +67,8 @@ class AppSettingsRepository(private val context: Context) {
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: false,
             volumeKeysTurnPages = p[Keys.VOLUME_KEYS] ?: true,
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
+            librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
+            librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
         )
     }
 
@@ -79,5 +88,13 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setResumeLastBook(enabled: Boolean) {
         context.appSettingsStore.edit { it[Keys.RESUME_LAST_BOOK] = enabled }
+    }
+
+    suspend fun setLibrarySort(sort: LibrarySort) {
+        context.appSettingsStore.edit { it[Keys.LIBRARY_SORT] = sort.id }
+    }
+
+    suspend fun setLibrarySortReversed(reversed: Boolean) {
+        context.appSettingsStore.edit { it[Keys.LIBRARY_SORT_REVERSED] = reversed }
     }
 }

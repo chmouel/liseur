@@ -18,6 +18,10 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.arrangedBy
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.chmouel.liseur.data.db.CalibreServer
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +50,8 @@ data class LibraryUiState(
     val downloads: Map<String, DownloadProgress> = emptyMap(),
     val canDownload: Boolean = true,
     val refreshing: Boolean = false,
+    val sort: LibrarySort = LibrarySort.Default,
+    val sortReversed: Boolean = false,
 )
 
 /**
@@ -60,6 +66,7 @@ class LibraryViewModel(
     private val catalog: CalibreCatalogRepository,
     private val downloads: BookDownloadRepository,
     private val account: CalibreAccountRepository,
+    private val appSettings: AppSettingsRepository,
     progressDao: ReadingProgressDao,
 ) : ViewModel() {
 
@@ -119,6 +126,7 @@ class LibraryViewModel(
             downloads.progress,
             account.server,
             _refreshing,
+            appSettings.settings,
         ) { values ->
             @Suppress("UNCHECKED_CAST")
             val books = values[0] as List<Book>
@@ -128,19 +136,46 @@ class LibraryViewModel(
             val running = values[3] as Map<String, DownloadProgress>
             val server = values[4] as CalibreServer?
             val refreshing = values[5] as Boolean
+            val settings = values[6] as AppSettings
             LibraryUiState(
                 loading = false,
-                books = books,
+                books = books.arrangedBy(settings.librarySort, settings.librarySortReversed),
                 continueReading = recent,
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
                 refreshing = refreshing,
+                sort = settings.librarySort,
+                sortReversed = settings.librarySortReversed,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
     init {
         refresh()
+    }
+
+    /**
+     * Picks an order. Asking for the order the library is already in
+     * turns it round, which is what a second tap on the same thing in a
+     * menu is nearly always meant to do.
+     */
+    fun setSort(sort: LibrarySort) {
+        viewModelScope.launch {
+            val current = state.value
+            if (current.sort == sort) {
+                appSettings.setLibrarySortReversed(!current.sortReversed)
+            } else {
+                appSettings.setLibrarySort(sort)
+                appSettings.setLibrarySortReversed(false)
+            }
+        }
+    }
+
+    /** Reads the library back to front. */
+    fun toggleSortDirection() {
+        viewModelScope.launch {
+            appSettings.setLibrarySortReversed(!state.value.sortReversed)
+        }
     }
 
     fun refreshCatalog() {
@@ -247,6 +282,7 @@ class LibraryViewModel(
                     catalog = container.calibreCatalog,
                     downloads = container.bookDownloads,
                     account = container.calibreAccount,
+                    appSettings = container.appSettings,
                     progressDao = container.database.readingProgressDao(),
                 )
             }

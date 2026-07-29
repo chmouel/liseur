@@ -68,24 +68,14 @@ data class Book(
 @Dao
 interface BookDao {
     /**
-     * The library in the order people actually reach for books: what you
-     * were reading, then what is on the device, then everything else,
-     * newest first within each. Title breaks ties so the grid never
-     * shuffles between launches.
+     * Every book, in a settled order.
+     *
+     * Which order the library actually shows is the reader's choice and
+     * is applied in `LibrarySort`, where all four of them live together
+     * and can be tested. This one only has to be the same every time so
+     * nothing flickers on the way through.
      */
-    @Query(
-        """
-        SELECT * FROM books
-        ORDER BY
-            CASE
-                WHEN last_opened_at IS NOT NULL THEN 0
-                WHEN download_state = 'DOWNLOADED' THEN 1
-                ELSE 2
-            END,
-            COALESCE(last_opened_at, downloaded_at, added_at) DESC,
-            title COLLATE NOCASE
-        """,
-    )
+    @Query("SELECT * FROM books ORDER BY title COLLATE NOCASE")
     fun observeAll(): Flow<List<Book>>
 
     @Query(

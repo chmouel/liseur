@@ -46,6 +46,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
+import com.chmouel.liseur.domain.LibrarySort
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
@@ -103,6 +110,8 @@ fun LibraryScreen(
     onDeleteFromServer: (Book) -> Unit,
     deleteFailures: Flow<DeleteFailure>,
     onRefresh: () -> Unit,
+    onSetSort: (LibrarySort) -> Unit,
+    onToggleSortDirection: () -> Unit,
     onDownloadAndOpen: (Book) -> Unit,
     failedOpens: Flow<Book>,
     onPendingOpenHandled: () -> Unit,
@@ -188,6 +197,8 @@ fun LibraryScreen(
 
                 else -> BookGrid(
                     state = state,
+                    onSetSort = onSetSort,
+                    onToggleSortDirection = onToggleSortDirection,
                     onBookSelected = { book ->
                         when {
                             book.openableUrl != null -> onBookSelected(book)
@@ -336,6 +347,8 @@ private fun BookGrid(
     state: LibraryUiState,
     onBookSelected: (Book) -> Unit,
     onBookLongPress: (Book) -> Unit,
+    onSetSort: (LibrarySort) -> Unit,
+    onToggleSortDirection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalGrid(
@@ -352,6 +365,14 @@ private fun BookGrid(
                     onClick = { onBookSelected(recent.book) },
                 )
             }
+        }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            SortRow(
+                sort = state.sort,
+                reversed = state.sortReversed,
+                onSetSort = onSetSort,
+                onToggleDirection = onToggleSortDirection,
+            )
         }
         items(state.books, key = { it.id }) { book ->
             BookCard(
@@ -676,6 +697,87 @@ private fun EmptyLibrary(
         }
         OutlinedButton(onClick = onOpenBook) {
             Text(stringResource(R.string.open_book))
+        }
+    }
+}
+
+/** The name of an order, for the button and the menu. */
+@Composable
+private fun LibrarySort.label(): String = stringResource(
+    when (this) {
+        LibrarySort.RECENT -> R.string.sort_recent
+        LibrarySort.TITLE -> R.string.sort_title
+        LibrarySort.AUTHOR -> R.string.sort_author
+        LibrarySort.ADDED -> R.string.sort_added
+    },
+)
+
+/**
+ * How the library is arranged, and the way to change it.
+ *
+ * It scrolls with the grid rather than sitting in the top bar: the order
+ * is worth seeing without a tap, but not worth a permanent row of chrome
+ * above every book.
+ */
+@Composable
+private fun SortRow(
+    sort: LibrarySort,
+    reversed: Boolean,
+    onSetSort: (LibrarySort) -> Unit,
+    onToggleDirection: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box {
+            // No leading inset, so the label lines up with the left edge
+            // of the covers below rather than floating inside them.
+            TextButton(
+                onClick = { open = true },
+                contentPadding = PaddingValues(start = 0.dp, end = 8.dp),
+            ) {
+                Text(sort.label())
+                Icon(
+                    Icons.Outlined.ArrowDropDown,
+                    contentDescription = null,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                LibrarySort.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label()) },
+                        onClick = {
+                            open = false
+                            onSetSort(option)
+                        },
+                        trailingIcon = {
+                            if (option == sort) {
+                                Icon(
+                                    Icons.Outlined.Check,
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        IconButton(onClick = onToggleDirection) {
+            Icon(
+                imageVector = if (reversed) {
+                    Icons.Outlined.ArrowUpward
+                } else {
+                    Icons.Outlined.ArrowDownward
+                },
+                contentDescription = stringResource(
+                    if (reversed) R.string.sort_reversed else R.string.sort_normal,
+                ),
+            )
         }
     }
 }
