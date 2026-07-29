@@ -121,6 +121,7 @@ private const val CHROME_ANIM_MS = 300
 fun ReaderScreen(
     publication: Publication,
     prefsFlow: StateFlow<ReaderPrefs>,
+    typographyIsOwnFlow: StateFlow<Boolean>,
     progressFlow: StateFlow<ReaderProgress?>,
     jumpBackFlow: StateFlow<ReaderViewModel.JumpBack?>,
     onLocatorChanged: (Locator) -> Unit,
@@ -148,6 +149,7 @@ fun ReaderScreen(
     var showTypography by remember { mutableStateOf(false) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
+    val typographyIsOwn by typographyIsOwnFlow.collectAsStateWithLifecycle()
     val progress by progressFlow.collectAsStateWithLifecycle()
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
     val annotations by annotationsFlow.collectAsStateWithLifecycle()
@@ -458,6 +460,8 @@ fun ReaderScreen(
     if (showTypography) {
         TypographySheet(
             prefs = prefs,
+            typographyIsOwn = typographyIsOwn,
+            onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
             onFontSelected = onPrefsAction.setFont,
             onFontSizeChanged = onPrefsAction.setFontSize,
             onThemeSelected = onPrefsAction.setTheme,
@@ -597,6 +601,7 @@ class ReaderPrefsActions(
     val setPageMargins: (Double?) -> Unit,
     val setBrightness: (Float?) -> Unit,
     val setPageTurnAnimation: (Boolean) -> Unit,
+    val setTypographyIsOwn: (Boolean) -> Unit,
 )
 
 /** Bundle of progress and navigation actions for the reader chrome. */

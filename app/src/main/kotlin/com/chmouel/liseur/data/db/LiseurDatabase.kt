@@ -14,8 +14,9 @@ import androidx.sqlite.execSQL
         LibraryFolder::class,
         CalibreServer::class,
         BookAnnotation::class,
+        BookTypography::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -24,6 +25,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun calibreServerDao(): CalibreServerDao
     abstract fun annotationDao(): BookAnnotationDao
+    abstract fun typographyDao(): BookTypographyDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -244,6 +246,23 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Lets a book be set apart from the shared reading settings. */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS book_typography (
+                        book_url TEXT NOT NULL PRIMARY KEY,
+                        font TEXT NOT NULL,
+                        font_size REAL NOT NULL,
+                        line_height REAL,
+                        page_margins REAL
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
@@ -261,6 +280,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
+            MIGRATION_13_14,
         )
     }
 }

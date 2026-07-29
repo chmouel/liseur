@@ -14,6 +14,9 @@ import com.chmouel.liseur.data.calibre.SyncPreview
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
+import com.chmouel.liseur.data.db.BookTypography
+import com.chmouel.liseur.data.db.BookTypographyDao
+import com.chmouel.liseur.data.db.withTypographyOf
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.FinishedState
@@ -47,6 +50,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -74,6 +78,7 @@ class ReaderViewModel(
     private val publicationOpener: PublicationOpener,
     private val progressDao: ReadingProgressDao,
     private val annotationDao: BookAnnotationDao,
+    private val typographyDao: BookTypographyDao,
     private val library: LocalLibraryRepository,
     private val finishedState: FinishedState,
     private val prefsRepo: ReaderPreferencesRepository,
@@ -294,7 +299,16 @@ class ReaderViewModel(
     private var speed = ReadingSpeedEstimator()
     private var jumpBackTimer: Job? = null
 
+    private val ownTypography: StateFlow<BookTypography?> = typographyDao.observe(bookId)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Whether this book has been set apart from the shared settings. */
+    val typographyIsOwn: StateFlow<Boolean> = ownTypography
+        .map { it != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val prefs: StateFlow<ReaderPrefs> = prefsRepo.prefs
+        .combine(ownTypography) { shared, own -> shared.withTypographyOf(own) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
 
     /** Most recent position, used to persist progress and to survive recreation. */
@@ -653,15 +667,60 @@ class ReaderViewModel(
         )
     }
 
-    fun setFont(font: ReaderFont) = viewModelScope.launch { prefsRepo.setFont(font) }
+    /**
+     * Sends a typography change wherever this book's settings live: to
+     * the book's own set when it has been set apart, to the shared ones
+     * otherwise. Read afresh each time rather than from the cached flow,
+     * so a change made while the sheet is open cannot land in the wrong
+     * place.
+     */
+    private fun typography(
+        shared: suspend () -> Unit,
+        own: (BookTypography) -> BookTypography,
+    ) = viewModelScope.launch {
+        val current = typographyDao.get(bookId)
+        if (current == null) shared() else typographyDao.upsert(own(current))
+    }
 
-    fun setFontSize(size: Double) = viewModelScope.launch { prefsRepo.setFontSize(size) }
+    /**
+     * Sets this book apart, or hands it back to the shared settings.
+     *
+     * Setting it apart starts from how the book reads right now, so
+     * nothing moves on screen at the moment you ask for it.
+     */
+    fun setTypographyIsOwn(own: Boolean) = viewModelScope.launch {
+        if (own) {
+            typographyDao.upsert(BookTypography.from(bookId, prefs.value))
+        } else {
+            typographyDao.clear(bookId)
+        }
+    }
+
+    fun setFont(font: ReaderFont) = typography(
+        shared = { prefsRepo.setFont(font) },
+        own = { it.copy(font = font.id) },
+    )
+
+    fun setFontSize(size: Double) = typography(
+        shared = { prefsRepo.setFontSize(size) },
+        own = {
+            it.copy(
+                fontSize = size.coerceIn(ReaderPrefs.MIN_FONT_SIZE, ReaderPrefs.MAX_FONT_SIZE),
+            )
+        },
+    )
 
     fun setTheme(theme: ReaderTheme) = viewModelScope.launch { prefsRepo.setTheme(theme) }
 
-    fun setLineHeight(value: Double?) = viewModelScope.launch { prefsRepo.setLineHeight(value) }
+    fun setLineHeight(value: Double?) = typography(
+        shared = { prefsRepo.setLineHeight(value) },
+        own = { it.copy(lineHeight = value) },
+    )
 
-    fun setPageMargins(value: Double?) = viewModelScope.launch { prefsRepo.setPageMargins(value) }
+    fun setPageMargins(value: Double?) = typography(
+        shared = { prefsRepo.setPageMargins(value) },
+        own = { it.copy(pageMargins = value) },
+    )
 
     fun setBrightness(value: Float?) = viewModelScope.launch { prefsRepo.setBrightness(value) }
 
@@ -710,6 +769,7 @@ class ReaderViewModel(
                     publicationOpener = container.publicationOpener,
                     progressDao = container.database.readingProgressDao(),
                     annotationDao = container.database.annotationDao(),
+                    typographyDao = container.database.typographyDao(),
                     library = container.libraryRepository,
                     finishedState = container.finishedState,
                     prefsRepo = container.readerPreferences,

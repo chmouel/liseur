@@ -61,6 +61,8 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 @Composable
 fun TypographySheet(
     prefs: ReaderPrefs,
+    typographyIsOwn: Boolean,
+    onTypographyIsOwnChanged: (Boolean) -> Unit,
     onFontSelected: (ReaderFont) -> Unit,
     onFontSizeChanged: (Double) -> Unit,
     onThemeSelected: (ReaderTheme) -> Unit,
@@ -93,6 +95,10 @@ fun TypographySheet(
             PageTurnAnimationToggle(
                 enabled = prefs.pageTurnAnimation,
                 onChanged = onPageTurnAnimationChanged,
+            )
+            JustThisBookToggle(
+                enabled = typographyIsOwn,
+                onChanged = onTypographyIsOwnChanged,
             )
         }
     }
@@ -339,6 +345,41 @@ private fun PageTurnAnimationToggle(enabled: Boolean, onChanged: (Boolean) -> Un
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )
+        Switch(checked = enabled, onCheckedChange = onChanged)
+    }
+}
+
+/**
+ * Sets the book apart from the shared reading settings.
+ *
+ * Last in the sheet, and only about the four settings above it that are
+ * genuinely the book's: what it is set in, how big, how open, how wide.
+ * The theme and the brightness are about the room, so they carry on
+ * being shared however this is left.
+ */
+@Composable
+private fun JustThisBookToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onChanged(!enabled) },
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "Keep this for this book only",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = if (enabled) {
+                    "Font, size and layout stay with this book."
+                } else {
+                    "Font, size and layout are shared with every book."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Switch(checked = enabled, onCheckedChange = onChanged)
     }
 }

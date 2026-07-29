@@ -113,6 +113,7 @@ class ReaderActivity : FragmentActivity() {
                         ReaderScreen(
                             publication = s.publication,
                             prefsFlow = viewModel.prefs,
+                            typographyIsOwnFlow = viewModel.typographyIsOwn,
                             progressFlow = viewModel.progress,
                             jumpBackFlow = viewModel.jumpBack,
                             onLocatorChanged = viewModel::onLocatorChanged,
@@ -127,6 +128,7 @@ class ReaderActivity : FragmentActivity() {
                                     setPageMargins = viewModel::setPageMargins,
                                     setBrightness = viewModel::setBrightness,
                                     setPageTurnAnimation = viewModel::setPageTurnAnimation,
+                                    setTypographyIsOwn = viewModel::setTypographyIsOwn,
                                 )
                             },
                             onProgressAction = remember {
