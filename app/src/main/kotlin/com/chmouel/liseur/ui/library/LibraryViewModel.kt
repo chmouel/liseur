@@ -48,6 +48,12 @@ data class LibraryUiState(
     val refreshing: Boolean = false,
 )
 
+/**
+ * A deletion the user asked for that did not happen, and where it was
+ * meant to happen, so the library can explain the right thing.
+ */
+data class DeleteFailure(val book: Book, val onServer: Boolean)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
     private val library: LocalLibraryRepository,
@@ -88,10 +94,10 @@ class LibraryViewModel(
         }
     }
 
-    private val _deleteFailures = MutableSharedFlow<Book>(extraBufferCapacity = 1)
+    private val _deleteFailures = MutableSharedFlow<DeleteFailure>(extraBufferCapacity = 1)
 
-    /** Books the server refused to delete, so the library can say so. */
-    val deleteFailures: Flow<Book> = _deleteFailures
+    /** Deletions that did not happen, so the library can say so. */
+    val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
     private val _refreshing = MutableStateFlow(false)
     private var lastScanAt = 0L
@@ -194,7 +200,11 @@ class LibraryViewModel(
 
     /** Deletes a local book's file and drops it from the library. */
     fun deleteLocalBook(book: Book) {
-        viewModelScope.launch { downloads.deleteLocalBook(book) }
+        viewModelScope.launch {
+            if (!downloads.deleteLocalBook(book)) {
+                _deleteFailures.emit(DeleteFailure(book, onServer = false))
+            }
+        }
     }
 
     /** Deletes the book from calibre-web itself. */
@@ -207,7 +217,9 @@ class LibraryViewModel(
             } else {
                 downloads.deleteFromServer(book, server.baseUrl, credentials)
             }
-            if (result !is ServerDeleteResult.Deleted) _deleteFailures.emit(book)
+            if (result !is ServerDeleteResult.Deleted) {
+                _deleteFailures.emit(DeleteFailure(book, onServer = true))
+            }
         }
     }
 

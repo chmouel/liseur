@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.calibre
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.util.Log
 import androidx.core.net.toUri
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -17,8 +18,10 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 /** How far along a book's download is, as a fraction, or null if unknown. */
 data class DownloadProgress(val bookUrl: String, val fraction: Float?)
@@ -122,15 +125,33 @@ class BookDownloadRepository(
     }
 
     /**
-     * Removes a book that came from a folder or a single import. The file
-     * goes if we are allowed to delete it; the library row goes either way,
-     * and a folder rescan will not bring back a file that is really gone.
+     * Removes a book that came from a folder or a single import.
+     *
+     * The library row only goes if the file really went. A folder scan
+     * indexes whatever is on disk, so dropping the row while the file
+     * survives makes the book reappear at the next scan, which looks like
+     * the app ignoring the request. Returns false when the file stayed;
+     * usually that means Liseur was only ever granted read access to the
+     * folder, and it has to be added again.
      */
-    suspend fun deleteLocalBook(book: Book) {
+    suspend fun deleteLocalBook(book: Book): Boolean = withContext(Dispatchers.IO) {
         val uri = (book.localUri ?: book.url).toUri()
-        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
-            .onFailure { runCatching { uri.path?.let { File(it).delete() } } }
+        if (!deleteFile(uri)) return@withContext false
         bookDao.deleteByUrls(listOf(book.url))
+        true
+    }
+
+    /** True once the file is not there any more, however that came about. */
+    private fun deleteFile(uri: Uri): Boolean = when (uri.scheme) {
+        "file" -> {
+            val file = uri.path?.let(::File)
+            file != null && (!file.exists() || file.delete())
+        }
+        else -> runCatching {
+            DocumentsContract.deleteDocument(context.contentResolver, uri)
+        }.onFailure {
+            Log.w(TAG, "Not allowed to delete $uri", it)
+        }.getOrDefault(false)
     }
 
     fun booksDir(): File = File(context.filesDir, "books").apply { mkdirs() }

@@ -101,7 +101,7 @@ fun LibraryScreen(
     onSetFinished: (Book, Boolean) -> Unit,
     onDeleteLocal: (Book) -> Unit,
     onDeleteFromServer: (Book) -> Unit,
-    deleteFailures: Flow<Book>,
+    deleteFailures: Flow<DeleteFailure>,
     onRefresh: () -> Unit,
     onDownloadAndOpen: (Book) -> Unit,
     failedOpens: Flow<Book>,
@@ -119,9 +119,13 @@ fun LibraryScreen(
     val credentialsLost = stringResource(R.string.calibre_credentials_lost)
 
     val downloadFailed = stringResource(R.string.download_failed_open)
-    val deleteFailed = stringResource(R.string.delete_from_server_failed)
+    val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)
+    val localDeleteFailed = stringResource(R.string.delete_local_failed)
     LaunchedEffect(deleteFailures) {
-        deleteFailures.collect { snackbarHost.showSnackbar(deleteFailed.format(it.title)) }
+        deleteFailures.collect { failure ->
+            val message = if (failure.onServer) serverDeleteFailed else localDeleteFailed
+            snackbarHost.showSnackbar(message.format(failure.book.title))
+        }
     }
     LaunchedEffect(failedOpens) {
         failedOpens.collect { book ->

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
@@ -41,8 +42,22 @@ class LocalLibraryRepository(
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 treeUri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                // Write as well as read: without it, deleting a book from
+                // the library cannot delete the file it stands for.
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
+        }.onFailure {
+            // An older version of Liseur took read only, and the grant
+            // cannot be widened after the fact. Reading still works; the
+            // folder has to be added again before deleting will.
+            Log.i(TAG, "Only allowed to read this folder", it)
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
         }
         folderDao.upsert(LibraryFolder(url = treeUri.toString(), addedAt = System.currentTimeMillis()))
         scanFolder(treeUri)
@@ -211,6 +226,10 @@ class LocalLibraryRepository(
                 file.absolutePath
             }.getOrNull()
         }
+    }
+
+    private companion object {
+        const val TAG = "local-library"
     }
 }
 
