@@ -4,11 +4,6 @@ import android.util.Log
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.FormBody
-import okhttp3.Cookie
-import okhttp3.CookieJar
-import okhttp3.HttpUrl
-import okhttp3.OkHttpClient
 
 /** What a calibre-web account turned out to be able to do. */
 data class CalibreCapabilities(
@@ -195,31 +190,13 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
         username: String,
         password: String,
     ): Pair<Int?, String>? = try {
-        val session = OkHttpClient.Builder()
-            .cookieJar(SessionCookieJar())
-            .build()
-        val withSession = CalibreHttp(session)
+        val session = CalibreWebSession.logIn(baseUrl, username, password) ?: return null
 
-        val loginUrl = CalibreUrl.resolve(baseUrl, "/login")
-        val csrf = withSession.get(loginUrl, null)
-            .use { CalibreParsing.csrfToken(it.body?.string().orEmpty()) }
-
-        val form = FormBody.Builder()
-            .add("username", username)
-            .add("password", password)
-            .add("submit", "")
-            .add("next", "/")
-            .apply { csrf?.let { add("csrf_token", it) } }
-            .build()
-        withSession.client.newCall(
-            withSession.request(loginUrl, null).post(form).build(),
-        ).execute().close()
-
-        val userId = withSession.get(CalibreUrl.resolve(baseUrl, "/me"), null)
+        val userId = session.http.get(CalibreUrl.resolve(baseUrl, "/me"), null)
             .use { CalibreParsing.userId(it.body?.string().orEmpty()) }
             ?: return null
 
-        val token = withSession
+        val token = session.http
             .get(CalibreUrl.resolve(baseUrl, "/kobo_auth/generate_auth_token/$userId"), null)
             .use { CalibreParsing.koboToken(it.body?.string().orEmpty()) }
             ?: return null

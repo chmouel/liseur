@@ -25,6 +25,14 @@ object CalibreParsing {
     )
     private val USER_ID = Regex("""generate_auth_token/(\d+)""")
     private val KOBO_TOKEN = Regex("""/kobo/([0-9a-fA-F]{32})""")
+    private val LOGIN_FORM = Regex(
+        """<form[^>]*action="[^"]*/?login[^"]*"""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val PASSWORD_FIELD = Regex(
+        """<input[^>]*name="password"""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /** True when the body really is an OPDS catalog and not, say, a login page. */
     fun isOpdsFeed(body: String): Boolean {
@@ -51,6 +59,19 @@ object CalibreParsing {
     /** The 32-character sync token from the Kobo setup page. */
     fun koboToken(html: String): String? =
         KOBO_TOKEN.find(html)?.groupValues?.get(1)?.lowercase()
+
+    /**
+     * True when this page is asking someone to log in.
+     *
+     * calibre-web answers a refused login, and any request made without a
+     * session, by rendering the login form with a perfectly ordinary 200.
+     * Telling that apart from a page that means something is the
+     * difference between reporting a book deleted and actually deleting it.
+     */
+    fun isLoginPage(html: String): Boolean {
+        val head = html.take(64_000)
+        return LOGIN_FORM.containsMatchIn(head) && PASSWORD_FIELD.containsMatchIn(head)
+    }
 
     private fun unescapeXml(value: String) = value
         .replace("&amp;", "&")

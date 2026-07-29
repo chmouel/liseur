@@ -32,7 +32,7 @@ class CalibreDeleteClient {
         remoteBookId: Int,
     ): ServerDeleteResult = withContext(Dispatchers.IO) {
         val session = CalibreWebSession.logIn(baseUrl, username, password)
-            ?: return@withContext ServerDeleteResult.Failed(null)
+            ?: return@withContext ServerDeleteResult.NotAllowed
         val csrf = session.csrfToken()
         try {
             val url = CalibreUrl.resolve(baseUrl, "/delete/$remoteBookId")
@@ -42,9 +42,15 @@ class CalibreDeleteClient {
                 .build()
             session.http.client.newCall(request).execute().use { response ->
                 when {
-                    response.isSuccessful -> ServerDeleteResult.Deleted
                     response.code == 401 || response.code == 403 -> ServerDeleteResult.NotAllowed
-                    else -> ServerDeleteResult.Failed("HTTP ${response.code}")
+                    !response.isSuccessful -> ServerDeleteResult.Failed("HTTP ${response.code}")
+                    // A 200 is not proof. calibre-web sends anyone without a
+                    // session to the login page, which arrives as a perfectly
+                    // successful response; taking it at its word would mean
+                    // deleting the only remaining copy of the book.
+                    CalibreParsing.isLoginPage(response.body?.string().orEmpty()) ->
+                        ServerDeleteResult.NotAllowed
+                    else -> ServerDeleteResult.Deleted
                 }
             }
         } catch (e: IOException) {
