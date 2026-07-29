@@ -36,6 +36,9 @@ android {
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
+                // v3 records the signing lineage, which is what makes
+                // rotating this key possible later without breaking updates.
+                enableV3Signing = true
             }
         }
     }

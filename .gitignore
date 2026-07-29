@@ -14,3 +14,4 @@ captures/
 keystore.properties
 *.jks
 *.keystore
+*.p12

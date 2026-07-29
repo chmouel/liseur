@@ -20,27 +20,38 @@ release build.
 
 ### Signing a release build (optional)
 
-If you want a properly signed release APK (e.g. to install updates over
-an existing install without uninstalling first), generate your own
-keystore and point a local `keystore.properties` file at it. This file is
-gitignored — it's per-developer, not checked in.
+The real signing key for published releases lives in `pass`:
+
+| Entry | Contents |
+| --- | --- |
+| `android/liseur.keystore.p12` | the PKCS#12 keystore, base64 |
+| `android/liseur.keystore-password` | store and key password |
+| `android/liseur.keystore-alias` | key alias (`liseur`) |
+
+To build a signed APK locally with it, write a `keystore.properties`
+(gitignored, per-developer) pointing at a decoded copy:
 
 ```bash
-keytool -genkeypair -v -keystore /path/to/your.jks \
-  -alias liseur -keyalg RSA -keysize 2048 -validity 10000
+pass show android/liseur.keystore.p12 | base64 -d > /tmp/liseur.p12
+{
+  echo "storeFile=/tmp/liseur.p12"
+  echo "storePassword=$(pass show android/liseur.keystore-password)"
+  echo "keyAlias=$(pass show android/liseur.keystore-alias)"
+  echo "keyPassword=$(pass show android/liseur.keystore-password)"
+} > keystore.properties
 ```
 
-Create `keystore.properties` in the project root:
+Contributors without access to that key can generate their own instead —
+any key produces an installable APK, it simply won't update over one
+signed with the release key:
 
-```properties
-storeFile=/path/to/your.jks
-storePassword=yourStorePassword
-keyAlias=liseur
-keyPassword=yourKeyPassword
+```bash
+keytool -genkeypair -v -keystore /path/to/your.p12 -storetype PKCS12 \
+  -alias liseur -keyalg RSA -keysize 4096 -validity 10950
 ```
 
-Then `./gradlew assembleRelease` will automatically pick it up and sign
-the release build.
+Either way `./gradlew assembleRelease` picks the file up automatically;
+without it the release build is simply unsigned.
 
 ## Testing
 
@@ -189,7 +200,16 @@ invoking it again with the same version.
 The tag triggers `.github/workflows/release.yml`, which builds a signed
 APK in the `release` GitHub environment and uploads it to the release.
 That environment must hold `LISEUR_KEYSTORE_BASE64`,
-`LISEUR_KEYSTORE_PASSWORD`, `LISEUR_KEY_ALIAS` and `LISEUR_KEY_PASSWORD`.
+`LISEUR_KEYSTORE_PASSWORD`, `LISEUR_KEY_ALIAS` and `LISEUR_KEY_PASSWORD`;
+`hack/release` creates the environment and uploads whichever of them are
+missing straight from `pass`, so an unlocked password store is the only
+setup a fresh clone needs. To refresh them all — after rotating the key,
+say — run:
+
+```bash
+hack/release --sync-secrets
+```
+
 Locally, signing is opt-in through a gitignored `keystore.properties`;
 without it the release build is simply unsigned.
 

@@ -8,17 +8,33 @@ readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
 readonly FDROID_BRANCH="$APP_ID"
 readonly BUILD_FILE="app/build.gradle.kts"
 readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
+readonly PASS_KEYSTORE="android/liseur.keystore.p12"
+readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
+readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
+readonly REQUIRED_SECRETS=(
+    LISEUR_KEYSTORE_BASE64
+    LISEUR_KEYSTORE_PASSWORD
+    LISEUR_KEY_ALIAS
+    LISEUR_KEY_PASSWORD
+)
 
 usage() {
     cat <<'EOF'
 Usage:
   hack/release [--yes] VERSION RELEASE NOTES...
   hack/release --fdroid-only VERSION
+  hack/release --sync-secrets
 
 Examples:
   hack/release 0.2.0 "Add in-book search and a Wiktionary lookup card."
   hack/release --yes 0.2.1 "Fix page fitting on tall screens."
   hack/release --fdroid-only 0.2.1
+  hack/release --sync-secrets
+
+The signing key lives in pass, under android/liseur.keystore.p12,
+android/liseur.keystore-password and android/liseur.keystore-alias. Any
+release secret missing from the GitHub release environment is uploaded
+from there, so a fresh clone needs nothing but an unlocked password store.
 EOF
 }
 
@@ -46,6 +62,49 @@ confirm() {
 
     read -r -p "Continue? [y/N] " answer
     [[ "$answer" =~ ^[Yy]$ ]] || die "release cancelled"
+}
+
+pass_show() {
+    local entry=$1 value
+    value=$(pass show "$entry" 2>/dev/null) ||
+        die "missing pass entry: $entry"
+    [[ -n "$value" ]] || die "pass entry is empty: $entry"
+    printf '%s' "$value"
+}
+
+# Secrets are pushed through stdin rather than --body so that they never
+# appear in the process list.
+set_release_secret() {
+    local name=$1 value=$2
+    printf '%s' "$value" |
+        gh secret set "$name" --repo "$GH_REPO" --env release >/dev/null ||
+        die "could not set release secret $name"
+}
+
+sync_release_secrets() {
+    local force=${1:-false}
+    local available missing=() secret
+
+    gh api --silent --method PUT "repos/$GH_REPO/environments/release" ||
+        die "could not create the release environment on $GH_REPO"
+
+    available=$(gh secret list --repo "$GH_REPO" --env release |
+        cut -f1) || available=""
+    for secret in "${REQUIRED_SECRETS[@]}"; do
+        grep -qx "$secret" <<<"$available" || missing+=("$secret")
+    done
+
+    if [[ ${#missing[@]} -eq 0 && "$force" == false ]]; then
+        return
+    fi
+
+    printf 'Uploading the signing key from pass to the release environment.\n'
+    set_release_secret LISEUR_KEYSTORE_BASE64 "$(pass_show "$PASS_KEYSTORE")"
+    set_release_secret LISEUR_KEYSTORE_PASSWORD \
+        "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
+    set_release_secret LISEUR_KEY_ALIAS "$(pass_show "$PASS_KEY_ALIAS")"
+    set_release_secret LISEUR_KEY_PASSWORD \
+        "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
 }
 
 github_release_exists() {
@@ -178,6 +237,7 @@ update_fdroid_submission() (
 
 assume_yes=false
 fdroid_only=false
+sync_secrets_only=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -187,6 +247,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --fdroid-only)
             fdroid_only=true
+            shift
+            ;;
+        --sync-secrets)
+            sync_secrets_only=true
             shift
             ;;
         -h|--help)
@@ -206,6 +270,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$sync_secrets_only" == true ]]; then
+    [[ "$fdroid_only" == false ]] ||
+        die "--sync-secrets and --fdroid-only are mutually exclusive"
+    [[ $# -eq 0 ]] || die "--sync-secrets does not take any argument"
+    for command in gh pass; do
+        require_command "$command"
+    done
+    sync_release_secrets true
+    printf 'Release secrets are up to date on %s.\n' "$GH_REPO"
+    exit 0
+fi
+
 [[ $# -ge 1 ]] || {
     usage >&2
     exit 2
@@ -217,7 +293,7 @@ release_notes="$*"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
     die "VERSION must use X.Y.Z format"
 
-for command in git gh glab jq base64 sed awk; do
+for command in git gh glab jq base64 sed awk pass; do
     require_command "$command"
 done
 
@@ -280,17 +356,7 @@ elif [[ "$local_head" != "$remote_head" ]]; then
         die "the unpushed commit is not the $tag release commit"
 fi
 
-required_secrets=(
-    LISEUR_KEYSTORE_BASE64
-    LISEUR_KEYSTORE_PASSWORD
-    LISEUR_KEY_ALIAS
-    LISEUR_KEY_PASSWORD
-)
-available_secrets=$(gh secret list --repo "$GH_REPO" --env release | cut -f1)
-for secret in "${required_secrets[@]}"; do
-    grep -qx "$secret" <<<"$available_secrets" ||
-        die "missing GitHub release environment secret: $secret"
-done
+sync_release_secrets
 
 changelog_path="$CHANGELOG_DIR/$current_version_code.txt"
 new_release=false
