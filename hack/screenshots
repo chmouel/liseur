@@ -52,6 +52,10 @@ readonly -a DEMO_BOOKS=(
 readonly HIGHLIGHT_NOTE="The line that gives the book its weather."
 readonly SEARCH_TERM="whale"
 
+# The chapter the reader screenshots are taken in, as the contents sheet
+# spells it. Moby Dick's again, and its first.
+readonly FIRST_CHAPTER="I: Loomings"
+
 setup=0
 setup_only=0
 serial=""
@@ -357,6 +361,34 @@ select_a_word() {
     return 1
 }
 
+# Press and drag along a line to take in a run of words. The notebook is
+# what these marks are for, and a list of single words -- "over", "to" --
+# says nothing about the book; a phrase reads like something a person
+# would have marked on purpose.
+#
+# The press has to register before the finger moves, so this cannot be a
+# swipe: hold the finger down, wait out the long press, and only then
+# drag. The gesture runs in one shell so the wait is the device's own.
+select_a_phrase() {
+    local spot py
+    for spot in 0.45 0.55 0.35 0.65; do
+        reader_chrome_down
+        py=$(y "$spot")
+        adb shell "input motionevent DOWN $(x 0.18) $py
+            sleep 1
+            input motionevent MOVE $(x 0.32) $py
+            input motionevent MOVE $(x 0.46) $py
+            input motionevent MOVE $(x 0.60) $py
+            input motionevent MOVE $(x 0.74) $py
+            input motionevent UP $(x 0.86) $py" >/dev/null 2>&1
+        sleep 3
+        if find_popup >/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # The word the definition card is about. The card puts it above
 # everything else, and it is the only text on that screen standing on its
 # own: the page behind it is paragraphs, and the sense headings come
@@ -539,19 +571,30 @@ grant_folder() {
     tap_on "Add books"
     tap_on "Add a folder"
     sleep 3
-    # The picker usually opens on the device's own storage already. When
-    # it does not, go out to the roots and come back in by the model name.
-    if ! on_screen "Books"; then
-        tap_if_there "Show roots" || true
-        local model
-        model=$(adb shell getprop ro.product.model | tr -d '\r')
-        tap_on "$model"
+    # The picker reopens wherever it was left, so it may already be
+    # inside the shelf. Tapping the folder again from in there hits the
+    # breadcrumb and walks back out, and the grant then lands on the
+    # wrong directory -- or on nothing at all.
+    if ! on_screen "Files in Books"; then
+        # The picker usually opens on the device's own storage already.
+        # When it does not, go out to the roots and come back in by the
+        # model name.
+        if ! on_screen "Books"; then
+            tap_if_there "Show roots" || true
+            local model
+            model=$(adb shell getprop ro.product.model | tr -d '\r')
+            tap_on "$model"
+        fi
+        tap_on "Books"
     fi
-    tap_on "Books"
     tap_on "USE THIS FOLDER"
     # The permission dialog can take a moment to arrive, and tapping
     # where it is about to be does nothing at all.
-    tap_on "ALLOW"
+    #
+    # Match the button exactly: the dialog above it opens with "Allow
+    # Liseur to access...", so a prefix match taps the sentence instead,
+    # which does nothing and loses the folder.
+    tap_on "ALLOW" exact
     note "waiting for the shelf to fill"
     local waited=0 count=0
     while ((waited < 90)); do
@@ -562,6 +605,8 @@ grant_folder() {
         waited=$((waited + 5))
     done
     note "$count books on the shelf"
+    ((count > 0)) ||
+        die "the folder was not granted; the picker layout may have changed"
 }
 
 # The reader screens are captured from the first book, so it has to look
@@ -579,8 +624,19 @@ seed_reading() {
     open_library
     open_first_book "Moby Dick"
 
-    # Far enough in that the page is prose rather than a title page.
-    turn_pages 10
+    # Jump to the first chapter. Paging in from the front lands in the
+    # epigraphs, which are a wall of quotations and attributions and make
+    # a poor picture of what reading the app is like. How many pages that
+    # takes depends on the type size, so go by the chapter rather than by
+    # counting taps.
+    reader_chrome_up
+    tap_on "Contents"
+    tap_on "$FIRST_CHAPTER"
+    sleep 4
+    reader_chrome_down
+
+    # A few pages in, so the page opens on prose rather than a heading.
+    turn_pages 3
 
     # A mark on each of three pages, so the notebook has something to
     # list. Each is checked against the database, because a highlight
@@ -589,7 +645,7 @@ seed_reading() {
     for _ in 1 2 3; do
         dismiss_popup
         before=$(annotation_count)
-        if select_a_word; then
+        if select_a_phrase; then
             tap_in_popup highlight
             sleep 2
             after=$(annotation_count)
@@ -609,7 +665,7 @@ seed_reading() {
     dismiss_popup
     turn_pages 2
     before=$(annotation_count)
-    if select_a_word; then
+    if select_a_phrase; then
         tap_in_popup note
         if wait_for "What did this make you think" 10 >/dev/null; then
             # Save stays greyed out until the note has words in it, and
