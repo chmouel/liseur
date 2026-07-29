@@ -90,27 +90,7 @@ class CalibreCatalogRepository(
         books.forEach { remote ->
             val url = remoteUrl(remote.uuid)
             val existing = bookDao.getByRemoteUuid(remote.uuid) ?: bookDao.getByUrl(url)
-            bookDao.upsert(
-                Book(
-                    id = existing?.id ?: 0,
-                    url = url,
-                    title = remote.title,
-                    author = remote.author,
-                    // A downloaded book has a real cover extracted from the
-                    // file; keep it rather than going back to the network.
-                    coverPath = existing?.coverPath,
-                    source = null,
-                    addedAt = existing?.addedAt ?: now,
-                    lastOpenedAt = existing?.lastOpenedAt,
-                    localUri = existing?.localUri,
-                    remoteUuid = remote.uuid,
-                    remoteBookId = remote.bookId,
-                    coverUrl = remote.coverHref?.let { CalibreUrl.resolve(baseUrl, it) },
-                    downloadHref = remote.downloadHref,
-                    downloadState = existing?.downloadState ?: DownloadState.REMOTE,
-                    remoteUpdatedAt = remote.updatedAt,
-                ),
-            )
+            bookDao.upsert(mergeCatalogEntry(remote, existing, url, baseUrl, now))
         }
     }
 
@@ -136,4 +116,43 @@ class CalibreCatalogRepository(
          */
         fun remoteUrl(uuid: String) = "calibre:$uuid"
     }
+}
+
+/**
+ * Folds a catalog entry into what is already known about a book.
+ *
+ * Only the fields the catalog owns are taken from the feed. Everything
+ * else — whether the book has been downloaded and when, how far it was
+ * read, whether it was finished — belongs to this device, and a routine
+ * refresh has no business resetting it.
+ */
+internal fun mergeCatalogEntry(
+    remote: OpdsBook,
+    existing: Book?,
+    url: String,
+    baseUrl: String,
+    now: Long,
+): Book {
+    val book = existing ?: Book(
+        url = url,
+        title = remote.title,
+        author = remote.author,
+        // A downloaded book has a cover extracted from the file itself;
+        // until then the catalog's cover URL is what gets shown.
+        coverPath = null,
+        source = null,
+        addedAt = now,
+        lastOpenedAt = null,
+        downloadState = DownloadState.REMOTE,
+    )
+    return book.copy(
+        url = url,
+        title = remote.title,
+        author = remote.author,
+        remoteUuid = remote.uuid,
+        remoteBookId = remote.bookId,
+        coverUrl = remote.coverHref?.let { CalibreUrl.resolve(baseUrl, it) },
+        downloadHref = remote.downloadHref,
+        remoteUpdatedAt = remote.updatedAt,
+    )
 }
