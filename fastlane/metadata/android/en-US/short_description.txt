@@ -1,1 +1,1 @@
-An open-source EPUB reader and calibre-web client
+An open-source EPUB books reader and calibre-web client

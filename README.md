@@ -1,6 +1,6 @@
 # Liseur
 
-An open-source EPUB reader and calibre-web client for Android: a modern
+An open-source EPUB books reader and calibre-web client for Android: a modern
 reader that is equally at home with the files on your phone and with a
 [calibre-web](https://github.com/janeczku/calibre-web) server.
 
