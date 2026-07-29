@@ -16,6 +16,7 @@ import com.chmouel.liseur.data.settings.ThemeMode
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chmouel.liseur.reader.chrome.BookSyncDialog
 import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.sync.PositionSyncWorker
 import androidx.lifecycle.lifecycleScope
@@ -79,6 +80,16 @@ class ReaderActivity : FragmentActivity() {
                 dynamicColor = settings.dynamicColor,
             ) {
                 val state by viewModel.state.collectAsStateWithLifecycle()
+                // Hosted above the loading state on purpose: a position
+                // disagreement is put before the book opens, so the reader
+                // starts in the right place rather than being moved after
+                // arriving in the wrong one.
+                val bookSync by viewModel.bookSync.collectAsStateWithLifecycle()
+                BookSyncDialog(
+                    state = bookSync,
+                    onResolve = viewModel::resolveBookSync,
+                    onDismiss = viewModel::dismissBookSync,
+                )
                 when (val s = state) {
                     ReaderViewModel.UiState.Loading ->
                         ReaderLoadingScreen()
@@ -151,7 +162,6 @@ class ReaderActivity : FragmentActivity() {
                                 )
                             },
                             syncableFlow = viewModel.syncable,
-                            bookSyncFlow = viewModel.bookSync,
                             goTo = viewModel.goTo,
                             onBookSyncAction = remember {
                                 ReaderBookSyncActions(

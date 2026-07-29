@@ -94,7 +94,6 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
-import com.chmouel.liseur.reader.chrome.BookSyncDialog
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
@@ -136,7 +135,6 @@ fun ReaderScreen(
     onAnnotationAction: ReaderAnnotationActions,
     onSearchAction: ReaderSearchActions,
     syncableFlow: StateFlow<Boolean>,
-    bookSyncFlow: StateFlow<ReaderViewModel.BookSync>,
     goTo: SharedFlow<Locator>,
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
@@ -508,13 +506,6 @@ fun ReaderScreen(
             navigatorNow?.go(locator, animated = false)
         }
     }
-
-    val bookSync by bookSyncFlow.collectAsStateWithLifecycle()
-    BookSyncDialog(
-        state = bookSync,
-        onResolve = onBookSyncAction.resolve,
-        onDismiss = onBookSyncAction.dismiss,
-    )
 
     if (showToc) {
         BackHandler { showToc = false }

@@ -34,6 +34,7 @@ import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -225,18 +226,53 @@ class ReaderViewModel(
                     _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
 
                 ResolveOutcome.Done -> {
-                    if (takeRemote) {
+                    // While the book is still opening there is nowhere to
+                    // jump to yet: open() reads the settled position and
+                    // starts the reader there.
+                    if (takeRemote && openQuestion == null) {
                         progressDao.get(bookId)?.totalProgression?.let { goToProgression(it) }
                     }
                     _bookSync.value = BookSync.Idle
                 }
             }
+            openQuestion?.takeIf { _bookSync.value == BookSync.Idle }?.complete(Unit)
         }
     }
 
     /** Puts the question away, leaving the server's answer on disk for later. */
     fun dismissBookSync() {
         _bookSync.value = BookSync.Idle
+        openQuestion?.complete(Unit)
+    }
+
+    /**
+     * Raised while a book is opening, so the answer arrives before the
+     * reader does. Completed by whichever way the question is answered.
+     */
+    private var openQuestion: CompletableDeferred<Unit>? = null
+
+    /**
+     * Puts a preserved disagreement to the reader before the book opens.
+     *
+     * Page numbers need the book laid out, which is the same work the
+     * cross-device path already pays for, so it is done here rather than
+     * showing two bare percentages.
+     */
+    private suspend fun askAboutPreservedConflict(publication: Publication) {
+        val preview = positionSync.preservedConflict(bookId) ?: return
+        val there = preview.remote ?: return
+        val here = preview.local ?: 0.0
+        if (bookPositions == null) bookPositions = BookPositions.of(publication)
+        val waiting = CompletableDeferred<Unit>()
+        openQuestion = waiting
+        _bookSync.value = BookSync.Choice(
+            here = point(here),
+            there = point(there, preview.remoteAt),
+            theirsIsBehind = there < here,
+            atRevision = progressDao.currentRevision(bookId) ?: 0,
+        )
+        waiting.await()
+        openQuestion = null
     }
 
     private suspend fun goToProgression(progression: Double) {
@@ -291,6 +327,12 @@ class ReaderViewModel(
             withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
                 runCatching { positionSync.request(SyncScope.Book(bookId)) }
             }
+
+            // Sync preserves a disagreement rather than guessing. Settle
+            // it now, while the book is still a loading screen: opening
+            // at one position and then yanking the reader to another is
+            // worse than a moment's wait before a single answer.
+            askAboutPreservedConflict(publication)
 
             val stored = progressDao.get(bookId)
                 ?.also { speed = ReadingSpeedEstimator(it.readingSpeed) }

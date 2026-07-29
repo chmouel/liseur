@@ -191,6 +191,34 @@ class KoboSyncRepository(
     }
 
     /**
+     * The unresolved disagreement an ordinary sync left behind, if there
+     * is one, without asking the server anything.
+     *
+     * When both sides have moved, reconciliation preserves both and
+     * chooses neither. That is the right call for a background job, but
+     * it leaves the reader to open a book at a position the app already
+     * knows is disputed. This reports the dispute so it can be put to
+     * the person holding the device, who is the only one who knows which
+     * device they last read on.
+     *
+     * Returns null when there is nothing preserved, when what is
+     * preserved came from a different account, or when the two sides
+     * turn out to agree after all.
+     */
+    suspend fun preservedConflict(bookUrl: String): SyncPreview? {
+        val server = serverDao.get() ?: return null
+        if (server.koboToken == null) return null
+        val stored = progressDao.get(bookUrl) ?: return null
+        val pending = stored.pendingStateFor(server.accountKey) ?: return null
+        val there = pending.progression ?: return null
+        return SyncPreview(
+            local = stored.totalProgression,
+            remote = there,
+            remoteAt = stored.remoteUpdatedAt?.takeIf { it > 0 },
+        ).takeIf { !it.agrees }
+    }
+
+    /**
      * Takes the position the server reported for one book, because
      * someone said to.
      *

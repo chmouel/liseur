@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.calibre.PreviewOutcome
 import com.chmouel.liseur.data.calibre.ResolveOutcome
 import com.chmouel.liseur.data.calibre.SyncOutcome
+import com.chmouel.liseur.data.calibre.SyncPreview
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -127,6 +128,14 @@ class PositionSyncCoordinator(private val sync: KoboSyncRepository) {
             sync.keepLocalPosition(bookUrl)
         }
     }
+
+    /**
+     * The disagreement an ordinary sync preserved rather than resolved,
+     * if there is one. Reads what is already on disk and asks the server
+     * nothing, so it is safe to call while opening a book.
+     */
+    suspend fun preservedConflict(bookUrl: String): SyncPreview? =
+        turn.withLock { sync.preservedConflict(bookUrl) }
 
     /**
      * Whether a run already under way can answer this request.
