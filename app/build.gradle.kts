@@ -96,6 +96,12 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// The migration tests read the exported schemas through the asset
+// manager, which under Robolectric means the variant's merged assets.
+// Debug only: release builds must not carry a hundred kilobytes of JSON
+// describing databases nobody will ever open.
+android.sourceSets.getByName("debug").assets.srcDir("$projectDir/schemas")
+
 dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
@@ -148,4 +154,7 @@ dependencies {
     // tests only, so an androidTest source set would never be exercised.
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    // Replays every exported schema against the next migration, so an
+    // upgrade cannot quietly drop a column full of reading positions.
+    testImplementation(libs.room.testing)
 }
