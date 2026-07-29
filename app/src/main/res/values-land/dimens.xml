@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Readium ships its own landscape value for this, which would
+      otherwise win over the one in values/ and put the padding back
+      just for landscape. See values/dimens.xml for why we want none.
+    -->
+    <dimen name="readium_navigator_epub_vertical_padding">0dp</dimen>
+</resources>

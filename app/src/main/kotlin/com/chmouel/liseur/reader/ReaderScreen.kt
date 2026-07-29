@@ -59,12 +59,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.compose.AndroidFragment
 import android.graphics.RectF
 import android.view.HapticFeedbackConstants
+import android.view.View
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -272,6 +274,7 @@ fun ReaderScreen(
                 .padding(top = 12.dp, bottom = 26.dp),
         ) { fragment ->
             navigator = fragment
+            fragment.view?.let(::consumeInsetsForReadium)
         }
 
         PageTurnOverlay(pageTurnEffect)
@@ -715,3 +718,20 @@ fun ReaderErrorScreen(message: String, onBack: () -> Unit) {
 @Composable
 private fun readerInsets(): WindowInsets =
     WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
+
+/**
+ * Stops the window insets at Readium's own view.
+ *
+ * Readium lays its web view out inside a `CoordinatorLayout`, which offsets
+ * its children by whatever insets reach it. Compose does not consume insets
+ * on behalf of the views it hosts, so they arrive here a second time even
+ * though [readerInsets] has already made room for them: the web view ends up
+ * pushed down by the height of the status bar, hanging that far past the
+ * bottom of the pager that clips it. Readium paginates against the web view's
+ * full height, so the text in that hidden strip — a line or two of every
+ * page — is laid out and then never drawn, and the reader simply loses it.
+ */
+private fun consumeInsetsForReadium(view: View) {
+    ViewCompat.setOnApplyWindowInsetsListener(view) { _, _ -> WindowInsetsCompat.CONSUMED }
+    ViewCompat.requestApplyInsets(view)
+}
