@@ -469,7 +469,7 @@ else
         # on HEAD. Anything later than that must come from its own
         # release commit.
         if [[ $(git log -1 --format=%s) != "chore: release $tag" ]]; then
-            [[ -z $(git tag -l) ]] ||
+            [[ -z $(git ls-remote --tags origin) ]] ||
                 die "version is already $version but HEAD is not its release commit"
             printf 'First release: tagging HEAD, which already declares %s.\n' \
                 "$version"
