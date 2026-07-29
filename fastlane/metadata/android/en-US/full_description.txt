@@ -1,9 +1,34 @@
-Liseur is a beautiful, modern ebook reader for Android.
+Liseur is a quiet place to read your books: a modern EPUB reader that is equally at home with the files on your phone and with a calibre-web server.
 
-Features (in development):
+Reading
 
-* First-class local EPUB reading, built on the Readium toolkit
-* Kindle-grade reading ergonomics: tap zones, page-turn animations, typography controls, Light/Sepia/Dark/Black themes, brightness gesture, time left in chapter
-* Local library indexed from folders you choose, with covers, highlights, notes, bookmarks, and in-book search
-* calibre-web client: browse, search, and download over OPDS; sync reading positions via the Kobo sync protocol
-* Free software: no trackers, no analytics. Network access is used only for your own calibre-web server and opt-in dictionary lookups.
+* Paginated EPUB rendering through the Readium toolkit, full screen by default
+* Tap right to go forward, left to go back, the middle for the controls; volume keys work too
+* A whole page always fits the screen, with no stray scrolling to catch the last line
+* Four reading themes (Light, Sepia, Dark, Black), independent of the app's own theme
+* Four bundled open fonts or the publisher's own, plus size, line spacing, margins and brightness
+* Time left in the chapter, time left in the book, page or percentage, and a scrubber with chapter ticks
+
+Marking up and looking up
+
+* Highlights in five colours, notes, and bookmarks with a corner ribbon
+* A notebook of everything you marked in a book, exportable as Markdown
+* Search the whole book, with snippets and jump-to highlighting
+* Wiktionary definitions for any selected word, or a hand-off to an offline dictionary app
+
+Your library
+
+* Index folders of EPUBs, covers and all
+* Books you are using sort to the front; finished ones get a tick
+* Pull to refresh picks up whatever changed behind the app's back
+
+calibre-web
+
+* One screen sets it up: URL, username, password; Liseur works out the catalog, download rights and sync token
+* Your server's books merge into the same library with a cloud badge; tap one to download and open it
+* Reading positions sync both ways through calibre-web's Kobo protocol
+* Remove the copy on the device, or delete the book from the server
+
+Free software
+
+No trackers, no analytics, no proprietary dependencies. The only network traffic is to the calibre-web server you configured and, if you ask for a definition, to Wiktionary.

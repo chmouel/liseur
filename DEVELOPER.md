@@ -169,3 +169,65 @@ agent or device check.
 - Deletions in calibre are not propagated (only archived books are, as
   `IsRemoved`), and users can restrict syncing to selected shelves, which
   makes an empty sync legitimate.
+
+## Releasing
+
+`hack/release` does the whole thing: bump `versionCode`/`versionName`,
+write the F-Droid changelog, run tests, lint and a release build, tag,
+push, publish the GitHub release, and update the F-Droid submission.
+
+```bash
+hack/release 0.2.0 "In-book search, and a Wiktionary card for any word."
+hack/release --fdroid-only 0.2.0     # re-run just the F-Droid step
+```
+
+It refuses to run on a dirty tree, off `main`, out of sync with the
+remote, on a version that is not newer, or with release notes over the
+500 characters F-Droid allows. Interrupted runs can be resumed by
+invoking it again with the same version.
+
+The tag triggers `.github/workflows/release.yml`, which builds a signed
+APK in the `release` GitHub environment and uploads it to the release.
+That environment must hold `LISEUR_KEYSTORE_BASE64`,
+`LISEUR_KEYSTORE_PASSWORD`, `LISEUR_KEY_ALIAS` and `LISEUR_KEY_PASSWORD`.
+Locally, signing is opt-in through a gitignored `keystore.properties`;
+without it the release build is simply unsigned.
+
+### Store assets
+
+Both are regenerated rather than maintained by hand:
+
+```bash
+hack/screenshots            # docs/screenshots + fastlane phoneScreenshots
+hack/icon                   # fastlane icon.png, from the vector drawables
+```
+
+`hack/screenshots` drives a connected device through adb, so it needs the
+app installed with a few books in its library — and its output is worth
+looking at before committing, because a changed layout can silently
+produce the wrong screen.
+
+## F-Droid readiness
+
+- **Dependencies are all FOSS**, from Maven Central or Google's Maven.
+  In particular `readium-lcp` is deliberately absent: it pulls in the
+  proprietary liblcp. The list users see is in `LicencesScreen.kt`.
+- **No trackers or analytics**, and no Google Play services. The only
+  outbound traffic is to the calibre-web server the user configured, and
+  to Wiktionary when a definition is asked for. That is what justifies
+  `INTERNET` in the store description.
+- **No non-free assets.** The bundled fonts (Literata, Vollkorn, Atkinson
+  Hyperlegible, Inter) are all OFL; the icon is drawn in-repo as vector
+  drawables.
+- **Reproducible versioning**: `versionCode` and `versionName` only ever
+  change in a `chore: release vX.Y.Z` commit made by `hack/release`, and
+  every release is tagged, so F-Droid's `UpdateCheckMode: Tags` and
+  `AutoUpdateMode: Version` work without further help.
+- **Metadata lives in the repo** under
+  `fastlane/metadata/android/en-US/`: title, descriptions, per-versionCode
+  changelogs, icon and screenshots.
+- **The build needs no network beyond Gradle dependencies** and no
+  signing config: `assembleRelease` on a clean checkout produces an
+  unsigned APK, which is what F-Droid builds and signs itself.
+- Remaining step, deliberately not done yet: opening the RFP / metadata
+  merge request against `fdroiddata`.

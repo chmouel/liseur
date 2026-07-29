@@ -1,1 +1,1 @@
-Beautiful EPUB reader and calibre-web client
+A quiet EPUB reader, and a calibre-web client

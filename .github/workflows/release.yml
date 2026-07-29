@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Check release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" == v* ]]
+          version="${RELEASE_TAG#v}"
+          grep -Fq "versionName = \"$version\"" app/build.gradle.kts
+
+      - name: Configure release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.LISEUR_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.LISEUR_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.LISEUR_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.LISEUR_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keystore="$RUNNER_TEMP/liseur-release.p12"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            printf 'storeFile=%s\n' "$keystore"
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease --console=plain
+
+      - name: Verify release APK
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/release/app-release.apk"
+          test -f "$apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$apksigner"
+          "$apksigner" verify --verbose "$apk"
+          release_apk="app/build/outputs/apk/release/liseur-${RELEASE_TAG}.apk"
+          mv "$apk" "$release_apk"
+          printf 'RELEASE_APK=%s\n' "$release_apk" >> "$GITHUB_ENV"
+
+      - name: Upload release APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" "$RELEASE_APK" --clobber

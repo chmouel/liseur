@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Render the adaptive launcher icon to a PNG for F-Droid and the README.
+
+F-Droid wants a plain 512x512 image, but the icon lives in the app as two
+Android vector drawables. Their pathData is already SVG path syntax, so the
+conversion is mostly a matter of translating the attribute names and the
+gradient elements; that is what this does, before handing the result to
+rsvg-convert.
+
+Usage: hack/icon [OUTPUT]   (default fastlane/metadata/android/en-US/images/icon.png)
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+ANDROID = "http://schemas.android.com/apk/res/android"
+AAPT = "http://schemas.android.com/aapt"
+RES = Path("app/src/main/res/drawable")
+
+# The visible part of an adaptive icon is the central 72dp of its 108dp
+# viewport; anything outside is what launchers crop away.
+VIEWPORT = 108.0
+SAFE = 72.0
+SIZE = 512
+
+
+def attr(element: ET.Element, name: str) -> str | None:
+    return element.get(f"{{{ANDROID}}}{name}")
+
+
+def gradient_of(path: ET.Element, index: int) -> tuple[str, str] | None:
+    """Return (gradient id, defs xml) for a path filled with a gradient."""
+    holder = path.find(f"{{{AAPT}}}attr")
+    if holder is None:
+        return None
+    gradient = holder.find("gradient")
+    if gradient is None:
+        return None
+
+    stops = "".join(
+        '<stop offset="{}" stop-color="{}" stop-opacity="{}"/>'.format(
+            attr(item, "offset") or "0",
+            (attr(item, "color") or "#000000")[:7],
+            alpha_of(attr(item, "color") or "#000000"),
+        )
+        for item in gradient.findall("item")
+    )
+    name = f"g{index}"
+    if attr(gradient, "type") == "radial":
+        defs = (
+            '<radialGradient id="{}" gradientUnits="userSpaceOnUse" '
+            'cx="{}" cy="{}" r="{}">{}</radialGradient>'
+        ).format(
+            name,
+            attr(gradient, "centerX"),
+            attr(gradient, "centerY"),
+            attr(gradient, "gradientRadius"),
+            stops,
+        )
+    else:
+        defs = (
+            '<linearGradient id="{}" gradientUnits="userSpaceOnUse" '
+            'x1="{}" y1="{}" x2="{}" y2="{}">{}</linearGradient>'
+        ).format(
+            name,
+            attr(gradient, "startX"),
+            attr(gradient, "startY"),
+            attr(gradient, "endX"),
+            attr(gradient, "endY"),
+            stops,
+        )
+    return name, defs
+
+
+def alpha_of(colour: str) -> str:
+    """Android colours may be #AARRGGBB; SVG wants the alpha separately."""
+    if len(colour) == 9:
+        return f"{int(colour[1:3], 16) / 255:.3f}"
+    return "1"
+
+
+def colour_of(colour: str | None, default: str = "none") -> str:
+    if not colour:
+        return default
+    if len(colour) == 9:
+        # Fully transparent is Android's way of saying "no fill".
+        return "none" if colour[1:3] == "00" else "#" + colour[3:]
+    return colour
+
+
+def convert(vector: Path, index_base: int) -> tuple[str, str]:
+    root = ET.parse(vector).getroot()
+    defs: list[str] = []
+    body: list[str] = []
+
+    for index, path in enumerate(root.iter("path"), start=index_base):
+        data = attr(path, "pathData")
+        if not data:
+            continue
+        gradient = gradient_of(path, index)
+        if gradient:
+            fill = f"url(#{gradient[0]})"
+            defs.append(gradient[1])
+        else:
+            fill = colour_of(attr(path, "fillColor"))
+
+        parts = [f'd="{data}"', f'fill="{fill}"']
+        for android_name, svg_name in (
+            ("fillAlpha", "fill-opacity"),
+            ("strokeWidth", "stroke-width"),
+            ("strokeAlpha", "stroke-opacity"),
+            ("strokeLineCap", "stroke-linecap"),
+        ):
+            value = attr(path, android_name)
+            if value:
+                parts.append(f'{svg_name}="{value}"')
+        stroke = attr(path, "strokeColor")
+        if stroke:
+            parts.append(f'stroke="{colour_of(stroke)}"')
+        body.append("<path " + " ".join(parts) + "/>")
+
+    return "".join(defs), "".join(body)
+
+
+def main() -> int:
+    output = Path(
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "fastlane/metadata/android/en-US/images/icon.png"
+    )
+    if not RES.exists():
+        print("error: run this from the repository root", file=sys.stderr)
+        return 1
+
+    background_defs, background = convert(RES / "ic_launcher_background.xml", 0)
+    foreground_defs, foreground = convert(RES / "ic_launcher_foreground.xml", 100)
+
+    # Scale the safe zone up to fill the output, which is what a launcher
+    # does, so the book is not left swimming in margin.
+    scale = VIEWPORT / SAFE
+    offset = (VIEWPORT - SAFE) / 2 * scale
+
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        'viewBox="0 0 {v} {v}">'
+        "<defs>{defs}</defs>"
+        '<g transform="translate({o},{o}) scale({s})">{background}{foreground}</g>'
+        "</svg>"
+    ).format(
+        size=SIZE,
+        v=VIEWPORT,
+        defs=background_defs + foreground_defs,
+        o=-offset,
+        s=scale,
+        background=background,
+        foreground=foreground,
+    )
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["rsvg-convert", "-w", str(SIZE), "-h", str(SIZE), "-o", str(output)],
+        input=svg.encode(),
+        check=True,
+    )
+    print(f"wrote {output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

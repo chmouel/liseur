@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#
+# Capture the screenshots used by the README and by F-Droid.
+#
+# Everything is driven through adb against a running emulator or device, so
+# the images can be regenerated after a UI change instead of drifting.
+#
+#   hack/screenshots                 # use the only attached device
+#   hack/screenshots emulator-5554   # pick one explicitly
+#
+# The app must already be installed, have at least one book in its library,
+# and be signed in to a calibre-web server if you want the cloud badges to
+# show. Nothing here writes to a server.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
+readonly OUT_DIR="docs/screenshots"
+readonly FASTLANE_DIR="fastlane/metadata/android/en-US/images/phoneScreenshots"
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+serial=${1:-}
+if [[ -z "$serial" ]]; then
+    mapfile -t devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+    [[ ${#devices[@]} -eq 1 ]] ||
+        die "expected exactly one attached device, got ${#devices[@]}; pass a serial"
+    serial=${devices[0]}
+fi
+
+adb() { command adb -s "$serial" "$@"; }
+
+shot() {
+    local name=$1
+    adb exec-out screencap -p > "$OUT_DIR/$name.png"
+    printf '  %s\n' "$OUT_DIR/$name.png"
+}
+
+# Screen coordinates are computed from the real display size rather than
+# hard-coded, so this keeps working on a differently sized device.
+read -r width height < <(
+    adb shell wm size | sed -nE 's/.*: ([0-9]+)x([0-9]+)/\1 \2/p' | tail -n 1
+)
+[[ -n "$width" && -n "$height" ]] || die "could not read the display size"
+
+x() { printf '%.0f' "$(awk "BEGIN { print $width * $1 }")"; }
+y() { printf '%.0f' "$(awk "BEGIN { print $height * $1 }")"; }
+
+tap() { adb shell input tap "$(x "$1")" "$(y "$2")"; }
+
+command -v adb >/dev/null || die "adb is not installed"
+adb shell pm path "$APP_ID" >/dev/null 2>&1 || die "$APP_ID is not installed"
+
+mkdir -p "$OUT_DIR" "$FASTLANE_DIR"
+
+printf 'Capturing from %s (%sx%s)\n' "$serial" "$width" "$height"
+
+# A demo run should look like a considered library, not a debug session:
+# hide the clock's seconds, the notification icons and the network state.
+adb shell settings put global sysui_demo_allowed 1
+adb shell am broadcast -a com.android.systemui.demo -e command enter >/dev/null
+adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 1000 >/dev/null
+adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false >/dev/null
+adb shell am broadcast -a com.android.systemui.demo -e command network \
+    -e wifi show -e level 4 -e mobile hide >/dev/null
+adb shell am broadcast -a com.android.systemui.demo -e command battery \
+    -e level 100 -e plugged false >/dev/null
+
+restore_status_bar() {
+    adb shell am broadcast -a com.android.systemui.demo -e command exit >/dev/null || true
+}
+trap restore_status_bar EXIT
+
+adb shell am force-stop "$APP_ID"
+adb shell am start -n "$MAIN_ACTIVITY" >/dev/null
+sleep 8
+
+# The library may auto-resume into the last book; get back to the shelf.
+if adb shell dumpsys activity activities | grep -q 'ReaderActivity.*t[0-9]'; then
+    adb shell input keyevent KEYCODE_BACK
+    sleep 3
+fi
+
+shot 01-library
+
+# Into a book, and a few pages in: the first page of an EPUB is usually
+# the cover, which says nothing about how the app renders text.
+tap 0.18 0.48
+sleep 9
+for _ in 1 2 3 4 5 6; do
+    tap 0.85 0.5
+    sleep 1
+done
+sleep 2
+shot 02-reading
+
+tap 0.5 0.5
+sleep 2
+shot 03-chrome
+
+# Typography sheet, from the "Aa" button in the reader's top bar.
+tap 0.815 0.092
+sleep 3
+shot 04-typography
+
+adb shell input keyevent KEYCODE_BACK
+sleep 2
+
+# Table of contents.
+tap 0.930 0.092
+sleep 3
+shot 05-contents
+
+adb shell input keyevent KEYCODE_BACK
+sleep 2
+adb shell input keyevent KEYCODE_BACK
+sleep 3
+
+# Settings.
+tap 0.698 0.092
+sleep 3
+shot 06-settings
+
+adb shell input keyevent KEYCODE_BACK
+sleep 2
+
+printf 'Copying the F-Droid set\n'
+i=1
+for name in 01-library 02-reading 04-typography 06-settings; do
+    cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
+    printf '  %s/%s.png\n' "$FASTLANE_DIR" "$i"
+    i=$((i + 1))
+done
+
+printf 'Done. Check the images before committing: the script drives the UI\n'
+printf 'blind, so a changed layout can quietly produce the wrong screen.\n'

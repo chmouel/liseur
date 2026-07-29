@@ -1,0 +1,386 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly GH_REPO="chmouel/liseur"
+readonly APP_ID="com.chmouel.liseur"
+readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
+readonly FDROID_BRANCH="$APP_ID"
+readonly BUILD_FILE="app/build.gradle.kts"
+readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  hack/release [--yes] VERSION RELEASE NOTES...
+  hack/release --fdroid-only VERSION
+
+Examples:
+  hack/release 0.2.0 "Add in-book search and a Wiktionary lookup card."
+  hack/release --yes 0.2.1 "Fix page fitting on tall screens."
+  hack/release --fdroid-only 0.2.1
+EOF
+}
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null || die "missing required command: $1"
+}
+
+read_version_name() {
+    sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' "$BUILD_FILE"
+}
+
+read_version_code() {
+    sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' "$BUILD_FILE"
+}
+
+confirm() {
+    if [[ "$assume_yes" == true ]]; then
+        return
+    fi
+
+    read -r -p "Continue? [y/N] " answer
+    [[ "$answer" =~ ^[Yy]$ ]] || die "release cancelled"
+}
+
+github_release_exists() {
+    gh release view "$1" --repo "$GH_REPO" >/dev/null 2>&1
+}
+
+github_release_is_published() {
+    local release is_draft published_at
+    release=$(gh release view "$1" --repo "$GH_REPO" \
+        --json isDraft,publishedAt 2>/dev/null) || return 1
+    is_draft=$(printf '%s' "$release" | jq -r .isDraft)
+    published_at=$(printf '%s' "$release" | jq -r .publishedAt)
+    [[ "$is_draft" == false && "$published_at" != null ]]
+}
+
+update_fdroid_submission() (
+    local version=$1
+    local version_code=$2
+    local commit_sha=$3
+    local metadata_path="metadata/$APP_ID.yml"
+    local encoded_path="metadata%2F$APP_ID.yml"
+    local upstream_file
+
+    if upstream_file=$(glab api --hostname gitlab.com \
+        "projects/$FDROID_PROJECT/repository/files/$encoded_path?ref=master" 2>/dev/null); then
+        local upstream_metadata
+        upstream_metadata=$(printf '%s' "$upstream_file" | jq -r .content | base64 --decode)
+        grep -q '^AutoUpdateMode: Version$' <<<"$upstream_metadata" ||
+            die "F-Droid metadata exists but auto-update is not enabled"
+        grep -q '^UpdateCheckMode: Tags' <<<"$upstream_metadata" ||
+            die "F-Droid metadata exists but tag updates are not enabled"
+        printf 'F-Droid: metadata is already upstream; tag auto-update will handle %s.\n' "$version"
+        return
+    fi
+
+    local merge_requests
+    merge_requests=$(glab api --hostname gitlab.com \
+        "projects/$FDROID_PROJECT/merge_requests?state=opened&source_branch=$FDROID_BRANCH&per_page=100")
+
+    local merge_request
+    merge_request=$(printf '%s' "$merge_requests" | jq -c \
+        --arg branch "$FDROID_BRANCH" \
+        '.[] | select(.source_branch == $branch) | select(.author.username == "chmouel")' |
+        head -n 1)
+    [[ -n "$merge_request" ]] ||
+        die "no upstream metadata or open Liseur inclusion MR was found"
+
+    local source_project_id source_branch merge_request_url encoded_branch file_response
+    source_project_id=$(printf '%s' "$merge_request" | jq -r .source_project_id)
+    source_branch=$(printf '%s' "$merge_request" | jq -r .source_branch)
+    merge_request_url=$(printf '%s' "$merge_request" | jq -r .web_url)
+    encoded_branch=$(jq -rn --arg value "$source_branch" '$value | @uri')
+    file_response=$(glab api --hostname gitlab.com \
+        "projects/$source_project_id/repository/files/$encoded_path?ref=$encoded_branch")
+
+    local last_commit_id metadata_file updated_file
+    last_commit_id=$(printf '%s' "$file_response" | jq -r .last_commit_id)
+    metadata_file=$(mktemp)
+    updated_file=$(mktemp)
+    trap 'rm -f "$metadata_file" "$updated_file"' EXIT
+    printf '%s' "$file_response" | jq -r .content | base64 --decode > "$metadata_file"
+
+    local metadata_current_code
+    metadata_current_code=$(sed -nE 's/^CurrentVersionCode: ([0-9]+)$/\1/p' "$metadata_file")
+    [[ -n "$metadata_current_code" ]] ||
+        die "could not read the current F-Droid versionCode"
+    (( version_code >= metadata_current_code )) ||
+        die "refusing to lower F-Droid from versionCode $metadata_current_code to $version_code"
+
+    if grep -Eq "^[[:space:]]+versionCode: $version_code$" "$metadata_file"; then
+        grep -Eq "^[[:space:]]+commit: $commit_sha$" "$metadata_file" ||
+            die "F-Droid versionCode $version_code already points to another commit"
+        printf 'F-Droid: %s already includes version %s.\n' "$merge_request_url" "$version"
+        return
+    fi
+
+    awk -v version="$version" -v code="$version_code" -v commit="$commit_sha" '
+        !inserted && /^AutoUpdateMode:/ {
+            print "  - versionName: " version
+            print "    versionCode: " code
+            print "    commit: " commit
+            print "    subdir: app"
+            print "    gradle:"
+            print "      - yes"
+            print "    prebuild: sed -i "
+            print "      \047s/jvmToolchain(17)/compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)/\047"
+            print "      build.gradle.kts"
+            print ""
+            inserted = 1
+        }
+        /^CurrentVersion:/ {
+            print "CurrentVersion: " version
+            next
+        }
+        /^CurrentVersionCode:/ {
+            print "CurrentVersionCode: " code
+            next
+        }
+        { print }
+        END {
+            if (!inserted) {
+                exit 42
+            }
+        }
+    ' "$metadata_file" > "$updated_file" ||
+        die "could not update the F-Droid metadata"
+
+    local payload
+    payload=$(jq -n \
+        --arg branch "$source_branch" \
+        --arg message "chore: update liseur" \
+        --arg path "$metadata_path" \
+        --arg content "$(cat "$updated_file")" \
+        --arg last_commit_id "$last_commit_id" \
+        '{
+            branch: $branch,
+            commit_message: $message,
+            actions: [{
+                action: "update",
+                file_path: $path,
+                content: $content,
+                last_commit_id: $last_commit_id
+            }]
+        }')
+
+    printf '%s' "$payload" | glab api --hostname gitlab.com --method POST \
+        "projects/$source_project_id/repository/commits" --input - >/dev/null
+    printf 'F-Droid: updated %s for version %s.\n' "$merge_request_url" "$version"
+)
+
+assume_yes=false
+fdroid_only=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --yes)
+            assume_yes=true
+            shift
+            ;;
+        --fdroid-only)
+            fdroid_only=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            die "unknown option: $1"
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+[[ $# -ge 1 ]] || {
+    usage >&2
+    exit 2
+}
+
+version=$1
+shift
+release_notes="$*"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die "VERSION must use X.Y.Z format"
+
+for command in git gh glab jq base64 sed awk; do
+    require_command "$command"
+done
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+[[ -f "$BUILD_FILE" ]] || die "run this script from the Liseur repository"
+
+git fetch --quiet origin main --tags
+
+tag="v$version"
+
+if [[ "$fdroid_only" == true ]]; then
+    [[ -z "$release_notes" ]] || die "--fdroid-only does not accept release notes"
+    remote_tag_refs=$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")
+    [[ -n "$remote_tag_refs" ]] || die "tag $tag does not exist on origin"
+    remote_commit=$(printf '%s\n' "$remote_tag_refs" |
+        awk '$2 ~ /\^\{\}$/ { print $1 }')
+    if [[ -z "$remote_commit" ]]; then
+        remote_commit=$(printf '%s\n' "$remote_tag_refs" | awk 'NR == 1 { print $1 }')
+    fi
+
+    commit_sha=$(git rev-parse "$tag^{commit}" 2>/dev/null) ||
+        die "tag $tag does not exist"
+    [[ "$commit_sha" == "$remote_commit" ]] ||
+        die "local and origin tags differ for $tag"
+    github_release_is_published "$tag" ||
+        die "GitHub release $tag is not published"
+
+    tag_build_file=$(git show "$tag:$BUILD_FILE")
+    tag_version=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' \
+        <<<"$tag_build_file")
+    tag_version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
+        <<<"$tag_build_file")
+    [[ "$tag_version" == "$version" && -n "$tag_version_code" ]] ||
+        die "$tag does not contain app version $version"
+
+    update_fdroid_submission "$version" "$tag_version_code" "$commit_sha"
+    exit
+fi
+
+[[ $(git branch --show-current) == main ]] || die "releases must be created from main"
+[[ -z $(git status --porcelain) ]] || die "the working tree is not clean"
+
+current_version=$(read_version_name)
+current_version_code=$(read_version_code)
+[[ -n "$current_version" && -n "$current_version_code" ]] ||
+    die "could not read the current app version"
+
+local_head=$(git rev-parse HEAD)
+remote_head=$(git rev-parse origin/main)
+if [[ "$current_version" != "$version" ]]; then
+    [[ "$local_head" == "$remote_head" ]] ||
+        die "local main is not synchronized with origin/main"
+elif [[ "$local_head" != "$remote_head" ]]; then
+    git merge-base --is-ancestor "$remote_head" "$local_head" ||
+        die "local main has diverged from origin/main"
+    [[ $(git rev-list --count "$remote_head..$local_head") == 1 ]] ||
+        die "resume requires exactly one unpushed release commit"
+    [[ $(git log -1 --format=%s) == "chore: release $tag" ]] ||
+        die "the unpushed commit is not the $tag release commit"
+fi
+
+required_secrets=(
+    LISEUR_KEYSTORE_BASE64
+    LISEUR_KEYSTORE_PASSWORD
+    LISEUR_KEY_ALIAS
+    LISEUR_KEY_PASSWORD
+)
+available_secrets=$(gh secret list --repo "$GH_REPO" --env release | cut -f1)
+for secret in "${required_secrets[@]}"; do
+    grep -qx "$secret" <<<"$available_secrets" ||
+        die "missing GitHub release environment secret: $secret"
+done
+
+changelog_path="$CHANGELOG_DIR/$current_version_code.txt"
+new_release=false
+
+if [[ "$current_version" != "$version" ]]; then
+    [[ -n "$release_notes" ]] || die "release notes are required"
+    [[ ${#release_notes} -le 500 ]] ||
+        die "release notes must be at most 500 characters for F-Droid"
+    [[ $(printf '%s\n%s\n' "$current_version" "$version" | sort -V | tail -n 1) == "$version" ]] ||
+        die "version $version must be newer than $current_version"
+    git rev-parse "$tag" >/dev/null 2>&1 && die "tag $tag already exists"
+
+    new_version_code=$((current_version_code + 1))
+    changelog_path="$CHANGELOG_DIR/$new_version_code.txt"
+    [[ ! -e "$changelog_path" ]] || die "$changelog_path already exists"
+
+    printf 'Release %s as versionCode %s.\n' "$version" "$new_version_code"
+    printf 'Release notes: %s\n' "$release_notes"
+    confirm
+
+    rollback=true
+    rollback_changes() {
+        if [[ "$rollback" == true ]]; then
+            git restore --staged "$BUILD_FILE" "$changelog_path" 2>/dev/null || true
+            git restore "$BUILD_FILE" 2>/dev/null || true
+            rm -f "$changelog_path"
+        fi
+    }
+    trap rollback_changes ERR INT TERM
+
+    sed -i -E \
+        "s/^([[:space:]]*)versionCode = [0-9]+$/\\1versionCode = $new_version_code/" \
+        "$BUILD_FILE"
+    sed -i -E \
+        "s/^([[:space:]]*)versionName = \"[^\"]+\"$/\\1versionName = \"$version\"/" \
+        "$BUILD_FILE"
+    printf '%s\n' "$release_notes" > "$changelog_path"
+
+    [[ $(read_version_name) == "$version" ]] || die "versionName update failed"
+    [[ $(read_version_code) == "$new_version_code" ]] || die "versionCode update failed"
+
+    ./gradlew testDebugUnitTest lintDebug assembleRelease --console=plain
+
+    git add "$BUILD_FILE" "$changelog_path"
+    git commit -m "chore: release $tag"
+
+    rollback=false
+    trap - ERR INT TERM
+    git tag "$tag"
+    current_version_code=$new_version_code
+    new_release=true
+else
+    changelog_path="$CHANGELOG_DIR/$current_version_code.txt"
+    [[ -s "$changelog_path" ]] || die "missing changelog: $changelog_path"
+    if ! git rev-parse "$tag" >/dev/null 2>&1; then
+        [[ $(git log -1 --format=%s) == "chore: release $tag" ]] ||
+            die "version is already $version but HEAD is not its release commit"
+        git tag "$tag"
+    fi
+    tag_commit=$(git rev-parse "$tag^{commit}")
+    if ! github_release_is_published "$tag"; then
+        [[ "$tag_commit" == $(git rev-parse HEAD) ]] ||
+            die "$tag does not point to HEAD and has no published GitHub release"
+    fi
+    printf 'Resuming release %s.\n' "$tag"
+    confirm
+fi
+
+git push --atomic origin main "$tag"
+commit_sha=$(git rev-parse "$tag^{commit}")
+tag_build_file=$(git show "$tag:$BUILD_FILE")
+release_version=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' \
+    <<<"$tag_build_file")
+release_version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
+    <<<"$tag_build_file")
+[[ "$release_version" == "$version" && -n "$release_version_code" ]] ||
+    die "$tag does not contain app version $version"
+
+if github_release_is_published "$tag"; then
+    printf 'GitHub: release %s already exists.\n' "$tag"
+elif github_release_exists "$tag"; then
+    die "GitHub release $tag exists but is still a draft"
+else
+    gh release create "$tag" --repo "$GH_REPO" --verify-tag \
+        --title "Liseur $tag" --notes-file "$changelog_path"
+    printf 'GitHub: published %s; approve the release environment deployment to build the APK.\n' "$tag"
+fi
+
+update_fdroid_submission "$version" "$release_version_code" "$commit_sha"
+
+if [[ "$new_release" == true ]]; then
+    printf 'Release %s is ready.\n' "$tag"
+fi
