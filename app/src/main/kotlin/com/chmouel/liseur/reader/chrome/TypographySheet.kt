@@ -44,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -133,7 +135,8 @@ private fun ThemeRow(selected: ReaderTheme, onSelected: (ReaderTheme) -> Unit) {
                     ),
                     modifier = Modifier
                         .size(56.dp)
-                        .clickable { onSelected(theme) },
+                        .clickable { onSelected(theme) }
+                        .semantics { contentDescription = theme.displayName },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(

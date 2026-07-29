@@ -1,9 +1,13 @@
 package com.chmouel.liseur.reader.annotations
 
+import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.domain.MarkedPassage
+import com.chmouel.liseur.domain.isSamePassage
 import org.json.JSONObject
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -16,11 +20,11 @@ import org.readium.r2.shared.publication.Locator
  * legible over text; they are kept light enough that words read cleanly
  * through them.
  */
-enum class HighlightTint(val color: Color) {
-    YELLOW(Color(0xFFFFD54F)),
-    GREEN(Color(0xFF9CCC65)),
-    BLUE(Color(0xFF64B5F6)),
-    PINK(Color(0xFFF06292)),
+enum class HighlightTint(val color: Color, @param:StringRes val label: Int) {
+    YELLOW(Color(0xFFFFD54F), R.string.annotation_tint_yellow),
+    GREEN(Color(0xFF9CCC65), R.string.annotation_tint_green),
+    BLUE(Color(0xFF64B5F6), R.string.annotation_tint_blue),
+    PINK(Color(0xFFF06292), R.string.annotation_tint_pink),
     ;
 
     companion object {
@@ -60,3 +64,10 @@ fun List<BookAnnotation>.toDecorations(): List<Decoration> =
 /** The stored locator, or null when it cannot be read back. */
 fun BookAnnotation.locator(): Locator? =
     runCatching { Locator.fromJSON(JSONObject(locatorJson)) }.getOrNull()
+
+/** A locator in the terms [isSamePassage] compares. */
+fun Locator.markedPassage(): MarkedPassage = MarkedPassage(
+    href = href.toString(),
+    progression = locations.progression,
+    text = text.highlight,
+)
