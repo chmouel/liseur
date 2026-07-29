@@ -148,6 +148,7 @@
     <string name="about_licences">Open-source licences</string>
     <string name="about_licence_line">Liseur is free software under the MIT licence.</string>
     <string name="licences_intro">Liseur is built entirely from free and open-source components.</string>
+    <string name="licences_read">%1$s \u2014 read it</string>
     <string name="read_book">Read</string>
     <string name="book_actions">Book actions</string>
     <string name="state_downloading">Downloading</string>
