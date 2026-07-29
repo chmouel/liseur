@@ -48,8 +48,7 @@ editions, which are in the public domain.</sub>
 
 ## What it does
 
-Reading. Paginated EPUB rendering through the [Readium Kotlin
-Toolkit](https://readium.org/kotlin-toolkit/), full screen by default. Tap the
+Reading. Read an EPUB rendered full screen. Tap the
 right of the page to go forward, the left to go back, the middle to bring up
 the chrome; volume keys work too if you would rather not touch the screen.
 
