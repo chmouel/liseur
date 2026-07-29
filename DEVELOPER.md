@@ -104,6 +104,34 @@ The script increments `versionCode`, writes the Fastlane changelog, runs the
 tests, lint, and release build, then commits, tags, pushes, and publishes the
 GitHub release.
 
+### Release notes
+
+Two things are written for every release, and they are not the same
+thing:
+
+- The **F-Droid changelog**, `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
+  Written by hand, capped at 500 characters, and passed to
+  `hack/release` as the release notes argument. This is what F-Droid
+  shows.
+- The **GitHub release notes**, generated during the release by
+  `hack/generate-release-notes`. It asks Gemini to turn the commits
+  since the previous tag into something a reader would want to read,
+  using the hand-written changelog as the summary to lead with.
+
+Without `GEMINI_API_KEY`, or if the request fails, the generated notes
+fall back to the hand-written changelog, so a release is never held up
+by this. The key comes from `pass` under `google/gemini-api` and is
+uploaded to the release environment by `hack/release --sync-secrets`.
+
+The notes can be rewritten after the fact — the body of a release stays
+editable even though its tag and assets do not:
+
+```bash
+GEMINI_API_KEY=$(pass show google/gemini-api) \
+  hack/generate-release-notes --output notes.md v0.2.0
+gh release edit v0.2.0 --notes-file notes.md
+```
+
 ### Never delete a release
 
 Releases are immutable once published, and that goes further than the

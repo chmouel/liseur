@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+
+# Writes the GitHub release notes for a tag, by asking Gemini to turn the
+# commits since the previous tag into something a reader would want to
+# read. Falls back to the F-Droid changelog when there is no API key or
+# the request fails, so a release is never held up by this.
+#
+# The F-Droid changelog stays the canonical short summary: it is capped
+# at 500 characters and written by hand. These notes are the long form.
+
+set -euo pipefail
+
+readonly BUILD_FILE="app/build.gradle.kts"
+readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
+readonly MODEL="gemini-3.6-flash"
+# Roughly the point where the prompt stops being worth the tokens. The
+# commit messages carry the meaning in this repository; the diffstat is
+# only there for scale.
+readonly MAX_PROMPT_BYTES=120000
+
+workdir=""
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+cleanup() {
+    [[ -n "$workdir" ]] && rm -rf "$workdir"
+}
+
+usage() {
+    cat <<'EOF'
+Usage:
+  hack/generate-release-notes [--output FILE] [TAG]
+
+Writes release notes for TAG (the current tag, or the newest one, by
+default) to FILE, or to standard output.
+
+GEMINI_API_KEY enables the generated notes. Without it the F-Droid
+changelog for the release is used instead.
+EOF
+}
+
+changelog_for_tag() {
+    local tag=$1 version_code
+
+    version_code=$(git show "$tag:$BUILD_FILE" 2>/dev/null |
+        sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p')
+    [[ -n "$version_code" ]] || return 1
+
+    git show "$tag:$CHANGELOG_DIR/$version_code.txt" 2>/dev/null
+}
+
+previous_tag() {
+    git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' \
+        "$1^" 2>/dev/null || true
+}
+
+build_prompt() {
+    local range=$1 prompt=$2 changelog=$3
+
+    {
+        cat <<'EOF'
+Write the GitHub release notes for Liseur, an open-source Android EPUB
+books reader and calibre-web client.
+
+Its readers are people who sideload their own books, care about
+typography, and may run a calibre-web server at home. Write for them,
+not for the people who wrote the code.
+
+The maintainer's own summary of this release:
+EOF
+        printf '\n%s\n\n' "$changelog"
+        cat <<'EOF'
+The commits in it, newest first. The messages are written in plain
+language and already say what changed and why, so trust them over the
+file names:
+
+EOF
+        git log --no-color --stat --pretty='--- %s%n%b' "$range"
+    } > "$prompt"
+
+    if [[ $(wc -c < "$prompt") -gt $MAX_PROMPT_BYTES ]]; then
+        local trimmed
+        trimmed=$(mktemp -p "$workdir")
+        head -c "$MAX_PROMPT_BYTES" "$prompt" > "$trimmed"
+        printf '\n[truncated]\n' >> "$trimmed"
+        mv "$trimmed" "$prompt"
+    fi
+
+    cat >> "$prompt" <<'EOF'
+
+Rules:
+
+- Lead with one or two sentences saying what this release is, in the
+  maintainer's voice. No heading above it.
+- Then group what changed under only the headings that earn a line:
+  ### Reading, ### Library, ### calibre-web, ### Fixes, ### Under the
+  hood. Drop any heading with nothing under it.
+- One bullet per thing a reader would notice. Merge commits that add up
+  to a single change into a single bullet.
+- Say what a person can now do, not what a class was renamed to. Never
+  name a file, a class or a function.
+- Leave out dependency bumps, CI, release plumbing and documentation
+  unless they change something a reader would see.
+- Do not invent anything that is not in the commits.
+- No "Contributors" section, no installation instructions, no links.
+- Plain, unexcited prose. No marketing, no emoji, no exclamation marks.
+
+Output only Markdown, with no code fences around it.
+EOF
+}
+
+generate() {
+    local prompt=$1 output=$2
+    local request response
+
+    request=$(mktemp -p "$workdir")
+    response=$(mktemp -p "$workdir")
+
+    jq -n --rawfile prompt "$prompt" \
+        '{contents: [{parts: [{text: $prompt}]}]}' > "$request"
+
+    curl -fsS --max-time 120 \
+        "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent" \
+        -H "Content-Type: application/json" \
+        -H "x-goog-api-key: $GEMINI_API_KEY" \
+        -X POST -d @"$request" > "$response" || return 1
+
+    jq -er '.candidates[0].content.parts | map(.text // "") | join("")
+        | select(length > 0)' "$response" > "$output" || return 1
+}
+
+main() {
+    local output="" tag="${TAG:-}"
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+        --output)
+            output=${2:-}
+            [[ -n "$output" ]] || die "--output needs a file"
+            shift 2
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        -*)
+            usage >&2
+            die "unknown option: $1"
+            ;;
+        *)
+            tag=$1
+            shift
+            ;;
+        esac
+    done
+
+    for command in git jq curl; do
+        command -v "$command" >/dev/null || die "missing required command: $command"
+    done
+
+    if [[ -z "$tag" ]]; then
+        tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*') ||
+            die "no tag to write notes for"
+    fi
+    git rev-parse --verify --quiet "$tag^{commit}" >/dev/null ||
+        die "unknown tag: $tag"
+
+    workdir=$(mktemp -d)
+    trap cleanup EXIT
+
+    local changelog previous range notes
+    changelog=$(changelog_for_tag "$tag") ||
+        die "no F-Droid changelog in $tag"
+    [[ -n "$changelog" ]] || die "the F-Droid changelog in $tag is empty"
+
+    previous=$(previous_tag "$tag")
+    range="$tag"
+    [[ -z "$previous" ]] || range="$previous..$tag"
+
+    notes=$(mktemp -p "$workdir")
+
+    if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+        printf 'No GEMINI_API_KEY: using the changelog.\n' >&2
+        printf '%s\n' "$changelog" > "$notes"
+    else
+        local prompt
+        prompt=$(mktemp -p "$workdir")
+        build_prompt "$range" "$prompt" "$changelog"
+        if ! generate "$prompt" "$notes"; then
+            printf 'Could not generate notes: using the changelog.\n' >&2
+            printf '%s\n' "$changelog" > "$notes"
+        fi
+    fi
+
+    if [[ -n "$output" ]]; then
+        cp "$notes" "$output"
+    else
+        cat "$notes"
+    fi
+}
+
+main "$@"

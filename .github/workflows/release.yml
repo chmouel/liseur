@@ -19,6 +19,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The notes are written from the commits since the previous
+          # tag, so the whole history and every tag has to be here.
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
@@ -39,9 +43,7 @@ jobs:
           grep -Fq "versionName = \"$version\"" app/build.gradle.kts
           version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
             app/build.gradle.kts)
-          notes="fastlane/metadata/android/en-US/changelogs/$version_code.txt"
-          test -s "$notes"
-          printf 'RELEASE_NOTES=%s\n' "$notes" >> "$GITHUB_ENV"
+          test -s "fastlane/metadata/android/en-US/changelogs/$version_code.txt"
 
       - name: Configure release signing
         env:
@@ -76,6 +78,17 @@ jobs:
           release_apk="app/build/outputs/apk/release/liseur-${RELEASE_TAG}.apk"
           mv "$apk" "$release_apk"
           printf 'RELEASE_APK=%s\n' "$release_apk" >> "$GITHUB_ENV"
+
+      - name: Write the release notes
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          hack/generate-release-notes --output "$RUNNER_TEMP/notes.md" \
+            "$RELEASE_TAG"
+          printf 'RELEASE_NOTES=%s\n' "$RUNNER_TEMP/notes.md" >> "$GITHUB_ENV"
+          cat "$RUNNER_TEMP/notes.md"
 
       - name: Publish the release
         env:

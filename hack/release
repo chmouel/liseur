@@ -13,11 +13,13 @@ readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
 readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
 readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
+readonly PASS_GEMINI_KEY="google/gemini-api"
 readonly REQUIRED_SECRETS=(
     LISEUR_KEYSTORE_BASE64
     LISEUR_KEYSTORE_PASSWORD
     LISEUR_KEY_ALIAS
     LISEUR_KEY_PASSWORD
+    GEMINI_API_KEY
 )
 
 usage() {
@@ -105,13 +107,14 @@ sync_release_secrets() {
         return
     fi
 
-    printf 'Uploading the signing key from pass to the release environment.\n'
+    printf 'Uploading the release secrets from pass.\n'
     set_release_secret LISEUR_KEYSTORE_BASE64 "$(pass_show "$PASS_KEYSTORE")"
     set_release_secret LISEUR_KEYSTORE_PASSWORD \
         "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
     set_release_secret LISEUR_KEY_ALIAS "$(pass_show "$PASS_KEY_ALIAS")"
     set_release_secret LISEUR_KEY_PASSWORD \
         "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
+    set_release_secret GEMINI_API_KEY "$(pass_show "$PASS_GEMINI_KEY")"
 }
 
 github_release_is_published() {
