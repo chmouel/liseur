@@ -8,7 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.ThemeMode
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,7 +69,15 @@ class ReaderActivity : FragmentActivity() {
             container.appSettings.settings.collect { volumeKeysTurnPages = it.volumeKeysTurnPages }
         }
         setContent {
-            LiseurTheme {
+            val settings by container.appSettings.settings.collectAsState(initial = AppSettings())
+            LiseurTheme(
+                darkTheme = when (settings.themeMode) {
+                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                },
+                dynamicColor = settings.dynamicColor,
+            ) {
                 val state by viewModel.state.collectAsStateWithLifecycle()
                 when (val s = state) {
                     ReaderViewModel.UiState.Loading ->
