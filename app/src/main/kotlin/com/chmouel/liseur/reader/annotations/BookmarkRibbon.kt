@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -25,16 +26,19 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 
-private val RIBBON_WIDTH = 26.dp
-private val RIBBON_HEIGHT = 46.dp
+private val RIBBON_WIDTH = 14.dp
+private val RIBBON_HEIGHT = 30.dp
 
 /**
  * The bookmark ribbon in the top corner of the page.
  *
  * It hangs into the page when the page is bookmarked and retracts out of
  * sight when it is not, which is both the Kindle gesture and, more usefully,
- * a state you can read at a glance without any chrome being on screen. The
- * whole corner is tappable, not just the drawn ribbon, so it can be hit
+ * a state you can read at a glance without any chrome being on screen.
+ *
+ * Drawn small and hung from the very top edge: it is a marker, not a
+ * decoration, and every pixel it takes is a pixel of page it costs. The
+ * corner around it stays a full-sized tap target so it can still be hit
  * without looking.
  */
 @Composable
@@ -54,8 +58,9 @@ fun BookmarkRibbon(
     )
 
     Box(
+        contentAlignment = Alignment.TopCenter,
         modifier = modifier
-            .size(width = 44.dp, height = 56.dp)
+            .size(width = 44.dp, height = 44.dp)
             .clickable(onClick = onToggle)
             .semantics { contentDescription = label },
     ) {
