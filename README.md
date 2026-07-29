@@ -4,12 +4,47 @@ An open-source EPUB reader and calibre-web client for Android: a modern
 reader that is equally at home with the files on your phone and with a
 [calibre-web](https://github.com/janeczku/calibre-web) server.
 
-<p align="center">
-  <img src="docs/screenshots/01-library.png" width="24%" alt="Library">
-  <img src="docs/screenshots/02-reading.png" width="24%" alt="Reading">
-  <img src="docs/screenshots/04-typography.png" width="24%" alt="Typography">
-  <img src="docs/screenshots/06-settings.png" width="24%" alt="Settings">
-</p>
+<table>
+  <tr>
+    <td width="25%"><img src="docs/screenshots/01-library.png" alt="Library"></td>
+    <td width="25%"><img src="docs/screenshots/02-reading.png" alt="Reading"></td>
+    <td width="25%"><img src="docs/screenshots/03-chrome.png" alt="Reading controls"></td>
+    <td width="25%"><img src="docs/screenshots/04-typography.png" alt="Typography"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The shelf, with whatever you were last reading on top.</sub></td>
+    <td align="center"><sub>A full page of text, a highlight, a bookmark ribbon.</sub></td>
+    <td align="center"><sub>Tap the middle for progress, the scrubber and time left.</sub></td>
+    <td align="center"><sub>Reading themes, fonts, size, spacing, brightness.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/05-contents.png" alt="Contents"></td>
+    <td><img src="docs/screenshots/06-highlights.png" alt="Highlights"></td>
+    <td><img src="docs/screenshots/07-search.png" alt="Search"></td>
+    <td><img src="docs/screenshots/08-settings.png" alt="Settings"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Contents on a full screen, so long books stay navigable.</sub></td>
+    <td align="center"><sub>Everything you marked up, exportable as Markdown.</sub></td>
+    <td align="center"><sub>Search the whole book, with a snippet around each hit.</sub></td>
+    <td align="center"><sub>Theme, volume keys, and where your books come from.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/09-calibre.png" alt="calibre-web setup"></td>
+    <td><img src="docs/screenshots/10-library-dark.png" alt="Library in dark mode"></td>
+    <td><img src="docs/screenshots/11-reading-dark.png" alt="Reading in the dark theme"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>An address, a username, a password. Liseur works out the rest.</sub></td>
+    <td align="center"><sub>The same shelf after dark.</sub></td>
+    <td align="center"><sub>The Dark page theme, chosen separately from the app's.</sub></td>
+    <td></td>
+  </tr>
+</table>
+
+<sub>Screenshots use <a href="https://standardebooks.org">Standard Ebooks</a>
+editions, which are in the public domain.</sub>
 
 ## What it does
 
@@ -30,7 +65,7 @@ left in the book, page, or percentage; tap it to cycle. A scrubber with
 chapter ticks, and a pill that takes you back if you jumped somewhere by
 accident.
 
-**Marking up.** Highlights in five colours, notes, bookmarks with a
+**Marking up.** Highlights in four colours, notes, bookmarks with a
 Kindle-style corner ribbon, and a notebook of everything you have marked
 in a book, exportable as Markdown.
 

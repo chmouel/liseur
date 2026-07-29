@@ -8,9 +8,19 @@
 #   hack/screenshots                 # use the only attached device
 #   hack/screenshots emulator-5554   # pick one explicitly
 #
-# The app must already be installed, have at least one book in its library,
-# and be signed in to a calibre-web server if you want the cloud badges to
-# show. Nothing here writes to a server.
+# What the device needs first:
+#
+#   * the app installed, with a library folder granted;
+#   * books whose covers can be published — the shelf ends up in the README
+#     and on F-Droid, so use public domain editions (Standard Ebooks is
+#     ideal) rather than whatever you happen to own;
+#   * the book that sorts first must be part-read and carry a few
+#     highlights, notes and bookmarks, because the notebook screens are
+#     captured from it;
+#   * calibre-web signed out, unless your server holds only books you are
+#     willing to publish a picture of.
+#
+# Nothing here writes to a server.
 
 set -euo pipefail
 
@@ -51,6 +61,23 @@ x() { printf '%.0f' "$(awk "BEGIN { print $width * $1 }")"; }
 y() { printf '%.0f' "$(awk "BEGIN { print $height * $1 }")"; }
 
 tap() { adb shell input tap "$(x "$1")" "$(y "$2")"; }
+back() { adb shell input keyevent KEYCODE_BACK; }
+
+# Landmarks, as fractions of the display.
+readonly TOP_BAR=0.092          # every top bar sits at the same height
+readonly LIB_FIRST_BOOK_X=0.18  # the first cover on the shelf
+readonly LIB_FIRST_BOOK_Y=0.32
+readonly LIB_SETTINGS_X=0.698
+readonly READER_SEARCH_X=0.696
+readonly READER_TYPOGRAPHY_X=0.815
+readonly READER_CONTENTS_X=0.932
+readonly SHEET_CLOSE_X=0.070
+readonly TABS_Y=0.152
+readonly TAB_HIGHLIGHTS_X=0.623
+readonly THEME_SWATCH_Y=0.614
+readonly THEME_LIGHT_X=0.126
+readonly THEME_DARK_X=0.476
+readonly SETTINGS_CALIBRE_Y=0.868
 
 command -v adb >/dev/null || die "adb is not installed"
 adb shell pm path "$APP_ID" >/dev/null 2>&1 || die "$APP_ID is not installed"
@@ -70,67 +97,124 @@ adb shell am broadcast -a com.android.systemui.demo -e command network \
 adb shell am broadcast -a com.android.systemui.demo -e command battery \
     -e level 100 -e plugged false >/dev/null
 
-restore_status_bar() {
+restore_device() {
     adb shell am broadcast -a com.android.systemui.demo -e command exit >/dev/null || true
+    adb shell cmd uimode night no >/dev/null || true
 }
-trap restore_status_bar EXIT
+trap restore_device EXIT
 
-adb shell am force-stop "$APP_ID"
-adb shell am start -n "$MAIN_ACTIVITY" >/dev/null
-sleep 8
+open_library() {
+    adb shell am force-stop "$APP_ID"
+    adb shell am start -n "$MAIN_ACTIVITY" >/dev/null
+    sleep 8
+    # The app opens on the book you were reading; step back to the shelf.
+    if adb shell dumpsys activity activities | grep -q 'ReaderActivity.*t[0-9]'; then
+        back
+        sleep 3
+    fi
+}
 
-# The library may auto-resume into the last book; get back to the shelf.
-if adb shell dumpsys activity activities | grep -q 'ReaderActivity.*t[0-9]'; then
-    adb shell input keyevent KEYCODE_BACK
+# The first book on the shelf is the one read most recently, which is also
+# the one carrying the annotations, and it reopens where it was left.
+open_book() {
+    tap "$LIB_FIRST_BOOK_X" "$LIB_FIRST_BOOK_Y"
+    sleep 10
+}
+
+show_chrome() {
+    tap 0.5 0.5
+    sleep 2
+}
+
+# Pick a reading theme by its swatch in the typography sheet. Doing this
+# explicitly rather than trusting whatever the device was left on is what
+# keeps a rerun from quietly capturing the light set on a dark page.
+choose_reading_theme() {
+    local swatch_x=$1
+    tap "$READER_TYPOGRAPHY_X" "$TOP_BAR"
     sleep 3
-fi
+    tap "$swatch_x" "$THEME_SWATCH_Y"
+    sleep 2
+    back
+    sleep 2
+}
 
+printf 'Light\n'
+
+open_library
 shot 01-library
 
-# Into a book, and a few pages in: the first page of an EPUB is usually
-# the cover, which says nothing about how the app renders text.
-tap 0.18 0.48
-sleep 9
-for _ in 1 2 3 4 5 6; do
-    tap 0.85 0.5
-    sleep 1
-done
-sleep 2
+open_book
+show_chrome
+choose_reading_theme "$THEME_LIGHT_X"
+show_chrome
 shot 02-reading
 
-tap 0.5 0.5
-sleep 2
+show_chrome
 shot 03-chrome
 
-# Typography sheet, from the "Aa" button in the reader's top bar.
-tap 0.815 0.092
+tap "$READER_TYPOGRAPHY_X" "$TOP_BAR"
 sleep 3
 shot 04-typography
-
-adb shell input keyevent KEYCODE_BACK
+back
 sleep 2
 
-# Table of contents.
-tap 0.930 0.092
+tap "$READER_CONTENTS_X" "$TOP_BAR"
 sleep 3
 shot 05-contents
 
-adb shell input keyevent KEYCODE_BACK
+tap "$TAB_HIGHLIGHTS_X" "$TABS_Y"
 sleep 2
-adb shell input keyevent KEYCODE_BACK
+shot 06-highlights
+tap "$SHEET_CLOSE_X" "$TOP_BAR"
 sleep 3
 
-# Settings.
-tap 0.698 0.092
+# In-book search, with a word common enough to fill the results.
+tap "$READER_SEARCH_X" "$TOP_BAR"
 sleep 3
-shot 06-settings
-
-adb shell input keyevent KEYCODE_BACK
+adb shell input text "whale"
+sleep 1
+adb shell input keyevent KEYCODE_ENTER
+sleep 6
+# Drop the keyboard so the results, not the letters, fill the screen.
+back
 sleep 2
+shot 07-search
+back
+sleep 3
+
+open_library
+tap "$LIB_SETTINGS_X" "$TOP_BAR"
+sleep 3
+shot 08-settings
+
+tap 0.5 "$SETTINGS_CALIBRE_Y"
+sleep 3
+shot 09-calibre
+
+printf 'Dark\n'
+
+adb shell cmd uimode night yes >/dev/null
+sleep 2
+
+open_library
+shot 10-library-dark
+
+open_book
+show_chrome
+choose_reading_theme "$THEME_DARK_X"
+# Hide the chrome again: the point of this one is the page itself.
+show_chrome
+sleep 2
+shot 11-reading-dark
+
+# Put the reading theme back, so a rerun starts from the same place.
+show_chrome
+choose_reading_theme "$THEME_LIGHT_X"
 
 printf 'Copying the F-Droid set\n'
 i=1
-for name in 01-library 02-reading 04-typography 06-settings; do
+for name in 01-library 02-reading 06-highlights 04-typography 11-reading-dark 08-settings; do
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
     printf '  %s/%s.png\n' "$FASTLANE_DIR" "$i"
     i=$((i + 1))

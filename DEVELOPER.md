@@ -222,10 +222,16 @@ hack/screenshots            # docs/screenshots + fastlane phoneScreenshots
 hack/icon                   # fastlane icon.png, from the vector drawables
 ```
 
-`hack/screenshots` drives a connected device through adb, so it needs the
-app installed with a few books in its library — and its output is worth
-looking at before committing, because a changed layout can silently
-produce the wrong screen.
+`hack/screenshots` drives a connected device through adb, so the device
+has to be prepared first: the app installed with a library folder
+granted, a shelf of books whose covers are safe to publish (the
+[Standard Ebooks](https://standardebooks.org) public domain editions are
+what the current set uses), the most recently read book carrying a few
+highlights, notes and bookmarks, and calibre-web signed out unless your
+server holds only books you would publish a picture of. It captures a
+light set and a dark set, and its output is worth looking at before
+committing, because a changed layout can silently produce the wrong
+screen.
 
 ## F-Droid readiness
 
