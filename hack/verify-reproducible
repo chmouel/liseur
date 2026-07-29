@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+
+# Builds the release APK twice from two independent clean checkouts and
+# compares the results byte for byte. F-Droid rebuilds from source and
+# refuses to publish a build that does not match, so this is the check
+# that has to pass before submitting.
+#
+# The two checkouts live at different paths on purpose: an absolute path
+# leaking into the APK is the most common reason a build is not
+# reproducible.
+
+set -euo pipefail
+
+readonly APK_DIR="app/build/outputs/apk/release"
+
+workdir=""
+keep=false
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+cleanup() {
+    if [[ -n "$workdir" && "$keep" == false ]]; then
+        rm -rf "$workdir"
+    elif [[ -n "$workdir" ]]; then
+        printf '\nBuilds left in %s\n' "$workdir"
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+Usage:
+  hack/verify-reproducible [--keep] [REVISION]
+
+Builds the release APK twice from clean checkouts of REVISION (HEAD by
+default) and reports whether the two are identical.
+
+Options:
+  --keep  Leave both checkouts and APKs behind for inspection.
+EOF
+}
+
+require_command() {
+    command -v "$1" >/dev/null || die "missing required command: $1"
+}
+
+build_once() {
+    local dest=$1 revision=$2
+
+    git clone --quiet --shared . "$dest"
+    git -C "$dest" checkout --quiet "$revision"
+
+    # local.properties is not committed, and a clean checkout has no way
+    # to find the SDK without it.
+    if [[ -f local.properties ]]; then
+        cp local.properties "$dest/local.properties"
+    fi
+
+    (cd "$dest" && ./gradlew --quiet --no-daemon assembleRelease) ||
+        die "the build in $dest failed"
+}
+
+# F-Droid builds and signs the APK itself, so the unsigned one is what
+# has to match. A local keystore.properties would produce a signed APK
+# instead, which is not what is being checked.
+apk_in() {
+    local dest=$1
+    local apk="$dest/$APK_DIR/app-release-unsigned.apk"
+
+    [[ -f "$apk" ]] ||
+        die "no unsigned APK in $dest/$APK_DIR: move keystore.properties aside"
+    printf '%s' "$apk"
+}
+
+# Lists every entry in the APK with its uncompressed hash, so that a
+# report can say which file differs rather than only that one does.
+entry_hashes() {
+    local apk=$1 extracted
+    extracted=$(mktemp -d)
+    unzip -qq -o -d "$extracted" "$apk"
+    (cd "$extracted" && find . -type f -print0 | sort -z |
+        xargs -0 sha256sum)
+    rm -rf "$extracted"
+}
+
+report_difference() {
+    local first=$1 second=$2
+
+    printf '\nThe two builds are NOT identical.\n\n'
+
+    printf 'Entries that differ:\n'
+    diff <(entry_hashes "$first") <(entry_hashes "$second") |
+        sed -nE 's/^[<>] [0-9a-f]+ +\.\/(.*)$/  \1/p' | sort -u
+
+    printf '\nZip metadata that differs (timestamps, order, compression):\n'
+    diff <(unzip -v "$first" | awk '{$2=$3=$4=""; print}') \
+        <(unzip -v "$second" | awk '{$2=$3=$4=""; print}') |
+        head -40 || true
+
+    printf '\nCommon causes: a timestamp baked into a resource, an\n'
+    printf 'absolute path from the build machine, or a dependency\n'
+    printf 'resolved to a different version between the two runs.\n'
+}
+
+main() {
+    local revision=HEAD
+    local first second apk_first apk_second sum_first sum_second
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+        --keep)
+            keep=true
+            shift
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        -*)
+            usage >&2
+            die "unknown option: $1"
+            ;;
+        *)
+            revision=$1
+            shift
+            ;;
+        esac
+    done
+
+    require_command git
+    require_command unzip
+    require_command sha256sum
+
+    git rev-parse --git-dir >/dev/null 2>&1 ||
+        die "run this from the Liseur checkout"
+    git rev-parse --verify --quiet "$revision" >/dev/null ||
+        die "unknown revision: $revision"
+
+    if [[ -n "$(git status --porcelain)" ]]; then
+        printf 'warning: uncommitted changes will not be part of the\n'
+        printf 'builds, which start from %s as committed.\n\n' "$revision"
+    fi
+
+    workdir=$(mktemp -d -t liseur-reproducible-XXXXXX)
+    trap cleanup EXIT
+
+    # Deliberately different lengths, so a path baked into the APK
+    # changes its size and not only its contents.
+    first="$workdir/build-one"
+    second="$workdir/a-rather-longer-second-build"
+
+    printf 'Building %s twice. This takes a few minutes.\n' \
+        "$(git rev-parse --short "$revision")"
+
+    printf '  first build...\n'
+    build_once "$first" "$revision"
+    printf '  second build...\n'
+    build_once "$second" "$revision"
+
+    apk_first=$(apk_in "$first")
+    apk_second=$(apk_in "$second")
+
+    sum_first=$(sha256sum <"$apk_first" | cut -d' ' -f1)
+    sum_second=$(sha256sum <"$apk_second" | cut -d' ' -f1)
+
+    printf '\n  %s  first\n  %s  second\n' "$sum_first" "$sum_second"
+
+    if [[ "$sum_first" == "$sum_second" ]]; then
+        printf '\nThe two builds are identical.\n'
+        return 0
+    fi
+
+    report_difference "$apk_first" "$apk_second"
+    return 1
+}
+
+main "$@"

@@ -258,5 +258,19 @@ screen.
 - **The build needs no network beyond Gradle dependencies** and no
   signing config: `assembleRelease` on a clean checkout produces an
   unsigned APK, which is what F-Droid builds and signs itself.
+- **The build is reproducible.** F-Droid rebuilds from source and will
+  not publish a build it cannot reproduce, so `hack/verify-reproducible`
+  builds the release APK twice from two clean checkouts at deliberately
+  different paths and compares the two byte for byte:
+
+  ```bash
+  hack/verify-reproducible          # HEAD
+  hack/verify-reproducible v0.2.0   # a tag, before submitting it
+  ```
+
+  If they differ it names the entries responsible, which is usually a
+  timestamp baked into a resource or an absolute build path that leaked
+  in. Run it before every release. Move `keystore.properties` aside
+  first if you have one: the check compares the unsigned APK.
 - Remaining step, deliberately not done yet: opening the RFP / metadata
   merge request against `fdroiddata`.
