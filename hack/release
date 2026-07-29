@@ -7,6 +7,8 @@ readonly APP_ID="com.chmouel.liseur"
 readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
 readonly FDROID_BRANCH="$APP_ID"
 readonly BUILD_FILE="app/build.gradle.kts"
+readonly RELEASE_WAIT_SECONDS=1800
+readonly RELEASE_POLL_SECONDS=20
 readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
 readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
@@ -112,10 +114,6 @@ sync_release_secrets() {
         "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
 }
 
-github_release_exists() {
-    gh release view "$1" --repo "$GH_REPO" >/dev/null 2>&1
-}
-
 github_release_is_published() {
     local release is_draft published_at
     release=$(gh release view "$1" --repo "$GH_REPO" \
@@ -123,6 +121,45 @@ github_release_is_published() {
     is_draft=$(printf '%s' "$release" | jq -r .isDraft)
     published_at=$(printf '%s' "$release" | jq -r .publishedAt)
     [[ "$is_draft" == false && "$published_at" != null ]]
+}
+
+# Pushing the tag starts the release workflow, which builds and signs the
+# APK and only then creates the release, because a published release is
+# immutable and cannot be given an APK afterwards. So there is nothing to
+# do here but wait for it, and say what it is waiting on.
+wait_for_github_release() {
+    local tag=$1
+    local waited=0 announced=false
+
+    if github_release_is_published "$tag"; then
+        printf 'GitHub: release %s already exists.\n' "$tag"
+        return
+    fi
+
+    printf 'GitHub: %s is building. This takes a few minutes.\n' "$tag"
+    while (( waited < RELEASE_WAIT_SECONDS )); do
+        if github_release_is_published "$tag"; then
+            printf 'GitHub: published %s.\n' "$tag"
+            return
+        fi
+        if [[ "$announced" == false ]] && release_run_is_waiting "$tag"; then
+            printf 'GitHub: the release environment needs approving:\n  %s\n' \
+                "https://github.com/$GH_REPO/actions"
+            announced=true
+        fi
+        sleep "$RELEASE_POLL_SECONDS"
+        waited=$((waited + RELEASE_POLL_SECONDS))
+    done
+
+    die "timed out waiting for the $tag release; see https://github.com/$GH_REPO/actions"
+}
+
+release_run_is_waiting() {
+    local status
+    status=$(gh api "repos/$GH_REPO/actions/runs?event=push&per_page=5" \
+        --jq ".workflow_runs[] | select(.head_branch == \"$1\") | .status" \
+        2>/dev/null | head -n 1) || return 1
+    [[ "$status" == waiting || "$status" == action_required ]]
 }
 
 update_fdroid_submission() (
@@ -458,15 +495,7 @@ release_version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
 [[ "$release_version" == "$version" && -n "$release_version_code" ]] ||
     die "$tag does not contain app version $version"
 
-if github_release_is_published "$tag"; then
-    printf 'GitHub: release %s already exists.\n' "$tag"
-elif github_release_exists "$tag"; then
-    die "GitHub release $tag exists but is still a draft"
-else
-    gh release create "$tag" --repo "$GH_REPO" --verify-tag \
-        --title "Liseur $tag" --notes-file "$changelog_path"
-    printf 'GitHub: published %s; approve the release environment deployment to build the APK.\n' "$tag"
-fi
+wait_for_github_release "$tag"
 
 if [[ "$skip_fdroid" == true ]]; then
     printf 'F-Droid: skipped; run --fdroid-only %s once the metadata is up.\n' \
