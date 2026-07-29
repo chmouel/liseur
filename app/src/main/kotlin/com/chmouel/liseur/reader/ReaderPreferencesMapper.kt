@@ -26,8 +26,13 @@ fun ReaderPrefs.toEpubPreferences(): EpubPreferences =
             ReaderTheme.SEPIA -> Theme.SEPIA
             ReaderTheme.DARK, ReaderTheme.BLACK -> Theme.DARK
         },
-        backgroundColor = if (theme == ReaderTheme.BLACK) Color(theme.background.toArgb()) else null,
-        textColor = if (theme == ReaderTheme.BLACK) Color(theme.foreground.toArgb()) else null,
+        // Readium's own palette is close to ours but not identical (its sepia
+        // is #FAF4E8 against our #F6EFDF, its dark #000000 against our
+        // #1F1F1F). The page is inset from the screen edges, so any
+        // difference shows up as bands above and below the text. Pass our
+        // colours for every theme so the two always match.
+        backgroundColor = Color(theme.background.toArgb()),
+        textColor = Color(theme.foreground.toArgb()),
         lineHeight = lineHeight,
         pageMargins = pageMargins,
         // Readium CSS only applies font-size and advanced settings (line
