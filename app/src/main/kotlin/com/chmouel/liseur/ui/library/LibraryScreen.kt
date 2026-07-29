@@ -41,6 +41,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import kotlinx.coroutines.flow.Flow
@@ -86,6 +88,9 @@ fun LibraryScreen(
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
     onSetFinished: (Book, Boolean) -> Unit,
+    onDeleteLocal: (Book) -> Unit,
+    onDeleteFromServer: (Book) -> Unit,
+    deleteFailures: Flow<Book>,
     onRefresh: () -> Unit,
     onDownloadAndOpen: (Book) -> Unit,
     failedOpens: Flow<Book>,
@@ -97,11 +102,16 @@ fun LibraryScreen(
     val downloading = stringResource(R.string.download_in_progress)
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     var sheetBook by remember { mutableStateOf<Book?>(null) }
+    var confirmServerDelete by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
     val notYetHere = stringResource(R.string.book_not_downloaded)
     val credentialsLost = stringResource(R.string.calibre_credentials_lost)
 
     val downloadFailed = stringResource(R.string.download_failed_open)
+    val deleteFailed = stringResource(R.string.delete_from_server_failed)
+    LaunchedEffect(deleteFailures) {
+        deleteFailures.collect { snackbarHost.showSnackbar(deleteFailed.format(it.title)) }
+    }
     LaunchedEffect(failedOpens) {
         failedOpens.collect { book ->
             onPendingOpenHandled()
@@ -180,6 +190,32 @@ fun LibraryScreen(
         }
     }
 
+    confirmServerDelete?.let { book ->
+        AlertDialog(
+            onDismissRequest = { confirmServerDelete = null },
+            title = { Text(stringResource(R.string.delete_from_server)) },
+            text = { Text(stringResource(R.string.delete_from_server_warning, book.title)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteFromServer(book)
+                        confirmServerDelete = null
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmServerDelete = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     sheetBook?.let { book ->
         BookActionsSheet(
             book = book,
@@ -190,6 +226,8 @@ fun LibraryScreen(
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
             onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
             onSetFinished = { onSetFinished(book, it); sheetBook = null },
+            onDeleteLocal = { onDeleteLocal(book); sheetBook = null },
+            onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
         )
     }
 }
@@ -206,6 +244,8 @@ private fun BookActionsSheet(
     onCancelDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
     onSetFinished: (Boolean) -> Unit,
+    onDeleteLocal: () -> Unit,
+    onDeleteFromServer: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 32.dp)) {
@@ -231,7 +271,7 @@ private fun BookActionsSheet(
                         onClick = onRemoveDownload,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(stringResource(R.string.remove_download))
+                        Text(stringResource(R.string.remove_copy_on_device))
                     }
 
                 book.remoteUuid != null -> Button(
@@ -244,6 +284,12 @@ private fun BookActionsSheet(
 
                 else -> Unit
             }
+            if (book.remoteUuid == null) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onDeleteLocal, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.delete_file))
+                }
+            }
             Spacer(Modifier.height(8.dp))
             TextButton(
                 onClick = { onSetFinished(!book.finished) },
@@ -254,6 +300,17 @@ private fun BookActionsSheet(
                         if (book.finished) R.string.mark_unread else R.string.mark_read,
                     ),
                 )
+            }
+            if (book.remoteUuid != null) {
+                // Kept apart from the others on purpose: everything above
+                // touches this device only, this one reaches the server.
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                TextButton(onClick = onDeleteFromServer, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.delete_from_server),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }

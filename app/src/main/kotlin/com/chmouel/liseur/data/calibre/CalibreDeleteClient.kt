@@ -1,0 +1,59 @@
+package com.chmouel.liseur.data.calibre
+
+import android.util.Log
+import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.FormBody
+
+/** How deleting a book from the server went. */
+sealed interface ServerDeleteResult {
+    data object Deleted : ServerDeleteResult
+
+    /** The account cannot delete books, or the server said no. */
+    data object NotAllowed : ServerDeleteResult
+
+    data class Failed(val message: String?) : ServerDeleteResult
+}
+
+/**
+ * Deletes a book from calibre-web itself.
+ *
+ * Neither OPDS nor the Kobo API can do this — calibre-web only exposes it
+ * through the web UI — so this posts to the same route the Delete button in
+ * a browser does, with a session cookie and a CSRF token.
+ */
+class CalibreDeleteClient {
+
+    suspend fun delete(
+        baseUrl: String,
+        username: String,
+        password: String,
+        remoteBookId: Int,
+    ): ServerDeleteResult = withContext(Dispatchers.IO) {
+        val session = CalibreWebSession.logIn(baseUrl, username, password)
+            ?: return@withContext ServerDeleteResult.Failed(null)
+        val csrf = session.csrfToken()
+        try {
+            val url = CalibreUrl.resolve(baseUrl, "/delete/$remoteBookId")
+            val request = session.http.request(url, null)
+                .apply { csrf?.let { header("X-CSRFToken", it) } }
+                .post(FormBody.Builder().build())
+                .build()
+            session.http.client.newCall(request).execute().use { response ->
+                when {
+                    response.isSuccessful -> ServerDeleteResult.Deleted
+                    response.code == 401 || response.code == 403 -> ServerDeleteResult.NotAllowed
+                    else -> ServerDeleteResult.Failed("HTTP ${response.code}")
+                }
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not delete the book on the server", e)
+            ServerDeleteResult.Failed(e.message)
+        }
+    }
+
+    private companion object {
+        const val TAG = "CalibreDelete"
+    }
+}

@@ -200,17 +200,6 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
         null
     }
 
-    /** Holds the login session for the few requests it takes to read the token. */
-    private class SessionCookieJar : CookieJar {
-        private val cookies = mutableMapOf<String, Cookie>()
-
-        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            cookies.forEach { this.cookies[it.name] = it }
-        }
-
-        override fun loadForRequest(url: HttpUrl): List<Cookie> = cookies.values.toList()
-    }
-
     private companion object {
         const val TAG = "CalibreSetup"
     }

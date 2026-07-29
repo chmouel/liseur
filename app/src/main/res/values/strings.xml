@@ -115,4 +115,10 @@
     <string name="mark_read">Mark as read</string>
     <string name="mark_unread">Mark as unread</string>
     <string name="book_finished">Read</string>
+    <string name="remove_copy_on_device">Remove the copy on this device</string>
+    <string name="delete_file">Delete file</string>
+    <string name="delete_from_server">Delete from server</string>
+    <string name="delete_from_server_warning">“%1$s” will be deleted from calibre-web itself, for every device. This cannot be undone.</string>
+    <string name="delete_from_server_failed">Could not delete “%1$s” from the server.</string>
+    <string name="delete">Delete</string>
 </resources>

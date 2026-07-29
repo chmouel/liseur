@@ -11,6 +11,7 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
 import com.chmouel.liseur.data.calibre.DownloadProgress
+import com.chmouel.liseur.data.calibre.ServerDeleteResult
 import com.chmouel.liseur.data.calibre.CatalogStatus
 import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.db.Book
@@ -20,6 +21,7 @@ import com.chmouel.liseur.data.library.LocalLibraryRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.chmouel.liseur.data.db.CalibreServer
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
@@ -85,6 +87,11 @@ class LibraryViewModel(
                 .take(1)
         }
     }
+
+    private val _deleteFailures = MutableSharedFlow<Book>(extraBufferCapacity = 1)
+
+    /** Books the server refused to delete, so the library can say so. */
+    val deleteFailures: Flow<Book> = _deleteFailures
 
     private val _refreshing = MutableStateFlow(false)
     private var lastScanAt = 0L
@@ -183,6 +190,25 @@ class LibraryViewModel(
 
     fun removeDownload(book: Book) {
         viewModelScope.launch { downloads.removeDownload(book) }
+    }
+
+    /** Deletes a local book's file and drops it from the library. */
+    fun deleteLocalBook(book: Book) {
+        viewModelScope.launch { downloads.deleteLocalBook(book) }
+    }
+
+    /** Deletes the book from calibre-web itself. */
+    fun deleteFromServer(book: Book) {
+        viewModelScope.launch {
+            val server = account.current()
+            val credentials = account.credentials()
+            val result = if (server == null || credentials == null) {
+                ServerDeleteResult.Failed(null)
+            } else {
+                downloads.deleteFromServer(book, server.baseUrl, credentials)
+            }
+            if (result !is ServerDeleteResult.Deleted) _deleteFailures.emit(book)
+        }
     }
 
     fun setFinished(book: Book, finished: Boolean) {

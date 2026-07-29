@@ -2,6 +2,8 @@ package com.chmouel.liseur.data.calibre
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
+import androidx.core.net.toUri
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.Data
@@ -28,6 +30,7 @@ data class StorageUse(val count: Int, val bytes: Long)
 class BookDownloadRepository(
     private val context: Context,
     private val bookDao: BookDao,
+    private val deleteClient: CalibreDeleteClient = CalibreDeleteClient(),
 ) {
     private val workManager get() = WorkManager.getInstance(context)
 
@@ -90,6 +93,44 @@ class BookDownloadRepository(
         File(booksDir(), "$uuid.epub.part").delete()
         File(booksDir(), "$uuid.epub.etag").delete()
         bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
+    }
+
+    /**
+     * Deletes a book from calibre-web and forgets it here.
+     *
+     * Everything else in the app only ever removes a copy; this is the one
+     * action that reaches the server, so it is the only one that can lose
+     * the book for good.
+     */
+    suspend fun deleteFromServer(
+        book: Book,
+        baseUrl: String,
+        credentials: CalibreCredentials,
+    ): ServerDeleteResult {
+        val remoteId = book.remoteBookId ?: return ServerDeleteResult.Failed(null)
+        val result = deleteClient.delete(
+            baseUrl = baseUrl,
+            username = credentials.username,
+            password = credentials.password,
+            remoteBookId = remoteId,
+        )
+        if (result is ServerDeleteResult.Deleted) {
+            book.remoteUuid?.let { fileFor(it).delete() }
+            bookDao.deleteByUrls(listOf(book.url))
+        }
+        return result
+    }
+
+    /**
+     * Removes a book that came from a folder or a single import. The file
+     * goes if we are allowed to delete it; the library row goes either way,
+     * and a folder rescan will not bring back a file that is really gone.
+     */
+    suspend fun deleteLocalBook(book: Book) {
+        val uri = (book.localUri ?: book.url).toUri()
+        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            .onFailure { runCatching { uri.path?.let { File(it).delete() } } }
+        bookDao.deleteByUrls(listOf(book.url))
     }
 
     fun booksDir(): File = File(context.filesDir, "books").apply { mkdirs() }
