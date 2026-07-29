@@ -19,6 +19,23 @@ sealed interface SyncScope {
 }
 
 /**
+ * What the coordinator needs a sync to be able to do.
+ *
+ * Named separately from [KoboSyncRepository] so the ordering rules below
+ * — which are the trickiest concurrency in the app — can be tested
+ * without a database, a server, or a device.
+ */
+interface PositionSync {
+    suspend fun syncAll(): SyncOutcome
+    suspend fun syncBook(bookUrl: String): SyncOutcome
+    suspend fun canSync(bookUrl: String): Boolean
+    suspend fun previewBook(bookUrl: String): PreviewOutcome
+    suspend fun preservedConflict(bookUrl: String): SyncPreview?
+    suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome
+    suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome
+}
+
+/**
  * Runs one reading-position sync at a time, and lets callers wait for
  * the answer.
  *
@@ -37,7 +54,7 @@ sealed interface SyncScope {
  * Two identical requests waiting at the same time share one run, because
  * otherwise they would do the same work twice in a row.
  */
-class PositionSyncCoordinator(private val sync: KoboSyncRepository) {
+class PositionSyncCoordinator(private val sync: PositionSync) {
     /** Held for the duration of a run, so only one happens at a time. */
     private val turn = Mutex()
 

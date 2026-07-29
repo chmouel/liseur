@@ -16,6 +16,7 @@ import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.reconcileReadingState
+import com.chmouel.liseur.sync.PositionSync
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -162,7 +163,7 @@ class KoboSyncRepository(
     private val client: KoboClient = KoboClient(),
     private val finishedState: FinishedState,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
-) {
+) : PositionSync {
     private val _status = MutableStateFlow<PositionSyncStatus>(PositionSyncStatus.Idle)
     val status: StateFlow<PositionSyncStatus> = _status.asStateFlow()
 
@@ -170,13 +171,13 @@ class KoboSyncRepository(
     val report: StateFlow<SyncReport> = _report.asStateFlow()
 
     /** Reconciles every book that has a position on either side. */
-    suspend fun syncAll(): SyncOutcome = run(book = null)
+    override suspend fun syncAll(): SyncOutcome = run(book = null)
 
     /** Reconciles one book, for the moments someone is waiting on it. */
-    suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)
+    override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)
 
     /** Whether this book has anywhere to sync to, so the action can stay hidden. */
-    suspend fun canSync(bookUrl: String): Boolean {
+    override suspend fun canSync(bookUrl: String): Boolean {
         val server = serverDao.get() ?: return false
         if (server.koboToken == null) return false
         return bookDao.getByUrl(bookUrl)?.remoteUuid != null
@@ -197,7 +198,7 @@ class KoboSyncRepository(
      * later — or not choosing, and coming back to it — works even if the
      * app is killed in between.
      */
-    suspend fun previewBook(bookUrl: String): PreviewOutcome {
+    override suspend fun previewBook(bookUrl: String): PreviewOutcome {
         val server = serverDao.get() ?: return PreviewOutcome.NotSynced
         val token = server.koboToken ?: return PreviewOutcome.NotSynced
         val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return PreviewOutcome.NotSynced
@@ -242,7 +243,7 @@ class KoboSyncRepository(
      * preserved came from a different account, or when the two sides
      * turn out to agree after all.
      */
-    suspend fun preservedConflict(bookUrl: String): SyncPreview? {
+    override suspend fun preservedConflict(bookUrl: String): SyncPreview? {
         val server = serverDao.get() ?: return null
         if (server.koboToken == null) return null
         val stored = progressDao.get(bookUrl) ?: return null
@@ -262,7 +263,7 @@ class KoboSyncRepository(
      * Still refuses if a page was turned in between, since that page turn
      * is newer than the choice being acted on.
      */
-    suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
+    override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
         val progression = stored.pendingProgression ?: return ResolveOutcome.Done
@@ -284,7 +285,7 @@ class KoboSyncRepository(
      * Sends this device's position for one book, because someone said to,
      * and stops the server's answer from being offered again.
      */
-    suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+    override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val token = server.koboToken ?: return ResolveOutcome.Done
         val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return ResolveOutcome.Done

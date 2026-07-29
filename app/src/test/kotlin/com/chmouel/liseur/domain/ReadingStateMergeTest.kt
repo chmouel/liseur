@@ -150,6 +150,19 @@ class ReadingStateMergeTest {
     }
 
     @Test
+    fun `an older clock does not lose a conflict either`() {
+        // The same skew the other way round. A server whose clock lags
+        // ours must not make its position look stale enough to discard.
+        val decision = reconcileReadingState(
+            local = state(0.6, at = 9_999_999L),
+            remote = state(0.8, at = 10L),
+            baseline = baseline(0.3),
+            localDirty = true,
+        )
+        (decision as SyncDecision.Conflict)
+    }
+
+    @Test
     fun `no baseline and a divergent server is a conflict, not a guess`() {
         val decision = reconcileReadingState(
             local = state(0.6),
