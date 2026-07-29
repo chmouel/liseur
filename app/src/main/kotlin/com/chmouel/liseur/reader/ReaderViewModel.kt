@@ -6,7 +6,11 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.chmouel.liseur.R
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.calibre.PreviewOutcome
+import com.chmouel.liseur.data.calibre.ResolveOutcome
+import com.chmouel.liseur.data.calibre.SyncPreview
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
@@ -26,6 +30,7 @@ import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.exportNotebookMarkdown
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
@@ -40,6 +45,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -108,6 +114,144 @@ class ReaderViewModel(
      */
     private val _selectionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val selectionRequests: SharedFlow<Unit> = _selectionRequests.asSharedFlow()
+
+    /**
+     * Where syncing this one book has got to, when someone has asked
+     * about it from the Navigate screen.
+     */
+    sealed interface BookSync {
+        data object Idle : BookSync
+        data object Asking : BookSync
+
+        /**
+         * Both sides, for someone to choose between. Shown whenever they
+         * differ at all — including when the server is *behind*, which is
+         * the case ordinary syncing is silent about and precisely the one
+         * worth being asked about after reading on another device.
+         */
+        data class Choice(
+            val here: SyncPoint,
+            val there: SyncPoint,
+            val theirsIsBehind: Boolean,
+            /** The local position this question is about. */
+            val atRevision: Long,
+        ) : BookSync
+
+        /** Nothing to choose: a message, and then out of the way. */
+        data class Note(val messageRes: Int) : BookSync
+    }
+
+    /** One side's position, in the terms the reader sees on the page. */
+    data class SyncPoint(
+        val progression: Double,
+        val page: Int?,
+        val totalPages: Int?,
+        /** When the server recorded it, if it said. */
+        val at: Long? = null,
+    )
+
+    private val _bookSync = MutableStateFlow<BookSync>(BookSync.Idle)
+    val bookSync: StateFlow<BookSync> = _bookSync.asStateFlow()
+
+    /** Raised when a choice moves the reader somewhere else in the book. */
+    private val _goTo = MutableSharedFlow<Locator>(extraBufferCapacity = 1)
+    val goTo: SharedFlow<Locator> = _goTo.asSharedFlow()
+
+    /** Whether this book can sync at all, so the action can stay hidden. */
+    val syncable: StateFlow<Boolean> = flow { emit(positionSync.canSync(bookId)) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Asks the server where this book was left, and offers the answer.
+     *
+     * Nothing is pulled or pushed until someone chooses. Doing it the
+     * other way round would be the ordinary sync, which is exactly what
+     * has already failed to help by the time this is pressed.
+     */
+    fun syncThisBook() {
+        if (_bookSync.value == BookSync.Asking) return
+        _bookSync.value = BookSync.Asking
+        viewModelScope.launch {
+            _bookSync.value = when (val outcome = positionSync.preview(bookId)) {
+                PreviewOutcome.NotSynced -> BookSync.Note(R.string.reader_sync_book_not_synced)
+                is PreviewOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
+                is PreviewOutcome.Ready -> describe(
+                    outcome.preview,
+                    progressDao.currentRevision(bookId) ?: 0,
+                )
+            }
+        }
+    }
+
+    private fun describe(preview: SyncPreview, atRevision: Long): BookSync {
+        val there = preview.remote
+            ?: return BookSync.Note(R.string.reader_sync_book_no_remote)
+        if (preview.agrees) return BookSync.Note(R.string.reader_sync_book_in_step)
+        val here = preview.local ?: lastLocator?.locations?.totalProgression ?: 0.0
+        return BookSync.Choice(
+            here = point(here),
+            there = point(there, preview.remoteAt),
+            theirsIsBehind = there < here,
+            atRevision = atRevision,
+        )
+    }
+
+    private fun point(progression: Double, at: Long? = null): SyncPoint {
+        val positions = bookPositions?.takeIf { it.isUsable }
+        return SyncPoint(
+            progression = progression,
+            page = positions?.positionAtProgression(progression.toFloat()),
+            totalPages = positions?.totalPositions,
+            at = at,
+        )
+    }
+
+    /**
+     * Acts on the choice. Taking the other device's position moves the
+     * reader there straight away, because that is the whole point of
+     * having asked.
+     */
+    fun resolveBookSync(takeRemote: Boolean) {
+        val asked = _bookSync.value as? BookSync.Choice ?: return
+        _bookSync.value = BookSync.Asking
+        viewModelScope.launch {
+            when (val outcome = positionSync.resolve(bookId, takeRemote, asked.atRevision)) {
+                is ResolveOutcome.Failed ->
+                    _bookSync.value = BookSync.Note(outcome.reason.messageRes())
+
+                // A page was turned while the question was on screen, so
+                // the answer was about somewhere the reader no longer is.
+                ResolveOutcome.Superseded ->
+                    _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
+
+                ResolveOutcome.Done -> {
+                    if (takeRemote) {
+                        progressDao.get(bookId)?.totalProgression?.let { goToProgression(it) }
+                    }
+                    _bookSync.value = BookSync.Idle
+                }
+            }
+        }
+    }
+
+    /** Puts the question away, leaving the server's answer on disk for later. */
+    fun dismissBookSync() {
+        _bookSync.value = BookSync.Idle
+    }
+
+    private suspend fun goToProgression(progression: Double) {
+        val positions = bookPositions ?: BookPositions.of(publication ?: return)
+            .also { bookPositions = it }
+        if (!positions.isUsable) return
+        positions.locatorAt(positions.positionAtProgression(progression.toFloat()))?.let {
+            // Remember where we were before the destination overwrites it,
+            // or the way back would point at the page just arrived on.
+            onJump()
+            lastLocator = it
+            _progress.value = progressAt(it)
+            _goTo.emit(it)
+        }
+    }
 
     private var publication: Publication? = null
     private var bookPositions: BookPositions? = null

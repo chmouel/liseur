@@ -94,6 +94,7 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
+import com.chmouel.liseur.reader.chrome.BookSyncDialog
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
@@ -134,9 +135,14 @@ fun ReaderScreen(
     selectionRequests: SharedFlow<Unit>,
     onAnnotationAction: ReaderAnnotationActions,
     onSearchAction: ReaderSearchActions,
+    syncableFlow: StateFlow<Boolean>,
+    bookSyncFlow: StateFlow<ReaderViewModel.BookSync>,
+    goTo: SharedFlow<Locator>,
+    onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
+    val navigatorNow by rememberUpdatedState(navigator)
     var chromeVisible by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var searchFor by remember { mutableStateOf<String?>(null) }
@@ -492,8 +498,27 @@ fun ReaderScreen(
         )
     }
 
+    // Taking the other device's position moves the reader there, which is
+    // a jump like any other: the way back stays one tap away. The way back
+    // is recorded before the move, so it is not done again here.
+    LaunchedEffect(goTo) {
+        goTo.collect { locator ->
+            showToc = false
+            chromeVisible = false
+            navigatorNow?.go(locator, animated = false)
+        }
+    }
+
+    val bookSync by bookSyncFlow.collectAsStateWithLifecycle()
+    BookSyncDialog(
+        state = bookSync,
+        onResolve = onBookSyncAction.resolve,
+        onDismiss = onBookSyncAction.dismiss,
+    )
+
     if (showToc) {
         BackHandler { showToc = false }
+        val syncable by syncableFlow.collectAsStateWithLifecycle()
         val here = navigator?.currentLocator?.collectAsStateWithLifecycle()
         ContentsScreen(
             publication = publication,
@@ -516,6 +541,7 @@ fun ReaderScreen(
                 )
             },
             onClose = { showToc = false },
+            onSyncBook = if (syncable) onBookSyncAction.start else null,
             onEntrySelected = { link ->
                 showToc = false
                 chromeVisible = false
@@ -592,6 +618,13 @@ class ReaderProgressActions(
     val chapterTitleAtPosition: (Int) -> String?,
     val positionAtProgression: (Float) -> Int,
     val locatorAtPosition: (Int) -> Locator?,
+)
+
+/** Syncing this one book on purpose, from the Navigate screen. */
+class ReaderBookSyncActions(
+    val start: () -> Unit,
+    val resolve: (takeRemote: Boolean) -> Unit,
+    val dismiss: () -> Unit,
 )
 
 /** Hides the status and navigation bars while the chrome is hidden. */

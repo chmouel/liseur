@@ -1,6 +1,8 @@
 package com.chmouel.liseur.sync
 
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
+import com.chmouel.liseur.data.calibre.PreviewOutcome
+import com.chmouel.liseur.data.calibre.ResolveOutcome
 import com.chmouel.liseur.data.calibre.SyncOutcome
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
@@ -92,6 +94,37 @@ class PositionSyncCoordinator(private val sync: KoboSyncRepository) {
             state.withLock { inFlight = null }
             slot.complete(outcome)
             outcome
+        }
+    }
+
+    /** Whether this book has anywhere to sync to. */
+    suspend fun canSync(bookUrl: String): Boolean = sync.canSync(bookUrl)
+
+    /**
+     * Asks about one book on purpose, without deciding anything.
+     *
+     * Takes the same turn an ordinary sync does, so it cannot read a
+     * position out from under a run that is halfway through writing one.
+     */
+    suspend fun preview(bookUrl: String): PreviewOutcome =
+        turn.withLock { sync.previewBook(bookUrl) }
+
+    /**
+     * Acts on what someone chose after being shown both positions.
+     *
+     * [atRevision] is the position the choice was made about. Taking the
+     * server's position is refused if a page has been turned since, since
+     * that page turn is newer than the decision being acted on.
+     */
+    suspend fun resolve(
+        bookUrl: String,
+        takeRemote: Boolean,
+        atRevision: Long,
+    ): ResolveOutcome = turn.withLock {
+        if (takeRemote) {
+            sync.takeRemotePosition(bookUrl, atRevision)
+        } else {
+            sync.keepLocalPosition(bookUrl)
         }
     }
 

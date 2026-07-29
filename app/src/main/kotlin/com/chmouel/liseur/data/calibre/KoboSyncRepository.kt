@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.CalibreServerDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingBaseline
 import com.chmouel.liseur.domain.ReadingState
@@ -63,6 +64,44 @@ sealed interface SyncOutcome {
     data class Failure(val reason: SyncFailure) : SyncOutcome
 }
 
+/** Where each side thinks the reader is, fetched but not yet acted on. */
+data class SyncPreview(
+    val local: Double?,
+    val remote: Double?,
+    /** The server's own timestamp for its position, for display only. */
+    val remoteAt: Long?,
+) {
+    /** True when there is nothing to choose between. */
+    val agrees: Boolean
+        get() {
+            val here = local ?: return remote == null
+            val there = remote ?: return false
+            return kotlin.math.abs(here - there) < EPSILON
+        }
+}
+
+/** What came of acting on a choice between two positions. */
+sealed interface ResolveOutcome {
+    data object Done : ResolveOutcome
+
+    /**
+     * A page was turned here while the question was sitting on screen, so
+     * the choice is about a position that is no longer the current one.
+     * Nothing was applied; the question is worth asking again.
+     */
+    data object Superseded : ResolveOutcome
+    data class Failed(val reason: SyncFailure) : ResolveOutcome
+}
+
+/** What came of asking about one book on purpose. */
+sealed interface PreviewOutcome {
+    data class Ready(val preview: SyncPreview) : PreviewOutcome
+
+    /** This book does not sync: no account, no Kobo sync, or not a server book. */
+    data object NotSynced : PreviewOutcome
+    data class Failed(val reason: SyncFailure) : PreviewOutcome
+}
+
 /**
  * Keeps reading positions in step with calibre-web.
  *
@@ -98,6 +137,106 @@ class KoboSyncRepository(
 
     /** Reconciles one book, for the moments someone is waiting on it. */
     suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)
+
+    /** Whether this book has anywhere to sync to, so the action can stay hidden. */
+    suspend fun canSync(bookUrl: String): Boolean {
+        val server = serverDao.get() ?: return false
+        if (server.koboToken == null) return false
+        return bookDao.getByUrl(bookUrl)?.remoteUuid != null
+    }
+
+    /**
+     * Asks the server outright where it thinks the reader is in one book,
+     * and reports both positions without acting on either.
+     *
+     * Deliberately not a reconciliation. Someone has asked about this
+     * book, so the answer is theirs to make: the ordinary rules would
+     * quietly do nothing whenever both sides had moved, and would say
+     * nothing at all when the server is *behind*, which is exactly when
+     * "sync this book" is being pressed after reading on another device
+     * that has not caught up.
+     *
+     * The server's answer is written down before returning, so choosing
+     * later — or not choosing, and coming back to it — works even if the
+     * app is killed in between.
+     */
+    suspend fun previewBook(bookUrl: String): PreviewOutcome {
+        val server = serverDao.get() ?: return PreviewOutcome.NotSynced
+        val token = server.koboToken ?: return PreviewOutcome.NotSynced
+        val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return PreviewOutcome.NotSynced
+        val base = "${server.baseUrl}/kobo/$token"
+        val account = server.accountKey
+
+        val remote = when (val asked = client.readState(base, uuid)) {
+            is KoboResult.Failed -> return PreviewOutcome.Failed(asked.reason)
+            is KoboResult.Ok -> asked.value
+        }
+        if (remote != null) {
+            progressDao.persistPending(
+                bookUrl = bookUrl,
+                progression = remote.progression,
+                status = remote.status.wireName,
+                remoteUpdatedAt = remote.updatedAt,
+                account = account,
+                now = System.currentTimeMillis(),
+            )
+        }
+        return PreviewOutcome.Ready(
+            SyncPreview(
+                local = progressDao.get(bookUrl)?.totalProgression,
+                remote = remote?.progression,
+                remoteAt = remote?.updatedAt?.takeIf { it > 0 },
+            ),
+        )
+    }
+
+    /**
+     * Takes the position the server reported for one book, because
+     * someone said to.
+     *
+     * Still refuses if a page was turned in between, since that page turn
+     * is newer than the choice being acted on.
+     */
+    suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
+        val server = serverDao.get() ?: return ResolveOutcome.Done
+        val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
+        val progression = stored.pendingProgression ?: return ResolveOutcome.Done
+        val applied = progressDao.applyPull(
+            bookUrl = bookUrl,
+            expectedRevision = atRevision,
+            progression = progression,
+            status = ReadingStatus.fromWire(stored.pendingStatus).wireName,
+            account = server.accountKey,
+            remoteUpdatedAt = stored.pendingUpdatedAt,
+            now = System.currentTimeMillis(),
+        )
+        if (!applied) return ResolveOutcome.Superseded
+        finishedState.refreshFromProgress(bookUrl)
+        return ResolveOutcome.Done
+    }
+
+    /**
+     * Sends this device's position for one book, because someone said to,
+     * and stops the server's answer from being offered again.
+     */
+    suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+        val server = serverDao.get() ?: return ResolveOutcome.Done
+        val token = server.koboToken ?: return ResolveOutcome.Done
+        val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return ResolveOutcome.Done
+        // Read afresh, so a page turned while the question was open is
+        // what gets sent rather than the position it was asked about.
+        val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
+
+        val failure = apply(
+            base = "${server.baseUrl}/kobo/$token",
+            uuid = uuid,
+            bookUrl = bookUrl,
+            account = server.accountKey,
+            stored = stored,
+            decision = SyncDecision.Push(stored.asReadingState()),
+        )
+        return failure?.let { ResolveOutcome.Failed(it) } ?: ResolveOutcome.Done
+    }
 
     private suspend fun run(book: String?): SyncOutcome {
         val server = serverDao.get() ?: run {

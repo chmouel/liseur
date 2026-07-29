@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Share
@@ -92,6 +93,8 @@ fun ContentsScreen(
     onAnnotationDeleted: (BookAnnotation) -> Unit,
     onExport: () -> Unit,
     onClose: () -> Unit,
+    /** Null when this book has nowhere to sync to. */
+    onSyncBook: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var tab by rememberSaveable { mutableStateOf(ContentsTab.CONTENTS) }
@@ -113,6 +116,15 @@ fun ContentsScreen(
                         }
                     },
                     actions = {
+                        if (onSyncBook != null) {
+                            IconButton(onClick = onSyncBook) {
+                                Icon(
+                                    Icons.Outlined.CloudSync,
+                                    contentDescription =
+                                    stringResource(R.string.reader_sync_book),
+                                )
+                            }
+                        }
                         if (annotations.isNotEmpty() && tab != ContentsTab.CONTENTS) {
                             IconButton(onClick = onExport) {
                                 Icon(

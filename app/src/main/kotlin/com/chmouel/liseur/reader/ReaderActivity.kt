@@ -150,6 +150,16 @@ class ReaderActivity : FragmentActivity() {
                                     clear = viewModel::clearSearch,
                                 )
                             },
+                            syncableFlow = viewModel.syncable,
+                            bookSyncFlow = viewModel.bookSync,
+                            goTo = viewModel.goTo,
+                            onBookSyncAction = remember {
+                                ReaderBookSyncActions(
+                                    start = viewModel::syncThisBook,
+                                    resolve = viewModel::resolveBookSync,
+                                    dismiss = viewModel::dismissBookSync,
+                                )
+                            },
                             onBack = ::finish,
                         )
                     }

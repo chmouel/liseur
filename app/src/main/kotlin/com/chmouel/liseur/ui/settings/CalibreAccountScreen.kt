@@ -55,8 +55,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.PositionSyncStatus
-import com.chmouel.liseur.data.calibre.SyncFailure
 import com.chmouel.liseur.data.calibre.StorageUse
+import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.data.db.CalibreServer
 
 /**
@@ -429,16 +429,6 @@ private fun PositionSyncStatus.describe(lastSyncedAt: Long?): String = when (thi
         ?: stringResource(R.string.calibre_sync_never)
 }
 
-/** Says what actually went wrong rather than blaming the network for all of it. */
-private fun SyncFailure.messageRes(): Int = when (this) {
-    SyncFailure.Offline -> R.string.calibre_sync_offline
-    SyncFailure.Timeout -> R.string.calibre_sync_timeout
-    SyncFailure.Unauthorised -> R.string.calibre_sync_unauthorised
-    SyncFailure.Forbidden -> R.string.calibre_sync_forbidden
-    SyncFailure.NotFound -> R.string.calibre_sync_missing
-    SyncFailure.Malformed -> R.string.calibre_sync_malformed
-    is SyncFailure.ServerError -> R.string.calibre_sync_server_error
-}
 
 @Composable
 private fun relative(at: Long): CharSequence =
