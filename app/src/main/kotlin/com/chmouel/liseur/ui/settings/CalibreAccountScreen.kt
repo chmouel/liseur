@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.PositionSyncStatus
 import com.chmouel.liseur.data.calibre.StorageUse
+import com.chmouel.liseur.data.calibre.SyncIdentity
+import com.chmouel.liseur.data.calibre.SyncReport
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.data.db.CalibreServer
 
@@ -119,6 +121,8 @@ fun CalibreAccountScreen(
                     server = server,
                     storage = state.storage,
                     syncStatus = state.syncStatus,
+                    syncReport = state.syncReport,
+                    identity = state.identity,
                     onSyncNow = onSyncNow,
                     busy = state.connecting,
                     onRetryCapabilities = onRetryCapabilities,
@@ -261,6 +265,8 @@ private fun ConnectedCard(
     server: CalibreServer,
     storage: StorageUse,
     syncStatus: PositionSyncStatus,
+    syncReport: SyncReport,
+    identity: SyncIdentity?,
     busy: Boolean,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
@@ -328,6 +334,41 @@ private fun ConnectedCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (identity != null) {
+            Text(
+                text = stringResource(R.string.calibre_sync_identity, identity.login),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val moved = describeMovement(syncReport)
+        if (moved != null) {
+            Text(
+                text = moved,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (syncReport.unresolved > 0) {
+            Notice(
+                text = pluralStringResource(
+                    R.plurals.calibre_sync_unresolved,
+                    syncReport.unresolved,
+                    syncReport.unresolved,
+                ),
+                tone = NoticeTone.NEUTRAL,
+            )
+        }
+        if (identity != null && identity.strandedBooks > 0) {
+            Notice(
+                text = pluralStringResource(
+                    R.plurals.calibre_sync_stranded,
+                    identity.strandedBooks,
+                    identity.strandedBooks,
+                ),
+                tone = NoticeTone.PROBLEM,
+            )
+        }
         TextButton(
             onClick = onSyncNow,
             enabled = syncStatus != PositionSyncStatus.Syncing,
@@ -340,6 +381,28 @@ private fun ConnectedCard(
 
     OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.calibre_disconnect))
+    }
+}
+
+/**
+ * What the last exchange moved, in plain terms. Null when it moved
+ * nothing, because "nothing changed" is the ordinary case and does not
+ * deserve a line of its own.
+ */
+@Composable
+private fun describeMovement(report: SyncReport): String? {
+    if (report.at == null) return null
+    val pulled = report.pulled
+    val pushed = report.pushed
+    return when {
+        pulled > 0 && pushed > 0 -> stringResource(
+            R.string.calibre_sync_moved_both,
+            pulled,
+            pushed,
+        )
+        pulled > 0 -> pluralStringResource(R.plurals.calibre_sync_pulled, pulled, pulled)
+        pushed > 0 -> pluralStringResource(R.plurals.calibre_sync_pushed, pushed, pushed)
+        else -> null
     }
 }
 

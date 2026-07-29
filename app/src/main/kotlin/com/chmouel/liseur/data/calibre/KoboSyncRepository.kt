@@ -19,6 +19,7 @@ import com.chmouel.liseur.domain.reconcileReadingState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /** How the last attempt to sync reading positions went. */
 sealed interface PositionSyncStatus {
@@ -63,6 +64,39 @@ sealed interface SyncOutcome {
      */
     data class Failure(val reason: SyncFailure) : SyncOutcome
 }
+
+/** Which way a single book's position went during a run. */
+enum class SyncMove { PULLED, PUSHED, UNRESOLVED }
+
+/** What one book's reconciliation did, and why it stopped if it did. */
+private data class BookOutcome(
+    val moved: SyncMove? = null,
+    val failure: SyncFailure? = null,
+)
+
+/**
+ * What the last exchange actually did, so "synced" can be more than a
+ * timestamp. Counts are of books, and [unresolved] is read from disk
+ * rather than remembered, so it stays true after a restart.
+ */
+data class SyncReport(
+    val at: Long? = null,
+    val pulled: Int = 0,
+    val pushed: Int = 0,
+    val unresolved: Int = 0,
+)
+
+/** Who the reading positions on this device belong to. */
+data class SyncIdentity(
+    /** The calibre-web login positions are exchanged as. */
+    val login: String,
+    /**
+     * Books holding reading done while signed in as somebody else. Those
+     * positions stay on this device and are never sent anywhere, so
+     * saying how many there are is the only way to explain the silence.
+     */
+    val strandedBooks: Int,
+)
 
 /** Where each side thinks the reader is, fetched but not yet acted on. */
 data class SyncPreview(
@@ -131,6 +165,9 @@ class KoboSyncRepository(
 ) {
     private val _status = MutableStateFlow<PositionSyncStatus>(PositionSyncStatus.Idle)
     val status: StateFlow<PositionSyncStatus> = _status.asStateFlow()
+
+    private val _report = MutableStateFlow(SyncReport())
+    val report: StateFlow<SyncReport> = _report.asStateFlow()
 
     /** Reconciles every book that has a position on either side. */
     suspend fun syncAll(): SyncOutcome = run(book = null)
@@ -255,7 +292,7 @@ class KoboSyncRepository(
         // what gets sent rather than the position it was asked about.
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
 
-        val failure = apply(
+        val outcome = apply(
             base = "${server.baseUrl}/kobo/$token",
             uuid = uuid,
             bookUrl = bookUrl,
@@ -263,7 +300,7 @@ class KoboSyncRepository(
             stored = stored,
             decision = SyncDecision.Push(stored.asReadingState()),
         )
-        return failure?.let { ResolveOutcome.Failed(it) } ?: ResolveOutcome.Done
+        return outcome.failure?.let { ResolveOutcome.Failed(it) } ?: ResolveOutcome.Done
     }
 
     private suspend fun run(book: String?): SyncOutcome {
@@ -293,12 +330,27 @@ class KoboSyncRepository(
 
         val books = bookDao.allRemote().filter { book == null || it.url == book }
         var firstFailure: SyncFailure? = null
+        var pulled = 0
+        var pushed = 0
         for (candidate in books) {
-            val failure = reconcileBook(base, account, candidate, reported)
-            if (failure != null && firstFailure == null) firstFailure = failure
+            val outcome = reconcileBook(base, account, candidate, reported)
+            when (outcome.moved) {
+                SyncMove.PULLED -> pulled++
+                SyncMove.PUSHED -> pushed++
+                SyncMove.UNRESOLVED, null -> Unit
+            }
+            if (outcome.failure != null && firstFailure == null) firstFailure = outcome.failure
         }
 
         val now = System.currentTimeMillis()
+        _report.value = SyncReport(
+            at = now,
+            pulled = pulled,
+            pushed = pushed,
+            // Counted from disk: a disagreement outlives the run that
+            // found it, and a restart must not make it look settled.
+            unresolved = progressDao.pendingFor(account).size,
+        )
         serverDao.upsert(serverDao.get()?.copy(positionSyncedAt = now) ?: server)
         return if (firstFailure == null) {
             _status.value = PositionSyncStatus.Synced(now)
@@ -364,8 +416,8 @@ class KoboSyncRepository(
         account: String,
         book: Book,
         landed: Map<String, ReadingState>,
-    ): SyncFailure? {
-        val uuid = book.remoteUuid ?: return null
+    ): BookOutcome {
+        val uuid = book.remoteUuid ?: return BookOutcome()
         var stored = progressDao.get(book.url)
         var remote = landed[book.url] ?: stored?.pendingStateFor(account)
 
@@ -373,7 +425,7 @@ class KoboSyncRepository(
         // position yet is simply unknown, not absent — ask outright, once.
         if (remote == null && stored?.agreedAccountMatches(account) != true) {
             when (val asked = client.readState(base, uuid)) {
-                is KoboResult.Failed -> return asked.reason
+                is KoboResult.Failed -> return BookOutcome(failure = asked.reason)
                 is KoboResult.Ok -> remote = asked.value?.also {
                     progressDao.persistPending(
                         bookUrl = book.url,
@@ -390,7 +442,9 @@ class KoboSyncRepository(
 
         val local = stored?.asReadingState()
         val dirty = stored?.isDirty == true
-        if (!needsReconciling(remote != null, stored?.hasPending == true, dirty)) return null
+        if (!needsReconciling(remote != null, stored?.hasPending == true, dirty)) {
+            return BookOutcome()
+        }
 
         val decision = reconcileReadingState(
             local = local,
@@ -409,7 +463,7 @@ class KoboSyncRepository(
         account: String,
         stored: ReadingProgress?,
         decision: SyncDecision,
-    ): SyncFailure? {
+    ): BookOutcome {
         val now = System.currentTimeMillis()
         return when (decision) {
             SyncDecision.InSync -> {
@@ -424,7 +478,7 @@ class KoboSyncRepository(
                         now = now,
                     )
                 }
-                null
+                BookOutcome()
             }
 
             is SyncDecision.Pull -> {
@@ -449,13 +503,13 @@ class KoboSyncRepository(
                 // Taking the server's word for it can finish a book, and
                 // the library has to agree with the reader about that.
                 finishedState.refreshFromProgress(bookUrl)
-                null
+                BookOutcome(moved = SyncMove.PULLED)
             }
 
             is SyncDecision.Push -> {
                 val sent = stored?.localRevision ?: 0
                 when (val pushed = client.pushState(base, uuid, decision.state)) {
-                    is KoboResult.Failed -> pushed.reason
+                    is KoboResult.Failed -> BookOutcome(failure = pushed.reason)
                     is KoboResult.Ok -> {
                         progressDao.ackPush(
                             bookUrl = bookUrl,
@@ -465,7 +519,7 @@ class KoboSyncRepository(
                             account = account,
                             now = now,
                         )
-                        null
+                        BookOutcome(moved = SyncMove.PUSHED)
                     }
                 }
             }
@@ -474,19 +528,50 @@ class KoboSyncRepository(
                 // Refused means someone here said outright that this book
                 // is read, or is not. That outranks a flag on the server,
                 // and the disagreement stays on disk to be settled.
-                if (progressDao.adoptStatus(bookUrl, decision.status.wireName, account, now)) {
-                    finishedState.refreshFromProgress(bookUrl)
-                }
-                null
+                val adopted =
+                    progressDao.adoptStatus(bookUrl, decision.status.wireName, account, now)
+                if (adopted) finishedState.refreshFromProgress(bookUrl)
+                // Refusing is a disagreement someone has to settle, not a
+                // quiet no-op, so it is counted as one.
+                BookOutcome(moved = if (adopted) SyncMove.PULLED else SyncMove.UNRESOLVED)
             }
 
             is SyncDecision.Conflict -> {
                 // Preserve both, choose neither. The remote state is
                 // already on disk; leaving it there is the whole point.
                 Log.i(TAG, "Both sides moved for a book; leaving it to be asked about")
-                null
+                BookOutcome(moved = SyncMove.UNRESOLVED)
             }
         }
+    }
+
+    /**
+     * Re-counts unsettled disagreements from disk, for when the report
+     * is shown by a process that has not run a sync itself.
+     */
+    suspend fun refreshUnresolved() {
+        val account = serverDao.get()?.accountKey ?: return
+        val unresolved = progressDao.pendingFor(account).size
+        _report.update { it.copy(unresolved = unresolved) }
+    }
+
+    /**
+     * Who positions on this device belong to, so a book that will not
+     * sync can say why rather than simply doing nothing.
+     *
+     * Positions are bound to the login that produced them. Signing in as
+     * a different calibre-web user therefore strands the reading done as
+     * the old one — deliberately, since uploading it would put one
+     * person's reading in another's account — but nothing has so far
+     * said so out loud.
+     */
+    suspend fun identity(): SyncIdentity? {
+        val server = serverDao.get() ?: return null
+        if (server.koboToken == null) return null
+        return SyncIdentity(
+            login = server.username,
+            strandedBooks = progressDao.ownedByOther(server.accountKey).size,
+        )
     }
 
     private fun ReadingProgress.statusOrDerived(): ReadingStatus =

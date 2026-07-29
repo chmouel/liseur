@@ -111,6 +111,24 @@
         <item quantity="one">%1$d book downloaded · %2$s</item>
         <item quantity="other">%1$d books downloaded · %2$s</item>
     </plurals>
+    <string name="calibre_sync_identity">Positions sync as %1$s. Reading done under another login stays on this device.</string>
+    <string name="calibre_sync_moved_both">Last sync: %1$d brought here, %2$d sent up</string>
+    <plurals name="calibre_sync_pulled">
+        <item quantity="one">Last sync: %1$d book brought here</item>
+        <item quantity="other">Last sync: %1$d books brought here</item>
+    </plurals>
+    <plurals name="calibre_sync_pushed">
+        <item quantity="one">Last sync: %1$d book sent up</item>
+        <item quantity="other">Last sync: %1$d books sent up</item>
+    </plurals>
+    <plurals name="calibre_sync_unresolved">
+        <item quantity="one">%1$d book is waiting on you to pick a position. You\'ll be asked when you open it.</item>
+        <item quantity="other">%1$d books are waiting on you to pick a position. You\'ll be asked when you open them.</item>
+    </plurals>
+    <plurals name="calibre_sync_stranded">
+        <item quantity="one">%1$d book holds reading from a different login. That position stays here and won\'t be sent.</item>
+        <item quantity="other">%1$d books hold reading from a different login. Those positions stay here and won\'t be sent.</item>
+    </plurals>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="reader_navigate">Navigate</string>

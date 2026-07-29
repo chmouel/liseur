@@ -15,6 +15,8 @@ import com.chmouel.liseur.data.calibre.PositionSyncStatus
 import com.chmouel.liseur.data.calibre.SetupFailure
 import com.chmouel.liseur.data.calibre.SetupResult
 import com.chmouel.liseur.data.calibre.StorageUse
+import com.chmouel.liseur.data.calibre.SyncIdentity
+import com.chmouel.liseur.data.calibre.SyncReport
 import com.chmouel.liseur.data.db.CalibreServer
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
@@ -41,6 +43,8 @@ data class CalibreAccountUiState(
     val error: AccountError? = null,
     val storage: StorageUse = StorageUse(count = 0, bytes = 0),
     val syncStatus: PositionSyncStatus = PositionSyncStatus.Idle,
+    val syncReport: SyncReport = SyncReport(),
+    val identity: SyncIdentity? = null,
 )
 
 class CalibreAccountViewModel(
@@ -68,8 +72,21 @@ class CalibreAccountViewModel(
         viewModelScope.launch {
             koboSync.status.collect { status ->
                 _state.update { it.copy(syncStatus = status) }
+                // Every settled run can change who owns what and what is
+                // left over, so the answer is re-read rather than cached.
+                refreshDiagnostics()
             }
         }
+        viewModelScope.launch {
+            koboSync.report.collect { report ->
+                _state.update { it.copy(syncReport = report) }
+            }
+        }
+    }
+
+    private suspend fun refreshDiagnostics() {
+        koboSync.refreshUnresolved()
+        _state.update { it.copy(identity = koboSync.identity()) }
     }
 
     /** Reconciles reading positions now, for the "Sync now" button. */
