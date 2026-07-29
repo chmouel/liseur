@@ -104,6 +104,18 @@ The script increments `versionCode`, writes the Fastlane changelog, runs the
 tests, lint, and release build, then commits, tags, pushes, and publishes the
 GitHub release.
 
+### Never delete a release
+
+Releases are immutable once published, and that goes further than the
+assets: **a tag that has carried a release can never be used again**,
+even after deleting both the release and the tag, and even with the
+feature turned off. GitHub does this so that a trusted artifact can
+never be swapped for another under the same name.
+
+So a release that went out wrong is not fixed by deleting it. Bump the
+patch version and release again. `v0.1.0` was burned exactly this way
+and is why the first published version is 0.1.1.
+
 ## Architecture
 
 See `AGENTS.md` for the layered package layout and project conventions.
