@@ -67,6 +67,31 @@ There is no instrumented/emulator test suite. Reader interactions
 (gestures, immersive mode, process-death restore, rotation) are verified
 manually on a booted AVD.
 
+### Checking a folder's storage permission
+
+Deleting a book's file needs write access to the folder it lives in, and
+that access is granted once, by the system picker, when the folder is
+added. A folder added by a version of Liseur older than
+"deleting a book deletes the book" was only ever granted read.
+
+What the system actually holds is worth checking directly rather than
+inferring from behaviour:
+
+```bash
+adb shell dumpsys activity permissions | grep -A2 targetPkg=com.chmouel.liseur
+```
+
+`mode=0x1` is read only, `mode=0x3` is read and write, and `persisted`
+says which of those survives a reboot. Adding the same folder again
+through the picker upgrades a read-only grant in place, which is what
+the "add it again to grant deletion" wording in `delete_local_failed`
+is telling the user to do.
+
+Worth knowing: on AOSP 16 deletion succeeds even from a read-only
+persisted grant, so a stale grant does not reproduce the failure there.
+The fallback in `LocalLibraryRepository.addFolder` and the message that
+goes with it are for the devices where it does.
+
 ## Releasing
 
 Use `hack/release` from a clean, up-to-date `main` branch:
