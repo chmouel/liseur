@@ -80,19 +80,23 @@ class PositionSyncWorker(
         }
 
         /**
-         * Keeps positions fresh in the background. Unmetered only, since
-         * nobody wants their reading position costing them roaming data.
+         * Keeps positions fresh in the background.
+         *
+         * Any connection will do. Waiting for wifi was meant to be
+         * considerate, but a reading position is a few dozen bytes — less
+         * than a single cover thumbnail — and the cost of being frugal was
+         * picking up a phone on mobile data and finding the wrong page.
+         *
+         * `UPDATE` rather than `KEEP`, or every phone that already has the
+         * old six-hourly wifi-only job would keep it forever and none of
+         * this would reach the people it is for.
          */
         fun schedulePeriodic(context: Context) {
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 PERIODIC_SYNC,
-                ExistingPeriodicWorkPolicy.KEEP,
-                PeriodicWorkRequestBuilder<PositionSyncWorker>(6, TimeUnit.HOURS)
-                    .setConstraints(
-                        Constraints.Builder()
-                            .setRequiredNetworkType(NetworkType.UNMETERED)
-                            .build(),
-                    )
+                ExistingPeriodicWorkPolicy.UPDATE,
+                PeriodicWorkRequestBuilder<PositionSyncWorker>(1, TimeUnit.HOURS)
+                    .setConstraints(onNetwork)
                     .build(),
             )
         }

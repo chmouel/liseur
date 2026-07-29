@@ -17,6 +17,8 @@ import com.chmouel.liseur.domain.FINISHED_PROGRESSION
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.sync.PositionSyncCoordinator
+import com.chmouel.liseur.sync.SyncScope
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.EPSILON
@@ -39,6 +41,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.shared.publication.Locator
@@ -65,6 +68,7 @@ class ReaderViewModel(
     private val annotationDao: BookAnnotationDao,
     private val library: LocalLibraryRepository,
     private val prefsRepo: ReaderPreferencesRepository,
+    private val positionSync: PositionSyncCoordinator,
 ) : ViewModel() {
 
     sealed interface UiState {
@@ -134,6 +138,14 @@ class ReaderViewModel(
                     _state.value = UiState.Failure(it.message)
                     return@launch
                 }
+            // Ask the server where this book was left before deciding
+            // where to open it. Bounded, and the answer is optional: a slow
+            // or absent server delays the book by a moment at most, never
+            // stops it opening.
+            withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
+                runCatching { positionSync.request(SyncScope.Book(bookId)) }
+            }
+
             val stored = progressDao.get(bookId)
                 ?.also { speed = ReadingSpeedEstimator(it.readingSpeed) }
             var initialLocator = stored?.locatorJson
@@ -487,6 +499,14 @@ class ReaderViewModel(
         private const val JUMP_BACK_TIMEOUT_MS = 30_000L
 
         /**
+         * How long opening a book will wait to hear where it was left
+         * elsewhere. Long enough for a server on the same network, short
+         * enough that a server which is not answering is not felt as the
+         * app hanging.
+         */
+        private const val OPEN_SYNC_TIMEOUT_MS = 2_500L
+
+        /**
          * Enough hits that no real search runs out, few enough that a
          * one-letter query on a long book does not fill memory.
          */
@@ -504,6 +524,7 @@ class ReaderViewModel(
                     annotationDao = container.database.annotationDao(),
                     library = container.libraryRepository,
                     prefsRepo = container.readerPreferences,
+                    positionSync = container.positionSync,
                 )
             }
         }

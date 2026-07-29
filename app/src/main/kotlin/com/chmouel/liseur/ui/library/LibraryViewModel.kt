@@ -23,6 +23,8 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.arrangedBy
+import com.chmouel.liseur.sync.PositionSyncCoordinator
+import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.chmouel.liseur.data.db.CalibreServer
 import kotlinx.coroutines.flow.Flow
@@ -65,6 +67,7 @@ data class DeleteFailure(val book: Book, val onServer: Boolean)
 class LibraryViewModel(
     private val library: LocalLibraryRepository,
     private val catalog: CalibreCatalogRepository,
+    private val positionSync: PositionSyncCoordinator,
     private val downloads: BookDownloadRepository,
     private val account: CalibreAccountRepository,
     private val appSettings: AppSettingsRepository,
@@ -193,15 +196,24 @@ class LibraryViewModel(
         viewModelScope.launch { catalog.refresh() }
     }
 
-    /** Pull-to-refresh: look again at both the folders and the server. */
+    /**
+     * Pull-to-refresh: look again at the folders, the server's books, and
+     * where you got to.
+     *
+     * The last of those used to be missing, which made the gesture look
+     * broken: pulling down brought new books but left a book you had read
+     * on another device sitting at the old page.
+     */
     fun refresh() {
         if (_refreshing.value) return
         _refreshing.value = true
+        val requestedAt = System.currentTimeMillis()
         viewModelScope.launch {
             try {
-                lastScanAt = System.currentTimeMillis()
+                lastScanAt = requestedAt
                 library.rescanAll()
                 catalog.refresh()
+                runCatching { positionSync.request(SyncScope.Full, requestedAt) }
             } finally {
                 _refreshing.value = false
             }
@@ -291,6 +303,7 @@ class LibraryViewModel(
                 LibraryViewModel(
                     library = container.libraryRepository,
                     catalog = container.calibreCatalog,
+                    positionSync = container.positionSync,
                     downloads = container.bookDownloads,
                     account = container.calibreAccount,
                     appSettings = container.appSettings,
