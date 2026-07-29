@@ -78,6 +78,13 @@ readonly THEME_SWATCH_Y=0.614
 readonly THEME_LIGHT_X=0.126
 readonly THEME_DARK_X=0.476
 readonly SETTINGS_CALIBRE_Y=0.868
+# A word in the middle of the open page, and where the selection popup's
+# "Define" lands once that word is held down. Both are tied to the page
+# the first book reopens on, like the annotations are.
+readonly PAGE_WORD_X=0.433
+readonly PAGE_WORD_Y=0.435
+readonly POPUP_DEFINE_X=0.590
+readonly POPUP_DEFINE_Y=0.313
 
 command -v adb >/dev/null || die "adb is not installed"
 adb shell pm path "$APP_ID" >/dev/null 2>&1 || die "$APP_ID is not installed"
@@ -124,6 +131,14 @@ open_book() {
 show_chrome() {
     tap 0.5 0.5
     sleep 2
+}
+
+# A long press is a swipe that goes nowhere.
+hold() {
+    local px py
+    px=$(x "$1")
+    py=$(y "$2")
+    adb shell input swipe "$px" "$py" "$px" "$py" 900
 }
 
 # Pick a reading theme by its swatch in the typography sheet. Doing this
@@ -182,6 +197,16 @@ sleep 2
 shot 07-search
 back
 sleep 3
+
+# Hold a word to get the selection popup, then look it up on Wiktionary.
+show_chrome
+hold "$PAGE_WORD_X" "$PAGE_WORD_Y"
+sleep 3
+tap "$POPUP_DEFINE_X" "$POPUP_DEFINE_Y"
+sleep 7
+shot 12-dictionary
+back
+sleep 2
 
 open_library
 tap "$LIB_SETTINGS_X" "$TOP_BAR"
