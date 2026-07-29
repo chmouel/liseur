@@ -94,15 +94,30 @@ goes with it are for the devices where it does.
 
 ## Releasing
 
-Use `hack/release` from a clean, up-to-date `main` branch:
+Run `hack/release` from a clean, up-to-date `main` branch, with nothing
+after it:
 
 ```bash
-hack/release 0.2.0 "Add the reading screen."
+hack/release
 ```
 
-The script increments `versionCode`, writes the Fastlane changelog, runs the
-tests, lint, and release build, then commits, tags, pushes, and publishes the
-GitHub release.
+It shows what has landed since the last release, grouped by commit type,
+offers the next patch, minor and major version, and opens an editor on a
+changelog drafted from those same commits. Correct the draft, save, and
+confirm.
+
+The version can also be given outright, which is what CI and scripts
+want:
+
+```bash
+hack/release --yes 0.2.1 "Fix page fitting on tall screens."
+```
+
+Either way the script bumps `versionCode` and `versionName`, writes the
+Fastlane changelog, runs the tests, lint and release build, then commits,
+tags and pushes. Pushing the tag is what starts the release workflow,
+which builds and signs the APK and creates the GitHub release with it
+attached.
 
 ### Release notes
 

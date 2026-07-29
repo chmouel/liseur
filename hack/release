@@ -14,6 +14,7 @@ readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
 readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
 readonly PASS_GEMINI_KEY="google/gemini-api"
+readonly NOTES_MODEL="gemini-3.6-flash"
 readonly REQUIRED_SECRETS=(
     LISEUR_KEYSTORE_BASE64
     LISEUR_KEYSTORE_PASSWORD
@@ -25,9 +26,14 @@ readonly REQUIRED_SECRETS=(
 usage() {
     cat <<'EOF'
 Usage:
+  hack/release [--no-fdroid]
   hack/release [--yes] [--no-fdroid] VERSION RELEASE NOTES...
   hack/release --fdroid-only VERSION
   hack/release --sync-secrets
+
+With no version it shows what has landed since the last release, offers
+the next major, minor and patch, and opens an editor on a changelog
+drafted from the commits.
 
 Examples:
   hack/release 0.2.0 "Add in-book search and a Wiktionary lookup card."
@@ -124,6 +130,167 @@ github_release_is_published() {
     is_draft=$(printf '%s' "$release" | jq -r .isDraft)
     published_at=$(printf '%s' "$release" | jq -r .publishedAt)
     [[ "$is_draft" == false && "$published_at" != null ]]
+}
+
+# Everything below drives `hack/release` with no arguments: show what
+# has landed since the last release, pick the next version from it, and
+# write the changelog F-Droid will show.
+
+# gum makes this pleasant, but the script must still work without it.
+pick_one() {
+    local header=$1
+    shift
+
+    if command -v gum >/dev/null; then
+        gum choose --header="$header" "$@"
+        return
+    fi
+
+    local option index=1
+    printf '%s\n' "$header" >&2
+    for option in "$@"; do
+        printf '  %s) %s\n' "$index" "$option" >&2
+        index=$((index + 1))
+    done
+    local answer
+    read -r -p "Choice: " answer
+    [[ "$answer" =~ ^[0-9]+$ ]] && (( answer >= 1 && answer <= $# )) || return 1
+    printf '%s' "${!answer}"
+}
+
+confirm_prompt() {
+    if command -v gum >/dev/null; then
+        gum confirm "$1"
+        return
+    fi
+    local answer
+    read -r -p "$1 [y/N] " answer
+    [[ "$answer" =~ ^[Yy]$ ]]
+}
+
+show_changes_since() {
+    local range=$1 kind subjects
+    local -a kinds=(feat fix perf refactor docs build chore ci)
+
+    for kind in "${kinds[@]}"; do
+        subjects=$(git log "$range" --no-decorate --pretty='  %s' \
+            --grep="^${kind}[(:]" 2>/dev/null)
+        [[ -n "$subjects" ]] || continue
+        printf '%s\n%s\n\n' "$kind" "$subjects"
+    done
+
+    local -a excludes=()
+    for kind in "${kinds[@]}"; do
+        excludes+=(--grep="^${kind}[(:]")
+    done
+    subjects=$(git log "$range" --no-decorate --pretty='  %s' \
+        "${excludes[@]}" --invert-grep 2>/dev/null)
+    [[ -z "$subjects" ]] || printf 'other\n%s\n\n' "$subjects"
+}
+
+bump_version() {
+    local version=$1 part=$2
+    local major minor patch
+    IFS=. read -r major minor patch <<<"$version"
+
+    case $part in
+    major) printf '%s.0.0' $((major + 1)) ;;
+    minor) printf '%s.%s.0' "$major" $((minor + 1)) ;;
+    patch) printf '%s.%s.%s' "$major" "$minor" $((patch + 1)) ;;
+    esac
+}
+
+# The changelog is what F-Droid shows, so it is worth a moment of the
+# maintainer's attention. Gemini drafts it from the commits; the editor
+# is where it gets fixed.
+draft_release_notes() {
+    local range=$1 draft=$2
+    local key request response
+
+    key=$(pass show "$PASS_GEMINI_KEY" 2>/dev/null) || return 1
+    [[ -n "$key" ]] || return 1
+
+    request=$(mktemp)
+    response=$(mktemp)
+    jq -n --rawfile log <(git log "$range" --no-decorate --pretty='- %s%n%b') \
+        '{contents: [{parts: [{text: ("Write the F-Droid changelog for the next release of Liseur, an Android EPUB books reader and calibre-web client.\n\nIt is shown in a store listing to people who read books, so say what they can now do, in plain unexcited prose. No headings, no bullets, no marketing, no emoji. At most 480 characters. Leave out anything they would not notice: dependency bumps, CI, refactoring, documentation.\n\nThe commits:\n\n" + $log)}]}]}' \
+        > "$request"
+
+    curl -fsS --max-time 120 \
+        "https://generativelanguage.googleapis.com/v1beta/models/$NOTES_MODEL:generateContent" \
+        -H "Content-Type: application/json" \
+        -H "x-goog-api-key: $key" \
+        -X POST -d @"$request" > "$response" 2>/dev/null &&
+        jq -er '.candidates[0].content.parts | map(.text // "") | join("")
+            | select(length > 0)' "$response" > "$draft"
+    local status=$?
+
+    rm -f "$request" "$response"
+    return $status
+}
+
+edit_release_notes() {
+    local range=$1
+    local file editor
+
+    file=$(mktemp --suffix=.txt)
+    if ! draft_release_notes "$range" "$file"; then
+        printf '' > "$file"
+    fi
+
+    {
+        printf '\n'
+        printf '# The changelog F-Droid will show, at most 500 characters.\n'
+        printf '# Lines starting with # are dropped. An empty file aborts.\n'
+    } >> "$file"
+
+    editor=${VISUAL:-${EDITOR:-vi}}
+    "$editor" "$file" || die "the editor exited without saving"
+
+    release_notes=$(grep -v '^#' "$file" | tr '\n' ' ' |
+        sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
+    rm -f "$file"
+
+    [[ -n "$release_notes" ]] || die "release cancelled: no changelog"
+    [[ ${#release_notes} -le 500 ]] ||
+        die "the changelog is ${#release_notes} characters; 500 is the limit"
+}
+
+choose_release() {
+    local current last_tag range choice
+    current=$(read_version_name)
+    [[ -n "$current" ]] || die "could not read the current app version"
+
+    last_tag=$(git describe --tags --abbrev=0 \
+        --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
+    if [[ -n "$last_tag" ]]; then
+        range="$last_tag..HEAD"
+        printf '\nSince %s, %s ago:\n\n' "$last_tag" \
+            "$(git log -1 --format=%ar "$last_tag")"
+    else
+        range=HEAD
+        printf '\nNothing released yet. Everything so far:\n\n'
+    fi
+
+    show_changes_since "$range"
+    [[ -n $(git log "$range" --oneline) ]] ||
+        die "nothing has landed since $last_tag"
+
+    choice=$(pick_one "Bump from $current" \
+        "patch ($(bump_version "$current" patch))" \
+        "minor ($(bump_version "$current" minor))" \
+        "major ($(bump_version "$current" major))") ||
+        die "release cancelled"
+    [[ -n "$choice" ]] || die "release cancelled"
+
+    version=$(bump_version "$current" "${choice%% *}")
+    printf 'Releasing %s.\n' "$version"
+
+    edit_release_notes "$range"
+
+    printf '\n%s\n\n' "$release_notes"
+    confirm_prompt "Release $version with this changelog?" ||
+        die "release cancelled"
 }
 
 # Pushing the tag starts the release workflow, which builds and signs the
@@ -334,16 +501,25 @@ if [[ "$sync_secrets_only" == true ]]; then
     exit 0
 fi
 
-[[ $# -ge 1 ]] || {
-    usage >&2
-    exit 2
-}
+interactive=false
+version=""
+release_notes=""
 
-version=$1
-shift
-release_notes="$*"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-    die "VERSION must use X.Y.Z format"
+if [[ $# -eq 0 ]]; then
+    [[ "$fdroid_only" == false ]] ||
+        die "--fdroid-only needs a version"
+    [[ -t 0 && -t 1 ]] || {
+        usage >&2
+        exit 2
+    }
+    interactive=true
+else
+    version=$1
+    shift
+    release_notes="$*"
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+        die "VERSION must use X.Y.Z format"
+fi
 
 for command in git gh glab jq base64 sed awk pass; do
     require_command "$command"
@@ -354,6 +530,10 @@ cd "$repo_root"
 [[ -f "$BUILD_FILE" ]] || die "run this script from the Liseur repository"
 
 git fetch --quiet origin main --tags
+
+if [[ "$interactive" == true ]]; then
+    choose_release
+fi
 
 tag="v$version"
 
