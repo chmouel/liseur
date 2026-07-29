@@ -27,6 +27,12 @@ class ReaderActivity : FragmentActivity() {
     private var navigator: EpubNavigatorFragment? = null
     private var pageTurner: PageTurner? = null
 
+    /**
+     * Read once and kept: the key handler runs on every press, and reading
+     * it from DataStore there would be both slow and pointlessly async.
+     */
+    private var volumeKeysTurnPages = true
+
     private val bookUrl: AbsoluteUrl? by lazy {
         (intent.getStringExtra(EXTRA_URL)?.toUri() ?: intent.data)?.toAbsoluteUrl()
     }
@@ -55,6 +61,9 @@ class ReaderActivity : FragmentActivity() {
         enableEdgeToEdge()
         // Reading is what the app should come back to next time it opens.
         lifecycleScope.launch { container.sessionState.setLeftFromReader(true) }
+        lifecycleScope.launch {
+            container.appSettings.settings.collect { volumeKeysTurnPages = it.volumeKeysTurnPages }
+        }
         setContent {
             LiseurTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
@@ -137,7 +146,6 @@ class ReaderActivity : FragmentActivity() {
         }
     }
 
-    /** Volume keys turn pages, like the Kindle app's optional setting. */
     override fun onStop() {
         super.onStop()
         // Leaving the book is the moment the position is worth sending:
@@ -145,8 +153,10 @@ class ReaderActivity : FragmentActivity() {
         PositionSyncWorker.pushBook(this, bookId)
     }
 
+    /** Volume keys turn pages, like the Kindle app's optional setting. */
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val turner = pageTurner ?: return super.onKeyDown(keyCode, event)
+        val turner = pageTurner.takeIf { volumeKeysTurnPages }
+            ?: return super.onKeyDown(keyCode, event)
         return when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
                 turner.turn(forward = true)
@@ -164,7 +174,7 @@ class ReaderActivity : FragmentActivity() {
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
         when {
-            navigator != null &&
+            navigator != null && volumeKeysTurnPages &&
                 (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
             -> true
 

@@ -4,6 +4,16 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +38,7 @@ import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material3.Button
@@ -83,7 +94,7 @@ fun LibraryScreen(
     onOpenBook: () -> Unit,
     onAddFolder: () -> Unit,
     onBookSelected: (Book) -> Unit,
-    onOpenAccount: () -> Unit,
+    onOpenSettings: () -> Unit,
     onDownload: (Book) -> Unit,
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
@@ -132,10 +143,10 @@ fun LibraryScreen(
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.library_title)) },
                 actions = {
-                    IconButton(onClick = onOpenAccount) {
+                    IconButton(onClick = onOpenSettings) {
                         Icon(
-                            Icons.Outlined.CloudQueue,
-                            contentDescription = stringResource(R.string.calibre_account),
+                            Icons.Outlined.Settings,
+                            contentDescription = stringResource(R.string.settings),
                         )
                     }
                     IconButton(onClick = onAddFolder) {
@@ -163,7 +174,7 @@ fun LibraryScreen(
                 .padding(padding),
         ) {
             when {
-                state.loading -> Box(Modifier.fillMaxSize())
+                state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
 
                 state.books.isEmpty() -> EmptyLibrary(
                     onOpenBook = onOpenBook,
@@ -419,8 +430,22 @@ private fun BookCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptics = LocalHapticFeedback.current
+    // The whole card is one thing to a screen reader: the cover, the badges
+    // and the two lines of text are all describing the same book.
+    val state = bookStateDescription(book, progress)
     Column(
-        modifier = modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        modifier = modifier
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                },
+                onClickLabel = stringResource(R.string.read_book),
+                onLongClickLabel = stringResource(R.string.book_actions),
+            )
+            .semantics(mergeDescendants = true) { stateDescription = state },
     ) {
         Box {
             BookCover(
@@ -463,6 +488,67 @@ private fun BookCard(
         }
     }
 }
+
+/** What a screen reader should say about a book beyond its title and author. */
+@Composable
+private fun bookStateDescription(book: Book, progress: DownloadProgress?): String = when {
+    progress != null -> stringResource(R.string.state_downloading)
+    book.finished -> stringResource(R.string.state_finished)
+    book.downloadState != DownloadState.DOWNLOADED -> stringResource(R.string.state_on_server)
+    else -> stringResource(R.string.state_on_device)
+}
+
+/**
+ * Cover-shaped placeholders while the first library query runs. A blank
+ * screen reads as "no books"; this reads as "nearly there".
+ */
+@Composable
+private fun LibrarySkeleton(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "skeletonAlpha",
+    )
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 120.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        userScrollEnabled = false,
+        modifier = modifier,
+    ) {
+        items(SKELETON_COUNT) {
+            Column {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(2f / 3f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha),
+                        ),
+                )
+                Box(
+                    Modifier
+                        .padding(top = 8.dp)
+                        .fillMaxWidth(0.8f)
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha),
+                        ),
+                )
+            }
+        }
+    }
+}
+
+private const val SKELETON_COUNT = 9
 
 /** The tick that says you have read this one. */
 @Composable

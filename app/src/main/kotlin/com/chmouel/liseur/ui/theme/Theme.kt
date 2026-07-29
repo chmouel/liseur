@@ -49,6 +49,9 @@ private val DarkColors = darkColorScheme(
     onSurfaceVariant = SageNight,
 )
 
+/** Whether this device can take its colours from the wallpaper. */
+val dynamicColorAvailable: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
 @Composable
 fun LiseurTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

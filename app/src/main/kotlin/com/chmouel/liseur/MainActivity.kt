@@ -14,6 +14,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -32,7 +34,16 @@ import com.chmouel.liseur.ui.library.LibraryScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.CalibreAccountScreen
 import com.chmouel.liseur.ui.settings.CalibreAccountViewModel
+import com.chmouel.liseur.ui.settings.LicencesScreen
+import com.chmouel.liseur.ui.settings.SettingsScreen
+import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.ui.theme.LiseurTheme
+import com.chmouel.liseur.ui.theme.dynamicColorAvailable
+import android.net.Uri
+import androidx.core.net.toUri
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 
 class MainActivity : ComponentActivity() {
 
@@ -54,8 +65,17 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState != null) deciding = false
 
         setContent {
-            LiseurTheme {
-                LiseurApp()
+            val settings by container.appSettings.settings
+                .collectAsState(initial = AppSettings())
+            LiseurTheme(
+                darkTheme = when (settings.themeMode) {
+                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                },
+                dynamicColor = settings.dynamicColor,
+            ) {
+                LiseurApp(settings)
             }
         }
 
@@ -75,6 +95,7 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun resumeLastBook() {
         val container = container
+        if (!container.appSettings.current().resumeLastBook) return
         val leftFromReader = container.sessionState.leftFromReader()
         val book = container.database.bookDao().mostRecentlyOpened()
         val candidate = book?.openableUrl?.let { fileUrl ->
@@ -98,19 +119,51 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { LIBRARY, CALIBRE_ACCOUNT }
+private enum class Screen { LIBRARY, SETTINGS, CALIBRE_ACCOUNT, LICENCES }
+
+private const val SOURCE_URL = "https://github.com/chmouel/liseur"
 
 @Composable
-private fun LiseurApp() {
+private fun LiseurApp(settings: AppSettings) {
     var screen by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember(context) { context.container.appSettings }
 
     when (screen) {
-        Screen.LIBRARY -> LibraryRoute(onOpenAccount = { screen = Screen.CALIBRE_ACCOUNT })
-        Screen.CALIBRE_ACCOUNT -> {
+        Screen.LIBRARY -> LibraryRoute(onOpenSettings = { screen = Screen.SETTINGS })
+
+        Screen.SETTINGS -> {
             BackHandler { screen = Screen.LIBRARY }
-            CalibreAccountRoute(onBack = { screen = Screen.LIBRARY })
+            SettingsScreen(
+                settings = settings,
+                dynamicColorAvailable = dynamicColorAvailable,
+                onThemeMode = { scope.launch { repository.setThemeMode(it) } },
+                onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
+                onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
+                onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
+                onOpenAccount = { screen = Screen.CALIBRE_ACCOUNT },
+                onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
+                onOpenLicences = { screen = Screen.LICENCES },
+                onBack = { screen = Screen.LIBRARY },
+            )
+        }
+
+        Screen.CALIBRE_ACCOUNT -> {
+            BackHandler { screen = Screen.SETTINGS }
+            CalibreAccountRoute(onBack = { screen = Screen.SETTINGS })
+        }
+
+        Screen.LICENCES -> {
+            BackHandler { screen = Screen.SETTINGS }
+            LicencesScreen(onBack = { screen = Screen.SETTINGS })
         }
     }
+}
+
+/** Opening a link must never take the app down with it. */
+private fun android.content.Context.openLink(uri: Uri) {
+    runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
 }
 
 @Composable
@@ -136,7 +189,7 @@ private fun CalibreAccountRoute(
 
 @Composable
 private fun LibraryRoute(
-    onOpenAccount: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
     val context = LocalContext.current
@@ -197,7 +250,7 @@ private fun LibraryRoute(
                 context.startActivity(ReaderActivity.intent(context, it, book.url))
             }
         },
-        onOpenAccount = onOpenAccount,
+        onOpenSettings = onOpenSettings,
         onDownload = viewModel::download,
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,
