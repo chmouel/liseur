@@ -66,7 +66,11 @@ class KomgaProgressionClient(private val http: KomgaHttp = KomgaHttp()) {
         bookId: String,
     ): RemoteResult<JSONObject?> = withContext(Dispatchers.IO) {
         remoteCall {
+            // The answer is an R2Progression wrapper; only what is inside
+            // it is a locator, and handing the wrapper on would silently
+            // lose every position it carries.
             http.getObjectOrNull(KomgaUrl.api(baseUrl, progression(bookId)), credentials)
+                ?.optJSONObject("locator")
         }
     }
 

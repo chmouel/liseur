@@ -66,6 +66,33 @@ class KomgaProgressionClientTest {
     }
 
     @Test
+    fun `a position read back is the locator, not the wrapper around it`() = runBlocking {
+        server.enqueue(
+            MockResponse(
+                body = """
+                {
+                  "modified": "2026-07-30T17:30:00+02:00",
+                  "device": {"id": "other-device", "name": "Another reader"},
+                  "locator": {
+                    "href": "OEBPS/Text/c33_chapter.xhtml",
+                    "type": "application/xhtml+xml",
+                    "locations": {"progression": 0.21, "totalProgression": 0.7}
+                  }
+                }
+                """.trimIndent(),
+            ),
+        )
+
+        val locator = (KomgaProgressionClient().read(baseUrl(), key, book) as RemoteResult.Ok).value
+
+        // Handing the wrapper on instead would read as a position with
+        // no progression at all, which is how a real server's answer was
+        // being thrown away.
+        assertEquals("OEBPS/Text/c33_chapter.xhtml", locator!!.getString("href"))
+        assertEquals(0.7, KomgaLocator.totalProgression(locator)!!, 1e-9)
+    }
+
+    @Test
     fun `a book the server has never heard of is a failure`() = runBlocking {
         server.enqueue(MockResponse(code = 404))
 

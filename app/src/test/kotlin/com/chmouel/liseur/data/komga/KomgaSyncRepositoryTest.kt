@@ -142,6 +142,19 @@ class KomgaSyncRepositoryTest {
 
     private fun json(body: String) = MockResponse(body = body)
 
+    /**
+     * What `GET /progression` actually answers: a locator wrapped in an
+     * R2Progression, with the timestamp that cannot be trusted for
+     * ordering still on it, because that is what a real server sends.
+     */
+    private fun progressionJson(locator: String) = """
+        {
+          "modified": "2024-06-01T12:00:00+02:00",
+          "device": {"id": "other", "name": "Another reader"},
+          "locator": $locator
+        }
+    """.trimIndent()
+
     /** Every request the run made, keyed by path, so order does not matter. */
     private fun requests(): List<RecordedRequest> =
         generateSequence { server.takeRequest(1, java.util.concurrent.TimeUnit.SECONDS) }.toList()
@@ -152,7 +165,7 @@ class KomgaSyncRepositoryTest {
     fun `a position read on another device arrives with the exact place`() = runTest {
         connect()
         server.enqueue(json(bookJson(page = 40, completed = false, readDate = "2024-06-01T10:00:00Z")))
-        server.enqueue(json(locatorJson("OEBPS/ch3.xhtml", 0.5, 0.31)))
+        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch3.xhtml", 0.5, 0.31))))
 
         assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
 
@@ -293,7 +306,7 @@ class KomgaSyncRepositoryTest {
             updatedAt = 2_000,
         )
         server.enqueue(json(bookJson(page = 90, completed = false, readDate = "2024-06-01T10:00:00Z")))
-        server.enqueue(json(locatorJson("OEBPS/ch7.xhtml", 0.5, 0.6)))
+        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch7.xhtml", 0.5, 0.6))))
 
         assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
 
@@ -318,7 +331,7 @@ class KomgaSyncRepositoryTest {
             updatedAt = 1_000,
         )
         progress.persistPending(bookUrl, 0.6, "Reading", 4_000, account, now = 4_000)
-        server.enqueue(json(locatorJson("OEBPS/ch7.xhtml", 0.5, 0.6)))
+        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch7.xhtml", 0.5, 0.6))))
 
         sync.takeRemotePosition(bookUrl, atRevision = requireNotNull(progress.get(bookUrl)).localRevision)
 
