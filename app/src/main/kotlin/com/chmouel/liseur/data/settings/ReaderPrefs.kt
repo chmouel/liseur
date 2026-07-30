@@ -51,7 +51,21 @@ enum class FooterMode(val id: String) {
     NONE("none"),
     ;
 
-    fun next(): FooterMode = entries[(ordinal + 1) % entries.size]
+    /**
+     * The next thing to show when the footer is tapped.
+     *
+     * [NONE] is not in the round. It draws nothing, so a tap that landed
+     * on it took away the very thing being tapped: the footer vanished
+     * and with it any way of getting it back, short of going through the
+     * typography sheet. Hiding the footer is a decision, and it belongs
+     * in the sheet where it can be undone, not at the end of a cycle
+     * where it is arrived at by accident.
+     */
+    fun next(): FooterMode {
+        val cycle = entries.filter { it != NONE }
+        val at = cycle.indexOf(this)
+        return cycle[(at + 1) % cycle.size]
+    }
 
     companion object {
         val Default = TIME_LEFT_CHAPTER
