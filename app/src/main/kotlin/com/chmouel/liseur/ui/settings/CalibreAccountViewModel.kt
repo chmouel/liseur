@@ -17,7 +17,7 @@ import com.chmouel.liseur.data.calibre.SetupResult
 import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
-import com.chmouel.liseur.data.db.CalibreServer
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
@@ -36,7 +36,7 @@ enum class AccountError {
 }
 
 data class CalibreAccountUiState(
-    val server: CalibreServer? = null,
+    val server: RemoteServer? = null,
     val url: String = "",
     val username: String = "",
     val password: String = "",

@@ -3,7 +3,7 @@ package com.chmouel.liseur.data.calibre
 import android.util.Log
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
-import com.chmouel.liseur.data.db.CalibreServerDao
+import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.FinishedState
@@ -59,7 +59,7 @@ private data class BookOutcome(
  * position with no trace.
  */
 class KoboSyncRepository(
-    private val serverDao: CalibreServerDao,
+    private val serverDao: RemoteServerDao,
     private val bookDao: BookDao,
     private val progressDao: ReadingProgressDao,
     private val client: KoboClient = KoboClient(),
@@ -276,7 +276,7 @@ class KoboSyncRepository(
      */
     private suspend fun land(
         base: String,
-        server: com.chmouel.liseur.data.db.CalibreServer,
+        server: com.chmouel.liseur.data.db.RemoteServer,
         account: String,
     ): RemoteResult<Map<String, ReadingState>> {
         val page = when (val pulled = client.pullReadingStates(base, server.syncToken)) {
@@ -472,7 +472,7 @@ class KoboSyncRepository(
         val server = serverDao.get() ?: return null
         if (server.koboToken == null) return null
         return SyncIdentity(
-            login = server.username,
+            login = server.username.orEmpty(),
             strandedBooks = progressDao.ownedByOther(server.accountKey).size,
         )
     }

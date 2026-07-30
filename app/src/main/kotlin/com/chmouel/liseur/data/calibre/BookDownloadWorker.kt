@@ -74,7 +74,7 @@ class BookDownloadWorker(
                     Result.retry()
                 }
                 DownloadFailure.NotAllowed -> {
-                    container.database.calibreServerDao().setCanDownload(false)
+                    container.database.remoteServerDao().setCanDownload(false)
                     fail(bookUrl)
                 }
                 DownloadFailure.Gone -> fail(bookUrl)

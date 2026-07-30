@@ -1,19 +1,20 @@
 package com.chmouel.liseur.data.calibre
 
 import com.chmouel.liseur.data.db.BookDao
-import com.chmouel.liseur.data.db.CalibreServer
-import com.chmouel.liseur.data.db.CalibreServerDao
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.remote.ServerKind
 import kotlinx.coroutines.flow.Flow
 
 /** Stores the calibre-web account and hands out its credentials. */
 class CalibreAccountRepository(
-    private val dao: CalibreServerDao,
+    private val dao: RemoteServerDao,
     private val bookDao: BookDao,
     private val progressDao: ReadingProgressDao,
     private val setupClient: CalibreSetupClient = CalibreSetupClient(),
 ) {
-    val server: Flow<CalibreServer?> = dao.observe()
+    val server: Flow<RemoteServer?> = dao.observe()
 
     /**
      * Last known base URL and login, so callers that cannot suspend —
@@ -22,15 +23,15 @@ class CalibreAccountRepository(
     @Volatile
     private var cached: Pair<String, CalibreCredentials>? = null
 
-    suspend fun current(): CalibreServer? = dao.get()
+    suspend fun current(): RemoteServer? = dao.get()
 
     suspend fun credentials(): CalibreCredentials? {
         val server = dao.get() ?: run {
             cached = null
             return null
         }
-        val password = CredentialCipher.decrypt(server.passwordCipher) ?: return null
-        return CalibreCredentials(server.username, password).also {
+        val password = server.passwordCipher?.let(CredentialCipher::decrypt) ?: return null
+        return CalibreCredentials(server.username.orEmpty(), password).also {
             cached = server.baseUrl to it
         }
     }
@@ -70,12 +71,15 @@ class CalibreAccountRepository(
             if (stored != null && !sameAccount) retireForAccountSwitch()
 
             dao.upsert(
-                CalibreServer(
+                RemoteServer(
+                    kind = ServerKind.CALIBRE,
                     baseUrl = capabilities.baseUrl,
                     username = username,
                     passwordCipher = CredentialCipher.encrypt(password),
+                    apiKeyCipher = null,
+                    accountId = capabilities.userId?.toString(),
                     userId = capabilities.userId,
-                    koboTokenCipher = CalibreServer.sealToken(capabilities.koboToken)
+                    koboTokenCipher = RemoteServer.seal(capabilities.koboToken)
                         ?: existing?.koboTokenCipher,
                     canDownload = capabilities.canDownload,
                     addedAt = existing?.addedAt ?: System.currentTimeMillis(),
@@ -105,8 +109,8 @@ class CalibreAccountRepository(
     /** Re-runs the probes for the saved account, e.g. after a permission change. */
     suspend fun refreshCapabilities(): SetupResult? {
         val server = dao.get() ?: return null
-        val password = CredentialCipher.decrypt(server.passwordCipher) ?: return null
-        return connect(server.baseUrl, server.username, password, allowHttp = true)
+        val password = server.passwordCipher?.let(CredentialCipher::decrypt) ?: return null
+        return connect(server.baseUrl, server.username.orEmpty(), password, allowHttp = true)
     }
 
     /**
@@ -120,7 +124,7 @@ class CalibreAccountRepository(
      */
     suspend fun forgetUnreadableAccount(): Boolean {
         val server = dao.get() ?: return false
-        if (CredentialCipher.decrypt(server.passwordCipher) != null) return false
+        if (server.passwordCipher?.let(CredentialCipher::decrypt) != null) return false
         cached = null
         dao.delete()
         return true
@@ -133,7 +137,7 @@ class CalibreAccountRepository(
                 value.length == 32 && value.all(Character::isLetterOrDigit)
             }?.lowercase()
         }
-        dao.setKoboTokenCipher(CalibreServer.sealToken(token))
+        dao.setKoboTokenCipher(RemoteServer.seal(token))
     }
 
     /**

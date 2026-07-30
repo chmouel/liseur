@@ -59,7 +59,7 @@ import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.ui.messageRes
-import com.chmouel.liseur.data.db.CalibreServer
+import com.chmouel.liseur.data.db.RemoteServer
 
 /**
  * One screen for the whole calibre-web account: the user gives an
@@ -268,7 +268,7 @@ private fun ConnectForm(
 
 @Composable
 private fun ConnectedCard(
-    server: CalibreServer,
+    server: RemoteServer,
     storage: StorageUse,
     syncStatus: PositionSyncStatus,
     syncReport: SyncReport,
@@ -294,7 +294,7 @@ private fun ConnectedCard(
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                server.username,
+                server.username.orEmpty(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -417,7 +417,7 @@ private fun describeMovement(report: SyncReport): String? {
  * and is only typed in by hand when that could not happen.
  */
 @Composable
-private fun AdvancedSection(server: CalibreServer, onKoboToken: (String) -> Unit) {
+private fun AdvancedSection(server: RemoteServer, onKoboToken: (String) -> Unit) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var token by remember { mutableStateOf(server.koboToken.orEmpty()) }
 

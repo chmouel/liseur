@@ -85,10 +85,48 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `a connected calibre account survives becoming a generic server`() {
+        // The account row is renamed and widened at 16. Anyone upgrading
+        // is by definition on calibre-web, and has to stay connected —
+        // and keep the same account key, since that key is already
+        // written into every row they have ever synced.
+        helper.createDatabase(TEST_DB, 15).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO calibre_server (
+                    id, base_url, username, password_cipher, user_id, kobo_token,
+                    can_download, added_at, catalog_synced_at, position_synced_at, sync_token
+                ) VALUES (1, 'https://books.example', 'ada', 'cipher', 7, 'tok', 1, 100, 200, 300, 'sync')
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT kind, base_url, username, password_cipher, api_key_cipher, " +
+                        "account_id, user_id, kobo_token, can_download, sync_token FROM remote_server",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("CALIBRE", cursor.getString(0))
+                    assertEquals("https://books.example", cursor.getString(1))
+                    assertEquals("ada", cursor.getString(2))
+                    assertEquals("cipher", cursor.getString(3))
+                    assertTrue(cursor.isNull(4))
+                    assertEquals("7", cursor.getString(5))
+                    assertEquals(7, cursor.getInt(6))
+                    assertEquals("tok", cursor.getString(7))
+                    assertEquals(1, cursor.getInt(8))
+                    assertEquals("sync", cursor.getString(9))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 15
+        const val LATEST = 16
     }
 }

@@ -69,6 +69,13 @@ data class Book(
      * synced, and still holding your place. Null while it is on the shelf.
      */
     @ColumnInfo(name = "archived_at") val archivedAt: Long? = null,
+    /**
+     * How long the server thinks the book is, in its own units. Komga
+     * counts pages and the catalog pass already knows the number, so it
+     * is kept rather than asked for again. Null for anything the server
+     * does not count, and for every local book.
+     */
+    @ColumnInfo(name = "remote_page_count") val remotePageCount: Int? = null,
 ) {
     val finished: Boolean get() = finishedAt != null
 

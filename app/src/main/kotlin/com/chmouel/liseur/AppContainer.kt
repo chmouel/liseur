@@ -73,7 +73,7 @@ class AppContainer(context: Context) {
     val sessionState = SessionStateRepository(context.applicationContext)
 
     val calibreAccount = CalibreAccountRepository(
-        dao = database.calibreServerDao(),
+        dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
     )
@@ -84,7 +84,7 @@ class AppContainer(context: Context) {
     )
 
     val koboSync = KoboSyncRepository(
-        serverDao = database.calibreServerDao(),
+        serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
         finishedState = finishedState,
@@ -97,7 +97,7 @@ class AppContainer(context: Context) {
 
     val calibreCatalog = CalibreCatalogRepository(
         account = calibreAccount,
-        serverDao = database.calibreServerDao(),
+        serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
     )
 }

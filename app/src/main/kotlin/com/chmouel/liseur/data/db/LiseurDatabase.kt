@@ -12,18 +12,18 @@ import androidx.sqlite.execSQL
         ReadingProgress::class,
         Book::class,
         LibraryFolder::class,
-        CalibreServer::class,
+        RemoteServer::class,
         BookAnnotation::class,
         BookTypography::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun bookDao(): BookDao
     abstract fun libraryFolderDao(): LibraryFolderDao
-    abstract fun calibreServerDao(): CalibreServerDao
+    abstract fun remoteServerDao(): RemoteServerDao
     abstract fun annotationDao(): BookAnnotationDao
     abstract fun typographyDao(): BookTypographyDao
 
@@ -271,6 +271,67 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Makes room for a second kind of server.
+         *
+         * The account table stops being about calibre-web in particular:
+         * it gains the kind of server it describes, somewhere to keep an
+         * API key, and a place for an account id that is not a number.
+         * The login and password become optional, because Komga does not
+         * use either.
+         *
+         * Everything already stored is a calibre-web account, and is
+         * carried over saying so, down to the user id being copied into
+         * the new text column as well as staying where it was. That
+         * matters more than it looks: `accountKey` is built from the
+         * user id and is already written into `owner_account` on every
+         * row that has ever synced, so a value that came out differently
+         * here would make the reader's own reading look like somebody
+         * else's.
+         */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `remote_server` (
+                        `id` INTEGER NOT NULL,
+                        `kind` TEXT NOT NULL,
+                        `base_url` TEXT NOT NULL,
+                        `username` TEXT,
+                        `password_cipher` TEXT,
+                        `api_key_cipher` TEXT,
+                        `account_id` TEXT,
+                        `user_id` INTEGER,
+                        `kobo_token` TEXT,
+                        `can_download` INTEGER NOT NULL,
+                        `added_at` INTEGER NOT NULL,
+                        `catalog_synced_at` INTEGER,
+                        `position_synced_at` INTEGER,
+                        `sync_token` TEXT,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    INSERT INTO remote_server (
+                        id, kind, base_url, username, password_cipher, api_key_cipher,
+                        account_id, user_id, kobo_token, can_download, added_at,
+                        catalog_synced_at, position_synced_at, sync_token
+                    )
+                    SELECT id, 'CALIBRE', base_url, username, password_cipher, NULL,
+                           CAST(user_id AS TEXT), user_id, kobo_token, can_download, added_at,
+                           catalog_synced_at, position_synced_at, sync_token
+                    FROM calibre_server
+                    """.trimIndent(),
+                )
+                connection.execSQL("DROP TABLE calibre_server")
+                // What Komga counts as the length of a book. Needed to
+                // put a position back when a locator will not go.
+                connection.execSQL("ALTER TABLE books ADD COLUMN remote_page_count INTEGER")
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -289,6 +350,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_12_13,
             MIGRATION_13_14,
             MIGRATION_14_15,
+            MIGRATION_15_16,
         )
     }
 }

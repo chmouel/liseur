@@ -3,7 +3,7 @@ package com.chmouel.liseur.data.calibre
 import android.util.Log
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
-import com.chmouel.liseur.data.db.CalibreServerDao
+import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.DownloadState
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +35,7 @@ sealed interface CatalogStatus {
  */
 class CalibreCatalogRepository(
     private val account: CalibreAccountRepository,
-    private val serverDao: CalibreServerDao,
+    private val serverDao: RemoteServerDao,
     private val bookDao: BookDao,
     private val client: CalibreCatalogClient = CalibreCatalogClient(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),

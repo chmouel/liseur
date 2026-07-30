@@ -29,7 +29,7 @@ import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import com.chmouel.liseur.data.db.CalibreServer
+import com.chmouel.liseur.data.db.RemoteServer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -195,7 +195,7 @@ class LibraryViewModel(
             val catalogStatus = baseValues[2] as CatalogStatus
             @Suppress("UNCHECKED_CAST")
             val running = baseValues[3] as Map<String, DownloadProgress>
-            val server = baseValues[4] as CalibreServer?
+            val server = baseValues[4] as RemoteServer?
             val refreshing = baseValues[5] as Boolean
             val settings = baseValues[6] as AppSettings
             @Suppress("UNCHECKED_CAST")
