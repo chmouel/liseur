@@ -122,6 +122,22 @@ interface RemoteServerDao {
     @Query("UPDATE remote_server SET kobo_token = :cipher WHERE id = :id")
     suspend fun setKoboTokenCipher(cipher: String?, id: Long = RemoteServer.SINGLE_ID)
 
+    /**
+     * Marks how far a run got, touching nothing else.
+     *
+     * Writing the whole row back would carry with it the copy of the
+     * credentials the run started with, which is how a password changed
+     * in the meantime gets quietly replaced by the old one.
+     */
+    @Query("UPDATE remote_server SET catalog_synced_at = :at WHERE id = :id")
+    suspend fun setCatalogSyncedAt(at: Long, id: Long = RemoteServer.SINGLE_ID)
+
+    @Query("UPDATE remote_server SET position_synced_at = :at WHERE id = :id")
+    suspend fun setPositionSyncedAt(at: Long, id: Long = RemoteServer.SINGLE_ID)
+
+    @Query("UPDATE remote_server SET sync_token = :token WHERE id = :id")
+    suspend fun setSyncToken(token: String?, id: Long = RemoteServer.SINGLE_ID)
+
     @Query("UPDATE remote_server SET can_download = :allowed WHERE id = :id")
     suspend fun setCanDownload(allowed: Boolean, id: Long = RemoteServer.SINGLE_ID)
 

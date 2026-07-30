@@ -110,14 +110,16 @@ class KomgaSyncRepository(
             is RemoteResult.Ok -> asked.value
         }
         if (remote != null) {
-            progressDao.persistPending(
-                bookUrl = bookUrl,
-                progression = remote.state.progression,
-                status = remote.state.status.wireName,
-                remoteUpdatedAt = remote.state.updatedAt,
-                account = server.accountKey,
-                now = System.currentTimeMillis(),
-            )
+            forAccount(server) {
+                progressDao.persistPending(
+                    bookUrl = bookUrl,
+                    progression = remote.state.progression,
+                    status = remote.state.status.wireName,
+                    remoteUpdatedAt = remote.state.updatedAt,
+                    account = server.accountKey,
+                    now = System.currentTimeMillis(),
+                )
+            }
         }
         return PreviewOutcome.Ready(
             SyncPreview(
@@ -268,9 +270,9 @@ class KomgaSyncRepository(
         // Only ever stamp the account that is still connected. If it went
         // away while this ran, writing it back would sign the user in again.
         inTransaction {
-            serverDao.get()
-                ?.takeIf { it.accountKey == server.accountKey }
-                ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
+            if (serverDao.get()?.accountKey == server.accountKey) {
+                serverDao.setPositionSyncedAt(now)
+            }
         }
         return if (firstFailure == null) {
             reporting.report(PositionSyncStatus.Synced(now))
@@ -320,14 +322,16 @@ class KomgaSyncRepository(
         if (remote == null) {
             remote = stored?.pendingStateFor(account)?.let { RemoteSide(it) }
         } else {
-            progressDao.persistPending(
-                bookUrl = book.url,
-                progression = remote.state.progression,
-                status = remote.state.status.wireName,
-                remoteUpdatedAt = remote.state.updatedAt,
-                account = account,
-                now = System.currentTimeMillis(),
-            )
+            forAccount(server) {
+                progressDao.persistPending(
+                    bookUrl = book.url,
+                    progression = remote.state.progression,
+                    status = remote.state.status.wireName,
+                    remoteUpdatedAt = remote.state.updatedAt,
+                    account = account,
+                    now = System.currentTimeMillis(),
+                )
+            }
             stored = progressDao.get(book.url)
         }
 
@@ -463,6 +467,16 @@ class KomgaSyncRepository(
 
     private suspend fun stillConnected(server: RemoteServer): Boolean =
         serverDao.get()?.accountKey == server.accountKey
+
+    /**
+     * Writes only while [server] is still the connected account, asking
+     * and writing in one go so that nothing can sign out in between.
+     */
+    private suspend fun forAccount(server: RemoteServer, work: suspend () -> Unit) {
+        inTransaction {
+            if (serverDao.get()?.accountKey == server.accountKey) work()
+        }
+    }
 
     private suspend fun write(
         server: RemoteServer,
@@ -614,15 +628,22 @@ class KomgaSyncRepository(
             }
         }
 
-        progressDao.ackPush(
-            bookUrl = bookUrl,
-            sentRevision = sent,
-            progression = state.progression,
-            status = state.status.wireName,
-            account = server.accountKey,
-            now = System.currentTimeMillis(),
-        )
-        return BookOutcome(moved = SyncMove.PUSHED)
+        // The pushing is over and the account may have gone in the
+        // meantime; what is written down about it has to belong to
+        // whoever is connected now, or to no one.
+        var acked = false
+        forAccount(server) {
+            progressDao.ackPush(
+                bookUrl = bookUrl,
+                sentRevision = sent,
+                progression = state.progression,
+                status = state.status.wireName,
+                account = server.accountKey,
+                now = System.currentTimeMillis(),
+            )
+            acked = true
+        }
+        return BookOutcome(moved = if (acked) SyncMove.PUSHED else null)
     }
 
     /**

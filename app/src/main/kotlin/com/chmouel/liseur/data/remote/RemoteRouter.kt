@@ -21,6 +21,15 @@ class RemoteRouter(
 
     suspend fun catalog(): CatalogSource? = kind()?.let(catalogs::get)
 
+    /**
+     * The catalog for a server already in hand.
+     *
+     * Reading the connected server again would be a second look at
+     * something that may have changed in between, which is how the new
+     * account's secret ends up being sent to the old account's host.
+     */
+    fun catalogFor(kind: ServerKind): CatalogSource? = catalogs[kind]
+
     suspend fun files(): FileSource? = kind()?.let(files::get)
 
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)

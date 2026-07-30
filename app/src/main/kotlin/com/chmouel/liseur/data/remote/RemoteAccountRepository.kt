@@ -168,9 +168,17 @@ class RemoteAccountRepository(
      * remote state, because they describe a library this new login cannot
      * see. Nothing is left looking unsent, so signing in as someone else
      * never quietly uploads the last person's reading into their account.
+     *
+     * The books go the same way they go on a disconnect. A remote id
+     * means something only to the server that issued it, so leaving one
+     * behind would have the next sync ask a different server about a
+     * book it has never heard of — or, worse, about one of its own that
+     * happens to answer to that id.
      */
     private suspend fun retireForAccountSwitch() {
         progressDao.retireAccountState()
+        bookDao.deleteRemoteNotDownloaded()
+        bookDao.unlinkDownloadedFromRemote()
     }
 
     /** Re-runs the probes for the saved account, e.g. after a permission change. */

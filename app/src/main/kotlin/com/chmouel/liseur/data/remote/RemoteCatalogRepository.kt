@@ -40,7 +40,6 @@ sealed interface CatalogStatus {
  * already in the same shape whoever sent them.
  */
 class RemoteCatalogRepository(
-    private val account: RemoteAccountRepository,
     private val router: RemoteRouter,
     private val serverDao: RemoteServerDao,
     private val bookDao: BookDao,
@@ -79,11 +78,14 @@ class RemoteCatalogRepository(
                 _status.value = CatalogStatus.Idle
                 return false
             }
-            val credentials = account.credentials() ?: run {
+            // Everything about the request comes from the one row that
+            // was read, so a sign-in landing now cannot have this send
+            // the new account's secret to the old account's server.
+            val credentials = server.credentials ?: run {
                 _status.value = CatalogStatus.CredentialsLost
                 return false
             }
-            val client = router.catalog() ?: run {
+            val client = router.catalogFor(server.kind) ?: run {
                 _status.value = CatalogStatus.Idle
                 return false
             }
@@ -101,7 +103,7 @@ class RemoteCatalogRepository(
                 // the dead, so the whole answer is dropped instead.
                 forAccount(server) {
                     dropVanished(seen)
-                    serverDao.upsert(server.copy(catalogSyncedAt = System.currentTimeMillis()))
+                    serverDao.setCatalogSyncedAt(System.currentTimeMillis())
                 }
                 _status.value = CatalogStatus.Idle
                 true
@@ -121,8 +123,8 @@ class RemoteCatalogRepository(
 
     suspend fun search(query: String): List<RemoteBook> {
         val server = serverDao.get() ?: return emptyList()
-        val credentials = account.credentials() ?: return emptyList()
-        val client = router.catalog() ?: return emptyList()
+        val credentials = server.credentials ?: return emptyList()
+        val client = router.catalogFor(server.kind) ?: return emptyList()
         return try {
             client.search(server.baseUrl, credentials, query)
         } catch (e: IOException) {

@@ -252,9 +252,9 @@ class KoboSyncRepository(
         // Only ever stamp the account that is still connected. If it went
         // away while this ran, writing it back would sign the user in again.
         inTransaction {
-            serverDao.get()
-                ?.takeIf { it.accountKey == server.accountKey }
-                ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
+            if (serverDao.get()?.accountKey == server.accountKey) {
+                serverDao.setPositionSyncedAt(now)
+            }
         }
         return if (firstFailure == null) {
             reporting.report(PositionSyncStatus.Synced(now))
@@ -308,7 +308,7 @@ class KoboSyncRepository(
                 )
                 landed[known.url] = state
             }
-            serverDao.upsert(server.copy(syncToken = page.syncToken))
+            serverDao.setSyncToken(page.syncToken)
         }
         if (changed) return RemoteResult.Failed(SyncFailure.Unauthorised)
         return RemoteResult.Ok(landed)
@@ -339,14 +339,16 @@ class KoboSyncRepository(
             when (val asked = client.readState(base, uuid)) {
                 is RemoteResult.Failed -> return BookOutcome(failure = asked.reason)
                 is RemoteResult.Ok -> remote = asked.value?.also {
-                    progressDao.persistPending(
-                        bookUrl = book.url,
-                        progression = it.progression,
-                        status = it.status.wireName,
-                        remoteUpdatedAt = it.updatedAt,
-                        account = account,
-                        now = System.currentTimeMillis(),
-                    )
+                    forAccount(account) {
+                        progressDao.persistPending(
+                            bookUrl = book.url,
+                            progression = it.progression,
+                            status = it.status.wireName,
+                            remoteUpdatedAt = it.updatedAt,
+                            account = account,
+                            now = System.currentTimeMillis(),
+                        )
+                    }
                     stored = progressDao.get(book.url)
                 }
             }
@@ -371,6 +373,56 @@ class KoboSyncRepository(
     private suspend fun apply(
         base: String,
         uuid: String,
+        bookUrl: String,
+        account: String,
+        stored: ReadingProgress?,
+        decision: SyncDecision,
+    ): BookOutcome {
+        // Pushing talks to the server and so cannot be held inside a
+        // transaction; the rest is local, and belongs to an account that
+        // may have gone, so it is asked about and done in one go.
+        if (decision is SyncDecision.Push) {
+            if (!stillConnected(account)) return BookOutcome()
+            val sent = stored?.localRevision ?: 0
+            return when (val pushed = client.pushState(base, uuid, decision.state)) {
+                is RemoteResult.Failed -> BookOutcome(failure = pushed.reason)
+                is RemoteResult.Ok -> {
+                    var acked = false
+                    forAccount(account) {
+                        progressDao.ackPush(
+                            bookUrl = bookUrl,
+                            sentRevision = sent,
+                            progression = decision.state.progression,
+                            status = decision.state.status.wireName,
+                            account = account,
+                            now = System.currentTimeMillis(),
+                        )
+                        acked = true
+                    }
+                    BookOutcome(moved = if (acked) SyncMove.PUSHED else null)
+                }
+            }
+        }
+        var outcome = BookOutcome()
+        inTransaction {
+            if (stillConnected(account)) {
+                outcome = write(bookUrl, account, stored, decision)
+            }
+        }
+        return outcome
+    }
+
+    private suspend fun stillConnected(account: String): Boolean =
+        serverDao.get()?.accountKey == account
+
+    /** Writes only while [account] is still connected, in one go. */
+    private suspend fun forAccount(account: String, work: suspend () -> Unit) {
+        inTransaction {
+            if (stillConnected(account)) work()
+        }
+    }
+
+    private suspend fun write(
         bookUrl: String,
         account: String,
         stored: ReadingProgress?,
@@ -419,23 +471,7 @@ class KoboSyncRepository(
                 BookOutcome(moved = SyncMove.PULLED)
             }
 
-            is SyncDecision.Push -> {
-                val sent = stored?.localRevision ?: 0
-                when (val pushed = client.pushState(base, uuid, decision.state)) {
-                    is RemoteResult.Failed -> BookOutcome(failure = pushed.reason)
-                    is RemoteResult.Ok -> {
-                        progressDao.ackPush(
-                            bookUrl = bookUrl,
-                            sentRevision = sent,
-                            progression = decision.state.progression,
-                            status = decision.state.status.wireName,
-                            account = account,
-                            now = now,
-                        )
-                        BookOutcome(moved = SyncMove.PUSHED)
-                    }
-                }
-            }
+            is SyncDecision.Push -> BookOutcome()
 
             is SyncDecision.AdoptStatus -> {
                 // Refused means someone here said outright that this book

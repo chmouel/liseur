@@ -150,7 +150,6 @@ class AppContainer(context: Context) {
     val positionSync = PositionSyncCoordinator(RoutedPositionSync(remoteRouter))
 
     val remoteCatalog = RemoteCatalogRepository(
-        account = remoteAccount,
         router = remoteRouter,
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
