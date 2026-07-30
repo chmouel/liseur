@@ -1,3 +1,5 @@
+[![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github)](https://github.com/sponsors/chmouel)
+
 # Liseur
 
 An open-source EPUB books reader and calibre-web / Komga client for Android: a
