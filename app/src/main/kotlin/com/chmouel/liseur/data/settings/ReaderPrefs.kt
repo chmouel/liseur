@@ -68,7 +68,17 @@ enum class FooterMode(val id: String) {
     }
 
     companion object {
-        val Default = TIME_LEFT_CHAPTER
+        /**
+         * Where you are, rather than how long is left.
+         *
+         * Time left in the chapter was the default, and it is the one
+         * mode that can end up drawing nothing: until enough reading has
+         * been watched to know a pace, the estimate is a stock guess,
+         * and near the end of a chapter that guess rounds to no time at
+         * all and the footer goes blank. The page count is known from
+         * the moment a book opens and is never a guess.
+         */
+        val Default = PAGE
 
         fun fromId(id: String?): FooterMode = entries.firstOrNull { it.id == id } ?: Default
     }

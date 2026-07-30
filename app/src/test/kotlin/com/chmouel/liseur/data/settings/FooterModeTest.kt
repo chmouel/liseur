@@ -51,4 +51,11 @@ class FooterModeTest {
         assertEquals(FooterMode.Default, FooterMode.fromId("something else"))
         assertEquals(FooterMode.PERCENT, FooterMode.fromId("percent"))
     }
+
+    @Test
+    fun `the default is something a book can always show`() {
+        // Time left is a guess until a pace has been learned, and near
+        // the end of a chapter that guess renders as nothing.
+        assertEquals(FooterMode.PAGE, FooterMode.Default)
+    }
 }
