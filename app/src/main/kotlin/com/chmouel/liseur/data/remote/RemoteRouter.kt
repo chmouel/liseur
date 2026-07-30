@@ -32,6 +32,9 @@ class RemoteRouter(
 
     suspend fun files(): FileSource? = kind()?.let(files::get)
 
+    /** The downloader for a server already in hand. See [catalogFor]. */
+    fun filesFor(kind: ServerKind): FileSource? = files[kind]
+
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
 }
 

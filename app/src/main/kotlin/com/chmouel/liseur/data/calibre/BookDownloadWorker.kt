@@ -26,9 +26,13 @@ class BookDownloadWorker(
         val bookDao = container.database.bookDao()
         val book = bookDao.getByUrl(bookUrl) ?: return give_up("unknown book $bookUrl")
         val uuid = book.remoteUuid ?: return give_up("book has no uuid")
+        // The URL, the secret and the way to ask for a file all come
+        // from the one row that was read. Looking each of them up in
+        // turn is how a key typed in just now ends up being handed to
+        // the server that was connected a moment ago.
         val server = container.remoteAccount.current() ?: return give_up("no server")
-        val credentials = container.remoteAccount.credentials() ?: return give_up("no credentials")
-        val files = container.remoteRouter.files() ?: return give_up("no file source")
+        val credentials = server.credentials ?: return give_up("no credentials")
+        val files = container.remoteRouter.filesFor(server.kind) ?: return give_up("no file source")
 
         val request = files.downloadRequest(server.baseUrl, credentials, book)
             ?: run {
