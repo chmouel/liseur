@@ -5,6 +5,7 @@ import java.io.ByteArrayInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 import org.w3c.dom.Node
+import org.xml.sax.SAXException
 
 /** A book as the calibre-web catalog describes it. */
 data class OpdsBook(
@@ -54,9 +55,83 @@ object OpdsParser {
     private const val IMAGE_REL = "http://opds-spec.org/image"
     private const val THUMBNAIL_REL = "http://opds-spec.org/image/thumbnail"
 
+    /**
+     * A parser that will not go and fetch things on the feed's behalf.
+     *
+     * A stock `DocumentBuilderFactory` honours a DOCTYPE, and an entity
+     * declared in one can name a local file or a URL. A feed that
+     * declared `file:///data/data/.../shared_prefs/...` would have its
+     * contents pulled into the document we then parse, and one naming a
+     * host on the same network would have us fetch it -- from inside
+     * whatever network the phone is on, which is the whole point of an
+     * SSRF. OPDS has no legitimate use for any of it.
+     *
+     * Each switch is asked for on its own and a refusal is survivable,
+     * because which of them an implementation honours varies and
+     * Android's parser is not the one these tests run against. What
+     * makes that safe is [rejectsDoctype] below: the guarantee does not
+     * rest on any of these being granted.
+     */
+    private fun safeDocumentBuilderFactory(): DocumentBuilderFactory =
+        DocumentBuilderFactory.newInstance().apply {
+            bestEffort("http://apache.org/xml/features/disallow-doctype-decl", true)
+            bestEffort("http://xml.org/sax/features/external-general-entities", false)
+            bestEffort("http://xml.org/sax/features/external-parameter-entities", false)
+            bestEffort("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            bestEffort(javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING, true)
+            runCatching { isXIncludeAware = false }
+            isExpandEntityReferences = false
+            isNamespaceAware = true
+        }
+
+    private fun DocumentBuilderFactory.bestEffort(feature: String, value: Boolean) {
+        runCatching { setFeature(feature, value) }
+    }
+
+    /**
+     * Refuses a feed that declares a document type at all.
+     *
+     * This is the guarantee, rather than the factory settings above: a
+     * parser that does not implement `disallow-doctype-decl` accepts the
+     * request to set it by throwing, which leaves nothing enforced. XML
+     * permits a DOCTYPE only in the prolog and nowhere else, so looking
+     * for one before parsing costs a scan of a few hundred bytes and
+     * cannot be talked out of by anything later in the document. A feed
+     * that trips it is refused as malformed, which is what it is: OPDS
+     * has no document type to declare.
+     */
+    private fun rejectsDoctype(xml: String) {
+        if (prologOf(xml).contains("<!DOCTYPE")) {
+            throw SAXException("the feed declares a document type, which OPDS never needs")
+        }
+    }
+
+    /**
+     * Everything before the root element opens.
+     *
+     * A DOCTYPE is only ever legal here, so this is the only place worth
+     * looking -- and looking only here means a document that merely
+     * quotes the word, in a title or a CDATA block, is not mistaken for
+     * one that declares it.
+     */
+    private fun prologOf(xml: String): String {
+        var i = 0
+        while (i < xml.length) {
+            val open = xml.indexOf('<', i)
+            if (open < 0) return xml
+            // Anything that is not <? or <! is the root element.
+            val next = xml.getOrNull(open + 1)
+            if (next != '?' && next != '!') return xml.take(open)
+            val close = xml.indexOf('>', open)
+            if (close < 0) return xml
+            i = close + 1
+        }
+        return xml
+    }
+
     fun parse(xml: String): OpdsPage {
-        val document = DocumentBuilderFactory.newInstance()
-            .apply { isNamespaceAware = true }
+        rejectsDoctype(xml)
+        val document = safeDocumentBuilderFactory()
             .newDocumentBuilder()
             .parse(ByteArrayInputStream(xml.toByteArray()))
 

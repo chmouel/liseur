@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.calibre
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -85,5 +86,63 @@ class OpdsParserTest {
 
         assertNull(book.downloadHref)
         assertEquals(74, book.bookId)
+    }
+
+    /**
+     * A feed is not trusted just because an account is connected to the
+     * server that sent it. A DOCTYPE is the way in: an entity declared
+     * there can name a local file, whose contents would then be parsed
+     * into the document, or a host on whatever network the phone is on,
+     * which we would go and fetch. OPDS needs none of it, so none of it
+     * is allowed.
+     */
+    @Test
+    fun `a feed that declares entities is refused rather than resolved`() {
+        val hostile = """
+            <?xml version="1.0"?>
+            <!DOCTYPE feed [<!ENTITY secret SYSTEM "file:///etc/hostname">]>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:1</id><title>&secret;</title></entry>
+            </feed>
+        """.trimIndent()
+
+        try {
+            OpdsParser.parse(hostile)
+            fail("the parser accepted a document that declared an external entity")
+        } catch (e: org.xml.sax.SAXException) {
+            // Refused outright, which upstream turns into "your server
+            // answered with something unexpected".
+        }
+    }
+
+    @Test
+    fun `an ordinary feed still parses`() {
+        val page = OpdsParser.parse(
+            """
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:abc</id><title>Moby Dick</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("abc"), page.books.map { it.uuid })
+    }
+
+    /** Only the prolog is looked at, so a book about XML still shows up. */
+    @Test
+    fun `a title that merely mentions a doctype is not refused`() {
+        val page = OpdsParser.parse(
+            """
+            <?xml version="1.0"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <id>urn:uuid:abc</id>
+                <title>Writing &lt;!DOCTYPE html&gt; by hand</title>
+              </entry>
+            </feed>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("abc"), page.books.map { it.uuid })
     }
 }
