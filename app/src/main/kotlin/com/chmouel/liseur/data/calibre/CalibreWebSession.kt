@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.calibre
 
 import android.util.Log
+import com.chmouel.liseur.data.remote.RemoteHttp
 import java.io.IOException
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -20,7 +21,7 @@ import okhttp3.Response
  * browser would and hands back both.
  */
 class CalibreWebSession private constructor(
-    val http: CalibreHttp,
+    val http: RemoteHttp,
     private val baseUrl: String,
 ) {
 
@@ -38,7 +39,7 @@ class CalibreWebSession private constructor(
 
         /** Logs in, or returns null when the server will not have us. */
         fun logIn(baseUrl: String, username: String, password: String): CalibreWebSession? = try {
-            val http = CalibreHttp(clientFor(baseUrl))
+            val http = RemoteHttp(clientFor(baseUrl))
             val loginUrl = CalibreUrl.resolve(baseUrl, "/login")
             val csrf = http.get(loginUrl, null)
                 .use { CalibreParsing.csrfToken(it.body?.string().orEmpty()) }

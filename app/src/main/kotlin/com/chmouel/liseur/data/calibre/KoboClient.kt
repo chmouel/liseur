@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.calibre
 
 import android.util.Log
+import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SyncFailure
@@ -28,7 +29,7 @@ data class RemoteReadingState(val uuid: String, val state: ReadingState)
  * The sync token is the only credential; it goes in the path, so every
  * URL here already carries it.
  */
-class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
+class KoboClient(private val http: RemoteHttp = RemoteHttp()) {
 
     /**
      * Walks `/v1/library/sync` to the end, collecting every reading state

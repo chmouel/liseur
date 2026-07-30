@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.calibre
 
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteHttp
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +35,7 @@ sealed interface DownloadOutcome {
  * so a book edited on the server is fetched again rather than stitched
  * together from two different versions.
  */
-class BookDownloader(private val http: CalibreHttp = CalibreHttp()) {
+class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
 
     suspend fun download(
         url: String,

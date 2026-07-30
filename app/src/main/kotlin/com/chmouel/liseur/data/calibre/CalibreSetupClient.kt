@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.calibre
 
 import android.util.Log
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.ServerCapabilities
 import com.chmouel.liseur.data.remote.ServerSetup
 import com.chmouel.liseur.data.remote.SetupFailure
@@ -16,7 +17,7 @@ import kotlinx.coroutines.withContext
  * may download books, and whether reading-position sync can be switched
  * on for it.
  */
-class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) : ServerSetup {
+class CalibreSetupClient(private val http: RemoteHttp = RemoteHttp()) : ServerSetup {
 
     override suspend fun connect(
         rawUrl: String,

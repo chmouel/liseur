@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.calibre
 import com.chmouel.liseur.data.remote.CatalogSource
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteHttp
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -10,7 +11,7 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 /** Fetches book lists from a calibre-web catalog. */
-class CalibreCatalogClient(private val http: CalibreHttp = CalibreHttp()) : CatalogSource {
+class CalibreCatalogClient(private val http: RemoteHttp = RemoteHttp()) : CatalogSource {
 
     /**
      * Every book in the library, following the feed's `next` links.
