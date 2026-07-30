@@ -86,6 +86,7 @@ class AppContainer(context: Context) {
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 
     val bookDownloads = BookDownloadRepository(
@@ -122,6 +123,7 @@ class AppContainer(context: Context) {
         finishedState = finishedState,
         device = deviceIdentity,
         reporting = syncReporting,
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 
     /**
@@ -152,6 +154,7 @@ class AppContainer(context: Context) {
         router = remoteRouter,
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 }
 

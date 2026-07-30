@@ -64,9 +64,11 @@ private data class RemoteSide(
  * percentage is still what the two sides are compared on, because that
  * is the only thing they can both mean.
  *
- * There is no sync token and nothing destructive to protect, so unlike
- * the Kobo sync nothing here has to be transactional: everything Komga
- * has to say can be asked for again.
+ * There is no sync token and nothing destructive to protect, so nothing
+ * Komga says has to be landed atomically: it can all be asked for again.
+ * What does have to be atomic is the question of whose account is being
+ * written for, because signing out during a run must not be undone by
+ * what the run had already decided.
  */
 class KomgaSyncRepository(
     private val serverDao: RemoteServerDao,
@@ -77,6 +79,7 @@ class KomgaSyncRepository(
     private val reporting: SyncReporting = SyncReporting(),
     private val catalog: KomgaCatalogClient = KomgaCatalogClient(),
     private val positions: KomgaProgressionClient = KomgaProgressionClient(),
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
 
     override suspend fun syncAll(): SyncOutcome = run(book = null)
@@ -264,9 +267,11 @@ class KomgaSyncRepository(
         )
         // Only ever stamp the account that is still connected. If it went
         // away while this ran, writing it back would sign the user in again.
-        serverDao.get()
-            ?.takeIf { it.accountKey == server.accountKey }
-            ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
+        inTransaction {
+            serverDao.get()
+                ?.takeIf { it.accountKey == server.accountKey }
+                ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
+        }
         return if (firstFailure == null) {
             reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success
@@ -437,6 +442,35 @@ class KomgaSyncRepository(
         remote: RemoteSide?,
         decision: SyncDecision,
     ): BookOutcome {
+        // A push talks to the server and cannot be held inside a
+        // transaction; everything else is a write for an account that
+        // may no longer be connected, so it is checked and done at once.
+        if (decision is SyncDecision.Push) {
+            return if (stillConnected(server)) {
+                push(server, credentials, id, bookUrl, stored, remote, decision.state)
+            } else {
+                BookOutcome()
+            }
+        }
+        var outcome = BookOutcome()
+        inTransaction {
+            if (serverDao.get()?.accountKey == server.accountKey) {
+                outcome = write(server, bookUrl, stored, remote, decision)
+            }
+        }
+        return outcome
+    }
+
+    private suspend fun stillConnected(server: RemoteServer): Boolean =
+        serverDao.get()?.accountKey == server.accountKey
+
+    private suspend fun write(
+        server: RemoteServer,
+        bookUrl: String,
+        stored: ReadingProgress?,
+        remote: RemoteSide?,
+        decision: SyncDecision,
+    ): BookOutcome {
         val account = server.accountKey
         val now = System.currentTimeMillis()
         return when (decision) {
@@ -446,6 +480,7 @@ class KomgaSyncRepository(
                 if (stored != null) {
                     progressDao.settleAgreed(
                         bookUrl = bookUrl,
+                        inspectedRevision = stored.localRevision,
                         progression = stored.totalProgression,
                         status = stored.statusOrDerived().wireName,
                         account = account,
@@ -483,8 +518,7 @@ class KomgaSyncRepository(
                 BookOutcome(moved = SyncMove.PULLED)
             }
 
-            is SyncDecision.Push ->
-                push(server, credentials, id, bookUrl, stored, remote, decision.state)
+            is SyncDecision.Push -> BookOutcome()
 
             is SyncDecision.AdoptStatus -> {
                 // Refused means someone here said outright that this book

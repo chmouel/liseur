@@ -26,6 +26,13 @@ class RemoteAccountRepository(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
     ),
+    /**
+     * Connecting and disconnecting each touch several tables, and a sync
+     * or a catalog refresh may be running at the same time. Doing them in
+     * one go is what lets those runs check whose account they are writing
+     * for and be sure the answer is still true when they write.
+     */
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     val server: Flow<RemoteServer?> = dao.observe()
 
@@ -103,6 +110,14 @@ class RemoteAccountRepository(
      * syncing one person's reading into another person's account.
      */
     private suspend fun store(
+        kind: ServerKind,
+        credentials: RemoteCredentials,
+        capabilities: ServerCapabilities,
+    ) {
+        inTransaction { storeLocked(kind, credentials, capabilities) }
+    }
+
+    private suspend fun storeLocked(
         kind: ServerKind,
         credentials: RemoteCredentials,
         capabilities: ServerCapabilities,
@@ -200,8 +215,10 @@ class RemoteAccountRepository(
      */
     suspend fun disconnect() {
         cached = null
-        bookDao.deleteRemoteNotDownloaded()
-        bookDao.unlinkDownloadedFromRemote()
-        dao.delete()
+        inTransaction {
+            bookDao.deleteRemoteNotDownloaded()
+            bookDao.unlinkDownloadedFromRemote()
+            dao.delete()
+        }
     }
 }

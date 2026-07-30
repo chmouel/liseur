@@ -338,15 +338,31 @@ class ReadingProgressDaoTest {
     // -- Settling without a push or a pull --------------------------------
 
     @Test
-    fun `agreeing settles at whatever revision the row is on`() = runTest {
+    fun `agreeing settles the revision that was compared`() = runTest {
         read(0.5)
         read(0.5)
-        dao.settleAgreed(book, 0.5, "Reading", account, now = 5_000)
+        dao.settleAgreed(book, 2L, 0.5, "Reading", account, now = 5_000)
 
         val row = row()
         assertEquals(2L, row.ackedRevision)
         assertFalse(row.isDirty)
         assertEquals(account, row.agreedAccount)
         assertNotNull(row.syncedAt)
+    }
+
+    @Test
+    fun `a page turned while agreeing is not settled with the rest`() = runTest {
+        read(0.5)
+        // The reader moved on after the comparison was made and before
+        // it could be written down. That page was never weighed against
+        // the server, so it is still owed.
+        read(0.9)
+        dao.settleAgreed(book, 1L, 0.5, "Reading", account, now = 5_000)
+
+        val row = row()
+        // Nothing is acknowledged: the compared revision has been
+        // overtaken, and the one that overtook it was never sent.
+        assertEquals(0L, row.ackedRevision)
+        assertTrue(row.isDirty)
     }
 }

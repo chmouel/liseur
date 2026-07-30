@@ -342,14 +342,18 @@ abstract class ReadingProgressDao {
     @Transaction
     open suspend fun settleAgreed(
         bookUrl: String,
+        inspectedRevision: Long,
         progression: Double?,
         status: String,
         account: String,
         now: Long,
     ) {
         setBaseline(bookUrl, progression, status, account, now)
-        ackRevision(bookUrl, currentRevision(bookUrl) ?: 0)
-        clearPending(bookUrl)
+        // Only the revision that was actually compared can be called
+        // settled. A page turned since then was never weighed against
+        // the server, so the row stays dirty and is sent next time.
+        ackRevision(bookUrl, inspectedRevision)
+        if (currentRevision(bookUrl) == inspectedRevision) clearPending(bookUrl)
     }
 
     @Query("SELECT local_revision FROM reading_progress WHERE book_url = :bookUrl")

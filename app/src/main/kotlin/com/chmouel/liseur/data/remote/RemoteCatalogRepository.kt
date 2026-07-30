@@ -44,6 +44,13 @@ class RemoteCatalogRepository(
     private val router: RemoteRouter,
     private val serverDao: RemoteServerDao,
     private val bookDao: BookDao,
+    /**
+     * Whose account a book belongs to is only true until someone signs
+     * out, so every write here checks and writes in one go. Anything
+     * less and a disconnect landing mid-refresh leaves the new account
+     * holding the old one's library.
+     */
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     private val _status = MutableStateFlow<CatalogStatus>(CatalogStatus.Idle)
@@ -85,17 +92,17 @@ class RemoteCatalogRepository(
             return try {
                 val seen = mutableSetOf<String>()
                 client.allBooks(server.baseUrl, credentials) { page ->
-                    if (!stillConnected(server)) throw AccountChanged()
                     page.forEach { seen += it.remoteId }
-                    store(server.kind, server.baseUrl, page)
+                    forAccount(server) { store(server.kind, server.baseUrl, page) }
                 }
                 // Someone may have disconnected or signed in elsewhere
                 // while this was in flight. Writing now would delete the
                 // new account's books, or bring the old account back from
                 // the dead, so the whole answer is dropped instead.
-                if (!stillConnected(server)) throw AccountChanged()
-                dropVanished(seen)
-                serverDao.upsert(server.copy(catalogSyncedAt = System.currentTimeMillis()))
+                forAccount(server) {
+                    dropVanished(seen)
+                    serverDao.upsert(server.copy(catalogSyncedAt = System.currentTimeMillis()))
+                }
                 _status.value = CatalogStatus.Idle
                 true
             } catch (e: AccountChanged) {
@@ -140,19 +147,33 @@ class RemoteCatalogRepository(
      */
     private suspend fun dropVanished(seenUuids: Set<String>) {
         val gone = bookDao.allRemote().filter { it.remoteUuid !in seenUuids }
-        val (downloaded, notDownloaded) = gone.partition {
-            it.downloadState != DownloadState.REMOTE
-        }
-        if (notDownloaded.isNotEmpty()) bookDao.deleteByUrls(notDownloaded.map { it.url })
+        // Only a book with a file of its own is worth keeping. One that
+        // was queued or failed has nothing to read, so it goes with the
+        // rest rather than staying as a row that can never be opened.
+        val (onDevice, noFile) = gone.partition { it.localUri != null }
+        if (noFile.isNotEmpty()) bookDao.deleteByUrls(noFile.map { it.url })
         // A book that is here but no longer there keeps its file and loses
         // its link: syncing it would keep asking the server about an id it
         // has forgotten, and be told no every time.
-        if (downloaded.isNotEmpty()) bookDao.unlinkFromRemote(downloaded.map { it.url })
+        if (onDevice.isNotEmpty()) bookDao.unlinkFromRemote(onDevice.map { it.url })
     }
 
-    /** Whether the account this run started under is still the one connected. */
-    private suspend fun stillConnected(server: RemoteServer): Boolean =
-        serverDao.get()?.accountKey == server.accountKey
+    /**
+     * Runs [work] only if [server] is still the connected account, with
+     * the check and the work in the same transaction so that nothing can
+     * sign out in between.
+     */
+    private suspend fun forAccount(server: RemoteServer, work: suspend () -> Unit) {
+        var changed = false
+        inTransaction {
+            if (serverDao.get()?.accountKey != server.accountKey) {
+                changed = true
+            } else {
+                work()
+            }
+        }
+        if (changed) throw AccountChanged()
+    }
 
     /** Thrown to abandon a run whose account is no longer the current one. */
     private class AccountChanged : IOException("The connected account changed")

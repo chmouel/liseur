@@ -172,10 +172,13 @@ fun reconcileReadingState(
 
     // Status alone travelled; the position it came with is simply absent.
     if (remote.progression == null) {
-        return if (remote.status == local.status) {
-            SyncDecision.InSync
-        } else {
-            SyncDecision.AdoptStatus(remote.status)
+        return when {
+            remote.status != local.status -> SyncDecision.AdoptStatus(remote.status)
+            // Agreeing about the status is not agreeing about the place.
+            // A position this device has not sent is still owed, and
+            // calling this settled would drop it for good.
+            localDirty && local.progression != null -> SyncDecision.Push(local)
+            else -> SyncDecision.InSync
         }
     }
 

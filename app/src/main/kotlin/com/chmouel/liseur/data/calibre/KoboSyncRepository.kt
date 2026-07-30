@@ -251,9 +251,11 @@ class KoboSyncRepository(
         )
         // Only ever stamp the account that is still connected. If it went
         // away while this ran, writing it back would sign the user in again.
-        serverDao.get()
-            ?.takeIf { it.accountKey == server.accountKey }
-            ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
+        inTransaction {
+            serverDao.get()
+                ?.takeIf { it.accountKey == server.accountKey }
+                ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
+        }
         return if (firstFailure == null) {
             reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success
@@ -286,7 +288,14 @@ class KoboSyncRepository(
         val landed = mutableMapOf<String, ReadingState>()
         val now = System.currentTimeMillis()
 
+        var changed = false
         inTransaction {
+            // Signing out while this was in flight retires everything the
+            // old account knew, so writing it now would bring it back.
+            if (serverDao.get()?.accountKey != account) {
+                changed = true
+                return@inTransaction
+            }
             for ((uuid, state) in page.states) {
                 val known = byUuid[uuid] ?: continue
                 progressDao.persistPending(
@@ -301,6 +310,7 @@ class KoboSyncRepository(
             }
             serverDao.upsert(server.copy(syncToken = page.syncToken))
         }
+        if (changed) return RemoteResult.Failed(SyncFailure.Unauthorised)
         return RemoteResult.Ok(landed)
     }
 
@@ -374,6 +384,7 @@ class KoboSyncRepository(
                 if (stored != null) {
                     progressDao.settleAgreed(
                         bookUrl = bookUrl,
+                        inspectedRevision = stored.localRevision,
                         progression = stored.totalProgression,
                         status = stored.statusOrDerived().wireName,
                         account = account,

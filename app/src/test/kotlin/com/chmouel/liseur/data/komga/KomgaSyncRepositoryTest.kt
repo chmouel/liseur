@@ -344,7 +344,7 @@ class KomgaSyncRepositoryTest {
             updatedAt = 1_000,
         )
         // Both sides have moved on from a point they once agreed on.
-        progress.settleAgreed(bookUrl, 0.1, "Reading", account, now = 500)
+        progress.settleAgreed(bookUrl, 1L, 0.1, "Reading", account, now = 500)
         progress.recordLocal(
             bookUrl = bookUrl,
             locatorJson = locatorJson("OEBPS/ch4.xhtml", 0.5, 0.4),
