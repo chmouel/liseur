@@ -801,9 +801,9 @@ tap_on "Settings"
 wait_for "Theme" >/dev/null || sleep 2
 shot 08-settings
 
-tap_on "calibre-web"
+tap_on "Book server"
 sleep 3
-shot 09-calibre
+shot 09-server
 
 step "Dark"
 

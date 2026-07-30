@@ -32,7 +32,7 @@ modern reader that is equally at home with the files on your phone and with a
   </tr>
   <tr>
     <td><img src="docs/screenshots/08-settings.png" alt="Settings"></td>
-    <td><img src="docs/screenshots/09-calibre.png" alt="Server setup"></td>
+    <td><img src="docs/screenshots/09-server.png" alt="Server setup"></td>
     <td><img src="docs/screenshots/10-library-dark.png" alt="Library in dark mode"></td>
     <td><img src="docs/screenshots/11-reading-dark.png" alt="Reading in the dark theme"></td>
   </tr>
