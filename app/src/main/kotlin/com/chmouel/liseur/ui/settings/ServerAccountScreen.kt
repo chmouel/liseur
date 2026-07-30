@@ -557,7 +557,10 @@ private fun ServerKind.labelRes(): Int = when (this) {
 }
 
 private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
-    AccountError.BAD_CREDENTIALS -> R.string.server_error_credentials
+    AccountError.BAD_CREDENTIALS -> when (kind) {
+        ServerKind.CALIBRE -> R.string.server_error_credentials
+        ServerKind.KOMGA -> R.string.server_error_credentials_komga
+    }
     AccountError.WRONG_SERVER -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_not_calibre
         ServerKind.KOMGA -> R.string.server_error_not_komga

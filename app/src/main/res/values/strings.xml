@@ -62,6 +62,7 @@
     <string name="server_http_warning">Liseur will talk to this server over plain HTTP. Your username and password are sent with every request, and anyone else on the network — or anywhere between you and the server — can read them, read what you are reading, and change what comes back. Only do this on a network you trust.</string>
     <string name="server_http_confirm">Connect anyway</string>
     <string name="server_error_credentials">That username or password was refused by the server.</string>
+    <string name="server_error_credentials_komga">That API key was refused by the server. Check that it has been copied whole and not revoked since.</string>
     <string name="server_error_not_calibre">No calibre-web catalog answered at that address. Check the address, including any folder it is served from.</string>
     <string name="server_error_not_komga">No Komga server answered at that address. Check the address, including any folder it is served from.</string>
     <string name="server_error_unreachable">The server did not answer. Check the address and that you are online.</string>
