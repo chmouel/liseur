@@ -102,6 +102,14 @@ data class LibraryUiState(
     val libraryIsEmpty: Boolean = true,
     /** Whether anything has been put away, so the way to it is only offered when there is one. */
     val hasArchived: Boolean = false,
+    /**
+     * Whether a book server is connected.
+     *
+     * Without one there is nothing to have not downloaded yet: every
+     * book in the library is a file already on the device, so a
+     * Downloaded filter would only ever say "all of them".
+     */
+    val hasServer: Boolean = false,
 )
 
 /**
@@ -203,6 +211,16 @@ class LibraryViewModel(
             val readAtList = baseValues[7] as List<BookReadAt>
             val readAt = readAtList.associate { it.bookUrl to it.updatedAt }
 
+            // Disconnecting a server takes its filter away with it,
+            // rather than leaving the shelf narrowed by a chip that is
+            // no longer on screen to widen it again.
+            val effectiveFilter =
+                if (server == null && filter == LibraryFilter.DOWNLOADED) {
+                    LibraryFilter.ALL
+                } else {
+                    filter
+                }
+
             val sortedBooks = books.arrangedBy(
                 settings.librarySort,
                 settings.librarySortReversed,
@@ -210,7 +228,7 @@ class LibraryViewModel(
             )
 
             val filteredBooks = sortedBooks
-                .filter { filter.accepts(it) }
+                .filter { effectiveFilter.accepts(it) }
                 .filter { book ->
                     matchesLibrarySearch(query, book.displayTitle, book.displayAuthor)
                 }
@@ -226,10 +244,11 @@ class LibraryViewModel(
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
                 searchQuery = query,
-                filter = filter,
+                filter = effectiveFilter,
                 isSearchActive = searchActive,
                 libraryIsEmpty = books.none { !it.archived },
                 hasArchived = books.any { it.archived },
+                hasServer = server != null,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 

@@ -510,11 +510,16 @@ private fun BookGrid(
                         onClick = { onSetFilter(LibraryFilter.ALL) },
                         label = { Text(stringResource(R.string.filter_all)) },
                     )
-                    FilterChip(
-                        selected = state.filter == LibraryFilter.DOWNLOADED,
-                        onClick = { onSetFilter(LibraryFilter.DOWNLOADED) },
-                        label = { Text(stringResource(R.string.filter_downloaded)) },
-                    )
+                    // Only worth asking once some books are on a server
+                    // and some are not: with nothing but local files,
+                    // everything is downloaded and the chip is a no-op.
+                    if (state.hasServer) {
+                        FilterChip(
+                            selected = state.filter == LibraryFilter.DOWNLOADED,
+                            onClick = { onSetFilter(LibraryFilter.DOWNLOADED) },
+                            label = { Text(stringResource(R.string.filter_downloaded)) },
+                        )
+                    }
                     FilterChip(
                         selected = state.filter == LibraryFilter.UNREAD,
                         onClick = { onSetFilter(LibraryFilter.UNREAD) },
