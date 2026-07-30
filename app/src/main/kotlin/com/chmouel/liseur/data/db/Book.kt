@@ -136,9 +136,22 @@ interface BookDao {
      */
     @Query(
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
-            "download_href = NULL, remote_updated_at = NULL WHERE remote_uuid IS NOT NULL",
+            "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL " +
+            "WHERE remote_uuid IS NOT NULL",
     )
     suspend fun unlinkDownloadedFromRemote()
+
+    /**
+     * The same, for named books: one that has gone from the catalog but
+     * is still on the device. Keeping the link would leave it syncing
+     * against an id the server no longer knows.
+     */
+    @Query(
+        "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
+            "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL " +
+            "WHERE url IN (:urls)",
+    )
+    suspend fun unlinkFromRemote(urls: List<String>)
 
     @Query("SELECT url FROM books WHERE source = :source")
     suspend fun urlsForSource(source: String): List<String>

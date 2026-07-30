@@ -249,7 +249,11 @@ class KoboSyncRepository(
                 unresolved = progressDao.pendingFor(account).size,
             ),
         )
-        serverDao.upsert(serverDao.get()?.copy(positionSyncedAt = now) ?: server)
+        // Only ever stamp the account that is still connected. If it went
+        // away while this ran, writing it back would sign the user in again.
+        serverDao.get()
+            ?.takeIf { it.accountKey == server.accountKey }
+            ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
         return if (firstFailure == null) {
             reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success

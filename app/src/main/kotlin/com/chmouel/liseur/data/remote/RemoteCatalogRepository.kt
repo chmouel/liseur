@@ -4,6 +4,7 @@ import android.util.Log
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -84,13 +85,23 @@ class RemoteCatalogRepository(
             return try {
                 val seen = mutableSetOf<String>()
                 client.allBooks(server.baseUrl, credentials) { page ->
+                    if (!stillConnected(server)) throw AccountChanged()
                     page.forEach { seen += it.remoteId }
                     store(server.kind, server.baseUrl, page)
                 }
+                // Someone may have disconnected or signed in elsewhere
+                // while this was in flight. Writing now would delete the
+                // new account's books, or bring the old account back from
+                // the dead, so the whole answer is dropped instead.
+                if (!stillConnected(server)) throw AccountChanged()
                 dropVanished(seen)
                 serverDao.upsert(server.copy(catalogSyncedAt = System.currentTimeMillis()))
                 _status.value = CatalogStatus.Idle
                 true
+            } catch (e: AccountChanged) {
+                Log.i(TAG, "The account changed while the catalog was being read; dropping it", e)
+                _status.value = CatalogStatus.Idle
+                false
             } catch (e: IOException) {
                 Log.i(TAG, "Could not refresh the catalog", e)
                 _status.value = CatalogStatus.Offline
@@ -128,11 +139,23 @@ class RemoteCatalogRepository(
      * it is removed from the server.
      */
     private suspend fun dropVanished(seenUuids: Set<String>) {
-        val gone = bookDao.allRemote()
-            .filter { it.remoteUuid !in seenUuids && it.downloadState == DownloadState.REMOTE }
-            .map { it.url }
-        if (gone.isNotEmpty()) bookDao.deleteByUrls(gone)
+        val gone = bookDao.allRemote().filter { it.remoteUuid !in seenUuids }
+        val (downloaded, notDownloaded) = gone.partition {
+            it.downloadState != DownloadState.REMOTE
+        }
+        if (notDownloaded.isNotEmpty()) bookDao.deleteByUrls(notDownloaded.map { it.url })
+        // A book that is here but no longer there keeps its file and loses
+        // its link: syncing it would keep asking the server about an id it
+        // has forgotten, and be told no every time.
+        if (downloaded.isNotEmpty()) bookDao.unlinkFromRemote(downloaded.map { it.url })
     }
+
+    /** Whether the account this run started under is still the one connected. */
+    private suspend fun stillConnected(server: RemoteServer): Boolean =
+        serverDao.get()?.accountKey == server.accountKey
+
+    /** Thrown to abandon a run whose account is no longer the current one. */
+    private class AccountChanged : IOException("The connected account changed")
 
     private companion object {
         const val TAG = "RemoteCatalog"

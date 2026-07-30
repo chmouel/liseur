@@ -262,7 +262,11 @@ class KomgaSyncRepository(
                 unresolved = progressDao.pendingFor(server.accountKey).size,
             ),
         )
-        serverDao.upsert(serverDao.get()?.copy(positionSyncedAt = now) ?: server)
+        // Only ever stamp the account that is still connected. If it went
+        // away while this ran, writing it back would sign the user in again.
+        serverDao.get()
+            ?.takeIf { it.accountKey == server.accountKey }
+            ?.let { serverDao.upsert(it.copy(positionSyncedAt = now)) }
         return if (firstFailure == null) {
             reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success
@@ -383,7 +387,22 @@ class KomgaSyncRepository(
         val locator = when (val read = positions.read(server.baseUrl, credentials, id)) {
             is RemoteResult.Failed -> return read
             is RemoteResult.Ok -> read.value
-        } ?: return RemoteResult.Ok(null)
+        } ?: return RemoteResult.Ok(
+            // No locator, but the catalog may still say the book was
+            // finished — marked read in Komga's own interface, say,
+            // without anyone ever opening it. That is worth adopting on
+            // its own, so it is reported as a status with no position.
+            known?.takeIf { it.completed }?.let {
+                RemoteSide(
+                    state = ReadingState(
+                        progression = null,
+                        status = statusOf(it, null),
+                        updatedAt = it.readDate ?: 0L,
+                    ),
+                    locator = null,
+                )
+            },
+        )
 
         // The catalog's readDate is the only timestamp Komga reports for
         // a position that can be trusted; the one beside the locator
@@ -506,6 +525,16 @@ class KomgaSyncRepository(
     ): BookOutcome {
         val sent = stored?.localRevision ?: 0
         val finished = state.status == ReadingStatus.FINISHED
+        // Komga has no way to say "not finished" other than forgetting the
+        // book, so an explicit mark-unread starts by wiping what it holds.
+        // Anything pushed after this lands on a clean slate.
+        val unread = !finished && stored?.override == FinishedOverride.UNREAD
+        if (unread) {
+            when (val cleared = positions.clear(server.baseUrl, credentials, id)) {
+                is RemoteResult.Failed -> return BookOutcome(failure = cleared.reason)
+                is RemoteResult.Ok -> Unit
+            }
+        }
 
         // Komga refuses anything not strictly newer than what it holds,
         // so a device whose clock is behind the server's would never be
@@ -535,13 +564,13 @@ class KomgaSyncRepository(
                 // Nowhere in the book matched, and the nearest place the
                 // server knows could not be found either. Saying the book
                 // is finished still works, and is worth doing.
-                PushOutcome.Unplaceable -> if (!finished) {
+                PushOutcome.Unplaceable -> if (!finished && !unread) {
                     Log.i(TAG, "Komga would not place this position")
                     return BookOutcome(moved = SyncMove.UNRESOLVED)
                 }
                 PushOutcome.Accepted -> Unit
             }
-            null -> if (!finished) return BookOutcome()
+            null -> if (!finished && !unread) return BookOutcome()
         }
 
         if (finished) {

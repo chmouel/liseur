@@ -189,7 +189,55 @@ class KomgaSyncRepositoryTest {
         assertEquals(1, requests().size)
     }
 
+    @Test
+    fun `a book marked read in komga without being opened comes back finished`() = runTest {
+        connect()
+        // Komga's own interface can mark a book read without there ever
+        // being a place in it, and then answers the position endpoint
+        // with 204 and nothing at all.
+        server.enqueue(json(bookJson(page = null, completed = true, readDate = "2024-06-01T10:00:00Z")))
+        server.enqueue(MockResponse(code = 204))
+
+        assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
+
+        val row = requireNotNull(db.readingProgressDao().get(bookUrl))
+        assertEquals("Finished", row.status)
+        assertNull(row.totalProgression)
+        assertFalse(row.isDirty)
+    }
+
     // -- Pushing ----------------------------------------------------------
+
+    @Test
+    fun `marking a book unread here forgets it on the server too`() = runTest {
+        connect()
+        db.readingProgressDao().recordLocal(
+            bookUrl = bookUrl,
+            locatorJson = locatorJson("OEBPS/ch20.xhtml", 0.9, 1.0),
+            progression = 1.0,
+            readingSpeed = null,
+            status = "Finished",
+            updatedAt = 5_000,
+        )
+        FinishedState(
+            bookDao = db.bookDao(),
+            progressDao = db.readingProgressDao(),
+        ).setFinished(bookUrl, false)
+        server.enqueue(json(bookJson(page = 400, completed = true, readDate = "2024-01-01T00:00:00Z")))
+        repeat(3) { server.enqueue(MockResponse(code = 204)) }
+
+        assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
+
+        // Komga has no way of being told "not finished": the only way to
+        // undo a completion is to forget the progress altogether, which
+        // has to happen before the place is sent again.
+        val sent = requests()
+        val cleared = sent.single { it.method == "DELETE" }
+        assertTrue(cleared.target!!.endsWith("/api/v1/books/$bookId/read-progress"))
+        assertTrue(sent.indexOf(cleared) < sent.indexOfFirst { it.method == "PUT" })
+        // And it must settle, or the row would stay dirty for ever.
+        assertFalse(requireNotNull(db.readingProgressDao().get(bookUrl)).isDirty)
+    }
 
     @Test
     fun `reading done here is sent as a locator the server will take`() = runTest {
