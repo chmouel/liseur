@@ -1,7 +1,7 @@
 package com.chmouel.liseur.ui
 
 import com.chmouel.liseur.R
-import com.chmouel.liseur.data.calibre.SyncFailure
+import com.chmouel.liseur.data.remote.SyncFailure
 
 /**
  * Plain words for why syncing did not work.

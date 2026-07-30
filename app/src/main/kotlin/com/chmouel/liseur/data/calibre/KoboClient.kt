@@ -1,6 +1,11 @@
 package com.chmouel.liseur.data.calibre
 
 import android.util.Log
+import com.chmouel.liseur.data.remote.RemoteHttpFailure
+import com.chmouel.liseur.data.remote.RemoteResult
+import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.data.remote.failureForCode
+import com.chmouel.liseur.data.remote.remoteCall
 import com.chmouel.liseur.domain.ReadingState
 import com.chmouel.liseur.domain.ReadingStatus
 import java.text.SimpleDateFormat
@@ -37,8 +42,8 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
     suspend fun pullReadingStates(
         koboBaseUrl: String,
         syncToken: String?,
-    ): KoboResult<SyncPage> = withContext(Dispatchers.IO) {
-        koboCall { walkSyncFeed(koboBaseUrl, syncToken) }
+    ): RemoteResult<SyncPage> = withContext(Dispatchers.IO) {
+        remoteCall { walkSyncFeed(koboBaseUrl, syncToken) }
     }
 
     private fun walkSyncFeed(koboBaseUrl: String, syncToken: String?): SyncPage {
@@ -52,7 +57,7 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
                 .build()
 
             val finished = http.client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw KoboHttpFailure(failureForCode(response.code))
+                if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
                 token = response.header(SYNC_TOKEN_HEADER) ?: token
                 collectStates(response.body?.string().orEmpty(), into = states)
                 !response.header(CONTINUE_HEADER).equals("continue", ignoreCase = true)
@@ -69,15 +74,15 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
      * mention. A book the server has no position for is not a failure:
      * that answer comes back as no state rather than as an error.
      */
-    suspend fun readState(koboBaseUrl: String, uuid: String): KoboResult<ReadingState?> =
+    suspend fun readState(koboBaseUrl: String, uuid: String): RemoteResult<ReadingState?> =
         withContext(Dispatchers.IO) {
-            koboCall {
+            remoteCall {
                 val request = http.request("$koboBaseUrl/v1/library/$uuid/state", null).build()
                 http.client.newCall(request).execute().use { response ->
                     when {
                         response.code == 404 -> null
                         !response.isSuccessful ->
-                            throw KoboHttpFailure(failureForCode(response.code))
+                            throw RemoteHttpFailure(failureForCode(response.code))
 
                         else -> {
                             // Reading one book back gives a bare array, while
@@ -104,8 +109,8 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
         koboBaseUrl: String,
         uuid: String,
         state: ReadingState,
-    ): KoboResult<Unit> = withContext(Dispatchers.IO) {
-        koboCall {
+    ): RemoteResult<Unit> = withContext(Dispatchers.IO) {
+        remoteCall {
             val percent = ((state.progression ?: 0.0) * 100).coerceIn(0.0, 100.0)
             val bookmark = JSONObject()
                 .put("ProgressPercent", percent)
@@ -126,7 +131,7 @@ class KoboClient(private val http: CalibreHttp = CalibreHttp()) {
                 .build()
             http.client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    throw KoboHttpFailure(failureForCode(response.code))
+                    throw RemoteHttpFailure(failureForCode(response.code))
                 }
             }
         }

@@ -54,10 +54,10 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
-import com.chmouel.liseur.data.calibre.PositionSyncStatus
+import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.calibre.StorageUse
-import com.chmouel.liseur.data.calibre.SyncIdentity
-import com.chmouel.liseur.data.calibre.SyncReport
+import com.chmouel.liseur.data.remote.SyncIdentity
+import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.data.db.CalibreServer
 

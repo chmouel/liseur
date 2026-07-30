@@ -1,10 +1,11 @@
 package com.chmouel.liseur.sync
 
-import com.chmouel.liseur.data.calibre.PreviewOutcome
-import com.chmouel.liseur.data.calibre.ResolveOutcome
-import com.chmouel.liseur.data.calibre.SyncFailure
-import com.chmouel.liseur.data.calibre.SyncOutcome
-import com.chmouel.liseur.data.calibre.SyncPreview
+import com.chmouel.liseur.data.remote.PositionSync
+import com.chmouel.liseur.data.remote.PreviewOutcome
+import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.data.remote.SyncPreview
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async

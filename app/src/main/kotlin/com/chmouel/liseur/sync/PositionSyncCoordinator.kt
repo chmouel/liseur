@@ -1,10 +1,10 @@
 package com.chmouel.liseur.sync
 
-import com.chmouel.liseur.data.calibre.KoboSyncRepository
-import com.chmouel.liseur.data.calibre.PreviewOutcome
-import com.chmouel.liseur.data.calibre.ResolveOutcome
-import com.chmouel.liseur.data.calibre.SyncOutcome
-import com.chmouel.liseur.data.calibre.SyncPreview
+import com.chmouel.liseur.data.remote.PositionSync
+import com.chmouel.liseur.data.remote.PreviewOutcome
+import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.data.remote.SyncPreview
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -16,23 +16,6 @@ sealed interface SyncScope {
 
     /** One book, for when someone is waiting on that book in particular. */
     data class Book(val bookUrl: String) : SyncScope
-}
-
-/**
- * What the coordinator needs a sync to be able to do.
- *
- * Named separately from [KoboSyncRepository] so the ordering rules below
- * — which are the trickiest concurrency in the app — can be tested
- * without a database, a server, or a device.
- */
-interface PositionSync {
-    suspend fun syncAll(): SyncOutcome
-    suspend fun syncBook(bookUrl: String): SyncOutcome
-    suspend fun canSync(bookUrl: String): Boolean
-    suspend fun previewBook(bookUrl: String): PreviewOutcome
-    suspend fun preservedConflict(bookUrl: String): SyncPreview?
-    suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome
-    suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome
 }
 
 /**

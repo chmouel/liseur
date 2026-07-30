@@ -13,7 +13,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.chmouel.liseur.container
-import com.chmouel.liseur.data.calibre.SyncOutcome
+import com.chmouel.liseur.data.remote.SyncOutcome
 import java.util.concurrent.TimeUnit
 
 /**

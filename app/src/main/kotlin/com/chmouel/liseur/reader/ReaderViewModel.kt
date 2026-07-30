@@ -8,9 +8,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
-import com.chmouel.liseur.data.calibre.PreviewOutcome
-import com.chmouel.liseur.data.calibre.ResolveOutcome
-import com.chmouel.liseur.data.calibre.SyncPreview
+import com.chmouel.liseur.data.remote.PreviewOutcome
+import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao

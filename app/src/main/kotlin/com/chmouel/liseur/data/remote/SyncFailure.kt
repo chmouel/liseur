@@ -1,4 +1,4 @@
-package com.chmouel.liseur.data.calibre
+package com.chmouel.liseur.data.remote
 
 import java.io.IOException
 import java.net.ConnectException
@@ -7,7 +7,7 @@ import java.net.UnknownHostException
 import org.json.JSONException
 
 /**
- * Why talking to calibre-web did not work.
+ * Why talking to a server did not work.
  *
  * Telling these apart is what lets the app say something true. "You are
  * offline" and "this account may not download books" call for completely
@@ -15,8 +15,8 @@ import org.json.JSONException
  * a failure hides the one thing that would have explained it.
  *
  * Every value here is safe to show and safe to write to the log. None of
- * them carries a URL, because the Kobo sync token sits in the path of
- * every sync URL and is a standing key to the account.
+ * them carries a URL, because calibre-web's Kobo sync token sits in the
+ * path of every sync URL and is a standing key to the account.
  */
 sealed interface SyncFailure {
 
@@ -67,23 +67,23 @@ sealed interface SyncFailure {
 }
 
 /** Either what was asked for, or why it could not be had. */
-sealed interface KoboResult<out T> {
-    data class Ok<T>(val value: T) : KoboResult<T>
-    data class Failed(val reason: SyncFailure) : KoboResult<Nothing>
+sealed interface RemoteResult<out T> {
+    data class Ok<T>(val value: T) : RemoteResult<T>
+    data class Failed(val reason: SyncFailure) : RemoteResult<Nothing>
 
     val failure: SyncFailure?
         get() = (this as? Failed)?.reason
 }
 
 /** What the value is, or null if the call failed. */
-fun <T> KoboResult<T>.valueOrNull(): T? = (this as? KoboResult.Ok)?.value
+fun <T> RemoteResult<T>.valueOrNull(): T? = (this as? RemoteResult.Ok)?.value
 
 /**
  * An answer that arrived and said no. Carried as an exception only so it
  * can travel out of the middle of a paged walk; it never escapes
- * [koboCall].
+ * [remoteCall].
  */
-internal class KoboHttpFailure(val reason: SyncFailure) : IOException()
+internal class RemoteHttpFailure(val reason: SyncFailure) : IOException()
 
 /**
  * Turns the exceptions OkHttp and the JSON parser throw into the reasons
@@ -91,20 +91,20 @@ internal class KoboHttpFailure(val reason: SyncFailure) : IOException()
  * forward: OkHttp puts the request URL in some of its messages, and that
  * URL contains the sync token.
  */
-internal inline fun <T> koboCall(body: () -> T): KoboResult<T> = try {
-    KoboResult.Ok(body())
-} catch (e: KoboHttpFailure) {
-    KoboResult.Failed(e.reason)
+internal inline fun <T> remoteCall(body: () -> T): RemoteResult<T> = try {
+    RemoteResult.Ok(body())
+} catch (e: RemoteHttpFailure) {
+    RemoteResult.Failed(e.reason)
 } catch (_: SocketTimeoutException) {
-    KoboResult.Failed(SyncFailure.Timeout)
+    RemoteResult.Failed(SyncFailure.Timeout)
 } catch (_: UnknownHostException) {
-    KoboResult.Failed(SyncFailure.Offline)
+    RemoteResult.Failed(SyncFailure.Offline)
 } catch (_: ConnectException) {
-    KoboResult.Failed(SyncFailure.Offline)
+    RemoteResult.Failed(SyncFailure.Offline)
 } catch (_: JSONException) {
-    KoboResult.Failed(SyncFailure.Malformed)
+    RemoteResult.Failed(SyncFailure.Malformed)
 } catch (_: IOException) {
-    KoboResult.Failed(SyncFailure.Offline)
+    RemoteResult.Failed(SyncFailure.Offline)
 }
 
 /** What an unsuccessful HTTP answer means. */

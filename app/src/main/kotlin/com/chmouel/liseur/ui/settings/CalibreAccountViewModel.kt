@@ -11,12 +11,12 @@ import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
-import com.chmouel.liseur.data.calibre.PositionSyncStatus
+import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.calibre.SetupFailure
 import com.chmouel.liseur.data.calibre.SetupResult
 import com.chmouel.liseur.data.calibre.StorageUse
-import com.chmouel.liseur.data.calibre.SyncIdentity
-import com.chmouel.liseur.data.calibre.SyncReport
+import com.chmouel.liseur.data.remote.SyncIdentity
+import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.db.CalibreServer
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator

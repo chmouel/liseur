@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.remote.RemoteResult
+import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.domain.ReadingState
 import com.chmouel.liseur.domain.ReadingStatus
 import java.net.InetAddress
@@ -61,7 +63,7 @@ class KoboClientTest {
             ),
         )
 
-        val page = (pull() as KoboResult.Ok).value
+        val page = (pull() as RemoteResult.Ok).value
         val state = page.states.getValue("uuid-1")
         assertEquals(0.425, state.progression!!, 1e-9)
         assertEquals(ReadingStatus.READING, state.status)
@@ -82,7 +84,7 @@ class KoboClientTest {
             ),
         )
 
-        val page = (pull() as KoboResult.Ok).value
+        val page = (pull() as RemoteResult.Ok).value
         assertEquals(ReadingStatus.FINISHED, page.states.getValue("uuid-2").status)
     }
 
@@ -112,7 +114,7 @@ class KoboClientTest {
             ),
         )
 
-        val page = (pull(token = "token-0") as KoboResult.Ok).value
+        val page = (pull(token = "token-0") as RemoteResult.Ok).value
         assertEquals(setOf("a", "b"), page.states.keys)
         assertEquals("token-2", page.syncToken)
 
@@ -123,13 +125,13 @@ class KoboClientTest {
     @Test
     fun `a forbidden account is not mistaken for being offline`() {
         server.enqueue(json("", code = 403))
-        assertEquals(SyncFailure.Forbidden, (pull() as KoboResult.Failed).reason)
+        assertEquals(SyncFailure.Forbidden, (pull() as RemoteResult.Failed).reason)
     }
 
     @Test
     fun `a refused sign-in is reported as such`() {
         server.enqueue(json("", code = 401))
-        val reason = (pull() as KoboResult.Failed).reason
+        val reason = (pull() as RemoteResult.Failed).reason
         assertEquals(SyncFailure.Unauthorised, reason)
         assertTrue(!reason.worthRetrying)
     }
@@ -137,7 +139,7 @@ class KoboClientTest {
     @Test
     fun `a broken server is worth trying again`() {
         server.enqueue(json("", code = 503))
-        val reason = (pull() as KoboResult.Failed).reason
+        val reason = (pull() as RemoteResult.Failed).reason
         assertEquals(SyncFailure.ServerError(503), reason)
         assertTrue(reason.worthRetrying)
     }
@@ -145,7 +147,7 @@ class KoboClientTest {
     @Test
     fun `nonsense instead of a feed is reported as malformed`() {
         server.enqueue(json("this is not json"))
-        assertEquals(SyncFailure.Malformed, (pull() as KoboResult.Failed).reason)
+        assertEquals(SyncFailure.Malformed, (pull() as RemoteResult.Failed).reason)
     }
 
     /**
@@ -163,7 +165,7 @@ class KoboClientTest {
             ),
         )
 
-        val state = (pull() as KoboResult.Ok).value.states.getValue("c")
+        val state = (pull() as RemoteResult.Ok).value.states.getValue("c")
         assertEquals(0.55, state.progression!!, 1e-9)
         assertEquals(0L, state.updatedAt)
     }
@@ -172,7 +174,7 @@ class KoboClientTest {
     fun `a book the server has no position for is not a failure`() {
         server.enqueue(json("", code = 404))
         val read = runBlocking { client.readState(base(), "uuid-1") }
-        assertNull((read as KoboResult.Ok).value)
+        assertNull((read as RemoteResult.Ok).value)
     }
 
     @Test
@@ -185,7 +187,7 @@ class KoboClientTest {
             ),
         )
         val read = runBlocking { client.readState(base(), "uuid-1") }
-        assertEquals(0.125, (read as KoboResult.Ok).value!!.progression!!, 1e-9)
+        assertEquals(0.125, (read as RemoteResult.Ok).value!!.progression!!, 1e-9)
     }
 
     /**
@@ -203,7 +205,7 @@ class KoboClientTest {
                 ReadingState(progression = 0.5, status = ReadingStatus.READING, updatedAt = 0),
             )
         }
-        assertTrue(pushed is KoboResult.Ok)
+        assertTrue(pushed is RemoteResult.Ok)
 
         val request = server.takeRequest()
         assertEquals("PUT", request.method)
@@ -226,14 +228,14 @@ class KoboClientTest {
                 ReadingState(progression = 0.5, status = ReadingStatus.READING, updatedAt = 0),
             )
         }
-        assertEquals(SyncFailure.Forbidden, (pushed as KoboResult.Failed).reason)
+        assertEquals(SyncFailure.Forbidden, (pushed as RemoteResult.Failed).reason)
     }
 
     @Test
     fun `a server that is not there is offline, and worth trying again`() {
         val url = base()
         server.close()
-        val reason = (runBlocking { client.pullReadingStates(url, null) } as KoboResult.Failed)
+        val reason = (runBlocking { client.pullReadingStates(url, null) } as RemoteResult.Failed)
             .reason
         assertTrue(reason == SyncFailure.Offline || reason == SyncFailure.Timeout)
         assertTrue(reason.worthRetrying)
