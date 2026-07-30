@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.remote.SyncMove
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncReport
+import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.remote.valueOrNull
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.FinishedOverride
@@ -28,10 +29,6 @@ import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.reconcileReadingState
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 
 /** What one book's reconciliation did, and why it stopped if it did. */
 private data class BookOutcome(
@@ -64,13 +61,9 @@ class KoboSyncRepository(
     private val progressDao: ReadingProgressDao,
     private val client: KoboClient = KoboClient(),
     private val finishedState: FinishedState,
+    private val reporting: SyncReporting = SyncReporting(),
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
-    private val _status = MutableStateFlow<PositionSyncStatus>(PositionSyncStatus.Idle)
-    val status: StateFlow<PositionSyncStatus> = _status.asStateFlow()
-
-    private val _report = MutableStateFlow(SyncReport())
-    val report: StateFlow<SyncReport> = _report.asStateFlow()
 
     /** Reconciles every book that has a position on either side. */
     override suspend fun syncAll(): SyncOutcome = run(book = null)
@@ -208,15 +201,15 @@ class KoboSyncRepository(
 
     private suspend fun run(book: String?): SyncOutcome {
         val server = serverDao.get() ?: run {
-            _status.value = PositionSyncStatus.Idle
+            reporting.report(PositionSyncStatus.Idle)
             return SyncOutcome.NotApplicable
         }
         val token = server.koboToken ?: run {
-            _status.value = PositionSyncStatus.Unavailable
+            reporting.report(PositionSyncStatus.Unavailable)
             return SyncOutcome.NotApplicable
         }
 
-        _status.value = PositionSyncStatus.Syncing
+        reporting.report(PositionSyncStatus.Syncing)
         val base = "${server.baseUrl}/kobo/$token"
         val account = server.accountKey
 
@@ -226,7 +219,7 @@ class KoboSyncRepository(
             is RemoteResult.Ok -> landed.value
             is RemoteResult.Failed -> {
                 Log.i(TAG, "Could not read reading positions: ${landed.reason.label}")
-                _status.value = PositionSyncStatus.Failed(landed.reason)
+                reporting.report(PositionSyncStatus.Failed(landed.reason))
                 return SyncOutcome.Failure(landed.reason)
             }
         }
@@ -246,21 +239,23 @@ class KoboSyncRepository(
         }
 
         val now = System.currentTimeMillis()
-        _report.value = SyncReport(
-            at = now,
-            pulled = pulled,
-            pushed = pushed,
-            // Counted from disk: a disagreement outlives the run that
-            // found it, and a restart must not make it look settled.
-            unresolved = progressDao.pendingFor(account).size,
+        reporting.report(
+            SyncReport(
+                at = now,
+                pulled = pulled,
+                pushed = pushed,
+                // Counted from disk: a disagreement outlives the run that
+                // found it, and a restart must not make it look settled.
+                unresolved = progressDao.pendingFor(account).size,
+            ),
         )
         serverDao.upsert(serverDao.get()?.copy(positionSyncedAt = now) ?: server)
         return if (firstFailure == null) {
-            _status.value = PositionSyncStatus.Synced(now)
+            reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success
         } else {
             Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
-            _status.value = PositionSyncStatus.Failed(firstFailure)
+            reporting.report(PositionSyncStatus.Failed(firstFailure))
             SyncOutcome.Partial(firstFailure)
         }
     }
@@ -452,10 +447,9 @@ class KoboSyncRepository(
      * Re-counts unsettled disagreements from disk, for when the report
      * is shown by a process that has not run a sync itself.
      */
-    suspend fun refreshUnresolved() {
+    override suspend fun refreshUnresolved() {
         val account = serverDao.get()?.accountKey ?: return
-        val unresolved = progressDao.pendingFor(account).size
-        _report.update { it.copy(unresolved = unresolved) }
+        reporting.reportUnresolved(progressDao.pendingFor(account).size)
     }
 
     /**
@@ -468,7 +462,7 @@ class KoboSyncRepository(
      * person's reading in another's account — but nothing has so far
      * said so out loud.
      */
-    suspend fun identity(): SyncIdentity? {
+    override suspend fun identity(): SyncIdentity? {
         val server = serverDao.get() ?: return null
         if (server.koboToken == null) return null
         return SyncIdentity(

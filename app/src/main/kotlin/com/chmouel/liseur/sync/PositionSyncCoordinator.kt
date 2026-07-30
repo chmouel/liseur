@@ -38,6 +38,13 @@ sealed interface SyncScope {
  * otherwise they would do the same work twice in a row.
  */
 class PositionSyncCoordinator(private val sync: PositionSync) {
+
+    /** Re-counts unsettled disagreements without starting a run. */
+    suspend fun refreshUnresolved() = sync.refreshUnresolved()
+
+    /** Who positions on this device belong to, or null if nobody. */
+    suspend fun identity() = sync.identity()
+
     /** Held for the duration of a run, so only one happens at a time. */
     private val turn = Mutex()
 

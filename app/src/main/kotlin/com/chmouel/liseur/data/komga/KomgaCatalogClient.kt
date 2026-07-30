@@ -54,6 +54,22 @@ class KomgaCatalogClient(private val http: KomgaHttp = KomgaHttp()) : CatalogSou
         books
     }
 
+    /**
+     * One book, for when only one book is being asked about.
+     *
+     * Syncing a single book after it is opened would otherwise page
+     * through the whole catalog to find one row of reading progress.
+     */
+    suspend fun book(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        bookId: String,
+    ): KomgaBook = withContext(Dispatchers.IO) {
+        KomgaBooks.parseBook(
+            http.getObject(KomgaUrl.api(baseUrl, "/api/v1/books/$bookId"), credentials),
+        )
+    }
+
     override suspend fun search(
         baseUrl: String,
         credentials: RemoteCredentials,

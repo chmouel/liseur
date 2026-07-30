@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.calibre
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.annotation.VisibleForTesting
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -42,7 +43,19 @@ object CredentialCipher {
 
     private fun decode(text: String): ByteArray = Base64.decode(text, Base64.NO_WRAP)
 
+    /**
+     * The key this encrypts with.
+     *
+     * Kept in a field so a JVM test can hand over an ordinary AES key:
+     * Robolectric has no Android Keystore, and the reconciliation tests
+     * that need to read a stored secret back are not about how it was
+     * stored. Nothing on a device ever assigns to it.
+     */
+    @VisibleForTesting
+    internal var keyForTesting: SecretKey? = null
+
     private fun key(): SecretKey {
+        keyForTesting?.let { return it }
         val store = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (store.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
 

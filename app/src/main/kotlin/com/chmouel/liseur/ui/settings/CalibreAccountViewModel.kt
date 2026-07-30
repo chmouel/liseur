@@ -10,13 +10,13 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
-import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.remote.SetupFailure
 import com.chmouel.liseur.data.remote.SetupResult
 import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
+import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
@@ -52,7 +52,7 @@ data class CalibreAccountUiState(
 class CalibreAccountViewModel(
     private val repository: RemoteAccountRepository,
     downloads: BookDownloadRepository,
-    private val koboSync: KoboSyncRepository,
+    private val reporting: SyncReporting,
     private val positionSync: PositionSyncCoordinator,
     private val catalog: RemoteCatalogRepository,
     private val appSettings: AppSettingsRepository,
@@ -73,7 +73,7 @@ class CalibreAccountViewModel(
             }
         }
         viewModelScope.launch {
-            koboSync.status.collect { status ->
+            reporting.status.collect { status ->
                 _state.update { it.copy(syncStatus = status) }
                 // Every settled run can change who owns what and what is
                 // left over, so the answer is re-read rather than cached.
@@ -86,15 +86,15 @@ class CalibreAccountViewModel(
             }
         }
         viewModelScope.launch {
-            koboSync.report.collect { report ->
+            reporting.report.collect { report ->
                 _state.update { it.copy(syncReport = report) }
             }
         }
     }
 
     private suspend fun refreshDiagnostics() {
-        koboSync.refreshUnresolved()
-        _state.update { it.copy(identity = koboSync.identity()) }
+        positionSync.refreshUnresolved()
+        _state.update { it.copy(identity = positionSync.identity()) }
     }
 
     /** Reconciles reading positions now, for the "Sync now" button. */
@@ -171,7 +171,7 @@ class CalibreAccountViewModel(
                 CalibreAccountViewModel(
                     repository = container.remoteAccount,
                     downloads = container.bookDownloads,
-                    koboSync = container.koboSync,
+                    reporting = container.syncReporting,
                     positionSync = container.positionSync,
                     catalog = container.remoteCatalog,
                     appSettings = container.appSettings,

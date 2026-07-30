@@ -176,6 +176,41 @@ class ReadingProgressDaoTest {
         assertFalse(row.isDirty)
     }
 
+    @Test
+    fun `a pull carrying an exact place reopens the book there`() = runTest {
+        read(0.2)
+        dao.persistPending(book, 0.9, "Reading", 4_000, account, now = 4_000)
+
+        val applied = dao.applyPull(
+            bookUrl = book,
+            expectedRevision = 1,
+            progression = 0.9,
+            status = "Reading",
+            account = account,
+            remoteUpdatedAt = 4_000,
+            now = 5_000,
+            locatorJson = """{"href":"OEBPS/ch7.xhtml"}""",
+        )
+
+        assertTrue(applied)
+        // A percentage alone can only reopen a book roughly where the
+        // other device was; the locator is what puts it on the right word.
+        assertEquals("""{"href":"OEBPS/ch7.xhtml"}""", row().locatorJson)
+    }
+
+    @Test
+    fun `a pull with no place to offer leaves the one this device had`() = runTest {
+        read(0.2)
+        dao.persistPending(book, 0.9, "Reading", 4_000, account, now = 4_000)
+
+        assertTrue(dao.applyPull(book, 1, 0.9, "Reading", account, 4_000, now = 5_000))
+
+        // Servers that only carry a percentage pass nothing, and
+        // overwriting a real locator with an empty one would lose the
+        // only precise thing on the row.
+        assertEquals("""{"at":0.2}""", row().locatorJson)
+    }
+
     // -- Durability -------------------------------------------------------
 
     @Test

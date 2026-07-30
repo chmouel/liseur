@@ -214,6 +214,13 @@ abstract class ReadingProgressDao {
      * on the revision that was inspected, and the caller treats a refusal
      * as what it now is: a conflict, with the remote state still on disk.
      *
+     * [locatorJson] is the exact place the server was left at, for the
+     * servers that keep one. A percentage can only reopen a book roughly
+     * where it was; a locator reopens it on the right word. Servers that
+     * have nothing so precise to offer pass null, and whatever locator
+     * this device already had is left alone rather than replaced with a
+     * guess.
+     *
      * Returns false when the row moved on and nothing was applied.
      */
     @Transaction
@@ -225,6 +232,7 @@ abstract class ReadingProgressDao {
         account: String,
         remoteUpdatedAt: Long?,
         now: Long,
+        locatorJson: String? = null,
     ): Boolean {
         val applied = applyPullIfUnchanged(
             bookUrl = bookUrl,
@@ -234,6 +242,7 @@ abstract class ReadingProgressDao {
             account = account,
             remoteUpdatedAt = remoteUpdatedAt,
             now = now,
+            locatorJson = locatorJson,
         )
         if (applied > 0) clearPending(bookUrl)
         return applied > 0
@@ -243,6 +252,7 @@ abstract class ReadingProgressDao {
         """
         UPDATE reading_progress SET
             total_progression = :progression,
+            locator_json = COALESCE(:locatorJson, locator_json),
             status = :status,
             updated_at = :now,
             synced_at = :now,
@@ -263,6 +273,7 @@ abstract class ReadingProgressDao {
         account: String,
         remoteUpdatedAt: Long?,
         now: Long,
+        locatorJson: String?,
     ): Int
 
     /**

@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.remote.PositionSync
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
 import kotlinx.coroutines.CompletableDeferred
@@ -55,6 +56,10 @@ class PositionSyncCoordinatorTest {
         }
 
         override suspend fun canSync(bookUrl: String) = syncable
+
+        override suspend fun refreshUnresolved() = Unit
+
+        override suspend fun identity(): SyncIdentity? = null
 
         override suspend fun previewBook(bookUrl: String) = preview
 

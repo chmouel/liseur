@@ -138,4 +138,21 @@ interface PositionSync {
 
     suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome
     suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome
+
+    /**
+     * Re-counts unsettled disagreements from disk, for when the report is
+     * shown by a process that has not run a sync itself.
+     */
+    suspend fun refreshUnresolved()
+
+    /**
+     * Who positions on this device belong to, so a book that will not
+     * sync can say why rather than simply doing nothing.
+     *
+     * Positions are bound to the login that produced them. Signing in as
+     * somebody else therefore strands the reading done as the old
+     * account — deliberately, since uploading it would put one person's
+     * reading in another's — but nothing else says so out loud.
+     */
+    suspend fun identity(): SyncIdentity?
 }

@@ -59,4 +59,10 @@ class RoutedPositionSync(private val router: RemoteRouter) : PositionSync {
 
     override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome =
         router.positionSync()?.keepLocalPosition(bookUrl) ?: ResolveOutcome.Done
+
+    override suspend fun refreshUnresolved() {
+        router.positionSync()?.refreshUnresolved()
+    }
+
+    override suspend fun identity(): SyncIdentity? = router.positionSync()?.identity()
 }
