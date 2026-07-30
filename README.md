@@ -1,5 +1,3 @@
-[![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github)](https://github.com/sponsors/chmouel)
-
 # Liseur
 
 An open-source EPUB books reader and calibre-web / Komga client for Android: a
@@ -97,8 +95,9 @@ a definition, to Wiktionary.
 ***See [DEVELOPER.md](DEVELOPER.md) for how to build Liseur from source.***
 
 ## Author
+[![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github)](https://github.com/sponsors/chmouel)
+### Chmouel Boudjnah 
 
-### Chmouel Boudjnah
 
 - Fediverse - <[@chmouel@chmouel.com](https://fosstodon.org/@chmouel)>
 - Twitter - <[@chmouel](https://twitter.com/chmouel)>
