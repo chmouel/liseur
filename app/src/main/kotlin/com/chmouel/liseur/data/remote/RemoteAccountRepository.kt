@@ -9,6 +9,8 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.komga.KomgaSetupClient
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Stores the one connected server and hands out its credentials.
@@ -37,26 +39,122 @@ class RemoteAccountRepository(
     val server: Flow<RemoteServer?> = dao.observe()
 
     /**
-     * Last known base URL and credentials, so callers that cannot
-     * suspend — the image loader, mainly — can still authenticate.
+     * What the account looks like to a caller that cannot suspend — the
+     * image loader, mainly, which signs Coil's cover requests from an
+     * OkHttp interceptor.
+     */
+    private sealed interface Snapshot {
+        /** There is no connected account. */
+        data object None : Snapshot
+
+        data class Account(
+            val origin: RemoteOrigin,
+            val credentials: RemoteCredentials,
+        ) : Snapshot
+    }
+
+    /**
+     * The account as last read, or null when it has not been read yet.
+     *
+     * "Not read yet" and "no account" are kept apart on purpose: they
+     * are the same absence to a caller but opposite instructions to this
+     * class, and conflating them is how a cold cache turns into a
+     * permanent one.
+     *
+     * This used to be filled in as a side effect of [credentials], which
+     * meant covers only loaded if something else had happened to ask for
+     * the account first. That held until the catalog and the download
+     * worker stopped calling it, at which point every Komga cover
+     * started coming back 401. A cache maintained by a caller that has
+     * no idea it is maintaining one is not a cache, so this one keeps
+     * itself.
      */
     @Volatile
-    private var cached: Pair<String, RemoteCredentials>? = null
+    private var cached: Snapshot? = null
+
+    /**
+     * Bumped on the way into a mutation and again on the way out.
+     *
+     * A read that began before a change and finished after it holds a
+     * row that is no longer true. Doing the first bump *before* the
+     * mutation starts is what makes that detectable: the reader compares
+     * the counter across its own query and throws away anything it
+     * loaded across a change, so a disconnected account can never be
+     * published back into the cache by a read that was already in
+     * flight.
+     */
+    private val generation = AtomicLong()
+
+    private val loading = Any()
 
     suspend fun current(): RemoteServer? = dao.get()
 
-    suspend fun credentials(): RemoteCredentials? {
-        val server = dao.get() ?: run {
-            cached = null
-            return null
-        }
-        return server.credentials?.also { cached = server.baseUrl to it }
+    suspend fun credentials(): RemoteCredentials? = dao.get()?.credentials
+
+    /** Reads the account into the cache, so the first cover need not wait. */
+    suspend fun prime() {
+        val at = generation.get()
+        val snapshot = snapshotOf(dao.get())
+        if (generation.get() == at) cached = snapshot
     }
 
     /** How to sign a request to [url], or null when it is not our server. */
     fun credentialsForUrl(url: String): RemoteCredentials? {
-        val (baseUrl, credentials) = cached ?: return null
-        return credentials.takeIf { url.startsWith(baseUrl) }
+        val account = (cached ?: load()) as? Snapshot.Account ?: return null
+        return account.credentials.takeIf { account.origin.covers(url) }
+    }
+
+    /**
+     * Fills a cold cache, blocking until it has an answer.
+     *
+     * There is nowhere to suspend to: this is called from an OkHttp
+     * interceptor. It is one indexed single-row query, it happens at
+     * most once between changes, and the lock makes a burst of cover
+     * requests at startup share a single read rather than each doing
+     * their own. [prime] normally gets there first.
+     */
+    private fun load(): Snapshot = synchronized(loading) {
+        cached?.let { return it }
+        repeat(LOAD_ATTEMPTS) {
+            val at = generation.get()
+            val snapshot = snapshotOf(runBlocking { dao.get() })
+            if (generation.get() == at) {
+                cached = snapshot
+                return snapshot
+            }
+        }
+        // Something is changing the account faster than it can be read.
+        // Answering "no account" only costs a cover; answering with what
+        // was read could cost the credentials.
+        return Snapshot.None
+    }
+
+    private fun snapshotOf(server: RemoteServer?): Snapshot {
+        val credentials = server?.credentials ?: return Snapshot.None
+        val origin = RemoteOrigin.of(server.baseUrl) ?: return Snapshot.None
+        return Snapshot.Account(origin, credentials)
+    }
+
+    /**
+     * Runs a change to the account with the cache emptied around it.
+     *
+     * Nothing here writes the new value into the cache; it only clears
+     * it, so the next reader goes and looks. That is deliberate — the
+     * cache should hold what the database actually committed, not what
+     * this call believed it was about to write.
+     */
+    private suspend fun <T> changingAccount(block: suspend () -> T): T {
+        invalidate()
+        return try {
+            block()
+        } finally {
+            invalidate()
+        }
+    }
+
+    private fun invalidate() {
+        generation.incrementAndGet()
+        cached = null
     }
 
     /** Probes a calibre-web server and, if it answers, saves it as the account. */
@@ -114,7 +212,7 @@ class RemoteAccountRepository(
         credentials: RemoteCredentials,
         capabilities: ServerCapabilities,
     ) {
-        inTransaction { storeLocked(kind, credentials, capabilities) }
+        changingAccount { inTransaction { storeLocked(kind, credentials, capabilities) } }
     }
 
     private suspend fun storeLocked(
@@ -197,12 +295,11 @@ class RemoteAccountRepository(
      * Asking for the password again is better than looking connected
      * while every request quietly fails.
      */
-    suspend fun forgetUnreadableAccount(): Boolean {
-        val server = dao.get() ?: return false
-        if (server.credentials != null) return false
-        cached = null
+    suspend fun forgetUnreadableAccount(): Boolean = changingAccount {
+        val server = dao.get() ?: return@changingAccount false
+        if (server.credentials != null) return@changingAccount false
         dao.delete()
-        return true
+        true
     }
 
     /** Sets the Kobo sync token by hand when it could not be picked up. */
@@ -222,11 +319,22 @@ class RemoteAccountRepository(
      * later on.
      */
     suspend fun disconnect() {
-        cached = null
-        inTransaction {
-            bookDao.deleteRemoteNotDownloaded()
-            bookDao.unlinkDownloadedFromRemote()
-            dao.delete()
+        changingAccount {
+            inTransaction {
+                bookDao.deleteRemoteNotDownloaded()
+                bookDao.unlinkDownloadedFromRemote()
+                dao.delete()
+            }
         }
+    }
+
+    private companion object {
+        /**
+         * How many times a cold read will retry when the account changes
+         * underneath it. A handful, because a change that keeps landing
+         * mid-read is a change that will be read correctly a moment
+         * later anyway.
+         */
+        const val LOAD_ATTEMPTS = 3
     }
 }

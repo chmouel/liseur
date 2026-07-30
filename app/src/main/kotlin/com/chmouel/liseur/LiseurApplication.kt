@@ -36,6 +36,10 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
             if (container.remoteAccount.forgetUnreadableAccount()) {
                 container.appSettings.setAccountLostToRestore(true)
             }
+            // Covers are fetched from the server and need signing, from
+            // an image loader that cannot wait on the database. Read the
+            // account now so the first screenful does not have to.
+            container.remoteAccount.prime()
         }
         PositionSyncWorker.schedulePeriodic(this)
         syncWhenBroughtToTheFore()
