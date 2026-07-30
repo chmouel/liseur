@@ -180,6 +180,14 @@ class ReaderActivity : FragmentActivity() {
         }
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Stop the reading clock the moment the book stops being looked
+        // at — a dialog, a notification, the screen dimming. Anything
+        // later would count the interruption as a very slow page.
+        viewModel.onReaderPaused()
+    }
+
     override fun onStop() {
         super.onStop()
         // Leaving the book is the moment the position is worth sending:

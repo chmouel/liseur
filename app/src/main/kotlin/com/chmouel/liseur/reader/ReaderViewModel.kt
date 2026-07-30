@@ -24,6 +24,7 @@ import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -85,6 +86,7 @@ class ReaderViewModel(
     private val library: LocalLibraryRepository,
     private val finishedState: FinishedState,
     private val prefsRepo: ReaderPreferencesRepository,
+    private val readingPace: ReadingPaceRepository,
     private val positionSync: PositionSyncCoordinator,
 ) : ViewModel() {
 
@@ -352,7 +354,10 @@ class ReaderViewModel(
             askAboutPreservedConflict(publication)
 
             val stored = progressDao.get(bookId)
-                ?.also { speed = ReadingSpeedEstimator(it.readingSpeed) }
+            speed = ReadingSpeedEstimator(
+                learned = readingPace.pace(),
+                bookSpeed = stored?.readingSpeed,
+            )
             var initialLocator = stored?.locatorJson
                 ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
 
@@ -394,10 +399,13 @@ class ReaderViewModel(
         val positions = bookPositions
         val totalProgression = locator.locations.totalProgression
         if (positions != null && positions.isUsable && totalProgression != null) {
-            speed.record(
+            val sample = speed.record(
                 position = totalProgression * positions.totalPositions,
                 atMillis = System.currentTimeMillis(),
             )
+            // A page that was really read teaches this reader's pace to
+            // every book, not just this one.
+            if (sample != null) viewModelScope.launch { readingPace.record(sample) }
         }
         _progress.value = progressAt(locator)
         viewModelScope.launch {
@@ -421,6 +429,17 @@ class ReaderViewModel(
             // someone said rather than guessed at from the position.
             finishedState.refreshFromProgress(bookId)
         }
+    }
+
+    /**
+     * Called when the reader stops being looked at.
+     *
+     * The gap over a pause is not reading time. Nothing about a book
+     * left open on a table distinguishes it from a very slow page, so
+     * the clock is stopped here rather than guessed at afterwards.
+     */
+    fun onReaderPaused() {
+        speed.forgetLastPosition()
     }
 
     /** Called before jumping, so the reader can come back in one tap. */
@@ -784,6 +803,7 @@ class ReaderViewModel(
                     library = container.libraryRepository,
                     finishedState = container.finishedState,
                     prefsRepo = container.readerPreferences,
+                    readingPace = container.readingPace,
                     positionSync = container.positionSync,
                 )
             }
