@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# Builds the release APK, signs it with the release key from pass, and
+# installs it on a device picked from `adb devices -l` via fzf.
+#
+# The signing key never touches disk unencrypted for longer than the sign
+# step: it is decoded into a temp directory that is removed on exit.
+
+set -euo pipefail
+
+readonly APK_DIR="app/build/outputs/apk/release"
+readonly UNSIGNED_APK="$APK_DIR/app-release-unsigned.apk"
+readonly PASS_KEYSTORE="android/liseur.keystore.p12"
+readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
+readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null || die "missing required command: $1"
+}
+
+pass_show() {
+    local entry=$1 value
+    value=$(pass show "$entry" 2>/dev/null) ||
+        die "missing pass entry: $entry"
+    [[ -n "$value" ]] || die "pass entry is empty: $entry"
+    printf '%s' "$value"
+}
+
+find_apksigner() {
+    local sdk_root candidate
+    sdk_root=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}
+    if [[ -z "$sdk_root" && -f local.properties ]]; then
+        sdk_root=$(sed -nE 's/^sdk\.dir=(.*)$/\1/p' local.properties)
+    fi
+    [[ -n "$sdk_root" ]] || die "set ANDROID_SDK_ROOT or sdk.dir in local.properties"
+    candidate=$(find "$sdk_root/build-tools" -maxdepth 1 -mindepth 1 -type d 2>/dev/null |
+        sort -V | tail -n 1)
+    [[ -n "$candidate" ]] || die "no build-tools found under $sdk_root/build-tools"
+    [[ -x "$candidate/apksigner" ]] || die "$candidate/apksigner not found"
+    printf '%s/apksigner' "$candidate"
+}
+
+pick_device() {
+    local selection
+    selection=$(adb devices -l | awk 'NR > 1 && $2 == "device" { $1=$1; print }' |
+        fzf --prompt='install to> ' --height=~10 --header-lines=0) ||
+        die "no device selected"
+    [[ -n "$selection" ]] || die "no device selected"
+    printf '%s' "$selection" | awk '{ print $1 }'
+}
+
+for command in adb fzf pass openssl; do
+    require_command "$command"
+done
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+apksigner=$(find_apksigner)
+
+serial=$(pick_device)
+printf 'Installing to %s.\n' "$serial"
+
+printf 'Building the release APK.\n'
+./gradlew assembleRelease --console=plain
+
+[[ -f "$UNSIGNED_APK" ]] || die "$UNSIGNED_APK not found after build"
+
+workdir=$(mktemp -d)
+trap 'rm -rf "$workdir"' EXIT
+
+keystore="$workdir/liseur-release.p12"
+signed_apk="$workdir/app-release-signed.apk"
+pass_show "$PASS_KEYSTORE" | base64 --decode >"$keystore"
+
+store_password=$(pass_show "$PASS_KEYSTORE_PASSWORD")
+key_alias=$(pass_show "$PASS_KEY_ALIAS")
+
+printf 'Signing the release APK.\n'
+"$apksigner" sign \
+    --ks "$keystore" \
+    --ks-pass "pass:$store_password" \
+    --ks-key-alias "$key_alias" \
+    --key-pass "pass:$store_password" \
+    --out "$signed_apk" \
+    "$UNSIGNED_APK"
+
+printf 'Installing on %s.\n' "$serial"
+adb -s "$serial" install -r "$signed_apk"
