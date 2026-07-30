@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -211,8 +212,14 @@ private fun SwitchRow(
         Row(
             modifier = Modifier
                 // One tap target for the whole row, so the switch is not the
-                // only thing you are allowed to hit.
-                .clickable(role = Role.Switch) { onCheckedChange(!checked) }
+                // only thing you are allowed to hit. Toggleable rather than
+                // merely clickable, so the row carries its own on-or-off state
+                // and a screen reader can say which it is.
+                .toggleable(
+                    value = checked,
+                    role = Role.Switch,
+                    onValueChange = onCheckedChange,
+                )
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

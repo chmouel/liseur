@@ -211,6 +211,68 @@ tap_if_there() {
 
 on_screen() { dump_ui && find_node "$1" >/dev/null; }
 
+# Whether a settings switch is on. The row carries the checked state but
+# no text of its own, so this finds the label and then the switch row
+# wrapped around it: prints "on" or "off", or nothing if there is no such
+# row on screen.
+#
+#   switch_state <label>
+switch_state() {
+    python3 - "$work/ui.xml" "$1" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+
+path, needle = sys.argv[1], sys.argv[2].lower()
+
+def box(node):
+    m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+    return tuple(int(g) for g in m.groups()) if m else None
+
+try:
+    nodes = list(ET.parse(path).getroot().iter("node"))
+except ET.ParseError:
+    sys.exit(1)
+
+label = next(
+    (n for n in nodes if (n.get("text") or "").strip().lower().startswith(needle)),
+    None,
+)
+if label is None or (lb := box(label)) is None:
+    sys.exit(1)
+
+# The smallest checkable box that contains the label is its own row and
+# not, say, a scroll container that happens to enclose several.
+rows = [
+    (b, n) for n in nodes if n.get("checkable") == "true"
+    if (b := box(n)) and b[0] <= lb[0] and b[1] <= lb[1] and b[2] >= lb[2] and b[3] >= lb[3]
+]
+if not rows:
+    sys.exit(1)
+_, row = min(rows, key=lambda r: (r[0][2] - r[0][0]) * (r[0][3] - r[0][1]))
+print("on" if row.get("checked") == "true" else "off")
+PY
+}
+
+# Put a settings switch in a known position. Tapping blind would toggle
+# whatever the last run left behind, which is how a screenshot set ends
+# up half in one palette and half in another.
+#
+#   set_switch <label> <on|off>
+set_switch() {
+    local label=$1 want=$2 now
+    wait_for "$label" 15 >/dev/null || die "no \"$label\" switch on screen"
+    now=$(switch_state "$label") || die "could not read the \"$label\" switch"
+    if [[ $now == "$want" ]]; then
+        note "$label already $want"
+        return 0
+    fi
+    tap_on "$label"
+    sleep 2
+    dump_ui
+    [[ $(switch_state "$label") == "$want" ]] ||
+        die "could not turn \"$label\" $want"
+    note "$label turned $want"
+}
+
 # Tap something on the shelf, scrolling down to it if it is below the
 # fold. Only the shelf scrolls this way; a swipe in the reader turns a
 # page instead.
@@ -728,6 +790,17 @@ if ((setup_only)); then
 fi
 
 step "Light"
+
+# Screenshots show Liseur's own palette, not the emulator's wallpaper.
+# Wallpaper colours are the default on Android 12 and up, which would
+# otherwise make every capture depend on whatever image the emulator
+# happens to be showing -- and would tell a store visitor nothing about
+# what the app looks like.
+open_library
+tap_on "Settings"
+wait_for "Theme" >/dev/null || sleep 2
+set_switch "Colours from your wallpaper" off
+back
 
 open_library
 shelf_to_top
