@@ -173,6 +173,16 @@ Key decisions:
   download, and the Kobo sync protocol (`/kobo/<token>/v1/...`) for
   reading-position sync, exchanging percentage progression like KOReader
   does.
+- **Komga** integration is Komga's own REST API: `POST
+  /api/v1/books/list` to browse, `GET /api/v1/books/{id}/file` to
+  download, and `GET`/`PUT /api/v1/books/{id}/progression` to sync a
+  full Readium locator rather than a percentage.
+- **One server at a time.** `data/remote/` holds provider-neutral
+  contracts (`CatalogSource`, `FileSource`, `ServerSetup`,
+  `PositionSync`); `data/calibre/` and `data/komga/` implement them, and
+  `RemoteRouter` picks the implementation from the connected server's
+  `ServerKind`. `domain/ReadingStateMerge.kt` is shared by both, so the
+  conflict rules are written once.
 - **Single `:app` module**, manual DI composition root, `ViewModel` +
   `StateFlow`, Room + DataStore for persistence.
 
@@ -264,6 +274,45 @@ agent or device check.
 - Deletions in calibre are not propagated (only archived books are, as
   `IsRemoved`), and users can restrict syncing to selected shelves, which
   makes an empty sync legitimate.
+
+## Komga protocol
+
+Verified against a real Komga install (API 1.25.0) with an API key, and
+against `BookLifecycle.kt` on master. Every rejection below was provoked
+deliberately rather than read off the schema.
+
+- Auth is `X-API-Key: <key>`, created in Komga's web UI. Identity is
+  `GET /api/v2/users/me` → `{id, email, roles[]}`; there is no
+  `/api/v1/users/me`. `FILE_DOWNLOAD` in `roles` means the account may
+  download. Users paste the API-key *page* address, so setup reduces a
+  pasted URL to its origin.
+- Browse is `POST /api/v1/books/list?page=&size=&sort=` with an EPUB +
+  READY condition; `GET /api/v1/books` is deprecated since 1.19.0. Each
+  entry carries `readProgress {page, completed, readDate}` inline, which
+  is the change detector — a routine sync costs one request.
+- Search is the same endpoint with `fullTextSearch` set, a sibling of
+  `condition`.
+- `PUT /progression` validates, in order: `modified` strictly after the
+  stored `readDate` (else `409`); `href`, fragment stripped and
+  URL-decoded, exactly matching an internal EPUB file name, with **no**
+  leading slash (else `400`); and `locations.progression`, which is
+  required. Our `totalProgression` is ignored and recomputed.
+- **There is no page-based fallback.** `PATCH read-progress {"page": N}`
+  is rejected for reflowable EPUB ("not Divina compatible"); only
+  `{"completed": true}` works. On a `400` the client instead fetches
+  `GET /api/v1/books/{id}/positions` and snaps to the nearest position
+  Komga already knows, keeping the position rather than coarsening it.
+  That index is ~330 KB for an ordinary book, so it is only ever fetched
+  after a rejection.
+- **`409` is not a failure.** The server holds something at least as
+  new; the row stays dirty and the next run pulls and reconciles.
+- `GET /progression` answers `204` with an empty body when there is no
+  progress. A `404` means the book is unknown, and *is* a failure.
+- `modified` comes back with a local UTC offset and is double-offset, so
+  it must not be used for ordering; `readProgress.readDate` round-trips
+  exactly and is what the sync orders by.
+- Deleting a book from the server is admin-only
+  (`DELETE /books/{id}/file`), so that action is hidden for Komga.
 
 ## Releasing
 

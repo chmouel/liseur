@@ -1,8 +1,9 @@
 # Liseur
 
-An open-source EPUB books reader and calibre-web client for Android: a modern
-reader that is equally at home with the files on your phone and with a
-[calibre-web](https://github.com/janeczku/calibre-web) server.
+An open-source EPUB books reader and calibre-web / Komga client for Android: a
+modern reader that is equally at home with the files on your phone and with a
+[calibre-web](https://github.com/janeczku/calibre-web) or
+[Komga](https://komga.org) server.
 
 <table>
   <tr>
@@ -31,13 +32,13 @@ reader that is equally at home with the files on your phone and with a
   </tr>
   <tr>
     <td><img src="docs/screenshots/08-settings.png" alt="Settings"></td>
-    <td><img src="docs/screenshots/09-calibre.png" alt="calibre-web setup"></td>
+    <td><img src="docs/screenshots/09-calibre.png" alt="Server setup"></td>
     <td><img src="docs/screenshots/10-library-dark.png" alt="Library in dark mode"></td>
     <td><img src="docs/screenshots/11-reading-dark.png" alt="Reading in the dark theme"></td>
   </tr>
   <tr>
     <td align="center"><sub>Theme, volume keys, and where your books come from.</sub></td>
-    <td align="center"><sub>An address, a username, a password. Liseur works out the rest.</sub></td>
+    <td align="center"><sub>calibre-web or Komga: an address and a way in. Liseur does the rest.</sub></td>
     <td align="center"><sub>The same shelf after dark.</sub></td>
     <td align="center"><sub>The Dark page theme, chosen separately from the app's.</sub></td>
   </tr>
@@ -73,15 +74,20 @@ Your library. Point Liseur at folders of EPUBs and it indexes them, covers and
 all. Books you are actually using sort to the front, finished ones get a tick,
 and pull to refresh picks up whatever changed behind the app's back.
 
-calibre-web. One screen: URL, username, password. Liseur works out the rest
-(the OPDS catalog, whether the account may download, and the Kobo sync token),
-then merges your server's books into the same library with a cloud badge. Tap
-one and it downloads and opens. Reading positions sync both ways through
-calibre-web's Kobo protocol. You can remove the copy on the device, or delete
-the book from the server outright.
+Your server. Pick calibre-web or Komga, give it an address and a way in — a
+username and password for calibre-web, an API key for Komga — and Liseur works
+out the rest: the catalog, whether the account may download, and how to sync.
+Your server's books merge into the same library with a cloud badge; tap one and
+it downloads and opens.
+
+Reading positions sync both ways, through calibre-web's Kobo protocol or
+Komga's own read-progress API. Komga carries a full locator rather than a
+percentage, so a book reopens on the exact word you left it on, whichever
+device you pick it up on. If both sides moved since they last agreed, Liseur
+says so instead of silently picking one.
 
 Free software. No trackers or analytics, no proprietary dependencies. The only
-network traffic is to the calibre-web server you configured and, if you ask for
+network traffic is to the book server you configured and, if you ask for
 a definition, to Wiktionary.
 
 ## Development

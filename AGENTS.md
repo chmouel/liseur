@@ -1,8 +1,8 @@
 # Liseur — Copilot instructions
 
-Open-source Android ebook reader: local EPUB library + calibre-web client
-(OPDS browse/download, Kobo-protocol position sync), with a Kindle-inspired
-reading experience. Kotlin + Jetpack Compose + Readium Kotlin Toolkit.
+Open-source Android ebook reader: local EPUB library + calibre-web and
+Komga clients (browse/download and position sync against either), with a
+Kindle-inspired reading experience. Kotlin + Jetpack Compose + Readium Kotlin Toolkit.
 FOSS-only dependencies — the app targets F-Droid inclusion. See `README.md`
 for user-facing goals.
 
@@ -32,16 +32,18 @@ is applied), compileSdk/targetSdk 37, minSdk 26. Dependencies are managed in
   Maven Central or Google's Maven repo. No proprietary blobs, trackers,
   analytics, or Google Play services. In particular, never add
   `readium-lcp` (depends on the proprietary liblcp).
-- Network access is limited to user-configured calibre-web servers and
-  opt-in dictionary lookups.
+- Network access is limited to the user-configured book server
+  (calibre-web or Komga) and opt-in dictionary lookups.
 
 ## Architecture
 
 Single `:app` module, layered packages under `com.chmouel.liseur`:
 
 - `data/` — Room database, DataStore settings, local library repository
-  (SAF folder scanning + Readium streamer metadata extraction), calibre-web
-  clients (OPDS + Kobo sync).
+  (SAF folder scanning + Readium streamer metadata extraction), and the
+  remote-server layer: `data/remote/` holds provider-neutral contracts,
+  `data/calibre/` (OPDS + Kobo sync) and `data/komga/` (REST) implement
+  them, and `RemoteRouter` dispatches on the connected server's kind.
 - `domain/` — small use-case layer, only where logic is non-trivial
   (sync merge, time-left estimator). Keep pure and JVM-testable.
 - `reader/` — Readium `EpubNavigatorFragment` hosted in Compose, plus the
@@ -57,9 +59,14 @@ emulator.
 
 ## Conventions
 
-- Reading positions are Readium `Locator`s locally; calibre-web sync
-  exchanges percentage progression (`locations.totalProgression`),
-  newest-wins conflict resolution.
+- Reading positions are Readium `Locator`s locally. calibre-web sync
+  exchanges percentage progression (`locations.totalProgression`); Komga
+  exchanges a full locator, so it also restores the exact spot. Both go
+  through `domain/ReadingStateMerge.kt` — write conflict rules there, once,
+  not per provider.
+- One server is connected at a time. Anything provider-shaped belongs
+  behind a `data/remote/` contract, not in a `when (kind)` at the call
+  site.
 - Reader settings map to Readium `EpubPreferences`; reading themes
   (Light/Sepia/Dark/Black) are decoupled from the app's Material theme.
 - Bundled fonts must be under open licenses (OFL): Literata et al.
