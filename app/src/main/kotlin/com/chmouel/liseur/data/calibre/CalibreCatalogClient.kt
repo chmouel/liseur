@@ -1,14 +1,18 @@
 package com.chmouel.liseur.data.calibre
 
+import android.util.Log
 import com.chmouel.liseur.data.remote.CatalogSource
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttp
-import java.io.IOException
+import com.chmouel.liseur.data.remote.RemoteHttpFailure
+import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.data.remote.failureForCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
+import org.xml.sax.SAXException
 
 /** Fetches book lists from a calibre-web catalog. */
 class CalibreCatalogClient(private val http: RemoteHttp = RemoteHttp()) : CatalogSource {
@@ -52,6 +56,17 @@ class CalibreCatalogClient(private val http: RemoteHttp = RemoteHttp()) : Catalo
         fetchPage(baseUrl, credentials, "/opds/search?query=$encoded").books.map(OpdsBook::toRemote)
     }
 
+    /**
+     * A page, with every way of failing already given its meaning.
+     *
+     * Both translations here matter upstream. A bare `IOException` for a
+     * rejected sign-in would reach the library as "could not reach the
+     * server", which sends someone to check their wifi over a password
+     * the server told us it does not like. And a feed that is not XML at
+     * all throws a `SAXException`, which is not an `IOException`, so
+     * nothing above catches it -- it escapes the refresh entirely and
+     * leaves the library spinning for good.
+     */
     private fun fetchPage(
         baseUrl: String,
         credentials: RemoteCredentials,
@@ -60,9 +75,19 @@ class CalibreCatalogClient(private val http: RemoteHttp = RemoteHttp()) : Catalo
         val url = CalibreUrl.resolve(baseUrl, href)
         return http.get(url, credentials).use { response ->
             if (!response.isSuccessful) {
-                throw IOException("Catalog request failed with ${response.code}")
+                throw RemoteHttpFailure(failureForCode(response.code))
             }
-            OpdsParser.parse(response.body?.string().orEmpty())
+            val body = response.body.string()
+            try {
+                OpdsParser.parse(body)
+            } catch (e: SAXException) {
+                Log.i(TAG, "The catalog feed was not readable XML", e)
+                throw RemoteHttpFailure(SyncFailure.Malformed)
+            }
         }
+    }
+
+    private companion object {
+        const val TAG = "calibre-catalog"
     }
 }

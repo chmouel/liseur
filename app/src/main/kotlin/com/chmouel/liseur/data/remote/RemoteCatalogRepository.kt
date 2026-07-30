@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import java.io.IOException
+import java.net.SocketTimeoutException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +22,17 @@ import kotlinx.coroutines.sync.withLock
 sealed interface CatalogStatus {
     data object Idle : CatalogStatus
     data object Refreshing : CatalogStatus
-    data object Offline : CatalogStatus
+
+    /**
+     * The last refresh did not finish, and why.
+     *
+     * Carrying the reason rather than a bare "offline" is the difference
+     * between telling someone their wifi is down and telling them their
+     * password was refused. Both used to come out as the former, because
+     * the failure a rejected request throws is an [java.io.IOException]
+     * like any other.
+     */
+    data class Failed(val reason: SyncFailure) : CatalogStatus
 
     /** The stored password could not be read, so the account must be set up again. */
     data object CredentialsLost : CatalogStatus
@@ -111,12 +122,36 @@ class RemoteCatalogRepository(
                 Log.i(TAG, "The account changed while the catalog was being read; dropping it", e)
                 _status.value = CatalogStatus.Idle
                 false
+            } catch (e: RemoteHttpFailure) {
+                // Already carries its meaning: a refused sign-in, a
+                // server in trouble, an answer that was not a catalog.
+                Log.i(TAG, "The server would not give up its catalog")
+                _status.value = CatalogStatus.Failed(e.reason)
+                false
+            } catch (e: SocketTimeoutException) {
+                // Before the catch below, because this is one too. A
+                // server that is answering slowly is not a server that
+                // cannot be reached, and waiting is the right advice
+                // where checking the address is not.
+                Log.i(TAG, "The catalog took too long to arrive")
+                _status.value = CatalogStatus.Failed(SyncFailure.Timeout)
+                false
             } catch (e: IOException) {
                 Log.i(TAG, "Could not refresh the catalog", e)
-                _status.value = CatalogStatus.Offline
+                _status.value = CatalogStatus.Failed(SyncFailure.Offline)
                 false
             }
         } finally {
+            // Cancellation and anything unforeseen both arrive here
+            // still marked as refreshing. A spinner that never stops is
+            // worse than any wrong message, so nothing leaves without a
+            // settled answer. Idle rather than a failure: by far the
+            // usual way to land here is the screen going away, which is
+            // nobody's fault and should not accuse the server of
+            // anything. A genuine surprise still travels on unswallowed.
+            if (_status.value is CatalogStatus.Refreshing) {
+                _status.value = CatalogStatus.Idle
+            }
             refreshing.unlock()
         }
     }

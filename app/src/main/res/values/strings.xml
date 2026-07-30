@@ -222,6 +222,22 @@
     <string name="read_book">Read</string>
     <string name="book_actions">Book actions</string>
     <string name="state_downloading">Downloading</string>
+    <string name="state_download_queued">Waiting to download</string>
+
+    <!--
+        What the last catalog refresh ran into. Worded as a report of
+        that attempt rather than a claim about the present: the network
+        can come back without telling anyone.
+    -->
+    <string name="catalog_failed_offline">Couldn\'t reach your server. Showing the saved catalog.</string>
+    <string name="catalog_failed_timeout">Your server took too long to answer. Showing the saved catalog.</string>
+    <string name="catalog_failed_unauthorised">Your server no longer accepts this sign-in. Reconnect the account to see new books.</string>
+    <string name="catalog_failed_forbidden">This account is not allowed to browse the library. Ask whoever runs the server.</string>
+    <string name="catalog_failed_not_found">No catalog answered at that address. Check it in the server settings.</string>
+    <string name="catalog_failed_malformed">Your server answered with something unexpected. Showing the saved catalog.</string>
+    <string name="catalog_failed_server_error">Your server ran into trouble. Showing the saved catalog.</string>
+    <string name="catalog_retry">Try again</string>
+    <string name="catalog_reconnect">Reconnect</string>
     <string name="state_finished">Finished</string>
     <string name="state_on_server">On the server</string>
     <string name="state_on_device">On this device</string>

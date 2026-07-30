@@ -1,6 +1,8 @@
 package com.chmouel.liseur.data.komga
 
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteHttpFailure
+import com.chmouel.liseur.data.remote.SyncFailure
 import java.net.InetAddress
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
@@ -8,6 +10,7 @@ import mockwebserver3.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.json.JSONObject
@@ -93,5 +96,41 @@ class KomgaCatalogClientTest {
         val body = JSONObject(server.takeRequest().body!!.utf8())
         assertEquals("moby dick", body.getString("fullTextSearch"))
         assertTrue(body.has("condition"))
+    }
+
+    private fun reasonFor(response: MockResponse): SyncFailure {
+        server.enqueue(response)
+        return try {
+            runBlocking { KomgaCatalogClient().allBooks(baseUrl(), key) }
+            fail("the client accepted a response it should have refused")
+            error("unreachable")
+        } catch (e: RemoteHttpFailure) {
+            e.reason
+        }
+    }
+
+    @Test
+    fun `a refused api key is not mistaken for a missing network`() {
+        assertEquals(SyncFailure.Unauthorised, reasonFor(MockResponse(code = 401)))
+    }
+
+    @Test
+    fun `a key without permission to browse says so`() {
+        assertEquals(SyncFailure.Forbidden, reasonFor(MockResponse(code = 403)))
+    }
+
+    @Test
+    fun `a server in trouble is reported with its code`() {
+        assertEquals(SyncFailure.ServerError(500), reasonFor(MockResponse(code = 500)))
+    }
+
+    /**
+     * A proxy's error page where a catalog was expected. `JSONException`
+     * is unchecked, so before this it escaped the refresh entirely and
+     * left the library spinning for good.
+     */
+    @Test
+    fun `an answer that is not json does not escape as an unhandled error`() {
+        assertEquals(SyncFailure.Malformed, reasonFor(MockResponse(body = "<html>502 Bad Gateway")))
     }
 }

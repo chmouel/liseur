@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.komga
 
+import android.util.Log
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
@@ -9,6 +10,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /**
@@ -26,7 +28,7 @@ import org.json.JSONObject
 class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
 
     fun getObject(url: String, credentials: RemoteCredentials): JSONObject =
-        JSONObject(body(get(url, credentials)))
+        asObject(body(get(url, credentials)))
 
     /**
      * A GET whose answer may legitimately be nothing at all.
@@ -39,7 +41,7 @@ class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
         http.client.newCall(http.request(url, credentials).build()).execute().use { response ->
             if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
             val body = response.body?.string().orEmpty()
-            return if (body.isBlank()) null else JSONObject(body)
+            return if (body.isBlank()) null else asObject(body)
         }
     }
 
@@ -47,7 +49,7 @@ class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
         val request = credentials.signInto(okhttp3.Request.Builder().url(url))
             .post(json.toString().toRequestBody(JSON))
             .build()
-        return JSONObject(body(http.client.newCall(request).execute()))
+        return asObject(body(http.client.newCall(request).execute()))
     }
 
     /**
@@ -82,12 +84,29 @@ class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
 
     private fun body(response: Response): String = response.use {
         if (!it.isSuccessful) throw RemoteHttpFailure(failureForCode(it.code))
-        val text = it.body?.string().orEmpty()
+        val text = it.body.string()
         if (text.isBlank()) throw RemoteHttpFailure(SyncFailure.Malformed)
         text
     }
 
+    /**
+     * Something that answered, but not with JSON.
+     *
+     * A `JSONException` is unchecked and is not an `IOException`, so
+     * left alone it goes straight past every catch between here and the
+     * screen. That is how a proxy's HTML error page -- or an address
+     * that reaches something else entirely -- ends up killing a catalog
+     * refresh outright instead of being reported as a bad answer.
+     */
+    private fun asObject(text: String): JSONObject = try {
+        JSONObject(text)
+    } catch (e: JSONException) {
+        Log.i(TAG, "The server did not answer with JSON", e)
+        throw RemoteHttpFailure(SyncFailure.Malformed)
+    }
+
     companion object {
+        private const val TAG = "komga-http"
         private val JSON = "application/json; charset=utf-8".toMediaType()
     }
 }

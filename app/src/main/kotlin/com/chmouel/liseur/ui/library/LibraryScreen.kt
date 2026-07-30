@@ -48,6 +48,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CreateNewFolder
@@ -107,6 +108,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
+import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
@@ -275,55 +277,69 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            when {
-                state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
+            Column(Modifier.fillMaxSize()) {
+                // Above every branch below, deliberately. A notice that
+                // only appeared over a full shelf would be missing from
+                // the one case that needs it most: a new account whose
+                // first refresh failed, where the library is empty and
+                // nothing on screen says why.
+                (state.catalogStatus as? CatalogStatus.Failed)?.let { failed ->
+                    CatalogFailureNotice(
+                        reason = failed.reason,
+                        onRetry = onRefresh,
+                        onReconnect = onConnectServer,
+                    )
+                }
+                when {
+                    state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
 
-                // Everything on the shelf has been put away. Not an
-                // empty library, and saying so would be alarming — the
-                // books are all still here, behind one tap.
-                state.books.isEmpty() && state.libraryIsEmpty && state.hasArchived ->
-                    EverythingPutAway(
-                        onShowArchived = { onSetFilter(LibraryFilter.ARCHIVED) },
+                    // Everything on the shelf has been put away. Not an
+                    // empty library, and saying so would be alarming — the
+                    // books are all still here, behind one tap.
+                    state.books.isEmpty() && state.libraryIsEmpty && state.hasArchived ->
+                        EverythingPutAway(
+                            onShowArchived = { onSetFilter(LibraryFilter.ARCHIVED) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+
+                    state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
+                        onOpenBook = onOpenBook,
+                        onAddFolder = onAddFolder,
+                        onConnectServer = onConnectServer,
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
-                    onOpenBook = onOpenBook,
-                    onAddFolder = onAddFolder,
-                    onConnectServer = onConnectServer,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                    // Books exist, they are simply all hidden. Offering to
+                    // add a folder here would be answering a question nobody
+                    // asked, and would suggest the shelf had been lost.
+                    state.books.isEmpty() -> NothingMatched(
+                        searching = state.isSearchActive && state.searchQuery.isNotBlank(),
+                        onClear = {
+                            onSearchQueryChange("")
+                            onSetFilter(LibraryFilter.ALL)
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
 
-                // Books exist, they are simply all hidden. Offering to
-                // add a folder here would be answering a question nobody
-                // asked, and would suggest the shelf had been lost.
-                state.books.isEmpty() -> NothingMatched(
-                    searching = state.isSearchActive && state.searchQuery.isNotBlank(),
-                    onClear = {
-                        onSearchQueryChange("")
-                        onSetFilter(LibraryFilter.ALL)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-
-                else -> BookGrid(
-                    state = state,
-                    onSetSort = onSetSort,
-                    onToggleSortDirection = onToggleSortDirection,
-                    onSetFilter = onSetFilter,
-                    onBookSelected = { book ->
-                        when {
-                            book.openableUrl != null -> onBookSelected(book)
-                            book.url in state.downloads ->
-                                scope.launch { snackbarHost.showSnackbar(downloading) }
-                            !state.canDownload ->
-                                scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
-                            else -> onDownloadAndOpen(book)
-                        }
-                    },
-                    onBookLongPress = { sheetBook = it },
-                    modifier = Modifier.fillMaxSize(),
-                )
+                    else -> BookGrid(
+                        state = state,
+                        onSetSort = onSetSort,
+                        onToggleSortDirection = onToggleSortDirection,
+                        onSetFilter = onSetFilter,
+                        onBookSelected = { book ->
+                            when {
+                                book.openableUrl != null -> onBookSelected(book)
+                                book.url in state.downloads ->
+                                    scope.launch { snackbarHost.showSnackbar(downloading) }
+                                !state.canDownload ->
+                                    scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
+                                else -> onDownloadAndOpen(book)
+                            }
+                        },
+                        onBookLongPress = { sheetBook = it },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }
@@ -656,6 +672,7 @@ private fun BookCard(
             when {
                 progress != null -> DownloadOverlay(
                     fraction = progress.fraction,
+                    queued = progress.queued,
                     modifier = Modifier.matchParentSize(),
                 )
 
@@ -693,6 +710,7 @@ private fun BookCard(
 /** What a screen reader should say about a book beyond its title and author. */
 @Composable
 private fun bookStateDescription(book: Book, progress: DownloadProgress?): String = when {
+    progress?.queued == true -> stringResource(R.string.state_download_queued)
     progress != null -> stringResource(R.string.state_downloading)
     book.finished -> stringResource(R.string.state_finished)
     book.downloadState != DownloadState.DOWNLOADED -> stringResource(R.string.state_on_server)
@@ -772,6 +790,60 @@ private fun FinishedBadge(modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * What went wrong last time the catalog was fetched.
+ *
+ * Phrased as a report of the last attempt rather than a claim about now,
+ * because connectivity comes back without telling anyone and a notice
+ * that insists you are offline while you are not is worse than none. The
+ * action follows the reason: there is no point offering to try again
+ * against a password the server has already refused.
+ */
+@Composable
+private fun CatalogFailureNotice(
+    reason: SyncFailure,
+    onRetry: () -> Unit,
+    onReconnect: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val explanation = when (reason) {
+        SyncFailure.Offline -> R.string.catalog_failed_offline
+        SyncFailure.Timeout -> R.string.catalog_failed_timeout
+        SyncFailure.Unauthorised -> R.string.catalog_failed_unauthorised
+        SyncFailure.Forbidden -> R.string.catalog_failed_forbidden
+        SyncFailure.NotFound -> R.string.catalog_failed_not_found
+        SyncFailure.Malformed -> R.string.catalog_failed_malformed
+        is SyncFailure.ServerError -> R.string.catalog_failed_server_error
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+        ) {
+            Text(
+                text = stringResource(explanation),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+            )
+            when (reason) {
+                SyncFailure.Unauthorised -> TextButton(onClick = onReconnect) {
+                    Text(stringResource(R.string.catalog_reconnect))
+                }
+                else -> if (reason.worthRetrying) {
+                    TextButton(onClick = onRetry) {
+                        Text(stringResource(R.string.catalog_retry))
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun BookCover(book: Book, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(10.dp)
@@ -816,22 +888,39 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier) {
 private val CoverBadgeScrim = Color.Black.copy(alpha = 0.6f)
 private val CoverBadgeContent = Color.White
 
-/** Dims the cover and shows how far the download has got. */
+/**
+ * Dims the cover and shows how far the download has got.
+ *
+ * A queued download gets a still icon rather than a turning one. They
+ * are not the same thing and they were shown as if they were: tapping a
+ * book with no connection left it spinning indefinitely, which reads as
+ * a download in progress that will never finish rather than as one
+ * waiting for its moment.
+ */
 @Composable
-private fun DownloadOverlay(fraction: Float?, modifier: Modifier = Modifier) {
+private fun DownloadOverlay(
+    fraction: Float?,
+    queued: Boolean,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(CoverBadgeScrim),
         contentAlignment = Alignment.Center,
     ) {
-        if (fraction == null) {
-            CircularProgressIndicator(
+        when {
+            queued -> Icon(
+                imageVector = Icons.Outlined.Schedule,
+                contentDescription = null,
+                tint = CoverBadgeContent,
+                modifier = Modifier.size(32.dp),
+            )
+            fraction == null -> CircularProgressIndicator(
                 color = CoverBadgeContent,
                 modifier = Modifier.size(32.dp),
             )
-        } else {
-            CircularProgressIndicator(
+            else -> CircularProgressIndicator(
                 progress = { fraction },
                 color = CoverBadgeContent,
                 modifier = Modifier.size(32.dp),

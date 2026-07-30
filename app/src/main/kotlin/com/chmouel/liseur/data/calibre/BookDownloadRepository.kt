@@ -24,8 +24,20 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
-/** How far along a book's download is, as a fraction, or null if unknown. */
-data class DownloadProgress(val bookUrl: String, val fraction: Float?)
+/**
+ * How far along a book's download is, as a fraction, or null if unknown.
+ *
+ * [queued] means WorkManager is holding the work back rather than
+ * running it -- no network, a backoff after a failed attempt, or the
+ * scheduler being busy. It has to be told apart from a download that is
+ * genuinely under way, because the two look identical from the outside
+ * and only one of them is going anywhere.
+ */
+data class DownloadProgress(
+    val bookUrl: String,
+    val fraction: Float?,
+    val queued: Boolean = false,
+)
 
 /** What downloaded books are costing in device storage. */
 data class StorageUse(val count: Int, val bytes: Long)
@@ -50,7 +62,11 @@ class BookDownloadRepository(
                             ?.removePrefix(BOOK_TAG_PREFIX)
                         ?: return@mapNotNull null
                     val fraction = info.progress.getFloat(KEY_FRACTION, -1f).takeIf { it >= 0f }
-                    url to DownloadProgress(url, fraction)
+                    url to DownloadProgress(
+                        bookUrl = url,
+                        fraction = fraction,
+                        queued = info.state == WorkInfo.State.ENQUEUED,
+                    )
                 }
                 .toMap()
         }
