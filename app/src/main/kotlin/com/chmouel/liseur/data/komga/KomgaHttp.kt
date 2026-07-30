@@ -31,13 +31,12 @@ class KomgaHttp(private val http: RemoteHttp = RemoteHttp()) {
     /**
      * A GET whose answer may legitimately be nothing at all.
      *
-     * Komga says "no reading position" with 204 and an empty body rather
-     * than 404, so an empty answer has to be told apart from a missing
-     * book instead of both arriving as an error.
+     * Komga says "no reading position yet" with 204 and an empty body.
+     * A book it has never heard of is a 404, and stays a failure: the
+     * two mean quite different things and only one of them is fine.
      */
     fun getObjectOrNull(url: String, credentials: RemoteCredentials): JSONObject? {
         http.client.newCall(http.request(url, credentials).build()).execute().use { response ->
-            if (response.code == 404) return null
             if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
             val body = response.body?.string().orEmpty()
             return if (body.isBlank()) null else JSONObject(body)

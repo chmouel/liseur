@@ -13,7 +13,15 @@ import org.json.JSONObject
 data class KomgaReadProgress(
     val page: Int,
     val completed: Boolean,
-    /** When the reading happened, which is what Komga orders writes by. */
+    /**
+     * When the reading happened.
+     *
+     * This is the only timestamp Komga reports for a position that can
+     * be believed, and it is the one the server itself orders writes by
+     * — a push whose `modified` is not strictly after it comes back 409.
+     * The `modified` field of `GET /progression` is not the same number
+     * and must not be used in its place.
+     */
     val readDate: Long?,
     val deviceId: String?,
 )
