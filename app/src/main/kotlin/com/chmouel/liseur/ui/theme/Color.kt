@@ -31,14 +31,37 @@ val PaperInverse = Color(0xFFF6F1EA)
 val Leather = Color(0xFF7A4A2B)
 val LeatherLight = Color(0xFFFFDCC3)
 val LeatherDark = Color(0xFF5C3018)
-val Sage = Color(0xFF5B6650)
-val SageLight = Color(0xFFDFE6D0)
+
+// The colour of "this one is chosen".
+//
+// M3 draws every selected chip and segmented button from the secondary
+// family, and in this app that is the only thing the family is ever
+// used for. It used to be sage, which made the one selected thing on a
+// screen the one green thing on it -- not a second accent so much as a
+// stray one, since nothing else anywhere was green. Selection now looks
+// like the app: leather, washed out enough to sit under dark text.
+val LeatherSoft = Color(0xFF8B5E3C)
+val LeatherWash = Color(0xFFF0DCC6)
+val LeatherInk = Color(0xFF4A2711)
+
 val Teal = Color(0xFF3A5F5C)
 val TealLight = Color(0xFFBDECE6)
 
+// Night is the same room with the lights off: the same warm neutrals
+// walked down rather than a second, cooler palette.
 val NightSurface = Color(0xFF17130E)
-val NightSurfaceHigh = Color(0xFF241E16)
+val NightSurfaceLowest = Color(0xFF100D09)
+val NightSurfaceLow = Color(0xFF1B1712)
+val NightSurfaceContainer = Color(0xFF201B15)
+val NightSurfaceHigh = Color(0xFF2B251D)
+val NightSurfaceHighest = Color(0xFF362F26)
+val NightSurfaceBright = Color(0xFF3D362C)
+val NightVariant = Color(0xFF443C31)
 val NightText = Color(0xFFEBE1D0)
+val NightTextSoft = Color(0xFFCFC3B1)
+val NightRule = Color(0xFF4A4238)
+val NightRuleStrong = Color(0xFF988D7C)
 val LeatherNight = Color(0xFFE5A87C)
-val SageNight = Color(0xFFBFC9AE)
+val LeatherNightDeep = Color(0xFF4A3324)
 val TealNight = Color(0xFFA2D3CD)
+val TealNightDeep = Color(0xFF2A4744)
