@@ -44,6 +44,7 @@
     <string name="back">Back</string>
     <string name="server_account">Book server</string>
     <string name="server_title">Book server</string>
+    <string name="connect_server">Connect a book server</string>
     <string name="server_kind">Which kind of server?</string>
     <string name="server_kind_calibre">calibre-web</string>
     <string name="server_kind_komga">Komga</string>

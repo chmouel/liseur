@@ -122,20 +122,29 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { LIBRARY, SETTINGS, CALIBRE_ACCOUNT, LICENCES }
+private enum class Screen { LIBRARY, SETTINGS, SERVER_ACCOUNT, LICENCES }
 
 private const val SOURCE_URL = "https://github.com/chmouel/liseur"
 
 @Composable
 private fun LiseurApp(settings: AppSettings) {
     var screen by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
+    // The server screen is reached from two places now, and Back has to
+    // go back to whichever one it was, not to the one it usually is.
+    var accountReturnsTo by rememberSaveable { mutableStateOf(Screen.SETTINGS) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(context) { context.container.appSettings }
     val annotationBackup = rememberAnnotationBackup()
 
     when (screen) {
-        Screen.LIBRARY -> LibraryRoute(onOpenSettings = { screen = Screen.SETTINGS })
+        Screen.LIBRARY -> LibraryRoute(
+            onOpenSettings = { screen = Screen.SETTINGS },
+            onConnectServer = {
+                accountReturnsTo = Screen.LIBRARY
+                screen = Screen.SERVER_ACCOUNT
+            },
+        )
 
         Screen.SETTINGS -> {
             BackHandler { screen = Screen.LIBRARY }
@@ -146,7 +155,10 @@ private fun LiseurApp(settings: AppSettings) {
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
-                onOpenAccount = { screen = Screen.CALIBRE_ACCOUNT },
+                onOpenAccount = {
+                    accountReturnsTo = Screen.SETTINGS
+                    screen = Screen.SERVER_ACCOUNT
+                },
                 onExportAnnotations = annotationBackup.export,
                 onImportAnnotations = annotationBackup.restore,
                 onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
@@ -155,9 +167,9 @@ private fun LiseurApp(settings: AppSettings) {
             )
         }
 
-        Screen.CALIBRE_ACCOUNT -> {
-            BackHandler { screen = Screen.SETTINGS }
-            ServerAccountRoute(onBack = { screen = Screen.SETTINGS })
+        Screen.SERVER_ACCOUNT -> {
+            BackHandler { screen = accountReturnsTo }
+            ServerAccountRoute(onBack = { screen = accountReturnsTo })
         }
 
         Screen.LICENCES -> {
@@ -257,6 +269,7 @@ private fun ServerAccountRoute(
 @Composable
 private fun LibraryRoute(
     onOpenSettings: () -> Unit,
+    onConnectServer: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
     val context = LocalContext.current
@@ -318,6 +331,7 @@ private fun LibraryRoute(
             }
         },
         onOpenSettings = onOpenSettings,
+        onConnectServer = onConnectServer,
         onDownload = viewModel::download,
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,

@@ -120,6 +120,7 @@ fun LibraryScreen(
     onAddFolder: () -> Unit,
     onBookSelected: (Book) -> Unit,
     onOpenSettings: () -> Unit,
+    onConnectServer: () -> Unit,
     onDownload: (Book) -> Unit,
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
@@ -289,6 +290,7 @@ fun LibraryScreen(
                 state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
                     onOpenBook = onOpenBook,
                     onAddFolder = onAddFolder,
+                    onConnectServer = onConnectServer,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -858,6 +860,7 @@ private fun OnServerBadge(modifier: Modifier = Modifier) {
 private fun EmptyLibrary(
     onOpenBook: () -> Unit,
     onAddFolder: () -> Unit,
+    onConnectServer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Scrollable even though it always fits, so that a pull from the top
@@ -896,6 +899,12 @@ private fun EmptyLibrary(
             }
             OutlinedButton(onClick = onOpenBook) {
                 Text(stringResource(R.string.open_book))
+            }
+            // The text above offers a server; until now nothing here
+            // took anyone to one, and it lives three taps away under
+            // Settings, which is not somewhere a new library looks.
+            OutlinedButton(onClick = onConnectServer) {
+                Text(stringResource(R.string.connect_server))
             }
         }
     }
