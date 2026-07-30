@@ -33,6 +33,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -60,18 +63,21 @@ import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.ServerKind
 
 /**
- * One screen for the whole calibre-web account: the user gives an
- * address and a login, and the app works out the rest.
+ * One screen for the whole book-server account: the user picks a kind of
+ * server, gives an address and a way in, and the app works out the rest.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CalibreAccountScreen(
-    state: CalibreAccountUiState,
+fun ServerAccountScreen(
+    state: ServerAccountUiState,
+    onKindChange: (ServerKind) -> Unit,
     onUrlChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
@@ -86,7 +92,7 @@ fun CalibreAccountScreen(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
-                title = { Text(stringResource(R.string.calibre_title)) },
+                title = { Text(stringResource(R.string.server_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -111,15 +117,17 @@ fun CalibreAccountScreen(
             if (server == null) {
                 if (state.lostToRestore) {
                     Notice(
-                        text = stringResource(R.string.calibre_lost_to_restore),
+                        text = stringResource(R.string.server_lost_to_restore),
                         tone = NoticeTone.PROBLEM,
                     )
                 }
                 ConnectForm(
                     state = state,
+                    onKindChange = onKindChange,
                     onUrlChange = onUrlChange,
                     onUsernameChange = onUsernameChange,
                     onPasswordChange = onPasswordChange,
+                    onApiKeyChange = onApiKeyChange,
                     onConnect = onConnect,
                 )
             } else {
@@ -136,8 +144,12 @@ fun CalibreAccountScreen(
                     onDisconnect = onDisconnect,
                 )
             }
+            val secretNote = when (server?.kind ?: state.kind) {
+                ServerKind.CALIBRE -> R.string.server_password_storage_note
+                ServerKind.KOMGA -> R.string.server_api_key_storage_note
+            }
             Text(
-                stringResource(R.string.calibre_password_storage_note),
+                stringResource(secretNote),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 24.dp),
@@ -148,21 +160,45 @@ fun CalibreAccountScreen(
 
 @Composable
 private fun ConnectForm(
-    state: CalibreAccountUiState,
+    state: ServerAccountUiState,
+    onKindChange: (ServerKind) -> Unit,
     onUrlChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
 ) {
     Text(
-        stringResource(R.string.calibre_intro),
+        stringResource(R.string.server_kind),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        ServerKind.entries.forEachIndexed { index, kind ->
+            SegmentedButton(
+                selected = state.kind == kind,
+                onClick = { onKindChange(kind) },
+                enabled = !state.connecting,
+                shape = SegmentedButtonDefaults.itemShape(index, ServerKind.entries.size),
+            ) {
+                Text(stringResource(kind.labelRes()))
+            }
+        }
+    }
+    Text(
+        stringResource(
+            when (state.kind) {
+                ServerKind.CALIBRE -> R.string.server_intro_calibre
+                ServerKind.KOMGA -> R.string.server_intro_komga
+            },
+        ),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     OutlinedTextField(
         value = state.url,
         onValueChange = onUrlChange,
-        label = { Text(stringResource(R.string.calibre_url)) },
+        label = { Text(stringResource(R.string.server_url)) },
         placeholder = { Text("books.example.com") },
         singleLine = true,
         enabled = !state.connecting,
@@ -172,63 +208,90 @@ private fun ConnectForm(
         ),
         modifier = Modifier.fillMaxWidth(),
     )
-    OutlinedTextField(
-        value = state.username,
-        onValueChange = onUsernameChange,
-        label = { Text(stringResource(R.string.calibre_username)) },
-        singleLine = true,
-        enabled = !state.connecting,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-        modifier = Modifier.fillMaxWidth(),
-    )
-    var passwordShown by rememberSaveable { mutableStateOf(false) }
-    OutlinedTextField(
-        value = state.password,
-        onValueChange = onPasswordChange,
-        label = { Text(stringResource(R.string.calibre_password)) },
-        singleLine = true,
-        enabled = !state.connecting,
-        visualTransformation = if (passwordShown) {
-            VisualTransformation.None
-        } else {
-            PasswordVisualTransformation()
-        },
-        trailingIcon = {
-            IconButton(onClick = { passwordShown = !passwordShown }) {
-                Icon(
-                    imageVector = if (passwordShown) {
-                        Icons.Outlined.VisibilityOff
-                    } else {
-                        Icons.Outlined.Visibility
-                    },
-                    contentDescription = stringResource(
-                        if (passwordShown) R.string.hide_password else R.string.show_password,
-                    ),
-                )
-            }
-        },
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Password,
-            imeAction = ImeAction.Done,
-        ),
-        modifier = Modifier.fillMaxWidth(),
-    )
+    var secretShown by rememberSaveable { mutableStateOf(false) }
+    val secretToggle: @Composable () -> Unit = {
+        IconButton(onClick = { secretShown = !secretShown }) {
+            Icon(
+                imageVector = if (secretShown) {
+                    Icons.Outlined.VisibilityOff
+                } else {
+                    Icons.Outlined.Visibility
+                },
+                contentDescription = stringResource(
+                    if (secretShown) R.string.hide_password else R.string.show_password,
+                ),
+            )
+        }
+    }
+    val secretMask = if (secretShown) {
+        VisualTransformation.None
+    } else {
+        PasswordVisualTransformation()
+    }
+    when (state.kind) {
+        ServerKind.CALIBRE -> {
+            OutlinedTextField(
+                value = state.username,
+                onValueChange = onUsernameChange,
+                label = { Text(stringResource(R.string.server_username)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.password,
+                onValueChange = onPasswordChange,
+                label = { Text(stringResource(R.string.server_password)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                visualTransformation = secretMask,
+                trailingIcon = secretToggle,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        ServerKind.KOMGA -> {
+            OutlinedTextField(
+                value = state.apiKey,
+                onValueChange = onApiKeyChange,
+                label = { Text(stringResource(R.string.server_api_key)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                visualTransformation = secretMask,
+                trailingIcon = secretToggle,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                stringResource(R.string.server_api_key_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 
     state.error?.let { error ->
         Notice(
-            text = stringResource(error.messageRes()),
+            text = stringResource(error.messageRes(state.kind)),
             tone = NoticeTone.PROBLEM,
         )
         if (error == AccountError.UNREACHABLE_TRY_HTTP) {
             var confirmingHttp by rememberSaveable { mutableStateOf(false) }
             TextButton(onClick = { confirmingHttp = true }) {
-                Text(stringResource(R.string.calibre_try_http))
+                Text(stringResource(R.string.server_try_http))
             }
             if (confirmingHttp) {
                 AlertDialog(
                     onDismissRequest = { confirmingHttp = false },
-                    title = { Text(stringResource(R.string.calibre_http_title)) },
-                    text = { Text(stringResource(R.string.calibre_http_warning)) },
+                    title = { Text(stringResource(R.string.server_http_title)) },
+                    text = { Text(stringResource(R.string.server_http_warning)) },
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -236,7 +299,7 @@ private fun ConnectForm(
                                 onConnect(true)
                             },
                         ) {
-                            Text(stringResource(R.string.calibre_http_confirm))
+                            Text(stringResource(R.string.server_http_confirm))
                         }
                     },
                     dismissButton = {
@@ -251,7 +314,8 @@ private fun ConnectForm(
 
     Button(
         onClick = { onConnect(false) },
-        enabled = !state.connecting && state.url.isNotBlank(),
+        enabled = !state.connecting && state.url.isNotBlank() &&
+            (state.kind == ServerKind.CALIBRE || state.apiKey.isNotBlank()),
         modifier = Modifier.fillMaxWidth(),
     ) {
         if (state.connecting) {
@@ -261,7 +325,7 @@ private fun ConnectForm(
                 color = MaterialTheme.colorScheme.onPrimary,
             )
         } else {
-            Text(stringResource(R.string.calibre_connect))
+            Text(stringResource(R.string.server_connect))
         }
     }
 }
@@ -294,16 +358,16 @@ private fun ConnectedCard(
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                server.username.orEmpty(),
+                server.username.orEmpty().ifBlank { stringResource(server.kind.labelRes()) },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
                 text = if (storage.count == 0) {
-                    stringResource(R.string.calibre_storage_empty)
+                    stringResource(R.string.server_storage_empty)
                 } else {
                     pluralStringResource(
-                        R.plurals.calibre_storage,
+                        R.plurals.server_storage,
                         storage.count,
                         storage.count,
                         Formatter.formatShortFileSize(LocalContext.current, storage.bytes),
@@ -317,19 +381,24 @@ private fun ConnectedCard(
 
     if (!server.canDownload) {
         Notice(
-            text = stringResource(R.string.calibre_no_download_right),
+            text = stringResource(
+                when (server.kind) {
+                    ServerKind.CALIBRE -> R.string.server_no_download_right
+                    ServerKind.KOMGA -> R.string.server_no_download_right_komga
+                },
+            ),
             tone = NoticeTone.PROBLEM,
         )
         TextButton(onClick = onRetryCapabilities, enabled = !busy) {
-            Text(stringResource(R.string.calibre_check_again))
+            Text(stringResource(R.string.server_check_again))
         }
     }
 
     Notice(
         text = if (server.canSync) {
-            stringResource(R.string.calibre_sync_on)
+            stringResource(R.string.server_sync_on)
         } else {
-            stringResource(R.string.calibre_sync_off)
+            stringResource(R.string.server_sync_off)
         },
         tone = if (server.canSync) NoticeTone.GOOD else NoticeTone.NEUTRAL,
     )
@@ -342,7 +411,7 @@ private fun ConnectedCard(
         )
         if (identity != null) {
             Text(
-                text = stringResource(R.string.calibre_sync_identity, identity.login),
+                text = stringResource(R.string.server_sync_identity, identity.login),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -358,7 +427,7 @@ private fun ConnectedCard(
         if (syncReport.unresolved > 0) {
             Notice(
                 text = pluralStringResource(
-                    R.plurals.calibre_sync_unresolved,
+                    R.plurals.server_sync_unresolved,
                     syncReport.unresolved,
                     syncReport.unresolved,
                 ),
@@ -368,7 +437,7 @@ private fun ConnectedCard(
         if (identity != null && identity.strandedBooks > 0) {
             Notice(
                 text = pluralStringResource(
-                    R.plurals.calibre_sync_stranded,
+                    R.plurals.server_sync_stranded,
                     identity.strandedBooks,
                     identity.strandedBooks,
                 ),
@@ -379,14 +448,17 @@ private fun ConnectedCard(
             onClick = onSyncNow,
             enabled = syncStatus != PositionSyncStatus.Syncing,
         ) {
-            Text(stringResource(R.string.calibre_sync_now))
+            Text(stringResource(R.string.server_sync_now))
         }
     }
 
-    AdvancedSection(server = server, onKoboToken = onKoboToken)
+    // The Kobo token is a calibre-web notion; Komga has nothing like it.
+    if (server.kind == ServerKind.CALIBRE) {
+        AdvancedSection(server = server, onKoboToken = onKoboToken)
+    }
 
     OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.calibre_disconnect))
+        Text(stringResource(R.string.server_disconnect))
     }
 }
 
@@ -402,12 +474,12 @@ private fun describeMovement(report: SyncReport): String? {
     val pushed = report.pushed
     return when {
         pulled > 0 && pushed > 0 -> stringResource(
-            R.string.calibre_sync_moved_both,
+            R.string.server_sync_moved_both,
             pulled,
             pushed,
         )
-        pulled > 0 -> pluralStringResource(R.plurals.calibre_sync_pulled, pulled, pulled)
-        pushed > 0 -> pluralStringResource(R.plurals.calibre_sync_pushed, pushed, pushed)
+        pulled > 0 -> pluralStringResource(R.plurals.server_sync_pulled, pulled, pulled)
+        pushed > 0 -> pluralStringResource(R.plurals.server_sync_pushed, pushed, pushed)
         else -> null
     }
 }
@@ -479,23 +551,31 @@ private fun Notice(text: String, tone: NoticeTone) {
     }
 }
 
-private fun AccountError.messageRes(): Int = when (this) {
-    AccountError.BAD_CREDENTIALS -> R.string.calibre_error_credentials
-    AccountError.NOT_CALIBRE_WEB -> R.string.calibre_error_not_calibre
-    AccountError.UNREACHABLE -> R.string.calibre_error_unreachable
-    AccountError.UNREACHABLE_TRY_HTTP -> R.string.calibre_error_https
+private fun ServerKind.labelRes(): Int = when (this) {
+    ServerKind.CALIBRE -> R.string.server_kind_calibre
+    ServerKind.KOMGA -> R.string.server_kind_komga
+}
+
+private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
+    AccountError.BAD_CREDENTIALS -> R.string.server_error_credentials
+    AccountError.WRONG_SERVER -> when (kind) {
+        ServerKind.CALIBRE -> R.string.server_error_not_calibre
+        ServerKind.KOMGA -> R.string.server_error_not_komga
+    }
+    AccountError.UNREACHABLE -> R.string.server_error_unreachable
+    AccountError.UNREACHABLE_TRY_HTTP -> R.string.server_error_https
 }
 
 /** Plain words for how the last position sync went. */
 @Composable
 private fun PositionSyncStatus.describe(lastSyncedAt: Long?): String = when (this) {
-    PositionSyncStatus.Syncing -> stringResource(R.string.calibre_sync_running)
+    PositionSyncStatus.Syncing -> stringResource(R.string.server_sync_running)
     is PositionSyncStatus.Failed -> stringResource(reason.messageRes())
-    PositionSyncStatus.Unavailable -> stringResource(R.string.calibre_sync_off)
-    is PositionSyncStatus.Synced -> stringResource(R.string.calibre_sync_last, relative(at))
+    PositionSyncStatus.Unavailable -> stringResource(R.string.server_sync_off)
+    is PositionSyncStatus.Synced -> stringResource(R.string.server_sync_last, relative(at))
     PositionSyncStatus.Idle -> lastSyncedAt
-        ?.let { stringResource(R.string.calibre_sync_last, relative(it)) }
-        ?: stringResource(R.string.calibre_sync_never)
+        ?.let { stringResource(R.string.server_sync_last, relative(it)) }
+        ?: stringResource(R.string.server_sync_never)
 }
 
 

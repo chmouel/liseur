@@ -10,11 +10,11 @@ import com.chmouel.liseur.data.remote.SyncFailure
  * never described two different ways depending on where you hit it.
  */
 fun SyncFailure.messageRes(): Int = when (this) {
-    SyncFailure.Offline -> R.string.calibre_sync_offline
-    SyncFailure.Timeout -> R.string.calibre_sync_timeout
-    SyncFailure.Unauthorised -> R.string.calibre_sync_unauthorised
-    SyncFailure.Forbidden -> R.string.calibre_sync_forbidden
-    SyncFailure.NotFound -> R.string.calibre_sync_missing
-    SyncFailure.Malformed -> R.string.calibre_sync_malformed
-    is SyncFailure.ServerError -> R.string.calibre_sync_server_error
+    SyncFailure.Offline -> R.string.server_sync_offline
+    SyncFailure.Timeout -> R.string.server_sync_timeout
+    SyncFailure.Unauthorised -> R.string.server_sync_unauthorised
+    SyncFailure.Forbidden -> R.string.server_sync_forbidden
+    SyncFailure.NotFound -> R.string.server_sync_missing
+    SyncFailure.Malformed -> R.string.server_sync_malformed
+    is SyncFailure.ServerError -> R.string.server_sync_server_error
 }

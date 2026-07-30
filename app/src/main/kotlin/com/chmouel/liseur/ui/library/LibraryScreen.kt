@@ -147,7 +147,7 @@ fun LibraryScreen(
     var confirmServerDelete by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
     val notYetHere = stringResource(R.string.book_not_downloaded)
-    val credentialsLost = stringResource(R.string.calibre_credentials_lost)
+    val credentialsLost = stringResource(R.string.server_credentials_lost)
 
     val downloadFailed = stringResource(R.string.download_failed_open)
     val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)

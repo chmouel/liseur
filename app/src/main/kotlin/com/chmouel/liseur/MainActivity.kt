@@ -35,8 +35,8 @@ import com.chmouel.liseur.reader.ReaderActivity
 import kotlinx.coroutines.launch
 import com.chmouel.liseur.ui.library.LibraryScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
-import com.chmouel.liseur.ui.settings.CalibreAccountScreen
-import com.chmouel.liseur.ui.settings.CalibreAccountViewModel
+import com.chmouel.liseur.ui.settings.ServerAccountScreen
+import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.data.settings.AppSettings
@@ -157,7 +157,7 @@ private fun LiseurApp(settings: AppSettings) {
 
         Screen.CALIBRE_ACCOUNT -> {
             BackHandler { screen = Screen.SETTINGS }
-            CalibreAccountRoute(onBack = { screen = Screen.SETTINGS })
+            ServerAccountRoute(onBack = { screen = Screen.SETTINGS })
         }
 
         Screen.LICENCES -> {
@@ -232,17 +232,19 @@ private fun android.content.Context.openLink(uri: Uri) {
 }
 
 @Composable
-private fun CalibreAccountRoute(
+private fun ServerAccountRoute(
     onBack: () -> Unit,
-    viewModel: CalibreAccountViewModel = viewModel(factory = CalibreAccountViewModel.Factory),
+    viewModel: ServerAccountViewModel = viewModel(factory = ServerAccountViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    CalibreAccountScreen(
+    ServerAccountScreen(
         state = state,
+        onKindChange = viewModel::setKind,
         onUrlChange = viewModel::setUrl,
         onUsernameChange = viewModel::setUsername,
         onPasswordChange = viewModel::setPassword,
+        onApiKeyChange = viewModel::setApiKey,
         onConnect = viewModel::connect,
         onRetryCapabilities = viewModel::retryCapabilities,
         onKoboToken = viewModel::setKoboToken,

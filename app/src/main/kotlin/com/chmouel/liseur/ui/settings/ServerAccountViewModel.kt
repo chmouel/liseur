@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
@@ -30,16 +31,18 @@ import kotlinx.coroutines.launch
 /** What went wrong while connecting, phrased as something to act on. */
 enum class AccountError {
     BAD_CREDENTIALS,
-    NOT_CALIBRE_WEB,
+    WRONG_SERVER,
     UNREACHABLE,
     UNREACHABLE_TRY_HTTP,
 }
 
-data class CalibreAccountUiState(
+data class ServerAccountUiState(
     val server: RemoteServer? = null,
+    val kind: ServerKind = ServerKind.CALIBRE,
     val url: String = "",
     val username: String = "",
     val password: String = "",
+    val apiKey: String = "",
     val connecting: Boolean = false,
     val error: AccountError? = null,
     val storage: StorageUse = StorageUse(count = 0, bytes = 0),
@@ -49,7 +52,7 @@ data class CalibreAccountUiState(
     val lostToRestore: Boolean = false,
 )
 
-class CalibreAccountViewModel(
+class ServerAccountViewModel(
     private val repository: RemoteAccountRepository,
     downloads: BookDownloadRepository,
     private val reporting: SyncReporting,
@@ -58,8 +61,8 @@ class CalibreAccountViewModel(
     private val appSettings: AppSettingsRepository,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(CalibreAccountUiState())
-    val state: StateFlow<CalibreAccountUiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(ServerAccountUiState())
+    val state: StateFlow<ServerAccountUiState> = _state.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -102,6 +105,10 @@ class CalibreAccountViewModel(
         viewModelScope.launch { positionSync.request(SyncScope.Full) }
     }
 
+    fun setKind(value: ServerKind) = _state.update { it.copy(kind = value, error = null) }
+
+    fun setApiKey(value: String) = _state.update { it.copy(apiKey = value, error = null) }
+
     fun setUrl(value: String) = _state.update { it.copy(url = value, error = null) }
 
     fun setUsername(value: String) = _state.update { it.copy(username = value, error = null) }
@@ -111,22 +118,31 @@ class CalibreAccountViewModel(
     fun connect(allowHttp: Boolean = false) {
         val current = _state.value
         if (current.connecting || current.url.isBlank()) return
+        if (current.kind == ServerKind.KOMGA && current.apiKey.isBlank()) return
         _state.update { it.copy(connecting = true, error = null) }
 
         viewModelScope.launch {
-            val result = repository.connectCalibre(
-                url = current.url,
-                username = current.username.trim(),
-                password = current.password,
-                allowHttp = allowHttp,
-            )
+            val result = when (current.kind) {
+                ServerKind.CALIBRE -> repository.connectCalibre(
+                    url = current.url,
+                    username = current.username.trim(),
+                    password = current.password,
+                    allowHttp = allowHttp,
+                )
+                ServerKind.KOMGA -> repository.connectKomga(
+                    url = current.url,
+                    apiKey = current.apiKey.trim(),
+                    allowHttp = allowHttp,
+                )
+            }
             if (result is SetupResult.Success) {
                 catalog.refreshDetached()
                 appSettings.setAccountLostToRestore(false)
             }
             _state.update {
                 when (result) {
-                    is SetupResult.Success -> it.copy(connecting = false, password = "")
+                    is SetupResult.Success ->
+                        it.copy(connecting = false, password = "", apiKey = "")
                     is SetupResult.Failure ->
                         it.copy(connecting = false, error = result.reason.toUiError())
                 }
@@ -153,13 +169,13 @@ class CalibreAccountViewModel(
     fun disconnect() {
         viewModelScope.launch {
             repository.disconnect()
-            _state.value = CalibreAccountUiState()
+            _state.value = ServerAccountUiState()
         }
     }
 
     private fun SetupFailure.toUiError(): AccountError = when (this) {
         SetupFailure.BadCredentials -> AccountError.BAD_CREDENTIALS
-        SetupFailure.WrongServer -> AccountError.NOT_CALIBRE_WEB
+        SetupFailure.WrongServer -> AccountError.WRONG_SERVER
         is SetupFailure.Unreachable ->
             if (httpMayWork) AccountError.UNREACHABLE_TRY_HTTP else AccountError.UNREACHABLE
     }
@@ -168,7 +184,7 @@ class CalibreAccountViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container
-                CalibreAccountViewModel(
+                ServerAccountViewModel(
                     repository = container.remoteAccount,
                     downloads = container.bookDownloads,
                     reporting = container.syncReporting,

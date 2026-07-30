@@ -128,7 +128,7 @@ fun SettingsScreen(
 
             SectionTitle(stringResource(R.string.settings_library))
             LinkRow(
-                title = stringResource(R.string.calibre_account),
+                title = stringResource(R.string.server_account),
                 subtitle = stringResource(R.string.settings_account_detail),
                 onClick = onOpenAccount,
             )
