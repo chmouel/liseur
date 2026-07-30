@@ -31,6 +31,8 @@ enum class ThemeMode(val id: String) {
  *
  * @param themeMode Light, dark, or whatever the system is doing.
  * @param dynamicColor Take the palette from the wallpaper (Android 12+).
+ *   On by default where the system can do it; the hand-made palette is
+ *   what you get back by turning it off, and what older phones always get.
  * @param volumeKeysTurnPages Volume keys page forward and back while reading.
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param librarySort How the library grid is arranged.
@@ -38,7 +40,7 @@ enum class ThemeMode(val id: String) {
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
-    val dynamicColor: Boolean = false,
+    val dynamicColor: Boolean = true,
     val volumeKeysTurnPages: Boolean = true,
     val resumeLastBook: Boolean = true,
     val librarySort: LibrarySort = LibrarySort.Default,
@@ -80,7 +82,7 @@ class AppSettingsRepository(private val context: Context) {
     val settings: Flow<AppSettings> = context.appSettingsStore.data.map { p ->
         AppSettings(
             themeMode = ThemeMode.fromId(p[Keys.THEME_MODE]),
-            dynamicColor = p[Keys.DYNAMIC_COLOR] ?: false,
+            dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
             volumeKeysTurnPages = p[Keys.VOLUME_KEYS] ?: true,
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),

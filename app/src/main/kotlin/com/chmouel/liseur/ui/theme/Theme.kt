@@ -93,8 +93,9 @@ val dynamicColorAvailable: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODE
 @Composable
 fun LiseurTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Brand palette by default; dynamic color stays available as an option.
-    dynamicColor: Boolean = false,
+    // Wallpaper colours where the system offers them; the palette above
+    // is the fallback, and what you get back by turning this off.
+    dynamicColor: Boolean = dynamicColorAvailable,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
