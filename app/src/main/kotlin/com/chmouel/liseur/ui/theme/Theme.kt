@@ -11,11 +11,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
+/*
+ * Every role M3 draws from is set here, deliberately.
+ *
+ * Only a handful used to be, and the rest kept Material's own defaults,
+ * which are neutrals mixed towards the baseline purple. Nothing looked
+ * obviously broken because nothing was obviously wrong: the page was
+ * warm and the menus, sheets, cards and scrolled app bars sitting on it
+ * were faintly lilac, which reads as the app being slightly grubby
+ * rather than as a bug. The containers below are what fixes that.
+ */
 private val LightColors = lightColorScheme(
     primary = Leather,
     onPrimary = Color.White,
     primaryContainer = LeatherLight,
     onPrimaryContainer = LeatherDark,
+    inversePrimary = LeatherNight,
     secondary = Sage,
     onSecondary = Color.White,
     secondaryContainer = SageLight,
@@ -28,8 +39,19 @@ private val LightColors = lightColorScheme(
     onBackground = Ink,
     surface = Paper,
     onSurface = Ink,
-    surfaceVariant = PaperDim,
+    surfaceVariant = PaperWarm,
     onSurfaceVariant = InkSoft,
+    surfaceBright = Paper,
+    surfaceDim = PaperDim,
+    surfaceContainerLowest = Paper,
+    surfaceContainerLow = PaperRaised,
+    surfaceContainer = PaperCard,
+    surfaceContainerHigh = PaperHigh,
+    surfaceContainerHighest = PaperHighest,
+    outline = RuleStrong,
+    outlineVariant = Rule,
+    inverseSurface = InkInverse,
+    inverseOnSurface = PaperInverse,
 )
 
 private val DarkColors = darkColorScheme(
