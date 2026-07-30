@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.remote.RemoteBook
 import java.io.ByteArrayInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
@@ -15,6 +16,23 @@ data class OpdsBook(
     val downloadHref: String?,
     val sizeBytes: Long?,
     val updatedAt: Long?,
+)
+
+/**
+ * The same book, said in the way the rest of the app speaks.
+ *
+ * OPDS keeps its own shape here because the parser is tested against
+ * real feeds; only this one function knows how the two line up.
+ */
+fun OpdsBook.toRemote(): RemoteBook = RemoteBook(
+    remoteId = uuid,
+    title = title,
+    author = author,
+    coverHref = coverHref,
+    downloadHref = downloadHref,
+    sizeBytes = sizeBytes,
+    updatedAt = updatedAt,
+    calibreBookId = bookId,
 )
 
 /** One page of a catalog feed, and where the next one is. */

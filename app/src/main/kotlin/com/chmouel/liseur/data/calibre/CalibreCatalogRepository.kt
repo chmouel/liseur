@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.remote.RemoteBook
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -75,7 +76,7 @@ class CalibreCatalogRepository(
             return try {
                 val seen = mutableSetOf<String>()
                 client.allBooks(server.baseUrl, credentials) { page ->
-                    page.forEach { seen += it.uuid }
+                    page.forEach { seen += it.remoteId }
                     store(server.baseUrl, page)
                 }
                 dropVanished(seen)
@@ -92,7 +93,7 @@ class CalibreCatalogRepository(
         }
     }
 
-    suspend fun search(query: String): List<OpdsBook> {
+    suspend fun search(query: String): List<RemoteBook> {
         val server = serverDao.get() ?: return emptyList()
         val credentials = account.credentials() ?: return emptyList()
         return try {
@@ -103,11 +104,11 @@ class CalibreCatalogRepository(
         }
     }
 
-    private suspend fun store(baseUrl: String, books: List<OpdsBook>) {
+    private suspend fun store(baseUrl: String, books: List<RemoteBook>) {
         val now = System.currentTimeMillis()
         books.forEach { remote ->
-            val url = remoteUrl(remote.uuid)
-            val existing = bookDao.getByRemoteUuid(remote.uuid) ?: bookDao.getByUrl(url)
+            val url = remoteUrl(remote.remoteId)
+            val existing = bookDao.getByRemoteUuid(remote.remoteId) ?: bookDao.getByUrl(url)
             bookDao.upsert(mergeCatalogEntry(remote, existing, url, baseUrl, now))
         }
     }
@@ -145,7 +146,7 @@ class CalibreCatalogRepository(
  * refresh has no business resetting it.
  */
 internal fun mergeCatalogEntry(
-    remote: OpdsBook,
+    remote: RemoteBook,
     existing: Book?,
     url: String,
     baseUrl: String,
@@ -167,8 +168,8 @@ internal fun mergeCatalogEntry(
         url = url,
         title = remote.title,
         author = remote.author,
-        remoteUuid = remote.uuid,
-        remoteBookId = remote.bookId,
+        remoteUuid = remote.remoteId,
+        remoteBookId = remote.calibreBookId,
         coverUrl = remote.coverHref?.let { CalibreUrl.resolve(baseUrl, it) },
         downloadHref = remote.downloadHref,
         remoteUpdatedAt = remote.updatedAt,

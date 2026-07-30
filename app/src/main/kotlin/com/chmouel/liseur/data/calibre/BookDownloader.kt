@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.remote.RemoteCredentials
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +38,7 @@ class BookDownloader(private val http: CalibreHttp = CalibreHttp()) {
 
     suspend fun download(
         url: String,
-        credentials: CalibreCredentials,
+        credentials: RemoteCredentials,
         target: File,
         onProgress: suspend (downloaded: Long, total: Long?) -> Unit = { _, _ -> },
     ): DownloadOutcome = withContext(Dispatchers.IO) {

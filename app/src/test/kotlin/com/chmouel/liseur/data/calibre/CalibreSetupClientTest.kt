@@ -1,5 +1,8 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.SetupFailure
+import com.chmouel.liseur.data.remote.SetupResult
 import java.net.InetAddress
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
@@ -35,13 +38,15 @@ class CalibreSetupClientTest {
     /** What the user typed: a host and port, no scheme. */
     private fun typedAddress() = "127.0.0.1:${server.port}"
 
+    private fun reader(password: String) = RemoteCredentials.Basic("reader", password)
+
     private fun enqueueCatalog() {
         server.enqueue(MockResponse(body = OPDS_FEED))
     }
 
     @Test
     fun `offers plain http when https cannot be reached`() = runBlocking {
-        val result = CalibreSetupClient().connect(typedAddress(), "reader", "secret")
+        val result = CalibreSetupClient().connect(typedAddress(), reader("secret"))
 
         val failure = (result as SetupResult.Failure).reason
         assertTrue(failure is SetupFailure.Unreachable)
@@ -56,8 +61,7 @@ class CalibreSetupClientTest {
 
         val result = CalibreSetupClient().connect(
             typedAddress(),
-            "reader",
-            "secret",
+            reader("secret"),
             allowHttp = true,
         )
 
@@ -74,8 +78,7 @@ class CalibreSetupClientTest {
 
         val result = CalibreSetupClient().connect(
             "http://${typedAddress()}",
-            "reader",
-            "secret",
+            reader("secret"),
             allowHttp = true,
         )
 
@@ -91,8 +94,7 @@ class CalibreSetupClientTest {
 
         val result = CalibreSetupClient().connect(
             "http://${typedAddress()}",
-            "reader",
-            "wrong",
+            reader("wrong"),
         )
 
         assertEquals(

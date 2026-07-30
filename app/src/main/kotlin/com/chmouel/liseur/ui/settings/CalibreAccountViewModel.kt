@@ -12,8 +12,8 @@ import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.remote.PositionSyncStatus
-import com.chmouel.liseur.data.calibre.SetupFailure
-import com.chmouel.liseur.data.calibre.SetupResult
+import com.chmouel.liseur.data.remote.SetupFailure
+import com.chmouel.liseur.data.remote.SetupResult
 import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
@@ -159,7 +159,7 @@ class CalibreAccountViewModel(
 
     private fun SetupFailure.toUiError(): AccountError = when (this) {
         SetupFailure.BadCredentials -> AccountError.BAD_CREDENTIALS
-        SetupFailure.NotCalibreWeb -> AccountError.NOT_CALIBRE_WEB
+        SetupFailure.WrongServer -> AccountError.NOT_CALIBRE_WEB
         is SetupFailure.Unreachable ->
             if (httpMayWork) AccountError.UNREACHABLE_TRY_HTTP else AccountError.UNREACHABLE
     }

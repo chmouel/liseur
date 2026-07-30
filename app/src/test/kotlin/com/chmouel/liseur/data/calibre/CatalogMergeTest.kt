@@ -24,7 +24,7 @@ class CatalogMergeTest {
         downloadHref = "/opds/download/42/epub",
         sizeBytes = 1_000_000,
         updatedAt = 2_000L,
-    )
+    ).toRemote()
 
     private val downloadedAndFinished = Book(
         id = 7,

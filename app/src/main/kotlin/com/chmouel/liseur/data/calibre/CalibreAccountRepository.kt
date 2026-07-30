@@ -4,7 +4,9 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.data.remote.SetupResult
 import kotlinx.coroutines.flow.Flow
 
 /** Stores the calibre-web account and hands out its credentials. */
@@ -21,23 +23,23 @@ class CalibreAccountRepository(
      * the image loader, mainly — can still authenticate.
      */
     @Volatile
-    private var cached: Pair<String, CalibreCredentials>? = null
+    private var cached: Pair<String, RemoteCredentials.Basic>? = null
 
     suspend fun current(): RemoteServer? = dao.get()
 
-    suspend fun credentials(): CalibreCredentials? {
+    suspend fun credentials(): RemoteCredentials.Basic? {
         val server = dao.get() ?: run {
             cached = null
             return null
         }
         val password = server.passwordCipher?.let(CredentialCipher::decrypt) ?: return null
-        return CalibreCredentials(server.username.orEmpty(), password).also {
+        return RemoteCredentials.Basic(server.username.orEmpty(), password).also {
             cached = server.baseUrl to it
         }
     }
 
     /** The login to use for [url], or null when it is not our server. */
-    fun credentialsForUrl(url: String): CalibreCredentials? {
+    fun credentialsForUrl(url: String): RemoteCredentials.Basic? {
         val (baseUrl, credentials) = cached ?: return null
         return credentials.takeIf { url.startsWith(baseUrl) }
     }
@@ -49,7 +51,7 @@ class CalibreAccountRepository(
         password: String,
         allowHttp: Boolean = false,
     ): SetupResult {
-        val result = setupClient.connect(url, username, password, allowHttp)
+        val result = setupClient.connect(url, RemoteCredentials.Basic(username, password), allowHttp)
         if (result is SetupResult.Success) {
             val capabilities = result.capabilities
             val stored = dao.get()
@@ -65,7 +67,7 @@ class CalibreAccountRepository(
             val sameAccount = stored != null &&
                 stored.baseUrl == capabilities.baseUrl &&
                 stored.username == username &&
-                (stored.userId == capabilities.userId || capabilities.userId == null)
+                (stored.userId == capabilities.calibreUserId || capabilities.calibreUserId == null)
             val existing = stored?.takeIf { sameAccount }
 
             if (stored != null && !sameAccount) retireForAccountSwitch()
@@ -77,8 +79,8 @@ class CalibreAccountRepository(
                     username = username,
                     passwordCipher = CredentialCipher.encrypt(password),
                     apiKeyCipher = null,
-                    accountId = capabilities.userId?.toString(),
-                    userId = capabilities.userId,
+                    accountId = capabilities.accountId,
+                    userId = capabilities.calibreUserId,
                     koboTokenCipher = RemoteServer.seal(capabilities.koboToken)
                         ?: existing?.koboTokenCipher,
                     canDownload = capabilities.canDownload,

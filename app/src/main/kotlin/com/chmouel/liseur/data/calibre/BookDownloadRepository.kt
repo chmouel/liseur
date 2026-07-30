@@ -16,6 +16,7 @@ import androidx.work.WorkManager
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.remote.RemoteCredentials
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -108,7 +109,7 @@ class BookDownloadRepository(
     suspend fun deleteFromServer(
         book: Book,
         baseUrl: String,
-        credentials: CalibreCredentials,
+        credentials: RemoteCredentials.Basic,
     ): ServerDeleteResult {
         val remoteId = book.remoteBookId ?: return ServerDeleteResult.Failed(null)
         val result = deleteClient.delete(

@@ -11,7 +11,7 @@ import coil3.request.crossfade
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.chmouel.liseur.data.calibre.CalibreAuthInterceptor
+import com.chmouel.liseur.data.remote.RemoteAuthInterceptor
 import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.CoroutineScope
@@ -77,7 +77,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                 add(
                     OkHttpNetworkFetcherFactory(
                         callFactory = {
-                            CalibreAuthInterceptor.imageLoaderClient(
+                            RemoteAuthInterceptor.imageLoaderClient(
                                 container.calibreAccount::credentialsForUrl,
                             )
                         },

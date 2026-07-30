@@ -1,34 +1,14 @@
 package com.chmouel.liseur.data.calibre
 
 import android.util.Log
+import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.ServerCapabilities
+import com.chmouel.liseur.data.remote.ServerSetup
+import com.chmouel.liseur.data.remote.SetupFailure
+import com.chmouel.liseur.data.remote.SetupResult
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-/** What a calibre-web account turned out to be able to do. */
-data class CalibreCapabilities(
-    val baseUrl: String,
-    val canDownload: Boolean,
-    val userId: Int?,
-    val koboToken: String?,
-)
-
-/** Why connecting to a server did not work, in terms a user can act on. */
-sealed interface SetupFailure {
-    /** The URL answered, but the credentials were rejected. */
-    data object BadCredentials : SetupFailure
-
-    /** Something answered, but it was not a calibre-web catalog. */
-    data object NotCalibreWeb : SetupFailure
-
-    /** Nothing answered over HTTPS; the user may want to allow plain HTTP. */
-    data class Unreachable(val message: String, val httpMayWork: Boolean) : SetupFailure
-}
-
-sealed interface SetupResult {
-    data class Success(val capabilities: CalibreCapabilities) : SetupResult
-    data class Failure(val reason: SetupFailure) : SetupResult
-}
 
 /**
  * Works out everything about a calibre-web server that the user should
@@ -36,17 +16,19 @@ sealed interface SetupResult {
  * may download books, and whether reading-position sync can be switched
  * on for it.
  */
-class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
+class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) : ServerSetup {
 
-    suspend fun connect(
+    override suspend fun connect(
         rawUrl: String,
-        username: String,
-        password: String,
-        allowHttp: Boolean = false,
+        credentials: RemoteCredentials,
+        allowHttp: Boolean,
     ): SetupResult = withContext(Dispatchers.IO) {
+        // calibre-web has no other way in: it wants a login, and the Kobo
+        // token can only be fetched by signing in as that person.
+        val basic = credentials as? RemoteCredentials.Basic
+            ?: return@withContext SetupResult.Failure(SetupFailure.WrongServer)
         val requested = CalibreUrl.normaliseBaseUrl(rawUrl)
-            ?: return@withContext SetupResult.Failure(SetupFailure.NotCalibreWeb)
-        val credentials = CalibreCredentials(username, password)
+            ?: return@withContext SetupResult.Failure(SetupFailure.WrongServer)
 
         val (baseUrl, probe) = probeCatalog(requested, credentials, allowHttp)
 
@@ -69,14 +51,16 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
         }
 
         val canDownload = probeDownloadRights(baseUrl, credentials, feed)
-        val kobo = provisionKoboToken(baseUrl, username, password)
+        val kobo = provisionKoboToken(baseUrl, basic.username, basic.password)
 
         SetupResult.Success(
-            CalibreCapabilities(
+            ServerCapabilities(
                 baseUrl = baseUrl,
                 canDownload = canDownload,
-                userId = kobo?.first,
+                accountId = kobo?.first?.toString(),
+                displayName = basic.username,
                 koboToken = kobo?.second,
+                calibreUserId = kobo?.first,
             ),
         )
     }
@@ -92,7 +76,7 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
      */
     private fun probeCatalog(
         requested: String,
-        credentials: CalibreCredentials,
+        credentials: RemoteCredentials,
         allowHttp: Boolean,
     ): Pair<String, Probe> {
         val first = fetchCatalog(requested, credentials)
@@ -114,17 +98,17 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
         data class Failed(val reason: SetupFailure) : Probe
     }
 
-    private fun fetchCatalog(baseUrl: String, credentials: CalibreCredentials): Probe = try {
+    private fun fetchCatalog(baseUrl: String, credentials: RemoteCredentials): Probe = try {
         http.get(CalibreUrl.resolve(baseUrl, "/opds"), credentials).use { response ->
             when {
                 response.code == 401 -> Probe.Failed(SetupFailure.BadCredentials)
-                !response.isSuccessful -> Probe.Failed(SetupFailure.NotCalibreWeb)
+                !response.isSuccessful -> Probe.Failed(SetupFailure.WrongServer)
                 else -> {
                     val body = response.body?.string().orEmpty()
                     if (CalibreParsing.isOpdsFeed(body)) {
                         Probe.Ok(body)
                     } else {
-                        Probe.Failed(SetupFailure.NotCalibreWeb)
+                        Probe.Failed(SetupFailure.WrongServer)
                     }
                 }
             }
@@ -141,7 +125,7 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
      */
     private fun probeDownloadRights(
         baseUrl: String,
-        credentials: CalibreCredentials,
+        credentials: RemoteCredentials,
         catalogFeed: String,
     ): Boolean {
         val href = firstBookLink(baseUrl, credentials, catalogFeed) ?: return true
@@ -157,7 +141,7 @@ class CalibreSetupClient(private val http: CalibreHttp = CalibreHttp()) {
 
     private fun firstBookLink(
         baseUrl: String,
-        credentials: CalibreCredentials,
+        credentials: RemoteCredentials,
         catalogFeed: String,
     ): String? {
         CalibreParsing.firstAcquisitionHref(catalogFeed)
