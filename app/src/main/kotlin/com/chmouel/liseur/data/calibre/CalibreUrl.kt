@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.remote.RemoteUrl
+
 /**
  * URL handling for a calibre-web server. Pure functions, so the awkward
  * cases have unit tests rather than being discovered on a real server.
@@ -31,36 +33,14 @@ object CalibreUrl {
         return withScheme.trimEnd('/')
     }
 
-    /** Swaps `https` for `http`, used only after the user asks for it. */
+        /** Swaps `https` for `http`, used only after the user asks for it. */
     fun withHttp(baseUrl: String): String =
         if (baseUrl.startsWith("https://")) "http://" + baseUrl.removePrefix("https://") else baseUrl
 
     /**
-     * Resolves a link from a feed against the server.
-     *
-     * Absolute URLs coming back from calibre-web are rebuilt onto
-     * [baseUrl]: behind a reverse proxy the server can advertise the
-     * wrong scheme, or a host the phone cannot reach.
+     * Resolves a link from a feed against the server. Shared with the
+     * other kinds of server, which have the same problem.
      */
-    fun resolve(baseUrl: String, href: String): String {
-        val base = baseUrl.trimEnd('/')
-        val prefix = base.substring(base.indexOf("://") + 3).substringAfter('/', "")
-
-        val path = when {
-            href.startsWith("http://", true) || href.startsWith("https://", true) ->
-                href.substring(href.indexOf("://") + 3).substringAfter('/', "")
-            href.startsWith("/") -> href.removePrefix("/")
-            else -> return "$base/$href"
-        }
-
-        // Behind a proxy the server already includes the path prefix that
-        // the base URL carries; joining both would duplicate it.
-        val relative = when {
-            prefix.isEmpty() -> path
-            path == prefix -> ""
-            path.startsWith("$prefix/") -> path.removePrefix("$prefix/")
-            else -> path
-        }
-        return if (relative.isEmpty()) base else "$base/$relative"
-    }
+    fun resolve(baseUrl: String, href: String): String =
+        RemoteUrl.resolve(baseUrl, href)
 }

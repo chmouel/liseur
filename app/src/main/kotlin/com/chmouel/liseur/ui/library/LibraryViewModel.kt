@@ -9,11 +9,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
-import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
+import com.chmouel.liseur.data.remote.RemoteCatalogRepository
+import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.calibre.ServerDeleteResult
-import com.chmouel.liseur.data.calibre.CatalogStatus
-import com.chmouel.liseur.data.calibre.CalibreAccountRepository
+import com.chmouel.liseur.data.remote.CatalogStatus
+import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookReadAt
@@ -113,10 +114,10 @@ data class DeleteFailure(val book: Book, val onServer: Boolean)
 class LibraryViewModel(
     private val library: LocalLibraryRepository,
     private val finishedState: FinishedState,
-    private val catalog: CalibreCatalogRepository,
+    private val catalog: RemoteCatalogRepository,
     private val positionSync: PositionSyncCoordinator,
     private val downloads: BookDownloadRepository,
-    private val account: CalibreAccountRepository,
+    private val account: RemoteAccountRepository,
     private val appSettings: AppSettingsRepository,
     private val progressDao: ReadingProgressDao,
     private val bookDao: BookDao,
@@ -352,7 +353,9 @@ class LibraryViewModel(
     fun deleteFromServer(book: Book) {
         viewModelScope.launch {
             val server = account.current()
-            val credentials = account.credentials()
+            // Only calibre-web offers this: on Komga, deleting a file is
+            // an administrator's job and the action stays hidden.
+            val credentials = account.credentials() as? RemoteCredentials.Basic
             val result = if (server == null || credentials == null) {
                 ServerDeleteResult.Failed(null)
             } else {
@@ -396,10 +399,10 @@ class LibraryViewModel(
                 LibraryViewModel(
                     library = container.libraryRepository,
                     finishedState = container.finishedState,
-                    catalog = container.calibreCatalog,
+                    catalog = container.remoteCatalog,
                     positionSync = container.positionSync,
                     downloads = container.bookDownloads,
-                    account = container.calibreAccount,
+                    account = container.remoteAccount,
                     appSettings = container.appSettings,
                     progressDao = container.database.readingProgressDao(),
                     bookDao = container.database.bookDao(),

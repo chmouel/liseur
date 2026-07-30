@@ -1,4 +1,4 @@
-package com.chmouel.liseur.data.calibre
+package com.chmouel.liseur.data.remote
 
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
@@ -15,16 +15,16 @@ import org.junit.Test
  */
 class CatalogMergeTest {
 
-    private val entry = OpdsBook(
-        uuid = "abc-123",
-        bookId = 42,
+    private val entry = RemoteBook(
+        remoteId = "abc-123",
         title = "Moby Dick",
         author = "Herman Melville",
         coverHref = "/opds/cover/42",
         downloadHref = "/opds/download/42/epub",
         sizeBytes = 1_000_000,
         updatedAt = 2_000L,
-    ).toRemote()
+        calibreBookId = 42,
+    )
 
     private val downloadedAndFinished = Book(
         id = 7,

@@ -33,7 +33,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
         appScope.launch {
             // Dropping it silently looks exactly like the account never
             // existing, so the calibre screen is left something to say.
-            if (container.calibreAccount.forgetUnreadableAccount()) {
+            if (container.remoteAccount.forgetUnreadableAccount()) {
                 container.appSettings.setAccountLostToRestore(true)
             }
         }
@@ -78,7 +78,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                     OkHttpNetworkFetcherFactory(
                         callFactory = {
                             RemoteAuthInterceptor.imageLoaderClient(
-                                container.calibreAccount::credentialsForUrl,
+                                container.remoteAccount::credentialsForUrl,
                             )
                         },
                     ),

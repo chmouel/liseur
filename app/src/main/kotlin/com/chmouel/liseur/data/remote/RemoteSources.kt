@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.remote
 
+import com.chmouel.liseur.data.db.Book
 import okhttp3.Request
 
 /**
@@ -33,21 +34,19 @@ interface CatalogSource {
  */
 interface FileSource {
     /**
-     * The signed request that fetches a book's file.
+     * The signed request that fetches [book]'s file, or null when there
+     * is no way to ask for it.
      *
-     * [downloadHref] is whatever the catalog recorded, absolute or
-     * relative; [remoteId] is there for servers that would rather build
-     * the URL themselves than trust a stored one.
+     * The whole book is passed rather than a URL because the servers do
+     * not agree on what identifies a file: calibre-web wants the integer
+     * id from its own database, Komga the id it gave the book. Working
+     * that out is the provider's business, not the download worker's.
      */
     fun downloadRequest(
         baseUrl: String,
         credentials: RemoteCredentials,
-        remoteId: String,
-        downloadHref: String?,
+        book: Book,
     ): Request.Builder?
-
-    /** Where a book's cover is, or null when the server offers none. */
-    fun coverUrl(baseUrl: String, remoteId: String, coverHref: String?): String?
 }
 
 /** What an account turned out to be able to do on its server. */

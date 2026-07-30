@@ -26,11 +26,11 @@ class BookDownloadWorker(
         val bookDao = container.database.bookDao()
         val book = bookDao.getByUrl(bookUrl) ?: return give_up("unknown book $bookUrl")
         val uuid = book.remoteUuid ?: return give_up("book has no uuid")
-        val server = container.calibreAccount.current() ?: return give_up("no server")
-        val credentials = container.calibreAccount.credentials() ?: return give_up("no credentials")
+        val server = container.remoteAccount.current() ?: return give_up("no server")
+        val credentials = container.remoteAccount.credentials() ?: return give_up("no credentials")
+        val files = container.remoteRouter.files() ?: return give_up("no file source")
 
-        val href = book.downloadHref
-            ?: book.remoteBookId?.let { "/opds/download/$it/epub/" }
+        val request = files.downloadRequest(server.baseUrl, credentials, book)
             ?: run {
                 Log.w(TAG, "no download link for $bookUrl")
                 return fail(bookUrl)
@@ -41,8 +41,7 @@ class BookDownloadWorker(
 
         val downloads = container.bookDownloads
         val outcome = BookDownloader().download(
-            url = CalibreUrl.resolve(server.baseUrl, href),
-            credentials = credentials,
+            request = request,
             target = downloads.fileFor(uuid),
         ) { downloaded, total ->
             val fraction = total?.takeIf { it > 0 }?.let { downloaded.toFloat() / it }

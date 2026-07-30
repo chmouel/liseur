@@ -3,16 +3,23 @@ package com.chmouel.liseur
 import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
-import com.chmouel.liseur.data.calibre.CalibreAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
-import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
+import com.chmouel.liseur.data.calibre.CalibreCatalogClient
+import com.chmouel.liseur.data.calibre.CalibreFileSource
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
+import com.chmouel.liseur.data.komga.KomgaCatalogClient
+import com.chmouel.liseur.data.komga.KomgaFileSource
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.AnnotationBackupRepository
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.remote.RemoteAccountRepository
+import com.chmouel.liseur.data.remote.RemoteCatalogRepository
+import com.chmouel.liseur.data.remote.RemoteRouter
+import com.chmouel.liseur.data.remote.RoutedPositionSync
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.settings.SessionStateRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import org.readium.r2.shared.util.asset.AssetRetriever
@@ -72,7 +79,7 @@ class AppContainer(context: Context) {
 
     val sessionState = SessionStateRepository(context.applicationContext)
 
-    val calibreAccount = CalibreAccountRepository(
+    val remoteAccount = RemoteAccountRepository(
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
@@ -93,10 +100,31 @@ class AppContainer(context: Context) {
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
-    val positionSync = PositionSyncCoordinator(koboSync)
+    /**
+     * Which implementation each request goes to, decided by the kind of
+     * server that is connected. Everything above this line is written
+     * once and works for both.
+     */
+    val remoteRouter = RemoteRouter(
+        serverDao = database.remoteServerDao(),
+        catalogs = mapOf(
+            ServerKind.CALIBRE to CalibreCatalogClient(),
+            ServerKind.KOMGA to KomgaCatalogClient(),
+        ),
+        files = mapOf(
+            ServerKind.CALIBRE to CalibreFileSource(),
+            ServerKind.KOMGA to KomgaFileSource(),
+        ),
+        positions = mapOf(
+            ServerKind.CALIBRE to koboSync,
+        ),
+    )
 
-    val calibreCatalog = CalibreCatalogRepository(
-        account = calibreAccount,
+    val positionSync = PositionSyncCoordinator(RoutedPositionSync(remoteRouter))
+
+    val remoteCatalog = RemoteCatalogRepository(
+        account = remoteAccount,
+        router = remoteRouter,
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
     )

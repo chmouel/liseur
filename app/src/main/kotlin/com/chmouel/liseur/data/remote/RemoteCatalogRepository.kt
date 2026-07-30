@@ -1,11 +1,10 @@
-package com.chmouel.liseur.data.calibre
+package com.chmouel.liseur.data.remote
 
 import android.util.Log
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
-import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.DownloadState
-import com.chmouel.liseur.data.remote.RemoteBook
+import com.chmouel.liseur.data.db.RemoteServerDao
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,17 +27,22 @@ sealed interface CatalogStatus {
 }
 
 /**
- * Keeps a copy of the calibre-web catalog in the library.
+ * Keeps a copy of the connected server's catalog in the library.
  *
- * Mirroring the feed into the database rather than paging it live means
- * the whole library is there to browse, sort and search while offline,
- * and downloaded books sit next to ones that are still on the server.
+ * Mirroring the catalog into the database rather than paging it live
+ * means the whole library is there to browse, sort and search while
+ * offline, and downloaded books sit next to ones that are still on the
+ * server.
+ *
+ * Which server that is does not reach this far: the [router] hands over
+ * whichever [CatalogSource] matches, and the books that come back are
+ * already in the same shape whoever sent them.
  */
-class CalibreCatalogRepository(
-    private val account: CalibreAccountRepository,
+class RemoteCatalogRepository(
+    private val account: RemoteAccountRepository,
+    private val router: RemoteRouter,
     private val serverDao: RemoteServerDao,
     private val bookDao: BookDao,
-    private val client: CalibreCatalogClient = CalibreCatalogClient(),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     private val _status = MutableStateFlow<CatalogStatus>(CatalogStatus.Idle)
@@ -71,13 +75,17 @@ class CalibreCatalogRepository(
                 _status.value = CatalogStatus.CredentialsLost
                 return false
             }
+            val client = router.catalog() ?: run {
+                _status.value = CatalogStatus.Idle
+                return false
+            }
 
             _status.value = CatalogStatus.Refreshing
             return try {
                 val seen = mutableSetOf<String>()
                 client.allBooks(server.baseUrl, credentials) { page ->
                     page.forEach { seen += it.remoteId }
-                    store(server.baseUrl, page)
+                    store(server.kind, server.baseUrl, page)
                 }
                 dropVanished(seen)
                 serverDao.upsert(server.copy(catalogSyncedAt = System.currentTimeMillis()))
@@ -96,6 +104,7 @@ class CalibreCatalogRepository(
     suspend fun search(query: String): List<RemoteBook> {
         val server = serverDao.get() ?: return emptyList()
         val credentials = account.credentials() ?: return emptyList()
+        val client = router.catalog() ?: return emptyList()
         return try {
             client.search(server.baseUrl, credentials, query)
         } catch (e: IOException) {
@@ -104,10 +113,10 @@ class CalibreCatalogRepository(
         }
     }
 
-    private suspend fun store(baseUrl: String, books: List<RemoteBook>) {
+    private suspend fun store(kind: ServerKind, baseUrl: String, books: List<RemoteBook>) {
         val now = System.currentTimeMillis()
         books.forEach { remote ->
-            val url = remoteUrl(remote.remoteId)
+            val url = kind.remoteUrl(remote.remoteId)
             val existing = bookDao.getByRemoteUuid(remote.remoteId) ?: bookDao.getByUrl(url)
             bookDao.upsert(mergeCatalogEntry(remote, existing, url, baseUrl, now))
         }
@@ -125,15 +134,8 @@ class CalibreCatalogRepository(
         if (gone.isNotEmpty()) bookDao.deleteByUrls(gone)
     }
 
-    companion object {
-        private const val TAG = "CalibreCatalog"
-
-        /**
-         * A remote book's permanent identity. It stays the same whether or
-         * not the file is on the device, so reading positions survive a
-         * download being removed.
-         */
-        fun remoteUrl(uuid: String) = "calibre:$uuid"
+    private companion object {
+        const val TAG = "RemoteCatalog"
     }
 }
 
@@ -170,8 +172,9 @@ internal fun mergeCatalogEntry(
         author = remote.author,
         remoteUuid = remote.remoteId,
         remoteBookId = remote.calibreBookId,
-        coverUrl = remote.coverHref?.let { CalibreUrl.resolve(baseUrl, it) },
+        coverUrl = remote.coverHref?.let { RemoteUrl.resolve(baseUrl, it) },
         downloadHref = remote.downloadHref,
         remoteUpdatedAt = remote.updatedAt,
+        remotePageCount = remote.pageCount,
     )
 }

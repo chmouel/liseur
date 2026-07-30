@@ -10,13 +10,33 @@ package com.chmouel.liseur.data.remote
  * Stored in the database by [name], so these spellings are part of the
  * schema and cannot be changed without a migration.
  */
-enum class ServerKind {
+enum class ServerKind(
+    /**
+     * What a book from this kind of server is called in the library.
+     *
+     * These spellings are written into `books.url`, which is the key
+     * reading positions and annotations hang off, so they are as good as
+     * schema: changing one would orphan every row that mentions it.
+     */
+    val urlPrefix: String,
+) {
     /** calibre-web: OPDS to browse, the Kobo protocol to sync. */
-    CALIBRE,
+    CALIBRE("calibre"),
 
     /** Komga: its own REST API throughout. */
-    KOMGA,
+    KOMGA("komga"),
     ;
+
+    /**
+     * A remote book's permanent identity. It stays the same whether or
+     * not the file is on the device, so reading positions survive a
+     * download being removed.
+     */
+    fun remoteUrl(remoteId: String) = "$urlPrefix:$remoteId"
+
+    /** The id back out of [remoteUrl], or null if the book is not ours. */
+    fun remoteId(bookUrl: String): String? =
+        bookUrl.removePrefix("$urlPrefix:").takeIf { it != bookUrl }
 
     companion object {
         /**

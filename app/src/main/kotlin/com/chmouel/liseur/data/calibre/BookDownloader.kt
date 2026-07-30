@@ -1,12 +1,12 @@
 package com.chmouel.liseur.data.calibre
 
-import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttp
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.Request
 import kotlin.coroutines.coroutineContext
 
 /** Why a download did not finish, in terms the library can explain. */
@@ -26,7 +26,7 @@ sealed interface DownloadOutcome {
 }
 
 /**
- * Fetches a book file from calibre-web.
+ * Fetches a book file from a server.
  *
  * The bytes go to a `.part` file first and are only moved into place once
  * the server says the transfer is complete, so a download killed halfway
@@ -38,8 +38,7 @@ sealed interface DownloadOutcome {
 class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
 
     suspend fun download(
-        url: String,
-        credentials: RemoteCredentials,
+        request: Request.Builder,
         target: File,
         onProgress: suspend (downloaded: Long, total: Long?) -> Unit = { _, _ -> },
     ): DownloadOutcome = withContext(Dispatchers.IO) {
@@ -53,7 +52,7 @@ class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
             etagFile.delete()
         }
 
-        val request = http.request(url, credentials)
+        val call = request
             .apply {
                 if (resumeFrom > 0) {
                     header("Range", "bytes=$resumeFrom-")
@@ -63,7 +62,7 @@ class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
             .build()
 
         try {
-            http.client.newCall(request).execute().use { response ->
+            http.client.newCall(call).execute().use { response ->
                 when (response.code) {
                     401, 403 -> return@withContext DownloadOutcome.Failed(DownloadFailure.NotAllowed)
                     404, 410 -> return@withContext DownloadOutcome.Failed(DownloadFailure.Gone)

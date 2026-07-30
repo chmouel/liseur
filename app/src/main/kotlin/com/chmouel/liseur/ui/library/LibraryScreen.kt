@@ -106,7 +106,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
-import com.chmouel.liseur.data.calibre.CatalogStatus
+import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState

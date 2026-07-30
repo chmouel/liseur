@@ -7,9 +7,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
-import com.chmouel.liseur.data.calibre.CalibreAccountRepository
+import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
-import com.chmouel.liseur.data.calibre.CalibreCatalogRepository
+import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.remote.SetupFailure
@@ -50,11 +50,11 @@ data class CalibreAccountUiState(
 )
 
 class CalibreAccountViewModel(
-    private val repository: CalibreAccountRepository,
+    private val repository: RemoteAccountRepository,
     downloads: BookDownloadRepository,
     private val koboSync: KoboSyncRepository,
     private val positionSync: PositionSyncCoordinator,
-    private val catalog: CalibreCatalogRepository,
+    private val catalog: RemoteCatalogRepository,
     private val appSettings: AppSettingsRepository,
 ) : ViewModel() {
 
@@ -114,7 +114,7 @@ class CalibreAccountViewModel(
         _state.update { it.copy(connecting = true, error = null) }
 
         viewModelScope.launch {
-            val result = repository.connect(
+            val result = repository.connectCalibre(
                 url = current.url,
                 username = current.username.trim(),
                 password = current.password,
@@ -169,11 +169,11 @@ class CalibreAccountViewModel(
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container
                 CalibreAccountViewModel(
-                    repository = container.calibreAccount,
+                    repository = container.remoteAccount,
                     downloads = container.bookDownloads,
                     koboSync = container.koboSync,
                     positionSync = container.positionSync,
-                    catalog = container.calibreCatalog,
+                    catalog = container.remoteCatalog,
                     appSettings = container.appSettings,
                 )
             }
