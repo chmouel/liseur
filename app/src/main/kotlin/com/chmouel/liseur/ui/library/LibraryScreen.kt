@@ -65,7 +65,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.outlined.ArrowDownward
-import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -114,6 +113,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -569,6 +569,7 @@ private fun BookGrid(
             // them cost a whole row of covers for no reason.
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // The chips scroll rather than wrap or clip, so a narrow
@@ -578,13 +579,13 @@ private fun BookGrid(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     FilterChip(
                         selected = state.filter == LibraryFilter.ALL,
                         onClick = { onSetFilter(LibraryFilter.ALL) },
-                        label = { Text(stringResource(R.string.filter_all)) },
+                        label = { FilterChipLabel(stringResource(R.string.filter_all)) },
                     )
                     // Only worth asking once some books are on a server
                     // and some are not: with nothing but local files,
@@ -593,13 +594,15 @@ private fun BookGrid(
                         FilterChip(
                             selected = state.filter == LibraryFilter.DOWNLOADED,
                             onClick = { onSetFilter(LibraryFilter.DOWNLOADED) },
-                            label = { Text(stringResource(R.string.filter_downloaded)) },
+                            label = {
+                                FilterChipLabel(stringResource(R.string.filter_downloaded))
+                            },
                         )
                     }
                     FilterChip(
                         selected = state.filter == LibraryFilter.UNREAD,
                         onClick = { onSetFilter(LibraryFilter.UNREAD) },
-                        label = { Text(stringResource(R.string.filter_unread)) },
+                        label = { FilterChipLabel(stringResource(R.string.filter_unread)) },
                     )
                     // Offered only once something has been put away: an
                     // empty drawer is not worth a permanent chip.
@@ -615,19 +618,21 @@ private fun BookGrid(
                                     },
                                 )
                             },
-                            label = { Text(stringResource(R.string.filter_archived)) },
+                            label = {
+                                FilterChipLabel(stringResource(R.string.filter_archived))
+                            },
                         )
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                // Laid out last and never squeezed: the sort control is
-                // the one thing here that must stay reachable, so the
-                // chips give way to it rather than the other way round.
+                // Pinned to the far end of the row and laid out last, so
+                // it is never squeezed: the chips give way to it rather
+                // than the other way round.
                 SortRow(
                     sort = state.sort,
                     reversed = state.sortReversed,
                     onSetSort = onSetSort,
                     onToggleDirection = onToggleSortDirection,
+                    modifier = Modifier.padding(start = 4.dp),
                 )
             }
         }
@@ -1198,11 +1203,34 @@ private fun LibrarySort.label(): String = stringResource(
 )
 
 /**
+ * A filter chip's text, one line and never wider than its words.
+ *
+ * Sharing a line with the sort control leaves the chips less room than
+ * they had to themselves, so they are set a step down and kept from
+ * wrapping: a chip two lines tall would push the whole row out of the
+ * grid's rhythm.
+ */
+@Composable
+private fun FilterChipLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/**
  * How the library is arranged, and the way to change it.
  *
  * It scrolls with the grid rather than sitting in the top bar: the order
  * is worth seeing without a tap, but not worth a permanent row of chrome
  * above every book.
+ *
+ * Order and direction are one control, not two. A separate reverse
+ * button spent a whole touch target on a question nobody asks without
+ * first having picked what to sort by, so the direction now lives in the
+ * menu: the current order carries the arrow, and tapping it flips.
  */
 @Composable
 private fun SortRow(
@@ -1213,64 +1241,69 @@ private fun SortRow(
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
+    val direction = if (reversed) Icons.Outlined.ArrowUpward else Icons.Outlined.ArrowDownward
 
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box {
-            // Sits at the end of the filter row now, so it keeps its
-            // trailing inset but drops the leading one; and the label is
-            // allowed to truncate, because on a narrow phone the arrow
-            // beside it matters more than the last word of "Recently
-            // added".
-            TextButton(
-                onClick = { open = true },
-                contentPadding = PaddingValues(start = 8.dp, end = 4.dp),
-            ) {
-                Text(
-                    text = sort.label(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 120.dp),
-                )
-                Icon(
-                    Icons.Outlined.ArrowDropDown,
-                    contentDescription = null,
-                    modifier = Modifier.padding(start = 2.dp),
-                )
-            }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                LibrarySort.entries.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.label()) },
-                        onClick = {
-                            open = false
-                            onSetSort(option)
-                        },
-                        trailingIcon = {
-                            if (option == sort) {
-                                Icon(
-                                    Icons.Outlined.Check,
-                                    contentDescription = null,
-                                )
-                            }
-                        },
-                    )
-                }
-            }
-        }
-        IconButton(onClick = onToggleDirection) {
+    Box(modifier = modifier) {
+        // Sits at the very end of the filter row, so its insets are cut
+        // to what the touch target needs and the label is allowed to
+        // truncate: on a narrow phone the arrow beside it matters more
+        // than the last word of "Recently added".
+        TextButton(
+            onClick = { open = true },
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+        ) {
+            Text(
+                text = sort.label(),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 96.dp),
+            )
             Icon(
-                imageVector = if (reversed) {
-                    Icons.Outlined.ArrowUpward
-                } else {
-                    Icons.Outlined.ArrowDownward
-                },
+                imageVector = direction,
                 contentDescription = stringResource(
                     if (reversed) R.string.sort_reversed else R.string.sort_normal,
                 ),
+                modifier = Modifier
+                    .padding(start = 2.dp)
+                    .size(16.dp),
             )
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            // Anchored to the button's right edge so it opens inward
+            // from the screen edge instead of hanging off it.
+            offset = DpOffset(x = 8.dp, y = 0.dp),
+        ) {
+            LibrarySort.entries.forEach { option ->
+                val current = option == sort
+                DropdownMenuItem(
+                    text = { Text(option.label()) },
+                    onClick = {
+                        // Choosing the order you are already in is not a
+                        // no-op: it is how you turn it around. Anything
+                        // else would leave the row inert under the
+                        // finger.
+                        if (current) onToggleDirection() else onSetSort(option)
+                        open = false
+                    },
+                    trailingIcon = {
+                        if (current) {
+                            Icon(
+                                imageVector = direction,
+                                contentDescription = stringResource(
+                                    if (reversed) {
+                                        R.string.sort_reversed
+                                    } else {
+                                        R.string.sort_normal
+                                    },
+                                ),
+                            )
+                        }
+                    },
+                )
+            }
         }
     }
 }
