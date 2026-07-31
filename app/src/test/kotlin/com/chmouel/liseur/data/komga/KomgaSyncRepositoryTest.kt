@@ -511,6 +511,7 @@ class KomgaSyncRepositoryTest {
             now = 2_000,
         )
         server.enqueue(json(bookJson(page = 40, completed = false, readDate = "2024-06-01T10:00:00Z")))
+        val before = progress.get(bookUrl)
 
         assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
 
@@ -518,5 +519,8 @@ class KomgaSyncRepositoryTest {
         // sides last agreed, so its position is known and asking for it
         // again would be a request per book to be told the same thing.
         assertEquals(1, requests().size)
+        // Nor is anything written back: settling what is already settled
+        // has the whole library redraw itself for nothing.
+        assertEquals(before, progress.get(bookUrl))
     }
 }

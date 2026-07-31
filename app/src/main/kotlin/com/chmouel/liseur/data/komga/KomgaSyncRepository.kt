@@ -47,6 +47,8 @@ private data class RemoteSide(
     val state: ReadingState,
     /** The place itself, when it was fetched. Null when it was inferred. */
     val locator: JSONObject? = null,
+    /** Whether the server is where it was when both sides last agreed. */
+    val unchanged: Boolean = false,
 )
 
 /**
@@ -342,6 +344,19 @@ class KomgaSyncRepository(
             is RemoteResult.Ok -> side.value
         }
 
+        // Neither side has moved since they last agreed: the server is
+        // where it was, nothing has been read here, and nothing was left
+        // unsettled. Writing the same numbers back would settle what is
+        // already settled and have the whole library redraw for it.
+        if (remote?.unchanged == true &&
+            stored != null &&
+            !stored.isDirty &&
+            !stored.hasPending &&
+            stored.override == FinishedOverride.NONE
+        ) {
+            return BookOutcome()
+        }
+
         // Something unsettled from an earlier run is still the server's
         // word, and outlives the run that heard it.
         if (remote == null) {
@@ -405,6 +420,7 @@ class KomgaSyncRepository(
                         status = statusOf(progress, stored.agreedProgression),
                         updatedAt = progress.readDate ?: 0L,
                     ),
+                    unchanged = true,
                 ),
             )
         }
