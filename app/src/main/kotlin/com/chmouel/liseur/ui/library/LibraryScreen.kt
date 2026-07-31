@@ -104,6 +104,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -128,6 +129,8 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.coverMinSize
+import com.chmouel.liseur.ui.theme.MarkFieldDark
+import com.chmouel.liseur.ui.theme.MarkFieldLight
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
 
@@ -160,6 +163,10 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    // Which cut of the reading mark to draw.  Asked of the scheme in
+    // force rather than of the resource qualifiers, so it follows the
+    // app's own dark setting even when the system disagrees.
+    val darkMark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val gridState = rememberLazyGridState()
     val snackbarHost = remember { SnackbarHostState() }
     val downloading = stringResource(R.string.download_in_progress)
@@ -248,14 +255,36 @@ fun LibraryScreen(
                             },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // A woman reading in peace on a sofa, breeze
-                            // drifting past — the reading mark, in place
-                            // of a plain wordmark or the launcher icon.
-                            Image(
-                                painter = painterResource(R.drawable.ic_reading_banner),
-                                contentDescription = null,
-                                modifier = Modifier.size(width = 46.dp, height = 42.dp),
-                            )
+                            // A woman reading in peace on a couch under a
+                            // lamp — the reading mark, in place of a plain
+                            // wordmark or the launcher icon.  It keeps the
+                            // height it always had; the width follows the
+                            // illustration's own proportions.
+                            //
+                            // The cut and the plate behind it come from the
+                            // theme in force here, not from a -night
+                            // qualifier: those follow the system, and the
+                            // app's own light/dark setting is allowed to
+                            // disagree.  Transparent line work alone was too
+                            // faint anyway, hence the little tinted card.
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 106.dp, height = 44.dp)
+                                    .background(
+                                        color = if (darkMark) MarkFieldDark else MarkFieldLight,
+                                        shape = RoundedCornerShape(10.dp),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Image(
+                                    painter = painterResource(
+                                        if (darkMark) R.drawable.ic_reading_banner_night
+                                        else R.drawable.ic_reading_banner,
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(width = 96.dp, height = 39.dp),
+                                )
+                            }
                             Spacer(Modifier.width(10.dp))
                             Column {
                                 Text(

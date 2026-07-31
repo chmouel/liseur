@@ -1,5 +1,12 @@
 # Liseur
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
+    <img src="docs/banner-light.png" alt="A woman reading on a couch under a lamp" width="640">
+  </picture>
+</p>
+
 An open-source EPUB books reader and calibre-web / Komga client for Android: a
 modern reader that is equally at home with the files on your phone and with a
 [calibre-web](https://github.com/janeczku/calibre-web) or
