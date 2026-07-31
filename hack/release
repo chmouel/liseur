@@ -478,15 +478,16 @@ update_fdroid_submission() (
     (( version_code >= metadata_current_code )) ||
         die "refusing to lower F-Droid from versionCode $metadata_current_code to $version_code"
 
-    if grep -Eq "^[[:space:]]+versionCode: $version_code$" "$metadata_file"; then
-        grep -Eq "^[[:space:]]+commit: $commit_sha$" "$metadata_file" ||
-            die "F-Droid versionCode $version_code already points to another commit"
-        printf 'F-Droid: %s already includes version %s.\n' "$merge_request_url" "$version"
-        return
-    fi
-
+    # The whole `Builds:` list is replaced rather than appended to. An
+    # inclusion merge request that is still under review carries a single
+    # build entry, the latest: every entry left in it is another ~25
+    # minute `fdroid build` for the reviewer, and an old version failing
+    # holds up the app that is being submitted. Once the merge request
+    # lands, `AutoUpdateMode: Version` appends upstream and history there
+    # is expected.
     awk -v version="$version" -v code="$version_code" -v commit="$commit_sha" '
-        !inserted && /^AutoUpdateMode:/ {
+        /^Builds:/ {
+            print "Builds:"
             print "  - versionName: " version
             print "    versionCode: " code
             print "    commit: " commit
@@ -494,7 +495,15 @@ update_fdroid_submission() (
             print "    gradle:"
             print "      - yes"
             print ""
-            inserted = 1
+            written = 1
+            dropping = 1
+            next
+        }
+        dropping && /^[^[:space:]]/ {
+            dropping = 0
+        }
+        dropping {
+            next
         }
         /^CurrentVersion:/ {
             print "CurrentVersion: " version
@@ -506,12 +515,17 @@ update_fdroid_submission() (
         }
         { print }
         END {
-            if (!inserted) {
+            if (!written) {
                 exit 42
             }
         }
     ' "$metadata_file" > "$updated_file" ||
         die "could not update the F-Droid metadata"
+
+    if cmp -s "$metadata_file" "$updated_file"; then
+        printf 'F-Droid: %s already includes version %s.\n' "$merge_request_url" "$version"
+        return
+    fi
 
     local payload
     # --rawfile rather than --arg "$(cat ...)": command substitution
