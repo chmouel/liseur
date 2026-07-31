@@ -220,6 +220,7 @@ hack/screenshots --setup    # build the demo shelf first, then capture
 hack/screenshots            # capture from a device already set up
 hack/screenshots --setup-only   # build the shelf and stop, to check it
 hack/icon                   # fastlane icon.png, from the vector drawables
+hack/feature-graphic        # fastlane featureGraphic.png, from the banner
 ```
 
 `hack/screenshots` drives a connected device through adb and writes both
