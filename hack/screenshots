@@ -6,7 +6,7 @@
 #   hack/screenshots              # capture from a device already set up
 #   hack/screenshots --setup-only # build the shelf and stop, to check it
 #   hack/screenshots -s SERIAL    # pick a device when several are attached
-#   hack/screenshots --class tenInch  # file the captures as a tablet set
+#   hack/screenshots --class tablet   # file the captures as a tablet set
 #
 # Which set is written is decided by how wide the device is, so a run
 # against a tablet cannot quietly overwrite the phone screenshots the
@@ -327,11 +327,16 @@ dp() { printf '%.0f' "$(awk "BEGIN { print $1 * $density / 160 }")"; }
 
 # ------------------------------------------------------- where they land
 #
-# Three sets, because a tablet capture is not a phone capture: fastlane
-# and F-Droid publish phoneScreenshots, sevenInchScreenshots and
-# tenInchScreenshots as separate listings, and the README embeds the
-# phone set by name. Writing them all to one directory means a run
-# against a tablet silently replaces the images the README shows.
+# Two sets, because a tablet capture is not a phone capture: fastlane
+# and F-Droid publish phoneScreenshots and tenInchScreenshots as separate
+# listings, and the README embeds the phone set by name. Writing both to
+# one directory means a run against a tablet silently replaces the images
+# the README shows.
+#
+# The phone set is the full tour. The tablet set is three pictures of
+# what a phone cannot show -- two columns, the control that chooses them,
+# and a shelf with room on it. A tablet listing does not need its own
+# picture of the settings screen.
 #
 # The class is guessed from the width so that no flag is needed to stay
 # out of trouble; --class overrides it, for a device whose shape does not
@@ -340,18 +345,16 @@ dp() { printf '%.0f' "$(awk "BEGIN { print $1 * $density / 160 }")"; }
 width_dp=$(awk "BEGIN { printf \"%d\", $width * 160 / $density }")
 
 if [[ -z "$shot_class" ]]; then
-    if [[ $width_dp -ge 720 ]]; then
-        shot_class="tenInch"
-    elif [[ $width_dp -ge 600 ]]; then
-        shot_class="sevenInch"
+    if [[ $width_dp -ge 600 ]]; then
+        shot_class="tablet"
     else
         shot_class="phone"
     fi
     note "device is ${width_dp}dp wide: capturing the $shot_class set"
 else
     case $shot_class in
-        phone | sevenInch | tenInch) ;;
-        *) die "unknown --class \"$shot_class\": want phone, sevenInch or tenInch" ;;
+        phone | tablet) ;;
+        *) die "unknown --class \"$shot_class\": want phone or tablet" ;;
     esac
     note "capturing the $shot_class set (device is ${width_dp}dp wide)"
 fi
@@ -359,23 +362,24 @@ readonly shot_class
 
 if [[ $shot_class == phone ]]; then
     readonly OUT_DIR="docs/screenshots"
+    # F-Droid's directory names are fixed, so the tablet set goes in the
+    # one it reads even though nothing here is measured in inches.
+    readonly FASTLANE_DIR="fastlane/metadata/android/en-US/images/phoneScreenshots"
 else
-    readonly OUT_DIR="docs/screenshots/$shot_class"
+    readonly OUT_DIR="docs/screenshots/tablet"
+    readonly FASTLANE_DIR="fastlane/metadata/android/en-US/images/tenInchScreenshots"
 fi
-readonly FASTLANE_DIR="fastlane/metadata/android/en-US/images/${shot_class}Screenshots"
 
-# Where the first highlight colour is, as "x y", or nothing if the popup
-# is not up. All four colours have to be there, side by side on one row:
-# a yellow highlight already on the page is otherwise indistinguishable
-# from the yellow chip, and mistaking one for the other means tapping the
-# page when the script believes it is tapping a button.
-find_popup() {
-    adb exec-out screencap -p > "$work/screen.png" 2>/dev/null || return 1
-    python3 - "$work/screen.png" "$TINTS" <<'PYEOF'
+# A screencap decoded to pixels without a library: an emulator host may
+# have no Pillow on it, and asking for one would put a pip install
+# between a checkout and a screenshot. Reads the file named by the first
+# argument and leaves out, width, height, channels and stride behind for
+# whatever is appended to it.
+readonly PNG_DECODER=$(
+    cat <<'PYEOF'
 import struct, sys, zlib
 
-path, wanted = sys.argv[1], sys.argv[2]
-targets = [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in wanted.split(",")]
+path = sys.argv[1]
 data = open(path, "rb").read()
 if data[:8] != b"\x89PNG\r\n\x1a\n":
     sys.exit(1)
@@ -418,7 +422,20 @@ for _ in range(height):
             line[i] = (line[i] + (a if pa <= pb and pa <= pc else (b if pb <= pc else c))) & 255
     out += line
     prev = line
+PYEOF
+)
 
+# Where the first highlight colour is, as "x y", or nothing if the popup
+# is not up. All four colours have to be there, side by side on one row:
+# a yellow highlight already on the page is otherwise indistinguishable
+# from the yellow chip, and mistaking one for the other means tapping the
+# page when the script believes it is tapping a button.
+find_popup() {
+    adb exec-out screencap -p > "$work/screen.png" 2>/dev/null || return 1
+    python3 -c "$PNG_DECODER
+$(
+        cat <<'PYEOF'
+targets = [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in sys.argv[2].split(",")]
 found = []
 for target in targets:
     xs, ys = [], []
@@ -441,6 +458,42 @@ if max(rows) - min(rows) > 12:
     sys.exit(1)
 print(min(x for x, _ in found), sum(rows) // len(rows))
 PYEOF
+    )" "$work/screen.png" "$TINTS"
+}
+
+# How much of the lower half of the page is ink, in tenths of a percent.
+# The page a book was left on can be the last one of a chapter, which is
+# a fine place to be reading and a poor thing to publish a picture of:
+# three lines at the top and white below them say nothing about how the
+# app uses a wide screen.
+page_ink() {
+    adb exec-out screencap -p > "$work/screen.png" 2>/dev/null || return 1
+    python3 -c "$PNG_DECODER
+$(
+        cat <<'PYEOF'
+dark = seen = 0
+for y in range(height // 2, height, 4):
+    row = y * stride
+    for x in range(0, width, 4):
+        i = row + x * channels
+        seen += 1
+        if sum(out[i:i + 3]) / 3 < 160:
+            dark += 1
+print(int(1000 * dark / seen))
+PYEOF
+    )" "$work/screen.png"
+}
+
+# Turn pages until one of them is worth photographing.
+page_to_a_full_page() {
+    local i ink
+    for i in 1 2 3 4 5 6; do
+        ink=$(page_ink || echo 0)
+        note "the page is ${ink}/1000 ink"
+        [[ $ink -ge 20 ]] && return 0
+        turn_pages 1
+    done
+    die "no page with enough text on it after six turns"
 }
 
 x() { printf '%.0f' "$(awk "BEGIN { print $width * $1 }")"; }
@@ -895,6 +948,47 @@ wait_for "Theme" >/dev/null || sleep 2
 set_switch "Colours from your wallpaper" off
 back
 
+if [[ $shot_class == tablet ]]; then
+    step "The tablet set"
+    # Three pictures, not a second copy of the phone tour. A store
+    # visitor on a tablet already knows what a settings screen looks
+    # like; what they cannot tell from the phone set is whether the app
+    # uses the width they paid for.
+    open_library
+    shelf_to_top
+    shot 03-library
+
+    open_first_book "Moby Dick"
+    choose_reading_theme "Light"
+    reader_chrome_down
+    page_to_a_full_page
+    shot 01-two-columns
+
+    reader_chrome_up
+    tap_on "Aa" exact
+    wait_for "Theme" >/dev/null || sleep 2
+    # The Columns control only exists on a wide screen, and it sits below
+    # the fold, so scroll it into frame. Swiping up scrolls the sheet's
+    # content; it is swiping down at the top that would dismiss it.
+    adb shell input swipe "$(x 0.5)" "$(y 0.92)" "$(x 0.5)" "$(y 0.72)" 400
+    sleep 2
+    on_screen "Columns" || die "the Columns control never came into frame"
+    shot 02-columns-control
+    dismiss_sheet "Line spacing"
+
+    step "The F-Droid set"
+    i=1
+    for name in 01-two-columns 02-columns-control 03-library; do
+        cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
+        note "$FASTLANE_DIR/$i.png"
+        i=$((i + 1))
+    done
+
+    printf '\nDone. Look at the images before committing: a screen can be found\n'
+    printf 'and still be showing the wrong thing.\n'
+    exit 0
+fi
+
 open_library
 shelf_to_top
 shot 01-library
@@ -909,16 +1003,6 @@ shot 03-chrome
 
 tap_on "Aa" exact
 wait_for "Theme" >/dev/null || sleep 2
-# On a wide screen the sheet grows a Columns control, and it is the one
-# thing in here a tablet listing should be showing. It sits below the
-# fold, so scroll it into frame. Swiping up scrolls the sheet's content;
-# it is swiping down at the top that would dismiss it, and a sheet with
-# nothing below the fold simply stays where it is.
-if [[ $shot_class != phone ]]; then
-    adb shell input swipe "$(x 0.5)" "$(y 0.92)" "$(x 0.5)" "$(y 0.72)" 400
-    sleep 2
-    on_screen "Columns" || die "the Columns control never came into frame"
-fi
 shot 04-typography
 dismiss_sheet "Line spacing"
 

@@ -219,7 +219,7 @@ hand:
 hack/screenshots --setup    # build the demo shelf first, then capture
 hack/screenshots            # capture from a device already set up
 hack/screenshots --setup-only   # build the shelf and stop, to check it
-hack/screenshots --class tenInch  # file the captures as a tablet set
+hack/screenshots --class tablet  # file the captures as a tablet set
 hack/icon                   # fastlane icon.png, from the vector drawables
 hack/feature-graphic        # fastlane featureGraphic.png, from the banner
 ```
@@ -230,14 +230,20 @@ by what they say rather than by where they sat when it was written, so a
 moved button is something it waits for and fails on, not a tap into empty
 space.
 
-There are three sets, because fastlane and F-Droid publish
-`phoneScreenshots`, `sevenInchScreenshots` and `tenInchScreenshots`
-separately and the README embeds the phone set by name. Which one a run
-writes is decided by how wide the device is — under 600dp phone, under
-720dp seven inch, above that ten inch — so a capture against a tablet
-cannot quietly overwrite the phone images. The tablet sets land under
-`docs/screenshots/<class>`. Pass `--class` for a device whose shape does
-not match how its pictures should be filed.
+There are two sets, because fastlane and F-Droid publish
+`phoneScreenshots` and `tenInchScreenshots` separately and the README
+embeds the phone set by name. Which one a run writes is decided by how
+wide the device is — under 600dp phone, above it tablet — so a capture
+against a tablet cannot quietly overwrite the phone images. Pass
+`--class` for a device whose shape does not match how its pictures
+should be filed.
+
+The phone set is the full tour, twelve screens. The tablet set is three
+pictures of what a phone cannot show — two columns, the control that
+chooses them, and a shelf with room on it — and lands in
+`docs/screenshots/tablet`. There is no point photographing the settings
+screen twice, and the search and dictionary steps that make the phone
+run slow are skipped, so a tablet run takes a few minutes.
 
 `--setup` builds the shelf from nothing: it downloads a handful of
 [Standard Ebooks](https://standardebooks.org) public domain editions
