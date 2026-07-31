@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -50,10 +51,14 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.widthClass
+import com.chmouel.liseur.ui.windowWidth
 
 /**
  * Kindle-style "Aa" sheet: reading theme, font, size, brightness
@@ -73,12 +78,15 @@ fun TypographySheet(
     onBrightnessChanged: (Float?) -> Unit,
     onPageTurnAnimationChanged: (Boolean) -> Unit,
     onFooterModeChanged: (FooterMode) -> Unit,
+    onColumnModeChanged: (ColumnMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
                 .verticalScroll(rememberScrollState())
+                .align(Alignment.CenterHorizontally)
+                .widthIn(max = contentWidthCap(windowWidth()))
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -90,8 +98,10 @@ fun TypographySheet(
             LayoutControls(
                 lineHeight = prefs.lineHeight,
                 pageMargins = prefs.pageMargins,
+                columnMode = prefs.columnMode,
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
+                onColumnModeChanged = onColumnModeChanged,
             )
             FooterModeDropdown(selected = prefs.footerMode, onSelected = onFooterModeChanged)
             PageTurnAnimationToggle(
@@ -391,8 +401,10 @@ private fun JustThisBookToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
 private fun LayoutControls(
     lineHeight: Double?,
     pageMargins: Double?,
+    columnMode: ColumnMode,
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
+    onColumnModeChanged: (ColumnMode) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionLabel("Line spacing")
@@ -415,6 +427,22 @@ private fun LayoutControls(
                     onClick = { onPageMarginsChanged(v) },
                     shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(label) }
+            }
+        }
+        // Only offered where it can be honoured. Two columns need room
+        // for two columns, and on a phone there is none: the control
+        // would sit there taking a tap and changing nothing.
+        if (widthClass().isAtLeastMedium) {
+            SectionLabel("Columns")
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                val options = ColumnMode.entries
+                options.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = columnMode == mode,
+                        onClick = { onColumnModeChanged(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                    ) { Text(mode.displayName) }
+                }
             }
         }
     }

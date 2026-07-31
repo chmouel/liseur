@@ -27,6 +27,7 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
+import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.EPSILON
@@ -756,6 +757,9 @@ class ReaderViewModel(
 
     fun setPageTurnAnimation(enabled: Boolean) =
         viewModelScope.launch { prefsRepo.setPageTurnAnimation(enabled) }
+
+    fun setColumnMode(mode: ColumnMode) =
+        viewModelScope.launch { prefsRepo.setColumnMode(mode) }
 
     fun cycleFooterMode() = viewModelScope.launch {
         prefsRepo.setFooterMode(prefs.value.footerMode.next())

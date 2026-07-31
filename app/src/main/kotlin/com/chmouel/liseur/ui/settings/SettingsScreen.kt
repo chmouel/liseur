@@ -2,11 +2,13 @@ package com.chmouel.liseur.ui.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
@@ -35,7 +37,10 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.windowWidth
 
 /** Everything about the app that is not about one particular book. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +51,7 @@ fun SettingsScreen(
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
     onVolumeKeys: (Boolean) -> Unit,
+    onEInkMode: (EInkMode) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onOpenAccount: () -> Unit,
     onExportAnnotations: () -> Unit,
@@ -74,112 +80,148 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
-        ) {
-            SectionTitle(stringResource(R.string.settings_appearance))
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        text = stringResource(R.string.settings_theme),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Row(
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .selectableGroup(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ThemeMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = settings.themeMode == mode,
-                                onClick = { onThemeMode(mode) },
-                                label = { Text(stringResource(mode.label)) },
-                            )
+        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+            Column(
+                Modifier
+                    // widthIn must come before fillMaxWidth: fillMaxSize would
+                    // pin the width to the window first, leaving the cap with a
+                    // fixed constraint it cannot narrow.
+                    .widthIn(max = contentWidthCap(windowWidth()))
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    // Settings rows are a column of sentences. Run across a
+                    // tablet they become a column of sentences with a foot of
+                    // nothing after each one, and the switch at the end is a
+                    // reach away from the label that explains it.
+                    .padding(horizontal = 20.dp),
+            ) {
+                SectionTitle(stringResource(R.string.settings_appearance))
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            text = stringResource(R.string.settings_theme),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .padding(top = 12.dp)
+                                .selectableGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ThemeMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = settings.themeMode == mode,
+                                    onClick = { onThemeMode(mode) },
+                                    label = { Text(stringResource(mode.label)) },
+                                )
+                            }
                         }
                     }
                 }
-            }
-            if (dynamicColorAvailable) {
+                if (dynamicColorAvailable) {
+                    SwitchRow(
+                        title = stringResource(R.string.settings_dynamic_color),
+                        subtitle = stringResource(R.string.settings_dynamic_color_detail),
+                        checked = settings.dynamicColor,
+                        onCheckedChange = onDynamicColor,
+                    )
+                }
+
+                SectionTitle(stringResource(R.string.settings_reading))
                 SwitchRow(
-                    title = stringResource(R.string.settings_dynamic_color),
-                    subtitle = stringResource(R.string.settings_dynamic_color_detail),
-                    checked = settings.dynamicColor,
-                    onCheckedChange = onDynamicColor,
+                    title = stringResource(R.string.settings_volume_keys),
+                    subtitle = stringResource(R.string.settings_volume_keys_detail),
+                    checked = settings.volumeKeysTurnPages,
+                    onCheckedChange = onVolumeKeys,
                 )
-            }
-
-            SectionTitle(stringResource(R.string.settings_reading))
-            SwitchRow(
-                title = stringResource(R.string.settings_volume_keys),
-                subtitle = stringResource(R.string.settings_volume_keys_detail),
-                checked = settings.volumeKeysTurnPages,
-                onCheckedChange = onVolumeKeys,
-            )
-            SwitchRow(
-                title = stringResource(R.string.settings_resume),
-                subtitle = stringResource(R.string.settings_resume_detail),
-                checked = settings.resumeLastBook,
-                onCheckedChange = onResumeLastBook,
-            )
-
-            SectionTitle(stringResource(R.string.settings_library))
-            LinkRow(
-                title = stringResource(R.string.server_account),
-                subtitle = stringResource(R.string.settings_account_detail),
-                onClick = onOpenAccount,
-            )
-            LinkRow(
-                title = stringResource(R.string.export_annotations),
-                subtitle = stringResource(R.string.export_annotations_detail),
-                onClick = onExportAnnotations,
-            )
-            LinkRow(
-                title = stringResource(R.string.import_annotations),
-                subtitle = stringResource(R.string.import_annotations_detail),
-                onClick = onImportAnnotations,
-            )
-
-            SectionTitle(stringResource(R.string.settings_about))
-            Card(Modifier.fillMaxWidth()) {
-                Column {
+                SwitchRow(
+                    title = stringResource(R.string.settings_resume),
+                    subtitle = stringResource(R.string.settings_resume_detail),
+                    checked = settings.resumeLastBook,
+                    onCheckedChange = onResumeLastBook,
+                )
+                Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
-                            text = stringResource(R.string.app_name),
-                            style = MaterialTheme.typography.titleMedium,
+                            text = stringResource(R.string.settings_eink),
+                            style = MaterialTheme.typography.bodyLarge,
                         )
                         Text(
-                            text = stringResource(R.string.about_tagline),
+                            text = stringResource(R.string.settings_eink_detail),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(
-                            text = stringResource(
-                                R.string.about_version,
-                                BuildConfig.VERSION_NAME,
-                                BuildConfig.VERSION_CODE,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
+                        Row(
+                            modifier = Modifier
+                                .padding(top = 12.dp)
+                                .selectableGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            EInkMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = settings.eInkMode == mode,
+                                    onClick = { onEInkMode(mode) },
+                                    label = { Text(stringResource(mode.label)) },
+                                )
+                            }
+                        }
                     }
-                    HorizontalDivider()
-                    PlainRow(stringResource(R.string.about_source), onOpenSource)
-                    HorizontalDivider()
-                    PlainRow(stringResource(R.string.about_licences), onOpenLicences)
                 }
+
+                SectionTitle(stringResource(R.string.settings_library))
+                LinkRow(
+                    title = stringResource(R.string.server_account),
+                    subtitle = stringResource(R.string.settings_account_detail),
+                    onClick = onOpenAccount,
+                )
+                LinkRow(
+                    title = stringResource(R.string.export_annotations),
+                    subtitle = stringResource(R.string.export_annotations_detail),
+                    onClick = onExportAnnotations,
+                )
+                LinkRow(
+                    title = stringResource(R.string.import_annotations),
+                    subtitle = stringResource(R.string.import_annotations_detail),
+                    onClick = onImportAnnotations,
+                )
+
+                SectionTitle(stringResource(R.string.settings_about))
+                Card(Modifier.fillMaxWidth()) {
+                    Column {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(
+                                text = stringResource(R.string.app_name),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.about_tagline),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.about_version,
+                                    BuildConfig.VERSION_NAME,
+                                    BuildConfig.VERSION_CODE,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        HorizontalDivider()
+                        PlainRow(stringResource(R.string.about_source), onOpenSource)
+                        HorizontalDivider()
+                        PlainRow(stringResource(R.string.about_licences), onOpenLicences)
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.about_licence_line),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 32.dp),
+                )
             }
-            Text(
-                text = stringResource(R.string.about_licence_line),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 16.dp, bottom = 32.dp),
-            )
         }
     }
 }
@@ -189,6 +231,13 @@ private val ThemeMode.label: Int
         ThemeMode.SYSTEM -> R.string.theme_system
         ThemeMode.LIGHT -> R.string.theme_light
         ThemeMode.DARK -> R.string.theme_dark
+    }
+
+private val EInkMode.label: Int
+    get() = when (this) {
+        EInkMode.AUTO -> R.string.eink_auto
+        EInkMode.ON -> R.string.eink_on
+        EInkMode.OFF -> R.string.eink_off
     }
 
 @Composable

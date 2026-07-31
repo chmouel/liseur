@@ -1,10 +1,12 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.ui.WidthClass
 import org.readium.r2.navigator.OverflowableNavigator
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.TapEvent
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
+import kotlin.math.abs
 
 /**
  * Reader tap zones:
@@ -24,6 +26,14 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  * back a page and the rest goes forward. When the chrome is showing,
  * any tap on the page dismisses it. Page turns are delegated to
  * [onTurnPage] so they can run the page-turn effect.
+ *
+ * The zones are proportional, which is right for turning pages — a
+ * third of the page is a third of the page whatever the page is — but
+ * wrong for the chrome. Two fifths of a phone is a thumb's worth of
+ * screen; two fifths of a 13" tablet is a hand span, and a reader
+ * reaching in to turn the page opens the menu instead. So the chrome
+ * zones are also capped in real units, which leaves a phone exactly
+ * where it was and stops the dead centre growing without limit.
  */
 @OptIn(ExperimentalReadiumApi::class)
 class ReaderTapZones(
@@ -40,31 +50,89 @@ class ReaderTapZones(
             return true
         }
 
-        val width = navigator.publicationView.width.toFloat()
-        val height = navigator.publicationView.height.toFloat()
+        val view = navigator.publicationView
+        val width = view.width.toFloat()
+        val height = view.height.toFloat()
         if (width <= 0f || height <= 0f) return false
 
+        val dp = view.resources.displayMetrics.density
         val rtl = navigator.overflow.value.readingProgression == ReadingProgression.RTL
-        val x = event.point.x / width
-        val y = event.point.y / height
-        when {
-            y < CHROME_ZONE || (x in CHROME_X && y in CHROME_Y) -> onShowChrome()
 
-            x < BACK_ZONE -> onTurnPage(rtl)
-            else -> onTurnPage(!rtl)
+        when (zoneAt(event.point.x, event.point.y, width, height, dp)) {
+            Zone.CHROME -> onShowChrome()
+            Zone.BACK -> onTurnPage(rtl)
+            Zone.FORWARD -> onTurnPage(!rtl)
         }
         return true
     }
+
+    /** What a tap on the page means, before reading direction is applied. */
+    enum class Zone { CHROME, BACK, FORWARD }
 
     companion object {
         /** Top strip of the screen that reveals the chrome. */
         const val CHROME_ZONE = 0.14f
 
-        /** Center box of the page that also reveals the chrome. */
-        val CHROME_X = 0.3f..0.7f
-        val CHROME_Y = 0.3f..0.7f
+        /** Half the width and height of the center box, as a fraction. */
+        const val CHROME_HALF_SPAN = 0.2f
 
         /** Left portion of the screen that turns back a page. */
         const val BACK_ZONE = 0.3f
+
+        /*
+         * The ceilings only come into play once the window is wide enough
+         * to have the problem they solve — a phone, or a narrow pane on a
+         * larger screen, keeps the fractions it always had. Above that the
+         * fractions stop describing a target and start describing a region
+         * too big to aim at, so they are clamped in absolute terms.
+         */
+
+        /** Ceiling on the top strip, so it stays a strip on a tall screen. */
+        const val MAX_CHROME_STRIP_DP = 130f
+
+        /** Ceiling on the center box across, where wide screens run away. */
+        const val MAX_CHROME_BOX_WIDTH_DP = 200f
+
+        /** Ceiling on the center box down. */
+        const val MAX_CHROME_BOX_HEIGHT_DP = 360f
+
+        /**
+         * Which zone a point falls in, in pixels, at [density] pixels per dp.
+         *
+         * Split out from the tap handling so the shape of the page can be
+         * checked at any screen size without a navigator to tap on.
+         */
+        fun zoneAt(
+            x: Float,
+            y: Float,
+            width: Float,
+            height: Float,
+            density: Float,
+        ): Zone {
+            val fx = x / width
+            val fy = y / height
+            val capped = width / density >= WidthClass.MEDIUM_MIN_DP
+            val strip = if (capped) {
+                minOf(CHROME_ZONE, MAX_CHROME_STRIP_DP * density / height)
+            } else {
+                CHROME_ZONE
+            }
+            val halfX = if (capped) {
+                minOf(CHROME_HALF_SPAN, MAX_CHROME_BOX_WIDTH_DP * density / width / 2f)
+            } else {
+                CHROME_HALF_SPAN
+            }
+            val halfY = if (capped) {
+                minOf(CHROME_HALF_SPAN, MAX_CHROME_BOX_HEIGHT_DP * density / height / 2f)
+            } else {
+                CHROME_HALF_SPAN
+            }
+            val inBox = abs(fx - 0.5f) < halfX && abs(fy - 0.5f) < halfY
+            return when {
+                fy < strip || inBox -> Zone.CHROME
+                fx < BACK_ZONE -> Zone.BACK
+                else -> Zone.FORWARD
+            }
+        }
     }
 }

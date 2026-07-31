@@ -85,6 +85,32 @@ enum class FooterMode(val id: String) {
 }
 
 /**
+ * How many columns of text a page is broken into.
+ *
+ * [AUTO] leaves the decision to Readium, which turns two columns on by
+ * itself once the page is wide enough. The other two say so outright,
+ * for the reader who wants one long column on a tablet or two short
+ * ones on a smaller screen held sideways.
+ *
+ * Readium only honours a forced count on a wide enough viewport — its
+ * stylesheet keeps the rule behind a `min-width: 60em` media query — so
+ * on a phone all three of these read the same, which is the point: the
+ * setting can be shown everywhere without changing what a phone does.
+ */
+enum class ColumnMode(val id: String, val displayName: String) {
+    AUTO("auto", "Auto"),
+    ONE("one", "1"),
+    TWO("two", "2"),
+    ;
+
+    companion object {
+        val Default = AUTO
+
+        fun fromId(id: String?): ColumnMode = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/**
  * User reading preferences.
  *
  * @param fontSize Percentage where 1.0 is the publisher's default size.
@@ -93,6 +119,7 @@ enum class FooterMode(val id: String) {
  * @param brightness Screen brightness override 0.0–1.0, null follows the system.
  * @param pageTurnAnimation Slide animation when turning pages; instant jump when off.
  * @param footerMode What the reading footer shows.
+ * @param columnMode How many columns of text a wide page is broken into.
  */
 data class ReaderPrefs(
     val font: ReaderFont = ReaderFont.Default,
@@ -103,6 +130,7 @@ data class ReaderPrefs(
     val brightness: Float? = null,
     val pageTurnAnimation: Boolean = true,
     val footerMode: FooterMode = FooterMode.Default,
+    val columnMode: ColumnMode = ColumnMode.Default,
 ) {
     companion object {
         const val MIN_FONT_SIZE = 0.6

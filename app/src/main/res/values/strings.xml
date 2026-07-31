@@ -213,6 +213,11 @@
     <string name="settings_volume_keys_detail">Volume down goes forward, volume up goes back.</string>
     <string name="settings_resume">Open on the book you were reading</string>
     <string name="settings_resume_detail">Skip the library when you left off mid-book.</string>
+    <string name="settings_eink">E-ink screen</string>
+    <string name="settings_eink_detail">Drops animation, which electronic paper smears rather than draws. Detected automatically; set it yourself if the guess is wrong.</string>
+    <string name="eink_auto">Auto</string>
+    <string name="eink_on">On</string>
+    <string name="eink_off">Off</string>
     <string name="settings_library">Library</string>
     <string name="settings_account_detail">Browse, download and sync with a calibre-web or Komga server.</string>
     <string name="settings_about">About</string>

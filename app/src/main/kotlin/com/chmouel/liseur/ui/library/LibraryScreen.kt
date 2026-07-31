@@ -124,6 +124,11 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.coverMinSize
+import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -162,6 +167,7 @@ fun LibraryScreen(
     var sheetBook by remember { mutableStateOf<Book?>(null) }
     var confirmServerDelete by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
+    val eInk = LocalEInk.current
     val notYetHere = stringResource(R.string.book_not_downloaded)
     val credentialsLost = stringResource(R.string.server_credentials_lost)
 
@@ -229,7 +235,16 @@ fun LibraryScreen(
                     title = {
                         Row(
                             modifier = Modifier.clickable {
-                                scope.launch { gridState.animateScrollToItem(0) }
+                                scope.launch {
+                                    // Scrolling the whole way is a long
+                                    // animation on a screen that repaints
+                                    // in frames; e-paper gets there in one.
+                                    if (eInk) {
+                                        gridState.scrollToItem(0)
+                                    } else {
+                                        gridState.animateScrollToItem(0)
+                                    }
+                                }
                             },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -456,7 +471,12 @@ private fun BookActionsSheet(
     onDeleteFromServer: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 32.dp)) {
+        Column(
+            Modifier
+                .align(Alignment.CenterHorizontally)
+                .widthIn(max = contentWidthCap(windowWidth()))
+                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+        ) {
             Text(book.title, style = MaterialTheme.typography.titleMedium)
             book.author?.let {
                 Text(
@@ -546,7 +566,7 @@ private fun BookGrid(
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 108.dp),
+        columns = GridCells.Adaptive(minSize = coverMinSize(windowWidth())),
         state = gridState,
         modifier = modifier,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
@@ -805,8 +825,9 @@ private fun bookStateDescription(book: Book, progress: DownloadProgress?): Strin
  * Cover-shaped placeholders while the first library query runs. A blank
  * screen reads as "no books"; this reads as "nearly there".
  */
+/** The breathing alpha the loading placeholders are drawn at. */
 @Composable
-private fun LibrarySkeleton(modifier: Modifier = Modifier) {
+private fun skeletonPulse(): Float {
     val transition = rememberInfiniteTransition(label = "skeleton")
     val alpha by transition.animateFloat(
         initialValue = 0.35f,
@@ -817,8 +838,18 @@ private fun LibrarySkeleton(modifier: Modifier = Modifier) {
         ),
         label = "skeletonAlpha",
     )
+    return alpha
+}
+
+@Composable
+private fun LibrarySkeleton(modifier: Modifier = Modifier) {
+    // On electronic paper the pulse is not a hint that something is
+    // coming, it is the whole screen repainting twice a second until it
+    // does. The placeholders are just as legible held still — and the
+    // transition is never started, rather than started and ignored.
+    val alpha = if (LocalEInk.current) 0.5f else skeletonPulse()
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 120.dp),
+        columns = GridCells.Adaptive(minSize = coverMinSize(windowWidth())),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1030,7 +1061,7 @@ private fun DownloadOverlay(
                 tint = CoverBadgeContent,
                 modifier = Modifier.size(32.dp),
             )
-            fraction == null -> CircularProgressIndicator(
+            fraction == null -> BusyIndicator(
                 color = CoverBadgeContent,
                 modifier = Modifier.size(32.dp),
             )

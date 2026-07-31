@@ -22,6 +22,12 @@ import com.chmouel.liseur.sync.PositionSyncWorker
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.container
 import com.chmouel.liseur.ui.theme.LiseurTheme
+import org.readium.r2.navigator.preferences.ReadingProgression
+import org.readium.r2.shared.ExperimentalReadiumApi
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.WidthClass
+import com.chmouel.liseur.ui.widthClass
+import com.chmouel.liseur.ui.ProvideEInk
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -31,6 +37,7 @@ class ReaderActivity : FragmentActivity() {
 
     private var navigator: EpubNavigatorFragment? = null
     private var pageTurner: PageTurner? = null
+    private var chromeVisible = false
 
     /**
      * Read once and kept: the key handler runs on every press, and reading
@@ -71,109 +78,126 @@ class ReaderActivity : FragmentActivity() {
         }
         setContent {
             val settings by container.appSettings.settings.collectAsState(initial = AppSettings())
-            LiseurTheme(
-                darkTheme = when (settings.themeMode) {
-                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                    ThemeMode.LIGHT -> false
-                    ThemeMode.DARK -> true
-                },
-                dynamicColor = settings.dynamicColor,
-            ) {
-                val state by viewModel.state.collectAsStateWithLifecycle()
-                // Hosted above the loading state on purpose: a position
-                // disagreement is put before the book opens, so the reader
-                // starts in the right place rather than being moved after
-                // arriving in the wrong one.
-                val bookSync by viewModel.bookSync.collectAsStateWithLifecycle()
-                BookSyncDialog(
-                    state = bookSync,
-                    onResolve = viewModel::resolveBookSync,
-                    onDismiss = viewModel::dismissBookSync,
-                )
-                when (val s = state) {
-                    ReaderViewModel.UiState.Loading ->
-                        ReaderLoadingScreen()
+            ProvideEInk(settings.eInkMode) {
+                LiseurTheme(
+                    darkTheme = when (settings.themeMode) {
+                        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                        ThemeMode.LIGHT -> false
+                        ThemeMode.DARK -> true
+                    },
+                    dynamicColor = settings.dynamicColor,
+                    monochrome = LocalEInk.current,
+                ) {
+                    val state by viewModel.state.collectAsStateWithLifecycle()
+                    // Hosted above the loading state on purpose: a position
+                    // disagreement is put before the book opens, so the reader
+                    // starts in the right place rather than being moved after
+                    // arriving in the wrong one.
+                    val bookSync by viewModel.bookSync.collectAsStateWithLifecycle()
+                    BookSyncDialog(
+                        state = bookSync,
+                        onResolve = viewModel::resolveBookSync,
+                        onDismiss = viewModel::dismissBookSync,
+                    )
+                    when (val s = state) {
+                        ReaderViewModel.UiState.Loading ->
+                            ReaderLoadingScreen()
 
-                    is ReaderViewModel.UiState.Failure ->
-                        ReaderErrorScreen(message = s.message, onBack = ::finish)
+                        is ReaderViewModel.UiState.Failure ->
+                            ReaderErrorScreen(message = s.message, onBack = ::finish)
 
-                    is ReaderViewModel.UiState.Ready -> {
-                        // The factory must be installed before AndroidFragment
-                        // instantiates the navigator, hence remember {} and
-                        // not SideEffect {}.
-                        remember(s.navigatorFactory) {
-                            s.navigatorFactory.createFragmentFactory(
-                                initialLocator = viewModel.lastLocator ?: s.initialLocator,
-                                initialPreferences = viewModel.prefs.value.toEpubPreferences(),
-                                configuration = epubNavigatorConfiguration(
-                                    onTextSelected = viewModel::onTextSelected,
-                                ),
-                            ).also { supportFragmentManager.fragmentFactory = it }
+                        is ReaderViewModel.UiState.Ready -> {
+                            // The factory must be installed before AndroidFragment
+                            // instantiates the navigator, hence remember {} and
+                            // not SideEffect {}.
+                            //
+                            // Column count is baked into the ReadiumCSS
+                            // properties the navigator is built with, so it is
+                            // also a key: changing it rebuilds the factory here
+                            // and ReaderScreen rebuilds the fragment, which
+                            // reopens at lastLocator so the reader stays put.
+                            // Rotating a tablet into a narrow window is the
+                            // same event, which is why the width goes through
+                            // effectiveFor() rather than being read once.
+                            val prefs by viewModel.prefs.collectAsStateWithLifecycle()
+                            val columnMode = prefs.columnMode.effectiveFor(widthClass())
+                            remember(s.navigatorFactory, columnMode) {
+                                s.navigatorFactory.createFragmentFactory(
+                                    initialLocator = viewModel.lastLocator ?: s.initialLocator,
+                                    initialPreferences = prefs.toEpubPreferences(columnMode),
+                                    configuration = epubNavigatorConfiguration(
+                                        columnMode = columnMode,
+                                        onTextSelected = viewModel::onTextSelected,
+                                    ),
+                                ).also { supportFragmentManager.fragmentFactory = it }
+                            }
+                            ReaderScreen(
+                                publication = s.publication,
+                                prefsFlow = viewModel.prefs,
+                                typographyIsOwnFlow = viewModel.typographyIsOwn,
+                                progressFlow = viewModel.progress,
+                                jumpBackFlow = viewModel.jumpBack,
+                                onLocatorChanged = viewModel::onLocatorChanged,
+                                onNavigatorChanged = { navigator = it },
+                                onPageTurnerChanged = { pageTurner = it },
+                                onChromeVisibleChanged = { chromeVisible = it },
+                                onPrefsAction = remember {
+                                    ReaderPrefsActions(
+                                        setFont = viewModel::setFont,
+                                        setFontSize = viewModel::setFontSize,
+                                        setTheme = viewModel::setTheme,
+                                        setLineHeight = viewModel::setLineHeight,
+                                        setPageMargins = viewModel::setPageMargins,
+                                        setBrightness = viewModel::setBrightness,
+                                        setPageTurnAnimation = viewModel::setPageTurnAnimation,
+                                        setColumnMode = viewModel::setColumnMode,
+                                        setTypographyIsOwn = viewModel::setTypographyIsOwn,
+                                    )
+                                },
+                                onProgressAction = remember {
+                                    ReaderProgressActions(
+                                        cycleFooterMode = viewModel::cycleFooterMode,
+                                        setFooterMode = viewModel::setFooterMode,
+                                        onJump = viewModel::onJump,
+                                        dismissJumpBack = viewModel::dismissJumpBack,
+                                        chapterTicks = viewModel::chapterTicks,
+                                        chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
+                                        positionAtProgression = viewModel::positionAtProgression,
+                                        locatorAtPosition = viewModel::locatorAtPosition,
+                                    )
+                                },
+                                annotationsFlow = viewModel.annotations,
+                                searchFlow = viewModel.search,
+                                bookmarkedFlow = viewModel.bookmarked,
+                                selectionRequests = viewModel.selectionRequests,
+                                onAnnotationAction = remember {
+                                    ReaderAnnotationActions(
+                                        highlight = viewModel::highlight,
+                                        addNote = viewModel::addNote,
+                                        annotationAt = viewModel::annotationAt,
+                                        toggleBookmark = viewModel::toggleBookmark,
+                                        remove = viewModel::remove,
+                                        notebookMarkdown = viewModel::notebookMarkdown,
+                                    )
+                                },
+                                onSearchAction = remember {
+                                    ReaderSearchActions(
+                                        search = viewModel::search,
+                                        clear = viewModel::clearSearch,
+                                    )
+                                },
+                                syncableFlow = viewModel.syncable,
+                                goTo = viewModel.goTo,
+                                onBookSyncAction = remember {
+                                    ReaderBookSyncActions(
+                                        start = viewModel::syncThisBook,
+                                        resolve = viewModel::resolveBookSync,
+                                        dismiss = viewModel::dismissBookSync,
+                                    )
+                                },
+                                onBack = ::finish,
+                            )
                         }
-                        ReaderScreen(
-                            publication = s.publication,
-                            prefsFlow = viewModel.prefs,
-                            typographyIsOwnFlow = viewModel.typographyIsOwn,
-                            progressFlow = viewModel.progress,
-                            jumpBackFlow = viewModel.jumpBack,
-                            onLocatorChanged = viewModel::onLocatorChanged,
-                            onNavigatorChanged = { navigator = it },
-                            onPageTurnerChanged = { pageTurner = it },
-                            onPrefsAction = remember {
-                                ReaderPrefsActions(
-                                    setFont = viewModel::setFont,
-                                    setFontSize = viewModel::setFontSize,
-                                    setTheme = viewModel::setTheme,
-                                    setLineHeight = viewModel::setLineHeight,
-                                    setPageMargins = viewModel::setPageMargins,
-                                    setBrightness = viewModel::setBrightness,
-                                    setPageTurnAnimation = viewModel::setPageTurnAnimation,
-                                    setTypographyIsOwn = viewModel::setTypographyIsOwn,
-                                )
-                            },
-                            onProgressAction = remember {
-                                ReaderProgressActions(
-                                    cycleFooterMode = viewModel::cycleFooterMode,
-                                    setFooterMode = viewModel::setFooterMode,
-                                    onJump = viewModel::onJump,
-                                    dismissJumpBack = viewModel::dismissJumpBack,
-                                    chapterTicks = viewModel::chapterTicks,
-                                    chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
-                                    positionAtProgression = viewModel::positionAtProgression,
-                                    locatorAtPosition = viewModel::locatorAtPosition,
-                                )
-                            },
-                            annotationsFlow = viewModel.annotations,
-                            searchFlow = viewModel.search,
-                            bookmarkedFlow = viewModel.bookmarked,
-                            selectionRequests = viewModel.selectionRequests,
-                            onAnnotationAction = remember {
-                                ReaderAnnotationActions(
-                                    highlight = viewModel::highlight,
-                                    addNote = viewModel::addNote,
-                                    annotationAt = viewModel::annotationAt,
-                                    toggleBookmark = viewModel::toggleBookmark,
-                                    remove = viewModel::remove,
-                                    notebookMarkdown = viewModel::notebookMarkdown,
-                                )
-                            },
-                            onSearchAction = remember {
-                                ReaderSearchActions(
-                                    search = viewModel::search,
-                                    clear = viewModel::clearSearch,
-                                )
-                            },
-                            syncableFlow = viewModel.syncable,
-                            goTo = viewModel.goTo,
-                            onBookSyncAction = remember {
-                                ReaderBookSyncActions(
-                                    start = viewModel::syncThisBook,
-                                    resolve = viewModel::resolveBookSync,
-                                    dismiss = viewModel::dismissBookSync,
-                                )
-                            },
-                            onBack = ::finish,
-                        )
                     }
                 }
             }
@@ -195,18 +219,56 @@ class ReaderActivity : FragmentActivity() {
         PositionSyncWorker.pushBook(this, bookId)
     }
 
-    /** Volume keys turn pages, like the Kindle app's optional setting. */
+    /**
+     * Hardware keys turn pages, like the Kindle app's optional setting.
+     *
+     * Volume is what an e-ink reader's page buttons send, and what the
+     * setting is named after, so it stays behind that setting. Media
+     * keys are deliberately not handled: a reader listening to something
+     * while they read still wants the next track.
+     *
+     * The rest come from a keyboard, a cover or a D-pad, the things
+     * tablets and e-ink readers get attached to, and are only taken on a
+     * window at least [WidthClass.MEDIUM_MIN_DP] wide. A phone keeps the
+     * keys it always had, whatever is plugged into it — arrows and Space
+     * are how switch access and a keyboard move focus and press what
+     * they land on, and that is not worth quietly taking over to save a
+     * reader a tap.
+     *
+     * Even on a wide screen, arrows and Space are left alone whenever
+     * the chrome is up and there is something to move focus between.
+     *
+     * Left and right follow the book rather than the screen, the same
+     * way the tap zones do, so an RTL publication turns the way it reads.
+     */
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val turner = pageTurner.takeIf { volumeKeysTurnPages }
-            ?: return super.onKeyDown(keyCode, event)
+        val turner = pageTurner ?: return super.onKeyDown(keyCode, event)
+        if (keyCode in VOLUME_KEYS) {
+            if (!volumeKeysTurnPages) return super.onKeyDown(keyCode, event)
+        } else if (!isWideEnoughForKeyboardPaging) {
+            return super.onKeyDown(keyCode, event)
+        }
+        if (chromeVisible && keyCode in FOCUS_KEYS) {
+            return super.onKeyDown(keyCode, event)
+        }
         return when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+            in FORWARD_KEYS -> {
                 turner.turn(forward = true)
                 true
             }
 
-            KeyEvent.KEYCODE_VOLUME_UP -> {
+            in BACK_KEYS -> {
                 turner.turn(forward = false)
+                true
+            }
+
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                turner.turn(forward = !isRtl)
+                true
+            }
+
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                turner.turn(forward = isRtl)
                 true
             }
 
@@ -214,11 +276,28 @@ class ReaderActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * Whether this window is wide enough to take over a keyboard's
+     * navigation keys. Read from the configuration rather than
+     * remembered, so folding, rotating or splitting the screen is
+     * answered by the next key press.
+     */
+    private val isWideEnoughForKeyboardPaging: Boolean
+        get() = resources.configuration.screenWidthDp >= WidthClass.MEDIUM_MIN_DP
+
+    /** Whether the open book reads right to left. */
+    @OptIn(ExperimentalReadiumApi::class)
+    private val isRtl: Boolean
+        get() = navigator?.overflow?.value?.readingProgression == ReadingProgression.RTL
+
+    /**
+     * Swallowed so the volume keys do not also ring up the volume panel
+     * on the way back out. Only the volume keys need this; the others
+     * have nothing behind them to suppress.
+     */
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
         when {
-            navigator != null && volumeKeysTurnPages &&
-                (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP)
-            -> true
+            navigator != null && volumeKeysTurnPages && keyCode in VOLUME_KEYS -> true
 
             else -> super.onKeyUp(keyCode, event)
         }
@@ -226,6 +305,38 @@ class ReaderActivity : FragmentActivity() {
     companion object {
         private const val EXTRA_URL = "url"
         private const val EXTRA_ID = "id"
+
+        private val VOLUME_KEYS = setOf(
+            KeyEvent.KEYCODE_VOLUME_DOWN,
+            KeyEvent.KEYCODE_VOLUME_UP,
+        )
+
+        /**
+         * Keys a keyboard uses to move focus and press what it lands on.
+         * Turning pages with them is only safe while nothing is focusable.
+         */
+        private val FOCUS_KEYS = setOf(
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_SPACE,
+        )
+
+        /** Keys that mean "on" whichever way the book reads. */
+        private val FORWARD_KEYS = setOf(
+            KeyEvent.KEYCODE_VOLUME_DOWN,
+            KeyEvent.KEYCODE_PAGE_DOWN,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_SPACE,
+        )
+
+        /** Keys that mean "back" whichever way the book reads. */
+        private val BACK_KEYS = setOf(
+            KeyEvent.KEYCODE_VOLUME_UP,
+            KeyEvent.KEYCODE_PAGE_UP,
+            KeyEvent.KEYCODE_DPAD_UP,
+        )
 
         fun intent(context: Context, url: String, id: String = url): Intent =
             Intent(context, ReaderActivity::class.java)

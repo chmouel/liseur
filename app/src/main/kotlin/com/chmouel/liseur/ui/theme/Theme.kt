@@ -88,6 +88,88 @@ private val DarkColors = darkColorScheme(
     inverseOnSurface = NightSurface,
 )
 
+/*
+ * E-ink panels are greyscale. Any hue we send them is flattened to its
+ * luminance, and the app's leather/teal palette happens to sit in the
+ * middle of that range, so tinted chrome arrives as muddy mid-grey with
+ * very little separation from the surfaces around it. These two schemes
+ * spend the whole range on contrast instead of colour: pure black and
+ * white at the ends, a handful of greys in between, nothing else.
+ */
+private val MonoLightColors = lightColorScheme(
+    primary = Color.Black,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFDCDCDC),
+    onPrimaryContainer = Color.Black,
+    inversePrimary = Color.White,
+    secondary = Color(0xFF2B2B2B),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE8E8E8),
+    onSecondaryContainer = Color.Black,
+    tertiary = Color(0xFF2B2B2B),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE8E8E8),
+    onTertiaryContainer = Color.Black,
+    background = Color.White,
+    onBackground = Color.Black,
+    surface = Color.White,
+    onSurface = Color.Black,
+    surfaceVariant = Color(0xFFF0F0F0),
+    onSurfaceVariant = Color(0xFF2B2B2B),
+    surfaceBright = Color.White,
+    surfaceDim = Color(0xFFE4E4E4),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFF7F7F7),
+    surfaceContainer = Color(0xFFF0F0F0),
+    surfaceContainerHigh = Color(0xFFE8E8E8),
+    surfaceContainerHighest = Color(0xFFE0E0E0),
+    outline = Color(0xFF3D3D3D),
+    outlineVariant = Color(0xFF9E9E9E),
+    inverseSurface = Color.Black,
+    inverseOnSurface = Color.White,
+    error = Color.Black,
+    onError = Color.White,
+    errorContainer = Color(0xFFE0E0E0),
+    onErrorContainer = Color.Black,
+)
+
+private val MonoDarkColors = darkColorScheme(
+    primary = Color.White,
+    onPrimary = Color.Black,
+    primaryContainer = Color(0xFF3D3D3D),
+    onPrimaryContainer = Color.White,
+    inversePrimary = Color.Black,
+    secondary = Color(0xFFE0E0E0),
+    onSecondary = Color.Black,
+    secondaryContainer = Color(0xFF2B2B2B),
+    onSecondaryContainer = Color.White,
+    tertiary = Color(0xFFE0E0E0),
+    onTertiary = Color.Black,
+    tertiaryContainer = Color(0xFF2B2B2B),
+    onTertiaryContainer = Color.White,
+    background = Color.Black,
+    onBackground = Color.White,
+    surface = Color.Black,
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF1C1C1C),
+    onSurfaceVariant = Color(0xFFE0E0E0),
+    surfaceBright = Color(0xFF2B2B2B),
+    surfaceDim = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF0F0F0F),
+    surfaceContainer = Color(0xFF1C1C1C),
+    surfaceContainerHigh = Color(0xFF262626),
+    surfaceContainerHighest = Color(0xFF303030),
+    outline = Color(0xFFC7C7C7),
+    outlineVariant = Color(0xFF5C5C5C),
+    inverseSurface = Color.White,
+    inverseOnSurface = Color.Black,
+    error = Color.White,
+    onError = Color.Black,
+    errorContainer = Color(0xFF3D3D3D),
+    onErrorContainer = Color.White,
+)
+
 /** Whether this device can take its colours from the wallpaper. */
 val dynamicColorAvailable: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -97,10 +179,14 @@ fun LiseurTheme(
     // Wallpaper colours where the system offers them; the palette above
     // is the fallback, and what you get back by turning this off.
     dynamicColor: Boolean = dynamicColorAvailable,
+    // Greyscale hardware: drop hue entirely and spend the range on
+    // contrast. Wins over dynamicColor, which is meaningless here.
+    monochrome: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val colorScheme = when {
+        monochrome -> if (darkTheme) MonoDarkColors else MonoLightColors
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             if (darkTheme) dynamicDarkColorScheme(context)
             else dynamicLightColorScheme(context)

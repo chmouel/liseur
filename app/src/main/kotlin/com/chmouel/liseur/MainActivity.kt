@@ -39,6 +39,8 @@ import com.chmouel.liseur.ui.settings.ServerAccountScreen
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.ProvideEInk
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.ui.theme.LiseurTheme
@@ -70,15 +72,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by container.appSettings.settings
                 .collectAsState(initial = AppSettings())
-            LiseurTheme(
-                darkTheme = when (settings.themeMode) {
-                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                    ThemeMode.LIGHT -> false
-                    ThemeMode.DARK -> true
-                },
-                dynamicColor = settings.dynamicColor,
-            ) {
-                LiseurApp(settings)
+            ProvideEInk(settings.eInkMode) {
+                LiseurTheme(
+                    darkTheme = when (settings.themeMode) {
+                        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                        ThemeMode.LIGHT -> false
+                        ThemeMode.DARK -> true
+                    },
+                    // A palette lifted from a wallpaper is chosen for how
+                    // its colours sit together, which is exactly what a
+                    // greyscale screen throws away — hence the monochrome
+                    // override below, which takes precedence.
+                    dynamicColor = settings.dynamicColor,
+                    monochrome = LocalEInk.current,
+                ) {
+                    LiseurApp(settings)
+                }
             }
         }
 
@@ -154,6 +163,7 @@ private fun LiseurApp(settings: AppSettings) {
                 onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
+                onEInkMode = { scope.launch { repository.setEInkMode(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onOpenAccount = {
                     accountReturnsTo = Screen.SETTINGS

@@ -27,6 +27,38 @@ enum class ThemeMode(val id: String) {
 }
 
 /**
+ * Whether the app draws for an electronic paper screen.
+ *
+ * E-paper repaints slowly and leaves the last frame behind for a moment,
+ * so anything that moves is at best wasted and at worst a smear that has
+ * to be cleared. [ON] takes the movement out: no page turn slide, no
+ * fading chrome, no shimmer while the library loads, no spinner turning
+ * on the spot.
+ *
+ * [AUTO] guesses from the device, which is a guess and known to be one,
+ * hence the two settings either side of it that overrule it.
+ */
+enum class EInkMode(val id: String) {
+    AUTO("auto"),
+    ON("on"),
+    OFF("off"),
+    ;
+
+    /** Whether to draw for e-paper, given what the device looks like. */
+    fun resolve(deviceLooksLikeEInk: Boolean): Boolean = when (this) {
+        AUTO -> deviceLooksLikeEInk
+        ON -> true
+        OFF -> false
+    }
+
+    companion object {
+        val Default = AUTO
+
+        fun fromId(id: String?): EInkMode = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/**
  * Settings that belong to the app rather than to a book.
  *
  * @param themeMode Light, dark, or whatever the system is doing.
@@ -37,6 +69,7 @@ enum class ThemeMode(val id: String) {
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param librarySort How the library grid is arranged.
  * @param librarySortReversed The library order read back to front.
+ * @param eInkMode Whether to drop animation for an electronic paper screen.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -45,6 +78,7 @@ data class AppSettings(
     val resumeLastBook: Boolean = true,
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
+    val eInkMode: EInkMode = EInkMode.Default,
 )
 
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
@@ -61,6 +95,7 @@ class AppSettingsRepository(private val context: Context) {
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val LIBRARY_SORT = stringPreferencesKey("library_sort")
         val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
+        val EINK_MODE = stringPreferencesKey("eink_mode")
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
     }
 
@@ -87,6 +122,7 @@ class AppSettingsRepository(private val context: Context) {
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
+            eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
         )
     }
 
@@ -114,5 +150,9 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setLibrarySortReversed(reversed: Boolean) {
         context.appSettingsStore.edit { it[Keys.LIBRARY_SORT_REVERSED] = reversed }
+    }
+
+    suspend fun setEInkMode(mode: EInkMode) {
+        context.appSettingsStore.edit { it[Keys.EINK_MODE] = mode.id }
     }
 }

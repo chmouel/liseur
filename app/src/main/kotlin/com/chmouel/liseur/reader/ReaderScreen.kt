@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +45,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -86,6 +86,7 @@ import com.chmouel.liseur.reader.annotations.toDecorations
 import com.chmouel.liseur.reader.dictionary.DefinitionSheet
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
@@ -100,6 +101,11 @@ import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.search.SearchScreen
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.widthClass
+import com.chmouel.liseur.ui.windowWidth
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -129,6 +135,7 @@ fun ReaderScreen(
     onLocatorChanged: (Locator) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onPageTurnerChanged: (PageTurner?) -> Unit,
+    onChromeVisibleChanged: (Boolean) -> Unit = {},
     onPrefsAction: ReaderPrefsActions,
     onProgressAction: ReaderProgressActions,
     annotationsFlow: StateFlow<List<BookAnnotation>>,
@@ -151,6 +158,12 @@ fun ReaderScreen(
     var showTypography by remember { mutableStateOf(false) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
+    val columnMode = prefs.columnMode.effectiveFor(widthClass())
+
+    // The activity decides what a keyboard's arrows mean, and the
+    // answer depends on whether there is any chrome to move focus
+    // around in.
+    LaunchedEffect(chromeVisible) { onChromeVisibleChanged(chromeVisible) }
     val typographyIsOwn by typographyIsOwnFlow.collectAsStateWithLifecycle()
     val progress by progressFlow.collectAsStateWithLifecycle()
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
@@ -163,11 +176,17 @@ fun ReaderScreen(
     val view = LocalView.current
     val context = LocalContext.current
     val effectScope = rememberCoroutineScope()
+    val eInk = LocalEInk.current
+    val eInkNow by rememberUpdatedState(eInk)
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
     val pageTurner = remember {
         PageTurner(
             effect = pageTurnEffect,
-            isAnimated = { prefsFlow.value.pageTurnAnimation },
+            // The sliding page is a snapshot dragged across the screen,
+            // which is the one thing electronic paper cannot draw: it
+            // arrives as a trail of half-erased pages. The instant jump
+            // the preference already had is what e-paper wants anyway.
+            isAnimated = { prefsFlow.value.pageTurnAnimation && !eInkNow },
             isEffectSuppressed = { chromeVisibleNow },
         )
     }
@@ -180,9 +199,12 @@ fun ReaderScreen(
     }
 
     // Apply preference changes to the rendered book as they happen.
-    LaunchedEffect(navigator) {
+    // The column mode is filtered through the window width for the same
+    // reason it is in ReaderActivity: a narrow window cannot carry a
+    // choice made on a wide one, and the control to undo it is hidden.
+    LaunchedEffect(navigator, columnMode) {
         val nav = navigator ?: return@LaunchedEffect
-        prefsFlow.collect { nav.submitPreferences(it.toEpubPreferences()) }
+        prefsFlow.collect { nav.submitPreferences(it.toEpubPreferences(columnMode)) }
     }
 
     // Picking the selection up from the navigator when it tells us the
@@ -267,14 +289,20 @@ fun ReaderScreen(
         // and a line would end up hidden under the gesture bar or the
         // notch — close enough to fit that the page becomes scrollable by
         // a few pixels, which is exactly the itch we are scratching.
-        AndroidFragment<EpubNavigatorFragment>(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(readerInsets())
-                .padding(top = 12.dp, bottom = 26.dp),
-        ) { fragment ->
-            navigator = fragment
-            fragment.view?.let(::consumeInsetsForReadium)
+        // Keyed on the column mode: the count is part of the ReadiumCSS
+        // properties the navigator is constructed with and cannot be
+        // changed on a live fragment, so the fragment is rebuilt instead.
+        // The factory hands it lastLocator, so the page stays where it was.
+        key(columnMode) {
+            AndroidFragment<EpubNavigatorFragment>(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(readerInsets())
+                    .padding(top = 12.dp, bottom = 26.dp),
+            ) { fragment ->
+                navigator = fragment
+                fragment.view?.let(::consumeInsetsForReadium)
+            }
         }
 
         PageTurnOverlay(pageTurnEffect)
@@ -334,10 +362,15 @@ fun ReaderScreen(
             }
         }
 
+        // Electronic paper cannot slide: it repaints in whole frames and
+        // leaves the last one behind, so a 300ms slide arrives as a stack
+        // of smeared bars. Snapping it into place is the same gesture,
+        // drawn once.
+        val chromeAnim = if (LocalEInk.current) 0 else CHROME_ANIM_MS
         AnimatedVisibility(
             visible = chromeVisible,
-            enter = slideInVertically(tween(CHROME_ANIM_MS)) { -it } + fadeIn(tween(CHROME_ANIM_MS)),
-            exit = slideOutVertically(tween(CHROME_ANIM_MS)) { -it } + fadeOut(tween(CHROME_ANIM_MS)),
+            enter = slideInVertically(tween(chromeAnim)) { -it } + fadeIn(tween(chromeAnim)),
+            exit = slideOutVertically(tween(chromeAnim)) { -it } + fadeOut(tween(chromeAnim)),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             TopAppBar(
@@ -473,6 +506,7 @@ fun ReaderScreen(
             onBrightnessChanged = onPrefsAction.setBrightness,
             onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
             onFooterModeChanged = onProgressAction.setFooterMode,
+            onColumnModeChanged = onPrefsAction.setColumnMode,
             onDismiss = { showTypography = false },
         )
     }
@@ -604,6 +638,7 @@ class ReaderPrefsActions(
     val setPageMargins: (Double?) -> Unit,
     val setBrightness: (Float?) -> Unit,
     val setPageTurnAnimation: (Boolean) -> Unit,
+    val setColumnMode: (ColumnMode) -> Unit,
     val setTypographyIsOwn: (Boolean) -> Unit,
 )
 
@@ -677,7 +712,7 @@ fun ReaderLoadingScreen() {
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
-        CircularProgressIndicator()
+        BusyIndicator()
     }
 }
 

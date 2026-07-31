@@ -1,6 +1,12 @@
 package com.chmouel.liseur.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +30,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.LocalEInk
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -319,7 +326,7 @@ private fun ConnectForm(
         modifier = Modifier.fillMaxWidth(),
     ) {
         if (state.connecting) {
-            CircularProgressIndicator(
+            BusyIndicator(
                 Modifier.size(18.dp),
                 strokeWidth = 2.dp,
                 color = MaterialTheme.colorScheme.onPrimary,
@@ -500,7 +507,15 @@ private fun AdvancedSection(server: RemoteServer, onKoboToken: (String) -> Unit)
             ),
         )
     }
-    AnimatedVisibility(expanded) {
+    // Expanding this on electronic paper is a full repaint of the lower
+    // half of the form for every frame of the slide; it is the same form
+    // either way, so it simply appears.
+    val eInk = LocalEInk.current
+    AnimatedVisibility(
+        visible = expanded,
+        enter = if (eInk) EnterTransition.None else fadeIn() + expandVertically(),
+        exit = if (eInk) ExitTransition.None else fadeOut() + shrinkVertically(),
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 stringResource(R.string.calibre_token_help),

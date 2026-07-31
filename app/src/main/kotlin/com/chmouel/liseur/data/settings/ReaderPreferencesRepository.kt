@@ -28,6 +28,7 @@ class ReaderPreferencesRepository(private val context: Context) {
         val BRIGHTNESS = floatPreferencesKey("brightness")
         val PAGE_TURN_ANIMATION = booleanPreferencesKey("page_turn_animation")
         val FOOTER_MODE = stringPreferencesKey("footer_mode")
+        val COLUMN_MODE = stringPreferencesKey("column_mode")
     }
 
     val prefs: Flow<ReaderPrefs> = context.readerPrefsStore.data.map { p ->
@@ -40,6 +41,7 @@ class ReaderPreferencesRepository(private val context: Context) {
             brightness = p[Keys.BRIGHTNESS],
             pageTurnAnimation = p[Keys.PAGE_TURN_ANIMATION] ?: true,
             footerMode = FooterMode.fromId(p[Keys.FOOTER_MODE]),
+            columnMode = ColumnMode.fromId(p[Keys.COLUMN_MODE]),
         )
     }
 
@@ -81,5 +83,9 @@ class ReaderPreferencesRepository(private val context: Context) {
 
     suspend fun setFooterMode(mode: FooterMode) {
         context.readerPrefsStore.edit { it[Keys.FOOTER_MODE] = mode.id }
+    }
+
+    suspend fun setColumnMode(mode: ColumnMode) {
+        context.readerPrefsStore.edit { it[Keys.COLUMN_MODE] = mode.id }
     }
 }

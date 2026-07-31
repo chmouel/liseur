@@ -89,6 +89,13 @@ Free software. No trackers or analytics, no proprietary dependencies. The only
 network traffic is to the book server you configured and, if you ask for
 a definition, to Wiktionary.
 
+On a tablet or an e-ink reader the page can be set to two columns instead of
+one, the library shows fewer and larger covers, sheets and dialogs stop
+spanning the whole screen, and a keyboard's Page Up/Down and arrow keys turn
+pages. An e-ink mode — detected automatically, overridable by hand — drops the
+app to black and white and stops everything that would otherwise animate,
+which on electronic paper is everything that would otherwise ghost.
+
 ## Development
 
 ***See [DEVELOPER.md](DEVELOPER.md) for how to build Liseur from source.***
