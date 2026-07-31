@@ -17,6 +17,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +35,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -562,14 +564,20 @@ private fun BookGrid(
             }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SortRow(
-                    sort = state.sort,
-                    reversed = state.sortReversed,
-                    onSetSort = onSetSort,
-                    onToggleDirection = onToggleSortDirection,
-                )
+            // Filters and sort share one line: they answer the same
+            // question, "which books and in what order", and stacking
+            // them cost a whole row of covers for no reason.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // The chips scroll rather than wrap or clip, so a narrow
+                // phone with every chip showing still reaches the last
+                // one instead of losing it off the edge.
                 Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -611,6 +619,16 @@ private fun BookGrid(
                         )
                     }
                 }
+                Spacer(Modifier.width(8.dp))
+                // Laid out last and never squeezed: the sort control is
+                // the one thing here that must stay reachable, so the
+                // chips give way to it rather than the other way round.
+                SortRow(
+                    sort = state.sort,
+                    reversed = state.sortReversed,
+                    onSetSort = onSetSort,
+                    onToggleDirection = onToggleSortDirection,
+                )
             }
         }
         items(state.books, key = { it.id }) { book ->
@@ -1197,21 +1215,29 @@ private fun SortRow(
     var open by remember { mutableStateOf(false) }
 
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
-            // No leading inset, so the label lines up with the left edge
-            // of the covers below rather than floating inside them.
+            // Sits at the end of the filter row now, so it keeps its
+            // trailing inset but drops the leading one; and the label is
+            // allowed to truncate, because on a narrow phone the arrow
+            // beside it matters more than the last word of "Recently
+            // added".
             TextButton(
                 onClick = { open = true },
-                contentPadding = PaddingValues(start = 0.dp, end = 8.dp),
+                contentPadding = PaddingValues(start = 8.dp, end = 4.dp),
             ) {
-                Text(sort.label())
+                Text(
+                    text = sort.label(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 120.dp),
+                )
                 Icon(
                     Icons.Outlined.ArrowDropDown,
                     contentDescription = null,
-                    modifier = Modifier.padding(start = 4.dp),
+                    modifier = Modifier.padding(start = 2.dp),
                 )
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {

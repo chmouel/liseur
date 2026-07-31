@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <!-- Woman reading in peace — solid deco silhouette -->
+  <circle cx="54" cy="54" r="50" fill="#F0DCC6"/>
+
+  <!-- bench line -->
+  <line x1="26" y1="80" x2="82" y2="80" stroke="#7A4A2B" stroke-width="2.4" stroke-linecap="round" opacity="0.45"/>
+
+  <g fill="#5C3018">
+    <!-- torso: leaning gently over the book, back is one long curve -->
+    <path d="M40 80
+             C36 68 38 54 46 45
+             C50 40.5 55 38.5 59 40
+             C62 41.2 63.5 44.5 62.5 48
+             C61 54 58 60 57 66
+             L58 80 Z"/>
+    <!-- head bowed in profile -->
+    <path d="M56 27
+             C61 24.5 67 27 68.5 32.5
+             C70 38 66.5 43 61 43.8
+             C57 44.3 53.5 42 52.5 38
+             C51.5 33.5 52.5 29.5 56 27 Z"/>
+    <!-- chignon -->
+    <circle cx="52" cy="26" r="5.2"/>
+    <!-- wisp of hair down the nape -->
+    <path d="M53 31 C51 35 50.5 39 52.5 43 C50 40 49 34 51 30 Z"/>
+    <!-- thighs: knees drawn up, book leans on them -->
+    <path d="M40 80
+             C44 70 52 63 62 62
+             C68 61.5 73 64 74 68
+             C74.8 71 72.5 73.5 69 73
+             C62 72 52 74.5 46 80 Z"/>
+  </g>
+
+  <!-- open book, white with ink spine, tilted on the knees -->
+  <g transform="rotate(-8 66 58)">
+    <path d="M52 56 C57 52.5 62 52.5 66 55 L66 64 C62 61.5 57 61.5 52 65 Z"
+          fill="#FFFFFF" stroke="#15110C" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M66 55 C70 52.5 75 52.5 80 56 L80 65 C75 61.5 70 61.5 66 64 Z"
+          fill="#FFFFFF" stroke="#15110C" stroke-width="1.8" stroke-linejoin="round"/>
+    <line x1="66" y1="55" x2="66" y2="64" stroke="#15110C" stroke-width="1.5"/>
+  </g>
+
+  <!-- arm from shoulder to the book -->
+  <path d="M58 46 C62 50 64 53 64.5 57" fill="none" stroke="#5C3018" stroke-width="4.8" stroke-linecap="round"/>
+
+  <!-- drifting leaves, teal accent -->
+  <g fill="#3A5F5C" opacity="0.9">
+    <ellipse cx="32" cy="32" rx="3" ry="1.6" transform="rotate(-35 32 32)"/>
+    <ellipse cx="27" cy="41" rx="2.4" ry="1.3" transform="rotate(25 27 41)"/>
+    <ellipse cx="35" cy="24" rx="2.1" ry="1.15" transform="rotate(-60 35 24)"/>
+  </g>
+</svg>

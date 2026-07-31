@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <!-- Liseur banner: a woman lounging along the sofa, reading in the breeze -->
+  <circle cx="54" cy="54" r="50" fill="#F0DCC6"/>
+
+  <!-- sofa backrest -->
+  <path d="M18 54 C18 49 21 46 26 46 L84 46 C89 46 92 49 92 54 L92 70 L18 70 Z"
+        fill="#3A5F5C" opacity="0.25"/>
+  <!-- left armrest, she leans on it -->
+  <path d="M12 52 C12 47.5 15 45 19 45 C23 45 26 47.5 26 52 L26 78 C26 80 24.5 81 22.5 81 L15.5 81 C13.5 81 12 80 12 78 Z"
+        fill="#356057"/>
+  <!-- seat -->
+  <path d="M22 66 C22 63 24.5 61 28 61 L88 61 C91.5 61 94 63 94 66 L94 76 C94 79 92 81 89 81 L27 81 C24 81 22 79 22 76 Z"
+        fill="#3A5F5C"/>
+  <!-- right armrest -->
+  <path d="M86 56 C86 52.5 88.5 50.5 91.5 50.5 C94.5 50.5 96 52.5 96 56 L96 78 C96 80 94.5 81 93 81 L89 81 C87 81 86 80 86 78 Z"
+        fill="#356057"/>
+  <rect x="20" y="81" width="3.2" height="5" rx="1.5" fill="#5C3018"/>
+  <rect x="88" y="81" width="3.2" height="5" rx="1.5" fill="#5C3018"/>
+
+  <!-- skirt flowing along the seat, covering her stretched legs -->
+  <path d="M34 52
+           C31 58 30 63 32 67
+           C45 63 60 62 74 64
+           C79 64.7 83 66 85 67.5
+           C86.5 69.5 85.5 71.5 83 71.5
+           C67 70 48 70.5 34 73
+           C30.5 68 30 58 34 52 Z" fill="#FFDCC3"/>
+  <!-- bare feet past the hem, crossed at the ankle -->
+  <ellipse cx="87.5" cy="66.5" rx="3.4" ry="2" transform="rotate(-18 87.5 66.5)" fill="#8B5E3C"/>
+  <ellipse cx="86.5" cy="70" rx="3.4" ry="2" transform="rotate(-8 86.5 70)" fill="#8B5E3C"/>
+
+  <!-- torso leaning back against the armrest -->
+  <path d="M28 52
+           C28 46 32 42.5 37 43.5
+           C41 44.3 43.5 48 43 53
+           C42.5 58 40 62 38 66
+           L30 66
+           C28.5 62 27.5 56 28 52 Z" fill="#FFDCC3"/>
+
+  <!-- neck and head, face toward us, slightly tilted to the page -->
+  <rect x="33.5" y="36" width="7" height="9" rx="3.2" fill="#8B5E3C"/>
+  <circle cx="37" cy="28" r="10" fill="#8B5E3C"/>
+
+  <!-- auburn hair: soft cap, middle part, loose bun; a strand in the breeze -->
+  <path d="M27.4 29
+           C26.9 21.5 31.4 17 37 17
+           C42.6 17 47.1 21.5 46.6 29
+           C46 24.6 43.6 22 40.6 21.3
+           L37 20.6 L33.4 21.3
+           C30.4 22 28 24.6 27.4 29 Z" fill="#7A4A2B"/>
+  <circle cx="37" cy="14.5" r="4.9" fill="#7A4A2B"/>
+  <path d="M42 13 C46 10.5 50 10.8 53 13 C50 12.3 46.5 13 44 15 Z" fill="#7A4A2B" opacity="0.85"/>
+
+  <!-- closed eyes, lashes down, and a soft smile -->
+  <path d="M31.8 29.6 Q33.6 31.4 35.4 29.6" fill="none" stroke="#5C3018" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M38.8 29.6 Q40.6 31.4 42.4 29.6" fill="none" stroke="#5C3018" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M35.4 34.6 Q37 35.9 38.6 34.6" fill="none" stroke="#5C3018" stroke-width="1.3" stroke-linecap="round" opacity="0.85"/>
+
+  <!-- open book on her lap, tilted toward her -->
+  <g transform="rotate(-10 52 52)">
+    <path d="M38 50 C44 46.7 49.5 46.7 52 49 L52 62 C49.5 59.7 44.5 59.7 38 63 Z"
+          fill="#FFFFFF" stroke="#5C3018" stroke-width="1.9" stroke-linejoin="round"/>
+    <path d="M52 49 C54.5 46.7 60 46.7 66 50 L66 63 C59.5 59.7 54.5 59.7 52 62 Z"
+          fill="#FFFFFF" stroke="#5C3018" stroke-width="1.9" stroke-linejoin="round"/>
+    <line x1="52" y1="49" x2="52" y2="62" stroke="#5C3018" stroke-width="1.4"/>
+    <g stroke="#5C3018" stroke-width="1" stroke-linecap="round" opacity="0.4">
+      <path d="M41 52.6 C44.5 51.2 47.5 51 49.4 52"/>
+      <path d="M41 55.8 C44.5 54.4 47.5 54.2 49.4 55.2"/>
+      <path d="M54.6 52 C56.5 51 59.5 51.2 63 52.6"/>
+      <path d="M54.6 55.2 C56.5 54.2 59.5 54.4 63 55.8"/>
+    </g>
+  </g>
+  <!-- arm holding the far edge of the book -->
+  <path d="M41 48 C45 50 49 53 52 57" fill="none" stroke="#8B5E3C" stroke-width="4.6" stroke-linecap="round"/>
+  <circle cx="53" cy="57.5" r="2.9" fill="#8B5E3C"/>
+
+  <!-- the breeze -->
+  <g fill="none" stroke="#3A5F5C" stroke-width="1.7" stroke-linecap="round" opacity="0.75">
+    <path d="M58 22 C66 19 72 19.5 77 23"/>
+    <path d="M62 30 C68 27.5 72.5 28 76 30.5"/>
+    <path d="M70 38 C75 36 79 36.4 82 38.5"/>
+  </g>
+  <g fill="#3A5F5C" opacity="0.9">
+    <ellipse cx="79.5" cy="21.5" rx="2.5" ry="1.35" transform="rotate(-25 79.5 21.5)"/>
+    <ellipse cx="78" cy="31.5" rx="2.1" ry="1.15" transform="rotate(20 78 31.5)"/>
+    <ellipse cx="84" cy="39.5" rx="1.9" ry="1.05" transform="rotate(-30 84 39.5)"/>
+  </g>
+</svg>

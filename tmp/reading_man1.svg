@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <circle cx="54" cy="54" r="50" fill="#F0DCC6"/>
+
+  <!-- sofa backrest cushion -->
+  <path d="M18 54 C18 49 21 46 26 46 L84 46 C89 46 92 49 92 54 L92 70 L18 70 Z"
+        fill="#3A5F5C" opacity="0.25"/>
+  <!-- left armrest -->
+  <path d="M12 52 C12 47.5 15 45 19 45 C23 45 26 47.5 26 52 L26 78 C26 80 24.5 81 22.5 81 L15.5 81 C13.5 81 12 80 12 78 Z"
+        fill="#356057"/>
+  <!-- seat -->
+  <path d="M22 66 C22 63 24.5 61 28 61 L88 61 C91.5 61 94 63 94 66 L94 76 C94 79 92 81 89 81 L27 81 C24 81 22 79 22 76 Z"
+        fill="#3A5F5C"/>
+  <!-- right armrest -->
+  <path d="M86 56 C86 52.5 88.5 50.5 91.5 50.5 C94.5 50.5 96 52.5 96 56 L96 78 C96 80 94.5 81 93 81 L89 81 C87 81 86 80 86 78 Z"
+        fill="#356057"/>
+  <rect x="20" y="81" width="3.2" height="5" rx="1.5" fill="#5C3018"/>
+  <rect x="88" y="81" width="3.2" height="5" rx="1.5" fill="#5C3018"/>
+
+  <!-- pants draped along the seat over his stretched legs -->
+  <path d="M34 53
+           C31 58.5 30 63.5 32 67.5
+           C44 64 58 63 70 64.5
+           C75 65.1 79 66.3 81 67.5
+           C82.5 69.5 81.5 71.5 79 71.5
+           C64 70.3 47 71 34 73.5
+           C30.5 68.5 30 59 34 53 Z" fill="#8A6B4E"/>
+  <!-- pants crease/seam to make it look like trousers -->
+  <path d="M32.5 65 C44 65 58 65 78 69" fill="none" stroke="#7A5B40" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- bare feet, crossed -->
+  <ellipse cx="85" cy="66.4" rx="3.2" ry="1.9" transform="rotate(-18 85 66.4)" fill="#8B5E3C"/>
+  <ellipse cx="87" cy="70" rx="3.2" ry="1.9" transform="rotate(-5 87 70)" fill="#8B5E3C"/>
+
+  <!-- torso leaning against the armrest -->
+  <path d="M28.5 53
+           C28.5 47 32.5 43.5 37.5 44.5
+           C41.5 45.3 44 49 43.5 54
+           C43 58.5 40.5 62.5 38.5 66.5
+           L30.5 66.5
+           C29 62.5 28 57 28.5 53 Z" fill="#FFF8EF"/>
+
+  <!-- neck -->
+  <path d="M32.5 37.5 L42 37.5 L42 45 C42 47.5 39.5 49 37.25 49 C35 49 32.5 47.5 32.5 45 Z" fill="#8B5E3C"/>
+
+  <!-- head: soft oval, slightly tilted toward the book -->
+  <ellipse cx="37.5" cy="27.5" rx="10.8" ry="11.4" fill="#8B5E3C"/>
+
+  <!-- short dark textured hair -->
+  <path d="M26 27 C25 20 30 14 38 14 C46 14 50 19 49 27 C48.5 29 47 30 46 30 C43 27 38 27 34 27 C31 27 28 29 27 30 C26.5 29 26 28 26 27 Z" fill="#15110C"/>
+  <!-- side fade/burn -->
+  <path d="M26 27 C26 30 27 33 28.5 35 C29.5 32 30 29 29.5 26.5 Z" fill="#15110C"/>
+  <path d="M34 14 C36 12 40 12 42 14" fill="none" stroke="#15110C" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- face: --> fine arched brows, closed lashes, small nose, soft smile -->
+  <path d="M30.8 26.2 Q33.2 24.8 35.5 25.7" fill="none" stroke="#15110C" stroke-width="1.1" stroke-linecap="round" opacity="0.9"/>
+  <path d="M39.5 25.7 Q41.8 24.8 44.2 26.2" fill="none" stroke="#15110C" stroke-width="1.1" stroke-linecap="round" opacity="0.9"/>
+  <path d="M31.4 29.3 Q33.2 31.2 35 29.3" fill="none" stroke="#15110C" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M40 29.3 Q41.8 31.2 43.6 29.3" fill="none" stroke="#15110C" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M37.3 31.2 Q36.8 32.8 37.5 33.4" fill="none" stroke="#4A2A1A" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M35.6 35.4 Q37.4 36.9 39.2 35.4" fill="none" stroke="#3E2012" stroke-width="1.5" stroke-linecap="round"/>
+  
+
+  <!-- open book on her lap -->
+  <g transform="rotate(-12 52 52)">
+    <!-- dark leather cover peaking out from behind the pages -->
+    <path d="M34.5 49.5 C43 46.5 49 47.5 52 49 C55 47.5 61 46.5 69.5 49.5 L69.5 65 C61 62 55 63 52 64.5 C49 63 43 62 34.5 65 Z" fill="#5C3018"/>
+    
+    <!-- stacked pages left -->
+    <path d="M35.5 50.5 C43 47.7 49 48.7 51.5 50 L51.5 63.5 C49 62 43 61 35.5 64 Z" fill="#E6DCC8"/>
+    <path d="M36 50 C43 47.5 49 48.5 51.5 50 L51.5 63 C49 61.7 43 61 36 63.5 Z" fill="#FFFDF9"/>
+    
+    <!-- stacked pages right -->
+    <path d="M68.5 50.5 C61 47.7 55 48.7 52.5 50 L52.5 63.5 C55 62 61 61 68.5 64 Z" fill="#E6DCC8"/>
+    <path d="M68 50 C61 47.5 55 48.5 52.5 50 L52.5 63 C55 61.7 61 61 68 63.5 Z" fill="#FFFDF9"/>
+    
+    <!-- spine crease shadow -->
+    <path d="M52 49.5 L52 64" fill="none" stroke="#D8CDB8" stroke-width="1.8"/>
+    
+    <!-- text lines -->
+    <g stroke="#C0B298" stroke-width="1.2" stroke-linecap="round">
+      <path d="M40 53.5 C43 52.5 47 53 49 54"/>
+      <path d="M39 56.5 C42 55.5 46 56 49 57"/>
+      <path d="M39 59.5 C42 58.5 46 59 49 60"/>
+      <path d="M43 62.5 C45 62 47 62 49 63"/>
+      
+      <path d="M64 53.5 C61 52.5 57 53 55 54"/>
+      <path d="M65 56.5 C62 55.5 58 56 55 57"/>
+      <path d="M65 59.5 C62 58.5 58 59 55 60"/>
+    </g>
+  </g>
+  
+  <!-- hands resting over the pages -->
+  <circle cx="38" cy="63.5" r="3.2" fill="#8B5E3C"/>
+  <circle cx="66" cy="60" r="3.2" fill="#8B5E3C"/>
+
+  <!-- breeze -->
+  <g fill="none" stroke="#3A5F5C" stroke-width="1.7" stroke-linecap="round" opacity="0.75">
+    <path d="M60 21 C68 18 74 18.5 79 22"/>
+    <path d="M63 29 C69 26.5 73.5 27 77 29.5"/>
+    <path d="M70 37 C75 35 79 35.4 82 37.5"/>
+  </g>
+  <g fill="#3A5F5C" opacity="0.9">
+    <ellipse cx="81.5" cy="20.5" rx="2.5" ry="1.35" transform="rotate(-25 81.5 20.5)"/>
+    <ellipse cx="79" cy="30.5" rx="2.1" ry="1.15" transform="rotate(20 79 30.5)"/>
+    <ellipse cx="84" cy="38.5" rx="1.9" ry="1.05" transform="rotate(-30 84 38.5)"/>
+  </g>
+</svg>
