@@ -94,8 +94,12 @@ goes with it are for the devices where it does.
 
 ## Releasing
 
-Run `hack/release` from a clean, up-to-date `main` branch, with nothing
-after it:
+`hack/release` does the whole thing: bump `versionCode` and
+`versionName`, write the F-Droid changelog, run the tests, lint and a
+release build, commit, tag and push, publish the GitHub release, and
+update the F-Droid submission.
+
+Run it from a clean, up-to-date `main` branch, with nothing after it:
 
 ```bash
 hack/release
@@ -103,22 +107,38 @@ hack/release
 
 It shows what has landed since the last release, grouped by commit type,
 says so when the screens have changed since the screenshots were last
-taken, offers the next patch, minor and major version, and opens an editor on a
-changelog drafted from those same commits. Correct the draft, save, and
-confirm.
+taken, offers the next patch, minor and major version, and opens an
+editor on a changelog drafted from those same commits. Correct the
+draft, save, and confirm.
 
 The version can also be given outright, which is what CI and scripts
 want:
 
 ```bash
 hack/release --yes 0.2.1 "Fix page fitting on tall screens."
+hack/release --fdroid-only 0.2.1     # re-run just the F-Droid step
 ```
 
-Either way the script bumps `versionCode` and `versionName`, writes the
-Fastlane changelog, runs the tests, lint and release build, then commits,
-tags and pushes. Pushing the tag is what starts the release workflow,
-which builds and signs the APK and creates the GitHub release with it
-attached.
+It refuses to run on a dirty tree, off `main`, out of sync with the
+remote, on a version that is not newer, or with release notes over the
+500 characters F-Droid allows. An interrupted run can be resumed by
+invoking it again with the same version.
+
+Pushing the tag is what starts `.github/workflows/release.yml`, which
+builds and signs the APK in the `release` GitHub environment and
+attaches it to the release. That environment must hold
+`LISEUR_KEYSTORE_BASE64`, `LISEUR_KEYSTORE_PASSWORD`,
+`LISEUR_KEY_ALIAS` and `LISEUR_KEY_PASSWORD`; `hack/release` creates the
+environment and uploads whichever of them are missing straight from
+`pass`, so an unlocked password store is the only setup a fresh clone
+needs. To refresh them all, after rotating the key for instance:
+
+```bash
+hack/release --sync-secrets
+```
+
+Signing a build on your own machine is a separate matter, covered under
+[Signing a release build](#signing-a-release-build-optional) above.
 
 ### Release notes
 
@@ -159,6 +179,73 @@ never be swapped for another under the same name.
 So a release that went out wrong is not fixed by deleting it. Bump the
 patch version and release again. `v0.1.0` was burned exactly this way
 and is why the first published version is 0.1.1.
+
+### What F-Droid checks
+
+Updating the submission is not the end of it. Pushing to the metadata
+merge request starts a pipeline on `fdroiddata`, and that pipeline can
+fail long after `hack/release` has finished and reported success.
+
+The check that catches people out is `fdroid rewritemeta`. It reformats
+`metadata/com.chmouel.liseur.yml` and fails if the result differs from
+what is committed, byte for byte, trailing newline included. It is not a
+linter with opinions to argue with: the file has to be what it would
+have written.
+
+Every release for a month failed this job while the builds themselves
+passed. `hack/release` had been sending the metadata through `jq` as
+`--arg content "$(cat file)"`, and command substitution strips trailing
+newlines, so what arrived ended mid-line. Use `jq --rawfile`, which
+reads the file as it is. The same trap is waiting in any script that
+sends a file through a JSON API.
+
+`hack/release` now waits for the metadata checks and stops the release
+naming whatever failed. What it does not wait for is `fdroid build`,
+which compiles the app from source, and the `check apk` that follows it:
+about twenty-five minutes between them. Those are left running and the
+pipeline is linked in the output, so look at it before assuming a
+release landed.
+
+A failure in `fdroid build` usually means reproducibility, which
+`hack/verify-reproducible` will reproduce locally. See *F-Droid
+readiness* below.
+
+### Store assets
+
+The screenshots and the icon are regenerated rather than maintained by
+hand:
+
+```bash
+hack/screenshots --setup    # build the demo shelf first, then capture
+hack/screenshots            # capture from a device already set up
+hack/screenshots --setup-only   # build the shelf and stop, to check it
+hack/icon                   # fastlane icon.png, from the vector drawables
+```
+
+`hack/screenshots` drives a connected device through adb and writes both
+`docs/screenshots` and the fastlane `phoneScreenshots`. It finds controls
+by what they say rather than by where they sat when it was written, so a
+moved button is something it waits for and fails on, not a tap into empty
+space.
+
+`--setup` builds the shelf from nothing: it downloads a handful of
+[Standard Ebooks](https://standardebooks.org) public domain editions
+(their cover art is what makes the library screens publishable), pushes
+them to the device, grants the folder through the real picker, and leaves
+the first book part-read with three highlights, a note and a bookmark on
+it. Each of those is checked against the database afterwards, because a
+highlight that quietly failed looks exactly like one that worked. Run it
+once; later runs can drop `--setup` and take about ten minutes.
+
+Sign out of calibre-web first unless your server holds only books you
+would publish a picture of. The script itself never writes to one.
+
+Look at the images before committing. A screen can be found and still be
+showing the wrong thing:
+
+```bash
+montage docs/screenshots/*.png -tile 6x2 -geometry 320x+6+6 /tmp/sheet.png
+```
 
 ## Architecture
 
@@ -313,104 +400,6 @@ deliberately rather than read off the schema.
   exactly and is what the sync orders by.
 - Deleting a book from the server is admin-only
   (`DELETE /books/{id}/file`), so that action is hidden for Komga.
-
-## Releasing
-
-`hack/release` does the whole thing: bump `versionCode`/`versionName`,
-write the F-Droid changelog, run tests, lint and a release build, tag,
-push, publish the GitHub release, and update the F-Droid submission.
-
-```bash
-hack/release 0.2.0 "In-book search, and a Wiktionary card for any word."
-hack/release --fdroid-only 0.2.0     # re-run just the F-Droid step
-```
-
-It refuses to run on a dirty tree, off `main`, out of sync with the
-remote, on a version that is not newer, or with release notes over the
-500 characters F-Droid allows. Interrupted runs can be resumed by
-invoking it again with the same version.
-
-The tag triggers `.github/workflows/release.yml`, which builds a signed
-APK in the `release` GitHub environment and uploads it to the release.
-That environment must hold `LISEUR_KEYSTORE_BASE64`,
-`LISEUR_KEYSTORE_PASSWORD`, `LISEUR_KEY_ALIAS` and `LISEUR_KEY_PASSWORD`;
-`hack/release` creates the environment and uploads whichever of them are
-missing straight from `pass`, so an unlocked password store is the only
-setup a fresh clone needs. To refresh them all — after rotating the key,
-say — run:
-
-```bash
-hack/release --sync-secrets
-```
-
-Locally, signing is opt-in through a gitignored `keystore.properties`;
-without it the release build is simply unsigned.
-
-### What F-Droid checks, and why a green release can still be red there
-
-Updating the submission is not the end of it. Pushing to the metadata
-merge request starts a pipeline on `fdroiddata`, and that pipeline can
-fail long after `hack/release` has finished and reported success.
-
-The check that catches people out is **`fdroid rewritemeta`**. It
-reformats `metadata/com.chmouel.liseur.yml` and fails if the result
-differs from what is committed — byte for byte, **trailing newline
-included**. It is not a linter with opinions to argue with; the file
-simply has to be what it would have written.
-
-That is worth knowing because it is invisible from here. Every release
-for a month failed this job while the builds themselves passed: the
-script had been sending the metadata through `jq` as
-`--arg content "$(cat file)"`, and command substitution strips trailing
-newlines, so what arrived ended mid-line. Nothing noticed, because
-nothing looked. Use `jq --rawfile`, which reads the file as it is.
-
-`hack/release` now waits for the metadata checks and stops the release
-naming whatever failed, so this particular silence cannot happen again.
-What it does **not** wait for is `fdroid build`, which compiles the app
-from source, and the `check apk` that follows it — together about
-twenty-five minutes. Those are left running and the pipeline is linked
-in the output. **Look at it before assuming a release landed.**
-
-A failure in `fdroid build` usually means reproducibility, which
-`hack/verify-reproducible` will reproduce locally; see *F-Droid
-readiness* below.
-
-### Store assets
-
-Both are regenerated rather than maintained by hand:
-
-```bash
-hack/screenshots --setup    # build the demo shelf first, then capture
-hack/screenshots            # capture from a device already set up
-hack/screenshots --setup-only   # build the shelf and stop, to check it
-hack/icon                   # fastlane icon.png, from the vector drawables
-```
-
-`hack/screenshots` drives a connected device through adb and writes both
-`docs/screenshots` and the fastlane `phoneScreenshots`. It finds controls
-by what they say rather than by where they sat when it was written, so a
-moved button is something it waits for and fails on, not a tap into empty
-space.
-
-`--setup` builds the shelf from nothing: it downloads a handful of
-[Standard Ebooks](https://standardebooks.org) public domain editions
-(their cover art is what makes the library screens publishable), pushes
-them to the device, grants the folder through the real picker, and leaves
-the first book part-read with three highlights, a note and a bookmark on
-it. Each of those is checked against the database afterwards, because a
-highlight that quietly failed looks exactly like one that worked. Run it
-once; later runs can drop `--setup` and take about ten minutes.
-
-Sign out of calibre-web first unless your server holds only books you
-would publish a picture of. The script itself never writes to one.
-
-Look at the images before committing. A screen can be found and still be
-showing the wrong thing:
-
-```bash
-montage docs/screenshots/*.png -tile 6x2 -geometry 320x+6+6 /tmp/sheet.png
-```
 
 ## F-Droid readiness
 

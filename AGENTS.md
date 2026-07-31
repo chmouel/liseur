@@ -22,8 +22,8 @@ CI (`.github/workflows/build.yml`) runs `testDebugUnitTest`, `lintDebug`, and
 `assembleDebug` on every push/PR to `main`.
 
 Releases go out with `hack/release`. It also updates the F-Droid
-submission, whose pipeline runs on GitLab and can fail *after* the
-script has finished — the long `fdroid build` is not waited for. Check
+submission, whose pipeline runs on GitLab and can fail after the script
+has finished, because the long `fdroid build` is not waited for. Check
 the pipeline it links before calling a release done. `DEVELOPER.md`
 explains what those checks are.
 
