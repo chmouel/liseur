@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
+import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -66,10 +67,17 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
      * [requestedAt] is when the thing that prompted this happened — a
      * pull-to-refresh gesture, a book being opened. It is what decides
      * whether a run already under way is allowed to answer.
+     *
+     * [snapshot] is a catalog walk to reuse rather than repeat. It rides
+     * along with this request only: a request that joins a run already
+     * going leaves its snapshot behind, since that run is doing its own
+     * fetching and is already known to have started late enough to
+     * answer honestly.
      */
     suspend fun request(
         scope: SyncScope,
         requestedAt: Long = System.currentTimeMillis(),
+        snapshot: SyncSnapshot? = null,
     ): SyncOutcome {
         val joinable = state.withLock {
             inFlight?.takeIf { canSatisfy(it, scope, requestedAt) }?.result
@@ -91,7 +99,7 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
             }
             val outcome = try {
                 when (scope) {
-                    SyncScope.Full -> sync.syncAll()
+                    SyncScope.Full -> sync.syncAll(snapshot)
                     is SyncScope.Book -> sync.syncBook(scope.bookUrl)
                 }
             } catch (e: Throwable) {

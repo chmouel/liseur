@@ -16,7 +16,7 @@ interface CatalogSource {
         baseUrl: String,
         credentials: RemoteCredentials,
         onPage: suspend (List<RemoteBook>) -> Unit = {},
-    ): List<RemoteBook>
+    ): CatalogWalk
 
     suspend fun search(
         baseUrl: String,
@@ -24,6 +24,41 @@ interface CatalogSource {
         query: String,
     ): List<RemoteBook>
 }
+
+/**
+ * How a walk of the whole catalog ended.
+ *
+ * [complete] is the difference between "the server has no more books"
+ * and "we stopped asking": both servers have a guard against a catalog
+ * that never ends, and a walk cut short by one of them has not seen the
+ * whole library. Anything that would remove what was not seen, or trust
+ * this as the current state of the server, must not act on it.
+ */
+data class CatalogWalk(
+    val complete: Boolean,
+    /** What the provider kept of the walk, for reusing within this run. */
+    val snapshot: CatalogSnapshot? = null,
+)
+
+/**
+ * A provider's own record of a catalog walk it has just done.
+ *
+ * Opaque on purpose: Komga's answer already carries every book's reading
+ * progress, so the position sync that follows a refresh need not fetch
+ * the same listing again, but what is in it is Komga's business. Nothing
+ * outside the provider that made one ever looks inside.
+ */
+interface CatalogSnapshot
+
+/**
+ * A catalog walk offered to a position sync, with whose it is.
+ *
+ * Reading progress is per-account on both servers. A snapshot taken
+ * before a sign-out says nothing true about whoever is signed in now,
+ * so it travels with the account it was read for and is refused if that
+ * is no longer the connected one.
+ */
+data class SyncSnapshot(val accountKey: String, val catalog: CatalogSnapshot)
 
 /**
  * Fetching the file itself.

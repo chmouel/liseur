@@ -19,6 +19,7 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncMove
 import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.data.remote.SyncSnapshot
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.remote.SyncReporting
@@ -82,7 +83,8 @@ class KomgaSyncRepository(
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
 
-    override suspend fun syncAll(): SyncOutcome = run(book = null)
+    override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
+        run(book = null, snapshot = snapshot)
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)
 
@@ -218,7 +220,7 @@ class KomgaSyncRepository(
         )
     }
 
-    private suspend fun run(book: String?): SyncOutcome {
+    private suspend fun run(book: String?, snapshot: SyncSnapshot? = null): SyncOutcome {
         val server = serverDao.get() ?: run {
             reporting.report(PositionSyncStatus.Idle)
             return SyncOutcome.NotApplicable
@@ -234,7 +236,9 @@ class KomgaSyncRepository(
         // One pass over the catalog says which books moved, because every
         // book carries its reading progress inline. Asking per book would
         // be a request each; asking for one book is a request either way.
-        val progress = when (val listed = listProgress(server, credentials, books)) {
+        val progress = when (
+            val listed = listProgress(server, credentials, books, snapshot.forThis(server))
+        ) {
             is RemoteResult.Ok -> listed.value
             is RemoteResult.Failed -> {
                 Log.i(TAG, "Could not read reading positions: ${listed.reason.label}")
@@ -292,16 +296,34 @@ class KomgaSyncRepository(
         server: RemoteServer,
         credentials: RemoteCredentials,
         books: List<Book>,
+        reusable: KomgaCatalogSnapshot?,
     ): RemoteResult<Map<String, KomgaReadProgress>> = remoteCall {
         val single = books.singleOrNull()?.remoteUuid
-        val listed = if (single != null) {
-            listOf(catalog.book(server.baseUrl, credentials, single))
-        } else {
-            catalog.allKomgaBooks(server.baseUrl, credentials)
+        val listed = when {
+            // The refresh that led here has just read this, progress and
+            // all. Asking again would be the whole catalog over the wire
+            // twice for one pull of the shelf.
+            reusable != null -> reusable.books
+            single != null -> listOf(catalog.book(server.baseUrl, credentials, single))
+            else -> catalog.allKomgaBooks(server.baseUrl, credentials).books
         }
         listed.mapNotNull { entry ->
             entry.progress?.let { entry.book.remoteId to it }
         }.toMap()
+    }
+
+    /**
+     * A snapshot this run may use: Komga's own, read for the account
+     * that is still connected. Anyone else's is refused rather than
+     * applied, since reading progress belongs to whoever it was read for.
+     */
+    private fun SyncSnapshot?.forThis(server: RemoteServer): KomgaCatalogSnapshot? {
+        val offered = this ?: return null
+        if (offered.accountKey != server.accountKey) {
+            Log.i(TAG, "A catalog snapshot from another account was offered; asking again")
+            return null
+        }
+        return offered.catalog as? KomgaCatalogSnapshot
     }
 
     /** Settles one book, and says what stopped it if anything did. */

@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
+import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -43,7 +44,12 @@ class PositionSyncCoordinatorTest {
         var conflict: SyncPreview? = null
         val resolved = mutableListOf<Pair<String, Boolean>>()
 
-        override suspend fun syncAll(): SyncOutcome = run(SyncScope.Full)
+        val snapshots = mutableListOf<SyncSnapshot?>()
+
+        override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome {
+            snapshots += snapshot
+            return run(SyncScope.Full)
+        }
 
         override suspend fun syncBook(bookUrl: String): SyncOutcome =
             run(SyncScope.Book(bookUrl))

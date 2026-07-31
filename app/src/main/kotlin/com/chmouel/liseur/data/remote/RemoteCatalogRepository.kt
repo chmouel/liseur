@@ -82,23 +82,23 @@ class RemoteCatalogRepository(
     }
 
     /** Pulls the catalog and folds it into the library. Safe to call often. */
-    suspend fun refresh(): Boolean {
-        if (!refreshing.tryLock()) return false
+    suspend fun refresh(): CatalogRefresh {
+        if (!refreshing.tryLock()) return CatalogRefresh.None
         try {
             val server = serverDao.get() ?: run {
                 _status.value = CatalogStatus.Idle
-                return false
+                return CatalogRefresh.None
             }
             // Everything about the request comes from the one row that
             // was read, so a sign-in landing now cannot have this send
             // the new account's secret to the old account's server.
             val credentials = server.credentials ?: run {
                 _status.value = CatalogStatus.CredentialsLost
-                return false
+                return CatalogRefresh.None
             }
             val client = router.catalogFor(server.kind) ?: run {
                 _status.value = CatalogStatus.Idle
-                return false
+                return CatalogRefresh.None
             }
 
             _status.value = CatalogStatus.Refreshing
@@ -108,11 +108,19 @@ class RemoteCatalogRepository(
                 // a query each against an unindexed column, so the cost of
                 // folding a catalog in grew with the square of the shelf.
                 val known = KnownBooks(bookDao.allOnce())
-                client.allBooks(server.baseUrl, credentials) { page ->
+                val walk = client.allBooks(server.baseUrl, credentials) { page ->
                     page.forEach { seen += it.remoteId }
                     forAccount(server) {
                         store(known, server.kind, server.baseUrl, page)
                     }
+                }
+                if (!walk.complete) {
+                    // A walk that stopped short has not seen the whole
+                    // library, so nothing may be removed for being absent
+                    // from it and nothing may be told this is current.
+                    Log.i(TAG, "The catalog walk did not finish; keeping what is known")
+                    _status.value = CatalogStatus.Idle
+                    return CatalogRefresh.None
                 }
                 // Someone may have disconnected or signed in elsewhere
                 // while this was in flight. Writing now would delete the
@@ -123,17 +131,21 @@ class RemoteCatalogRepository(
                     serverDao.setCatalogSyncedAt(System.currentTimeMillis())
                 }
                 _status.value = CatalogStatus.Idle
-                true
+                CatalogRefresh(
+                    completed = true,
+                    accountKey = server.accountKey,
+                    snapshot = walk.snapshot,
+                )
             } catch (e: AccountChanged) {
                 Log.i(TAG, "The account changed while the catalog was being read; dropping it", e)
                 _status.value = CatalogStatus.Idle
-                false
+                CatalogRefresh.None
             } catch (e: RemoteHttpFailure) {
                 // Already carries its meaning: a refused sign-in, a
                 // server in trouble, an answer that was not a catalog.
                 Log.i(TAG, "The server would not give up its catalog")
                 _status.value = CatalogStatus.Failed(e.reason)
-                false
+                CatalogRefresh.None
             } catch (e: SocketTimeoutException) {
                 // Before the catch below, because this is one too. A
                 // server that is answering slowly is not a server that
@@ -141,11 +153,11 @@ class RemoteCatalogRepository(
                 // where checking the address is not.
                 Log.i(TAG, "The catalog took too long to arrive")
                 _status.value = CatalogStatus.Failed(SyncFailure.Timeout)
-                false
+                CatalogRefresh.None
             } catch (e: IOException) {
                 Log.i(TAG, "Could not refresh the catalog", e)
                 _status.value = CatalogStatus.Failed(SyncFailure.Offline)
-                false
+                CatalogRefresh.None
             }
         } finally {
             // Cancellation and anything unforeseen both arrive here
@@ -239,6 +251,35 @@ class RemoteCatalogRepository(
 
     private companion object {
         const val TAG = "RemoteCatalog"
+    }
+}
+
+/**
+ * What a catalog refresh left behind.
+ *
+ * [completed] is what everything else hangs on: only a walk that reached
+ * the end of the catalog has seen the whole library, and only such a
+ * walk may be reused in place of asking the server again.
+ */
+data class CatalogRefresh(
+    val completed: Boolean,
+    val accountKey: String? = null,
+    val snapshot: CatalogSnapshot? = null,
+) {
+    /**
+     * The walk offered to a position sync, or null when there is nothing
+     * worth offering. Refusing one from another account is the point:
+     * reading progress belongs to whoever was signed in when it was read.
+     */
+    fun forSync(): SyncSnapshot? {
+        if (!completed) return null
+        val account = accountKey ?: return null
+        return snapshot?.let { SyncSnapshot(account, it) }
+    }
+
+    companion object {
+        /** Nothing was read, so nothing may be concluded from it. */
+        val None = CatalogRefresh(completed = false)
     }
 }
 

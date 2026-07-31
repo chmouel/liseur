@@ -75,13 +75,17 @@ class RemoteCatalogRepositoryTest {
 
     /** A catalog that does whatever the test needs it to do. */
     private class FakeCatalog(
-        private val walk: suspend (suspend (List<RemoteBook>) -> Unit) -> List<RemoteBook>,
+        private val complete: Boolean = true,
+        private val walk: suspend (suspend (List<RemoteBook>) -> Unit) -> Unit,
     ) : CatalogSource {
         override suspend fun allBooks(
             baseUrl: String,
             credentials: RemoteCredentials,
             onPage: suspend (List<RemoteBook>) -> Unit,
-        ): List<RemoteBook> = walk(onPage)
+        ): CatalogWalk {
+            walk(onPage)
+            return CatalogWalk(complete)
+        }
 
         override suspend fun search(
             baseUrl: String,
@@ -153,7 +157,7 @@ class RemoteCatalogRepositoryTest {
         connect()
         val repository = repository(failing(RemoteHttpFailure(SyncFailure.Unauthorised)))
 
-        assertEquals(false, repository.refresh())
+        assertEquals(false, repository.refresh().completed)
         assertEquals(CatalogStatus.Failed(SyncFailure.Unauthorised), repository.status.value)
     }
 
@@ -202,20 +206,19 @@ class RemoteCatalogRepositoryTest {
                 onPage(listOf(book("b1")))
                 db.remoteServerDao().delete()
                 onPage(listOf(book("b2")))
-                emptyList()
             },
         )
 
-        assertEquals(false, repository.refresh())
+        assertEquals(false, repository.refresh().completed)
         assertEquals(CatalogStatus.Idle, repository.status.value)
     }
 
     @Test
     fun `a refresh that works leaves nothing showing`() = runTest {
         connect()
-        val repository = repository(FakeCatalog { onPage -> listOf(book("b1")).also { onPage(it) } })
+        val repository = repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) })
 
-        assertEquals(true, repository.refresh())
+        assertEquals(true, repository.refresh().completed)
         assertEquals(CatalogStatus.Idle, repository.status.value)
         assertEquals(1, db.bookDao().allRemote().size)
     }
@@ -225,7 +228,7 @@ class RemoteCatalogRepositoryTest {
         connect()
         repository(failing(IOException("no route to host"))).refresh()
 
-        val repository = repository(FakeCatalog { onPage -> listOf(book("b1")).also { onPage(it) } })
+        val repository = repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) })
         repository.refresh()
 
         assertEquals(CatalogStatus.Idle, repository.status.value)
@@ -265,11 +268,11 @@ class RemoteCatalogRepositoryTest {
         val dao = CountingBookDao(db.bookDao())
         val pages = (0 until 3).map { page -> (0 until 50).map { book("b$page-$it") } }
         val repository = repository(
-            FakeCatalog { onPage -> pages.forEach { onPage(it) }; pages.flatten() },
+            FakeCatalog { onPage -> pages.forEach { onPage(it) } },
             dao,
         )
 
-        assertEquals(true, repository.refresh())
+        assertEquals(true, repository.refresh().completed)
 
         assertEquals(1, dao.listedEverything)
         assertEquals(0, dao.singleReads)
@@ -281,11 +284,11 @@ class RemoteCatalogRepositoryTest {
     @Test
     fun `a catalog that has not moved is not written back`() = runTest {
         connect()
-        val walk = FakeCatalog { onPage -> listOf(book("b1"), book("b2")).also { onPage(it) } }
+        val walk = FakeCatalog { onPage -> onPage(listOf(book("b1"), book("b2"))) }
         repository(walk).refresh()
 
         val dao = CountingBookDao(db.bookDao())
-        assertEquals(true, repository(walk, dao).refresh())
+        assertEquals(true, repository(walk, dao).refresh().completed)
 
         assertEquals(0, dao.batches)
         assertEquals(0, dao.rowsWritten)
@@ -299,17 +302,17 @@ class RemoteCatalogRepositoryTest {
     @Test
     fun `a downloaded book that comes back attaches to the row it already had`() = runTest {
         connect()
-        val full = FakeCatalog { onPage -> listOf(book("b1")).also { onPage(it) } }
+        val full = FakeCatalog { onPage -> onPage(listOf(book("b1"))) }
         repository(full).refresh()
         db.bookDao().setDownloadState(
             url = db.bookDao().allRemote().single().url,
             state = com.chmouel.liseur.data.db.DownloadState.DOWNLOADED,
             localUri = "content://downloads/b1.epub",
         )
-        repository(FakeCatalog { emptyList() }).refresh()
+        repository(FakeCatalog { }).refresh()
         assertEquals(null, db.bookDao().allOnce().single().remoteUuid)
 
-        assertEquals(true, repository(full).refresh())
+        assertEquals(true, repository(full).refresh().completed)
 
         val books = db.bookDao().allOnce()
         assertEquals(1, books.size)

@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -175,6 +176,84 @@ class KomgaSyncRepositoryTest {
         // the book reopens where the other device was, not at a percentage.
         assertEquals("OEBPS/ch3.xhtml", JSONObject(row.locatorJson).getString("href"))
         assertFalse(row.isDirty)
+    }
+
+    // -- Reusing what the refresh already read ---------------------------
+
+    /**
+     * A second book on the shelf, so a full sync is a walk of the
+     * catalog rather than the one-book request a library of one gets.
+     */
+    private suspend fun anotherBook() {
+        db.bookDao().upsert(
+            Book(
+                url = "komga:OTHER",
+                title = "Another",
+                author = null,
+                coverPath = null,
+                source = null,
+                addedAt = 0,
+                lastOpenedAt = null,
+                downloadState = DownloadState.REMOTE,
+                remoteUuid = "OTHER",
+            ),
+        )
+    }
+
+    /**
+     * Pulling the shelf down walks Komga's catalog for the books; that
+     * same answer carries every book's reading progress, so syncing
+     * afterwards must not walk it a second time.
+     */
+    @Test
+    fun `a sync offered the refresh's own listing does not ask for it again`() = runTest {
+        connect()
+        val snapshot = KomgaCatalogSnapshot(
+            listOf(KomgaBooks.parseBook(JSONObject(bookJson(40, false, "2024-06-01T10:00:00Z")))),
+        )
+        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch3.xhtml", 0.5, 0.31))))
+
+        assertEquals(SyncOutcome.Success, sync.syncAll(SyncSnapshot(account, snapshot)))
+
+        // Only the one book's position: no /books/list at all.
+        val paths = requests().map { it.target.substringBefore("?") }
+        assertEquals(listOf("/api/v1/books/$bookId/progression"), paths)
+        assertEquals(0.31, db.readingProgressDao().get(bookUrl)!!.totalProgression!!, 1e-9)
+    }
+
+    /**
+     * Reading progress belongs to whoever was signed in when it was
+     * read. Someone else's is refused rather than applied.
+     */
+    @Test
+    fun `a listing read for another account is not used`() = runTest {
+        connect()
+        anotherBook()
+        val snapshot = KomgaCatalogSnapshot(
+            listOf(KomgaBooks.parseBook(JSONObject(bookJson(40, false, "2024-06-01T10:00:00Z")))),
+        )
+        server.enqueue(json("""{"content":[],"last":true}"""))
+
+        sync.syncAll(SyncSnapshot("somebody|else|-1", snapshot))
+
+        assertEquals("/api/v1/books/list", requests().first().target.substringBefore("?"))
+    }
+
+    /** The hourly worker has no refresh behind it and must still work. */
+    @Test
+    fun `a sync with nothing offered walks the catalog itself`() = runTest {
+        connect()
+        anotherBook()
+        server.enqueue(json("""{"content":[${bookJson(40, false, "2024-06-01T10:00:00Z")}],"last":true}"""))
+        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch3.xhtml", 0.5, 0.31))))
+
+        assertEquals(SyncOutcome.Success, sync.syncAll())
+
+        val paths = requests().map { it.target.substringBefore("?") }
+        assertEquals(
+            listOf("/api/v1/books/list", "/api/v1/books/$bookId/progression"),
+            paths,
+        )
     }
 
     /**

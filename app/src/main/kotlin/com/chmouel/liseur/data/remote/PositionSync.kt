@@ -121,8 +121,16 @@ sealed interface PreviewOutcome {
  * a second set of rules.
  */
 interface PositionSync {
-    /** Reconciles every book that has a position on either side. */
-    suspend fun syncAll(): SyncOutcome
+    /**
+     * Reconciles every book that has a position on either side.
+     *
+     * [snapshot] is a catalog walk that has just been done, offered so a
+     * provider whose catalog already carries reading progress need not
+     * fetch the same listing twice for one gesture. It is a shortcut and
+     * never a requirement: without one, or with one from another
+     * account, the run asks the server itself.
+     */
+    suspend fun syncAll(snapshot: SyncSnapshot? = null): SyncOutcome
 
     /** Reconciles one book, for the moments someone is waiting on it. */
     suspend fun syncBook(bookUrl: String): SyncOutcome

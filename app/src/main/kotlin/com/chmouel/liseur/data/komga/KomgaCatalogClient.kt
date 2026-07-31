@@ -1,7 +1,9 @@
 package com.chmouel.liseur.data.komga
 
 import android.util.Log
+import com.chmouel.liseur.data.remote.CatalogSnapshot
 import com.chmouel.liseur.data.remote.CatalogSource
+import com.chmouel.liseur.data.remote.CatalogWalk
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import kotlin.coroutines.coroutineContext
@@ -24,9 +26,15 @@ class KomgaCatalogClient(private val http: KomgaHttp = KomgaHttp()) : CatalogSou
         baseUrl: String,
         credentials: RemoteCredentials,
         onPage: suspend (List<RemoteBook>) -> Unit,
-    ): List<RemoteBook> = allKomgaBooks(baseUrl, credentials) { page ->
-        onPage(page.map(KomgaBook::book))
-    }.map(KomgaBook::book)
+    ): CatalogWalk {
+        val walk = allKomgaBooks(baseUrl, credentials) { page ->
+            onPage(page.map(KomgaBook::book))
+        }
+        // Kept for the position sync that follows a refresh: it wants
+        // exactly this listing, and fetching it again is the whole
+        // catalog over the wire a second time for one gesture.
+        return CatalogWalk(walk.complete, KomgaCatalogSnapshot(walk.books))
+    }
 
     /**
      * The same walk, keeping what only the sync cares about.
@@ -38,7 +46,7 @@ class KomgaCatalogClient(private val http: KomgaHttp = KomgaHttp()) : CatalogSou
         baseUrl: String,
         credentials: RemoteCredentials,
         onPage: suspend (List<KomgaBook>) -> Unit = {},
-    ): List<KomgaBook> = withContext(Dispatchers.IO) {
+    ): KomgaWalk = withContext(Dispatchers.IO) {
         val books = mutableListOf<KomgaBook>()
         var page = 0
 
@@ -47,11 +55,13 @@ class KomgaCatalogClient(private val http: KomgaHttp = KomgaHttp()) : CatalogSou
             val answer = KomgaBooks.parsePage(fetchPage(baseUrl, credentials, page))
             books += answer.books
             onPage(answer.books)
-            if (answer.last || answer.books.isEmpty()) return@withContext books
+            if (answer.last || answer.books.isEmpty()) {
+                return@withContext KomgaWalk(books, complete = true)
+            }
             page++
         }
         Log.i(TAG, "Stopped after $MAX_PAGES pages of catalog")
-        books
+        KomgaWalk(books, complete = false)
     }
 
     /**
@@ -120,3 +130,15 @@ class KomgaCatalogClient(private val http: KomgaHttp = KomgaHttp()) : CatalogSou
         const val MAX_PAGES = 200
     }
 }
+
+/** A walk of Komga's catalog, and whether it got to the end of it. */
+data class KomgaWalk(val books: List<KomgaBook>, val complete: Boolean)
+
+/**
+ * The listing a refresh just read, for the sync that follows it.
+ *
+ * Every book in it carries its reading progress, which is the same
+ * answer `/api/v1/books/list` would give again a moment later. Only
+ * Komga's own sync unwraps this.
+ */
+class KomgaCatalogSnapshot(val books: List<KomgaBook>) : CatalogSnapshot

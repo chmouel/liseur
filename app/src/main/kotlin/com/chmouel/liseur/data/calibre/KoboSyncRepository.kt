@@ -17,6 +17,7 @@ import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncMove
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
+import com.chmouel.liseur.data.remote.SyncSnapshot
 import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.remote.valueOrNull
@@ -66,7 +67,12 @@ class KoboSyncRepository(
 ) : PositionSync {
 
     /** Reconciles every book that has a position on either side. */
-    override suspend fun syncAll(): SyncOutcome = run(book = null)
+    /**
+     * calibre-web has nothing to reuse: positions come from the Kobo
+     * store, which is its own incremental protocol and already asks for
+     * only what has changed. Any snapshot is dropped.
+     */
+    override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = run(book = null)
 
     /** Reconciles one book, for the moments someone is waiting on it. */
     override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)

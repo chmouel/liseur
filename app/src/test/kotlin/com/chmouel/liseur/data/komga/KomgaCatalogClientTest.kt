@@ -68,11 +68,13 @@ class KomgaCatalogClientTest {
         server.enqueue(page("b3", last = true))
 
         val seen = mutableListOf<List<String>>()
-        val books = KomgaCatalogClient().allBooks(baseUrl(), key) { batch ->
+        val walk = KomgaCatalogClient().allBooks(baseUrl(), key) { batch ->
             seen += batch.map { it.remoteId }
         }
 
-        assertEquals(listOf("b1", "b2", "b3"), books.map { it.remoteId })
+        assertTrue(walk.complete)
+        val kept = (walk.snapshot as KomgaCatalogSnapshot).books.map { it.book.remoteId }
+        assertEquals(listOf("b1", "b2", "b3"), kept)
         assertEquals(listOf(listOf("b1", "b2"), listOf("b3")), seen)
         assertTrue(server.takeRequest().target.contains("page=0"))
         assertTrue(server.takeRequest().target.contains("page=1"))
@@ -82,7 +84,9 @@ class KomgaCatalogClientTest {
     fun `an empty page ends the walk even if the server never says last`() = runBlocking {
         server.enqueue(MockResponse(body = """{"content":[],"last":false}"""))
 
-        assertTrue(KomgaCatalogClient().allBooks(baseUrl(), key).isEmpty())
+        val walk = KomgaCatalogClient().allBooks(baseUrl(), key)
+        assertTrue((walk.snapshot as KomgaCatalogSnapshot).books.isEmpty())
+        assertTrue(walk.complete)
         assertEquals(1, server.requestCount)
     }
 

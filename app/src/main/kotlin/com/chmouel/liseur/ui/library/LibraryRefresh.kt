@@ -1,5 +1,7 @@
 package com.chmouel.liseur.ui.library
 
+import com.chmouel.liseur.data.remote.CatalogRefresh
+import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -26,8 +28,8 @@ import kotlinx.coroutines.sync.withLock
 class LibraryRefresh(
     private val scope: CoroutineScope,
     private val scanFolders: suspend () -> Unit,
-    private val refreshCatalog: suspend () -> Unit,
-    private val syncPositions: suspend (requestedAt: Long) -> Unit,
+    private val refreshCatalog: suspend () -> CatalogRefresh,
+    private val syncPositions: suspend (requestedAt: Long, snapshot: SyncSnapshot?) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val _refreshing = MutableStateFlow(false)
@@ -65,12 +67,16 @@ class LibraryRefresh(
     fun all() {
         if (_refreshing.value) return
         _refreshing.value = true
-        val requestedAt = now()
         scope.launch {
             try {
                 runCatching { scanOnce() }
-                refreshCatalog()
-                runCatching { syncPositions(requestedAt) }
+                val catalog = runCatching { refreshCatalog() }.getOrDefault(CatalogRefresh.None)
+                // Asked as of now rather than as of the gesture, because
+                // the catalog has only just been read: a sync already
+                // running started before that and cannot answer for what
+                // it has not seen. What it did see is offered along, so
+                // the same listing is not fetched twice.
+                runCatching { syncPositions(now(), catalog.forSync()) }
             } finally {
                 _refreshing.value = false
             }

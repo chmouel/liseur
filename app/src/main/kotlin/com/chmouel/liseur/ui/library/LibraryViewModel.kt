@@ -175,7 +175,9 @@ class LibraryViewModel(
         scope = viewModelScope,
         scanFolders = { library.rescanAll() },
         refreshCatalog = { catalog.refresh() },
-        syncPositions = { requestedAt -> positionSync.request(SyncScope.Full, requestedAt) },
+        syncPositions = { requestedAt, snapshot ->
+            positionSync.request(SyncScope.Full, requestedAt, snapshot)
+        },
     )
 
     private val continueReading = library.mostRecent.flatMapLatest { book ->

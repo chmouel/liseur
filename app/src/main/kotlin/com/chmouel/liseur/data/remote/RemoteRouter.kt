@@ -51,8 +51,8 @@ class RemoteRouter(
  */
 class RoutedPositionSync(private val router: RemoteRouter) : PositionSync {
 
-    override suspend fun syncAll(): SyncOutcome =
-        router.positionSync()?.syncAll() ?: SyncOutcome.NotApplicable
+    override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
+        router.positionSync()?.syncAll(snapshot) ?: SyncOutcome.NotApplicable
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome =
         router.positionSync()?.syncBook(bookUrl) ?: SyncOutcome.NotApplicable

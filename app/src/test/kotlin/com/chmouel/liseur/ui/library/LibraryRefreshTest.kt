@@ -1,5 +1,8 @@
 package com.chmouel.liseur.ui.library
 
+import com.chmouel.liseur.data.remote.CatalogRefresh
+import com.chmouel.liseur.data.remote.CatalogSnapshot
+import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -22,6 +25,8 @@ class LibraryRefreshTest {
     private var syncs = 0
     private var clock = 1_000L
     private var scanGate: CompletableDeferred<Unit>? = null
+    private var catalogResult = CatalogRefresh.None
+    private val offered = mutableListOf<SyncSnapshot?>()
 
     private fun refresher(scope: kotlinx.coroutines.CoroutineScope) = LibraryRefresh(
         scope = scope,
@@ -33,9 +38,11 @@ class LibraryRefreshTest {
         refreshCatalog = {
             catalogs++
             order += "catalog"
+            catalogResult
         },
-        syncPositions = {
+        syncPositions = { _, snapshot ->
             syncs++
+            offered += snapshot
             order += "positions"
         },
         now = { clock },
@@ -137,5 +144,39 @@ class LibraryRefreshTest {
         scanGate?.complete(Unit)
         advanceUntilIdle()
         assertEquals(false, refresh.refreshing.value)
+    }
+
+    /**
+     * The listing the refresh just read is handed to the sync rather
+     * than fetched again: on Komga the two are the same request, and
+     * one pull of the shelf should not walk the catalog twice.
+     */
+    @Test
+    fun `what the catalog walk read is handed to the sync`() = runTest {
+        val snapshot = object : CatalogSnapshot {}
+        catalogResult = CatalogRefresh(completed = true, accountKey = "acc", snapshot = snapshot)
+
+        refresher(this).all()
+        advanceUntilIdle()
+
+        assertEquals(listOf(SyncSnapshot("acc", snapshot)), offered)
+    }
+
+    /**
+     * A walk that stopped short saw only part of the library, so the
+     * sync asks the server itself rather than trusting it.
+     */
+    @Test
+    fun `a walk that did not finish is not handed on`() = runTest {
+        catalogResult = CatalogRefresh(
+            completed = false,
+            accountKey = "acc",
+            snapshot = object : CatalogSnapshot {},
+        )
+
+        refresher(this).all()
+        advanceUntilIdle()
+
+        assertEquals(listOf(null), offered)
     }
 }

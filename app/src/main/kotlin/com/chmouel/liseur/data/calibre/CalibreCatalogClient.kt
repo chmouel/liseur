@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.calibre
 
 import android.util.Log
 import com.chmouel.liseur.data.remote.CatalogSource
+import com.chmouel.liseur.data.remote.CatalogWalk
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttp
@@ -28,22 +29,25 @@ class CalibreCatalogClient(private val http: RemoteHttp = RemoteHttp()) : Catalo
         baseUrl: String,
         credentials: RemoteCredentials,
         onPage: suspend (List<RemoteBook>) -> Unit,
-    ): List<RemoteBook> = withContext(Dispatchers.IO) {
-        val books = mutableListOf<RemoteBook>()
+    ): CatalogWalk = withContext(Dispatchers.IO) {
         val seenHrefs = mutableSetOf<String>()
         var href: String? = "/opds/books/letter/00"
 
         while (href != null) {
             coroutineContext.ensureActive()
-            if (!seenHrefs.add(href)) break
+            // A feed that points back at a page already read would be
+            // walked for ever. Stopping is right; calling what was read
+            // the whole library is not, so the walk says it did not finish.
+            if (!seenHrefs.add(href)) {
+                Log.i(TAG, "The catalog feed pointed back at itself; stopping short")
+                return@withContext CatalogWalk(complete = false)
+            }
 
             val page = fetchPage(baseUrl, credentials, href)
-            val entries = page.books.map(OpdsBook::toRemote)
-            books += entries
-            onPage(entries)
+            onPage(page.books.map(OpdsBook::toRemote))
             href = page.nextHref
         }
-        books
+        CatalogWalk(complete = true)
     }
 
     /** calibre-web does not page search results, so this is one request. */
