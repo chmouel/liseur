@@ -9,6 +9,10 @@ readonly FDROID_BRANCH="$APP_ID"
 readonly BUILD_FILE="app/build.gradle.kts"
 readonly RELEASE_WAIT_SECONDS=1800
 readonly RELEASE_POLL_SECONDS=20
+# Long enough for the metadata checks, which take a couple of minutes,
+# and deliberately far short of the build they run alongside.
+readonly FDROID_PIPELINE_WAIT_SECONDS=420
+readonly FDROID_PIPELINE_POLL_SECONDS=15
 readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
 readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
@@ -351,6 +355,75 @@ release_run_is_waiting() {
     [[ "$status" == waiting || "$status" == action_required ]]
 }
 
+# Says how F-Droid took the submission.
+#
+# Nothing used to, and a broken metadata file went unnoticed for a month
+# of releases: the commit was made, the merge request was updated, the
+# script said it was done, and the pipeline quietly went red every time.
+#
+# Only the checks that read the metadata are waited for. `fdroid build`
+# compiles the app from source and takes far longer than anyone will sit
+# and watch, and `check apk` cannot start until it has, so both are left
+# to run and named in the link rather than blocked on. A failure in
+# either is a real problem, but it is not one this script could have
+# caused between one release and the next.
+#
+# Should F-Droid add a check, it is waited for by default, which is the
+# right way round: a new metadata rule is exactly what this is for.
+report_fdroid_pipeline() {
+    local project_id=$1 sha=$2
+    local waited=0 pipeline url
+
+    while (( waited < FDROID_PIPELINE_WAIT_SECONDS )); do
+        pipeline=$(glab api --hostname gitlab.com \
+            "projects/$project_id/pipelines?sha=$sha&per_page=1" 2>/dev/null |
+            jq -r '.[0] // empty')
+        [[ -n "$pipeline" ]] && break
+        sleep "$FDROID_PIPELINE_POLL_SECONDS"
+        waited=$((waited + FDROID_PIPELINE_POLL_SECONDS))
+    done
+
+    if [[ -z "$pipeline" ]]; then
+        printf 'F-Droid: no pipeline started yet; check it yourself:\n  %s\n' \
+            "$merge_request_url"
+        return
+    fi
+
+    url=$(printf '%s' "$pipeline" | jq -r .web_url)
+    local pipeline_id
+    pipeline_id=$(printf '%s' "$pipeline" | jq -r .id)
+    printf 'F-Droid: checking the submission:\n  %s\n' "$url"
+
+    # Everything the build has to finish before it can even begin.
+    local slow_jobs='.[] | select(.name != "fdroid build" and .name != "check apk")'
+    local jobs failed pending
+    while (( waited < FDROID_PIPELINE_WAIT_SECONDS )); do
+        jobs=$(glab api --hostname gitlab.com \
+            "projects/$project_id/pipelines/$pipeline_id/jobs?per_page=100" 2>/dev/null) || jobs=''
+        if [[ -n "$jobs" ]]; then
+            failed=$(printf '%s' "$jobs" | jq -r "$slow_jobs"'
+                    | select(.status == "failed") | .name')
+            if [[ -n "$failed" ]]; then
+                printf 'F-Droid: these checks failed:\n%s\n' \
+                    "$(printf '%s' "$failed" | sed 's/^/  /')"
+                die "the F-Droid submission was rejected; see $url"
+            fi
+            pending=$(printf '%s' "$jobs" | jq -r "$slow_jobs"'
+                    | select(.status != "success" and .status != "manual" and
+                             .status != "skipped") | .name')
+            if [[ -z "$pending" ]]; then
+                printf 'F-Droid: the metadata checks passed. The build is still running.\n'
+                return
+            fi
+        fi
+        sleep "$FDROID_PIPELINE_POLL_SECONDS"
+        waited=$((waited + FDROID_PIPELINE_POLL_SECONDS))
+    done
+
+    printf 'F-Droid: the checks are taking a while. Look before assuming it landed:\n  %s\n' \
+        "$url"
+}
+
 update_fdroid_submission() (
     local version=$1
     local version_code=$2
@@ -463,9 +536,21 @@ update_fdroid_submission() (
             }]
         }')
 
-    printf '%s' "$payload" | glab api --hostname gitlab.com --method POST \
-        "projects/$source_project_id/repository/commits" --input - >/dev/null
+    # Checked on the payload rather than on the file, because the file is
+    # not what goes over the wire and the bug this guards against was
+    # entirely in the step between the two. Every release for a month
+    # failed rewritemeta this way, and nothing here noticed: the commit
+    # was made, the merge request was updated, and the script reported
+    # success. Cheap to check, and it fails before anything is pushed.
+    printf '%s' "$payload" | jq -e '.actions[0].content | endswith("\n")' >/dev/null ||
+        die "refusing to send F-Droid metadata that does not end in a newline"
+
+    local commit_response new_sha
+    commit_response=$(printf '%s' "$payload" | glab api --hostname gitlab.com --method POST \
+        "projects/$source_project_id/repository/commits" --input -)
+    new_sha=$(printf '%s' "$commit_response" | jq -r .id)
     printf 'F-Droid: updated %s for version %s.\n' "$merge_request_url" "$version"
+    report_fdroid_pipeline "$source_project_id" "$new_sha"
 )
 
 assume_yes=false
