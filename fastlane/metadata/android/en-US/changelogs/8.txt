@@ -1,0 +1,1 @@
+Faster startup and library sync: the catalog no longer fully refreshes on launch, remote entries merge in batches, and Komga position sync reuses catalog data and skips books that are already up to date. Reading positions now sync right after a server is connected, and foreground syncs are debounced across restarts.
