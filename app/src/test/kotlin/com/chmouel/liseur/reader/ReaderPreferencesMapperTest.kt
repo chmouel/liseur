@@ -22,11 +22,17 @@ class ReaderPreferencesMapperTest {
     }
 
     @Test
-    fun `anything wider takes the reader at their word`() {
+    fun `anything wider takes a stated choice at its word`() {
         for (width in listOf(WidthClass.MEDIUM, WidthClass.EXPANDED)) {
-            for (mode in ColumnMode.entries) {
-                assertEquals(mode, mode.effectiveFor(width))
-            }
+            assertEquals(ColumnMode.ONE, ColumnMode.ONE.effectiveFor(width))
+            assertEquals(ColumnMode.TWO, ColumnMode.TWO.effectiveFor(width))
+        }
+    }
+
+    @Test
+    fun `Auto is two columns once there is room for them`() {
+        for (width in listOf(WidthClass.MEDIUM, WidthClass.EXPANDED)) {
+            assertEquals(ColumnMode.TWO, ColumnMode.AUTO.effectiveFor(width))
         }
     }
 

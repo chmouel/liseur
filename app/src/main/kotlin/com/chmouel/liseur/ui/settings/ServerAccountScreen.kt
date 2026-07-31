@@ -10,9 +10,11 @@ import androidx.compose.animation.shrinkVertically
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -71,6 +73,8 @@ import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.windowWidth
 
 /**
  * One screen for the whole book-server account: the user picks a kind of
@@ -112,55 +116,62 @@ fun ServerAccountScreen(
             )
         },
     ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            val server = state.server
-            if (server == null) {
-                if (state.lostToRestore) {
-                    Notice(
-                        text = stringResource(R.string.server_lost_to_restore),
-                        tone = NoticeTone.PROBLEM,
+        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+            Column(
+                Modifier
+                    // widthIn must come before fillMaxWidth: fillMaxSize would
+                    // pin the width to the window first, leaving the cap with a
+                    // fixed constraint it cannot narrow.
+                    .widthIn(max = contentWidthCap(windowWidth()))
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    // An address and a password are short things to type, and a
+                    // field the width of a tablet makes them look like neither.
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                val server = state.server
+                if (server == null) {
+                    if (state.lostToRestore) {
+                        Notice(
+                            text = stringResource(R.string.server_lost_to_restore),
+                            tone = NoticeTone.PROBLEM,
+                        )
+                    }
+                    ConnectForm(
+                        state = state,
+                        onKindChange = onKindChange,
+                        onUrlChange = onUrlChange,
+                        onUsernameChange = onUsernameChange,
+                        onPasswordChange = onPasswordChange,
+                        onApiKeyChange = onApiKeyChange,
+                        onConnect = onConnect,
+                    )
+                } else {
+                    ConnectedCard(
+                        server = server,
+                        storage = state.storage,
+                        syncStatus = state.syncStatus,
+                        syncReport = state.syncReport,
+                        identity = state.identity,
+                        onSyncNow = onSyncNow,
+                        busy = state.connecting,
+                        onRetryCapabilities = onRetryCapabilities,
+                        onKoboToken = onKoboToken,
+                        onDisconnect = onDisconnect,
                     )
                 }
-                ConnectForm(
-                    state = state,
-                    onKindChange = onKindChange,
-                    onUrlChange = onUrlChange,
-                    onUsernameChange = onUsernameChange,
-                    onPasswordChange = onPasswordChange,
-                    onApiKeyChange = onApiKeyChange,
-                    onConnect = onConnect,
-                )
-            } else {
-                ConnectedCard(
-                    server = server,
-                    storage = state.storage,
-                    syncStatus = state.syncStatus,
-                    syncReport = state.syncReport,
-                    identity = state.identity,
-                    onSyncNow = onSyncNow,
-                    busy = state.connecting,
-                    onRetryCapabilities = onRetryCapabilities,
-                    onKoboToken = onKoboToken,
-                    onDisconnect = onDisconnect,
+                val secretNote = when (server?.kind ?: state.kind) {
+                    ServerKind.CALIBRE -> R.string.server_password_storage_note
+                    ServerKind.KOMGA -> R.string.server_api_key_storage_note
+                }
+                Text(
+                    stringResource(secretNote),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 24.dp),
                 )
             }
-            val secretNote = when (server?.kind ?: state.kind) {
-                ServerKind.CALIBRE -> R.string.server_password_storage_note
-                ServerKind.KOMGA -> R.string.server_api_key_storage_note
-            }
-            Text(
-                stringResource(secretNote),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 24.dp),
-            )
         }
     }
 }

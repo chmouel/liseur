@@ -72,15 +72,27 @@ private const val TWO_COLUMN_WIDTH_VW = 45.0
 /**
  * The column mode a window this wide can actually carry out.
  *
+ * Two things happen here, at either end of the range.
+ *
  * A phone cannot fit two columns of text worth reading, and the control
  * that sets this is hidden below [WidthClass.MEDIUM] — so a reader who
  * picks two columns on a tablet and then rotates it, or folds it, or
  * opens the book in a narrow split-screen pane, would otherwise be stuck
  * with a setting they can no longer see or undo. Narrow windows fall
- * back to Auto, which is the untouched Readium layout.
+ * back to Auto, which on a phone is the untouched Readium layout: one
+ * column, exactly as it has always been.
+ *
+ * Above that, Auto means two. Readium's own default is a single column
+ * whatever the screen, which on a tablet is a line of text a foot long
+ * and hard to follow back to; a reader who never opens the typography
+ * sheet should still get a page laid out for the screen they are
+ * holding. One column remains a choice, not an accident.
  */
-fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode =
-    if (widthClass == WidthClass.COMPACT) ColumnMode.AUTO else this
+fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode = when {
+    widthClass == WidthClass.COMPACT -> ColumnMode.AUTO
+    this == ColumnMode.AUTO -> ColumnMode.TWO
+    else -> this
+}
 
 /**
  * Navigator configuration declaring the bundled reading fonts, served from

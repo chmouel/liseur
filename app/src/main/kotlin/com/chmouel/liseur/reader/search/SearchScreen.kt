@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -51,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.ReaderViewModel.SearchState
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.windowWidth
 import org.readium.r2.shared.publication.Locator
 
 /**
@@ -132,23 +135,32 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            when {
-                hits.isNotEmpty() -> HitList(
-                    hits = hits,
-                    capped = (state as? SearchState.Done)?.truncated == true,
-                    theme = theme,
-                    onHitSelected = onHitSelected,
-                )
+            // A search hit is a sentence with its surroundings, and it
+            // reads no better for being stretched across a tablet.
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .widthIn(max = contentWidthCap(windowWidth()))
+                    .fillMaxSize(),
+            ) {
+                when {
+                    hits.isNotEmpty() -> HitList(
+                        hits = hits,
+                        capped = (state as? SearchState.Done)?.truncated == true,
+                        theme = theme,
+                        onHitSelected = onHitSelected,
+                    )
 
-                state is SearchState.Done ->
-                    Message(theme, stringResource(R.string.search_no_results, state.query))
+                    state is SearchState.Done ->
+                        Message(theme, stringResource(R.string.search_no_results, state.query))
 
-                state is SearchState.Failure ->
-                    Message(theme, stringResource(R.string.search_failed))
+                    state is SearchState.Failure ->
+                        Message(theme, stringResource(R.string.search_failed))
 
-                state is SearchState.Running -> Unit
+                    state is SearchState.Running -> Unit
 
-                else -> Message(theme, stringResource(R.string.search_prompt))
+                    else -> Message(theme, stringResource(R.string.search_prompt))
+                }
             }
         }
     }

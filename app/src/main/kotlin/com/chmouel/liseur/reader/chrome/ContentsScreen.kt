@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
@@ -58,6 +59,8 @@ import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.windowWidth
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
 
@@ -171,41 +174,52 @@ fun ContentsScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            when (tab) {
-                ContentsTab.CONTENTS -> ContentsList(
-                    publication = publication,
-                    theme = theme,
-                    currentHref = currentHref,
-                    onEntrySelected = onEntrySelected,
-                )
+            // A chapter title or a highlight is one line of prose, and a
+            // line of prose is only readable so wide. Left to itself the
+            // list rules the whole width of a tablet and leaves each row
+            // a thread of text with a hand's width of nothing after it.
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .widthIn(max = contentWidthCap(windowWidth()))
+                    .fillMaxSize(),
+            ) {
+                when (tab) {
+                    ContentsTab.CONTENTS -> ContentsList(
+                        publication = publication,
+                        theme = theme,
+                        currentHref = currentHref,
+                        onEntrySelected = onEntrySelected,
+                    )
 
-                ContentsTab.BOOKMARKS -> AnnotationList(
-                    annotations = annotations.filter {
-                        it.kind == AnnotationKind.BOOKMARK.name
-                    },
-                    theme = theme,
-                    emptyRes = R.string.reader_no_bookmarks,
-                    onSelected = onAnnotationSelected,
-                    onDeleted = onAnnotationDeleted,
-                )
+                    ContentsTab.BOOKMARKS -> AnnotationList(
+                        annotations = annotations.filter {
+                            it.kind == AnnotationKind.BOOKMARK.name
+                        },
+                        theme = theme,
+                        emptyRes = R.string.reader_no_bookmarks,
+                        onSelected = onAnnotationSelected,
+                        onDeleted = onAnnotationDeleted,
+                    )
 
-                ContentsTab.HIGHLIGHTS -> AnnotationList(
-                    annotations = annotations.filter {
-                        it.kind != AnnotationKind.BOOKMARK.name
-                    },
-                    theme = theme,
-                    emptyRes = R.string.reader_no_highlights,
-                    onSelected = onAnnotationSelected,
-                    onDeleted = onAnnotationDeleted,
-                )
+                    ContentsTab.HIGHLIGHTS -> AnnotationList(
+                        annotations = annotations.filter {
+                            it.kind != AnnotationKind.BOOKMARK.name
+                        },
+                        theme = theme,
+                        emptyRes = R.string.reader_no_highlights,
+                        onSelected = onAnnotationSelected,
+                        onDeleted = onAnnotationDeleted,
+                    )
 
-                ContentsTab.NOTES -> AnnotationList(
-                    annotations = annotations.filter { !it.note.isNullOrBlank() },
-                    theme = theme,
-                    emptyRes = R.string.reader_no_notes,
-                    onSelected = onAnnotationSelected,
-                    onDeleted = onAnnotationDeleted,
-                )
+                    ContentsTab.NOTES -> AnnotationList(
+                        annotations = annotations.filter { !it.note.isNullOrBlank() },
+                        theme = theme,
+                        emptyRes = R.string.reader_no_notes,
+                        onSelected = onAnnotationSelected,
+                        onDeleted = onAnnotationDeleted,
+                    )
+                }
             }
         }
     }
