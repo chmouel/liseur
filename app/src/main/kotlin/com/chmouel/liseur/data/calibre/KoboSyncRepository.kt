@@ -249,14 +249,17 @@ class KoboSyncRepository(
                 unresolved = progressDao.pendingFor(account).size,
             ),
         )
-        // Only ever stamp the account that is still connected. If it went
-        // away while this ran, writing it back would sign the user in again.
-        inTransaction {
-            if (serverDao.get()?.accountKey == server.accountKey) {
-                serverDao.setPositionSyncedAt(now)
-            }
-        }
         return if (firstFailure == null) {
+            // Only a run that settled everything counts as having synced,
+            // and only ever for the account that is still connected: if it
+            // went away while this ran, writing it back would sign the user
+            // in again. A half-finished run leaves the old time standing,
+            // so whatever is waiting on it knows to come back.
+            inTransaction {
+                if (serverDao.get()?.accountKey == server.accountKey) {
+                    serverDao.setPositionSyncedAt(now)
+                }
+            }
             reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success
         } else {

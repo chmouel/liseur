@@ -177,9 +177,28 @@ class KomgaSyncRepositoryTest {
         assertFalse(row.isDirty)
     }
 
+    /**
+     * A run that did not settle everything must not be written down as
+     * having synced: the app decides whether to sync on opening from
+     * that timestamp, and a half-finished run would buy an hour's
+     * silence it has not earned.
+     */
     @Test
-    fun `a book the server has never been told about is left alone`() = runTest {
+    fun `a run that did not finish is not written down as a sync`() = runTest {
         connect()
+        server.enqueue(
+            json(bookJson(page = 40, completed = false, readDate = "2024-06-01T10:00:00Z")),
+        )
+        server.enqueue(MockResponse(code = 500))
+
+        val outcome = sync.syncBook(bookUrl)
+
+        assertTrue(outcome is SyncOutcome.Partial)
+        assertNull(db.remoteServerDao().get()!!.positionSyncedAt)
+    }
+
+    @Test
+    fun `a book the server has never been told about is left alone`() = runTest {        connect()
         server.enqueue(json(bookJson(page = null, completed = false, readDate = null)))
 
         assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))

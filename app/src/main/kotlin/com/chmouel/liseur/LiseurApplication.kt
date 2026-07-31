@@ -12,6 +12,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.chmouel.liseur.data.remote.RemoteAuthInterceptor
+import com.chmouel.liseur.domain.shouldSyncOnForeground
 import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.CoroutineScope
@@ -63,6 +64,13 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                     if (now - lastForegroundSyncAt < FOREGROUND_SYNC_DEBOUNCE_MS) return
                     lastForegroundSyncAt = now
                     appScope.launch {
+                        // A process is not a session. Whether a full sync
+                        // is worth its round trips is answered from what
+                        // the last one wrote down, which outlives being
+                        // killed in a way a field in here does not.
+                        if (!shouldSyncOnForeground(container.remoteAccount.current(), now)) {
+                            return@launch
+                        }
                         runCatching { container.positionSync.request(SyncScope.Full, now) }
                     }
                 }
