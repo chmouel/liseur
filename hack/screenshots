@@ -519,10 +519,10 @@ open_library() {
     adb shell am start -n "$MAIN_ACTIVITY" >/dev/null
     sleep 6
     # The app can open on the book you were reading; step back to the shelf.
-    if ! wait_for "Library" 20 exact >/dev/null; then
+    if ! wait_for "Liseur" 20 exact >/dev/null; then
         back
         sleep 3
-        wait_for "Library" 20 exact >/dev/null || die "never reached the library"
+        wait_for "Liseur" 20 exact >/dev/null || die "never reached the library"
     fi
 }
 

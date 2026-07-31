@@ -8,6 +8,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -98,9 +99,9 @@ fun LiseurTheme(
     dynamicColor: Boolean = dynamicColorAvailable,
     content: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context)
             else dynamicLightColorScheme(context)
         }
@@ -108,9 +109,10 @@ fun LiseurTheme(
         else -> LightColors
     }
 
+    val typography = remember { liseurTypography(literataFamily(context.assets)) }
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = LiseurTypography,
+        typography = typography,
         content = content,
     )
 }

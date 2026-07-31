@@ -2,6 +2,7 @@ package com.chmouel.liseur.ui.library
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -35,8 +36,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -72,7 +75,6 @@ import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -98,14 +100,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
@@ -142,7 +152,8 @@ fun LibraryScreen(
     onSetSearchActive: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val gridState = rememberLazyGridState()
     val snackbarHost = remember { SnackbarHostState() }
     val downloading = stringResource(R.string.download_in_progress)
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
@@ -209,8 +220,46 @@ fun LibraryScreen(
                     },
                 )
             } else {
-                LargeTopAppBar(
-                    title = { Text(stringResource(R.string.library_title)) },
+                // Deliberately the compact bar, not the large one: the
+                // collapsed form is the good one, so it is what the shelf
+                // gets all the time rather than only once you scroll.
+                TopAppBar(
+                    title = {
+                        Row(
+                            modifier = Modifier.clickable {
+                                scope.launch { gridState.animateScrollToItem(0) }
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // A woman reading in peace on a sofa, breeze
+                            // drifting past — the reading mark, in place
+                            // of a plain wordmark or the launcher icon.
+                            Image(
+                                painter = painterResource(R.drawable.ic_reading_banner),
+                                contentDescription = null,
+                                modifier = Modifier.size(width = 46.dp, height = 42.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = stringResource(R.string.library_title),
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                if (!state.loading && state.books.isNotEmpty()) {
+                                    Text(
+                                        text = pluralStringResource(
+                                            R.plurals.library_book_count,
+                                            state.books.size,
+                                            state.books.size,
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        letterSpacing = 0.8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    },
                     actions = {
                         IconButton(onClick = { onSetSearchActive(true) }) {
                             Icon(
@@ -323,6 +372,7 @@ fun LibraryScreen(
 
                     else -> BookGrid(
                         state = state,
+                        gridState = gridState,
                         onSetSort = onSetSort,
                         onToggleSortDirection = onToggleSortDirection,
                         onSetFilter = onSetFilter,
@@ -485,6 +535,7 @@ private fun BookActionsSheet(
 @Composable
 private fun BookGrid(
     state: LibraryUiState,
+    gridState: LazyGridState,
     onBookSelected: (Book) -> Unit,
     onBookLongPress: (Book) -> Unit,
     onSetSort: (LibrarySort) -> Unit,
@@ -494,6 +545,7 @@ private fun BookGrid(
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 108.dp),
+        state = gridState,
         modifier = modifier,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -583,8 +635,9 @@ private fun ContinueReadingCard(
             BookCover(
                 book = entry.book,
                 modifier = Modifier
-                    .width(64.dp)
-                    .height(96.dp),
+                    .width(72.dp)
+                    .height(108.dp)
+                    .shadow(6.dp, RoundedCornerShape(10.dp)),
             )
             Column(
                 Modifier
@@ -592,13 +645,17 @@ private fun ContinueReadingCard(
                     .fillMaxWidth(),
             ) {
                 Text(
-                    text = stringResource(R.string.continue_reading),
-                    style = MaterialTheme.typography.labelMedium,
+                    text = stringResource(R.string.continue_reading).uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = entry.book.displayTitle,
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -618,7 +675,8 @@ private fun ContinueReadingCard(
                     ) {
                         LinearProgressIndicator(
                             progress = { progression.toFloat() },
-                            modifier = Modifier.weight(1f),
+                            strokeCap = StrokeCap.Round,
+                            modifier = Modifier.weight(1f).height(6.dp),
                         )
                         Text(
                             text = "${(progression * 100).toInt()}%",
@@ -686,18 +744,21 @@ private fun BookCard(
         Column(
             modifier = Modifier
                 .padding(top = 6.dp)
-                .heightIn(min = 52.dp),
+                .heightIn(min = 56.dp),
         ) {
             Text(
                 text = book.displayTitle,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 18.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             book.displayAuthor?.let {
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -845,6 +906,45 @@ private fun CatalogFailureNotice(
 }
 
 @Composable
+private fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(8.dp),
+        ) {
+            Text(
+                text = book.displayTitle,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                textAlign = TextAlign.Center,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+            book.displayAuthor?.let { author ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = author,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun BookCover(book: Book, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(10.dp)
     val artwork = book.coverPath ?: book.coverUrl
@@ -855,26 +955,17 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier) {
             shape,
         )
     if (artwork != null) {
-        AsyncImage(
+        SubcomposeAsyncImage(
             model = artwork,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = borderModifier,
+            error = { PlaceholderCover(book) },
+            loading = { PlaceholderCover(book) },
         )
     } else {
-        Box(
-            modifier = borderModifier
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = book.displayTitle,
-                style = MaterialTheme.typography.labelMedium,
-                textAlign = TextAlign.Center,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(8.dp),
-            )
+        Box(modifier = borderModifier) {
+            PlaceholderCover(book)
         }
     }
 }
