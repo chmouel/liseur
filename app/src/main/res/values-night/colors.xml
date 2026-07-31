@@ -1,0 +1,10 @@
+<resources>
+    <!-- Liseur mark, dark artwork: cream line work and terracotta pages on a
+         deep navy field.  The drawings in drawable-night are separate art, not
+         a recolour, so only the field and the inks are overridden here.  The
+         skin tone is deepened to sit against cream line work. -->
+    <color name="logo_field">#051423</color>
+    <color name="logo_ink">#EAE1D8</color>
+    <color name="logo_skin">#C89A74</color>
+    <color name="logo_accent">#CA7051</color>
+</resources>

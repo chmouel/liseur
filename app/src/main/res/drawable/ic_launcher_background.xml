@@ -1,34 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Warm parchment backdrop with a soft radial highlight and a delicate accent ring. -->
+<!-- Plain field behind the mark; the artwork carries its own ring, so this
+     stays flat.  The mark keeps its cream field in both themes: inverted it
+     read as grey hair. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Base parchment fill. -->
     <path
-        android:fillColor="#F5ECE1"
+        android:fillColor="@color/logo_field"
         android:pathData="M0,0h108v108h-108z" />
-    <!-- Soft warm radial glow centered in the safe zone. -->
-    <path android:pathData="M0,0h108v108h-108z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:centerX="54"
-                android:centerY="50"
-                android:gradientRadius="54"
-                android:type="radial">
-                <item android:color="#FBF7F0" android:offset="0.0" />
-                <item android:color="#F5ECE1" android:offset="0.62" />
-                <item android:color="#EFE3D2" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <!-- Delicate concentric accent ring. -->
-    <path
-        android:strokeColor="#DFCFB9"
-        android:strokeWidth="1.4"
-        android:fillColor="#00000000"
-        android:strokeAlpha="0.7"
-        android:pathData="M54,20.5 A33.5,33.5 0 1,0 54.01,20.5 Z" />
 </vector>

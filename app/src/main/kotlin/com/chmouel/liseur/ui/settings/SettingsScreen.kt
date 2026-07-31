@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.settings
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
@@ -31,6 +33,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -188,26 +192,47 @@ fun SettingsScreen(
                 SectionTitle(stringResource(R.string.settings_about))
                 Card(Modifier.fillMaxWidth()) {
                     Column {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(
-                                text = stringResource(R.string.app_name),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                text = stringResource(R.string.about_tagline),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.about_version,
-                                    BuildConfig.VERSION_NAME,
-                                    BuildConfig.VERSION_CODE,
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // The mark, on the one screen that says what the
+                            // app is.  Which cut to draw is asked of the
+                            // scheme in force rather than of the resource
+                            // qualifiers, since those follow the system and
+                            // the app's own dark setting may differ.
+                            Image(
+                                painter = painterResource(
+                                    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                                        R.drawable.ic_logo_night
+                                    } else {
+                                        R.drawable.ic_logo
+                                    },
                                 ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp),
+                                contentDescription = null,
+                                modifier = Modifier.size(56.dp),
                             )
+                            Column(Modifier.padding(start = 16.dp)) {
+                                Text(
+                                    text = stringResource(R.string.app_name),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    text = stringResource(R.string.about_tagline),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.about_version,
+                                        BuildConfig.VERSION_NAME,
+                                        BuildConfig.VERSION_CODE,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                            }
                         }
                         HorizontalDivider()
                         PlainRow(stringResource(R.string.about_source), onOpenSource)

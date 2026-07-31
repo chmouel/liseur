@@ -20,6 +20,7 @@ from pathlib import Path
 ANDROID = "http://schemas.android.com/apk/res/android"
 AAPT = "http://schemas.android.com/aapt"
 RES = Path("app/src/main/res/drawable")
+VALUES = Path("app/src/main/res/values/colors.xml")
 
 # The visible part of an adaptive icon is the central 72dp of its 108dp
 # viewport; anything outside is what launchers crop away.
@@ -30,6 +31,23 @@ SIZE = 512
 
 def attr(element: ET.Element, name: str) -> str | None:
     return element.get(f"{{{ANDROID}}}{name}")
+
+
+def palette() -> dict[str, str]:
+    """The icon background pulls its colours from values/colors.xml."""
+    if not VALUES.exists():
+        return {}
+    return {c.get("name", ""): (c.text or "").strip() for c in ET.parse(VALUES).getroot()}
+
+
+COLOURS = palette()
+
+
+def resolve(value: str | None) -> str | None:
+    """Turn a @color/foo reference into the literal it points at."""
+    if value and value.startswith("@color/"):
+        return COLOURS.get(value[len("@color/"):], "#000000")
+    return value
 
 
 def gradient_of(path: ET.Element, index: int) -> tuple[str, str] | None:
@@ -44,8 +62,8 @@ def gradient_of(path: ET.Element, index: int) -> tuple[str, str] | None:
     stops = "".join(
         '<stop offset="{}" stop-color="{}" stop-opacity="{}"/>'.format(
             attr(item, "offset") or "0",
-            (attr(item, "color") or "#000000")[:7],
-            alpha_of(attr(item, "color") or "#000000"),
+            (resolve(attr(item, "color")) or "#000000")[:7],
+            alpha_of(resolve(attr(item, "color")) or "#000000"),
         )
         for item in gradient.findall("item")
     )
@@ -92,37 +110,69 @@ def colour_of(colour: str | None, default: str = "none") -> str:
     return colour
 
 
+def transform_of(group: ET.Element) -> str:
+    """VectorDrawable group transforms, in the order Android applies them."""
+    parts = []
+    tx, ty = attr(group, "translateX"), attr(group, "translateY")
+    if tx or ty:
+        parts.append(f"translate({tx or 0},{ty or 0})")
+    pivot_x, pivot_y = attr(group, "pivotX") or "0", attr(group, "pivotY") or "0"
+    rotation = attr(group, "rotation")
+    if rotation:
+        parts.append(f"rotate({rotation},{pivot_x},{pivot_y})")
+    scale_x, scale_y = attr(group, "scaleX"), attr(group, "scaleY")
+    if scale_x or scale_y:
+        parts.append(
+            f"translate({pivot_x},{pivot_y}) "
+            f"scale({scale_x or 1},{scale_y or 1}) "
+            f"translate(-{pivot_x},-{pivot_y})"
+        )
+    return " ".join(parts)
+
+
+def walk(element: ET.Element, defs: list[str], body: list[str], counter: list[int]) -> None:
+    for child in element:
+        tag = child.tag.rsplit("}", 1)[-1]
+        if tag == "group":
+            body.append(f'<g transform="{transform_of(child)}">')
+            walk(child, defs, body, counter)
+            body.append("</g>")
+        elif tag == "path":
+            data = attr(child, "pathData")
+            if not data:
+                continue
+            counter[0] += 1
+            gradient = gradient_of(child, counter[0])
+            if gradient:
+                fill = f"url(#{gradient[0]})"
+                defs.append(gradient[1])
+            else:
+                fill = colour_of(resolve(attr(child, "fillColor")))
+
+            parts = [f'd="{data}"', f'fill="{fill}"']
+            for android_name, svg_name in (
+                ("fillAlpha", "fill-opacity"),
+                ("strokeWidth", "stroke-width"),
+                ("strokeAlpha", "stroke-opacity"),
+                ("strokeLineCap", "stroke-linecap"),
+                ("strokeLineJoin", "stroke-linejoin"),
+                ("fillType", "fill-rule"),
+            ):
+                value = attr(child, android_name)
+                if value:
+                    if svg_name == "fill-rule":
+                        value = "evenodd" if value == "evenOdd" else "nonzero"
+                    parts.append(f'{svg_name}="{value}"')
+            stroke = attr(child, "strokeColor")
+            if stroke:
+                parts.append(f'stroke="{colour_of(resolve(stroke))}"')
+            body.append("<path " + " ".join(parts) + "/>")
+
+
 def convert(vector: Path, index_base: int) -> tuple[str, str]:
-    root = ET.parse(vector).getroot()
     defs: list[str] = []
     body: list[str] = []
-
-    for index, path in enumerate(root.iter("path"), start=index_base):
-        data = attr(path, "pathData")
-        if not data:
-            continue
-        gradient = gradient_of(path, index)
-        if gradient:
-            fill = f"url(#{gradient[0]})"
-            defs.append(gradient[1])
-        else:
-            fill = colour_of(attr(path, "fillColor"))
-
-        parts = [f'd="{data}"', f'fill="{fill}"']
-        for android_name, svg_name in (
-            ("fillAlpha", "fill-opacity"),
-            ("strokeWidth", "stroke-width"),
-            ("strokeAlpha", "stroke-opacity"),
-            ("strokeLineCap", "stroke-linecap"),
-        ):
-            value = attr(path, android_name)
-            if value:
-                parts.append(f'{svg_name}="{value}"')
-        stroke = attr(path, "strokeColor")
-        if stroke:
-            parts.append(f'stroke="{colour_of(stroke)}"')
-        body.append("<path " + " ".join(parts) + "/>")
-
+    walk(ET.parse(vector).getroot(), defs, body, [index_base])
     return "".join(defs), "".join(body)
 
 
@@ -140,7 +190,7 @@ def main() -> int:
     foreground_defs, foreground = convert(RES / "ic_launcher_foreground.xml", 100)
 
     # Scale the safe zone up to fill the output, which is what a launcher
-    # does, so the book is not left swimming in margin.
+    # does, so the medallion is not left swimming in margin.
     scale = VIEWPORT / SAFE
     offset = (VIEWPORT - SAFE) / 2 * scale
 

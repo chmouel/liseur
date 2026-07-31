@@ -1,4 +1,13 @@
 <resources>
     <color name="paper">#FFFFFF</color>
     <color name="ink">#15110C</color>
+
+    <!-- Liseur mark, as the launcher and splash draw it.  These follow the
+         *system* dark mode through values-night, which is right for those two
+         surfaces; anything drawn in Compose picks its own cut instead, since
+         the app's light/dark setting may disagree with the system's. -->
+    <color name="logo_field">#FCF4ED</color>
+    <color name="logo_ink">#183453</color>
+    <color name="logo_skin">#E9C4A4</color>
+    <color name="logo_accent">#C56C4B</color>
 </resources>
