@@ -3,6 +3,8 @@ package com.chmouel.liseur.data.remote
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import java.io.IOException
@@ -97,6 +99,41 @@ class RemoteCatalogRepositoryTest {
         ),
         serverDao = db.remoteServerDao(),
         bookDao = db.bookDao(),
+    )
+
+    /** A book DAO that keeps count of what a refresh asked it to do. */
+    private class CountingBookDao(private val delegate: BookDao) : BookDao by delegate {
+        var listedEverything = 0
+        var singleReads = 0
+        var batches = 0
+        var rowsWritten = 0
+
+        override suspend fun allOnce(): List<Book> {
+            listedEverything++
+            return delegate.allOnce()
+        }
+
+        override suspend fun getByUrl(url: String): Book? {
+            singleReads++
+            return delegate.getByUrl(url)
+        }
+
+        override suspend fun upsertAll(books: List<Book>) {
+            batches++
+            rowsWritten += books.size
+            delegate.upsertAll(books)
+        }
+    }
+
+    private fun repository(catalog: CatalogSource, bookDao: BookDao) = RemoteCatalogRepository(
+        router = RemoteRouter(
+            serverDao = db.remoteServerDao(),
+            catalogs = mapOf(ServerKind.KOMGA to catalog),
+            files = emptyMap(),
+            positions = emptyMap(),
+        ),
+        serverDao = db.remoteServerDao(),
+        bookDao = bookDao,
     )
 
     private fun failing(e: Throwable) = FakeCatalog { throw e }
@@ -216,5 +253,67 @@ class RemoteCatalogRepositoryTest {
         job.join()
 
         assertEquals(CatalogStatus.Idle, repository.status.value)
+    }
+
+    /**
+     * The whole point of the batched merge: what a shelf costs to fold in
+     * must not grow with a query per book against an unindexed column.
+     */
+    @Test
+    fun `a catalog is read in with one look at the library and one write a page`() = runTest {
+        connect()
+        val dao = CountingBookDao(db.bookDao())
+        val pages = (0 until 3).map { page -> (0 until 50).map { book("b$page-$it") } }
+        val repository = repository(
+            FakeCatalog { onPage -> pages.forEach { onPage(it) }; pages.flatten() },
+            dao,
+        )
+
+        assertEquals(true, repository.refresh())
+
+        assertEquals(1, dao.listedEverything)
+        assertEquals(0, dao.singleReads)
+        assertEquals(3, dao.batches)
+        assertEquals(150, dao.rowsWritten)
+        assertEquals(150, db.bookDao().allRemote().size)
+    }
+
+    @Test
+    fun `a catalog that has not moved is not written back`() = runTest {
+        connect()
+        val walk = FakeCatalog { onPage -> listOf(book("b1"), book("b2")).also { onPage(it) } }
+        repository(walk).refresh()
+
+        val dao = CountingBookDao(db.bookDao())
+        assertEquals(true, repository(walk, dao).refresh())
+
+        assertEquals(0, dao.batches)
+        assertEquals(0, dao.rowsWritten)
+    }
+
+    /**
+     * A downloaded book keeps its file and loses its link when it goes
+     * from the catalog. Coming back must find that same row again --
+     * by URL, since the link that was its other name is gone.
+     */
+    @Test
+    fun `a downloaded book that comes back attaches to the row it already had`() = runTest {
+        connect()
+        val full = FakeCatalog { onPage -> listOf(book("b1")).also { onPage(it) } }
+        repository(full).refresh()
+        db.bookDao().setDownloadState(
+            url = db.bookDao().allRemote().single().url,
+            state = com.chmouel.liseur.data.db.DownloadState.DOWNLOADED,
+            localUri = "content://downloads/b1.epub",
+        )
+        repository(FakeCatalog { emptyList() }).refresh()
+        assertEquals(null, db.bookDao().allOnce().single().remoteUuid)
+
+        assertEquals(true, repository(full).refresh())
+
+        val books = db.bookDao().allOnce()
+        assertEquals(1, books.size)
+        assertEquals("b1", books.single().remoteUuid)
+        assertEquals("content://downloads/b1.epub", books.single().localUri)
     }
 }

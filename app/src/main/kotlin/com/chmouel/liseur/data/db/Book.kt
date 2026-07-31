@@ -119,9 +119,6 @@ interface BookDao {
     @Query("UPDATE books SET archived_at = :archivedAt WHERE url = :url")
     suspend fun setArchived(url: String, archivedAt: Long?)
 
-    @Query("SELECT * FROM books WHERE remote_uuid = :uuid")
-    suspend fun getByRemoteUuid(uuid: String): Book?
-
     @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL")
     suspend fun allRemote(): List<Book>
 
@@ -203,6 +200,16 @@ interface BookDao {
 
     @Upsert
     suspend fun upsert(book: Book): Long
+
+    /**
+     * A page of the catalog in one go.
+     *
+     * A row at a time meant a statement, a transaction and an
+     * invalidation each, so a library of any size redrew itself once per
+     * book while it was being read in.
+     */
+    @Upsert
+    suspend fun upsertAll(books: List<Book>)
 
     @Query("DELETE FROM books WHERE url IN (:urls)")
     suspend fun deleteByUrls(urls: List<String>)

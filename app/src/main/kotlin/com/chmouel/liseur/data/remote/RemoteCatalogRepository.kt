@@ -104,9 +104,15 @@ class RemoteCatalogRepository(
             _status.value = CatalogStatus.Refreshing
             return try {
                 val seen = mutableSetOf<String>()
+                // What is already known, read once. Doing it per book was
+                // a query each against an unindexed column, so the cost of
+                // folding a catalog in grew with the square of the shelf.
+                val known = KnownBooks(bookDao.allOnce())
                 client.allBooks(server.baseUrl, credentials) { page ->
                     page.forEach { seen += it.remoteId }
-                    forAccount(server) { store(server.kind, server.baseUrl, page) }
+                    forAccount(server) {
+                        store(known, server.kind, server.baseUrl, page)
+                    }
                 }
                 // Someone may have disconnected or signed in elsewhere
                 // while this was in flight. Writing now would delete the
@@ -168,13 +174,29 @@ class RemoteCatalogRepository(
         }
     }
 
-    private suspend fun store(kind: ServerKind, baseUrl: String, books: List<RemoteBook>) {
+    private suspend fun store(
+        known: KnownBooks,
+        kind: ServerKind,
+        baseUrl: String,
+        books: List<RemoteBook>,
+    ) {
         val now = System.currentTimeMillis()
+        val changed = mutableListOf<Book>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
-            val existing = bookDao.getByRemoteUuid(remote.remoteId) ?: bookDao.getByUrl(url)
-            bookDao.upsert(mergeCatalogEntry(remote, existing, url, baseUrl, now))
+            // A book first seen earlier in this same walk was written
+            // without its generated id coming back, so ask for it rather
+            // than upsert a row that would insert a second time and be
+            // refused by the unique URL.
+            val existing = known.find(remote.remoteId, url)
+                ?.let { if (it.id == 0L) bookDao.getByUrl(url) else it }
+            val merged = mergeCatalogEntry(remote, existing, url, baseUrl, now)
+            known.remember(merged)
+            // Nothing the catalog owns has moved, so writing the row back
+            // would only tell the library to sort itself again.
+            if (merged != existing) changed += merged
         }
+        if (changed.isNotEmpty()) bookDao.upsertAll(changed)
     }
 
     /**
@@ -217,6 +239,28 @@ class RemoteCatalogRepository(
 
     private companion object {
         const val TAG = "RemoteCatalog"
+    }
+}
+
+/**
+ * The library as it stood when a refresh began, by both of the names a
+ * catalog entry can be recognised by.
+ *
+ * Every book is here, not only the ones linked to a server: a downloaded
+ * book that was unlinked when it vanished from the catalog has no UUID
+ * left, and if it comes back it must attach to the row it already has
+ * rather than collide with it over the URL.
+ */
+private class KnownBooks(books: List<Book>) {
+    private val byUuid = books.mapNotNull { book -> book.remoteUuid?.let { it to book } }.toMap()
+        .toMutableMap()
+    private val byUrl = books.associateBy { it.url }.toMutableMap()
+
+    fun find(remoteId: String, url: String): Book? = byUuid[remoteId] ?: byUrl[url]
+
+    fun remember(book: Book) {
+        book.remoteUuid?.let { byUuid[it] = book }
+        byUrl[book.url] = book
     }
 }
 
