@@ -441,11 +441,16 @@ update_fdroid_submission() (
         die "could not update the F-Droid metadata"
 
     local payload
+    # --rawfile rather than --arg "$(cat ...)": command substitution
+    # strips every trailing newline, and the file that reached GitLab
+    # therefore ended without one. `fdroid rewritemeta` reformats the
+    # metadata and fails the merge request when the result differs, and a
+    # missing final newline is a difference.
     payload=$(jq -n \
         --arg branch "$source_branch" \
         --arg message "chore: update liseur" \
         --arg path "$metadata_path" \
-        --arg content "$(cat "$updated_file")" \
+        --rawfile content "$updated_file" \
         --arg last_commit_id "$last_commit_id" \
         '{
             branch: $branch,
