@@ -74,9 +74,8 @@ Point `Liseur` at folders of EPUBs and it indexes them, covers and
 all. Books you are actually using sort to the front, finished ones get a tick,
 and pull to refresh picks up whatever changed behind the app's back.
 
-Pick [calibre-web](https://github.com/janeczku/calibre-web) or [Komga](https://komga.org/), give it an address and a way in — a
-username and password for calibre-web, an API key for Komga — and Liseur works
-out the rest: the catalog, whether the account may download, and how to sync.
+Pick [calibre-web](https://github.com/janeczku/calibre-web) or [Komga](https://komga.org/), connect to it and Liseur works
+out the rest: the catalog, whether the account may download, and how to sync. 
 Your server's books merge into the same library with a cloud badge; tap one and
 it downloads and opens.
 
