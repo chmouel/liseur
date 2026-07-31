@@ -49,32 +49,32 @@ editions, which are in the public domain.</sub>
 
 ## What it does
 
-Reading. Read an EPUB rendered full screen. Tap the
+Read an EPUB rendered full screen. Tap the
 right of the page to go forward, the left to go back, the middle to bring up
 the chrome; volume keys work too if you would rather not touch the screen.
 
-Typography. Four reading themes (Light, Sepia, Dark, Black) that are
+Four reading themes (Light, Sepia, Dark, Black) that are
 independent of the app's own theme, four bundled open fonts (Literata,
 Vollkorn, Atkinson Hyperlegible, Inter) or the publisher's own, plus size, line
 spacing, margins and an in-app brightness slider.
 
-Where you are. A footer that shows time left in the chapter, time left in the
+A footer that shows time left in the chapter, time left in the
 book, page, or percentage; tap it to cycle. A scrubber with chapter ticks, and
 a pill that takes you back if you jumped somewhere by accident.
 
-Marking up. Highlights in four colours, notes, bookmarks with a Kindle-style
+Highlights in four colours, notes, bookmarks with a Kindle-style
 corner ribbon, and a notebook of everything you have marked in a book,
 exportable as Markdown.
 
-Looking things up. Search the whole book with snippets and jump-to
+Search the whole book with snippets and jump-to
 highlighting, and a Wiktionary definition card on any selected word, with a
 hand-off to an offline dictionary app if you have one.
 
-Your library. Point Liseur at folders of EPUBs and it indexes them, covers and
+Point `Liseur` at folders of EPUBs and it indexes them, covers and
 all. Books you are actually using sort to the front, finished ones get a tick,
 and pull to refresh picks up whatever changed behind the app's back.
 
-Your server. Pick calibre-web or Komga, give it an address and a way in — a
+Pick [calibre-web](https://github.com/janeczku/calibre-web) or [Komga](https://komga.org/), give it an address and a way in — a
 username and password for calibre-web, an API key for Komga — and Liseur works
 out the rest: the catalog, whether the account may download, and how to sync.
 Your server's books merge into the same library with a cloud badge; tap one and
