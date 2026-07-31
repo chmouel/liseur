@@ -59,11 +59,17 @@ class LibraryRefreshTest {
     }
 
     @Test
-    fun `pulling the shelf down does all three, in order`() = runTest {
+    fun `pulling the shelf down does all three, positions last`() = runTest {
         refresher(this).all()
         advanceUntilIdle()
 
-        assertEquals(listOf("scan", "catalog", "positions"), order)
+        // The scan and the catalog run side by side — neither waits on
+        // the other — so only the ending is promised: the positions ask
+        // comes after both, with the catalog's answer in hand.
+        assertEquals(1, scans)
+        assertEquals(1, catalogs)
+        assertEquals(1, syncs)
+        assertEquals("positions", order.last())
     }
 
     @Test
@@ -78,7 +84,10 @@ class LibraryRefreshTest {
         scanGate?.complete(Unit)
         advanceUntilIdle()
 
-        assertEquals(listOf("scan", "catalog", "positions"), order)
+        assertEquals(1, scans)
+        assertEquals(1, catalogs)
+        assertEquals(1, syncs)
+        assertEquals("positions", order.last())
     }
 
     /**

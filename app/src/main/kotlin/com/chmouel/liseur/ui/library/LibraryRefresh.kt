@@ -57,8 +57,8 @@ class LibraryRefresh(
     }
 
     /**
-     * Pull-to-refresh: the folders, the server's books, and where you
-     * got to, in that order.
+     * Pull-to-refresh: the folders and the server's books, side by side,
+     * then where you got to once both are in.
      *
      * The last of those used to be missing, which made the gesture look
      * broken: pulling down brought new books but left a book you had
@@ -69,8 +69,12 @@ class LibraryRefresh(
         _refreshing.value = true
         scope.launch {
             try {
-                runCatching { scanOnce() }
+                // The folders and the server know nothing of each other,
+                // and the gesture should not wait on a slow disk walk
+                // before the network is even asked.
+                val scan = launch { runCatching { scanOnce() } }
                 val catalog = runCatching { refreshCatalog() }.getOrDefault(CatalogRefresh.None)
+                scan.join()
                 // Asked as of now rather than as of the gesture, because
                 // the catalog has only just been read: a sync already
                 // running started before that and cannot answer for what

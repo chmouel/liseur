@@ -295,6 +295,87 @@ class RemoteCatalogRepositoryTest {
     }
 
     /**
+     * The library moves while a walk is in flight: a download finishes,
+     * a book is opened or finished. The walk read its copy of the shelf
+     * before any of that, and writing that copy back would undo it --
+     * a completed download flipping back to remote and its file lost.
+     */
+    @Test
+    fun `a download landing mid-walk survives the catalog folding in over it`() = runTest {
+        connect()
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
+        val url = db.bookDao().allRemote().single().url
+
+        val repository = repository(
+            FakeCatalog { onPage ->
+                // After the walk snapshotted the shelf, before the page
+                // carrying a catalog-side change to the same book lands.
+                db.bookDao().setDownloadState(
+                    url = url,
+                    state = com.chmouel.liseur.data.db.DownloadState.DOWNLOADED,
+                    localUri = "content://downloads/b1.epub",
+                )
+                onPage(listOf(book("b1").copy(title = "b1 (revised)")))
+            },
+        )
+        assertEquals(true, repository.refresh().completed)
+
+        val stored = db.bookDao().allOnce().single()
+        assertEquals("b1 (revised)", stored.title)
+        assertEquals("content://downloads/b1.epub", stored.localUri)
+        assertEquals(com.chmouel.liseur.data.db.DownloadState.DOWNLOADED, stored.downloadState)
+    }
+
+    /**
+     * A feed that names the same book twice on one page -- pagination
+     * shifting under a server-side change does this -- must fold into
+     * one row, not two inserts racing for the same unique URL.
+     */
+    @Test
+    fun `a book named twice on one page lands once`() = runTest {
+        connect()
+        val repository = repository(
+            FakeCatalog { onPage ->
+                onPage(listOf(book("b1"), book("b1").copy(title = "b1 again"), book("b2")))
+            },
+        )
+
+        assertEquals(true, repository.refresh().completed)
+        assertEquals(CatalogStatus.Idle, repository.status.value)
+
+        val books = db.bookDao().allOnce()
+        assertEquals(2, books.size)
+        assertEquals("b1 again", books.single { it.remoteUuid == "b1" }.title)
+    }
+
+    /**
+     * A detached refresh has no screen behind it to catch a surprise: an
+     * exception nobody predicted must settle into nothing rather than
+     * crash the app from a scope of its own.
+     */
+    @Test
+    fun `a detached refresh survives a failure nobody predicted`() = runTest {
+        connect()
+        val repository = RemoteCatalogRepository(
+            router = RemoteRouter(
+                serverDao = db.remoteServerDao(),
+                catalogs = mapOf(ServerKind.KOMGA to failing(IllegalStateException("surprise"))),
+                files = emptyMap(),
+                positions = emptyMap(),
+            ),
+            serverDao = db.remoteServerDao(),
+            bookDao = db.bookDao(),
+            scope = this,
+        )
+
+        val settled = CompletableDeferred<CatalogRefresh>()
+        repository.refreshDetached { settled.complete(it) }
+
+        assertEquals(false, settled.await().completed)
+        assertEquals(CatalogStatus.Idle, repository.status.value)
+    }
+
+    /**
      * A downloaded book keeps its file and loses its link when it goes
      * from the catalog. Coming back must find that same row again --
      * by URL, since the link that was its other name is gone.

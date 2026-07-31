@@ -211,6 +211,34 @@ interface BookDao {
     @Upsert
     suspend fun upsertAll(books: List<Book>)
 
+    /**
+     * Writes only what the catalog owns. The row it lands on may have
+     * moved since it was read — a download finishing, a book being
+     * opened or archived — and none of that is the catalog's to put
+     * back, so a full-row write here is never safe.
+     */
+    @Query(
+        """
+        UPDATE books
+        SET title = :title, author = :author, remote_uuid = :remoteUuid,
+            remote_book_id = :remoteBookId, cover_url = :coverUrl,
+            download_href = :downloadHref, remote_updated_at = :remoteUpdatedAt,
+            remote_page_count = :remotePageCount
+        WHERE url = :url
+        """,
+    )
+    suspend fun updateCatalogFields(
+        url: String,
+        title: String,
+        author: String?,
+        remoteUuid: String?,
+        remoteBookId: Int?,
+        coverUrl: String?,
+        downloadHref: String?,
+        remoteUpdatedAt: Long?,
+        remotePageCount: Int?,
+    )
+
     @Query("DELETE FROM books WHERE url IN (:urls)")
     suspend fun deleteByUrls(urls: List<String>)
 

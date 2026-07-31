@@ -79,7 +79,18 @@ class RemoteCatalogRepository(
      */
     fun refreshDetached(andThen: suspend (CatalogRefresh) -> Unit = {}) {
         scope.launch {
-            val refreshed = refresh()
+            // Nothing on this errand has a screen behind it to catch a
+            // surprise, and an uncaught one in a detached scope takes
+            // the whole app down. IO troubles are already handled inside;
+            // this is for the failure nobody predicted.
+            val refreshed = try {
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "The catalog refresh failed unexpectedly", e)
+                CatalogRefresh.None
+            }
             // Whatever follows a refresh -- reconciling where the new
             // account's books were read -- belongs to the same errand and
             // must outlive the screen just as the refresh itself does.
@@ -199,22 +210,46 @@ class RemoteCatalogRepository(
         books: List<RemoteBook>,
     ) {
         val now = System.currentTimeMillis()
-        val changed = mutableListOf<Book>()
+        // Keyed by URL so a feed that names the same book twice on one
+        // page folds into one insert, rather than two rows racing for
+        // the same unique URL and being refused.
+        val inserts = LinkedHashMap<String, Book>()
+        val updates = mutableListOf<Book>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
-            // A book first seen earlier in this same walk was written
-            // without its generated id coming back, so ask for it rather
-            // than upsert a row that would insert a second time and be
-            // refused by the unique URL.
+            // A book first seen earlier in this walk was written without
+            // its generated id coming back, so ask the database for it.
+            // One seen earlier on this same page has not landed yet, and
+            // the pending row itself is the answer.
             val existing = known.find(remote.remoteId, url)
-                ?.let { if (it.id == 0L) bookDao.getByUrl(url) else it }
+                ?.let { pending ->
+                    if (pending.id == 0L) bookDao.getByUrl(url) ?: pending else pending
+                }
             val merged = mergeCatalogEntry(remote, existing, url, baseUrl, now)
             known.remember(merged)
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
-            if (merged != existing) changed += merged
+            if (merged == existing) return@forEach
+            if (merged.id == 0L) inserts[url] = merged else updates += merged
         }
-        if (changed.isNotEmpty()) bookDao.upsertAll(changed)
+        // Rows the library already has get only the catalog's columns.
+        // What is known about them was read once, before the walk began,
+        // and a whole row written from that copy would put back a
+        // download, an opening or an archiving that happened since.
+        updates.forEach {
+            bookDao.updateCatalogFields(
+                url = it.url,
+                title = it.title,
+                author = it.author,
+                remoteUuid = it.remoteUuid,
+                remoteBookId = it.remoteBookId,
+                coverUrl = it.coverUrl,
+                downloadHref = it.downloadHref,
+                remoteUpdatedAt = it.remoteUpdatedAt,
+                remotePageCount = it.remotePageCount,
+            )
+        }
+        if (inserts.isNotEmpty()) bookDao.upsertAll(inserts.values.toList())
     }
 
     /**

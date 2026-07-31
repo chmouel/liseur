@@ -29,6 +29,7 @@ import com.chmouel.liseur.domain.matchesLibrarySearch
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.chmouel.liseur.data.db.RemoteServer
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.SharingStarted
@@ -257,7 +259,8 @@ class LibraryViewModel(
                 hasArchived = books.any { it.archived },
                 hasServer = server != null,
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query

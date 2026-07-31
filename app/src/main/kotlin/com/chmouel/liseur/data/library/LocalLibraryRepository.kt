@@ -5,7 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Log
-import androidx.documentfile.provider.DocumentFile
+import android.provider.DocumentsContract
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.LibraryFolder
@@ -113,34 +113,84 @@ class LocalLibraryRepository(
     }
 
     private suspend fun scanFolder(treeUri: Uri) = withContext(Dispatchers.IO) {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext
+        val found = findEpubs(treeUri) ?: return@withContext
         val knownUrls = bookDao.urlsForSource(treeUri.toString()).toMutableSet()
+        // Everything on the shelf, read once. Looking each file up as it
+        // was met meant a query per book per scan, on every cold start.
+        val knownBooks = bookDao.allOnce().associateBy { it.url }
         val foundUrls = mutableSetOf<String>()
 
-        fun walk(dir: DocumentFile): List<DocumentFile> =
-            dir.listFiles().flatMap { file ->
-                when {
-                    file.isDirectory -> walk(file)
-                    file.isFile && file.isEpub() -> listOf(file)
-                    else -> emptyList()
-                }
-            }
-
-        for (file in walk(root)) {
+        for (file in found) {
             val url = file.uri.toAbsoluteUrl() ?: continue
             foundUrls += url.toString()
-            val modifiedAt = file.lastModified().takeIf { it > 0 }
-            val existing = bookDao.getByUrl(url.toString())
+            val existing = knownBooks[url.toString()]
             when {
-                existing == null -> indexBook(url, source = treeUri.toString(), modifiedAt)
+                existing == null -> indexBook(url, source = treeUri.toString(), file.modifiedAt)
                 // The path is the same but the file behind it is not, so the
                 // title and cover we cached are no longer the book's.
-                modifiedAt != null && existing.fileModifiedAt != modifiedAt ->
-                    reindexBook(url, modifiedAt, existing.workId)
+                file.modifiedAt != null && existing.fileModifiedAt != file.modifiedAt ->
+                    reindexBook(url, file.modifiedAt, existing.workId)
             }
         }
 
         bookDao.deleteByUrls((knownUrls - foundUrls).toList())
+    }
+
+    private class ScannedEpub(val uri: Uri, val modifiedAt: Long?)
+
+    /**
+     * Walks a folder with one query per directory, or null when the
+     * folder cannot be read at all.
+     *
+     * `DocumentFile` answers every question about a file — its name, its
+     * type, when it changed — with a ContentResolver round trip of its
+     * own, which made scanning cost four or five IPC calls per file.
+     * Asking the provider for its children with a projection gets the
+     * whole directory in one go.
+     *
+     * Null rather than empty on failure, because the two mean opposite
+     * things to the caller: an empty folder prunes every book that came
+     * from it, and a folder that would not open must prune nothing.
+     */
+    private fun findEpubs(treeUri: Uri): List<ScannedEpub>? {
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        val found = mutableListOf<ScannedEpub>()
+
+        fun walk(documentId: String): Boolean {
+            val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
+            val cursor = runCatching {
+                context.contentResolver.query(children, projection, null, null, null)
+            }.getOrNull() ?: return false
+            cursor.use {
+                while (it.moveToNext()) {
+                    val id = it.getString(0) ?: continue
+                    val name = it.getString(1).orEmpty()
+                    val mime = it.getString(2)
+                    when {
+                        mime == DocumentsContract.Document.MIME_TYPE_DIR -> walk(id)
+                        mime == "application/epub+zip" ||
+                            name.endsWith(".epub", ignoreCase = true) -> {
+                            val modifiedAt = (if (it.isNull(3)) 0L else it.getLong(3))
+                                .takeIf { at -> at > 0 }
+                            found += ScannedEpub(
+                                DocumentsContract.buildDocumentUriUsingTree(treeUri, id),
+                                modifiedAt,
+                            )
+                        }
+                    }
+                }
+            }
+            return true
+        }
+
+        val rootId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }
+            .getOrNull() ?: return null
+        return if (walk(rootId)) found else null
     }
 
     /**
@@ -188,9 +238,6 @@ class LocalLibraryRepository(
             publication.close()
         }
     }
-
-    private fun DocumentFile.isEpub(): Boolean =
-        type == "application/epub+zip" || name.orEmpty().endsWith(".epub", ignoreCase = true)
 
     private suspend fun indexBook(
         url: AbsoluteUrl,
