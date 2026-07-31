@@ -346,6 +346,36 @@ hack/release --sync-secrets
 Locally, signing is opt-in through a gitignored `keystore.properties`;
 without it the release build is simply unsigned.
 
+### What F-Droid checks, and why a green release can still be red there
+
+Updating the submission is not the end of it. Pushing to the metadata
+merge request starts a pipeline on `fdroiddata`, and that pipeline can
+fail long after `hack/release` has finished and reported success.
+
+The check that catches people out is **`fdroid rewritemeta`**. It
+reformats `metadata/com.chmouel.liseur.yml` and fails if the result
+differs from what is committed — byte for byte, **trailing newline
+included**. It is not a linter with opinions to argue with; the file
+simply has to be what it would have written.
+
+That is worth knowing because it is invisible from here. Every release
+for a month failed this job while the builds themselves passed: the
+script had been sending the metadata through `jq` as
+`--arg content "$(cat file)"`, and command substitution strips trailing
+newlines, so what arrived ended mid-line. Nothing noticed, because
+nothing looked. Use `jq --rawfile`, which reads the file as it is.
+
+`hack/release` now waits for the metadata checks and stops the release
+naming whatever failed, so this particular silence cannot happen again.
+What it does **not** wait for is `fdroid build`, which compiles the app
+from source, and the `check apk` that follows it — together about
+twenty-five minutes. Those are left running and the pipeline is linked
+in the output. **Look at it before assuming a release landed.**
+
+A failure in `fdroid build` usually means reproducibility, which
+`hack/verify-reproducible` will reproduce locally; see *F-Droid
+readiness* below.
+
 ### Store assets
 
 Both are regenerated rather than maintained by hand:
@@ -418,5 +448,8 @@ montage docs/screenshots/*.png -tile 6x2 -geometry 320x+6+6 /tmp/sheet.png
   timestamp baked into a resource or an absolute build path that leaked
   in. Run it before every release. Move `keystore.properties` aside
   first if you have one: the check compares the unsigned APK.
-- Remaining step, deliberately not done yet: opening the RFP / metadata
-  merge request against `fdroiddata`.
+- **Submitted.** The metadata merge request is
+  [fdroiddata!44292](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/44292),
+  and `hack/release` keeps it up to date with each version. See *What
+  F-Droid checks* above for what its pipeline runs and how it can fail
+  after a release looks finished.
