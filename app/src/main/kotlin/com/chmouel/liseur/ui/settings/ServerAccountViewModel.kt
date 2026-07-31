@@ -136,7 +136,7 @@ class ServerAccountViewModel(
                 )
             }
             if (result is SetupResult.Success) {
-                catalog.refreshDetached()
+                fetchCatalogAndPositions()
                 appSettings.setAccountLostToRestore(false)
             }
             _state.update {
@@ -156,9 +156,29 @@ class ServerAccountViewModel(
         _state.update { it.copy(connecting = true, error = null) }
         viewModelScope.launch {
             if (repository.refreshCapabilities() is SetupResult.Success) {
-                catalog.refreshDetached()
+                fetchCatalogAndPositions()
             }
             _state.update { it.copy(connecting = false) }
+        }
+    }
+
+    /**
+     * A newly connected server's books, and then where they were read.
+     *
+     * Connecting is the one moment nothing about this account is known
+     * yet, so both halves are worth doing at once -- and the catalog
+     * walk that has just finished is handed to the sync rather than
+     * being done again. Neither is tied to this screen, which is
+     * usually gone the moment the account turns green.
+     */
+    private fun fetchCatalogAndPositions() {
+        catalog.refreshDetached { refreshed ->
+            if (!refreshed.completed) return@refreshDetached
+            positionSync.request(
+                SyncScope.Full,
+                System.currentTimeMillis(),
+                refreshed.forSync(),
+            )
         }
     }
 

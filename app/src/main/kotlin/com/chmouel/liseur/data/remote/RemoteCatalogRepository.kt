@@ -77,8 +77,14 @@ class RemoteCatalogRepository(
      * to that screen's lifetime is how the library ends up empty until
      * the app is restarted.
      */
-    fun refreshDetached() {
-        scope.launch { refresh() }
+    fun refreshDetached(andThen: suspend (CatalogRefresh) -> Unit = {}) {
+        scope.launch {
+            val refreshed = refresh()
+            // Whatever follows a refresh -- reconciling where the new
+            // account's books were read -- belongs to the same errand and
+            // must outlive the screen just as the refresh itself does.
+            runCatching { andThen(refreshed) }
+        }
     }
 
     /** Pulls the catalog and folds it into the library. Safe to call often. */
