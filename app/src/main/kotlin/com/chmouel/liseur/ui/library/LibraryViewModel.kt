@@ -167,11 +167,16 @@ class LibraryViewModel(
     /** Deletions that did not happen, so the library can say so. */
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
-    private val _refreshing = MutableStateFlow(false)
     private val _searchQuery = MutableStateFlow("")
     private val _filter = MutableStateFlow(LibraryFilter.ALL)
     private val _isSearchActive = MutableStateFlow(false)
-    private var lastScanAt = 0L
+
+    private val refresher = LibraryRefresh(
+        scope = viewModelScope,
+        scanFolders = { library.rescanAll() },
+        refreshCatalog = { catalog.refresh() },
+        syncPositions = { requestedAt -> positionSync.request(SyncScope.Full, requestedAt) },
+    )
 
     private val continueReading = library.mostRecent.flatMapLatest { book ->
         if (book == null) {
@@ -190,7 +195,7 @@ class LibraryViewModel(
                 catalog.status,
                 downloads.progress,
                 account.server,
-                _refreshing,
+                refresher.refreshing,
                 appSettings.settings,
                 progressDao.observeReadAt(),
             ) { values -> values },
@@ -268,7 +273,10 @@ class LibraryViewModel(
     }
 
     init {
-        refresh()
+        // Whatever is already known is in the database and about to be on
+        // screen. All a fresh start owes the reader is a look at the
+        // folders on the device; the server is asked when they ask.
+        refresher.scanQuietly()
     }
 
     /**
@@ -295,44 +303,20 @@ class LibraryViewModel(
         }
     }
 
-    fun refreshCatalog() {
-        viewModelScope.launch { catalog.refresh() }
-    }
-
     /**
      * Pull-to-refresh: look again at the folders, the server's books, and
      * where you got to.
-     *
-     * The last of those used to be missing, which made the gesture look
-     * broken: pulling down brought new books but left a book you had read
-     * on another device sitting at the old page.
      */
-    fun refresh() {
-        if (_refreshing.value) return
-        _refreshing.value = true
-        val requestedAt = System.currentTimeMillis()
-        viewModelScope.launch {
-            try {
-                lastScanAt = requestedAt
-                library.rescanAll()
-                catalog.refresh()
-                runCatching { positionSync.request(SyncScope.Full, requestedAt) }
-            } finally {
-                _refreshing.value = false
-            }
-        }
+    fun refreshAll() {
+        refresher.all()
     }
 
     /**
-     * Coming back to the library after a while, quietly pick up books added
-     * or deleted elsewhere. Debounced, because returning from the reader is
-     * the most common way to land here and rescanning every time would spin
-     * the disk for nothing.
+     * Coming back to the library after a while, quietly pick up books
+     * added or deleted elsewhere.
      */
     fun refreshIfStale() {
-        if (System.currentTimeMillis() - lastScanAt < RESCAN_DEBOUNCE_MS) return
-        lastScanAt = System.currentTimeMillis()
-        viewModelScope.launch { library.rescanAll() }
+        refresher.scanIfStale()
     }
 
     fun download(book: Book) {
@@ -410,8 +394,6 @@ class LibraryViewModel(
     }
 
     companion object {
-        private const val RESCAN_DEBOUNCE_MS = 60_000L
-
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container

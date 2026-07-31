@@ -340,7 +340,7 @@ private fun LibraryRoute(
         onDeleteLocal = viewModel::deleteLocalBook,
         onDeleteFromServer = viewModel::deleteFromServer,
         deleteFailures = viewModel.deleteFailures,
-        onRefresh = viewModel::refresh,
+        onRefresh = viewModel::refreshAll,
         onSetSort = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
         onDownloadAndOpen = viewModel::downloadAndOpen,
