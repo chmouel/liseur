@@ -6,6 +6,11 @@
 #   hack/screenshots              # capture from a device already set up
 #   hack/screenshots --setup-only # build the shelf and stop, to check it
 #   hack/screenshots -s SERIAL    # pick a device when several are attached
+#   hack/screenshots --class tenInch  # file the captures as a tablet set
+#
+# Which set is written is decided by how wide the device is, so a run
+# against a tablet cannot quietly overwrite the phone screenshots the
+# README embeds. --class overrides the guess.
 #
 # The screens are found by what they say — a button's label, a book's
 # title — rather than by where they happened to sit when this was
@@ -27,8 +32,6 @@ set -euo pipefail
 
 readonly APP_ID="com.chmouel.liseur"
 readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
-readonly OUT_DIR="docs/screenshots"
-readonly FASTLANE_DIR="fastlane/metadata/android/en-US/images/phoneScreenshots"
 readonly DEVICE_BOOKS="/sdcard/Books"
 readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/liseur-screenshots"
 
@@ -59,6 +62,7 @@ readonly FIRST_CHAPTER="I: Loomings"
 setup=0
 setup_only=0
 serial=""
+shot_class=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --setup) setup=1 ;;
@@ -70,8 +74,12 @@ while [[ $# -gt 0 ]]; do
             serial=${2:-}
             shift
             ;;
+        --class)
+            shot_class=${2:-}
+            shift
+            ;;
         -h | --help)
-            sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '3,30p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -155,7 +163,11 @@ def hit(value):
     value = (value or "").strip().lower()
     if not value:
         return False
-    return value == needle if mode == "exact" else value.startswith(needle)
+    if mode == "exact":
+        return value == needle
+    if mode == "contains":
+        return needle in value
+    return value.startswith(needle)
 
 for node in root.iter("node"):
     if hit(node.get("text")) or hit(node.get("content-desc")):
@@ -313,6 +325,45 @@ density=$(adb shell wm density | sed -nE 's/.*density: ([0-9]+).*/\1/p' | tail -
 [[ -n "$density" ]] || density=420
 dp() { printf '%.0f' "$(awk "BEGIN { print $1 * $density / 160 }")"; }
 
+# ------------------------------------------------------- where they land
+#
+# Three sets, because a tablet capture is not a phone capture: fastlane
+# and F-Droid publish phoneScreenshots, sevenInchScreenshots and
+# tenInchScreenshots as separate listings, and the README embeds the
+# phone set by name. Writing them all to one directory means a run
+# against a tablet silently replaces the images the README shows.
+#
+# The class is guessed from the width so that no flag is needed to stay
+# out of trouble; --class overrides it, for a device whose shape does not
+# match how its pictures should be filed.
+
+width_dp=$(awk "BEGIN { printf \"%d\", $width * 160 / $density }")
+
+if [[ -z "$shot_class" ]]; then
+    if [[ $width_dp -ge 720 ]]; then
+        shot_class="tenInch"
+    elif [[ $width_dp -ge 600 ]]; then
+        shot_class="sevenInch"
+    else
+        shot_class="phone"
+    fi
+    note "device is ${width_dp}dp wide: capturing the $shot_class set"
+else
+    case $shot_class in
+        phone | sevenInch | tenInch) ;;
+        *) die "unknown --class \"$shot_class\": want phone, sevenInch or tenInch" ;;
+    esac
+    note "capturing the $shot_class set (device is ${width_dp}dp wide)"
+fi
+readonly shot_class
+
+if [[ $shot_class == phone ]]; then
+    readonly OUT_DIR="docs/screenshots"
+else
+    readonly OUT_DIR="docs/screenshots/$shot_class"
+fi
+readonly FASTLANE_DIR="fastlane/metadata/android/en-US/images/${shot_class}Screenshots"
+
 # Where the first highlight colour is, as "x y", or nothing if the popup
 # is not up. All four colours have to be there, side by side on one row:
 # a yellow highlight already on the page is otherwise indistinguishable
@@ -397,6 +448,21 @@ y() { printf '%.0f' "$(awk "BEGIN { print $height * $1 }")"; }
 tap() { adb shell input tap "$(x "$1")" "$(y "$2")"; }
 back() { adb shell input keyevent KEYCODE_BACK; }
 
+# Put a sheet away and make sure it went. A sheet that has been dragged
+# up to its full height can eat the first back press on the way to
+# settling, and the next step then taps into a sheet it thinks is gone.
+#
+#   dismiss_sheet <something the sheet says>
+dismiss_sheet() {
+    local needle=$1 i
+    for i in 1 2 3; do
+        back
+        sleep 2
+        on_screen "$needle" || return 0
+    done
+    die "\"$needle\" would not go away"
+}
+
 # A long press: a swipe that barely moves, held long enough for the page
 # to treat it as a word being picked rather than a tap.
 hold() {
@@ -433,16 +499,37 @@ select_a_word() {
 # drag. The gesture runs in one shell so the wait is the device's own.
 select_a_phrase() {
     local spot py
+    local -a xs ys
     for spot in 0.45 0.55 0.35 0.65; do
         reader_chrome_down
         py=$(y "$spot")
-        adb shell "input motionevent DOWN $(x 0.18) $py
+        # A wide screen lays the page out in two columns, and a drag
+        # across the whole width crosses the gutter: what comes back is
+        # the tail of one column, which reads like nothing anyone meant
+        # to mark. Stay inside the left column there, and go down a
+        # couple of lines to make up the length the narrower measure
+        # costs. A phone has the whole width to itself and keeps it.
+        if [[ $shot_class == phone ]]; then
+            xs=(0.18 0.32 0.46 0.60 0.74 0.86)
+            ys=("$py" "$py" "$py" "$py" "$py" "$py")
+        else
+            xs=(0.10 0.20 0.34 0.42 0.16 0.38)
+            ys=(
+                "$py"
+                "$py"
+                "$py"
+                "$py"
+                "$(y "$(awk "BEGIN { print $spot + 0.017 }")")"
+                "$(y "$(awk "BEGIN { print $spot + 0.017 }")")"
+            )
+        fi
+        adb shell "input motionevent DOWN $(x "${xs[0]}") ${ys[0]}
             sleep 1
-            input motionevent MOVE $(x 0.32) $py
-            input motionevent MOVE $(x 0.46) $py
-            input motionevent MOVE $(x 0.60) $py
-            input motionevent MOVE $(x 0.74) $py
-            input motionevent UP $(x 0.86) $py" >/dev/null 2>&1
+            input motionevent MOVE $(x "${xs[1]}") ${ys[1]}
+            input motionevent MOVE $(x "${xs[2]}") ${ys[2]}
+            input motionevent MOVE $(x "${xs[3]}") ${ys[3]}
+            input motionevent MOVE $(x "${xs[4]}") ${ys[4]}
+            input motionevent UP $(x "${xs[5]}") ${ys[5]}" >/dev/null 2>&1
         sleep 3
         if find_popup >/dev/null; then
             return 0
@@ -774,6 +861,12 @@ adb shell am broadcast -a com.android.systemui.demo -e command network \
 adb shell am broadcast -a com.android.systemui.demo -e command battery \
     -e level 100 -e plugged false >/dev/null
 
+# A device that thinks it has a stylus offers to teach you handwriting
+# the first time a text field is touched, and that dialog takes the
+# typing meant for the field. Tablet images have one; phones mostly do
+# not, which is why this only ever showed up on the big screens.
+adb shell settings put secure stylus_handwriting_enabled 0 >/dev/null 2>&1 || true
+
 if ((setup)); then
     step "Fetching the demo shelf"
     fetch_books
@@ -816,9 +909,18 @@ shot 03-chrome
 
 tap_on "Aa" exact
 wait_for "Theme" >/dev/null || sleep 2
+# On a wide screen the sheet grows a Columns control, and it is the one
+# thing in here a tablet listing should be showing. It sits below the
+# fold, so scroll it into frame. Swiping up scrolls the sheet's content;
+# it is swiping down at the top that would dismiss it, and a sheet with
+# nothing below the fold simply stays where it is.
+if [[ $shot_class != phone ]]; then
+    adb shell input swipe "$(x 0.5)" "$(y 0.92)" "$(x 0.5)" "$(y 0.72)" 400
+    sleep 2
+    on_screen "Columns" || die "the Columns control never came into frame"
+fi
 shot 04-typography
-back
-sleep 2
+dismiss_sheet "Line spacing"
 
 reader_chrome_up
 tap_on "Contents"
@@ -831,13 +933,31 @@ back
 sleep 2
 
 step "In-book search"
-reader_chrome_up
-tap_on "Search in book"
-sleep 2
-adb shell input text "$SEARCH_TERM"
-sleep 1
-adb shell input keyevent KEYCODE_ENTER
-sleep 6
+# The search field has to have taken focus before the text is sent, and
+# it does not always get there first: a tablet image offers to teach you
+# stylus handwriting the first time a text field is touched, and that
+# dialog takes the typing meant for the field. Typing into nothing then
+# photographs an empty search screen and calls it a result. So type, look
+# at what came back, and start the whole thing over if it was nothing.
+searched=0
+for attempt in 1 2 3; do
+    reader_chrome_up
+    tap_on "Search in book"
+    sleep 2
+    adb shell input text "$SEARCH_TERM"
+    sleep 1
+    adb shell input keyevent KEYCODE_ENTER
+    # A long book takes a moment; a short wait would call it empty.
+    wait_for "result" 20 contains >/dev/null && searched=1 && break
+    note "the search box did not take the word; starting over"
+    # Back out of whatever is on top until the reader is showing again.
+    for i in 1 2 3 4; do
+        on_screen "Search in this book" || break
+        back
+        sleep 1
+    done
+done
+[[ $searched -eq 1 ]] || die "the search never returned anything for \"$SEARCH_TERM\""
 # Drop the keyboard so the results, not the letters, fill the screen.
 back
 sleep 2
@@ -848,13 +968,16 @@ sleep 3
 step "A definition"
 # "the" is a word with an entry, so the screen would be found and would
 # still be worth nothing to look at. Press elsewhere until the card is
-# about a word someone might actually look up.
+# about a word someone might actually look up. Where a press lands on a
+# word worth reading about is luck, and there is more of it to be had on
+# a page laid out in two columns, so there are plenty of places to try.
 defined=0
-for across in 0.60 0.35 0.72 0.50 0.28; do
+for across in 0.60 0.35 0.72 0.50 0.28 0.66 0.42 0.78 0.55 0.31; do
     select_a_word "$across" || continue
     tap_in_popup define
     sleep 7
     looked_up=$(dictionary_word)
+    note "the card came back with \"${looked_up:-nothing}\""
     if [[ ${#looked_up} -ge 6 ]]; then
         note "looked up \"$looked_up\""
         shot 12-dictionary
