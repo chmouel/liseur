@@ -204,9 +204,9 @@ fun SettingsScreen(
                             Image(
                                 painter = painterResource(
                                     if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
-                                        R.drawable.ic_logo_night
+                                        R.drawable.ic_brand_emblem_night
                                     } else {
-                                        R.drawable.ic_logo
+                                        R.drawable.ic_brand_emblem
                                     },
                                 ),
                                 contentDescription = null,

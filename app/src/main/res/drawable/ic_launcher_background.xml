@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Plain field behind the mark; the artwork carries its own ring, so this
-     stays flat.  The mark keeps its cream field in both themes: inverted it
-     read as grey hair. -->
+<!-- Plain field behind the mark, in the same colour as the field the
+     foreground artwork was drawn against, so the ring the mark carries is
+     the only edge the icon shows. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

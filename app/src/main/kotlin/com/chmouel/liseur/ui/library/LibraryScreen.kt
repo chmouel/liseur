@@ -129,8 +129,6 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.coverMinSize
-import com.chmouel.liseur.ui.theme.MarkFieldDark
-import com.chmouel.liseur.ui.theme.MarkFieldLight
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
 
@@ -255,41 +253,35 @@ fun LibraryScreen(
                             },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // A woman reading in peace on a couch under a
-                            // lamp — the reading mark, in place of a plain
-                            // wordmark or the launcher icon.  It keeps the
-                            // height it always had; the width follows the
-                            // illustration's own proportions.
+                            // The brand mark and the wordmark, both cut
+                            // from the banner art rather than set in a UI
+                            // font: the drawn lettering is the wordmark,
+                            // so the bar shows it instead of spelling the
+                            // name out again.
                             //
-                            // The cut and the plate behind it come from the
-                            // theme in force here, not from a -night
-                            // qualifier: those follow the system, and the
-                            // app's own light/dark setting is allowed to
-                            // disagree.  Transparent line work alone was too
-                            // faint anyway, hence the little tinted card.
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 106.dp, height = 44.dp)
-                                    .background(
-                                        color = if (darkMark) MarkFieldDark else MarkFieldLight,
-                                        shape = RoundedCornerShape(10.dp),
-                                    ),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Image(
-                                    painter = painterResource(
-                                        if (darkMark) R.drawable.ic_reading_banner_night
-                                        else R.drawable.ic_reading_banner,
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(width = 96.dp, height = 39.dp),
-                                )
-                            }
+                            // Which cut to draw is asked of the theme in
+                            // force here, not of a -night qualifier: those
+                            // follow the system, and the app's own
+                            // light/dark setting is allowed to disagree.
+                            Image(
+                                painter = painterResource(
+                                    if (darkMark) R.drawable.ic_brand_emblem_night
+                                    else R.drawable.ic_brand_emblem,
+                                ),
+                                contentDescription = null,
+                                modifier = Modifier.height(40.dp),
+                            )
                             Spacer(Modifier.width(10.dp))
                             Column {
-                                Text(
-                                    text = stringResource(R.string.library_title),
-                                    style = MaterialTheme.typography.titleLarge,
+                                Image(
+                                    painter = painterResource(
+                                        if (darkMark) R.drawable.ic_brand_wordmark_night
+                                        else R.drawable.ic_brand_wordmark,
+                                    ),
+                                    // The picture is the title, so it has
+                                    // to say the title out loud.
+                                    contentDescription = stringResource(R.string.library_title),
+                                    modifier = Modifier.height(20.dp),
                                 )
                                 if (!state.loading && state.books.isNotEmpty()) {
                                     Text(

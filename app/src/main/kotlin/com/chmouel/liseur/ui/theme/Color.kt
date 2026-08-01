@@ -66,9 +66,3 @@ val LeatherNightDeep = Color(0xFF4A3324)
 val TealNight = Color(0xFFA2D3CD)
 val TealNightDeep = Color(0xFF2A4744)
 
-// The plate the library mark sits on.  The illustration is transparent
-// line work, which reads as smudges directly on a surface, so it gets a
-// small card of its own field colour — the same cream and navy the
-// artwork was drawn against.
-val MarkFieldLight = Color(0xFFF0DFCA)
-val MarkFieldDark = Color(0xFF0A121C)
