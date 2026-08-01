@@ -165,6 +165,12 @@ private fun LiseurApp(settings: AppSettings) {
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
                 onEInkMode = { scope.launch { repository.setEInkMode(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
+                onDictionaryLookup = {
+                    scope.launch { repository.setDictionaryLookupEnabled(it) }
+                },
+                onDictionaryBaseUrl = {
+                    scope.launch { repository.setDictionaryBaseUrl(it) }
+                },
                 onOpenAccount = {
                     accountReturnsTo = Screen.SETTINGS
                     screen = Screen.SERVER_ACCOUNT

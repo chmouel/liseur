@@ -1,0 +1,5 @@
+Online definitions are now off until you turn them on, in Settings › Dictionary, and you choose which Wiktionary edition or mirror answers them. The hand-off to an offline dictionary app needs no network and works either way.
+
+Liseur has a mark of its own: a new launcher icon, a reading illustration on the library screen, and a feature graphic for the listing.
+
+Tablets and e-ink readers get a proper layout — two columns where the page is wide enough, with a control to choose otherwise. The library's filters and ordering now sit on one line.

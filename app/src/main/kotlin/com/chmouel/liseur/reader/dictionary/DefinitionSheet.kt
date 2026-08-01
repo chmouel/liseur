@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.chmouel.liseur.ui.BusyIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -29,29 +30,43 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 
 /**
  * The Kindle-style definition card: the word, its senses, and a way out to a
- * real dictionary app or to Wiktionary itself when the short answer is not
+ * real dictionary app or to the full entry when the short answer is not
  * enough.
+ *
+ * Nothing is fetched until [enabled] is true. Until then the card explains
+ * which site would be asked and offers to turn the lookup on, so the first
+ * word anyone defines is also the moment they decide whether the app may
+ * talk to a dictionary at all.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DefinitionSheet(
     word: String,
     languages: List<String>,
+    enabled: Boolean,
+    baseUrl: String,
+    onEnable: () -> Unit,
     onOpenInDictionaryApp: (String) -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onDismiss: () -> Unit,
     client: WiktionaryClient = remember { WiktionaryClient() },
 ) {
     val term = remember(word) { normaliseLookupTerm(word) }
-    var state by remember(term) { mutableStateOf<DictionaryState>(DictionaryState.Loading) }
+    var state by remember(term, enabled, baseUrl) {
+        mutableStateOf<DictionaryState>(
+            if (enabled) DictionaryState.Loading else DictionaryState.Disabled,
+        )
+    }
 
-    LaunchedEffect(term, languages) {
-        state = client.define(term, languages)
+    LaunchedEffect(term, languages, enabled, baseUrl) {
+        if (!enabled) return@LaunchedEffect
+        state = client.define(term, languages, baseUrl)
     }
 
     ModalBottomSheet(
@@ -75,6 +90,21 @@ fun DefinitionSheet(
             )
 
             when (val current = state) {
+                DictionaryState.Disabled -> Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.dictionary_disabled_explanation,
+                            DictionaryUrl.hostOf(baseUrl),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(onClick = onEnable) {
+                        Text(stringResource(R.string.dictionary_enable))
+                    }
+                }
+
                 DictionaryState.Loading -> Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -109,7 +139,7 @@ fun DefinitionSheet(
                     Text(stringResource(R.string.dictionary_other_app))
                 }
                 TextButton(onClick = { onOpenInBrowser(term) }) {
-                    Text(stringResource(R.string.dictionary_open_wiktionary))
+                    Text(stringResource(R.string.dictionary_open_full_entry))
                 }
             }
         }

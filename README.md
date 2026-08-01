@@ -75,8 +75,11 @@ corner ribbon, and a notebook of everything you have marked in a book,
 exportable as Markdown.
 
 Search the whole book with snippets and jump-to
-highlighting, and a Wiktionary definition card on any selected word, with a
-hand-off to an offline dictionary app if you have one.
+highlighting, and a definition card on any selected word. The card asks
+Wiktionary, which means leaving the device, so it stays off until you turn
+it on and you can point it at whichever Wiktionary edition or mirror you
+prefer. The hand-off to an offline dictionary app needs no network and
+works either way.
 
 Point `Liseur` at folders of EPUBs and it indexes them, covers and
 all. Books you are actually using sort to the front, finished ones get a tick,
@@ -94,8 +97,8 @@ device you pick it up on. If both sides moved since they last agreed, Liseur
 says so instead of silently picking one.
 
 Free software. No trackers or analytics, no proprietary dependencies. The only
-network traffic is to the book server you configured and, if you ask for
-a definition, to Wiktionary.
+network traffic is to the book server you configured and, if you switch
+online definitions on, to the dictionary site you chose.
 
 On a tablet or an e-ink reader the page is laid out in two columns rather
 than one long line, the library shows fewer and larger covers, sheets and

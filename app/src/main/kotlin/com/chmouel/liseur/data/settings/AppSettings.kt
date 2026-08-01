@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibrarySort
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -70,6 +71,12 @@ enum class EInkMode(val id: String) {
  * @param librarySort How the library grid is arranged.
  * @param librarySortReversed The library order read back to front.
  * @param eInkMode Whether to drop animation for an electronic paper screen.
+ * @param dictionaryLookupEnabled Whether Define may ask a dictionary server
+ *   for a definition. Off until asked for, because that server is the one
+ *   thing the app talks to that the reader did not choose themselves.
+ * @param dictionaryBaseUrl The site definitions are fetched from. Any
+ *   Wiktionary works, so a reader can pick their own language's edition or
+ *   a mirror instead of the default.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -79,6 +86,8 @@ data class AppSettings(
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
     val eInkMode: EInkMode = EInkMode.Default,
+    val dictionaryLookupEnabled: Boolean = false,
+    val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
 )
 
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
@@ -96,6 +105,8 @@ class AppSettingsRepository(private val context: Context) {
         val LIBRARY_SORT = stringPreferencesKey("library_sort")
         val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
         val EINK_MODE = stringPreferencesKey("eink_mode")
+        val DICTIONARY_ENABLED = booleanPreferencesKey("dictionary_lookup_enabled")
+        val DICTIONARY_BASE_URL = stringPreferencesKey("dictionary_base_url")
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
     }
 
@@ -123,6 +134,9 @@ class AppSettingsRepository(private val context: Context) {
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
+            dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
+            dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
+                ?: DictionaryUrl.DEFAULT_BASE_URL,
         )
     }
 
@@ -154,5 +168,19 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setEInkMode(mode: EInkMode) {
         context.appSettingsStore.edit { it[Keys.EINK_MODE] = mode.id }
+    }
+
+    suspend fun setDictionaryLookupEnabled(enabled: Boolean) {
+        context.appSettingsStore.edit { it[Keys.DICTIONARY_ENABLED] = enabled }
+    }
+
+    /**
+     * Stores the dictionary site, normalised. Anything that cannot be a
+     * URL puts the default back rather than leaving the reader with a
+     * dictionary that silently never answers.
+     */
+    suspend fun setDictionaryBaseUrl(url: String) {
+        val normalised = DictionaryUrl.normalise(url) ?: DictionaryUrl.DEFAULT_BASE_URL
+        context.appSettingsStore.edit { it[Keys.DICTIONARY_BASE_URL] = normalised }
     }
 }

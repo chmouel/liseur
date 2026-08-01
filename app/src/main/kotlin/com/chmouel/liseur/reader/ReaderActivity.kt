@@ -187,6 +187,8 @@ class ReaderActivity : FragmentActivity() {
                                     )
                                 },
                                 syncableFlow = viewModel.syncable,
+                                dictionaryFlow = viewModel.dictionary,
+                                onEnableDictionary = viewModel::enableDictionary,
                                 goTo = viewModel.goTo,
                                 onBookSyncAction = remember {
                                     ReaderBookSyncActions(

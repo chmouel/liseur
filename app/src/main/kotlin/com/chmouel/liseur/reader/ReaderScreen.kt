@@ -80,7 +80,7 @@ import com.chmouel.liseur.reader.annotations.SelectionActions
 import com.chmouel.liseur.reader.annotations.SelectionPopup
 import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.lookUpExternally
-import com.chmouel.liseur.reader.annotations.openWiktionary
+import com.chmouel.liseur.reader.annotations.openDictionaryEntry
 import com.chmouel.liseur.reader.annotations.shareText
 import com.chmouel.liseur.reader.annotations.toDecorations
 import com.chmouel.liseur.reader.dictionary.DefinitionSheet
@@ -145,6 +145,8 @@ fun ReaderScreen(
     onAnnotationAction: ReaderAnnotationActions,
     onSearchAction: ReaderSearchActions,
     syncableFlow: StateFlow<Boolean>,
+    dictionaryFlow: StateFlow<ReaderViewModel.DictionarySettings>,
+    onEnableDictionary: () -> Unit,
     goTo: SharedFlow<Locator>,
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
@@ -170,6 +172,7 @@ fun ReaderScreen(
     val annotations by annotationsFlow.collectAsStateWithLifecycle()
     val searchState by searchFlow.collectAsStateWithLifecycle()
     val bookmarked by bookmarkedFlow.collectAsStateWithLifecycle()
+    val dictionary by dictionaryFlow.collectAsStateWithLifecycle()
     var selection by remember { mutableStateOf<ActiveSelection?>(null) }
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var defineWord by remember { mutableStateOf<String?>(null) }
@@ -469,12 +472,15 @@ fun ReaderScreen(
             languages = remember(publication) {
                 WiktionaryClient.languagesFor(publication.metadata.languages.firstOrNull())
             },
+            enabled = dictionary.enabled,
+            baseUrl = dictionary.baseUrl,
+            onEnable = onEnableDictionary,
             onOpenInDictionaryApp = {
-                context.lookUpExternally(it)
+                context.lookUpExternally(it, dictionary.baseUrl)
                 defineWord = null
             },
             onOpenInBrowser = {
-                context.openWiktionary(it)
+                context.openDictionaryEntry(it, dictionary.baseUrl)
                 defineWord = null
             },
             onDismiss = { defineWord = null },

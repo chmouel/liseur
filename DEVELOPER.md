@@ -424,12 +424,24 @@ deliberately rather than read off the schema.
   In particular `readium-lcp` is deliberately absent: it pulls in the
   proprietary liblcp. The list users see is in `LicencesScreen.kt`.
 - **No trackers or analytics**, and no Google Play services. The only
-  outbound traffic is to the calibre-web server the user configured, and
-  to Wiktionary when a definition is asked for. That is what justifies
-  `INTERNET` in the store description.
+  outbound traffic is to the calibre-web or Komga server the user
+  configured, and to a dictionary site when a definition is asked for.
+  That second one is off until switched on in Settings and the site is
+  the user's to choose (`DictionaryUrl`), because F-Droid review will
+  otherwise treat a hardcoded third-party host as grounds for the
+  TetheredNet anti-feature. Together those justify `INTERNET`;
+  `ACCESS_NETWORK_STATE` is there for the `NetworkType.CONNECTED`
+  constraint on the sync workers.
 - **No non-free assets.** The bundled fonts (Literata, Vollkorn, Atkinson
   Hyperlegible, Inter) are all OFL; the icon is drawn in-repo as vector
   drawables.
+- **`fonts.googleapis.com` appears in the release dex and is unreachable.**
+  It is a string inside Readium's `ReadiumCss`, emitted only for families
+  registered through `EpubNavigatorFactory`'s separate `googleFonts` list.
+  Liseur never sets that list: every `addFontFamilyDeclaration` in
+  `ReaderPreferencesMapper.kt` sources its faces from bundled asset paths.
+  Worth knowing, because a reviewer grepping the dex for hosts will find
+  it and ask.
 - **Reproducible versioning**: `versionCode` and `versionName` only ever
   change in a `chore: release vX.Y.Z` commit made by `hack/release`, and
   every release is tagged, so F-Droid's `UpdateCheckMode: Tags` and

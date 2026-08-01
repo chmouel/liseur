@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Plain HTTP is allowed because a self-hosted calibre-web often lives on
-    a home network with no certificate. Liseur always tries HTTPS first and
-    only falls back after the user explicitly asks it to, having been told
-    what they are giving up.
+    Plain HTTP is allowed because a self-hosted calibre-web or Komga often
+    lives on a home network with no certificate. Liseur always tries HTTPS
+    first and only falls back after the user explicitly asks it to, having
+    been told what they are giving up.
 
     That permission cannot be narrowed to the server itself — it can be at
     any address the user types — but it can be kept away from everything
-    else the app talks to, which is what the domain rules below do.
+    else the app talks to.
+
+    The dictionary is the only other thing, and it is a public site on the
+    internet rather than a box on the reader's own network, so it gets no
+    such excuse: DictionaryUrl refuses anything but https when the site is
+    entered, and the default host is pinned below as well.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />

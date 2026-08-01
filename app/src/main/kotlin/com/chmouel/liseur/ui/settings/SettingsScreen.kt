@@ -24,12 +24,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -37,12 +44,14 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 
@@ -57,6 +66,8 @@ fun SettingsScreen(
     onVolumeKeys: (Boolean) -> Unit,
     onEInkMode: (EInkMode) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
+    onDictionaryLookup: (Boolean) -> Unit,
+    onDictionaryBaseUrl: (String) -> Unit,
     onOpenAccount: () -> Unit,
     onExportAnnotations: () -> Unit,
     onImportAnnotations: () -> Unit,
@@ -172,6 +183,20 @@ fun SettingsScreen(
                     }
                 }
 
+                SectionTitle(stringResource(R.string.settings_dictionary))
+                SwitchRow(
+                    title = stringResource(R.string.settings_dictionary_lookup),
+                    subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
+                    checked = settings.dictionaryLookupEnabled,
+                    onCheckedChange = onDictionaryLookup,
+                )
+                if (settings.dictionaryLookupEnabled) {
+                    DictionarySiteCard(
+                        baseUrl = settings.dictionaryBaseUrl,
+                        onBaseUrl = onDictionaryBaseUrl,
+                    )
+                }
+
                 SectionTitle(stringResource(R.string.settings_library))
                 LinkRow(
                     title = stringResource(R.string.server_account),
@@ -264,6 +289,61 @@ private val EInkMode.label: Int
         EInkMode.ON -> R.string.eink_on
         EInkMode.OFF -> R.string.eink_off
     }
+
+/**
+ * Where definitions come from.
+ *
+ * Shown only once online lookups are on, because until then there is no
+ * site to pick. The field keeps what is typed and only commits it once it
+ * parses, so a half-typed address never becomes the stored one.
+ */
+@Composable
+private fun DictionarySiteCard(baseUrl: String, onBaseUrl: (String) -> Unit) {
+    var typed by remember(baseUrl) { mutableStateOf(baseUrl) }
+    val normalised = remember(typed) { DictionaryUrl.normalise(typed) }
+    val invalid = typed.isNotBlank() && normalised == null
+
+    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.settings_dictionary_site),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = stringResource(R.string.settings_dictionary_site_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = typed,
+                onValueChange = {
+                    typed = it
+                    DictionaryUrl.normalise(it)?.let(onBaseUrl)
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                singleLine = true,
+                isError = invalid,
+                placeholder = { Text(stringResource(R.string.settings_dictionary_site_hint)) },
+                supportingText = if (invalid) {
+                    { Text(stringResource(R.string.settings_dictionary_site_invalid)) }
+                } else {
+                    null
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            )
+            if (normalised != DictionaryUrl.DEFAULT_BASE_URL) {
+                TextButton(
+                    onClick = {
+                        typed = DictionaryUrl.DEFAULT_BASE_URL
+                        onBaseUrl(DictionaryUrl.DEFAULT_BASE_URL)
+                    },
+                ) {
+                    Text(stringResource(R.string.settings_dictionary_site_reset))
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SectionTitle(text: String) {

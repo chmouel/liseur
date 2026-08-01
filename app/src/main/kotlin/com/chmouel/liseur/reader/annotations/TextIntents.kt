@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
+import com.chmouel.liseur.domain.DictionaryUrl
 
 /** Hands a passage to whatever the reader uses to share things. */
 fun Context.shareText(text: String, subject: String?) {
@@ -22,10 +23,11 @@ fun Context.shareText(text: String, subject: String?) {
  *
  * `PROCESS_TEXT` is what dictionary apps register for, so this works with
  * whatever the reader already has installed — no dictionary is bundled, and
- * nothing proprietary is required. When nothing handles it, fall back to
- * Wiktionary in the browser, which is free content and needs no account.
+ * nothing proprietary is required. It also needs no network, which is why it
+ * stays available when the online lookup is switched off. When nothing
+ * handles it, fall back to the dictionary site in the browser.
  */
-fun Context.lookUpExternally(text: String) {
+fun Context.lookUpExternally(text: String, dictionaryBaseUrl: String) {
     val word = text.trim().takeIf { it.isNotBlank() } ?: return
     val process = Intent(Intent.ACTION_PROCESS_TEXT).apply {
         type = "text/plain"
@@ -35,19 +37,19 @@ fun Context.lookUpExternally(text: String) {
     // A chooser with nothing in it still opens, so ask first rather than
     // showing the reader an empty sheet when no dictionary is installed.
     if (packageManager.queryIntentActivities(process, 0).isEmpty()) {
-        openWiktionary(word)
+        openDictionaryEntry(word, dictionaryBaseUrl)
         return
     }
     try {
         startActivity(Intent.createChooser(process, null))
     } catch (_: ActivityNotFoundException) {
-        openWiktionary(word)
+        openDictionaryEntry(word, dictionaryBaseUrl)
     }
 }
 
-/** Opens the word's full Wiktionary entry in a browser. */
-fun Context.openWiktionary(word: String) {
-    val url: Uri = "https://en.wiktionary.org/wiki/${Uri.encode(word.substringBefore(' '))}"
-        .toUri()
+/** Opens the word's full entry on the configured dictionary site. */
+fun Context.openDictionaryEntry(word: String, dictionaryBaseUrl: String) {
+    val term = word.substringBefore(' ').takeIf { it.isNotBlank() } ?: return
+    val url: Uri = DictionaryUrl.entryPage(dictionaryBaseUrl, term).toUri()
     runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
 }

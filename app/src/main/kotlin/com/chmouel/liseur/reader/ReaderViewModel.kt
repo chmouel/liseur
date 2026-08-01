@@ -21,6 +21,7 @@ import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -31,6 +32,7 @@ import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.EPSILON
+import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.isSamePassage
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.readingStatusFor
@@ -89,7 +91,29 @@ class ReaderViewModel(
     private val prefsRepo: ReaderPreferencesRepository,
     private val readingPace: ReadingPaceRepository,
     private val positionSync: PositionSyncCoordinator,
+    private val appSettings: AppSettingsRepository,
 ) : ViewModel() {
+
+    /**
+     * What the definition card needs to know before it may fetch anything.
+     *
+     * @param enabled Whether the reader has agreed to online lookups.
+     * @param baseUrl The dictionary site they chose.
+     */
+    data class DictionarySettings(
+        val enabled: Boolean = false,
+        val baseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
+    )
+
+    /** The dictionary's opt-in state, watched so the card reacts to it. */
+    val dictionary: StateFlow<DictionarySettings> = appSettings.settings
+        .map { DictionarySettings(it.dictionaryLookupEnabled, it.dictionaryBaseUrl) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DictionarySettings())
+
+    /** Turns online definitions on, from the card that asked for them. */
+    fun enableDictionary() {
+        viewModelScope.launch { appSettings.setDictionaryLookupEnabled(true) }
+    }
 
     sealed interface UiState {
         data object Loading : UiState
@@ -809,6 +833,7 @@ class ReaderViewModel(
                     prefsRepo = container.readerPreferences,
                     readingPace = container.readingPace,
                     positionSync = container.positionSync,
+                    appSettings = container.appSettings,
                 )
             }
         }
