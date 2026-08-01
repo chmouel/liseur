@@ -17,8 +17,8 @@ okhttp = "5.4.0"
 work = "2.11.2"
 desugar = "2.1.5"
 json = "20260719"
-coroutines = "1.10.2"
-robolectric = "4.16"
+coroutines = "1.11.0"
+robolectric = "4.16.1"
 junit = "4.13.2"
 
 [libraries]
