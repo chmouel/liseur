@@ -253,11 +253,12 @@ fun LibraryScreen(
                             },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // The brand mark and the wordmark, both cut
-                            // from the banner art rather than set in a UI
-                            // font: the drawn lettering is the wordmark,
-                            // so the bar shows it instead of spelling the
-                            // name out again.
+                            // A woman reading stretched out on her couch,
+                            // cut from the banner art — the reading mark,
+                            // in place of a plain wordmark or the launcher
+                            // icon.  Painted art with its own wall and
+                            // floor, so it is framed as a small tile
+                            // rather than knocked out to line work.
                             //
                             // Which cut to draw is asked of the theme in
                             // force here, not of a -night qualifier: those
@@ -265,23 +266,20 @@ fun LibraryScreen(
                             // light/dark setting is allowed to disagree.
                             Image(
                                 painter = painterResource(
-                                    if (darkMark) R.drawable.ic_brand_emblem_night
-                                    else R.drawable.ic_brand_emblem,
+                                    if (darkMark) R.drawable.ic_reading_scene_night
+                                    else R.drawable.ic_reading_scene,
                                 ),
                                 contentDescription = null,
-                                modifier = Modifier.height(40.dp),
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
                             )
                             Spacer(Modifier.width(10.dp))
                             Column {
-                                Image(
-                                    painter = painterResource(
-                                        if (darkMark) R.drawable.ic_brand_wordmark_night
-                                        else R.drawable.ic_brand_wordmark,
-                                    ),
-                                    // The picture is the title, so it has
-                                    // to say the title out loud.
-                                    contentDescription = stringResource(R.string.library_title),
-                                    modifier = Modifier.height(20.dp),
+                                Text(
+                                    text = stringResource(R.string.library_title),
+                                    style = MaterialTheme.typography.titleLarge,
                                 )
                                 if (!state.loading && state.books.isNotEmpty()) {
                                     Text(
