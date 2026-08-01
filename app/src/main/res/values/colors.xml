@@ -3,9 +3,9 @@
     <color name="ink">#15110C</color>
 
     <!-- The field the mark is drawn on, behind the launcher and splash
-         artwork.  It follows the *system* dark mode through values-night,
-         which is right for those two surfaces; anything drawn in Compose
-         picks its own cut instead, since the app's light/dark setting may
-         disagree with the system's. -->
+         artwork.  Those two show the cream mark whatever the system theme
+         is — an icon that changes under the user is worse than one that
+         does not match the wallpaper — so there is no night value here.
+         Anything drawn in Compose picks its own cut instead. -->
     <color name="logo_field">#FCF4ED</color>
 </resources>

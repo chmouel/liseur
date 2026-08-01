@@ -1,5 +1,0 @@
-<resources>
-    <!-- Deep navy: the field the dark artwork in drawable-night-* was drawn
-         against, so the ring the icon carries melts into it. -->
-    <color name="logo_field">#021328</color>
-</resources>
