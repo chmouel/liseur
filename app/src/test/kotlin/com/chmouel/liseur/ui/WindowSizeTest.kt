@@ -42,15 +42,26 @@ class WindowSizeTest {
     }
 
     @Test
-    fun `a phone keeps the reading tile it had`() {
-        assertEquals(44.dp, brandTileHeight(411.dp))
+    fun `a phone shows the reading tile small`() {
+        assertEquals(48.dp, brandTileHeight(360.dp))
+    }
+
+    @Test
+    fun `an e-reader under the tablet threshold still gets a big tile`() {
+        // Boox Go Color 7: 578dp, twenty short of Material's 600.
+        assertEquals(100.dp, brandTileHeight(578.dp))
+    }
+
+    @Test
+    fun `the reading tile stops growing on a big tablet`() {
+        assertEquals(112.dp, brandTileHeight(2000.dp))
     }
 
     @Test
     fun `the reading tile grows with the screen`() {
-        // Boox Go 7.
-        assertTrue(brandTileHeight(674.dp) > brandTileHeight(411.dp))
-        assertTrue(brandTileHeight(1280.dp) > brandTileHeight(674.dp))
+        // Phone, then the Boox Go 7, then the cap.
+        assertTrue(brandTileHeight(578.dp) > brandTileHeight(411.dp))
+        assertTrue(brandTileHeight(1280.dp) > brandTileHeight(578.dp))
     }
 
     @Test

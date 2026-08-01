@@ -132,7 +132,6 @@ import com.chmouel.liseur.ui.brandTileHeight
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.coverMinSize
 import com.chmouel.liseur.ui.libraryBarHeight
-import com.chmouel.liseur.ui.widthClassOf
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
 
@@ -172,7 +171,10 @@ fun LibraryScreen(
     // The bar shows the illustration at the size the window can afford.
     val barWidth = windowWidth()
     val tileHeight = brandTileHeight(barWidth)
-    val wide = widthClassOf(barWidth).isAtLeastMedium
+    // Keyed to the picture, not to the window class: a seven-inch
+    // e-reader lands just under Material's tablet threshold, and the
+    // bar should follow the size of the tile it is holding.
+    val wide = tileHeight >= 64.dp
     val gridState = rememberLazyGridState()
     val snackbarHost = remember { SnackbarHostState() }
     val downloading = stringResource(R.string.download_in_progress)

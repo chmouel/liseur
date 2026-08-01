@@ -89,28 +89,38 @@ fun coverMinSize(width: Dp): Dp = when (widthClassOf(width)) {
  * Shape of the reading illustration, width over height.
  *
  * The tile is drawn against this rather than against whatever box the
- * app bar hands out: the crop it is cut from is 580×440, and a box even
+ * app bar hands out: the crop it is cut from is 838×383, and a box even
  * slightly wider than that would otherwise have to lose the top and the
  * bottom of the picture to fill itself.
  */
-const val BRAND_TILE_ASPECT = 580f / 440f
+const val BRAND_TILE_ASPECT = 838f / 383f
 
 /**
  * How tall the reading illustration in the library bar is drawn.
  *
  * It is a picture, not an icon, so on a screen with room to spare it can
- * be looked at rather than merely identified. A phone keeps the size it
- * had, where the bar is already crowded by the title and three actions.
+ * be looked at rather than merely identified. A straight line between
+ * two anchors rather than Material's three bands: the Boox Go Color 7
+ * reports 578dp, twenty short of the tablet threshold, and there is no
+ * reason a seven-inch reader should get a phone's picture over twenty
+ * dp. At that width the band is wide enough to leave the title in the
+ * middle of the bar. Floored so a phone's bar still fits Material's
+ * 64dp, capped so the picture cannot eat a tablet's screen.
  */
-fun brandTileHeight(width: Dp): Dp = when (widthClassOf(width)) {
-    WidthClass.COMPACT -> 44.dp
-    WidthClass.MEDIUM -> 68.dp
-    WidthClass.EXPANDED -> 84.dp
+fun brandTileHeight(width: Dp): Dp {
+    val along = (width.value - PHONE_WIDTH_DP) / (READER_WIDTH_DP - PHONE_WIDTH_DP)
+    return (PHONE_TILE_DP + along * (READER_TILE_DP - PHONE_TILE_DP)).dp
+        .coerceIn(48.dp, 112.dp)
 }
+
+private const val PHONE_WIDTH_DP = 411f
+private const val PHONE_TILE_DP = 52f
+private const val READER_WIDTH_DP = 578f
+private const val READER_TILE_DP = 100f
 
 /**
  * How tall the library's app bar is, which is however tall it has to be
  * to hold [brandTileHeight] with a little air, but never shorter than
  * Material's own bar.
  */
-fun libraryBarHeight(width: Dp): Dp = maxOf(64.dp, brandTileHeight(width) + 20.dp)
+fun libraryBarHeight(width: Dp): Dp = maxOf(64.dp, brandTileHeight(width) + 12.dp)
