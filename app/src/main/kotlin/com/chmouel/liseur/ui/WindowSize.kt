@@ -84,3 +84,33 @@ fun coverMinSize(width: Dp): Dp = when (widthClassOf(width)) {
     WidthClass.MEDIUM -> 132.dp
     WidthClass.EXPANDED -> 156.dp
 }
+
+/**
+ * Shape of the reading illustration, width over height.
+ *
+ * The tile is drawn against this rather than against whatever box the
+ * app bar hands out: the crop it is cut from is 580×440, and a box even
+ * slightly wider than that would otherwise have to lose the top and the
+ * bottom of the picture to fill itself.
+ */
+const val BRAND_TILE_ASPECT = 580f / 440f
+
+/**
+ * How tall the reading illustration in the library bar is drawn.
+ *
+ * It is a picture, not an icon, so on a screen with room to spare it can
+ * be looked at rather than merely identified. A phone keeps the size it
+ * had, where the bar is already crowded by the title and three actions.
+ */
+fun brandTileHeight(width: Dp): Dp = when (widthClassOf(width)) {
+    WidthClass.COMPACT -> 44.dp
+    WidthClass.MEDIUM -> 68.dp
+    WidthClass.EXPANDED -> 84.dp
+}
+
+/**
+ * How tall the library's app bar is, which is however tall it has to be
+ * to hold [brandTileHeight] with a little air, but never shorter than
+ * Material's own bar.
+ */
+fun libraryBarHeight(width: Dp): Dp = maxOf(64.dp, brandTileHeight(width) + 20.dp)

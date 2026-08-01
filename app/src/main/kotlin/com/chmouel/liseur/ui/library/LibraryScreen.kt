@@ -126,9 +126,13 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.BRAND_TILE_ASPECT
 import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.brandTileHeight
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.coverMinSize
+import com.chmouel.liseur.ui.libraryBarHeight
+import com.chmouel.liseur.ui.widthClassOf
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
 
@@ -165,6 +169,10 @@ fun LibraryScreen(
     // force rather than of the resource qualifiers, so it follows the
     // app's own dark setting even when the system disagrees.
     val darkMark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    // The bar shows the illustration at the size the window can afford.
+    val barWidth = windowWidth()
+    val tileHeight = brandTileHeight(barWidth)
+    val wide = widthClassOf(barWidth).isAtLeastMedium
     val gridState = rememberLazyGridState()
     val snackbarHost = remember { SnackbarHostState() }
     val downloading = stringResource(R.string.download_in_progress)
@@ -270,16 +278,26 @@ fun LibraryScreen(
                                     else R.drawable.ic_reading_scene,
                                 ),
                                 contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                                // Fit, not Crop, and the frame pinned to
+                                // the picture's own aspect: whatever
+                                // height the bar ends up granting, the
+                                // box can never come out wider than the
+                                // art and take a slice off her head.
+                                contentScale = ContentScale.Fit,
                                 modifier = Modifier
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
+                                    .height(tileHeight)
+                                    .aspectRatio(BRAND_TILE_ASPECT)
+                                    .clip(RoundedCornerShape(if (wide) 14.dp else 10.dp)),
                             )
-                            Spacer(Modifier.width(10.dp))
+                            Spacer(Modifier.width(if (wide) 16.dp else 10.dp))
                             Column {
                                 Text(
                                     text = stringResource(R.string.library_title),
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = if (wide) {
+                                        MaterialTheme.typography.headlineMedium
+                                    } else {
+                                        MaterialTheme.typography.titleLarge
+                                    },
                                 )
                                 if (!state.loading && state.books.isNotEmpty()) {
                                     Text(
@@ -296,6 +314,7 @@ fun LibraryScreen(
                             }
                         }
                     },
+                    expandedHeight = libraryBarHeight(barWidth),
                     actions = {
                         IconButton(onClick = { onSetSearchActive(true) }) {
                             Icon(

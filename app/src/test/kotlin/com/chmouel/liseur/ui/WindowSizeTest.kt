@@ -42,6 +42,30 @@ class WindowSizeTest {
     }
 
     @Test
+    fun `a phone keeps the reading tile it had`() {
+        assertEquals(44.dp, brandTileHeight(411.dp))
+    }
+
+    @Test
+    fun `the reading tile grows with the screen`() {
+        // Boox Go 7.
+        assertTrue(brandTileHeight(674.dp) > brandTileHeight(411.dp))
+        assertTrue(brandTileHeight(1280.dp) > brandTileHeight(674.dp))
+    }
+
+    @Test
+    fun `a phone keeps Material's own bar height`() {
+        assertEquals(64.dp, libraryBarHeight(411.dp))
+    }
+
+    @Test
+    fun `the bar always has room for the tile`() {
+        for (width in listOf(360.dp, 674.dp, 1280.dp)) {
+            assertTrue(libraryBarHeight(width) > brandTileHeight(width))
+        }
+    }
+
+    @Test
     fun `a phone caps nothing, so sheets stay full width`() {
         assertEquals(androidx.compose.ui.unit.Dp.Unspecified, contentWidthCap(411.dp))
     }
