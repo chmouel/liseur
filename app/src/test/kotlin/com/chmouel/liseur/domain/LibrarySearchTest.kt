@@ -68,4 +68,36 @@ class LibrarySearchTest {
     fun `part of a word matches`() {
         assertTrue(matches("labo"))
     }
+
+    @Test
+    fun `a closed search bar leaves the shelf alone`() {
+        assertTrue(
+            survivesLibrarySearch(
+                query = "dickens",
+                searchActive = false,
+                title = "Morning Star",
+                author = "Pierce Brown",
+            ),
+        )
+    }
+
+    @Test
+    fun `an open search bar narrows the shelf`() {
+        assertFalse(
+            survivesLibrarySearch(
+                query = "dickens",
+                searchActive = true,
+                title = "Morning Star",
+                author = "Pierce Brown",
+            ),
+        )
+        assertTrue(
+            survivesLibrarySearch(
+                query = "brown",
+                searchActive = true,
+                title = "Morning Star",
+                author = "Pierce Brown",
+            ),
+        )
+    }
 }

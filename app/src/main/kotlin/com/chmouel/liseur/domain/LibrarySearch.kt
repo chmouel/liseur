@@ -19,6 +19,21 @@ fun matchesLibrarySearch(query: String, title: String, author: String?): Boolean
 }
 
 /**
+ * Whether a book stays on the shelf, given the state of the search bar.
+ *
+ * Closing search keeps the query so it can be offered back next time,
+ * which means a query outlives the bar that showed it. A shelf narrowed
+ * by a query nobody can see has simply lost books, so the query counts
+ * only while the bar is up.
+ */
+fun survivesLibrarySearch(
+    query: String,
+    searchActive: Boolean,
+    title: String,
+    author: String?,
+): Boolean = !searchActive || matchesLibrarySearch(query, title, author)
+
+/**
  * Reduces text to something two spellings of the same word agree on.
  *
  * Decomposing first and then dropping the combining marks turns é into

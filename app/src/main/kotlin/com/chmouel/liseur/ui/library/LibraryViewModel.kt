@@ -26,6 +26,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.matchesLibrarySearch
+import com.chmouel.liseur.domain.survivesLibrarySearch
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
@@ -239,7 +240,12 @@ class LibraryViewModel(
             val filteredBooks = sortedBooks
                 .filter { effectiveFilter.accepts(it) }
                 .filter { book ->
-                    matchesLibrarySearch(query, book.displayTitle, book.displayAuthor)
+                    survivesLibrarySearch(
+                        query,
+                        searchActive,
+                        book.displayTitle,
+                        book.displayAuthor,
+                    )
                 }
 
             LibraryUiState(
@@ -271,10 +277,10 @@ class LibraryViewModel(
     }
 
     fun setSearchActive(active: Boolean) {
+        // The query is deliberately kept when search closes: reopening
+        // offers it back, selected, so it can be reused or typed over.
+        // The clear button in the bar is what empties it.
         _isSearchActive.value = active
-        if (!active) {
-            _searchQuery.value = ""
-        }
     }
 
     init {

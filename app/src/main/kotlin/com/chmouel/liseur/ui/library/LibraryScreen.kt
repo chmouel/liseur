@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.library
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -102,16 +103,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -208,6 +214,31 @@ fun LibraryScreen(
         }
     }
 
+    // What the search field shows is held here rather than read back from
+    // the view model: the query is combined with seven other flows and
+    // filtered off the main thread before it returns, which is far too
+    // late to draw the letter that was just typed.  The view model is
+    // still told about every change; it just no longer owes an answer.
+    var searchField by remember { mutableStateOf(TextFieldValue()) }
+    val searchFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(state.isSearchActive) {
+        if (!state.isSearchActive) return@LaunchedEffect
+        // Opening search brings the last query back with all of it
+        // selected, so the next letter replaces it and one delete clears
+        // it, without losing it for anyone who only wanted a second look.
+        val query = state.searchQuery
+        searchField = TextFieldValue(query, TextRange(0, query.length))
+        searchFocus.requestFocus()
+        // Focus alone usually raises the keyboard, but not dependably
+        // when the field arrives in the same frame as the bar holding it.
+        keyboard?.show()
+    }
+
+    // Without this, back on an open search bar falls through to the
+    // activity and closes the app.
+    BackHandler(enabled = state.isSearchActive) { onSetSearchActive(false) }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -216,11 +247,16 @@ fun LibraryScreen(
                 TopAppBar(
                     title = {
                         OutlinedTextField(
-                            value = state.searchQuery,
-                            onValueChange = onSearchQueryChange,
+                            value = searchField,
+                            onValueChange = {
+                                searchField = it
+                                onSearchQueryChange(it.text)
+                            },
                             placeholder = { Text(stringResource(R.string.search_books)) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocus),
                         )
                     },
                     navigationIcon = {
@@ -232,8 +268,11 @@ fun LibraryScreen(
                         }
                     },
                     actions = {
-                        if (state.searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
+                        if (searchField.text.isNotEmpty()) {
+                            IconButton(onClick = {
+                                searchField = TextFieldValue()
+                                onSearchQueryChange("")
+                            }) {
                                 Icon(
                                     Icons.Outlined.Close,
                                     contentDescription = stringResource(R.string.clear),
