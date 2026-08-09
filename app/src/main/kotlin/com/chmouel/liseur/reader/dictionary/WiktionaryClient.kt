@@ -46,33 +46,45 @@ class WiktionaryClient(
         withContext(Dispatchers.IO) {
             val term = normaliseLookupTerm(word)
             if (term.isBlank()) return@withContext DictionaryState.NotFound
-            val request = Request.Builder()
-                .url(DictionaryUrl.definitionApi(baseUrl, term))
-                .header("Accept", "application/json")
-                // Wikimedia answers 403 to requests without a descriptive
-                // agent, so say who we are and where to complain.
-                .header("User-Agent", USER_AGENT)
-                .build()
-            runCatching {
-                client.newCall(request).execute().use { response ->
-                    when {
-                        response.code == 404 -> DictionaryState.NotFound
-                        !response.isSuccessful -> DictionaryState.Failed("HTTP ${response.code}")
-                        else -> {
-                            val senses = parseWiktionaryDefinitions(
-                                response.body?.string().orEmpty(),
-                                languages,
-                            )
-                            if (senses.isEmpty()) {
-                                DictionaryState.NotFound
-                            } else {
-                                DictionaryState.Found(senses)
-                            }
+            val result = lookup(term, languages, baseUrl)
+            if (result !is DictionaryState.NotFound) return@withContext result
+            val lowercaseTerm = term.lowercase()
+            if (lowercaseTerm == term) return@withContext result
+            lookup(lowercaseTerm, languages, baseUrl)
+        }
+
+    private fun lookup(
+        term: String,
+        languages: List<String>,
+        baseUrl: String,
+    ): DictionaryState {
+        val request = Request.Builder()
+            .url(DictionaryUrl.definitionApi(baseUrl, term))
+            .header("Accept", "application/json")
+            // Wikimedia answers 403 to requests without a descriptive
+            // agent, so say who we are and where to complain.
+            .header("User-Agent", USER_AGENT)
+            .build()
+        return runCatching {
+            client.newCall(request).execute().use { response ->
+                when {
+                    response.code == 404 -> DictionaryState.NotFound
+                    !response.isSuccessful -> DictionaryState.Failed("HTTP ${response.code}")
+                    else -> {
+                        val senses = parseWiktionaryDefinitions(
+                            response.body?.string().orEmpty(),
+                            languages,
+                        )
+                        if (senses.isEmpty()) {
+                            DictionaryState.NotFound
+                        } else {
+                            DictionaryState.Found(senses)
                         }
                     }
                 }
-            }.getOrElse { DictionaryState.Failed(it.message) }
-        }
+            }
+        }.getOrElse { DictionaryState.Failed(it.message) }
+    }
 
     companion object {
         private val USER_AGENT =

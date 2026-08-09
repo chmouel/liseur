@@ -74,6 +74,23 @@ class WiktionaryClientTest {
     }
 
     @Test
+    fun `retries a capitalised word in lowercase`() = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"en":[{"partOfSpeech":"Noun","definitions":[{"definition":"A group."}]}]}""",
+            ),
+        )
+
+        val state = WiktionaryClient().define("Antipathies", listOf("en"), baseUrl())
+
+        assertEquals("/api/rest_v1/page/definition/Antipathies", server.takeRequest().target)
+        assertEquals("/api/rest_v1/page/definition/antipathies", server.takeRequest().target)
+        assertTrue(state is DictionaryState.Found)
+    }
+
+    @Test
     fun `an entry with no senses in the wanted languages counts as missing`() = runBlocking {
         server.enqueue(
             MockResponse(
