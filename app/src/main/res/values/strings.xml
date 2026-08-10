@@ -32,6 +32,7 @@
     <string name="footer_left_in_chapter">%s left in chapter</string>
     <string name="footer_left_in_book">%s left in book</string>
     <string name="footer_page">Page %1$d of %2$d</string>
+    <string name="footer_page_compact">%1$d of %2$d</string>
     <string name="footer_percent">%d%%</string>
     <string name="duration_under_minute">Less than a minute</string>
     <string name="duration_hours_and_minutes">%1$s %2$s</string>

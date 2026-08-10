@@ -265,11 +265,11 @@ private fun FooterModeDropdown(selected: FooterMode, onSelected: (FooterMode) ->
 
 private val FooterMode.label: String
     get() = when (this) {
-        FooterMode.TIME_LEFT_CHAPTER -> "Time left in chapter"
+        FooterMode.SMART -> "Time left, or the chapter"
         FooterMode.TIME_LEFT_BOOK -> "Time left in book"
-        FooterMode.PAGE -> "Page number"
-        FooterMode.PERCENT -> "Percentage read"
-        FooterMode.NONE -> "Nothing"
+        FooterMode.CHAPTER_TITLE -> "Chapter title"
+        FooterMode.EMPTY -> "Nothing in the middle"
+        FooterMode.NONE -> "Hide the footer"
     }
 
 private fun ReaderFont.composeFamily(assets: android.content.res.AssetManager): FontFamily? =

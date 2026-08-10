@@ -42,24 +42,34 @@ enum class ReaderTheme(
     }
 }
 
-/** What the reading footer shows; tapping it cycles through these. */
+/**
+ * What the middle of the reading footer shows.
+ *
+ * The percentage read and the page number live at the footer's edges
+ * and are always drawn; this enum only decides the slot between them,
+ * and tapping the footer cycles it.
+ */
 enum class FooterMode(val id: String) {
-    TIME_LEFT_CHAPTER("time_chapter"),
+    /**
+     * Time left in the chapter once a reading pace has actually been
+     * measured, and the chapter title until then — so the slot degrades
+     * to something true rather than to a stock guess or to nothing.
+     */
+    SMART("time_chapter"),
     TIME_LEFT_BOOK("time_book"),
-    PAGE("page"),
-    PERCENT("percent"),
+    CHAPTER_TITLE("chapter"),
+    EMPTY("empty"),
     NONE("none"),
     ;
 
     /**
      * The next thing to show when the footer is tapped.
      *
-     * [NONE] is not in the round. It draws nothing, so a tap that landed
-     * on it took away the very thing being tapped: the footer vanished
-     * and with it any way of getting it back, short of going through the
-     * typography sheet. Hiding the footer is a decision, and it belongs
-     * in the sheet where it can be undone, not at the end of a cycle
-     * where it is arrived at by accident.
+     * [NONE] is not in the round: it hides the whole footer, and a tap
+     * that landed on it would take away the very thing being tapped.
+     * Hiding the footer is a decision, and it belongs in the typography
+     * sheet where it can be undone. [EMPTY] is safe in the round — the
+     * edges keep drawing, so the footer stays visible and tappable.
      */
     fun next(): FooterMode {
         val cycle = entries.filter { it != NONE }
@@ -68,18 +78,14 @@ enum class FooterMode(val id: String) {
     }
 
     companion object {
-        /**
-         * Where you are, rather than how long is left.
-         *
-         * Time left in the chapter was the default, and it is the one
-         * mode that can end up drawing nothing: until enough reading has
-         * been watched to know a pace, the estimate is a stock guess,
-         * and near the end of a chapter that guess rounds to no time at
-         * all and the footer goes blank. The page count is known from
-         * the moment a book opens and is never a guess.
-         */
-        val Default = PAGE
+        val Default = SMART
 
+        /**
+         * Reads a stored mode. The ids `page` and `percent` belonged to
+         * modes that put a single figure in the single slot the footer
+         * used to have; both figures are now permanent edges, so those
+         * preferences resolve to the default middle instead.
+         */
         fun fromId(id: String?): FooterMode = entries.firstOrNull { it.id == id } ?: Default
     }
 }

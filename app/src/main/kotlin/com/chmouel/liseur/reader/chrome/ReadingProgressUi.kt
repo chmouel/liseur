@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,12 +37,16 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.reader.progress.FooterMiddle
 import com.chmouel.liseur.reader.progress.ReaderProgress
+import com.chmouel.liseur.reader.progress.footerMiddle
 
 /**
- * The quiet line of text at the bottom of the page, Kindle-style:
- * time left in the chapter or book, the page number or the percentage
- * read. Tapping it cycles through those, and never turns the page.
+ * The quiet line of text at the bottom of the page, Kindle-style. The
+ * percentage read sits on the left and the page number on the right,
+ * always; the middle carries the smart slot — time left, the chapter's
+ * name — and tapping the footer cycles what that slot shows. Taps
+ * never turn the page.
  */
 @Composable
 fun ReadingFooter(
@@ -54,43 +57,55 @@ fun ReadingFooter(
     modifier: Modifier = Modifier,
 ) {
     if (mode == FooterMode.NONE || progress == null) return
-    val text = footerText(progress, mode) ?: return
-    Box(
+    val color = theme.foreground.copy(alpha = 0.6f)
+    Row(
         modifier
             .fillMaxWidth()
             .clickableWithoutRipple(onCycleMode)
             .padding(horizontal = 20.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        FooterEdge(stringResource(R.string.footer_percent, progress.percent), color)
         Text(
-            text = text,
+            text = middleText(progress, mode).orEmpty(),
             style = MaterialTheme.typography.labelSmall,
-            color = theme.foreground.copy(alpha = 0.6f),
+            color = color,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
+        )
+        FooterEdge(
+            stringResource(R.string.footer_page_compact, progress.position, progress.totalPositions),
+            color,
         )
     }
 }
 
 @Composable
-private fun footerText(progress: ReaderProgress, mode: FooterMode): String? = when (mode) {
-    FooterMode.TIME_LEFT_CHAPTER ->
-        if (!progress.isSpeedMeasured && progress.minutesLeftInChapter == 0) {
-            null
-        } else {
-            stringResource(R.string.footer_left_in_chapter, durationText(progress.minutesLeftInChapter))
-        }
-
-    FooterMode.TIME_LEFT_BOOK ->
-        stringResource(R.string.footer_left_in_book, durationText(progress.minutesLeftInBook))
-
-    FooterMode.PAGE ->
-        stringResource(R.string.footer_page, progress.position, progress.totalPositions)
-
-    FooterMode.PERCENT ->
-        stringResource(R.string.footer_percent, progress.percent)
-
-    FooterMode.NONE -> null
+private fun FooterEdge(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        maxLines = 1,
+    )
 }
+
+@Composable
+private fun middleText(progress: ReaderProgress, mode: FooterMode): String? =
+    when (val middle = footerMiddle(progress, mode)) {
+        is FooterMiddle.TimeInChapter ->
+            stringResource(R.string.footer_left_in_chapter, durationText(middle.minutes))
+
+        is FooterMiddle.TimeInBook ->
+            stringResource(R.string.footer_left_in_book, durationText(middle.minutes))
+
+        is FooterMiddle.Chapter -> middle.title
+
+        null -> null
+    }
 
 /** "45 mins", "2 hrs 5 mins", or a friendly line for nearly nothing left. */
 @Composable
@@ -163,11 +178,11 @@ fun ReadingScrubber(
             modifier = Modifier.chapterTicks(chapterTicks, accent.copy(alpha = 0.5f)),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            FooterHint(stringResource(R.string.footer_percent, progress.percent), accent)
             FooterHint(
                 stringResource(R.string.footer_page, previewPosition, progress.totalPositions),
                 accent,
             )
-            FooterHint(stringResource(R.string.footer_percent, progress.percent), accent)
         }
     }
 }

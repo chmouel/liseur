@@ -49,13 +49,22 @@ class FooterModeTest {
     fun `an unknown stored mode falls back to the default`() {
         assertEquals(FooterMode.Default, FooterMode.fromId(null))
         assertEquals(FooterMode.Default, FooterMode.fromId("something else"))
-        assertEquals(FooterMode.PERCENT, FooterMode.fromId("percent"))
+        assertEquals(FooterMode.TIME_LEFT_BOOK, FooterMode.fromId("time_book"))
+    }
+
+    @Test
+    fun `the single-slot modes of old resolve to the default middle`() {
+        // "page" and "percent" filled the one slot the footer used to
+        // have; both figures are now permanent edges, so the stored
+        // preference should land on the default middle, not vanish.
+        assertEquals(FooterMode.Default, FooterMode.fromId("page"))
+        assertEquals(FooterMode.Default, FooterMode.fromId("percent"))
     }
 
     @Test
     fun `the default is something a book can always show`() {
-        // Time left is a guess until a pace has been learned, and near
-        // the end of a chapter that guess renders as nothing.
-        assertEquals(FooterMode.PAGE, FooterMode.Default)
+        // SMART degrades to the chapter title until a pace is measured,
+        // so the middle is never a stock guess presented as knowledge.
+        assertEquals(FooterMode.SMART, FooterMode.Default)
     }
 }

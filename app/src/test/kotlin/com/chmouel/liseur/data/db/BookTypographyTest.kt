@@ -24,7 +24,7 @@ class BookTypographyTest {
         pageMargins = 1.0,
         brightness = 0.3f,
         pageTurnAnimation = false,
-        footerMode = FooterMode.PAGE,
+        footerMode = FooterMode.SMART,
     )
 
     private val own = BookTypography(
@@ -55,7 +55,7 @@ class BookTypographyTest {
         assertEquals(ReaderTheme.DARK, effective.theme)
         assertEquals(0.3f, effective.brightness!!, 0f)
         assertEquals(false, effective.pageTurnAnimation)
-        assertEquals(FooterMode.PAGE, effective.footerMode)
+        assertEquals(FooterMode.SMART, effective.footerMode)
     }
 
     @Test
