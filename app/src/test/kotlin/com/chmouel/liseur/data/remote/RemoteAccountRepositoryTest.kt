@@ -160,7 +160,7 @@ class RemoteAccountRepositoryTest {
         dao = dao,
         bookDao = db.bookDao(),
         progressDao = db.readingProgressDao(),
-        bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao()),
+        bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao(), db.syncPeerStateDao()),
         setups = mapOf(ServerKind.KOMGA to AlwaysConnects),
     )
 

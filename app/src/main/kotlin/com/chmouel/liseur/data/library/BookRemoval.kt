@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.library
 
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.db.SyncPeerStateDao
 
 /**
  * Removes library books and their reading statistics as one database change.
@@ -15,12 +16,14 @@ import com.chmouel.liseur.data.db.ReadingSessionDao
 class BookRemoval(
     private val bookDao: BookDao,
     private val sessionDao: ReadingSessionDao,
+    private val peerStateDao: SyncPeerStateDao,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
         inTransaction {
             sessionDao.deleteForBooks(bookUrls)
+            peerStateDao.forgetBooks(bookUrls)
             bookDao.deleteByUrls(bookUrls)
         }
     }
@@ -30,6 +33,7 @@ class BookRemoval(
             val bookUrls = bookDao.remoteNotDownloadedUrls()
             if (bookUrls.isEmpty()) return@inTransaction
             sessionDao.deleteForBooks(bookUrls)
+            peerStateDao.forgetBooks(bookUrls)
             bookDao.deleteByUrls(bookUrls)
         }
     }

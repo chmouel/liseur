@@ -20,6 +20,7 @@ import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
+import com.chmouel.liseur.data.remote.CompositePositionSync
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
@@ -67,6 +68,7 @@ class AppContainer(context: Context) {
     val bookRemoval = BookRemoval(
         bookDao = database.bookDao(),
         sessionDao = database.readingSessionDao(),
+        peerStateDao = database.syncPeerStateDao(),
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -172,7 +174,17 @@ class AppContainer(context: Context) {
         ),
     )
 
-    val positionSync = PositionSyncCoordinator(RoutedPositionSync(remoteRouter))
+    /**
+     * Every partner reading positions are kept in step with.
+     *
+     * The catalog server is one of them; a dedicated sync server, once
+     * connected, is another, and it covers books no catalog server has
+     * ever heard of. The coordinator above sees one thing to sync, so
+     * its ordering rules are written once regardless.
+     */
+    val positionSync = PositionSyncCoordinator(
+        CompositePositionSync(listOf(RoutedPositionSync(remoteRouter))),
+    )
 
     val remoteCatalog = RemoteCatalogRepository(
         router = remoteRouter,

@@ -35,6 +35,7 @@ class BookRemovalTest {
         removal = BookRemoval(
             bookDao = db.bookDao(),
             sessionDao = db.readingSessionDao(),
+            peerStateDao = db.syncPeerStateDao(),
             inTransaction = { work -> db.withTransaction { work() } },
         )
     }

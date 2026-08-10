@@ -48,8 +48,14 @@ class RemoteRouter(
  * With nothing connected, or a server whose kind cannot sync, every call
  * answers "not applicable" rather than failing: there is nothing wrong,
  * there is simply nothing to do, and a retry would not change that.
+ *
+ * As a peer this is one partner among possibly several, and the one
+ * whose reading positions the connected server shows in its own
+ * interface.
  */
-class RoutedPositionSync(private val router: RemoteRouter) : PositionSync {
+class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
+
+    override val peerId: String get() = PeerPositionSync.CATALOG
 
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
         router.positionSync()?.syncAll(snapshot) ?: SyncOutcome.NotApplicable

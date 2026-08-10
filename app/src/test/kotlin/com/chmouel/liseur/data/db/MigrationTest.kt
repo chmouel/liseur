@@ -123,10 +123,105 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `what the connected account agreed becomes that account's own baseline`() {
+        // Splitting the baseline out per partner must carry the existing
+        // one across. Starting the connected account from nothing would
+        // make every book look as though both sides had moved and ask
+        // about a conflict that never happened.
+        helper.createDatabase(TEST_DB, 17).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO reading_progress (
+                    book_url, locator_json, total_progression, updated_at,
+                    local_revision, acked_revision,
+                    agreed_progression, agreed_status, agreed_account,
+                    pending_progression, pending_status, pending_updated_at, pending_account,
+                    owner_account, remote_updated_at, synced_at
+                ) VALUES (
+                    'calibre:uuid-1', '{}', 0.5, 1000,
+                    4, 3,
+                    0.4, 'Reading', 'https://books.example|ada|7',
+                    0.6, 'Reading', 900, 'https://books.example|ada|7',
+                    'https://books.example|ada|7', 800, 700
+                )
+                """.trimIndent(),
+            )
+            // Nobody has ever agreed anything about this one; a partner
+            // has simply said something that is still unsettled.
+            old.execSQL(
+                """
+                INSERT INTO reading_progress (
+                    book_url, locator_json, total_progression, updated_at,
+                    local_revision, acked_revision,
+                    pending_progression, pending_status, pending_updated_at, pending_account
+                ) VALUES (
+                    'komga:book-2', '{}', NULL, 1000,
+                    0, 0,
+                    0.2, 'Reading', 950, 'https://komga.example|ada|u1'
+                )
+                """.trimIndent(),
+            )
+            // Read only here, agreed with nobody: no partner, no row.
+            old.execSQL(
+                """
+                INSERT INTO reading_progress (book_url, locator_json, total_progression, updated_at)
+                VALUES ('file:///local', '{}', 0.3, 1000)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT peer_id, acked_revision, agreed_progression, agreed_status, " +
+                        "pending_progression, has_pending, remote_updated_at " +
+                        "FROM sync_peer_state WHERE book_url = 'calibre:uuid-1'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("https://books.example|ada|7", cursor.getString(0))
+                    assertEquals(3, cursor.getInt(1))
+                    assertEquals(0.4, cursor.getDouble(2), 1e-9)
+                    assertEquals("Reading", cursor.getString(3))
+                    assertEquals(0.6, cursor.getDouble(4), 1e-9)
+                    assertEquals(1, cursor.getInt(5))
+                    assertEquals(800, cursor.getLong(6))
+                }
+
+                db.query(
+                    "SELECT peer_id, agreed_progression, pending_progression, has_pending " +
+                        "FROM sync_peer_state WHERE book_url = 'komga:book-2'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("https://komga.example|ada|u1", cursor.getString(0))
+                    assertTrue(cursor.isNull(1))
+                    assertEquals(0.2, cursor.getDouble(2), 1e-9)
+                    assertEquals(1, cursor.getInt(3))
+                }
+
+                db.query(
+                    "SELECT COUNT(*) FROM sync_peer_state WHERE book_url = 'file:///local'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0, cursor.getInt(0))
+                }
+
+                // The old columns are still what the calibre-web and
+                // Komga paths read, so copying must not have moved them.
+                db.query(
+                    "SELECT agreed_progression FROM reading_progress " +
+                        "WHERE book_url = 'calibre:uuid-1'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0.4, cursor.getDouble(0), 1e-9)
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 17
+        const val LATEST = 18
     }
 }

@@ -16,13 +16,15 @@ import androidx.sqlite.execSQL
         BookAnnotation::class,
         BookTypography::class,
         ReadingSession::class,
+        SyncPeerState::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun readingSessionDao(): ReadingSessionDao
+    abstract fun syncPeerStateDao(): SyncPeerStateDao
     abstract fun bookDao(): BookDao
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun remoteServerDao(): RemoteServerDao
@@ -367,6 +369,107 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Gives every sync partner its own copy of what it has agreed
+         * with this device.
+         *
+         * One server meant one baseline, and `reading_progress` held it.
+         * A dedicated sync server can now run alongside the catalog
+         * server, and a baseline is a fact about a pair: sharing one
+         * between two partners would have each quietly overwrite the
+         * other's idea of what was settled.
+         *
+         * What is already agreed is carried across rather than
+         * rediscovered — starting the connected account from nothing
+         * would make every book look as though both sides had moved, and
+         * ask about a conflict that does not exist. The old columns stay
+         * where they are for now: they are still what the calibre-web
+         * and Komga paths read, and copying rather than moving means a
+         * release can be rolled back without taking anybody's place in a
+         * book with it.
+         */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `sync_peer_state` (
+                        `book_url` TEXT NOT NULL,
+                        `peer_id` TEXT NOT NULL,
+                        `acked_revision` INTEGER NOT NULL DEFAULT 0,
+                        `agreed_progression` REAL,
+                        `agreed_status` TEXT,
+                        `pending_progression` REAL,
+                        `pending_status` TEXT,
+                        `pending_updated_at` INTEGER,
+                        `has_pending` INTEGER NOT NULL DEFAULT 0,
+                        `remote_updated_at` INTEGER,
+                        `synced_at` INTEGER,
+                        PRIMARY KEY(`book_url`, `peer_id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_sync_peer_state_peer_id` " +
+                        "ON `sync_peer_state` (`peer_id`)",
+                )
+                // A book only has a partner if some account is named on
+                // it. The pending state is attributed to the account that
+                // reported it, which may not be the one the baseline was
+                // agreed with, so the two are carried across separately.
+                connection.execSQL(
+                    """
+                    INSERT INTO sync_peer_state (
+                        book_url, peer_id, acked_revision,
+                        agreed_progression, agreed_status,
+                        pending_progression, pending_status, pending_updated_at,
+                        has_pending, remote_updated_at, synced_at
+                    )
+                    SELECT book_url,
+                           COALESCE(owner_account, agreed_account),
+                           acked_revision,
+                           agreed_progression,
+                           agreed_status,
+                           CASE WHEN pending_account IS NOT NULL
+                                     AND pending_account = COALESCE(owner_account, agreed_account)
+                                THEN pending_progression END,
+                           CASE WHEN pending_account IS NOT NULL
+                                     AND pending_account = COALESCE(owner_account, agreed_account)
+                                THEN pending_status END,
+                           CASE WHEN pending_account IS NOT NULL
+                                     AND pending_account = COALESCE(owner_account, agreed_account)
+                                THEN pending_updated_at END,
+                           CASE WHEN pending_account IS NOT NULL
+                                     AND pending_account = COALESCE(owner_account, agreed_account)
+                                THEN 1 ELSE 0 END,
+                           remote_updated_at,
+                           synced_at
+                    FROM reading_progress
+                    WHERE COALESCE(owner_account, agreed_account) IS NOT NULL
+                    """.trimIndent(),
+                )
+                // A partner that reported something about a book this
+                // device has never agreed with anyone about is still a
+                // partner, and its report is the whole reason the row
+                // needs to exist.
+                connection.execSQL(
+                    """
+                    INSERT OR IGNORE INTO sync_peer_state (
+                        book_url, peer_id, acked_revision,
+                        agreed_progression, agreed_status,
+                        pending_progression, pending_status, pending_updated_at,
+                        has_pending, remote_updated_at, synced_at
+                    )
+                    SELECT book_url, pending_account, acked_revision,
+                           NULL, NULL,
+                           pending_progression, pending_status, pending_updated_at,
+                           1, remote_updated_at, synced_at
+                    FROM reading_progress
+                    WHERE pending_account IS NOT NULL
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -387,6 +490,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_14_15,
             MIGRATION_15_16,
             MIGRATION_16_17,
+            MIGRATION_17_18,
         )
     }
 }
