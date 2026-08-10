@@ -6,6 +6,8 @@ import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -40,16 +42,23 @@ class LiseurSyncRejection(
  * each time: sign the request, tell a refusal that means something apart
  * from one that does not, and never let a proxy's HTML error page reach
  * a JSON parser unannounced.
+ *
+ * Both calls suspend and move to the IO dispatcher here rather than
+ * leaving it to each caller. One of them forgot, and since a `suspend`
+ * signature reads like a promise that the thread is safe, the mistake
+ * was invisible until a statistics screen brought the app down from
+ * `viewModelScope`. Blocking where the blocking happens costs nothing
+ * and removes the way to get it wrong.
  */
 class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
 
-    fun get(
+    suspend fun get(
         url: String,
         credentials: RemoteCredentials?,
         expected: Set<Int> = emptySet(),
     ): JSONObject = send(Request.Builder().url(url).get(), credentials, expected)
 
-    fun post(
+    suspend fun post(
         url: String,
         credentials: RemoteCredentials?,
         json: JSONObject,
@@ -68,11 +77,11 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
      * else becomes the same [RemoteHttpFailure] the rest of the app
      * already knows how to phrase.
      */
-    private fun send(
+    private suspend fun send(
         builder: Request.Builder,
         credentials: RemoteCredentials?,
         expected: Set<Int>,
-    ): JSONObject {
+    ): JSONObject = withContext(Dispatchers.IO) {
         val request = builder.also { credentials?.signInto(it) }.build()
         http.client.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
@@ -80,7 +89,7 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
                 throw LiseurSyncRejection(response.code, parseOrNull(text))
             }
             if (!response.isSuccessful) throw failureFor(response, text)
-            return parseOrNull(text) ?: throw RemoteHttpFailure(SyncFailure.Malformed)
+            parseOrNull(text) ?: throw RemoteHttpFailure(SyncFailure.Malformed)
         }
     }
 

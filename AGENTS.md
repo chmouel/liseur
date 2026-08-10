@@ -95,6 +95,10 @@ emulator.
 - Statistics from a sync server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
   must stand on its own.
+- Blocking network calls move to `Dispatchers.IO` inside the client that
+  blocks, not in the caller. A `suspend` signature reads as a promise
+  that the thread is safe, and a repository reached from a
+  `viewModelScope` is reached from the main thread.
 - Reader settings map to Readium `EpubPreferences`; reading themes
   (Light/Sepia/Dark/Black) are decoupled from the app's Material theme.
 - Bundled fonts must be under open licenses (OFL): Literata et al.

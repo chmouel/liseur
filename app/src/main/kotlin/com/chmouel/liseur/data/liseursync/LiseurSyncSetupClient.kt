@@ -178,7 +178,7 @@ class LiseurSyncSetupClient(private val http: LiseurSyncHttp = LiseurSyncHttp())
         }
     }
 
-    private fun mint(
+    private suspend fun mint(
         baseUrl: String,
         session: RemoteCredentials,
         name: String,

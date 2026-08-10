@@ -726,7 +726,7 @@ class LiseurSyncPositionSync(
     // -- Odds and ends ----------------------------------------------------
 
     /** The newest thing anybody said about one book. */
-    private fun latestOp(
+    private suspend fun latestOp(
         baseUrl: String,
         credentials: RemoteCredentials,
         workId: String,
