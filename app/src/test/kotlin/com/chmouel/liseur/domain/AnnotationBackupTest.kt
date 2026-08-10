@@ -135,4 +135,31 @@ class AnnotationBackupTest {
         val backedUp = BackedUpBook("file:///elsewhere.epub", "A Book", "An Author", emptyList())
         assertEquals("file:///elsewhere.epub", matchBackedUpBook(backedUp, emptyList()))
     }
+
+    @Test
+    fun `a preview counts what would land here`() {
+        val backedUp = listOf(
+            BackedUpBook("calibre:uuid-1", "A Book", "An Author", listOf(full, bare)),
+            BackedUpBook("file:///phone-one/b.epub", "Another", "Someone", listOf(full)),
+            BackedUpBook("file:///gone.epub", "Not Here", "Nobody", listOf(bare)),
+        )
+        val known = listOf(
+            KnownBook("calibre:uuid-1", "A Book", "An Author"),
+            KnownBook("file:///phone-two/b.epub", "another", "someone"),
+        )
+        val match = previewBackupMatch(BackupContents.Readable(backedUp), known)
+        assertEquals(3, match.books)
+        assertEquals(4, match.marks)
+        assertEquals(2, match.matchedBooks)
+        assertEquals(3, match.matchedMarks)
+    }
+
+    @Test
+    fun `a preview of nothing matching says so`() {
+        val backedUp = listOf(BackedUpBook("file:///gone.epub", "Not Here", "Nobody", listOf(bare)))
+        val match = previewBackupMatch(BackupContents.Readable(backedUp), emptyList())
+        assertEquals(1, match.books)
+        assertEquals(0, match.matchedBooks)
+        assertEquals(0, match.matchedMarks)
+    }
 }

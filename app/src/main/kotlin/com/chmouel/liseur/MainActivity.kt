@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -26,9 +27,10 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.chmouel.liseur.data.library.BackupResult
+import com.chmouel.liseur.data.library.BackupSummary
+import com.chmouel.liseur.data.library.Inspection
 import com.chmouel.liseur.domain.ResumeCandidate
 import com.chmouel.liseur.domain.shouldResume
 import com.chmouel.liseur.reader.ReaderActivity
@@ -46,6 +48,7 @@ import com.chmouel.liseur.ui.settings.SyncServerViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
+import com.chmouel.liseur.ui.settings.AnnotationBackupUi
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.ProvideEInk
 import com.chmouel.liseur.data.settings.AppSettings
@@ -195,10 +198,8 @@ private fun LiseurApp(settings: AppSettings) {
                 factory = ReadingStatsViewModel.factory(),
             )
             val statsState by model.state.collectAsStateWithLifecycle()
-            val across by model.acrossDevices.collectAsStateWithLifecycle()
             ReadingStatsScreen(
                 state = statsState,
-                acrossDevices = across,
                 onOpenBook = { book ->
                     statsBook = StatsTarget(book.bookUrl, book.title)
                     bookStatsReturnsTo = Screen.STATS
@@ -256,8 +257,7 @@ private fun LiseurApp(settings: AppSettings) {
                     screen = Screen.SERVER_ACCOUNT
                 },
                 onOpenSyncServer = { screen = Screen.SYNC_SERVER },
-                onExportAnnotations = annotationBackup.export,
-                onImportAnnotations = annotationBackup.restore,
+                backup = annotationBackup,
                 onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
                 onOpenLicences = { screen = Screen.LICENCES },
                 onBack = { screen = Screen.LIBRARY },
@@ -281,18 +281,22 @@ private fun LiseurApp(settings: AppSettings) {
     }
 }
 
-/** The two ways marks leave and return: a file written, a file read. */
-private class AnnotationBackupActions(val export: () -> Unit, val restore: () -> Unit)
-
 /**
- * Wires saving and restoring marks to the system file picker.
+ * Everything the settings card needs to show about saving and restoring
+ * marks, as state rather than as events.
  *
- * A file the user chooses, rather than somewhere of our own, because the
- * whole point is to move it: onto another phone, into a backup, out of
- * Liseur entirely if they would rather keep their reading elsewhere.
+ * The card is a picture of this: what an export would carry, what a
+ * picked file would do, and how the last attempt went. Nothing here
+ * Toasts, because a toast vanishes and the question it answered —
+ * "did that work?" — usually occurs a few seconds later.
+ *
+ * Restoring is a two-step: the picker hands over a file, the file is
+ * read and described, and only the reader's yes lets it touch the
+ * library. The summary is kept current so the card can say what an
+ * export would hold rather than being a leap.
  */
 @Composable
-private fun rememberAnnotationBackup(): AnnotationBackupActions {
+private fun rememberAnnotationBackup(): AnnotationBackupUi {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val backup = remember(context) { context.container.annotationBackup }
@@ -301,43 +305,79 @@ private fun rememberAnnotationBackup(): AnnotationBackupActions {
     // off the composition's own context there is a leak waiting to be.
     val app = remember(context) { context.applicationContext }
 
-    fun report(result: BackupResult) {
-        val message = when (result) {
-            is BackupResult.Exported -> app.getString(
-                R.string.export_annotations_done,
-                result.annotations,
-                result.books,
-            )
-            BackupResult.NothingToExport -> app.getString(R.string.export_annotations_empty)
-            is BackupResult.Imported -> if (result.added == 0) {
-                app.getString(R.string.import_annotations_none)
-            } else {
-                app.getString(R.string.import_annotations_done, result.added)
-            }
-            is BackupResult.Failed -> result.reason
-                ?.let { app.getString(R.string.annotations_backup_failed, it) }
-                ?: app.getString(R.string.annotations_backup_failed_unknown)
+    var summary by remember { mutableStateOf<BackupSummary?>(null) }
+    var pending by remember { mutableStateOf<Pair<Uri, Inspection>?>(null) }
+    var status by remember { mutableStateOf<String?>(null) }
+
+    fun refresh() {
+        scope.launch { summary = backup.exportPreview() }
+    }
+    LaunchedEffect(Unit) { refresh() }
+
+    fun describe(result: BackupResult): String = when (result) {
+        is BackupResult.Exported -> app.getString(
+            R.string.export_annotations_done,
+            result.annotations,
+            result.books,
+        )
+        BackupResult.NothingToExport -> app.getString(R.string.export_annotations_empty)
+        is BackupResult.Imported -> if (result.added == 0) {
+            app.getString(R.string.import_annotations_none)
+        } else {
+            app.getString(R.string.import_annotations_done, result.added)
         }
-        Toast.makeText(app, message, Toast.LENGTH_LONG).show()
+        is BackupResult.Failed -> result.reason
+            ?.let { app.getString(R.string.annotations_backup_failed, it) }
+            ?: app.getString(R.string.annotations_backup_failed_unknown)
     }
 
     val save = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri -> uri?.let { scope.launch { report(backup.exportTo(it)) } } }
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                status = describe(backup.exportTo(it))
+                refresh()
+            }
+        }
+    }
 
     val open = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
-    ) { uri -> uri?.let { scope.launch { report(backup.importFrom(it)) } } }
-
-    return remember(save, open) {
-        AnnotationBackupActions(
-            export = { save.launch("liseur-highlights.json") },
-            // Not filtered to application/json: files copied between
-            // devices arrive labelled all sorts of things, and being told
-            // your own backup cannot be picked is maddening.
-            restore = { open.launch(arrayOf("*/*")) },
-        )
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                when (val looked = backup.inspectBackup(it)) {
+                    is Inspection.Ready -> pending = it to looked
+                    is Inspection.Unreadable ->
+                        status = app.getString(R.string.annotations_backup_failed, looked.reason)
+                    is Inspection.Failed -> status = looked.reason
+                        ?.let { r -> app.getString(R.string.annotations_backup_failed, r) }
+                        ?: app.getString(R.string.annotations_backup_failed_unknown)
+                }
+            }
+        }
     }
+
+    return AnnotationBackupUi(
+        summary = summary,
+        pendingImport = pending?.second,
+        status = status,
+        export = { save.launch("liseur-highlights.json") },
+        // Not filtered to application/json: files copied between
+        // devices arrive labelled all sorts of things, and being told
+        // your own backup cannot be picked is maddening.
+        restore = { open.launch(arrayOf("*/*")) },
+        confirmImport = run@{
+            val file = pending ?: return@run
+            pending = null
+            scope.launch {
+                status = describe(backup.importFrom(file.first))
+                refresh()
+            }
+        },
+        dismissImport = { pending = null },
+    )
 }
 
 /** Opening a link must never take the app down with it. */

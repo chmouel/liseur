@@ -17,6 +17,9 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.library.Inspection
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -70,8 +74,7 @@ fun SettingsScreen(
     onDictionaryBaseUrl: (String) -> Unit,
     onOpenAccount: () -> Unit,
     onOpenSyncServer: () -> Unit,
-    onExportAnnotations: () -> Unit,
-    onImportAnnotations: () -> Unit,
+    backup: AnnotationBackupUi,
     onOpenSource: () -> Unit,
     onOpenLicences: () -> Unit,
     onBack: () -> Unit,
@@ -209,16 +212,7 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.sync_server_account_detail),
                     onClick = onOpenSyncServer,
                 )
-                LinkRow(
-                    title = stringResource(R.string.export_annotations),
-                    subtitle = stringResource(R.string.export_annotations_detail),
-                    onClick = onExportAnnotations,
-                )
-                LinkRow(
-                    title = stringResource(R.string.import_annotations),
-                    subtitle = stringResource(R.string.import_annotations_detail),
-                    onClick = onImportAnnotations,
-                )
+                HighlightsBackupCard(backup = backup)
 
                 SectionTitle(stringResource(R.string.settings_about))
                 Card(Modifier.fillMaxWidth()) {
@@ -425,4 +419,126 @@ private fun PlainRow(title: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(16.dp),
     )
+}
+
+/**
+ * Keeping and carrying marks, as one card rather than two blind rows.
+ *
+ * The summary says what an export would hold before the picker asks
+ * where to put it, and a restore is previewed before it is applied:
+ * a file is a leap otherwise, and "Restored 0 marks" is a poor way to
+ * find out the books in it are not on this phone.
+ */
+@Composable
+private fun HighlightsBackupCard(backup: AnnotationBackupUi) {
+    // The confirm dialog is owed to whichever file is being asked about.
+    (backup.pendingImport as? Inspection.Ready)?.let { ready ->
+        AlertDialog(
+            onDismissRequest = backup.dismissImport,
+            title = { Text(stringResource(R.string.import_preview_title)) },
+            text = {
+                Text(
+                    if (ready.preview.matchedBooks > 0) {
+                        stringResource(
+                            R.string.import_preview_body,
+                            ready.preview.marks,
+                            ready.preview.books,
+                            ready.preview.matchedBooks,
+                        )
+                    } else {
+                        stringResource(R.string.import_preview_none)
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = backup.confirmImport,
+                    enabled = ready.preview.matchedBooks > 0,
+                ) {
+                    Text(stringResource(R.string.import_apply))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = backup.dismissImport) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    Card(Modifier.padding(top = 8.dp).fillMaxWidth()) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(
+                    text = stringResource(R.string.annotations_backup_title),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = backup.summary?.let {
+                        if (it.marks > 0) {
+                            stringResource(R.string.annotations_backup_summary, it.marks, it.books)
+                        } else {
+                            stringResource(R.string.annotations_backup_none)
+                        }
+                    } ?: stringResource(R.string.annotations_backup_none),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            BackupActionRow(
+                icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
+                title = stringResource(R.string.export_annotations),
+                subtitle = stringResource(R.string.export_annotations_detail),
+                enabled = (backup.summary?.marks ?: 0) > 0,
+                onClick = backup.export,
+            )
+            BackupActionRow(
+                icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
+                title = stringResource(R.string.import_annotations),
+                subtitle = stringResource(R.string.import_annotations_detail),
+                enabled = true,
+                onClick = backup.restore,
+            )
+            backup.status?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupActionRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val tint = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() }
+        Column(Modifier.padding(start = 16.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = tint)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

@@ -164,3 +164,40 @@ fun matchBackedUpBook(
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() }
+
+/**
+ * How much of a backup would land on books that are actually here.
+ *
+ * The counting is the same `matchBackedUpBook` an import runs, so the
+ * preview cannot promise what the import would not deliver. Pure so it
+ * can be answered without a phone.
+ */
+fun previewBackupMatch(
+    contents: BackupContents.Readable,
+    known: List<KnownBook>,
+): BackupMatch {
+    var matchedBooks = 0
+    var matchedMarks = 0
+    for (book in contents.books) {
+        val target = matchBackedUpBook(book, known)
+        if (target != book.bookId || known.any { it.bookId == book.bookId }) {
+            matchedBooks += 1
+            matchedMarks += book.annotations.size
+        }
+    }
+    return BackupMatch(
+        books = contents.books.size,
+        marks = contents.books.sumOf { it.annotations.size },
+        matchedBooks = matchedBooks,
+        matchedMarks = matchedMarks,
+    )
+}
+
+/** What a backup would do here, counted. */
+data class BackupMatch(
+    val books: Int,
+    val marks: Int,
+    /** Books whose marks would land somewhere in this library. */
+    val matchedBooks: Int,
+    val matchedMarks: Int,
+)
