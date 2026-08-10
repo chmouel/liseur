@@ -407,14 +407,8 @@ fun LibraryScreen(
                                 )
                             }
                         }
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(
-                                Icons.Outlined.Settings,
-                                contentDescription = stringResource(R.string.settings),
-                            )
-                        }
-                        // A menu rather than a fourth icon. The bar is
-                        // already carrying three, and the shelf is what
+                        // A menu rather than more icons. The bar is
+                        // already carrying two, and the shelf is what
                         // this screen is for.
                         var moreOpen by remember { mutableStateOf(false) }
                         Box {
@@ -439,6 +433,19 @@ fun LibraryScreen(
                                     onClick = {
                                         moreOpen = false
                                         onOpenStats()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.settings)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.Settings,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        moreOpen = false
+                                        onOpenSettings()
                                     },
                                 )
                             }
