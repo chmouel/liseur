@@ -1,0 +1,1 @@
+Dictionary lookups now fall back to lowercase when the exact word isn't found, fixing capitalized selections like the first word of a sentence. Added reading time tracking with a statistics dashboard. The settings button moved into the overflow menu.
