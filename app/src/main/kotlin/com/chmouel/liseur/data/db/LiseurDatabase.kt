@@ -22,7 +22,7 @@ import androidx.sqlite.execSQL
         WorkAlias::class,
         WorkAmbiguity::class,
     ],
-    version = 21,
+    version = 22,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -557,6 +557,20 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `reading_sessions` ADD COLUMN `start_progression` REAL",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `reading_sessions` ADD COLUMN `end_progression` REAL",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `reading_sessions` ADD COLUMN `uploaded_at` INTEGER",
+                )
+            }
+        }
+
         /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
@@ -582,6 +596,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_18_19,
             MIGRATION_19_20,
             MIGRATION_20_21,
+            MIGRATION_21_22,
         )
     }
 }

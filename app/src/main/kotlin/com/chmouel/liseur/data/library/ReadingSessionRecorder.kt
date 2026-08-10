@@ -39,7 +39,11 @@ class ReadingSessionRecorder(
         data class Ready(override val at: Moment) : Event
         data class Resumed(override val at: Moment) : Event
         data class Paused(override val at: Moment) : Event
-        data class Checkpoint(override val at: Moment) : Event
+        data class Checkpoint(
+            override val at: Moment,
+            /** Null for the periodic tick, which turned no page. */
+            val progression: Double? = null,
+        ) : Event
         data class Close(
             val completed: CompletableDeferred<Unit>,
             override val at: Moment,
@@ -53,9 +57,23 @@ class ReadingSessionRecorder(
     private val events = Channel<Event>(Channel.UNLIMITED)
     private val accepting = AtomicBoolean(true)
 
+
     private var ready = false
     private var foreground = false
     private var sessionId: Long? = null
+
+    /**
+     * Where the reader was last seen, for the events that turned no
+     * page.
+     *
+     * A pause, a close and the periodic tick all have to say where the
+     * session had got to, and none of them is handed a locator. Only
+     * ever touched from the queue's own coroutine, which is also why a
+     * page turn carries its progression in the event rather than
+     * writing it here: two turns can be submitted before either is
+     * processed, and the first checkpoint must record the first page.
+     */
+    private var latestProgression: Double? = null
 
     init {
         scope.launch {
@@ -83,9 +101,16 @@ class ReadingSessionRecorder(
         enqueue(Event.Paused(moment()))
     }
 
-    /** Persists elapsed time at the moment a page turn is observed. */
-    fun onPageTurned() {
-        enqueue(Event.Checkpoint(moment()))
+    /**
+     * Persists elapsed time at the moment a page turn is observed, and
+     * with it where in the book that page was.
+     *
+     * Captured here rather than read back from the database when the
+     * checkpoint is written: by then the reader may have turned again,
+     * and a stretch would be credited to the wrong part of the book.
+     */
+    fun onPageTurned(progression: Double? = null) {
+        enqueue(Event.Checkpoint(moment(), progression))
     }
 
     /**
@@ -150,7 +175,7 @@ class ReadingSessionRecorder(
             }
 
             is Event.Checkpoint -> {
-                checkpoint(event.at)
+                checkpoint(event.at, event.progression)
                 true
             }
 
@@ -180,12 +205,14 @@ class ReadingSessionRecorder(
         )
     }
 
-    private suspend fun checkpoint(at: Moment) {
+    private suspend fun checkpoint(at: Moment, progression: Double?) {
+        if (progression != null) latestProgression = progression
         val id = sessionId ?: return
         dao.checkpoint(
             id = id,
             totalMs = clock.checkpoint(at.elapsed),
             atMillis = at.wall,
+            progression = latestProgression,
         )
     }
 
@@ -195,6 +222,7 @@ class ReadingSessionRecorder(
             id = id,
             totalMs = clock.pause(at.elapsed),
             atMillis = at.wall,
+            progression = latestProgression,
         )
         sessionId = null
     }

@@ -19,6 +19,7 @@ import mockwebserver3.RecordedRequest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -214,6 +215,89 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `finished reading is sent once, as fractions rather than pages`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val session = closedSession(from = 0.1, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+
+        sync().syncAll(null)
+
+        val sent = JSONObject(
+            requests().last { it.target.startsWith("/v1/sessions") }.body!!.utf8(),
+        ).getJSONArray("sessions").getJSONObject(0)
+        assertEquals("w-1", sent.getString("work_id"))
+        assertEquals(0.1, sent.getDouble("start_progression"), 0.0001)
+        assertEquals(0.4, sent.getDouble("end_progression"), 0.0001)
+        // Pages are a property of one rendering on one screen; this
+        // device cannot work them out for anybody else.
+        assertFalse(sent.has("pages"))
+        assertNotNull(db.readingSessionDao().get(session)?.uploadedAt)
+
+        // And the next run has nothing left to say.
+        server.enqueue(json("""{"ops":[]}"""))
+        sync().syncAll(null)
+        assertEquals(1, requests().count { it.target.startsWith("/v1/sessions") })
+    }
+
+    @Test
+    fun `an hour the server never confirmed is offered again, not lost`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val session = closedSession(from = 0.1, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 500, body = ""))
+
+        sync().syncAll(null)
+        assertNull(db.readingSessionDao().get(session)?.uploadedAt)
+
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+        sync().syncAll(null)
+
+        val sessions = requests().filter { it.target.startsWith("/v1/sessions") }
+        // Byte for byte, so the server recognises it rather than
+        // counting the same hour twice.
+        assertEquals(sessions[0].body!!.utf8(), sessions[1].body!!.utf8())
+        assertNotNull(db.readingSessionDao().get(session)?.uploadedAt)
+    }
+
+    @Test
+    fun `a batch the server will never accept stops being offered`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val session = closedSession(from = 0.1, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 409, body = """{"error":"session_id reused"}"""))
+
+        sync().syncAll(null)
+
+        // Retrying forever would park it at the head of the queue and
+        // stop every later session behind it.
+        assertNotNull(db.readingSessionDao().get(session)?.uploadedAt)
+    }
+
+    @Test
+    fun `reading of a book this server has no name for waits`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        val session = closedSession(from = 0.1, to = 0.4)
+        // No alias, and resolving is refused, so nothing can be said
+        // about which book this was.
+        server.enqueue(MockResponse(code = 503, body = ""))
+        server.enqueue(json("""{"ops":[]}"""))
+
+        sync().syncAll(null)
+
+        assertTrue(requests().none { it.target.startsWith("/v1/sessions") })
+        assertNull(db.readingSessionDao().get(session)?.uploadedAt)
+    }
+
+    @Test
     fun `nothing is asked of the server when no account is connected`() = runTest {
         db.bookDao().upsert(local())
 
@@ -231,6 +315,7 @@ class LiseurSyncPositionSyncTest {
             progressDao = db.readingProgressDao(),
             peerStateDao = db.syncPeerStateDao(),
             identityDao = db.workIdentityDao(),
+            sessionDao = db.readingSessionDao(),
             works = WorkResolver(
                 dao = db.workIdentityDao(),
                 fingerprints = BookFingerprintStore(context, db.workIdentityDao()) { NOW },
@@ -304,6 +389,20 @@ class LiseurSyncPositionSyncTest {
     }
 
     private val seen = mutableListOf<RecordedRequest>()
+
+    private suspend fun closedSession(from: Double, to: Double): Long {
+        val dao = db.readingSessionDao()
+        val id = dao.insert(
+            com.chmouel.liseur.data.db.ReadingSession(
+                bookUrl = LOCAL,
+                startedAt = NOW,
+                lastCheckpointAt = NOW,
+            ),
+        )
+        dao.checkpoint(id, totalMs = 0, atMillis = NOW, progression = from)
+        dao.finish(id, totalMs = 60_000, atMillis = NOW + 60_000, progression = to)
+        return id
+    }
 
     private fun peer() = "liseursync|http://127.0.0.1:${server.port}|ada"
 

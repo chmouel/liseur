@@ -231,6 +231,7 @@ class AppContainer(context: Context) {
                     progressDao = database.readingProgressDao(),
                     peerStateDao = database.syncPeerStateDao(),
                     identityDao = database.workIdentityDao(),
+                    sessionDao = database.readingSessionDao(),
                     works = workResolver,
                     finishedState = finishedState,
                     reporting = syncReporting,

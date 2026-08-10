@@ -36,6 +36,24 @@ data class ReadingSession(
     /** The last moment this session was safely persisted. */
     @ColumnInfo(name = "last_checkpoint_at") val lastCheckpointAt: Long,
     @ColumnInfo(name = "duration_ms") val durationMs: Long = 0,
+    /**
+     * How far into the book this stretch began and ended.
+     *
+     * Fractions rather than pages, deliberately: a page is a property of
+     * one rendering of one edition on one screen size, so a page count
+     * exchanged between devices would be a number nobody can check. A
+     * server that knows the edition can work pages out; this device
+     * cannot work them out for anybody else.
+     *
+     * Both are null for sessions recorded before progressions were
+     * captured, and for a stretch in which no page ever turned. Those
+     * are never uploaded — a session that cannot say where it happened
+     * says nothing worth knowing.
+     */
+    @ColumnInfo(name = "start_progression") val startProgression: Double? = null,
+    @ColumnInfo(name = "end_progression") val endProgression: Double? = null,
+    /** When this session was accepted by the sync server, if ever. */
+    @ColumnInfo(name = "uploaded_at") val uploadedAt: Long? = null,
 ) {
     val isOpen: Boolean get() = endedAt == null
 }
@@ -62,11 +80,13 @@ interface ReadingSessionDao {
         """
         UPDATE reading_sessions
         SET duration_ms = MAX(duration_ms, :totalMs),
-            last_checkpoint_at = MAX(last_checkpoint_at, :atMillis)
+            last_checkpoint_at = MAX(last_checkpoint_at, :atMillis),
+            start_progression = COALESCE(start_progression, :progression),
+            end_progression = COALESCE(:progression, end_progression)
         WHERE id = :id AND ended_at IS NULL
         """,
     )
-    suspend fun checkpoint(id: Long, totalMs: Long, atMillis: Long)
+    suspend fun checkpoint(id: Long, totalMs: Long, atMillis: Long, progression: Double?)
 
     /** Closes a session for good, at a moment reading is known to have happened. */
     @Query(
@@ -74,11 +94,13 @@ interface ReadingSessionDao {
         UPDATE reading_sessions
         SET duration_ms = MAX(duration_ms, :totalMs),
             last_checkpoint_at = MAX(last_checkpoint_at, :atMillis),
+            start_progression = COALESCE(start_progression, :progression),
+            end_progression = COALESCE(:progression, end_progression),
             ended_at = MAX(started_at, last_checkpoint_at, :atMillis)
         WHERE id = :id AND ended_at IS NULL
         """,
     )
-    suspend fun finish(id: Long, totalMs: Long, atMillis: Long)
+    suspend fun finish(id: Long, totalMs: Long, atMillis: Long, progression: Double?)
 
     /**
      * Sessions the app never got to close, oldest first.
@@ -106,6 +128,28 @@ interface ReadingSessionDao {
     /** Every session anywhere, newest first. The dashboard's whole input. */
     @Query("SELECT * FROM reading_sessions ORDER BY started_at DESC")
     fun observeAll(): Flow<List<ReadingSession>>
+
+    /**
+     * Finished sessions the sync server has not been told about, oldest
+     * first.
+     *
+     * Only sessions that know where in the book they happened: one that
+     * cannot say is not worth a request, and sending it would make the
+     * server invent a stretch from zero to zero.
+     */
+    @Query(
+        """
+        SELECT * FROM reading_sessions
+        WHERE ended_at IS NOT NULL AND uploaded_at IS NULL
+          AND start_progression IS NOT NULL AND end_progression IS NOT NULL
+        ORDER BY started_at
+        LIMIT :limit
+        """,
+    )
+    suspend fun awaitingUpload(limit: Int): List<ReadingSession>
+
+    @Query("UPDATE reading_sessions SET uploaded_at = :at WHERE id IN (:ids)")
+    suspend fun markUploaded(ids: List<Long>, at: Long)
 
     @Query("DELETE FROM reading_sessions WHERE book_url = :bookUrl")
     suspend fun deleteForBook(bookUrl: String)

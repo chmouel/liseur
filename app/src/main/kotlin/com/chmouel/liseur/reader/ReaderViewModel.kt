@@ -442,7 +442,7 @@ class ReaderViewModel(
         _progress.value = progressAt(locator)
         // Capture the page's moment before suspendable position writes,
         // so database latency cannot become reading time.
-        sessions.onPageTurned()
+        sessions.onPageTurned(totalProgression)
         viewModelScope.launch {
             // One statement, so two page turns cannot interleave and a
             // stale acknowledgement cannot be carried back over a fresh

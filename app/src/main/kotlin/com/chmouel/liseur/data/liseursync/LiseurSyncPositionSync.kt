@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.SyncAccount
 import com.chmouel.liseur.data.db.SyncAccountDao
 import com.chmouel.liseur.data.db.SyncPeerState
@@ -64,6 +65,7 @@ class LiseurSyncPositionSync(
     private val progressDao: ReadingProgressDao,
     private val peerStateDao: SyncPeerStateDao,
     private val identityDao: WorkIdentityDao,
+    private val sessionDao: ReadingSessionDao,
     private val works: WorkResolver,
     private val finishedState: FinishedState,
     private val reporting: SyncReporting = SyncReporting(),
@@ -239,6 +241,11 @@ class LiseurSyncPositionSync(
         }
 
         val pushed = push(account, credentials, pushes) { firstFailure = firstFailure ?: it }
+
+        // After the positions, because where the reader is now matters
+        // more than how long they took to get there, and a run cut short
+        // by a dead network should have spent what it had on the former.
+        uploadSessions(account, credentials) { firstFailure = firstFailure ?: it }
 
         val at = now()
         reporting.report(
@@ -632,6 +639,80 @@ class LiseurSyncPositionSync(
         return pushed
     }
 
+    // -- Sessions ---------------------------------------------------------
+
+    /**
+     * Sends finished reading, once each.
+     *
+     * Only sessions for books this server already has a name for, and
+     * only ones that know where in the book they happened; the rest
+     * wait, which costs nothing because a session is a fact about the
+     * past and is no less true next run.
+     *
+     * A refusal on the server's own terms — an id it already holds
+     * carrying something else, or a payload it will not parse — is
+     * marked done rather than retried. Neither will ever be accepted,
+     * and a batch that can never succeed would sit at the head of the
+     * queue forever and stop every later session behind it.
+     */
+    private suspend fun uploadSessions(
+        account: SyncAccount,
+        credentials: RemoteCredentials,
+        onFailure: (SyncFailure) -> Unit,
+    ) {
+        val sessions = sessionDao.awaitingUpload(SessionUploads.MAX_BATCH)
+        if (sessions.isEmpty()) return
+        val byBook = identityDao.aliasesFor(account.peerId)
+            .filter { it.usable }
+            .associateBy { it.bookUrl }
+
+        val sending = sessions.mapNotNull { session ->
+            val alias = byBook[session.bookUrl] ?: return@mapNotNull null
+            SessionUploads.toJson(
+                session = session,
+                deviceKey = account.deviceKey,
+                workId = alias.workId,
+                editionSha = alias.editionSha,
+            )?.let { session.id to it }
+        }
+        if (sending.isEmpty()) return
+
+        try {
+            http.post(
+                LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.SESSIONS),
+                credentials,
+                JSONObject().put(
+                    "sessions",
+                    JSONArray().apply { sending.forEach { put(it.second) } },
+                ),
+            )
+        } catch (rejected: RemoteHttpFailure) {
+            if (!rejected.reason.isFinal()) {
+                Log.i(TAG, "Could not send reading sessions", rejected)
+                onFailure(rejected.reason)
+                return
+            }
+            Log.i(TAG, "The server will never take these sessions; not asking again")
+        } catch (e: IOException) {
+            Log.i(TAG, "Could not send reading sessions", e)
+            onFailure(reasonFor(e))
+            return
+        }
+
+        forAccount(account) { sessionDao.markUploaded(sending.map { it.first }, now()) }
+    }
+
+    /**
+     * Whether asking again could ever produce a different answer.
+     *
+     * A malformed batch stays malformed, and an id the server already
+     * holds under a different payload will never become free. Both are
+     * settled by giving up on them rather than by trying harder.
+     */
+    private fun SyncFailure.isFinal(): Boolean =
+        this is SyncFailure.Malformed ||
+            (this is SyncFailure.ServerError && code in FINAL_CODES)
+
     private fun accepted(answer: JSONObject): Set<String> {
         val results = answer.optJSONArray("results") ?: return emptySet()
         return (0 until results.length()).mapNotNull { index ->
@@ -715,6 +796,9 @@ class LiseurSyncPositionSync(
     private val pendingLocators = mutableMapOf<String, String>()
 
     private companion object {
+        /** Refusals no amount of retrying will turn into an acceptance. */
+        val FINAL_CODES = setOf(400, 409, 422)
+
         const val TAG = "liseur-sync-positions"
         const val PAGE = 500
         const val MAX_PAGES = 200

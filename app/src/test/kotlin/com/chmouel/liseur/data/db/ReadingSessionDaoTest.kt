@@ -243,13 +243,88 @@ class ReadingSessionDaoTest {
     }
 
     @Test
+    fun `a segment remembers where in the book it happened`() = runTest {
+        val recorder = recorder()
+        recorder.resumed()
+        now += minute
+        recorder.onPageTurned(0.20)
+        now += minute
+        recorder.onPageTurned(0.35)
+        recorder.paused()
+
+        val session = dao.observeAll().first().single()
+        // The first page seen is where the stretch began; the last is
+        // where it ended. Anything else would credit the reading to the
+        // wrong part of the book.
+        assertEquals(0.20, session.startProgression!!, 0.0001)
+        assertEquals(0.35, session.endProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `closing at a page nobody turned still knows where it stopped`() = runTest {
+        // The periodic checkpoint and the pause are not page turns and
+        // are handed no locator, so the last one seen has to do.
+        val recorder = recorder()
+        recorder.resumed()
+        recorder.onPageTurned(0.5)
+        now += minute
+        recorder.paused()
+
+        val session = dao.observeAll().first().single()
+        assertEquals(0.5, session.endProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a segment in which no page ever turned says nothing about where`() = runTest {
+        val recorder = recorder()
+        recorder.resumed()
+        now += minute
+        recorder.paused()
+
+        val session = dao.observeAll().first().single()
+        // Null rather than zero: a book opened and put down again did
+        // not happen at the start of the book, it happened nowhere
+        // anybody can name, and it is never uploaded.
+        assertEquals(null, session.startProgression)
+        assertTrue(dao.awaitingUpload(10).isEmpty())
+    }
+
+    @Test
+    fun `a finished segment is offered once and then not again`() = runTest {
+        val recorder = recorder()
+        recorder.resumed()
+        recorder.onPageTurned(0.1)
+        now += minute
+        recorder.paused()
+
+        val waiting = dao.awaitingUpload(10)
+        assertEquals(1, waiting.size)
+        dao.markUploaded(waiting.map { it.id }, now)
+
+        assertTrue(dao.awaitingUpload(10).isEmpty())
+    }
+
+    @Test
+    fun `an open segment is not offered for upload`() = runTest {
+        val recorder = recorder()
+        recorder.resumed()
+        recorder.onPageTurned(0.1)
+        recorder.awaitIdle()
+
+        // Still being read. Its end is not known yet, and a session sent
+        // now would have to be corrected, which the server will not
+        // allow.
+        assertTrue(dao.awaitingUpload(10).isEmpty())
+    }
+
+    @Test
     fun `a checkpoint cannot drag the last page backwards`() = runTest {
         val id = dao.insert(
             ReadingSession(bookUrl = book, startedAt = 0, lastCheckpointAt = 10 * minute),
         )
         // A clock that went backwards between two page turns. The time
         // stands still rather than the record of it going into reverse.
-        dao.checkpoint(id, totalMs = 0, atMillis = minute)
+        dao.checkpoint(id, totalMs = 0, atMillis = minute, progression = null)
         assertEquals(10 * minute, dao.get(id)!!.lastCheckpointAt)
     }
 
@@ -257,8 +332,8 @@ class ReadingSessionDaoTest {
     fun `retrying an absolute checkpoint cannot count it twice`() = runTest {
         val id = dao.insert(ReadingSession(bookUrl = book, startedAt = 0, lastCheckpointAt = 0))
 
-        dao.checkpoint(id, totalMs = minute, atMillis = minute)
-        dao.checkpoint(id, totalMs = minute, atMillis = minute)
+        dao.checkpoint(id, totalMs = minute, atMillis = minute, progression = null)
+        dao.checkpoint(id, totalMs = minute, atMillis = minute, progression = null)
 
         assertEquals(minute, dao.get(id)!!.durationMs)
     }
@@ -268,8 +343,8 @@ class ReadingSessionDaoTest {
         val id = dao.insert(
             ReadingSession(bookUrl = book, startedAt = 0, lastCheckpointAt = 0),
         )
-        dao.finish(id, totalMs = minute, atMillis = minute)
-        dao.finish(id, totalMs = 5 * minute, atMillis = 10 * minute)
+        dao.finish(id, totalMs = minute, atMillis = minute, progression = null)
+        dao.finish(id, totalMs = 5 * minute, atMillis = 10 * minute, progression = null)
 
         val session = dao.get(id)!!
         assertEquals(minute, session.durationMs)
@@ -286,7 +361,7 @@ class ReadingSessionDaoTest {
             ),
         )
 
-        dao.finish(id, totalMs = minute, atMillis = 5 * minute)
+        dao.finish(id, totalMs = minute, atMillis = 5 * minute, progression = null)
 
         val session = dao.get(id)!!
         assertEquals(10 * minute, session.lastCheckpointAt)
