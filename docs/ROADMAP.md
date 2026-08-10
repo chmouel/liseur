@@ -76,10 +76,23 @@ the server copy before any of it is written.
 ### Carry highlights between devices
 
 Highlights, notes and bookmarks never leave the device. Either sync them
-through calibre-web, or build a library-wide export and import so they
-can be moved by hand. The per-book Markdown export is not enough.
+through calibre-web or liseur-sync, or build a library-wide export and
+import so they can be moved by hand. The per-book Markdown export is not
+enough.
 
-*Where:* `data/db/BookAnnotation.kt`, `data/calibre/`.
+*Where:* `data/db/BookAnnotation.kt`, `data/calibre/`,
+`data/liseursync/`.
+
+### Merge two works from the phone
+
+When a book's identifiers name two different works on a sync server,
+Liseur reports the count and leaves them alone: merging is destructive
+and irreversible from here. Doing it in the app means showing both
+candidates well enough that somebody can tell them apart, which needs
+more than a work id.
+
+*Where:* `data/liseursync/WorkResolver.kt`,
+`ui/settings/SyncServerScreen.kt`.
 
 ### Per-book typography
 

@@ -96,9 +96,20 @@ percentage, so a book reopens on the exact word you left it on, whichever
 device you pick it up on. If both sides moved since they last agreed, Liseur
 says so instead of silently picking one.
 
+You can also connect a [liseur-sync](https://github.com/chmouel/liseur-sync)
+server, alongside your catalog server or instead of one. It holds no books,
+only places: it syncs the exact spot, and it does it for books that came off an
+SD card and have never been near a catalog at all, which nothing else here can.
+Books are matched by the file's own hashes where possible, and where the match
+rests on nothing but a title and an author, Liseur asks you before it syncs
+anything — two translations of the same novel look identical from a title.
+It also keeps your reading time, so the stats screen can show the hours you put
+in on your other devices as well as this one.
+
 Free software. No trackers or analytics, no proprietary dependencies. The only
-network traffic is to the book server you configured and, if you switch
-online definitions on, to the dictionary site you chose.
+network traffic is to the book server you configured, the sync server if you
+added one, and, if you switch online definitions on, to the dictionary site you
+chose.
 
 On a tablet or an e-ink reader the page is laid out in two columns rather
 than one long line, the library shows fewer and larger covers, sheets and

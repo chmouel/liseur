@@ -418,6 +418,64 @@ deliberately rather than read off the schema.
 - Deleting a book from the server is admin-only
   (`DELETE /books/{id}/file`), so that action is hidden for Komga.
 
+## liseur-sync protocol
+
+A second kind of partner, and a different shape from the two above.
+calibre-web and Komga each hold one current position per book and
+answer "where am I"; liseur-sync holds an append-only log and answers
+"what has happened since `seq`". It holds no books at all, which is
+what lets it sync a book that came off an SD card.
+
+- Auth is `Authorization: Bearer <token>`. `POST /v1/login` with a
+  username and password mints device tokens through `POST /v1/tokens`;
+  one scope per token, so signing in asks for two — `sync` and
+  `read-insights` — and a reader who pastes a token made elsewhere
+  usually has only the first. Statistics are simply absent then.
+- **The cursor is the only irreplaceable state.** Everything else can
+  be asked for again, but ops behind `sync_account.cursor_seq` cannot.
+  So a page from `GET /v1/changes?since=` is written and the cursor
+  advanced in one transaction, never the other way round. A cursor that
+  has fallen below the server's compaction horizon gets `410
+  resync_required`; the answer is `GET /v1/heads` and its
+  `snapshot_seq`.
+- **Ids are derived, not drawn.** The server treats `op_id` and
+  `session_id` as idempotency keys and compares the whole payload
+  behind each: same id and same payload is `duplicate`, same id and a
+  different payload is a conflict. So the id is
+  `UUIDv3(deviceKey|workId|revision)` and every payload field comes
+  from stored state — `client_ts` is `reading_progress.updated_at`,
+  never the clock. A push interrupted by a dead network is simply
+  repeated. The server does not check that the id is a UUIDv7; it is
+  opaque, up to 64 characters.
+- `POST /v1/works/resolve` takes every identifier at once — `sha256:`,
+  `pmd5:` (KOReader's partial MD5), `dc:` and `ta:` — and registers all
+  of them against whichever matched, which is how a re-encoded copy and
+  the original converge. `409` means they named two different works;
+  the server changes nothing and merging is left to the reader.
+- **`ta:` normalisation is an interoperability contract and is not in
+  the schema.** The server matches `ta` aliases by exact string and
+  computes nothing itself. `WorkIdentifiers.titleAuthor` defines it as
+  `fold(title)|fold(author)`, where folding is NFKD, strip `\p{Mn}`,
+  lowercase, non-alphanumerics collapsed to single spaces, trimmed. Any
+  other client must agree exactly or it will silently fail to match.
+- A locator over 16 KB is dropped and the progression sent on its own.
+  Failing the push outright would leave the other device with no idea
+  where the reader is, which is far worse than reopening at a
+  percentage.
+- A book resolved *today* has all of its history behind the cursor, so
+  a newly named book is seeded once from
+  `GET /v1/works/{id}/positions?limit=1`.
+- `POST /v1/sessions` takes closed sessions only, as progression
+  fractions. **Never send page numbers**: a page is a property of one
+  rendering of one edition at one type size, and the server derives
+  pages itself when it knows the edition. `idle_ms` is always zero here
+  and honestly so — time is counted only while the reader is in the
+  foreground, so time spent elsewhere is already absent rather than
+  included and subtracted.
+- Statistics (`/v1/insights/*`) are decoration. Every failure is null
+  and silent, and a null `eta_seconds` is carried through untouched: no
+  estimate beats an invented one.
+
 ## F-Droid readiness
 
 - **Dependencies are all FOSS**, from Maven Central or Google's Maven.
