@@ -50,6 +50,7 @@
     <string name="sync_server_account">Sync server</string>
     <string name="sync_server_account_detail">Keep your place in step across devices with a liseur-sync server, including books that came from nowhere but this phone.</string>
     <string name="sync_server_intro">A liseur-sync server keeps your reading positions and reading time, and nothing else. It holds no books, and it can be used alongside a book server or on its own.</string>
+    <string name="sync_server_get_one">Haven\'t got one? Run your own</string>
     <string name="sync_server_sign_in_password">Sign in</string>
     <string name="sync_server_sign_in_token">Paste a token</string>
     <string name="sync_server_password_help">Your password is used once, to ask the server for a token for this device. It is never stored.</string>

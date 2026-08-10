@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -58,6 +60,9 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.ui.windowWidth
+
+/** Where to get a server, for a reader who has not got one yet. */
+private const val SYNC_SERVER_URL = "https://github.com/chmouel/liseur-sync"
 
 /**
  * Connecting a place to keep reading positions.
@@ -174,6 +179,15 @@ private fun ConnectSyncForm(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    // A reader who has not got a server yet cannot connect to one, and
+    // the screen otherwise gives them nowhere to go.
+    val uriHandler = LocalUriHandler.current
+    TextButton(
+        onClick = { runCatching { uriHandler.openUri(SYNC_SERVER_URL) } },
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Text(stringResource(R.string.sync_server_get_one))
+    }
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         SyncSignIn.entries.forEachIndexed { index, way ->
             SegmentedButton(
