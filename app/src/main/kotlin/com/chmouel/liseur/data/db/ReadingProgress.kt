@@ -84,6 +84,12 @@ data class BookReadAt(
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
 
+/** How far through a book the reader is, if anything is known. */
+data class BookProgression(
+    @ColumnInfo(name = "book_url") val bookUrl: String,
+    @ColumnInfo(name = "total_progression") val totalProgression: Double?,
+)
+
 @Dao
 abstract class ReadingProgressDao {
     /**
@@ -116,6 +122,16 @@ abstract class ReadingProgressDao {
      */
     @Query("SELECT book_url, updated_at FROM reading_progress")
     abstract fun observeReadAt(): kotlinx.coroutines.flow.Flow<List<BookReadAt>>
+
+    /**
+     * How far through each book the reader is, watched.
+     *
+     * Only the two columns the statistics need. A whole
+     * [ReadingProgress] row per book would carry every sync column with
+     * it and make the dashboard rebuild whenever a token moved.
+     */
+    @Query("SELECT book_url, total_progression FROM reading_progress")
+    abstract fun observeProgressions(): kotlinx.coroutines.flow.Flow<List<BookProgression>>
 
     @Upsert
     abstract suspend fun upsert(progress: ReadingProgress)

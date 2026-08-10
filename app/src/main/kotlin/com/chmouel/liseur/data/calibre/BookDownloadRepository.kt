@@ -16,6 +16,7 @@ import androidx.work.WorkManager
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -46,6 +47,7 @@ data class StorageUse(val count: Int, val bytes: Long)
 class BookDownloadRepository(
     private val context: Context,
     private val bookDao: BookDao,
+    private val bookRemoval: BookRemoval,
     private val deleteClient: CalibreDeleteClient = CalibreDeleteClient(),
 ) {
     private val workManager get() = WorkManager.getInstance(context)
@@ -136,7 +138,10 @@ class BookDownloadRepository(
         )
         if (result is ServerDeleteResult.Deleted) {
             book.remoteUuid?.let { fileFor(it).delete() }
-            bookDao.deleteByUrls(listOf(book.url))
+            // The book is gone from the server too, so this is not a
+            // copy being freed up: nothing is coming back, and the
+            // hours are no longer about anything.
+            bookRemoval.deleteByUrls(listOf(book.url))
         }
         return result
     }
@@ -154,7 +159,7 @@ class BookDownloadRepository(
     suspend fun deleteLocalBook(book: Book): Boolean = withContext(Dispatchers.IO) {
         val uri = (book.localUri ?: book.url).toUri()
         if (!deleteFile(uri)) return@withContext false
-        bookDao.deleteByUrls(listOf(book.url))
+        bookRemoval.deleteByUrls(listOf(book.url))
         true
     }
 

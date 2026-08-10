@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.komga.KomgaSetupClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
@@ -24,6 +25,7 @@ class RemoteAccountRepository(
     private val dao: RemoteServerDao,
     private val bookDao: BookDao,
     private val progressDao: ReadingProgressDao,
+    private val bookRemoval: BookRemoval,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -260,12 +262,13 @@ class RemoteAccountRepository(
     /**
      * Puts down everything that belonged to the account being left.
      *
-     * The reading itself stays, and so does the note of who did it: that
-     * is exactly what the reader has to be asked about before anything is
-     * handed over. What goes is the agreed baseline and any unsettled
-     * remote state, because they describe a library this new login cannot
-     * see. Nothing is left looking unsent, so signing in as someone else
-     * never quietly uploads the last person's reading into their account.
+     * The saved position stays for books that remain, and so does the note
+     * of who wrote it: that is exactly what the reader has to be asked about
+     * before anything is handed over. What goes is the agreed baseline and
+     * any unsettled remote state, because they describe a library this new
+     * login cannot see. Nothing is left looking unsent, so signing in as
+     * someone else never quietly uploads the last person's reading into
+     * their account.
      *
      * The books go the same way they go on a disconnect. A remote id
      * means something only to the server that issued it, so leaving one
@@ -275,7 +278,7 @@ class RemoteAccountRepository(
      */
     private suspend fun retireForAccountSwitch() {
         progressDao.retireAccountState()
-        bookDao.deleteRemoteNotDownloaded()
+        bookRemoval.deleteRemoteNotDownloaded()
         bookDao.unlinkDownloadedFromRemote()
     }
 
@@ -314,14 +317,14 @@ class RemoteAccountRepository(
 
     /**
      * Forgets the account. Books that only ever lived on the server go
-     * with it; anything downloaded stays on the device as an ordinary
-     * book, cut loose so it cannot be synced against a different server
-     * later on.
+     * with it, including its local statistics; anything downloaded stays
+     * on the device as an ordinary book with its statistics intact, cut
+     * loose so it cannot be synced against a different server later on.
      */
     suspend fun disconnect() {
         changingAccount {
             inTransaction {
-                bookDao.deleteRemoteNotDownloaded()
+                bookRemoval.deleteRemoteNotDownloaded()
                 bookDao.unlinkDownloadedFromRemote()
                 dao.delete()
             }

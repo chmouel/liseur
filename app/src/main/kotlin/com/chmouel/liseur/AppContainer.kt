@@ -13,7 +13,9 @@ import com.chmouel.liseur.data.komga.KomgaSyncRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.AnnotationBackupRepository
+import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
@@ -30,6 +32,9 @@ import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Manual composition root: shared Readium services and app-wide
@@ -37,6 +42,7 @@ import org.readium.r2.streamer.parser.DefaultPublicationParser
  */
 class AppContainer(context: Context) {
     private val httpClient = DefaultHttpClient()
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val assetRetriever = AssetRetriever(context.contentResolver, httpClient)
 
@@ -53,6 +59,17 @@ class AppContainer(context: Context) {
         .addMigrations(*LiseurDatabase.MIGRATIONS)
         .build()
 
+    val readingSessions = ReadingSessionManager(
+        dao = database.readingSessionDao(),
+        scope = applicationScope,
+    )
+
+    val bookRemoval = BookRemoval(
+        bookDao = database.bookDao(),
+        sessionDao = database.readingSessionDao(),
+        inTransaction = { work -> database.withTransaction { work() } },
+    )
+
     val libraryRepository = LocalLibraryRepository(
         context = context.applicationContext,
         assetRetriever = assetRetriever,
@@ -61,6 +78,8 @@ class AppContainer(context: Context) {
         folderDao = database.libraryFolderDao(),
         progressDao = database.readingProgressDao(),
         annotationDao = database.annotationDao(),
+        sessionDao = database.readingSessionDao(),
+        bookRemoval = bookRemoval,
     )
 
     /** Highlights and notes written to a file, and read back on another device. */
@@ -90,12 +109,14 @@ class AppContainer(context: Context) {
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
+        bookRemoval = bookRemoval,
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
     val bookDownloads = BookDownloadRepository(
         context = context.applicationContext,
         bookDao = database.bookDao(),
+        bookRemoval = bookRemoval,
     )
 
     /** This device, as the servers that record who saved a position see it. */
@@ -157,6 +178,7 @@ class AppContainer(context: Context) {
         router = remoteRouter,
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
+        bookRemoval = bookRemoval,
         inTransaction = { work -> database.withTransaction { work() } },
     )
 }

@@ -12,6 +12,7 @@ import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.LibraryFolderDao
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.domain.isSameWork
 import com.chmouel.liseur.domain.workIdOf
 import java.io.File
@@ -39,6 +40,8 @@ class LocalLibraryRepository(
     private val folderDao: LibraryFolderDao,
     private val progressDao: ReadingProgressDao,
     private val annotationDao: BookAnnotationDao,
+    private val sessionDao: ReadingSessionDao,
+    private val bookRemoval: BookRemoval,
 ) {
     val books: Flow<List<Book>> = bookDao.observeAll()
     val mostRecent: Flow<Book?> = bookDao.observeMostRecent()
@@ -71,7 +74,7 @@ class LocalLibraryRepository(
 
     suspend fun removeFolder(url: String) {
         folderDao.delete(url)
-        bookDao.deleteByUrls(bookDao.urlsForSource(url))
+        bookRemoval.deleteByUrls(bookDao.urlsForSource(url))
     }
 
     /** Rescans every library folder, adding new books and pruning deleted files. */
@@ -133,7 +136,7 @@ class LocalLibraryRepository(
             }
         }
 
-        bookDao.deleteByUrls((knownUrls - foundUrls).toList())
+        bookRemoval.deleteByUrls((knownUrls - foundUrls).toList())
     }
 
     private class ScannedEpub(val uri: Uri, val modifiedAt: Long?)
@@ -232,6 +235,7 @@ class LocalLibraryRepository(
                 Log.i(TAG, "A different book took over a path; starting it fresh")
                 progressDao.forget(url.toString())
                 annotationDao.deleteForBook(url.toString())
+                sessionDao.deleteForBook(url.toString())
                 bookDao.forgetReadingHistory(url.toString())
             }
         } finally {

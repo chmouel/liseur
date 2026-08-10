@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.library.BookRemoval
 import java.io.IOException
 import java.net.SocketTimeoutException
 import javax.crypto.KeyGenerator
@@ -103,6 +104,7 @@ class RemoteCatalogRepositoryTest {
         ),
         serverDao = db.remoteServerDao(),
         bookDao = db.bookDao(),
+        bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao()),
     )
 
     /** A book DAO that keeps count of what a refresh asked it to do. */
@@ -138,6 +140,7 @@ class RemoteCatalogRepositoryTest {
         ),
         serverDao = db.remoteServerDao(),
         bookDao = bookDao,
+        bookRemoval = BookRemoval(bookDao, db.readingSessionDao()),
     )
 
     private fun failing(e: Throwable) = FakeCatalog { throw e }
@@ -365,6 +368,7 @@ class RemoteCatalogRepositoryTest {
             ),
             serverDao = db.remoteServerDao(),
             bookDao = db.bookDao(),
+            bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao()),
             scope = this,
         )
 

@@ -6,6 +6,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.library.BookRemoval
 import java.io.IOException
 import java.net.SocketTimeoutException
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +55,7 @@ class RemoteCatalogRepository(
     private val router: RemoteRouter,
     private val serverDao: RemoteServerDao,
     private val bookDao: BookDao,
+    private val bookRemoval: BookRemoval,
     /**
      * Whose account a book belongs to is only true until someone signs
      * out, so every write here checks and writes in one go. Anything
@@ -263,7 +265,7 @@ class RemoteCatalogRepository(
         // was queued or failed has nothing to read, so it goes with the
         // rest rather than staying as a row that can never be opened.
         val (onDevice, noFile) = gone.partition { it.localUri != null }
-        if (noFile.isNotEmpty()) bookDao.deleteByUrls(noFile.map { it.url })
+        if (noFile.isNotEmpty()) bookRemoval.deleteByUrls(noFile.map { it.url })
         // A book that is here but no longer there keeps its file and loses
         // its link: syncing it would keep asking the server about an id it
         // has forgotten, and be told no every time.

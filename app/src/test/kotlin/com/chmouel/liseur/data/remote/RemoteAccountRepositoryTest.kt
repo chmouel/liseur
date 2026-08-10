@@ -6,6 +6,7 @@ import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.library.BookRemoval
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -159,6 +160,7 @@ class RemoteAccountRepositoryTest {
         dao = dao,
         bookDao = db.bookDao(),
         progressDao = db.readingProgressDao(),
+        bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao()),
         setups = mapOf(ServerKind.KOMGA to AlwaysConnects),
     )
 

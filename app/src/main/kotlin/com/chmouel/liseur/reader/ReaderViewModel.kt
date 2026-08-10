@@ -21,6 +21,7 @@ import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
@@ -92,7 +93,10 @@ class ReaderViewModel(
     private val readingPace: ReadingPaceRepository,
     private val positionSync: PositionSyncCoordinator,
     private val appSettings: AppSettingsRepository,
+    sessionManager: ReadingSessionManager,
 ) : ViewModel() {
+
+    private val sessions = sessionManager.recorder(bookId)
 
     /**
      * What the definition card needs to know before it may fetch anything.
@@ -406,6 +410,9 @@ class ReaderViewModel(
                 navigatorFactory = EpubNavigatorFactory(publication),
                 initialLocator = initialLocator,
             )
+            // onResume arrives before a publication has necessarily
+            // opened. Only now can foreground time be reading time.
+            sessions.onReaderReady()
             // Computing positions parses the whole book, so it runs
             // after the reader is on screen.
             if (bookPositions == null) bookPositions = BookPositions.of(publication)
@@ -433,6 +440,9 @@ class ReaderViewModel(
             if (sample != null) viewModelScope.launch { readingPace.record(sample) }
         }
         _progress.value = progressAt(locator)
+        // Capture the page's moment before suspendable position writes,
+        // so database latency cannot become reading time.
+        sessions.onPageTurned()
         viewModelScope.launch {
             // One statement, so two page turns cannot interleave and a
             // stale acknowledgement cannot be carried back over a fresh
@@ -465,6 +475,18 @@ class ReaderViewModel(
      */
     fun onReaderPaused() {
         speed.forgetLastPosition()
+        sessions.onPaused()
+    }
+
+    /**
+     * Called when the reader comes back to the front.
+     *
+     * The counterpart to [onReaderPaused]. The recorder also waits for
+     * [UiState.Ready], so loading and position-disagreement screens are
+     * never counted merely because the activity is visible.
+     */
+    fun onReaderResumed() {
+        sessions.onResumed()
     }
 
     /** Called before jumping, so the reader can come back in one tap. */
@@ -794,6 +816,7 @@ class ReaderViewModel(
     }
 
     override fun onCleared() {
+        sessions.close()
         (_state.value as? UiState.Ready)?.publication?.close()
     }
 
@@ -834,6 +857,7 @@ class ReaderViewModel(
                     readingPace = container.readingPace,
                     positionSync = container.positionSync,
                     appSettings = container.appSettings,
+                    sessionManager = container.readingSessions,
                 )
             }
         }

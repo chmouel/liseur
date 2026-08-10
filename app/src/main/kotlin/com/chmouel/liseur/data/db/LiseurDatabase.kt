@@ -15,12 +15,14 @@ import androidx.sqlite.execSQL
         RemoteServer::class,
         BookAnnotation::class,
         BookTypography::class,
+        ReadingSession::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
     abstract fun readingProgressDao(): ReadingProgressDao
+    abstract fun readingSessionDao(): ReadingSessionDao
     abstract fun bookDao(): BookDao
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun remoteServerDao(): RemoteServerDao
@@ -332,6 +334,39 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Adds the record of time actually spent reading.
+         *
+         * Nothing is backfilled. Positions say where a reader got to,
+         * never how long it took them, and inventing durations from the
+         * one timestamp there is would put a number on the screen that
+         * nobody's reading ever produced.
+         */
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `reading_sessions` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `book_url` TEXT NOT NULL,
+                        `started_at` INTEGER NOT NULL,
+                        `ended_at` INTEGER,
+                        `last_checkpoint_at` INTEGER NOT NULL,
+                        `duration_ms` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_reading_sessions_book_url` " +
+                        "ON `reading_sessions` (`book_url`)",
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_reading_sessions_started_at` " +
+                        "ON `reading_sessions` (`started_at`)",
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -351,6 +386,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_13_14,
             MIGRATION_14_15,
             MIGRATION_15_16,
+            MIGRATION_16_17,
         )
     }
 }

@@ -274,4 +274,22 @@
     <string name="import_annotations_none">Every mark in that file was already here.</string>
     <string name="annotations_backup_failed">That did not work: %1$s</string>
     <string name="annotations_backup_failed_unknown">That did not work.</string>
+    <string name="reading_stats">Reading stats</string>
+    <string name="reading_stats_total">Time spent reading</string>
+    <string name="reading_stats_books_read">Books read from</string>
+    <string name="reading_stats_books_finished">Books finished</string>
+    <string name="reading_stats_recent">This past week</string>
+    <string name="reading_stats_by_book">By book</string>
+    <string name="reading_stats_empty_title">Nothing recorded yet.</string>
+    <string name="reading_stats_empty_detail">Liseur starts counting from the moment you open a book. Reading you did before this arrived is not here, because there is no honest way to work out how long it took.</string>
+    <string name="reading_stats_book_empty">You have not read any of this one yet.</string>
+    <string name="reading_stats_no_reading_day">Nothing read on %1$s</string>
+    <string name="reading_stats_last_read">Last read %1$s</string>
+    <string name="reading_stats_progress">%1$d%% through</string>
+    <string name="reading_stats_day_read">%1$s on %2$s</string>
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours">%1$d h</string>
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
+    <string name="duration_none">None</string>
+    <string name="more_options">More</string>
 </resources>

@@ -122,9 +122,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL")
     suspend fun allRemote(): List<Book>
 
-    /** Forgets remote books that were never downloaded, e.g. on disconnect. */
-    @Query("DELETE FROM books WHERE remote_uuid IS NOT NULL AND local_uri IS NULL")
-    suspend fun deleteRemoteNotDownloaded()
+    /** Remote-only books that will disappear when their account does. */
+    @Query("SELECT url FROM books WHERE remote_uuid IS NOT NULL AND local_uri IS NULL")
+    suspend fun remoteNotDownloadedUrls(): List<String>
 
     /**
      * Cuts downloaded books loose from the server they came from. The file

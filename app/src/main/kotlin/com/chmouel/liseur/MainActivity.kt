@@ -33,6 +33,11 @@ import com.chmouel.liseur.domain.ResumeCandidate
 import com.chmouel.liseur.domain.shouldResume
 import com.chmouel.liseur.reader.ReaderActivity
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.listSaver
+import com.chmouel.liseur.domain.displayTitle
+import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
+import com.chmouel.liseur.ui.stats.ReadingStatsScreen
+import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.LibraryScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
@@ -131,7 +136,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { LIBRARY, SETTINGS, SERVER_ACCOUNT, LICENCES }
+private enum class Screen { LIBRARY, SETTINGS, SERVER_ACCOUNT, LICENCES, STATS, BOOK_STATS }
+
+/**
+ * Which book the per-book statistics are about.
+ *
+ * A second piece of state beside [Screen] because the enum carries no
+ * arguments, and the alternative — a navigation library, routes, a
+ * back stack — is a lot of machinery for this small set of screens.
+ */
+private data class StatsTarget(val bookUrl: String, val title: String)
 
 private const val SOURCE_URL = "https://github.com/chmouel/liseur"
 
@@ -141,6 +155,10 @@ private fun LiseurApp(settings: AppSettings) {
     // The server screen is reached from two places now, and Back has to
     // go back to whichever one it was, not to the one it usually is.
     var accountReturnsTo by rememberSaveable { mutableStateOf(Screen.SETTINGS) }
+    var statsBook by rememberSaveable(stateSaver = StatsTargetSaver) {
+        mutableStateOf<StatsTarget?>(null)
+    }
+    var bookStatsReturnsTo by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(context) { context.container.appSettings }
@@ -149,11 +167,57 @@ private fun LiseurApp(settings: AppSettings) {
     when (screen) {
         Screen.LIBRARY -> LibraryRoute(
             onOpenSettings = { screen = Screen.SETTINGS },
+            onOpenStats = { screen = Screen.STATS },
+            onOpenBookStats = { book ->
+                statsBook = StatsTarget(book.url, book.displayTitle)
+                bookStatsReturnsTo = Screen.LIBRARY
+                screen = Screen.BOOK_STATS
+            },
             onConnectServer = {
                 accountReturnsTo = Screen.LIBRARY
                 screen = Screen.SERVER_ACCOUNT
             },
         )
+
+        Screen.STATS -> {
+            BackHandler { screen = Screen.LIBRARY }
+            val model: ReadingStatsViewModel = viewModel(
+                factory = ReadingStatsViewModel.factory(),
+            )
+            val statsState by model.state.collectAsStateWithLifecycle()
+            ReadingStatsScreen(
+                state = statsState,
+                onOpenBook = { book ->
+                    statsBook = StatsTarget(book.bookUrl, book.title)
+                    bookStatsReturnsTo = Screen.STATS
+                    screen = Screen.BOOK_STATS
+                },
+                onBack = { screen = Screen.LIBRARY },
+            )
+        }
+
+        Screen.BOOK_STATS -> {
+            val target = statsBook
+            // Nothing to show a book's reading for. Only reachable if the
+            // saved state came back without the book, which Android is
+            // allowed to do; going home beats an empty screen.
+            if (target == null) {
+                LaunchedEffect(Unit) { screen = Screen.LIBRARY }
+            } else {
+                val back = { screen = bookStatsReturnsTo }
+                BackHandler { back() }
+                val model: ReadingStatsViewModel = viewModel(
+                    factory = ReadingStatsViewModel.factory(),
+                )
+                val bookStatsState by remember(model, target.bookUrl) { model.forBook(target.bookUrl) }
+                    .collectAsStateWithLifecycle()
+                BookReadingStatsScreen(
+                    title = target.title,
+                    state = bookStatsState,
+                    onBack = back,
+                )
+            }
+        }
 
         Screen.SETTINGS -> {
             BackHandler { screen = Screen.LIBRARY }
@@ -285,6 +349,8 @@ private fun ServerAccountRoute(
 @Composable
 private fun LibraryRoute(
     onOpenSettings: () -> Unit,
+    onOpenStats: () -> Unit,
+    onOpenBookStats: (com.chmouel.liseur.data.db.Book) -> Unit,
     onConnectServer: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
@@ -347,6 +413,8 @@ private fun LibraryRoute(
             }
         },
         onOpenSettings = onOpenSettings,
+        onOpenStats = onOpenStats,
+        onOpenBookStats = onOpenBookStats,
         onConnectServer = onConnectServer,
         onDownload = viewModel::download,
         onCancelDownload = viewModel::cancelDownload,
@@ -367,3 +435,15 @@ private fun LibraryRoute(
         onSetSearchActive = viewModel::setSearchActive,
     )
 }
+
+/**
+ * Keeps the book the statistics are about across a process death.
+ *
+ * Two strings, saved as a list, because a `data class` is not something
+ * a Bundle can hold on its own and a parcelable for two fields would be
+ * more ceremony than the fields are worth.
+ */
+private val StatsTargetSaver = listSaver<StatsTarget?, String>(
+    save = { target -> target?.let { listOf(it.bookUrl, it.title) } ?: emptyList() },
+    restore = { saved -> saved.takeIf { it.size == 2 }?.let { StatsTarget(it[0], it[1]) } },
+)

@@ -206,8 +206,21 @@ class ReaderActivity : FragmentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Nothing was ever opened, so there is no view model to ask —
+        // touching it here would build one around a URL that is not
+        // there. See onCreate, which has already called finish().
+        if (bookUrl == null) return
+        // The activity is in front of the reader. The recorder also
+        // waits until the publication is ready, so loading and failures
+        // do not become reading time.
+        viewModel.onReaderResumed()
+    }
+
     override fun onPause() {
         super.onPause()
+        if (bookUrl == null) return
         // Stop the reading clock the moment the book stops being looked
         // at — a dialog, a notification, the screen dimming. Anything
         // later would count the interruption as a very slow page.

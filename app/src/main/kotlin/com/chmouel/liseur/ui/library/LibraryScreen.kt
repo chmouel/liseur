@@ -79,6 +79,8 @@ import com.chmouel.liseur.domain.displayTitle
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
@@ -149,6 +151,8 @@ fun LibraryScreen(
     onAddFolder: () -> Unit,
     onBookSelected: (Book) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenStats: () -> Unit,
+    onOpenBookStats: (Book) -> Unit,
     onConnectServer: () -> Unit,
     onDownload: (Book) -> Unit,
     onCancelDownload: (Book) -> Unit,
@@ -409,6 +413,36 @@ fun LibraryScreen(
                                 contentDescription = stringResource(R.string.settings),
                             )
                         }
+                        // A menu rather than a fourth icon. The bar is
+                        // already carrying three, and the shelf is what
+                        // this screen is for.
+                        var moreOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { moreOpen = true }) {
+                                Icon(
+                                    Icons.Outlined.MoreVert,
+                                    contentDescription = stringResource(R.string.more_options),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = moreOpen,
+                                onDismissRequest = { moreOpen = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.reading_stats)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.BarChart,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        moreOpen = false
+                                        onOpenStats()
+                                    },
+                                )
+                            }
+                        }
                     },
                     scrollBehavior = scrollBehavior,
                 )
@@ -527,6 +561,7 @@ fun LibraryScreen(
             onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
             onSetFinished = { onSetFinished(book, it); sheetBook = null },
             onSetArchived = { onSetArchived(book, it); sheetBook = null },
+            onOpenStats = { onOpenBookStats(book); sheetBook = null },
             onDeleteLocal = { onDeleteLocal(book); sheetBook = null },
             onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
         )
@@ -546,6 +581,7 @@ private fun BookActionsSheet(
     onRemoveDownload: () -> Unit,
     onSetFinished: (Boolean) -> Unit,
     onSetArchived: (Boolean) -> Unit,
+    onOpenStats: () -> Unit,
     onDeleteLocal: () -> Unit,
     onDeleteFromServer: () -> Unit,
 ) {
@@ -617,6 +653,9 @@ private fun BookActionsSheet(
                         if (book.archived) R.string.unarchive_book else R.string.archive_book,
                     ),
                 )
+            }
+            TextButton(onClick = onOpenStats, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.reading_stats))
             }
             if (book.remoteUuid != null) {
                 // Kept apart from the others on purpose: everything above
