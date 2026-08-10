@@ -549,10 +549,11 @@ private fun AdvancedSection(server: RemoteServer, onKoboToken: (String) -> Unit)
     }
 }
 
-private enum class NoticeTone { GOOD, NEUTRAL, PROBLEM }
+/** Shared with the sync-server screen so one problem never reads two ways. */
+internal enum class NoticeTone { GOOD, NEUTRAL, PROBLEM }
 
 @Composable
-private fun Notice(text: String, tone: NoticeTone) {
+internal fun Notice(text: String, tone: NoticeTone) {
     val color = when (tone) {
         NoticeTone.GOOD -> MaterialTheme.colorScheme.primary
         NoticeTone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant

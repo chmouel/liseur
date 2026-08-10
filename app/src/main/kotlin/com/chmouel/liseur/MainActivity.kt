@@ -41,6 +41,8 @@ import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.LibraryScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
+import com.chmouel.liseur.ui.settings.SyncServerScreen
+import com.chmouel.liseur.ui.settings.SyncServerViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
@@ -136,7 +138,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { LIBRARY, SETTINGS, SERVER_ACCOUNT, LICENCES, STATS, BOOK_STATS }
+private enum class Screen {
+    LIBRARY,
+    SETTINGS,
+    SERVER_ACCOUNT,
+    SYNC_SERVER,
+    LICENCES,
+    STATS,
+    BOOK_STATS,
+}
 
 /**
  * Which book the per-book statistics are about.
@@ -239,6 +249,7 @@ private fun LiseurApp(settings: AppSettings) {
                     accountReturnsTo = Screen.SETTINGS
                     screen = Screen.SERVER_ACCOUNT
                 },
+                onOpenSyncServer = { screen = Screen.SYNC_SERVER },
                 onExportAnnotations = annotationBackup.export,
                 onImportAnnotations = annotationBackup.restore,
                 onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
@@ -250,6 +261,11 @@ private fun LiseurApp(settings: AppSettings) {
         Screen.SERVER_ACCOUNT -> {
             BackHandler { screen = accountReturnsTo }
             ServerAccountRoute(onBack = { screen = accountReturnsTo })
+        }
+
+        Screen.SYNC_SERVER -> {
+            BackHandler { screen = Screen.SETTINGS }
+            SyncServerRoute(onBack = { screen = Screen.SETTINGS })
         }
 
         Screen.LICENCES -> {
@@ -342,6 +358,28 @@ private fun ServerAccountRoute(
         onKoboToken = viewModel::setKoboToken,
         onDisconnect = viewModel::disconnect,
         onSyncNow = viewModel::syncPositions,
+        onBack = onBack,
+    )
+}
+
+@Composable
+private fun SyncServerRoute(
+    onBack: () -> Unit,
+    viewModel: SyncServerViewModel = viewModel(factory = SyncServerViewModel.Factory),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    SyncServerScreen(
+        state = state,
+        onSignInChange = viewModel::setSignIn,
+        onUrlChange = viewModel::setUrl,
+        onUsernameChange = viewModel::setUsername,
+        onPasswordChange = viewModel::setPassword,
+        onTokenChange = viewModel::setToken,
+        onWantInsights = viewModel::setWantInsights,
+        onConnect = viewModel::connect,
+        onDisconnect = viewModel::disconnect,
+        onSyncNow = viewModel::syncNow,
         onBack = onBack,
     )
 }

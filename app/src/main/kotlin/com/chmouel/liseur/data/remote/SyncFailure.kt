@@ -42,6 +42,15 @@ sealed interface SyncFailure {
     data object Malformed : SyncFailure
 
     /**
+     * The server will not take credentials over plain HTTP.
+     *
+     * Worth its own name because the server says it with a 403, which
+     * otherwise reads as "this account may not" and sends the reader
+     * looking for a permission when what is wrong is the address.
+     */
+    data object InsecureTransport : SyncFailure
+
+    /**
      * Whether asking again later stands a chance. A refused sign-in will
      * be refused just as firmly in ten minutes, so retrying it only
      * spends battery.
@@ -50,7 +59,7 @@ sealed interface SyncFailure {
         get() = when (this) {
             Offline, Timeout, Malformed -> true
             is ServerError -> code >= 500
-            Unauthorised, Forbidden, NotFound -> false
+            Unauthorised, Forbidden, NotFound, InsecureTransport -> false
         }
 
     /** A short tag for the log. Never contains a URL or a token. */
@@ -63,6 +72,7 @@ sealed interface SyncFailure {
             NotFound -> "not found"
             is ServerError -> "server error $code"
             Malformed -> "malformed response"
+            InsecureTransport -> "https required"
         }
 }
 

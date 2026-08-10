@@ -225,6 +225,9 @@ class RemoteAccountRepository(
         val username = when (credentials) {
             is RemoteCredentials.Basic -> credentials.username
             is RemoteCredentials.ApiKey -> capabilities.displayName
+            // No catalog server signs in this way, so nothing reaches
+            // here; the name the server gave is still the honest answer.
+            is RemoteCredentials.Bearer -> capabilities.displayName
         }
         val stored = dao.get()
         val sameAccount = stored != null &&

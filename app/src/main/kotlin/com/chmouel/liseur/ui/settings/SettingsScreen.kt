@@ -69,6 +69,7 @@ fun SettingsScreen(
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenSyncServer: () -> Unit,
     onExportAnnotations: () -> Unit,
     onImportAnnotations: () -> Unit,
     onOpenSource: () -> Unit,
@@ -202,6 +203,11 @@ fun SettingsScreen(
                     title = stringResource(R.string.server_account),
                     subtitle = stringResource(R.string.settings_account_detail),
                     onClick = onOpenAccount,
+                )
+                LinkRow(
+                    title = stringResource(R.string.sync_server_account),
+                    subtitle = stringResource(R.string.sync_server_account_detail),
+                    onClick = onOpenSyncServer,
                 )
                 LinkRow(
                     title = stringResource(R.string.export_annotations),

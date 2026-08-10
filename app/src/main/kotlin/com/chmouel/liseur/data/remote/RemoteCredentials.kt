@@ -37,4 +37,19 @@ sealed interface RemoteCredentials {
             const val HEADER = "X-API-Key"
         }
     }
+
+    /**
+     * A bearer token, as liseur-sync wants it.
+     *
+     * Two quite different secrets travel this way: the short-lived token
+     * a sign-in returns, which may only manage tokens, and the device
+     * token that does the syncing afterwards. They are the same shape on
+     * the wire and are deliberately not told apart here — what a token
+     * is allowed to do is the server's business, and guessing at it
+     * client-side would only be a second, wronger answer.
+     */
+    data class Bearer(val token: String) : RemoteCredentials {
+        override fun signInto(builder: Request.Builder): Request.Builder =
+            builder.header("Authorization", "Bearer $token")
+    }
 }

@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.komga
 
+import com.chmouel.liseur.data.remote.RemoteUrl
+
 /**
  * URL handling for a Komga server. Pure functions, so the awkward cases
  * have unit tests rather than being discovered on a real server.
@@ -44,35 +46,16 @@ object KomgaUrl {
     }
 
     /**
-     * Turns what a user typed into a base URL: adds a scheme when none
-     * was given, drops a trailing slash, and keeps any path prefix,
-     * because Komga is often reverse-proxied under one.
-     *
-     * Returns null when the input cannot be a URL at all.
+     * Turns what a user typed into a base URL. Shared with every other
+     * kind of server, since the awkward cases — a missing scheme, a
+     * trailing slash, a reverse proxy's path prefix — are not Komga's.
      */
-    fun normaliseBaseUrl(input: String, defaultScheme: String = "https"): String? {
-        val trimmed = input.trim().substringBefore('?').substringBefore('#')
-        if (trimmed.isEmpty()) return null
-
-        val withScheme = when {
-            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
-            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-            trimmed.contains("://") -> return null
-            else -> "$defaultScheme://$trimmed"
-        }
-
-        val schemeEnd = withScheme.indexOf("://") + 3
-        val host = withScheme.substring(schemeEnd).substringBefore('/')
-        if (host.isEmpty() || host.startsWith(":")) return null
-
-        return withScheme.trimEnd('/')
-    }
+    fun normaliseBaseUrl(input: String, defaultScheme: String = "https"): String? =
+        RemoteUrl.normaliseBase(input, defaultScheme)
 
     /** Swaps `https` for `http`, used only after the user asks for it. */
-    fun withHttp(baseUrl: String): String =
-        if (baseUrl.startsWith("https://")) "http://" + baseUrl.removePrefix("https://") else baseUrl
+    fun withHttp(baseUrl: String): String = RemoteUrl.withHttp(baseUrl)
 
     /** An API path against the server, e.g. `/api/v1/books/42/file`. */
-    fun api(baseUrl: String, path: String): String =
-        baseUrl.trimEnd('/') + "/" + path.trimStart('/')
+    fun api(baseUrl: String, path: String): String = RemoteUrl.api(baseUrl, path)
 }

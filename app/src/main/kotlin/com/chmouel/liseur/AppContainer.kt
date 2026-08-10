@@ -21,6 +21,7 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
+import com.chmouel.liseur.data.liseursync.SyncAccountRepository
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
@@ -172,6 +173,21 @@ class AppContainer(context: Context) {
             ServerKind.CALIBRE to koboSync,
             ServerKind.KOMGA to komgaSync,
         ),
+    )
+
+    /**
+     * The dedicated sync server, when there is one.
+     *
+     * Connected as well as a catalog server rather than instead of one,
+     * and the only partner a book that never came from a server can
+     * have.
+     */
+    val syncAccount = SyncAccountRepository(
+        dao = database.syncAccountDao(),
+        peerStateDao = database.syncPeerStateDao(),
+        device = deviceIdentity,
+        reporting = syncReporting,
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 
     /**

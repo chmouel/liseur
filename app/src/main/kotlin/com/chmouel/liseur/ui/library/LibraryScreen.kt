@@ -1053,6 +1053,7 @@ private fun CatalogFailureNotice(
         SyncFailure.Forbidden -> R.string.catalog_failed_forbidden
         SyncFailure.NotFound -> R.string.catalog_failed_not_found
         SyncFailure.Malformed -> R.string.catalog_failed_malformed
+        SyncFailure.InsecureTransport -> R.string.catalog_failed_insecure
         is SyncFailure.ServerError -> R.string.catalog_failed_server_error
     }
     Surface(

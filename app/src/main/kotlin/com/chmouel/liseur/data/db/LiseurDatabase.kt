@@ -17,14 +17,16 @@ import androidx.sqlite.execSQL
         BookTypography::class,
         ReadingSession::class,
         SyncPeerState::class,
+        SyncAccount::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun readingSessionDao(): ReadingSessionDao
     abstract fun syncPeerStateDao(): SyncPeerStateDao
+    abstract fun syncAccountDao(): SyncAccountDao
     abstract fun bookDao(): BookDao
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun remoteServerDao(): RemoteServerDao
@@ -470,6 +472,35 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Adds the dedicated sync server.
+         *
+         * Its own table rather than another `remote_server` row: it holds
+         * no books, it is connected to as well as a catalog server rather
+         * than instead of one, and it is the only partner a book that
+         * never came from a server can have.
+         */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `sync_account` (
+                        `id` INTEGER NOT NULL,
+                        `base_url` TEXT NOT NULL,
+                        `username` TEXT NOT NULL,
+                        `token_cipher` TEXT NOT NULL,
+                        `insights_token_cipher` TEXT,
+                        `device_name` TEXT NOT NULL,
+                        `cursor_seq` INTEGER NOT NULL DEFAULT 0,
+                        `added_at` INTEGER NOT NULL,
+                        `synced_at` INTEGER,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -491,6 +522,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_15_16,
             MIGRATION_16_17,
             MIGRATION_17_18,
+            MIGRATION_18_19,
         )
     }
 }
