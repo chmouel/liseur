@@ -59,6 +59,14 @@
     <string name="sync_server_insights_detail">Also ask for permission to read the totals the server works out from every device.</string>
     <string name="sync_server_no_insights">Statistics are not shared with this server; totals stay on this device.</string>
     <string name="sync_server_device">This device is called “%1$s” on the server.</string>
+    <string name="sync_server_same_book_title">Is this the same book?</string>
+    <string name="sync_server_same_book_detail">Your server matched these by title and author alone. Two translations, or two editions with different text, look the same that way — so nothing is synced for them until you say.</string>
+    <string name="sync_server_same_book_yes">Same book</string>
+    <string name="sync_server_same_book_no">Different</string>
+    <plurals name="sync_server_ambiguous">
+        <item quantity="one">One book matches more than one book on your server. Liseur left it alone rather than guess; merging them is something only you can decide, from the server itself.</item>
+        <item quantity="other">%1$d books match more than one book on your server. Liseur left them alone rather than guess; merging them is something only you can decide, from the server itself.</item>
+    </plurals>
     <string name="sync_server_privacy_note">Only your reading position, the time you spent reading, and a fingerprint of each book are sent. Book files never leave the device, and the position is stored on the server as-is rather than encrypted.</string>
     <string name="sync_server_http_warning">Plain HTTP sends your password and your device token in the clear. Only do this on a network you trust.</string>
     <string name="sync_server_disconnect_title">Disconnect the sync server?</string>

@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 import androidx.room.Upsert
 import com.chmouel.liseur.domain.BookFingerprint
 
@@ -60,11 +61,23 @@ data class WorkAlias(
     @ColumnInfo(name = "resolved_at") val resolvedAt: Long,
 ) {
     /** Whether reading may be exchanged under this name yet. */
-    val usable: Boolean get() = confidence != LOW || confirmed
+    val usable: Boolean get() = confirmed || confidence == HIGH
+
+    /** Whether the reader has been asked about this and not yet answered. */
+    val awaitingAnswer: Boolean get() = confidence == LOW && !confirmed
 
     companion object {
         const val HIGH = "high"
         const val LOW = "low"
+
+        /**
+         * The reader said these were not the same book.
+         *
+         * Kept rather than deleted, and kept as a confidence rather than
+         * a flag, so that the next run finds an answer here instead of
+         * resolving again and asking the same question a second time.
+         */
+        const val REJECTED = "rejected"
     }
 }
 
@@ -99,6 +112,33 @@ interface WorkIdentityDao {
 
     @Query("SELECT * FROM work_alias WHERE book_url = :bookUrl AND peer_id = :peerId")
     suspend fun alias(bookUrl: String, peerId: String): WorkAlias?
+
+    /** Matches the server only guessed at, waiting on the reader. */
+    @Query(
+        """
+        SELECT * FROM work_alias
+        WHERE peer_id = :peerId AND confidence = 'low' AND confirmed = 0
+        ORDER BY resolved_at
+        """,
+    )
+    fun observeAwaitingAnswer(peerId: String): Flow<List<WorkAlias>>
+
+    /**
+     * Records that these were not the same book after all.
+     *
+     * The row stays: a deleted alias is resolved again on the next run,
+     * and the reader is asked the same question for the rest of time.
+     */
+    @Query(
+        """
+        UPDATE work_alias SET confidence = 'rejected', confirmed = 0
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    suspend fun reject(bookUrl: String, peerId: String)
+
+    @Query("SELECT COUNT(*) FROM work_ambiguity WHERE peer_id = :peerId")
+    fun observeAmbiguityCount(peerId: String): Flow<Int>
 
     @Query("SELECT * FROM work_alias WHERE peer_id = :peerId")
     suspend fun aliasesFor(peerId: String): List<WorkAlias>

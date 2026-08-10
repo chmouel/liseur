@@ -10,6 +10,7 @@ import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import java.io.File
 import java.net.InetAddress
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -123,6 +124,34 @@ class WorkResolverTest {
         resolver.confirm(downloaded(), PEER)
 
         assertEquals("w-3", resolver.cached(downloaded(), PEER)?.workId)
+    }
+
+    @Test
+    fun `a match the reader rejected is never asked about again`() = runTest {
+        answer(200, """{"work_id":"w-3","confidence":"low"}""")
+        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+
+        resolver.reject(BOOK, PEER)
+
+        // No second request, and no second question: a deleted alias
+        // would be resolved again and the reader asked forever.
+        val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        assertTrue(again is WorkResolution.Unresolved)
+        assertEquals(1, server.requestCount)
+        assertNull(resolver.cached(downloaded(), PEER))
+    }
+
+    @Test
+    fun `books awaiting an answer are the ones to ask about`() = runTest {
+        answer(200, """{"work_id":"w-3","confidence":"low"}""")
+        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+
+        assertEquals(1, db.workIdentityDao().observeAwaitingAnswer(PEER).first().size)
+
+        resolver.confirm(downloaded(), PEER)
+
+        // Answered, so it stops being a question.
+        assertTrue(db.workIdentityDao().observeAwaitingAnswer(PEER).first().isEmpty())
     }
 
     @Test

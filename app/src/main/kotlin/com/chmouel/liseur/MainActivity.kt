@@ -386,6 +386,7 @@ private fun SyncServerRoute(
         onConnect = viewModel::connect,
         onDisconnect = viewModel::disconnect,
         onSyncNow = viewModel::syncNow,
+        onAnswerConfirmation = viewModel::answerConfirmation,
         onBack = onBack,
     )
 }

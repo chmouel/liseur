@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -80,6 +82,7 @@ fun SyncServerScreen(
     onDisconnect: () -> Unit,
     onSyncNow: () -> Unit,
     onBack: () -> Unit,
+    onAnswerConfirmation: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -129,6 +132,20 @@ fun SyncServerScreen(
                         onSyncNow = onSyncNow,
                         onDisconnect = onDisconnect,
                     )
+                    if (state.confirmations.isNotEmpty()) {
+                        SameBookCard(state.confirmations, onAnswerConfirmation)
+                    }
+                    if (state.ambiguities > 0) {
+                        Text(
+                            pluralStringResource(
+                                R.plurals.sync_server_ambiguous,
+                                state.ambiguities,
+                                state.ambiguities,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 Text(
                     stringResource(R.string.sync_server_privacy_note),
@@ -317,6 +334,59 @@ private fun ConnectSyncForm(
             )
         } else {
             Text(stringResource(R.string.server_connect))
+        }
+    }
+}
+
+/**
+ * The matches the server was not sure about, one question each.
+ *
+ * Asked here rather than interrupting the reader in the library,
+ * because there is nothing urgent about it: the book still opens, the
+ * position is still kept on this device, and all that waits is whether
+ * it is shared with the other one.
+ */
+@Composable
+private fun SameBookCard(
+    confirmations: List<WorkConfirmation>,
+    onAnswer: (String, Boolean) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                stringResource(R.string.sync_server_same_book_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                stringResource(R.string.sync_server_same_book_detail),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            confirmations.forEach { candidate ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(candidate.title, style = MaterialTheme.typography.bodyLarge)
+                    candidate.author?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onAnswer(candidate.bookUrl, true) }) {
+                            Text(stringResource(R.string.sync_server_same_book_yes))
+                        }
+                        OutlinedButton(onClick = { onAnswer(candidate.bookUrl, false) }) {
+                            Text(stringResource(R.string.sync_server_same_book_no))
+                        }
+                    }
+                }
+            }
         }
     }
 }

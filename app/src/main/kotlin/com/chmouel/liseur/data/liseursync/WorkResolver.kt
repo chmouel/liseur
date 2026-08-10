@@ -68,6 +68,9 @@ class WorkResolver(
     /** Accepts a match the server was unsure about. */
     suspend fun confirm(book: Book, peerId: String) = dao.confirm(book.url, peerId)
 
+    /** Refuses one, for good. */
+    suspend fun reject(bookUrl: String, peerId: String) = dao.reject(bookUrl, peerId)
+
     /**
      * Asks the server what to call [book], caching whatever it says.
      *
@@ -84,10 +87,14 @@ class WorkResolver(
         credentials: RemoteCredentials,
     ): WorkResolution {
         dao.alias(book.url, peerId)?.let { existing ->
-            return if (existing.usable) {
-                WorkResolution.Named(existing)
-            } else {
-                WorkResolution.NeedsConfirming(existing)
+            return when {
+                existing.usable -> WorkResolution.Named(existing)
+                // Already asked and already answered no. Resolving again
+                // would put the same question back on the screen.
+                existing.confidence == WorkAlias.REJECTED ->
+                    WorkResolution.Unresolved(cause = null)
+
+                else -> WorkResolution.NeedsConfirming(existing)
             }
         }
 
