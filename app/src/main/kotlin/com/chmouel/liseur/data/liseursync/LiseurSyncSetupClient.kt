@@ -26,6 +26,8 @@ data class SyncConnection(
     val token: String,
     val insightsToken: String?,
     val deviceName: String,
+    /** The server's own name for this device, when it said one. */
+    val deviceId: String? = null,
 )
 
 /** Why connecting to a sync server did not work. */
@@ -121,7 +123,8 @@ class LiseurSyncSetupClient(private val http: LiseurSyncHttp = LiseurSyncHttp())
                 ?: throw RemoteHttpFailure(SyncFailure.Malformed)
             val session = RemoteCredentials.Bearer(auth)
 
-            val token = mint(baseUrl, session, deviceName, LiseurSyncApi.SCOPE_SYNC)
+            val minted = mint(baseUrl, session, deviceName, LiseurSyncApi.SCOPE_SYNC)
+            val token = minted?.optString("secret")?.takeIf { it.isNotEmpty() }
                 ?: throw RemoteHttpFailure(SyncFailure.Malformed)
 
             // Statistics are the extra, not the point. A server that will
@@ -130,6 +133,7 @@ class LiseurSyncSetupClient(private val http: LiseurSyncHttp = LiseurSyncHttp())
             val insights = if (wantInsights) {
                 try {
                     mint(baseUrl, session, "$deviceName (statistics)", LiseurSyncApi.SCOPE_INSIGHTS)
+                        ?.optString("secret")?.takeIf { it.isNotEmpty() }
                 } catch (_: IOException) {
                     Log.i(TAG, "No statistics token; positions will still sync")
                     null
@@ -138,7 +142,14 @@ class LiseurSyncSetupClient(private val http: LiseurSyncHttp = LiseurSyncHttp())
                 null
             }
 
-            SyncConnection(baseUrl, username, token, insights, deviceName)
+            SyncConnection(
+                baseUrl = baseUrl,
+                username = username,
+                token = token,
+                insightsToken = insights,
+                deviceName = deviceName,
+                deviceId = minted.optString("device_id").takeIf { it.isNotEmpty() },
+            )
         }
     }
 
@@ -172,11 +183,11 @@ class LiseurSyncSetupClient(private val http: LiseurSyncHttp = LiseurSyncHttp())
         session: RemoteCredentials,
         name: String,
         scope: String,
-    ): String? = http.post(
+    ): JSONObject? = http.post(
         LiseurSyncApi.url(baseUrl, LiseurSyncApi.TOKENS),
         session,
         JSONObject().put("name", name).put("scope", scope),
-    ).optString("secret").takeIf { it.isNotEmpty() }
+    )
 
     /**
      * Runs [connect] against the typed address, dropping to plain HTTP

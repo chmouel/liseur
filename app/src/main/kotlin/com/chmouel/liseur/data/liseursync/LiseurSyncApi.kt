@@ -24,6 +24,10 @@ object LiseurSyncApi {
     fun changes(baseUrl: String, since: Long, limit: Int): String =
         url(baseUrl, "$CHANGES?since=$since&limit=$limit")
 
+    /** The newest positions recorded for one book, newest first. */
+    fun positions(baseUrl: String, workId: String, limit: Int): String =
+        url(baseUrl, "/v1/works/$workId/positions?limit=$limit")
+
     fun insightsSummary(baseUrl: String, range: String): String =
         url(baseUrl, "/v1/insights/summary?range=$range")
 

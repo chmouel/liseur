@@ -54,26 +54,108 @@ data class SyncPeerState(
 }
 
 @Dao
-interface SyncPeerStateDao {
+abstract class SyncPeerStateDao {
 
     @Query("SELECT * FROM sync_peer_state WHERE book_url = :bookUrl AND peer_id = :peerId")
-    suspend fun get(bookUrl: String, peerId: String): SyncPeerState?
+    abstract suspend fun get(bookUrl: String, peerId: String): SyncPeerState?
 
     @Query("SELECT * FROM sync_peer_state WHERE peer_id = :peerId")
-    suspend fun forPeer(peerId: String): List<SyncPeerState>
+    abstract suspend fun forPeer(peerId: String): List<SyncPeerState>
 
     /** Disagreements this partner reported and nobody has settled. */
     @Query("SELECT * FROM sync_peer_state WHERE peer_id = :peerId AND has_pending = 1")
-    suspend fun pendingFor(peerId: String): List<SyncPeerState>
+    abstract suspend fun pendingFor(peerId: String): List<SyncPeerState>
+
+    @Query("SELECT COUNT(*) FROM sync_peer_state WHERE peer_id = :peerId AND has_pending = 1")
+    abstract suspend fun countPending(peerId: String): Int
 
     @Upsert
-    suspend fun upsert(state: SyncPeerState)
+    abstract suspend fun upsert(state: SyncPeerState)
+
+    /**
+     * Lands something a partner reported, before its cursor is allowed
+     * to move past it.
+     *
+     * Written as one statement rather than read-modify-write for the
+     * same reason the local position is: whatever else is in the row is
+     * this partner's agreement, and carrying a stale copy of it back
+     * over a fresh one would undo an acknowledgement.
+     */
+    @Query(
+        """
+        INSERT INTO sync_peer_state (
+            book_url, peer_id, acked_revision,
+            pending_progression, pending_status, pending_updated_at,
+            has_pending, remote_updated_at
+        )
+        VALUES (:bookUrl, :peerId, 0, :progression, :status, :remoteUpdatedAt, 1,
+                :remoteUpdatedAt)
+        ON CONFLICT(book_url, peer_id) DO UPDATE SET
+            pending_progression = :progression,
+            pending_status = :status,
+            pending_updated_at = :remoteUpdatedAt,
+            has_pending = 1,
+            remote_updated_at = :remoteUpdatedAt
+        """,
+    )
+    abstract suspend fun persistPending(
+        bookUrl: String,
+        peerId: String,
+        progression: Double?,
+        status: String?,
+        remoteUpdatedAt: Long?,
+    )
+
+    @Query(
+        """
+        UPDATE sync_peer_state SET
+            pending_progression = NULL, pending_status = NULL,
+            pending_updated_at = NULL, has_pending = 0
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    abstract suspend fun clearPending(bookUrl: String, peerId: String)
+
+    /**
+     * Records what this partner and this device now both hold.
+     *
+     * [ackedRevision] is exactly the revision that was compared, and no
+     * other: a page turned since then was never weighed against the
+     * partner, so the book stays owed to it rather than being quietly
+     * called settled.
+     */
+    @Query(
+        """
+        INSERT INTO sync_peer_state (
+            book_url, peer_id, acked_revision,
+            agreed_progression, agreed_status, has_pending, synced_at
+        )
+        VALUES (:bookUrl, :peerId, :ackedRevision, :progression, :status, 0, :now)
+        ON CONFLICT(book_url, peer_id) DO UPDATE SET
+            acked_revision = :ackedRevision,
+            agreed_progression = :progression,
+            agreed_status = :status,
+            pending_progression = NULL,
+            pending_status = NULL,
+            pending_updated_at = NULL,
+            has_pending = 0,
+            synced_at = :now
+        """,
+    )
+    abstract suspend fun settle(
+        bookUrl: String,
+        peerId: String,
+        ackedRevision: Long,
+        progression: Double?,
+        status: String?,
+        now: Long,
+    )
 
     @Query("DELETE FROM sync_peer_state WHERE book_url = :bookUrl")
-    suspend fun forget(bookUrl: String)
+    abstract suspend fun forget(bookUrl: String)
 
     @Query("DELETE FROM sync_peer_state WHERE book_url IN (:bookUrls)")
-    suspend fun forgetBooks(bookUrls: List<String>)
+    abstract suspend fun forgetBooks(bookUrls: List<String>)
 
     /**
      * Forgets everything agreed with one partner, for when that account
@@ -81,5 +163,5 @@ interface SyncPeerStateDao {
      * device, it simply no longer has a partner it is in step with.
      */
     @Query("DELETE FROM sync_peer_state WHERE peer_id = :peerId")
-    suspend fun forgetPeer(peerId: String)
+    abstract suspend fun forgetPeer(peerId: String)
 }

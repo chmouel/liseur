@@ -116,6 +116,7 @@ class SyncAccountRepository(
 
     private suspend fun store(result: SyncSetupResult): SyncSetupResult {
         val connection = (result as? SyncSetupResult.Success)?.connection ?: return result
+        val deviceKey = device.current().id
         // Connecting as somebody else makes what the old account had
         // confirmed meaningless, and leaving it behind would have the new
         // account inherit a baseline it never agreed to.
@@ -127,6 +128,8 @@ class SyncAccountRepository(
                 tokenCipher = CredentialCipher.encrypt(connection.token),
                 insightsTokenCipher = connection.insightsToken?.let(CredentialCipher::encrypt),
                 deviceName = connection.deviceName,
+                deviceId = connection.deviceId,
+                deviceKey = deviceKey,
                 addedAt = now(),
             )
             if (existing != null && existing.peerId != fresh.peerId) {

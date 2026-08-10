@@ -39,6 +39,25 @@ data class SyncAccount(
     /** What this device is called on the server's own device list. */
     @ColumnInfo(name = "device_name") val deviceName: String,
     /**
+     * The server's own name for this device, when it told us.
+     *
+     * Only used to recognise this device's own ops coming back around.
+     * Null for a token pasted in from elsewhere, which says nothing
+     * about whose device it is — and that is survivable, because an op
+     * of ours replayed back describes the position we last pushed, which
+     * is the baseline, so nothing follows from it.
+     */
+    @ColumnInfo(name = "device_id") val deviceId: String? = null,
+    /**
+     * This device, as this device knows itself.
+     *
+     * Part of every op id, so that two phones sitting at the same
+     * revision of the same book do not name the same op and silence each
+     * other. It is the local identity rather than the server's precisely
+     * so that it exists before the server has said anything.
+     */
+    @ColumnInfo(name = "device_key", defaultValue = "") val deviceKey: String = "",
+    /**
      * How far through the op log this device has reconciled.
      *
      * Zero means "everything", which is what a freshly connected account

@@ -22,6 +22,7 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
+import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.SyncAccountRepository
 import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
@@ -221,7 +222,22 @@ class AppContainer(context: Context) {
      * its ordering rules are written once regardless.
      */
     val positionSync = PositionSyncCoordinator(
-        CompositePositionSync(listOf(RoutedPositionSync(remoteRouter))),
+        CompositePositionSync(
+            listOf(
+                RoutedPositionSync(remoteRouter),
+                LiseurSyncPositionSync(
+                    accountDao = database.syncAccountDao(),
+                    bookDao = database.bookDao(),
+                    progressDao = database.readingProgressDao(),
+                    peerStateDao = database.syncPeerStateDao(),
+                    identityDao = database.workIdentityDao(),
+                    works = workResolver,
+                    finishedState = finishedState,
+                    reporting = syncReporting,
+                    inTransaction = { work -> database.withTransaction { work() } },
+                ),
+            ),
+        ),
     )
 
     val remoteCatalog = RemoteCatalogRepository(

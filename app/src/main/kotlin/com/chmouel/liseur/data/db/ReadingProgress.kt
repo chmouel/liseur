@@ -237,6 +237,12 @@ abstract class ReadingProgressDao {
      * this device already had is left alone rather than replaced with a
      * guess.
      *
+     * The revision goes up, and the acknowledgement goes up with it, so
+     * this partner still counts as in step while every *other* partner
+     * sees new local reading to be told about. A pull that left the
+     * counter alone would be invisible to them, and a position that
+     * arrived from one server would never reach the next.
+     *
      * Returns false when the row moved on and nothing was applied.
      */
     @Transaction
@@ -277,7 +283,8 @@ abstract class ReadingProgressDao {
             agreed_status = :status,
             agreed_account = :account,
             owner_account = :account,
-            acked_revision = local_revision
+            local_revision = local_revision + 1,
+            acked_revision = local_revision + 1
         WHERE book_url = :bookUrl AND local_revision = :expectedRevision
         """,
     )
@@ -417,6 +424,108 @@ abstract class ReadingProgressDao {
         account: String,
         now: Long,
     )
+
+    // -- Sync partners other than the catalog server ----------------------
+
+    /**
+     * Takes a position a peer reported, as a local move.
+     *
+     * Two things are different from [applyPull], and both follow from
+     * there being more than one partner. Nothing about an agreement is
+     * written here — that is a fact about a *pair* and lives in
+     * `sync_peer_state`. And `local_revision` goes *up* rather than
+     * staying put: reading that arrives from one partner is new to every
+     * other partner, and a counter that did not move would leave the
+     * others believing they had already seen it.
+     *
+     * The row is created when the book has never been opened here, which
+     * is the ordinary case for a book first read on another device.
+     *
+     * Returns false when a page was turned here while this was being
+     * decided; then nothing is applied and the caller has a conflict
+     * rather than a handover.
+     */
+    @Transaction
+    open suspend fun applyPeerPull(
+        bookUrl: String,
+        expectedRevision: Long,
+        progression: Double,
+        status: String,
+        now: Long,
+        locatorJson: String? = null,
+    ): Boolean {
+        // The row is made to exist first, because a book first read on
+        // another device has never been opened here and there is nothing
+        // to update. A fresh row starts at revision zero, which is what
+        // the caller compares against, so the conditional write below
+        // still decides whether it applies.
+        startIfMissing(bookUrl, now)
+        return applyPeerPullIfUnchanged(
+            bookUrl = bookUrl,
+            expectedRevision = expectedRevision,
+            progression = progression,
+            status = status,
+            now = now,
+            locatorJson = locatorJson,
+        ) > 0
+    }
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO reading_progress (
+            book_url, locator_json, total_progression, updated_at,
+            local_revision, acked_revision
+        )
+        VALUES (:bookUrl, '{}', NULL, :now, 0, 0)
+        """,
+    )
+    protected abstract suspend fun startIfMissing(bookUrl: String, now: Long)
+
+    @Query(
+        """
+        UPDATE reading_progress SET
+            total_progression = :progression,
+            locator_json = COALESCE(:locatorJson, locator_json),
+            status = :status,
+            updated_at = :now,
+            synced_at = :now,
+            local_revision = local_revision + 1
+        WHERE book_url = :bookUrl AND local_revision = :expectedRevision
+        """,
+    )
+    protected abstract suspend fun applyPeerPullIfUnchanged(
+        bookUrl: String,
+        expectedRevision: Long,
+        progression: Double,
+        status: String,
+        now: Long,
+        locatorJson: String?,
+    ): Int
+
+    /**
+     * Takes a status a peer reported without a position.
+     *
+     * As with [adoptStatus], a status said outright on this device wins:
+     * marking a book unread here is an act, and a stale "finished" on a
+     * server is not.
+     */
+    @Transaction
+    open suspend fun adoptPeerStatus(bookUrl: String, status: String, now: Long): Boolean {
+        if ((overrideFor(bookUrl) ?: 0) != 0) return false
+        return setPeerStatusOnly(bookUrl, status, now) > 0
+    }
+
+    @Query(
+        """
+        UPDATE reading_progress SET status = :status, remote_updated_at = :now
+        WHERE book_url = :bookUrl
+        """,
+    )
+    protected abstract suspend fun setPeerStatusOnly(
+        bookUrl: String,
+        status: String,
+        now: Long,
+    ): Int
 
     // -- What someone said, as opposed to what the position implies -------
 
