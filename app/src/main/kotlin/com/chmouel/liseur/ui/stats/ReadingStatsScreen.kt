@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
@@ -45,6 +46,7 @@ import com.chmouel.liseur.ui.windowWidth
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
+import java.util.concurrent.TimeUnit
 
 /**
  * What the reader has actually read, added up.
@@ -61,6 +63,7 @@ fun ReadingStatsScreen(
     state: ReadingStatsUiState,
     onOpenBook: (BookReadingStats) -> Unit,
     onBack: () -> Unit,
+    acrossDevices: InsightsSummary? = null,
 ) {
     Scaffold(
         topBar = {
@@ -108,8 +111,14 @@ fun ReadingStatsScreen(
             ),
         ) {
             item {
-                Headline(stats)
+                Headline(stats, labelled = acrossDevices != null)
                 Spacer(Modifier.height(24.dp))
+            }
+            acrossDevices?.let { summary ->
+                item {
+                    AcrossDevices(summary)
+                    Spacer(Modifier.height(24.dp))
+                }
             }
             item {
                 SectionTitle(stringResource(R.string.reading_stats_recent))
@@ -126,8 +135,18 @@ fun ReadingStatsScreen(
 
 /** The three numbers worth leading with. */
 @Composable
-private fun Headline(stats: ReadingStats) {
+private fun Headline(stats: ReadingStats, labelled: Boolean) {
     Column(Modifier.fillMaxWidth()) {
+        if (labelled) {
+            // Only said when there is something else to tell it apart
+            // from. Labelling the only figure on screen "on this device"
+            // raises a question nobody asked.
+            Text(
+                text = stringResource(R.string.reading_stats_on_this_device),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Text(
             text = stringResource(R.string.reading_stats_total),
             style = MaterialTheme.typography.labelLarge,
@@ -141,6 +160,37 @@ private fun Headline(stats: ReadingStats) {
         Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
             Tally(stats.booksRead, stringResource(R.string.reading_stats_books_read))
             Tally(stats.booksFinished, stringResource(R.string.reading_stats_books_finished))
+        }
+    }
+}
+
+/**
+ * The same reading, counted everywhere the reader reads.
+ *
+ * Kept plainly beside the local figures rather than replacing them, and
+ * labelled with the range the server actually used. A reader who reads
+ * on a phone and a tablet has two half-truths on their hands otherwise,
+ * and no way to tell which of them they are looking at.
+ */
+@Composable
+private fun AcrossDevices(summary: InsightsSummary) {
+    Column(Modifier.fillMaxWidth()) {
+        SectionTitle(stringResource(R.string.reading_stats_across_devices))
+        Text(
+            text = readingDuration(
+                TimeUnit.MINUTES.toMillis(summary.activeMinutes.toLong()),
+            ),
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        Text(
+            text = stringResource(R.string.reading_stats_across_range, summary.rangeDays),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+            Tally(summary.sessions, stringResource(R.string.reading_stats_sessions))
+            Tally(summary.streakDays, stringResource(R.string.reading_stats_streak))
         }
     }
 }

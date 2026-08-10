@@ -17,7 +17,13 @@ import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.readingStats
+import com.chmouel.liseur.data.liseursync.InsightsSummary
+import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
+import com.chmouel.liseur.data.liseursync.WorkInsights
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -48,9 +54,38 @@ class ReadingStatsViewModel(
     sessionDao: ReadingSessionDao,
     bookDao: BookDao,
     progressDao: ReadingProgressDao,
+    private val insights: LiseurSyncInsights? = null,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
     private val today: () -> LocalDate = { LocalDate.now(ZoneId.systemDefault()) },
 ) : ViewModel() {
+
+    private val _acrossDevices = MutableStateFlow<InsightsSummary?>(null)
+
+    /**
+     * The same reading, counted on every device rather than this one.
+     *
+     * Null until the server has answered, and null forever if it never
+     * does. Nothing on this screen waits for it: the local figures are
+     * complete in themselves and this appears beside them when it can.
+     */
+    val acrossDevices: StateFlow<InsightsSummary?> = _acrossDevices.asStateFlow()
+
+    init {
+        viewModelScope.launch { _acrossDevices.value = insights?.summary() }
+    }
+
+    /**
+     * How much longer this book has, according to every device.
+     *
+     * A fresh request each time rather than a cached one: the number is
+     * only interesting immediately after reading, which is exactly when
+     * a cached copy would be stale.
+     */
+    fun serverEstimateFor(bookUrl: String): StateFlow<WorkInsights?> {
+        val answer = MutableStateFlow<WorkInsights?>(null)
+        viewModelScope.launch { answer.value = insights?.forBook(bookUrl) }
+        return answer.asStateFlow()
+    }
 
     val state: StateFlow<ReadingStatsUiState> = combine(
         sessionDao.observeAll(),
@@ -116,6 +151,7 @@ class ReadingStatsViewModel(
                     sessionDao = container.database.readingSessionDao(),
                     bookDao = container.database.bookDao(),
                     progressDao = container.database.readingProgressDao(),
+                    insights = container.syncInsights,
                 )
             }
         }

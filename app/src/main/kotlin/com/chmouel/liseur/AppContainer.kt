@@ -22,6 +22,7 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
+import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.SyncAccountRepository
 import com.chmouel.liseur.data.liseursync.WorkResolver
@@ -239,6 +240,12 @@ class AppContainer(context: Context) {
                 ),
             ),
         ),
+    )
+
+    /** Reading added up across every device, when a server keeps it. */
+    val syncInsights = LiseurSyncInsights(
+        accountDao = database.syncAccountDao(),
+        identityDao = database.workIdentityDao(),
     )
 
     val remoteCatalog = RemoteCatalogRepository(

@@ -309,6 +309,12 @@
     <string name="reading_stats_last_read">Last read %1$s</string>
     <string name="reading_stats_progress">%1$d%% through</string>
     <string name="reading_stats_day_read">%1$s on %2$s</string>
+    <string name="reading_stats_across_devices">Across your devices</string>
+    <string name="reading_stats_across_range">Last %1$d days, from your sync server</string>
+    <string name="reading_stats_sessions">Sittings</string>
+    <string name="reading_stats_streak">Day streak</string>
+    <string name="reading_stats_on_this_device">On this device</string>
+    <string name="reading_stats_time_left">About %1$s left, at the pace you have been reading</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>

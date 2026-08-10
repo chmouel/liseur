@@ -195,8 +195,10 @@ private fun LiseurApp(settings: AppSettings) {
                 factory = ReadingStatsViewModel.factory(),
             )
             val statsState by model.state.collectAsStateWithLifecycle()
+            val across by model.acrossDevices.collectAsStateWithLifecycle()
             ReadingStatsScreen(
                 state = statsState,
+                acrossDevices = across,
                 onOpenBook = { book ->
                     statsBook = StatsTarget(book.bookUrl, book.title)
                     bookStatsReturnsTo = Screen.STATS
@@ -221,10 +223,14 @@ private fun LiseurApp(settings: AppSettings) {
                 )
                 val bookStatsState by remember(model, target.bookUrl) { model.forBook(target.bookUrl) }
                     .collectAsStateWithLifecycle()
+                val serverInsights by remember(model, target.bookUrl) {
+                    model.serverEstimateFor(target.bookUrl)
+                }.collectAsStateWithLifecycle()
                 BookReadingStatsScreen(
                     title = target.title,
                     state = bookStatsState,
                     onBack = back,
+                    serverInsights = serverInsights,
                 )
             }
         }

@@ -24,12 +24,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import java.time.Instant
 import java.time.ZoneId
+import java.util.concurrent.TimeUnit
 
 /**
  * How much of one book has been read, and when it was last opened.
@@ -43,6 +45,7 @@ fun BookReadingStatsScreen(
     title: String,
     state: BookReadingStatsUiState,
     onBack: () -> Unit,
+    serverInsights: WorkInsights? = null,
 ) {
     Scaffold(
         topBar = {
@@ -125,6 +128,22 @@ fun BookReadingStatsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Only ever shown when the server had one to give. It
+                // knows how fast this reader gets through books on every
+                // device, which this screen cannot work out on its own,
+                // and it answers null rather than guessing when it has
+                // nothing to divide by. That null is respected here: no
+                // estimate beats an invented one.
+                serverInsights?.etaSeconds?.let { seconds ->
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.reading_stats_time_left,
+                            readingDuration(TimeUnit.SECONDS.toMillis(seconds.toLong())),
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
             }
         }
     }
