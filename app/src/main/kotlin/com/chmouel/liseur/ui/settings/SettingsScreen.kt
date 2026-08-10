@@ -19,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -52,7 +54,9 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.ConnectionsState
 import com.chmouel.liseur.data.library.Inspection
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -75,6 +79,7 @@ fun SettingsScreen(
     onOpenAccount: () -> Unit,
     onOpenSyncServer: () -> Unit,
     backup: AnnotationBackupUi,
+    connections: ConnectionsState,
     onOpenSource: () -> Unit,
     onOpenLicences: () -> Unit,
     onBack: () -> Unit,
@@ -202,14 +207,29 @@ fun SettingsScreen(
                 }
 
                 SectionTitle(stringResource(R.string.settings_library))
-                LinkRow(
+                val catalog by connections.catalog.collectAsStateWithLifecycle(null)
+                val sync by connections.sync.collectAsStateWithLifecycle(null)
+                ConnectionRow(
+                    icon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
                     title = stringResource(R.string.server_account),
-                    subtitle = stringResource(R.string.settings_account_detail),
+                    // Connected: say to what. Not connected: say what it
+                    // would do. A row that always reads as an invitation
+                    // makes a connected server look unconnected.
+                    subtitle = catalog?.let {
+                        stringResource(
+                            R.string.server_connected,
+                            it.baseUrl,
+                            it.username ?: "",
+                        )
+                    } ?: stringResource(R.string.settings_account_detail),
                     onClick = onOpenAccount,
                 )
-                LinkRow(
+                ConnectionRow(
+                    icon = { Icon(Icons.Outlined.CloudSync, contentDescription = null) },
                     title = stringResource(R.string.sync_server_account),
-                    subtitle = stringResource(R.string.sync_server_account_detail),
+                    subtitle = sync?.let {
+                        stringResource(R.string.server_connected, it.baseUrl, it.username)
+                    } ?: stringResource(R.string.sync_server_account_detail),
                     onClick = onOpenSyncServer,
                 )
                 HighlightsBackupCard(backup = backup)
@@ -539,6 +559,40 @@ private fun BackupActionRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/**
+ * A server row that says where it points once it points anywhere.
+ *
+ * The icon is the same family the account screens themselves use, so
+ * the row reads as a door into them rather than a new kind of thing.
+ */
+@Composable
+private fun ConnectionRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Card(Modifier.padding(top = 8.dp).fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() }
+            Column(Modifier.padding(start = 16.dp)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

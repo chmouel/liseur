@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.ConnectionsState
 import com.chmouel.liseur.data.calibre.CalibreCatalogClient
 import com.chmouel.liseur.data.calibre.CalibreFileSource
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
@@ -246,6 +247,18 @@ class AppContainer(context: Context) {
     val syncInsights = LiseurSyncInsights(
         accountDao = database.syncAccountDao(),
         identityDao = database.workIdentityDao(),
+    )
+
+    /**
+     * Which servers are connected, for settings to show at a glance.
+     *
+     * Both halves are already observed for their own screens; this only
+     * joins them so the settings rows can say what they are connected to
+     * rather than repeat the invitation to connect.
+     */
+    val connections = ConnectionsState(
+        catalog = remoteAccount.server,
+        sync = syncAccount.account,
     )
 
     val remoteCatalog = RemoteCatalogRepository(

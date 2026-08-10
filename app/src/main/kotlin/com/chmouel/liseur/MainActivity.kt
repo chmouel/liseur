@@ -258,6 +258,7 @@ private fun LiseurApp(settings: AppSettings) {
                 },
                 onOpenSyncServer = { screen = Screen.SYNC_SERVER },
                 backup = annotationBackup,
+                connections = context.container.connections,
                 onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
                 onOpenLicences = { screen = Screen.LICENCES },
                 onBack = { screen = Screen.LIBRARY },

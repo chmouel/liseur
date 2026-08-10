@@ -76,6 +76,7 @@
     <string name="sync_server_error_wrong_server">That address answered, but not like a liseur-sync server.</string>
     <string name="sync_server_error_rate_limited">Too many attempts. Wait a moment and try again.</string>
     <string name="server_account">Book server</string>
+    <string name="server_connected" formatted="true">Connected to %1$s as %2$s</string>
     <string name="server_title">Book server</string>
     <string name="connect_server">Connect a book server</string>
     <string name="server_kind">Which kind of server?</string>
