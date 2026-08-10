@@ -20,6 +20,7 @@ import com.chmouel.liseur.domain.readingStats
 import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.WorkInsights
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,8 +34,26 @@ import java.time.ZoneId
 
 sealed interface ReadingStatsUiState {
     data object Loading : ReadingStatsUiState
-    data class Ready(val stats: ReadingStats) : ReadingStatsUiState
+    data class Ready(val stats: ReadingStats, val headline: StatsHeadline) : ReadingStatsUiState
 }
+
+/**
+ * The one set of figures the screen leads with, merged across devices.
+ *
+ * The server's count is the same reading seen on every device, so where
+ * it answers it is the superset and it wins; this device's own sessions
+ * are part of it, so summing the two would count them twice. When the
+ * server has nothing — offline, or no statistics token — the local
+ * lifetime figures stand in, and the range is left null so the caption
+ * can say "in total" instead of pretending a window.
+ */
+data class StatsHeadline(
+    val totalMs: Long,
+    /** Days the total covers, or null when it is lifetime-local. */
+    val rangeDays: Int?,
+    val sessions: Int?,
+    val streakDays: Int?,
+)
 
 sealed interface BookReadingStatsUiState {
     data object Loading : BookReadingStatsUiState
@@ -64,11 +83,11 @@ class ReadingStatsViewModel(
     /**
      * The same reading, counted on every device rather than this one.
      *
-     * Null until the server has answered, and null forever if it never
-     * does. Nothing on this screen waits for it: the local figures are
-     * complete in themselves and this appears beside them when it can.
+     * Folded into the headline rather than shown beside it: the reader
+     * does not care which machine did the reading, and two figures that
+     * answer the same question differently are a doubt, not a feature.
      */
-    val acrossDevices: StateFlow<InsightsSummary?> = _acrossDevices.asStateFlow()
+    private val acrossDevices: StateFlow<InsightsSummary?> = _acrossDevices.asStateFlow()
 
     init {
         viewModelScope.launch { _acrossDevices.value = insights?.summary() }
@@ -87,7 +106,7 @@ class ReadingStatsViewModel(
         return answer.asStateFlow()
     }
 
-    val state: StateFlow<ReadingStatsUiState> = combine(
+    private val local = combine(
         sessionDao.observeAll(),
         bookDao.observeAll(),
         progressDao.observeProgressions(),
@@ -114,12 +133,18 @@ class ReadingStatsViewModel(
             zone = zone(),
             today = today(),
         )
-    }.map<ReadingStats, ReadingStatsUiState>(ReadingStatsUiState::Ready)
-        .stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
-            ReadingStatsUiState.Loading,
-        )
+    }
+
+    val state: StateFlow<ReadingStatsUiState> = combine(
+        local,
+        acrossDevices,
+    ) { stats, server ->
+        ReadingStatsUiState.Ready(stats, mergeHeadline(stats, server))
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+        ReadingStatsUiState.Loading,
+    )
 
     /**
      * One book's line, taken from the same figures as the dashboard so
@@ -143,6 +168,33 @@ class ReadingStatsViewModel(
     companion object {
         /** Long enough to survive a rotation without recomputing. */
         private const val STOP_TIMEOUT_MS = 5_000L
+
+        /**
+         * The one headline, from both sources.
+         *
+         * Prefer the server, fall back to local, never sum. The server's
+         * count already includes this device's sessions, so adding the
+         * two would count this device twice; and a null range is the
+         * honest caption for a lifetime total.
+         */
+        internal fun mergeHeadline(
+            local: ReadingStats,
+            server: InsightsSummary?,
+        ): StatsHeadline = if (server != null) {
+            StatsHeadline(
+                totalMs = TimeUnit.MINUTES.toMillis(server.activeMinutes.toLong()),
+                rangeDays = server.rangeDays,
+                sessions = server.sessions,
+                streakDays = server.streakDays,
+            )
+        } else {
+            StatsHeadline(
+                totalMs = local.totalMs,
+                rangeDays = null,
+                sessions = null,
+                streakDays = null,
+            )
+        }
 
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {
