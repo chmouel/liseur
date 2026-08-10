@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.komga.KomgaSyncRepository
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.AnnotationBackupRepository
+import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.ReadingSessionManager
@@ -22,6 +23,7 @@ import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
 import com.chmouel.liseur.data.liseursync.SyncAccountRepository
+import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
@@ -70,6 +72,7 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         sessionDao = database.readingSessionDao(),
         peerStateDao = database.syncPeerStateDao(),
+        identityDao = database.workIdentityDao(),
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -185,9 +188,28 @@ class AppContainer(context: Context) {
     val syncAccount = SyncAccountRepository(
         dao = database.syncAccountDao(),
         peerStateDao = database.syncPeerStateDao(),
+        identityDao = database.workIdentityDao(),
         device = deviceIdentity,
         reporting = syncReporting,
         inTransaction = { work -> database.withTransaction { work() } },
+    )
+
+    /**
+     * What a book's file hashes to, worked out on demand.
+     *
+     * Lazily, and never during a library scan: hashing a large EPUB on a
+     * memory card is slow enough to be felt, and nothing needs the
+     * answer until a book is named to a server.
+     */
+    val bookFingerprints = BookFingerprintStore(
+        context = context.applicationContext,
+        dao = database.workIdentityDao(),
+    )
+
+    /** What the sync server calls each book, cached per account. */
+    val workResolver = WorkResolver(
+        dao = database.workIdentityDao(),
+        fingerprints = bookFingerprints,
     )
 
     /**

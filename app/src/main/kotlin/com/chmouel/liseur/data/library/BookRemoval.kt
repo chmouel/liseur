@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.library
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
+import com.chmouel.liseur.data.db.WorkIdentityDao
 
 /**
  * Removes library books and their reading statistics as one database change.
@@ -17,14 +18,13 @@ class BookRemoval(
     private val bookDao: BookDao,
     private val sessionDao: ReadingSessionDao,
     private val peerStateDao: SyncPeerStateDao,
+    private val identityDao: WorkIdentityDao,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
         inTransaction {
-            sessionDao.deleteForBooks(bookUrls)
-            peerStateDao.forgetBooks(bookUrls)
-            bookDao.deleteByUrls(bookUrls)
+            forget(bookUrls)
         }
     }
 
@@ -32,9 +32,23 @@ class BookRemoval(
         inTransaction {
             val bookUrls = bookDao.remoteNotDownloadedUrls()
             if (bookUrls.isEmpty()) return@inTransaction
-            sessionDao.deleteForBooks(bookUrls)
-            peerStateDao.forgetBooks(bookUrls)
-            bookDao.deleteByUrls(bookUrls)
+            forget(bookUrls)
         }
+    }
+
+    /**
+     * Everything keyed by a book URL, in one place.
+     *
+     * The fingerprints go too. They describe files that are no longer
+     * here, and a path that is reused later would otherwise be sent to a
+     * server under the hash of whatever used to be at it.
+     */
+    private suspend fun forget(bookUrls: List<String>) {
+        sessionDao.deleteForBooks(bookUrls)
+        peerStateDao.forgetBooks(bookUrls)
+        identityDao.forgetFingerprints(bookUrls)
+        identityDao.forgetAliases(bookUrls)
+        identityDao.forgetAmbiguities(bookUrls)
+        bookDao.deleteByUrls(bookUrls)
     }
 }

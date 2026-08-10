@@ -18,8 +18,11 @@ import androidx.sqlite.execSQL
         ReadingSession::class,
         SyncPeerState::class,
         SyncAccount::class,
+        BookFingerprintRow::class,
+        WorkAlias::class,
+        WorkAmbiguity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -27,6 +30,8 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun readingSessionDao(): ReadingSessionDao
     abstract fun syncPeerStateDao(): SyncPeerStateDao
     abstract fun syncAccountDao(): SyncAccountDao
+
+    abstract fun workIdentityDao(): WorkIdentityDao
     abstract fun bookDao(): BookDao
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun remoteServerDao(): RemoteServerDao
@@ -500,6 +505,49 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_fingerprint` (
+                        `book_url` TEXT NOT NULL,
+                        `sha256` TEXT NOT NULL,
+                        `partial_md5` TEXT NOT NULL,
+                        `file_size` INTEGER NOT NULL,
+                        `file_modified_at` INTEGER,
+                        `computed_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`book_url`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `work_alias` (
+                        `book_url` TEXT NOT NULL,
+                        `peer_id` TEXT NOT NULL,
+                        `work_id` TEXT NOT NULL,
+                        `confidence` TEXT NOT NULL,
+                        `confirmed` INTEGER NOT NULL DEFAULT 0,
+                        `edition_sha` TEXT,
+                        `resolved_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`book_url`, `peer_id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `work_ambiguity` (
+                        `book_url` TEXT NOT NULL,
+                        `peer_id` TEXT NOT NULL,
+                        `work_ids` TEXT NOT NULL,
+                        `noticed_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`book_url`, `peer_id`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
@@ -523,6 +571,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_16_17,
             MIGRATION_17_18,
             MIGRATION_18_19,
+            MIGRATION_19_20,
         )
     }
 }

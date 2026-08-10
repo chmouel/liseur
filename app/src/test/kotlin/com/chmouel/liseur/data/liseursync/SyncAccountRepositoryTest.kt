@@ -48,6 +48,7 @@ class SyncAccountRepositoryTest {
         repository = SyncAccountRepository(
             dao = db.syncAccountDao(),
             peerStateDao = db.syncPeerStateDao(),
+            identityDao = db.workIdentityDao(),
             device = DeviceIdentityRepository(context),
             setup = FakeSetup(),
             now = { NOW },

@@ -104,7 +104,12 @@ class RemoteCatalogRepositoryTest {
         ),
         serverDao = db.remoteServerDao(),
         bookDao = db.bookDao(),
-        bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao(), db.syncPeerStateDao()),
+        bookRemoval = BookRemoval(
+            db.bookDao(),
+            db.readingSessionDao(),
+            db.syncPeerStateDao(),
+            db.workIdentityDao(),
+        ),
     )
 
     /** A book DAO that keeps count of what a refresh asked it to do. */
@@ -140,7 +145,12 @@ class RemoteCatalogRepositoryTest {
         ),
         serverDao = db.remoteServerDao(),
         bookDao = bookDao,
-        bookRemoval = BookRemoval(bookDao, db.readingSessionDao(), db.syncPeerStateDao()),
+        bookRemoval = BookRemoval(
+            bookDao,
+            db.readingSessionDao(),
+            db.syncPeerStateDao(),
+            db.workIdentityDao(),
+        ),
     )
 
     private fun failing(e: Throwable) = FakeCatalog { throw e }
@@ -368,7 +378,12 @@ class RemoteCatalogRepositoryTest {
             ),
             serverDao = db.remoteServerDao(),
             bookDao = db.bookDao(),
-            bookRemoval = BookRemoval(db.bookDao(), db.readingSessionDao(), db.syncPeerStateDao()),
+            bookRemoval = BookRemoval(
+            db.bookDao(),
+            db.readingSessionDao(),
+            db.syncPeerStateDao(),
+            db.workIdentityDao(),
+        ),
             scope = this,
         )
 

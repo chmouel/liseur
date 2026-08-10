@@ -43,7 +43,14 @@ fun workIdOf(identifier: String?, title: String?, author: String?): String? {
 fun isSameWork(stored: String?, found: String?): Boolean =
     stored == null || found == null || stored == found
 
-private val USELESS_IDENTIFIERS = setOf(
+/**
+ * Identifiers that name nothing.
+ *
+ * Publishers are not required to make `dc:identifier` unique and several
+ * tools emit the same placeholder for every file they produce, so taking
+ * these at face value would merge unrelated books into one.
+ */
+internal val USELESS_IDENTIFIERS = setOf(
     "urn:uuid:00000000-0000-0000-0000-000000000000",
     "00000000-0000-0000-0000-000000000000",
     "urn:uuid:none",

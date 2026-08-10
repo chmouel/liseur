@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.SyncAccount
 import com.chmouel.liseur.data.db.SyncAccountDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
+import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.PeerPositionSync
 import com.chmouel.liseur.data.remote.SyncReporting
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 class SyncAccountRepository(
     private val dao: SyncAccountDao,
     private val peerStateDao: SyncPeerStateDao,
+    private val identityDao: WorkIdentityDao,
     private val device: DeviceIdentityRepository,
     private val setup: SyncSetup = LiseurSyncSetupClient(),
     private val reporting: SyncReporting? = null,
@@ -92,10 +94,24 @@ class SyncAccountRepository(
     suspend fun disconnect() {
         val existing = dao.get() ?: return
         inTransaction {
-            peerStateDao.forgetPeer(existing.peerId)
+            forgetPeer(existing.peerId)
             dao.delete()
         }
         reporting?.forget(PeerPositionSync.LISEUR_SYNC)
+    }
+
+    /**
+     * Everything a peer had agreed or named, dropped together.
+     *
+     * The work aliases go with the rest: a work id is that server's own
+     * name for a book and means nothing once we are no longer talking to
+     * it — and if the same server is connected again as somebody else,
+     * their ids are theirs, not the last account's.
+     */
+    private suspend fun forgetPeer(peerId: String) {
+        peerStateDao.forgetPeer(peerId)
+        identityDao.forgetPeerAliases(peerId)
+        identityDao.forgetPeerAmbiguities(peerId)
     }
 
     private suspend fun store(result: SyncSetupResult): SyncSetupResult {
@@ -114,7 +130,7 @@ class SyncAccountRepository(
                 addedAt = now(),
             )
             if (existing != null && existing.peerId != fresh.peerId) {
-                peerStateDao.forgetPeer(existing.peerId)
+                forgetPeer(existing.peerId)
             }
             dao.upsert(fresh)
         }
