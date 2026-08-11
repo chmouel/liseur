@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#
+# Builds a release-signed APK and installs it in place over the one on
+# the connected device, keeping the app's data.
+#
+# The device carries a release-signed install, so a debug build cannot
+# update it: Android refuses the signature change, and getting past it
+# means uninstalling — and losing the configuration — every time. This
+# builds with the real key instead, fetched from pass exactly as
+# hack/release does, so `hack/install` is the whole update.
+
+set -euo pipefail
+
+readonly PASS_KEYSTORE="android/liseur.keystore.p12"
+readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
+readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
+readonly APK="app/build/outputs/apk/release/app-release.apk"
+
+cd "$(git rev-parse --show-toplevel)"
+
+keystore=$(mktemp --suffix=.p12)
+properties="keystore.properties"
+cleanup() { rm -f "$keystore" "$properties"; }
+trap cleanup EXIT
+
+pass show "$PASS_KEYSTORE" >"$keystore"
+password=$(pass show "$PASS_KEYSTORE_PASSWORD" | head -1)
+alias=$(pass show "$PASS_KEY_ALIAS" | head -1)
+
+cat >"$properties" <<EOF
+storeFile=$keystore
+storePassword=$password
+keyAlias=$alias
+keyPassword=$password
+EOF
+
+./gradlew assembleRelease
+
+adb install -r "$@" "$APK"
