@@ -1,0 +1,1 @@
+Sync reading positions through a liseur-sync server alongside calibre-web or Komga, jump straight to the furthest position across devices with a way back, and reading statistics on the device itself.
