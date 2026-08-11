@@ -128,13 +128,14 @@ sealed interface SyncDecision {
 
     /**
      * Both sides moved since they last agreed. Preserve both, choose
-     * neither.
+     * neither — here.
      *
-     * There is deliberately no automatic winner. Taking the further
-     * position would silently throw away a deliberate reread; taking the
-     * newer one would trust two clocks that cannot be compared. The
-     * remote state stays on disk until someone who knows which device
-     * they last held is asked.
+     * The merge cannot pick a winner soundly: taking the newer position
+     * would trust two clocks that cannot be compared. The remote state
+     * stays on disk until the book is next opened, where the reader
+     * takes the further of the two and is offered the way back — a
+     * deliberate reread is one tap from being restored, rather than a
+     * question to answer before every book.
      */
     data class Conflict(val local: ReadingState, val remote: ReadingState) : SyncDecision
 }

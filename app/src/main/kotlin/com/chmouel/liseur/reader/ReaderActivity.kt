@@ -89,14 +89,11 @@ class ReaderActivity : FragmentActivity() {
                     monochrome = LocalEInk.current,
                 ) {
                     val state by viewModel.state.collectAsStateWithLifecycle()
-                    // Hosted above the loading state on purpose: a position
-                    // disagreement is put before the book opens, so the reader
-                    // starts in the right place rather than being moved after
-                    // arriving in the wrong one.
+                    // Hosted above the loading state so a note about a manual
+                    // sync can show whatever screen the reader is on.
                     val bookSync by viewModel.bookSync.collectAsStateWithLifecycle()
                     BookSyncDialog(
                         state = bookSync,
-                        onResolve = viewModel::resolveBookSync,
                         onDismiss = viewModel::dismissBookSync,
                     )
                     when (val s = state) {
@@ -193,8 +190,6 @@ class ReaderActivity : FragmentActivity() {
                                 onBookSyncAction = remember {
                                     ReaderBookSyncActions(
                                         start = viewModel::syncThisBook,
-                                        resolve = viewModel::resolveBookSync,
-                                        dismiss = viewModel::dismissBookSync,
                                     )
                                 },
                                 onBack = ::finish,

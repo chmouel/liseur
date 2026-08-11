@@ -45,7 +45,6 @@ import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -163,32 +162,9 @@ class ReaderViewModel(
         data object Idle : BookSync
         data object Asking : BookSync
 
-        /**
-         * Both sides, for someone to choose between. Shown whenever they
-         * differ at all — including when the server is *behind*, which is
-         * the case ordinary syncing is silent about and precisely the one
-         * worth being asked about after reading on another device.
-         */
-        data class Choice(
-            val here: SyncPoint,
-            val there: SyncPoint,
-            val theirsIsBehind: Boolean,
-            /** The local position this question is about. */
-            val atRevision: Long,
-        ) : BookSync
-
-        /** Nothing to choose: a message, and then out of the way. */
+        /** Nothing left to do: a message, and then out of the way. */
         data class Note(val messageRes: Int) : BookSync
     }
-
-    /** One side's position, in the terms the reader sees on the page. */
-    data class SyncPoint(
-        val progression: Double,
-        val page: Int?,
-        val totalPages: Int?,
-        /** When the server recorded it, if it said. */
-        val at: Long? = null,
-    )
 
     private val _bookSync = MutableStateFlow<BookSync>(BookSync.Idle)
     val bookSync: StateFlow<BookSync> = _bookSync.asStateFlow()
@@ -202,11 +178,15 @@ class ReaderViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /**
-     * Asks the server where this book was left, and offers the answer.
+     * Brings this book in step with the server, taking whichever side has
+     * read further.
      *
-     * Nothing is pulled or pushed until someone chooses. Doing it the
-     * other way round would be the ordinary sync, which is exactly what
-     * has already failed to help by the time this is pressed.
+     * There is no choosing: the further position wins outright, because
+     * that is almost always the answer, and being asked to compare two
+     * page numbers mid-book is a chore. Jumping ahead raises the same
+     * "back to page N" pill as any other jump, so a deliberate reread is
+     * one tap from being restored — and sending it again from there makes
+     * this device the further one.
      */
     fun syncThisBook() {
         if (_bookSync.value == BookSync.Asking) return
@@ -215,7 +195,7 @@ class ReaderViewModel(
             _bookSync.value = when (val outcome = positionSync.preview(bookId)) {
                 PreviewOutcome.NotSynced -> BookSync.Note(R.string.reader_sync_book_not_synced)
                 is PreviewOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
-                is PreviewOutcome.Ready -> describe(
+                is PreviewOutcome.Ready -> adoptFurthest(
                     outcome.preview,
                     progressDao.currentRevision(bookId) ?: 0,
                 )
@@ -223,95 +203,80 @@ class ReaderViewModel(
         }
     }
 
-    private fun describe(preview: SyncPreview, atRevision: Long): BookSync {
+    private suspend fun adoptFurthest(preview: SyncPreview, atRevision: Long): BookSync {
         val there = preview.remote
             ?: return BookSync.Note(R.string.reader_sync_book_no_remote)
         if (preview.agrees) return BookSync.Note(R.string.reader_sync_book_in_step)
         val here = preview.local ?: lastLocator?.locations?.totalProgression ?: 0.0
-        return BookSync.Choice(
-            here = point(here),
-            there = point(there, preview.remoteAt),
-            theirsIsBehind = there < here,
-            atRevision = atRevision,
-        )
-    }
+        val takeRemote = there > here
+        return when (val outcome = positionSync.resolve(bookId, takeRemote, atRevision)) {
+            is ResolveOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
 
-    private fun point(progression: Double, at: Long? = null): SyncPoint {
-        val positions = bookPositions?.takeIf { it.isUsable }
-        return SyncPoint(
-            progression = progression,
-            page = positions?.positionAtProgression(progression.toFloat()),
-            totalPages = positions?.totalPositions,
-            at = at,
-        )
-    }
+            // A page was turned while this ran, so the answer was about
+            // somewhere the reader no longer is.
+            ResolveOutcome.Superseded -> BookSync.Note(R.string.reader_sync_book_moved)
 
-    /**
-     * Acts on the choice. Taking the other device's position moves the
-     * reader there straight away, because that is the whole point of
-     * having asked.
-     */
-    fun resolveBookSync(takeRemote: Boolean) {
-        val asked = _bookSync.value as? BookSync.Choice ?: return
-        _bookSync.value = BookSync.Asking
-        viewModelScope.launch {
-            when (val outcome = positionSync.resolve(bookId, takeRemote, asked.atRevision)) {
-                is ResolveOutcome.Failed ->
-                    _bookSync.value = BookSync.Note(outcome.reason.messageRes())
-
-                // A page was turned while the question was on screen, so
-                // the answer was about somewhere the reader no longer is.
-                ResolveOutcome.Superseded ->
-                    _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
-
-                ResolveOutcome.Done -> {
-                    // While the book is still opening there is nowhere to
-                    // jump to yet: open() reads the settled position and
-                    // starts the reader there.
-                    if (takeRemote && openQuestion == null) {
-                        progressDao.get(bookId)?.totalProgression?.let { goToProgression(it) }
-                    }
-                    _bookSync.value = BookSync.Idle
+            ResolveOutcome.Done -> {
+                if (takeRemote) {
+                    // The jump raises the way-back pill through onJump(),
+                    // which is the whole announcement: where you are now,
+                    // and one tap back to where you were.
+                    progressDao.get(bookId)?.totalProgression?.let { goToProgression(it) }
+                    BookSync.Idle
+                } else {
+                    BookSync.Note(R.string.reader_sync_book_sent)
                 }
             }
-            openQuestion?.takeIf { _bookSync.value == BookSync.Idle }?.complete(Unit)
         }
     }
 
-    /** Puts the question away, leaving the server's answer on disk for later. */
+    /** Puts the message away. */
     fun dismissBookSync() {
         _bookSync.value = BookSync.Idle
-        openQuestion?.complete(Unit)
     }
 
     /**
-     * Raised while a book is opening, so the answer arrives before the
-     * reader does. Completed by whichever way the question is answered.
-     */
-    private var openQuestion: CompletableDeferred<Unit>? = null
-
-    /**
-     * Puts a preserved disagreement to the reader before the book opens.
+     * Settles a disagreement an ordinary sync preserved, before the book
+     * opens.
      *
-     * Page numbers need the book laid out, which is the same work the
-     * cross-device path already pays for, so it is done here rather than
-     * showing two bare percentages.
+     * The further side wins, so the book simply opens at the right page.
+     * When that page came from the other device, the way-back pill is
+     * raised over the first page shown: the announcement that the book
+     * jumped ahead, and the one tap that undoes it for a reread.
      */
-    private suspend fun askAboutPreservedConflict(publication: Publication) {
+    private suspend fun settlePreservedConflict(publication: Publication) {
         val preview = positionSync.preservedConflict(bookId) ?: return
         val there = preview.remote ?: return
         val here = preview.local ?: 0.0
-        if (bookPositions == null) bookPositions = BookPositions.of(publication)
-        val waiting = CompletableDeferred<Unit>()
-        openQuestion = waiting
-        _bookSync.value = BookSync.Choice(
-            here = point(here),
-            there = point(there, preview.remoteAt),
-            theirsIsBehind = there < here,
-            atRevision = progressDao.currentRevision(bookId) ?: 0,
+        val takeRemote = there > here
+        val outcome = positionSync.resolve(
+            bookId,
+            takeRemote,
+            progressDao.currentRevision(bookId) ?: 0,
         )
-        waiting.await()
-        openQuestion = null
+        // On failure the disagreement stays preserved and will be
+        // settled on the next open; the book still opens now.
+        if (outcome != ResolveOutcome.Done || !takeRemote) return
+        if (bookPositions == null) bookPositions = BookPositions.of(publication)
+        offerWayBack(here)
+    }
+
+    /**
+     * Raises the way-back pill for a place the reader has not actually
+     * been this session — the position this device held before a sync
+     * moved it. [onJump] cannot do this: the book is not open yet, so
+     * there is no last locator to remember.
+     */
+    private fun offerWayBack(progression: Double) {
+        val positions = bookPositions?.takeIf { it.isUsable } ?: return
+        val position = positions.positionAtProgression(progression.toFloat())
+        val locator = positions.locatorAt(position) ?: return
+        _jumpBack.value = JumpBack(locator = locator, position = position)
+        jumpBackTimer?.cancel()
+        jumpBackTimer = viewModelScope.launch {
+            delay(JUMP_BACK_TIMEOUT_MS)
+            _jumpBack.value = null
+        }
     }
 
     private suspend fun goToProgression(progression: Double) {
@@ -376,11 +341,11 @@ class ReaderViewModel(
                 runCatching { positionSync.request(SyncScope.Book(bookId)) }
             }
 
-            // Sync preserves a disagreement rather than guessing. Settle
-            // it now, while the book is still a loading screen: opening
-            // at one position and then yanking the reader to another is
-            // worse than a moment's wait before a single answer.
-            askAboutPreservedConflict(publication)
+            // Sync preserves a disagreement rather than guessing across
+            // devices in the background. Settle it now, while the book is
+            // still a loading screen, so it opens at the further position
+            // instead of being yanked there after arriving.
+            settlePreservedConflict(publication)
 
             val stored = progressDao.get(bookId)
             speed = ReadingSpeedEstimator(
