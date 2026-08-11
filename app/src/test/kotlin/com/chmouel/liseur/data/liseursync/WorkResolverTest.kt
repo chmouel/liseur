@@ -132,7 +132,7 @@ class WorkResolverTest {
                 resolvedAt = NOW,
             ),
         )
-        answer(200, """{"work_id":"w-1","confidence":"low"}""")
+        answer(200, """{"work_id":"w-1","confidence":"high"}""")
 
         val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
@@ -145,6 +145,9 @@ class WorkResolverTest {
             body.getJSONArray("identifiers").getJSONObject(it).getString("kind")
         }
         assertTrue("source" in kinds)
+        // The reader's earlier yes travels with the request, so the
+        // server may register the stronger identifiers on a fuzzy hit.
+        assertTrue(body.getBoolean("confirmed"))
 
         // The debt is paid: the next resolve uses the cache.
         val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
@@ -236,14 +239,17 @@ class WorkResolverTest {
     @Test
     fun `a guess made from the file itself still waits for the reader`() = runTest {
         // Here the server saw the hashes and still only matched on the
-        // title: re-asking would change nothing, so the question stands.
+        // title. It is re-asked — the other device may have registered
+        // the catalog id since — but an answer that is still a guess
+        // leaves the question with the reader.
         answer(200, """{"work_id":"w-7","confidence":"low"}""")
         resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
+        answer(200, """{"work_id":"w-7","confidence":"low"}""")
         val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertTrue(again is WorkResolution.NeedsConfirming)
-        assertEquals(1, server.requestCount)
+        assertEquals(2, server.requestCount)
     }
 
     @Test

@@ -342,11 +342,10 @@ class LiseurSyncPositionSync(
                 }
                 continue
             }
-            // A guess made while the book was catalog-only can be
-            // settled by the file, now that there is one, without
-            // troubling the reader; any other unusable alias has asked
+            // A guess the file or the catalog id could settle is worth
+            // asking about again; any other unusable alias has asked
             // its question and waits for the answer.
-            if (cached != null && !works.strengthenable(cached, candidate)) continue
+            if (cached != null && !works.retryable(cached, candidate)) continue
             if (budget <= 0) continue
             budget--
             when (

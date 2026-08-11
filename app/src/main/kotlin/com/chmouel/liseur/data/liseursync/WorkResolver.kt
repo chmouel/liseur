@@ -84,6 +84,17 @@ class WorkResolver(
         alias.awaitingAnswer && alias.editionSha == null && book.openableUrl != null
 
     /**
+     * Whether asking the server again could settle [alias] without the
+     * reader: the file has arrived since ([strengthenable]), or the
+     * guess predates the catalog-id identifier and one exists to send —
+     * the other device may have registered it in the meantime, turning
+     * the guess into a match.
+     */
+    fun retryable(alias: WorkAlias, book: Book): Boolean =
+        strengthenable(alias, book) ||
+            (alias.awaitingAnswer && !alias.sourceSent && sourceOf(book) != null)
+
+    /**
      * Whether [alias] still owes the server [book]'s catalog id.
      *
      * The catalog's own name for a book is the one identifier another
@@ -135,9 +146,9 @@ class WorkResolver(
                     return WorkResolution.Unresolved(cause = null)
                 // A guess made while the book was catalog-only, when a
                 // title and an author were all there was to offer. The
-                // file is here now, and its own identifiers can answer
-                // the question instead of the reader.
-                strengthenable(it, book) -> Unit
+                // file, or the catalog id, may be able to answer the
+                // question instead of the reader now.
+                retryable(it, book) -> Unit
                 else -> return WorkResolution.NeedsConfirming(it)
             }
         }
@@ -157,7 +168,10 @@ class WorkResolver(
             http.post(
                 url = LiseurSyncApi.url(baseUrl, LiseurSyncApi.RESOLVE),
                 credentials = credentials,
-                json = request(identifiers, book),
+                // The reader's earlier yes to this match travels along:
+                // the server registers stronger identifiers on a fuzzy
+                // hit only on somebody's word that it is the same book.
+                json = request(identifiers, book, confirmed = existing?.confirmed == true),
                 expected = setOf(LiseurSyncHttp.CONFLICT),
             )
         } catch (rejection: LiseurSyncRejection) {
@@ -179,18 +193,21 @@ class WorkResolver(
         // id, or to let the file settle a guess — must not lose what the
         // reader and the seed pass already established about it.
         val sameWork = existing?.workId == workId
+        val confidence = if (answer.optString("confidence") == WorkAlias.LOW) {
+            WorkAlias.LOW
+        } else {
+            WorkAlias.HIGH
+        }
         val alias = WorkAlias(
             bookUrl = book.url,
             peerId = peerId,
             workId = workId,
-            confidence = if (answer.optString("confidence") == WorkAlias.LOW) {
-                WorkAlias.LOW
-            } else {
-                WorkAlias.HIGH
-            },
+            confidence = confidence,
             confirmed = sameWork && existing?.confirmed == true,
             seeded = sameWork && existing?.seeded == true,
-            sourceSent = sourceId != null,
+            // The server registers nothing on a fuzzy, unconfirmed hit,
+            // so a low answer leaves the catalog id still owed.
+            sourceSent = sourceId != null && confidence == WorkAlias.HIGH,
             editionSha = fingerprint?.sha256,
             resolvedAt = now(),
         )
@@ -222,7 +239,11 @@ class WorkResolver(
         return WorkResolution.Ambiguous(works)
     }
 
-    private fun request(identifiers: List<WorkIdentifier>, book: Book) = JSONObject().apply {
+    private fun request(
+        identifiers: List<WorkIdentifier>,
+        book: Book,
+        confirmed: Boolean,
+    ) = JSONObject().apply {
         put(
             "identifiers",
             JSONArray().apply {
@@ -233,6 +254,7 @@ class WorkResolver(
         )
         put("title", book.title)
         book.author?.let { put("author", it) }
+        if (confirmed) put("confirmed", true)
     }
 
     private fun strings(array: JSONArray?): List<String> =
