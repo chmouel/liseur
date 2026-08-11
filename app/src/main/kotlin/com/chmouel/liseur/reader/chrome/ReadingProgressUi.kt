@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.Icon
@@ -238,6 +239,7 @@ private fun Modifier.chapterTicks(ticks: List<Float>, color: Color): Modifier =
 @Composable
 fun JumpBackPill(
     position: Int?,
+    fromSync: Boolean,
     theme: ReaderTheme,
     onJumpBack: () -> Unit,
     onDismiss: () -> Unit,
@@ -260,15 +262,30 @@ fun JumpBackPill(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.clickableWithoutRipple(onJumpBack),
             ) {
-                Icon(Icons.Outlined.Undo, contentDescription = null)
+                Icon(
+                    imageVector = if (fromSync) Icons.Outlined.CloudSync else Icons.Outlined.Undo,
+                    contentDescription = null,
+                )
                 Text(
-                    text = if (position != null) {
+                    text = if (fromSync) {
+                        stringResource(R.string.position_synced_from_device)
+                    } else if (position != null) {
                         stringResource(R.string.jump_back_to_page, position)
                     } else {
                         stringResource(R.string.jump_back)
                     },
                     style = MaterialTheme.typography.labelLarge,
                 )
+                if (fromSync) {
+                    Icon(
+                        imageVector = Icons.Outlined.Undo,
+                        contentDescription = if (position != null) {
+                            stringResource(R.string.jump_back_to_page, position)
+                        } else {
+                            stringResource(R.string.jump_back)
+                        },
+                    )
+                }
             }
             Icon(
                 Icons.Default.Close,

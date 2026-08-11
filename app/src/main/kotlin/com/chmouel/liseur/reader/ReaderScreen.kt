@@ -348,6 +348,7 @@ fun ReaderScreen(
             jumpBack?.let { target ->
                 JumpBackPill(
                     position = target.position,
+                    fromSync = target.fromSync,
                     theme = prefs.theme,
                     onJumpBack = {
                         onProgressAction.dismissJumpBack()

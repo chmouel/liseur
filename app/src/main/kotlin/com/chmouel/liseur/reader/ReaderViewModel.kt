@@ -279,7 +279,7 @@ class ReaderViewModel(
         val positions = bookPositions?.takeIf { it.isUsable } ?: return
         val position = positions.positionAtProgression(progression.toFloat())
         val locator = positions.locatorAt(position) ?: return
-        _jumpBack.value = JumpBack(locator = locator, position = position)
+        _jumpBack.value = JumpBack(locator = locator, position = position, fromSync = true)
         jumpBackTimer?.cancel()
         jumpBackTimer = viewModelScope.launch {
             delay(JUMP_BACK_TIMEOUT_MS)
@@ -885,7 +885,11 @@ class ReaderViewModel(
     }
 
     /** A place to return to after a jump, and the page it was on. */
-    data class JumpBack(val locator: Locator, val position: Int?)
+    data class JumpBack(
+        val locator: Locator,
+        val position: Int?,
+        val fromSync: Boolean = false,
+    )
 
     companion object {
         private const val LOCATOR_EPSILON = 0.000001
