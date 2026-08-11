@@ -262,6 +262,7 @@
     <string name="settings_dictionary_site_reset">Use the default</string>
     <string name="settings_library">Library</string>
     <string name="settings_remote_library">Remote libraries</string>
+    <string name="settings_export_import">Export and import</string>
     <string name="settings_library_help_title">Book servers and sync servers</string>
     <string name="settings_library_help_body" formatted="true">A book server — calibre-web or Komga — holds your library: Liseur browses it, downloads from it, and can keep your place in step with it. Komga is a fine choice on its own, or alongside calibre-web on another device.\n\nA liseur-sync server is something else: a small companion that keeps reading positions and reading time, and nothing else. It holds no books, and it can be used alongside a book server or on its own. Run your own from %1$s.</string>
     <string name="settings_account_detail">Browse, download and sync with a calibre-web or Komga server.</string>

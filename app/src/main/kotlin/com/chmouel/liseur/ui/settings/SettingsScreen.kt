@@ -151,47 +151,6 @@ fun SettingsScreen(
                     }
                 }
 
-                SettingsGroup(stringResource(R.string.settings_reading)) {
-                    SwitchRow(
-                        title = stringResource(R.string.settings_volume_keys),
-                        subtitle = stringResource(R.string.settings_volume_keys_detail),
-                        checked = settings.volumeKeysTurnPages,
-                        onCheckedChange = onVolumeKeys,
-                    )
-                    RowDivider()
-                    SwitchRow(
-                        title = stringResource(R.string.settings_resume),
-                        subtitle = stringResource(R.string.settings_resume_detail),
-                        checked = settings.resumeLastBook,
-                        onCheckedChange = onResumeLastBook,
-                    )
-                    RowDivider()
-                    ChipRow(
-                        title = stringResource(R.string.settings_eink),
-                        subtitle = stringResource(R.string.settings_eink_detail),
-                        options = EInkMode.entries,
-                        selected = settings.eInkMode,
-                        label = { stringResource(it.label) },
-                        onSelected = onEInkMode,
-                    )
-                }
-
-                SettingsGroup(stringResource(R.string.settings_dictionary)) {
-                    SwitchRow(
-                        title = stringResource(R.string.settings_dictionary_lookup),
-                        subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
-                        checked = settings.dictionaryLookupEnabled,
-                        onCheckedChange = onDictionaryLookup,
-                    )
-                    if (settings.dictionaryLookupEnabled) {
-                        RowDivider()
-                        DictionarySiteRow(
-                            baseUrl = settings.dictionaryBaseUrl,
-                            onBaseUrl = onDictionaryBaseUrl,
-                        )
-                    }
-                }
-
                 val showLibraryHelp = remember { mutableStateOf(false) }
                 if (showLibraryHelp.value) {
                     val uriHandler = LocalUriHandler.current
@@ -275,7 +234,51 @@ fun SettingsScreen(
                         onClick = onOpenSyncServer,
                     )
                 }
-                HighlightsBackupCard(backup = backup)
+
+                SettingsGroup(stringResource(R.string.settings_reading)) {
+                    SwitchRow(
+                        title = stringResource(R.string.settings_volume_keys),
+                        subtitle = stringResource(R.string.settings_volume_keys_detail),
+                        checked = settings.volumeKeysTurnPages,
+                        onCheckedChange = onVolumeKeys,
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = stringResource(R.string.settings_resume),
+                        subtitle = stringResource(R.string.settings_resume_detail),
+                        checked = settings.resumeLastBook,
+                        onCheckedChange = onResumeLastBook,
+                    )
+                    RowDivider()
+                    ChipRow(
+                        title = stringResource(R.string.settings_eink),
+                        subtitle = stringResource(R.string.settings_eink_detail),
+                        options = EInkMode.entries,
+                        selected = settings.eInkMode,
+                        label = { stringResource(it.label) },
+                        onSelected = onEInkMode,
+                    )
+                }
+
+                SettingsGroup(stringResource(R.string.settings_dictionary)) {
+                    SwitchRow(
+                        title = stringResource(R.string.settings_dictionary_lookup),
+                        subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
+                        checked = settings.dictionaryLookupEnabled,
+                        onCheckedChange = onDictionaryLookup,
+                    )
+                    if (settings.dictionaryLookupEnabled) {
+                        RowDivider()
+                        DictionarySiteRow(
+                            baseUrl = settings.dictionaryBaseUrl,
+                            onBaseUrl = onDictionaryBaseUrl,
+                        )
+                    }
+                }
+
+                SettingsGroup(stringResource(R.string.settings_export_import)) {
+                    HighlightsBackupCard(backup = backup, grouped = true)
+                }
 
                 SettingsGroup(stringResource(R.string.settings_about)) {
                         Row(
@@ -536,7 +539,7 @@ private fun <T> ChipRow(
  * find out the books in it are not on this phone.
  */
 @Composable
-private fun HighlightsBackupCard(backup: AnnotationBackupUi) {
+private fun HighlightsBackupCard(backup: AnnotationBackupUi, grouped: Boolean = false) {
     // The confirm dialog is owed to whichever file is being asked about.
     (backup.pendingImport as? Inspection.Ready)?.let { ready ->
         AlertDialog(
@@ -572,7 +575,9 @@ private fun HighlightsBackupCard(backup: AnnotationBackupUi) {
         )
     }
 
-    Card(Modifier.padding(top = 8.dp).fillMaxWidth()) {
+    // Inside a section the card already exists; drawing another one
+    // would nest a box in a box.
+    val content: @Composable ColumnScope.() -> Unit = {
         Column(Modifier.padding(vertical = 8.dp)) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
@@ -614,6 +619,11 @@ private fun HighlightsBackupCard(backup: AnnotationBackupUi) {
                 )
             }
         }
+    }
+    if (grouped) {
+        Column(content = content)
+    } else {
+        Card(Modifier.padding(top = 8.dp).fillMaxWidth(), content = content)
     }
 }
 
