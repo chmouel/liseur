@@ -68,9 +68,12 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                         // is worth its round trips is answered from what
                         // the last one wrote down, which outlives being
                         // killed in a way a field in here does not.
-                        if (!shouldSyncOnForeground(container.remoteAccount.current(), now)) {
-                            return@launch
-                        }
+                        val due = shouldSyncOnForeground(
+                            container.remoteAccount.current(),
+                            container.syncAccount.current(),
+                            now,
+                        )
+                        if (!due) return@launch
                         runCatching { container.positionSync.request(SyncScope.Full, now) }
                     }
                 }
