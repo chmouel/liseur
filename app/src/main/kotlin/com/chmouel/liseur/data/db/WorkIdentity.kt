@@ -66,6 +66,15 @@ data class WorkAlias(
     @ColumnInfo(name = "confirmed") val confirmed: Boolean = false,
     /** Whether the server has been asked, once, where this book stands. */
     @ColumnInfo(name = "seeded", defaultValue = "0") val seeded: Boolean = false,
+    /**
+     * Whether the catalog's own id for this book has been registered.
+     *
+     * Aliases resolved before the `source` identifier existed never
+     * told the server which catalog entry the book is, which is the
+     * one identifier another device holds before downloading anything.
+     * Each such alias re-resolves once to hand it over.
+     */
+    @ColumnInfo(name = "source_sent", defaultValue = "0") val sourceSent: Boolean = false,
     /** The file this alias was resolved for; null for file-less books. */
     @ColumnInfo(name = "edition_sha") val editionSha: String? = null,
     @ColumnInfo(name = "resolved_at") val resolvedAt: Long,

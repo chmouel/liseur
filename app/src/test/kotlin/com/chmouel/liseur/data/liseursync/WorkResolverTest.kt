@@ -86,7 +86,7 @@ class WorkResolverTest {
         val kinds = (0 until body.getJSONArray("identifiers").length()).map {
             body.getJSONArray("identifiers").getJSONObject(it).getString("kind")
         }
-        assertEquals(listOf("sha256", "partial-md5", "dc", "ta"), kinds)
+        assertEquals(listOf("sha256", "partial-md5", "source", "dc", "ta"), kinds)
         assertEquals("A Memory Called Empire", body.getString("title"))
     }
 
@@ -104,7 +104,52 @@ class WorkResolverTest {
         val kinds = (0 until body.getJSONArray("identifiers").length()).map {
             body.getJSONArray("identifiers").getJSONObject(it).getString("kind")
         }
-        assertEquals(listOf("dc", "ta"), kinds)
+        assertEquals(listOf("source", "dc", "ta"), kinds)
+        // The catalog id is the book's own URL: the one string another
+        // device connected to the same catalog is guaranteed to share.
+        assertEquals(
+            BOOK,
+            body.getJSONArray("identifiers").getJSONObject(0).getString("value"),
+        )
+    }
+
+    @Test
+    fun `a name that predates the catalog id re-resolves once to register it`() = runTest {
+        // An alias resolved before the source identifier existed never
+        // told the server which catalog entry this is — the identifier a
+        // fresh install matches on. It owes one re-resolve, and what the
+        // reader and the seed pass established must survive it.
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = BOOK,
+                peerId = PEER,
+                workId = "w-1",
+                confidence = WorkAlias.LOW,
+                confirmed = true,
+                seeded = true,
+                sourceSent = false,
+                editionSha = "aa",
+                resolvedAt = NOW,
+            ),
+        )
+        answer(200, """{"work_id":"w-1","confidence":"low"}""")
+
+        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+
+        val alias = (result as WorkResolution.Named).alias
+        assertTrue(alias.sourceSent)
+        assertTrue(alias.confirmed)
+        assertTrue(alias.seeded)
+        val body = JSONObject(server.takeRequest().body!!.utf8())
+        val kinds = (0 until body.getJSONArray("identifiers").length()).map {
+            body.getJSONArray("identifiers").getJSONObject(it).getString("kind")
+        }
+        assertTrue("source" in kinds)
+
+        // The debt is paid: the next resolve uses the cache.
+        val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        assertEquals("w-1", (again as WorkResolution.Named).alias.workId)
+        assertEquals(1, server.requestCount)
     }
 
     @Test

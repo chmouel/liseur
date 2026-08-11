@@ -319,14 +319,26 @@ class LiseurSyncPositionSync(
         for (candidate in ordered) {
             val cached = known[candidate.url]
             if (cached != null && cached.usable) {
-                out += candidate to cached
+                var alias = cached
+                // A name that predates the catalog-id identifier owes
+                // the server one re-resolve, so the next fresh install
+                // can match on the catalog entry instead of asking the
+                // reader. Failing is fine: the cached name still works,
+                // and the debt stands until it is paid.
+                if (works.owesSource(cached, candidate) && budget > 0) {
+                    budget--
+                    val refreshed =
+                        works.resolve(candidate, account.peerId, account.baseUrl, credentials)
+                    if (refreshed is WorkResolution.Named) alias = refreshed.alias
+                }
+                out += candidate to alias
                 // A name that arrived without the one-off question —
                 // a doubtful match confirmed by hand — still owes
                 // it: whatever the server heard before the name was
                 // usable is behind the cursor.
-                if (!cached.seeded && budget > 0) {
+                if (!alias.seeded && budget > 0) {
                     budget--
-                    seed(account, credentials, candidate, cached)
+                    seed(account, credentials, candidate, alias)
                 }
                 continue
             }

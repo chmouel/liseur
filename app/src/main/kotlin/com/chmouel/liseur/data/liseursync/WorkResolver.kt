@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.WorkAmbiguity
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.WorkIdentifier
 import com.chmouel.liseur.domain.WorkIdentifiers
 import java.io.IOException
@@ -83,6 +84,29 @@ class WorkResolver(
         alias.awaitingAnswer && alias.editionSha == null && book.openableUrl != null
 
     /**
+     * Whether [alias] still owes the server [book]'s catalog id.
+     *
+     * The catalog's own name for a book is the one identifier another
+     * device holds before downloading anything, so an alias resolved
+     * before it was sent re-resolves once to register it — that is what
+     * lets the next fresh install match on it instead of asking the
+     * reader.
+     */
+    fun owesSource(alias: WorkAlias, book: Book): Boolean =
+        alias.usable && !alias.sourceSent && sourceOf(book) != null
+
+    /**
+     * The catalog server's id for [book], or null for a local file.
+     *
+     * The book's own URL already is that id — `komga:<id>`,
+     * `calibre:<uuid>` — and it is the same string on every device
+     * connected to the same catalog. A local book's URL names a path on
+     * this device and means nothing anywhere else, so it is never sent.
+     */
+    fun sourceOf(book: Book): String? =
+        book.url.takeIf { url -> ServerKind.entries.any { it.remoteId(url) != null } }
+
+    /**
      * Asks the server what to call [book], caching whatever it says.
      *
      * A book with no file on the device still resolves, on its own
@@ -97,25 +121,32 @@ class WorkResolver(
         baseUrl: String,
         credentials: RemoteCredentials,
     ): WorkResolution {
-        dao.alias(book.url, peerId)?.let { existing ->
+        val existing = dao.alias(book.url, peerId)
+        existing?.let {
             when {
-                existing.usable -> return WorkResolution.Named(existing)
+                // A usable name that never told the server which catalog
+                // entry it is resolves once more to hand that over; any
+                // other usable name is simply used.
+                it.usable ->
+                    if (!owesSource(it, book)) return WorkResolution.Named(it)
                 // Already asked and already answered no. Resolving again
                 // would put the same question back on the screen.
-                existing.confidence == WorkAlias.REJECTED ->
+                it.confidence == WorkAlias.REJECTED ->
                     return WorkResolution.Unresolved(cause = null)
                 // A guess made while the book was catalog-only, when a
                 // title and an author were all there was to offer. The
                 // file is here now, and its own identifiers can answer
                 // the question instead of the reader.
-                strengthenable(existing, book) -> Unit
-                else -> return WorkResolution.NeedsConfirming(existing)
+                strengthenable(it, book) -> Unit
+                else -> return WorkResolution.NeedsConfirming(it)
             }
         }
 
         val fingerprint = fingerprints.of(book)
+        val sourceId = sourceOf(book)
         val identifiers = WorkIdentifiers.of(
             fingerprint = fingerprint,
+            sourceId = sourceId,
             dcIdentifier = WorkIdentifiers.dcFrom(book.workId, book.title, book.author),
             title = book.title,
             author = book.author,
@@ -144,6 +175,10 @@ class WorkResolver(
         // this is.
         dao.clearAmbiguity(book.url, peerId)
 
+        // A re-resolve of a name already in use — to register the catalog
+        // id, or to let the file settle a guess — must not lose what the
+        // reader and the seed pass already established about it.
+        val sameWork = existing?.workId == workId
         val alias = WorkAlias(
             bookUrl = book.url,
             peerId = peerId,
@@ -153,6 +188,9 @@ class WorkResolver(
             } else {
                 WorkAlias.HIGH
             },
+            confirmed = sameWork && existing?.confirmed == true,
+            seeded = sameWork && existing?.seeded == true,
+            sourceSent = sourceId != null,
             editionSha = fingerprint?.sha256,
             resolvedAt = now(),
         )

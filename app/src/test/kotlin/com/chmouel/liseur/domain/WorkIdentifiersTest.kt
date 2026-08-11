@@ -21,13 +21,14 @@ class WorkIdentifiersTest {
     fun `every identifier is offered, strongest first`() {
         val identifiers = WorkIdentifiers.of(
             fingerprint = fingerprint,
+            sourceId = "komga:0K1Q",
             dcIdentifier = "urn:isbn:9780765387561",
             title = "A Memory Called Empire",
             author = "Arkady Martine",
         )
 
         assertEquals(
-            listOf("sha256", "partial-md5", "dc", "ta"),
+            listOf("sha256", "partial-md5", "source", "dc", "ta"),
             identifiers.map { it.kind },
         )
         // Hashes go up as hex and are compared lowercased everywhere.
@@ -42,12 +43,13 @@ class WorkIdentifiersTest {
         // on what the catalog knows rather than not at all.
         val identifiers = WorkIdentifiers.of(
             fingerprint = null,
+            sourceId = "komga:2f9b",
             dcIdentifier = "urn:uuid:2f9b",
             title = "Piranesi",
             author = "Susanna Clarke",
         )
 
-        assertEquals(listOf("dc", "ta"), identifiers.map { it.kind })
+        assertEquals(listOf("source", "dc", "ta"), identifiers.map { it.kind })
     }
 
     @Test

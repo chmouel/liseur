@@ -8,6 +8,13 @@ data class WorkIdentifier(val kind: String, val value: String) {
         const val SHA256 = "sha256"
         const val PARTIAL_MD5 = "partial-md5"
 
+        /**
+         * The catalog server's own id for the book (`komga:<id>`,
+         * `calibre:<uuid>`). Two devices browsing the same catalog hold
+         * the same one before either has downloaded the file.
+         */
+        const val SOURCE = "source"
+
         /** The EPUB's own `dc:identifier`: an ISBN, a UUID, a calibre id. */
         const val DC = "dc"
 
@@ -36,6 +43,7 @@ object WorkIdentifiers {
 
     fun of(
         fingerprint: BookFingerprint?,
+        sourceId: String? = null,
         dcIdentifier: String?,
         title: String?,
         author: String?,
@@ -44,6 +52,8 @@ object WorkIdentifiers {
             add(WorkIdentifier(WorkIdentifier.SHA256, it.sha256.lowercase()))
             add(WorkIdentifier(WorkIdentifier.PARTIAL_MD5, it.partialMd5.lowercase()))
         }
+        sourceId?.takeIf { it.isNotBlank() }
+            ?.let { add(WorkIdentifier(WorkIdentifier.SOURCE, it)) }
         dcIdentifier?.trim()?.lowercase()
             ?.takeIf { it.isNotEmpty() && it !in USELESS_IDENTIFIERS }
             ?.let { add(WorkIdentifier(WorkIdentifier.DC, it)) }
