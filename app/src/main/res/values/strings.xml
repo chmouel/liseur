@@ -46,6 +46,8 @@
     </plurals>
     <string name="jump_back">Back</string>
     <string name="jump_back_to_page">Back to page %d</string>
+    <string name="catch_up">Continue where you left off elsewhere</string>
+    <string name="catch_up_to_page">Continue to page %d</string>
     <string name="back">Back</string>
     <string name="sync_server_title">Sync server</string>
     <string name="sync_server_account">Sync server</string>

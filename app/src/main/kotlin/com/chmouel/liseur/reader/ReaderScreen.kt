@@ -90,6 +90,7 @@ import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.reader.chrome.CatchUpPill
 import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
@@ -132,6 +133,7 @@ fun ReaderScreen(
     typographyIsOwnFlow: StateFlow<Boolean>,
     progressFlow: StateFlow<ReaderProgress?>,
     jumpBackFlow: StateFlow<ReaderViewModel.JumpBack?>,
+    catchUpFlow: StateFlow<ReaderViewModel.CatchUp?>,
     onLocatorChanged: (Locator) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onPageTurnerChanged: (PageTurner?) -> Unit,
@@ -169,6 +171,7 @@ fun ReaderScreen(
     val typographyIsOwn by typographyIsOwnFlow.collectAsStateWithLifecycle()
     val progress by progressFlow.collectAsStateWithLifecycle()
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
+    val catchUp by catchUpFlow.collectAsStateWithLifecycle()
     val annotations by annotationsFlow.collectAsStateWithLifecycle()
     val searchState by searchFlow.collectAsStateWithLifecycle()
     val bookmarked by bookmarkedFlow.collectAsStateWithLifecycle()
@@ -339,6 +342,18 @@ fun ReaderScreen(
                     onDismiss = onProgressAction.dismissJumpBack,
                 )
             }
+            // The way back outranks the way forward: a jump that just
+            // happened is the fresher offer, and two pills is a quiz.
+            if (jumpBack == null) {
+                catchUp?.let { offer ->
+                    CatchUpPill(
+                        position = offer.position,
+                        theme = prefs.theme,
+                        onCatchUp = onProgressAction.acceptCatchUp,
+                        onDismiss = onProgressAction.dismissCatchUp,
+                    )
+                }
+            }
             if (chromeVisible) {
                 ReadingScrubber(
                     progress = progress,
@@ -355,7 +370,7 @@ fun ReaderScreen(
                         }
                     },
                 )
-            } else if (jumpBack == null) {
+            } else if (jumpBack == null && catchUp == null) {
                 ReadingFooter(
                     progress = progress,
                     mode = prefs.footerMode,
@@ -654,6 +669,8 @@ class ReaderProgressActions(
     val setFooterMode: (FooterMode) -> Unit,
     val onJump: () -> Unit,
     val dismissJumpBack: () -> Unit,
+    val acceptCatchUp: () -> Unit,
+    val dismissCatchUp: () -> Unit,
     val chapterTicks: () -> List<Float>,
     val chapterTitleAtPosition: (Int) -> String?,
     val positionAtProgression: (Float) -> Int,

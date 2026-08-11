@@ -142,6 +142,14 @@ class ReaderViewModel(
     /** Offer to return to where reading was before the last jump. */
     val jumpBack: StateFlow<JumpBack?> = _jumpBack.asStateFlow()
 
+    /** An offer to continue where another device has read further. */
+    data class CatchUp(val progression: Double, val position: Int?)
+
+    private val _catchUp = MutableStateFlow<CatchUp?>(null)
+
+    /** Raised when another device is further along than this page. */
+    val catchUp: StateFlow<CatchUp?> = _catchUp.asStateFlow()
+
     /** Highlights, notes and bookmarks in this book, in reading order. */
     val annotations: StateFlow<List<BookAnnotation>> = annotationDao.observe(bookId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -297,6 +305,8 @@ class ReaderViewModel(
     private var bookPositions: BookPositions? = null
     private var speed = ReadingSpeedEstimator()
     private var jumpBackTimer: Job? = null
+    private var catchUpChecking = false
+    private var catchUpDeclined: Double? = null
 
     private val ownTypography: StateFlow<BookTypography?> = typographyDao.observe(bookId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -452,6 +462,67 @@ class ReaderViewModel(
      */
     fun onReaderResumed() {
         sessions.onResumed()
+        maybeOfferCatchUp()
+    }
+
+    /**
+     * Quietly asks, on coming back to the front, whether another device
+     * has read further, and offers its page rather than jumping there.
+     *
+     * An offer, not a report: every failure is silence, and declining
+     * one place is remembered so the same pill does not chase the
+     * reader around. Accepting goes through the same adopt-furthest
+     * path as syncing the book by hand.
+     */
+    private fun maybeOfferCatchUp() {
+        if (catchUpChecking || publication == null) return
+        catchUpChecking = true
+        viewModelScope.launch {
+            try {
+                val outcome = positionSync.preview(bookId)
+                val preview = (outcome as? PreviewOutcome.Ready)?.preview ?: return@launch
+                val there = preview.remote ?: return@launch
+                val here = preview.local
+                    ?: lastLocator?.locations?.totalProgression
+                    ?: 0.0
+                if (there <= here + EPSILON) return@launch
+                // Declining an offer declines that place; only reading
+                // done elsewhere since brings the pill back.
+                if (catchUpDeclined?.let { kotlin.math.abs(it - there) < EPSILON } == true) {
+                    return@launch
+                }
+                val positions = bookPositions?.takeIf { it.isUsable }
+                _catchUp.value = CatchUp(
+                    progression = there,
+                    position = positions?.positionAtProgression(there.toFloat()),
+                )
+            } finally {
+                catchUpChecking = false
+            }
+        }
+    }
+
+    /** Takes the offer: the further position wins, and the page turns. */
+    fun acceptCatchUp() {
+        if (_catchUp.value == null) return
+        _catchUp.value = null
+        viewModelScope.launch {
+            val outcome = positionSync.resolve(
+                bookId,
+                takeRemote = true,
+                atRevision = progressDao.currentRevision(bookId) ?: 0,
+            )
+            // Anything but a clean adoption leaves the book where it is;
+            // the offer will simply be made again if it still stands.
+            if (outcome != ResolveOutcome.Done) return@launch
+            progressDao.get(bookId)?.totalProgression?.let { goToProgression(it) }
+        }
+    }
+
+    /** Declines the offer, until the other device reads further still. */
+    fun dismissCatchUp() {
+        catchUpDeclined = _catchUp.value?.progression
+        _catchUp.value = null
     }
 
     /** Called before jumping, so the reader can come back in one tap. */

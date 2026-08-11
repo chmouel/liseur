@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -265,6 +266,57 @@ fun JumpBackPill(
                         stringResource(R.string.jump_back_to_page, position)
                     } else {
                         stringResource(R.string.jump_back)
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            Icon(
+                Icons.Default.Close,
+                contentDescription = stringResource(R.string.dismiss),
+                modifier = Modifier
+                    .clickableWithoutRipple(onDismiss)
+                    .padding(4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The offer to continue where another device has read further. The
+ * same shape as [JumpBackPill], because it is the same bargain in the
+ * other direction: one tap to take the place, one to wave it away.
+ */
+@Composable
+fun CatchUpPill(
+    position: Int?,
+    theme: ReaderTheme,
+    onCatchUp: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = theme.foreground.copy(alpha = 0.92f),
+        contentColor = theme.background,
+        shadowElevation = 6.dp,
+        modifier = modifier.padding(16.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.clickableWithoutRipple(onCatchUp),
+            ) {
+                Icon(Icons.Outlined.Redo, contentDescription = null)
+                Text(
+                    text = if (position != null) {
+                        stringResource(R.string.catch_up_to_page, position)
+                    } else {
+                        stringResource(R.string.catch_up)
                     },
                     style = MaterialTheme.typography.labelLarge,
                 )
