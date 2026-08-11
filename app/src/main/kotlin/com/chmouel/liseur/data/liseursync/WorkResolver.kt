@@ -72,6 +72,17 @@ class WorkResolver(
     suspend fun reject(bookUrl: String, peerId: String) = dao.reject(bookUrl, peerId)
 
     /**
+     * Whether [alias] is a guess that [book]'s file could settle.
+     *
+     * True for a low-confidence match resolved before the book had a
+     * file on this device: the server never saw the file's hashes, so
+     * asking again now that they exist can turn the guess into a
+     * certainty — or into the merge question it really was.
+     */
+    fun strengthenable(alias: WorkAlias, book: Book): Boolean =
+        alias.awaitingAnswer && alias.editionSha == null && book.openableUrl != null
+
+    /**
      * Asks the server what to call [book], caching whatever it says.
      *
      * A book with no file on the device still resolves, on its own
@@ -87,14 +98,18 @@ class WorkResolver(
         credentials: RemoteCredentials,
     ): WorkResolution {
         dao.alias(book.url, peerId)?.let { existing ->
-            return when {
-                existing.usable -> WorkResolution.Named(existing)
+            when {
+                existing.usable -> return WorkResolution.Named(existing)
                 // Already asked and already answered no. Resolving again
                 // would put the same question back on the screen.
                 existing.confidence == WorkAlias.REJECTED ->
-                    WorkResolution.Unresolved(cause = null)
-
-                else -> WorkResolution.NeedsConfirming(existing)
+                    return WorkResolution.Unresolved(cause = null)
+                // A guess made while the book was catalog-only, when a
+                // title and an author were all there was to offer. The
+                // file is here now, and its own identifiers can answer
+                // the question instead of the reader.
+                strengthenable(existing, book) -> Unit
+                else -> return WorkResolution.NeedsConfirming(existing)
             }
         }
 

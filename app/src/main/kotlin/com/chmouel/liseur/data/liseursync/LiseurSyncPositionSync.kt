@@ -318,20 +318,23 @@ class LiseurSyncPositionSync(
         val ordered = books.sortedByDescending { it.lastOpenedAt ?: 0 }
         for (candidate in ordered) {
             val cached = known[candidate.url]
-            if (cached != null) {
-                if (cached.usable) {
-                    out += candidate to cached
-                    // A name that arrived without the one-off question —
-                    // a doubtful match confirmed by hand — still owes
-                    // it: whatever the server heard before the name was
-                    // usable is behind the cursor.
-                    if (!cached.seeded && budget > 0) {
-                        budget--
-                        seed(account, credentials, candidate, cached)
-                    }
+            if (cached != null && cached.usable) {
+                out += candidate to cached
+                // A name that arrived without the one-off question —
+                // a doubtful match confirmed by hand — still owes
+                // it: whatever the server heard before the name was
+                // usable is behind the cursor.
+                if (!cached.seeded && budget > 0) {
+                    budget--
+                    seed(account, credentials, candidate, cached)
                 }
                 continue
             }
+            // A guess made while the book was catalog-only can be
+            // settled by the file, now that there is one, without
+            // troubling the reader; any other unusable alias has asked
+            // its question and waits for the answer.
+            if (cached != null && !works.strengthenable(cached, candidate)) continue
             if (budget <= 0) continue
             budget--
             when (

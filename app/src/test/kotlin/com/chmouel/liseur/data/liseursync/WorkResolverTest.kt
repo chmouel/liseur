@@ -166,6 +166,42 @@ class WorkResolverTest {
     }
 
     @Test
+    fun `a guess made without the file is settled by the file, not the reader`() = runTest {
+        // Catalog-only, so a title and an author were all there was to
+        // offer, and the server could only guess.
+        answer(200, """{"work_id":"w-6","confidence":"low"}""")
+        resolver.resolve(remoteOnly(), PEER, baseUrl(), TOKEN)
+
+        // The book has been downloaded since. Its hashes name it
+        // exactly, so they answer the question instead of the reader.
+        answer(200, """{"work_id":"w-6","confidence":"high"}""")
+        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+
+        assertEquals("w-6", (result as WorkResolution.Named).alias.workId)
+        assertTrue(result.alias.usable)
+        server.takeRequest()
+        val body = JSONObject(server.takeRequest().body!!.utf8())
+        val kinds = (0 until body.getJSONArray("identifiers").length()).map {
+            body.getJSONArray("identifiers").getJSONObject(it).getString("kind")
+        }
+        assertTrue("sha256" in kinds)
+        assertTrue(db.workIdentityDao().observeAwaitingAnswer(PEER).first().isEmpty())
+    }
+
+    @Test
+    fun `a guess made from the file itself still waits for the reader`() = runTest {
+        // Here the server saw the hashes and still only matched on the
+        // title: re-asking would change nothing, so the question stands.
+        answer(200, """{"work_id":"w-7","confidence":"low"}""")
+        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+
+        val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+
+        assertTrue(again is WorkResolution.NeedsConfirming)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun `identifiers that name two books are left for the reader to settle`() = runTest {
         answer(409, """{"error":"identifiers resolve to multiple works","works":["w-4","w-5"]}""")
 
