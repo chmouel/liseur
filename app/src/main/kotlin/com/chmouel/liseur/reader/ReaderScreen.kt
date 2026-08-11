@@ -108,6 +108,9 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.widthClass
 import com.chmouel.liseur.ui.windowWidth
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
@@ -181,6 +184,7 @@ fun ReaderScreen(
     var defineWord by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
     val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val effectScope = rememberCoroutineScope()
     val eInk = LocalEInk.current
     val eInkNow by rememberUpdatedState(eInk)
@@ -197,11 +201,17 @@ fun ReaderScreen(
         )
     }
 
-    LaunchedEffect(navigator) {
+    LaunchedEffect(navigator, lifecycle) {
         onNavigatorChanged(navigator)
-        // The navigator replays its current locator on subscription; only
-        // subsequent changes need persisting.
-        navigator?.currentLocator?.drop(1)?.collect(onLocatorChanged)
+        val nav = navigator ?: return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // The navigator replays its current locator on subscription.
+            // Subscribe afresh on every resume so a layout/restoration
+            // emission is discarded too: merely bringing the reader back
+            // must not look like this device turned a page and turn a
+            // one-sided remote update into a conflict.
+            nav.currentLocator.drop(1).collect(onLocatorChanged)
+        }
     }
 
     // Apply preference changes to the rendered book as they happen.
@@ -210,7 +220,11 @@ fun ReaderScreen(
     // choice made on a wide one, and the control to undo it is hidden.
     LaunchedEffect(navigator, columnMode) {
         val nav = navigator ?: return@LaunchedEffect
-        prefsFlow.collect { nav.submitPreferences(it.toEpubPreferences(columnMode)) }
+        // The factory already built this navigator with the current
+        // preferences. Submitting that same value once more reflows the
+        // freshly opened book and emits a second restoration locator,
+        // which must not be recorded as a page the reader turned.
+        prefsFlow.drop(1).collect { nav.submitPreferences(it.toEpubPreferences(columnMode)) }
     }
 
     // Picking the selection up from the navigator when it tells us the

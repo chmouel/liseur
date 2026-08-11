@@ -217,12 +217,15 @@ class ReaderActivity : FragmentActivity() {
     }
 
     override fun onPause() {
+        if (bookUrl != null) {
+            // Mark the reader inactive before FragmentActivity pauses the
+            // navigator. Readium can publish a layout/restoration locator
+            // from inside that pause; it is not a page the reader turned.
+            // This also stops the reading clock the moment the book stops
+            // being looked at, rather than counting the interruption.
+            viewModel.onReaderPaused()
+        }
         super.onPause()
-        if (bookUrl == null) return
-        // Stop the reading clock the moment the book stops being looked
-        // at — a dialog, a notification, the screen dimming. Anything
-        // later would count the interruption as a very slow page.
-        viewModel.onReaderPaused()
     }
 
     override fun onStop() {

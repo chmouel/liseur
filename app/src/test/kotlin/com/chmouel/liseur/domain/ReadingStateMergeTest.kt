@@ -126,6 +126,21 @@ class ReadingStateMergeTest {
     }
 
     @Test
+    fun `one local page in a long book is not erased by a remote move`() {
+        // Live regression: one position out of 498 is smaller than the
+        // tolerance used for percentages from different renderings. The
+        // revision still proves that this device genuinely turned it.
+        val decision = reconcileReadingState(
+            local = state(0.58635),
+            remote = state(0.57646),
+            baseline = baseline(0.58434),
+            localDirty = true,
+        )
+
+        (decision as SyncDecision.Conflict)
+    }
+
+    @Test
     fun `the further position does not win a conflict on its own`() {
         val decision = reconcileReadingState(
             local = state(0.1),

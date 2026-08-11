@@ -307,6 +307,7 @@ class ReaderViewModel(
     private var jumpBackTimer: Job? = null
     private var catchUpChecking = false
     private var catchUpDeclined: Double? = null
+    private var readerActive = false
 
     private val ownTypography: StateFlow<BookTypography?> = typographyDao.observe(bookId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -402,7 +403,18 @@ class ReaderViewModel(
     }
 
     fun onLocatorChanged(locator: Locator) {
+        // Fragment pause/resume and a viewport reflow can publish a new
+        // current locator without any reader action. Treating that as a
+        // page turn makes this device dirty just as another device's
+        // position arrives, manufacturing a sync conflict.
+        if (!readerActive) return
+        val samePosition = lastLocator?.sameReadingPositionAs(locator) == true
         lastLocator = locator
+        _progress.value = progressAt(locator)
+        // Readium recalculates totalProgression for a different viewport,
+        // even when its stable resource position has not moved. Keep the
+        // display current, but do not turn that layout detail into reading.
+        if (samePosition) return
         val positions = bookPositions
         val totalProgression = locator.locations.totalProgression
         if (positions != null && positions.isUsable && totalProgression != null) {
@@ -414,7 +426,6 @@ class ReaderViewModel(
             // every book, not just this one.
             if (sample != null) viewModelScope.launch { readingPace.record(sample) }
         }
-        _progress.value = progressAt(locator)
         // Capture the page's moment before suspendable position writes,
         // so database latency cannot become reading time.
         sessions.onPageTurned(totalProgression)
@@ -441,6 +452,21 @@ class ReaderViewModel(
         }
     }
 
+    /** Whether two locators name the same stable place within a resource. */
+    private fun Locator.sameReadingPositionAs(other: Locator): Boolean {
+        if (href != other.href) return false
+        val position = locations.position
+        val otherPosition = other.locations.position
+        if (position != null && otherPosition != null && position != otherPosition) return false
+
+        val progression = locations.progression
+        val otherProgression = other.locations.progression
+        if (progression != null && otherProgression != null) {
+            return kotlin.math.abs(progression - otherProgression) < LOCATOR_EPSILON
+        }
+        return position != null && otherPosition != null
+    }
+
     /**
      * Called when the reader stops being looked at.
      *
@@ -449,6 +475,7 @@ class ReaderViewModel(
      * the clock is stopped here rather than guessed at afterwards.
      */
     fun onReaderPaused() {
+        readerActive = false
         speed.forgetLastPosition()
         sessions.onPaused()
     }
@@ -461,6 +488,7 @@ class ReaderViewModel(
      * never counted merely because the activity is visible.
      */
     fun onReaderResumed() {
+        readerActive = true
         sessions.onResumed()
         maybeOfferCatchUp()
     }
@@ -860,6 +888,7 @@ class ReaderViewModel(
     data class JumpBack(val locator: Locator, val position: Int?)
 
     companion object {
+        private const val LOCATOR_EPSILON = 0.000001
         private const val JUMP_BACK_TIMEOUT_MS = 30_000L
 
         /**

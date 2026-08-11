@@ -183,8 +183,13 @@ fun reconcileReadingState(
         }
     }
 
-    val localMoved = localDirty && movedFrom(baseline, local)
-    val remoteMoved = movedFrom(baseline, remote)
+    // A revision is durable evidence that the reader moved here, even by
+    // less than the cross-device tolerance (one page in a long book can
+    // be much smaller than EPSILON). The remote side has no revision we
+    // can trust, so it still needs the tolerance to absorb rounding and
+    // layout differences.
+    val localMoved = localDirty && movedFrom(baseline, local, LOCAL_MOVE_EPSILON)
+    val remoteMoved = movedFrom(baseline, remote, EPSILON)
 
     return when {
         !localMoved && remoteMoved -> SyncDecision.Pull(remote)
@@ -195,12 +200,16 @@ fun reconcileReadingState(
 }
 
 /** Whether a side has genuinely left the place both sides agreed on. */
-private fun movedFrom(baseline: ReadingBaseline?, state: ReadingState): Boolean {
+private fun movedFrom(
+    baseline: ReadingBaseline?,
+    state: ReadingState,
+    tolerance: Double,
+): Boolean {
     if (baseline == null) return true
     if (baseline.status != state.status) return true
     val agreed = baseline.progression ?: return state.progression != null
     val now = state.progression ?: return true
-    return kotlin.math.abs(agreed - now) >= EPSILON
+    return kotlin.math.abs(agreed - now) >= tolerance
 }
 
 private fun sameSpot(local: ReadingState, remote: ReadingState): Boolean {
@@ -216,6 +225,9 @@ private fun sameSpot(local: ReadingState, remote: ReadingState): Boolean {
  * percentage point.
  */
 const val EPSILON = 0.005
+
+/** Only floating-point noise is ignored once a local revision proves movement. */
+private const val LOCAL_MOVE_EPSILON = 0.000000001
 
 /**
  * Whether a sync has any reason to touch this book at all.
