@@ -8,6 +8,8 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.SyncAccount
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.data.remote.PreviewOutcome
+import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.SyncOutcome
 import java.io.File
 import java.net.InetAddress
@@ -298,6 +300,54 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a doubtful match confirmed by hand is asked where it stands`() = runTest {
+        // The book was matched on title and author alone, sat unusable
+        // while the question was open, and has just been confirmed. The
+        // other device's reading is behind the cursor by now; only a
+        // direct question recovers it.
+        connect()
+        db.bookDao().upsert(local())
+        alias(seeded = false, confidence = "low")
+        server.enqueue(json("""{"ops":[${op(seq = 2, progression = 0.44)}]}"""))
+        server.enqueue(json("""{"ops":[]}"""))
+
+        sync().syncAll(null)
+
+        assertTrue(requests().any { it.target.startsWith("/v1/works/w-1/positions") })
+        assertEquals(0.44, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+
+        // Asked once, not every run.
+        server.enqueue(json("""{"ops":[]}"""))
+        sync().syncAll(null)
+        assertEquals(
+            1,
+            requests().count { it.target.startsWith("/v1/works/w-1/positions") },
+        )
+    }
+
+    @Test
+    fun `the answer a preview fetched is there for the choice that follows`() = runTest {
+        // "Sync this book" previews first and resolves second, and the
+        // resolve is only ever sent to a peer holding the disagreement
+        // on disk. An answer that were merely returned would make the
+        // choice that follows a silent no-op.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"ops":[${op(seq = 7, progression = 0.8)}]}"""))
+
+        val sync = sync()
+        val preview = sync.previewBook(LOCAL)
+        assertTrue(preview is PreviewOutcome.Ready)
+        assertNotNull(sync.preservedConflict(LOCAL))
+
+        // Taking the server's side re-fetches the exact place.
+        server.enqueue(json("""{"ops":[${op(seq = 7, progression = 0.8)}]}"""))
+        assertEquals(ResolveOutcome.Done, sync.takeRemotePosition(LOCAL, 0))
+        assertEquals(0.8, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
     fun `nothing is asked of the server when no account is connected`() = runTest {
         db.bookDao().upsert(local())
 
@@ -361,16 +411,18 @@ class LiseurSyncPositionSyncTest {
         ),
     )
 
-    private suspend fun alias() = db.workIdentityDao().upsert(
-        com.chmouel.liseur.data.db.WorkAlias(
-            bookUrl = LOCAL,
-            peerId = peer(),
-            workId = "w-1",
-            confidence = "high",
-            confirmed = true,
-            resolvedAt = NOW,
-        ),
-    )
+    private suspend fun alias(seeded: Boolean = true, confidence: String = "high") =
+        db.workIdentityDao().upsert(
+            com.chmouel.liseur.data.db.WorkAlias(
+                bookUrl = LOCAL,
+                peerId = peer(),
+                workId = "w-1",
+                confidence = confidence,
+                confirmed = true,
+                seeded = seeded,
+                resolvedAt = NOW,
+            ),
+        )
 
     private fun op(seq: Long, progression: Double, deviceId: String? = null): String {
         val device = deviceId?.let { ""","device_id":"$it"""" } ?: ""

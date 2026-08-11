@@ -47,6 +47,14 @@ data class BookFingerprintRow(
  * translations, will match each other that way. Reading state is not
  * merged across a low-confidence match until somebody says it is the
  * same book.
+ *
+ * [seeded] records that this book, under this name, has been asked
+ * where it stands once. Everything the server heard before a book had
+ * a usable name here sits behind the cursor, where the ordinary delta
+ * pull will never mention it again; the one direct question is how
+ * that reading is recovered, and it must survive the run that asked
+ * it, or a book confirmed today would wait for the other device to
+ * happen to push again.
  */
 @Entity(tableName = "work_alias", primaryKeys = ["book_url", "peer_id"])
 data class WorkAlias(
@@ -56,6 +64,8 @@ data class WorkAlias(
     /** The strongest identifier the alias rests on, for explaining it. */
     @ColumnInfo(name = "confidence") val confidence: String,
     @ColumnInfo(name = "confirmed") val confirmed: Boolean = false,
+    /** Whether the server has been asked, once, where this book stands. */
+    @ColumnInfo(name = "seeded", defaultValue = "0") val seeded: Boolean = false,
     /** The file this alias was resolved for; null for file-less books. */
     @ColumnInfo(name = "edition_sha") val editionSha: String? = null,
     @ColumnInfo(name = "resolved_at") val resolvedAt: Long,
@@ -148,6 +158,9 @@ interface WorkIdentityDao {
 
     @Query("UPDATE work_alias SET confirmed = 1 WHERE book_url = :bookUrl AND peer_id = :peerId")
     suspend fun confirm(bookUrl: String, peerId: String)
+
+    @Query("UPDATE work_alias SET seeded = 1 WHERE book_url = :bookUrl AND peer_id = :peerId")
+    suspend fun markSeeded(bookUrl: String, peerId: String)
 
     @Upsert
     suspend fun upsert(ambiguity: WorkAmbiguity)

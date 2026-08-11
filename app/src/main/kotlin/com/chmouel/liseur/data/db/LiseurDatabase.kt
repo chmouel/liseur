@@ -22,7 +22,7 @@ import androidx.sqlite.execSQL
         WorkAlias::class,
         WorkAmbiguity::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -572,6 +572,24 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Remembers which books have been asked where they stand.
+         *
+         * Deliberately starts everybody at no: the one-off question was
+         * only ever asked for books named by a fresh resolve, so a book
+         * whose doubtful match was confirmed by hand never got it, and
+         * whatever the other device read beforehand sits behind the
+         * cursor. Asking once more per book is cheap and budgeted, and
+         * it is what heals those books.
+         */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `work_alias` ADD COLUMN `seeded` INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -597,6 +615,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_19_20,
             MIGRATION_20_21,
             MIGRATION_21_22,
+            MIGRATION_22_23,
         )
     }
 }

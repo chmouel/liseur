@@ -89,6 +89,16 @@ class LiseurSyncPositionSync(
         return bookDao.getByUrl(bookUrl) != null
     }
 
+    /**
+     * Asks the server outright where it thinks the reader is in one book,
+     * and reports both positions without acting on either.
+     *
+     * The server's answer is written down before returning, exactly as
+     * the catalog peers do. Acting on the answer goes through
+     * `takeRemotePosition`/`keepLocalPosition`, and those are only ever
+     * routed to a peer that has a disagreement on disk — an answer that
+     * was merely returned would make the choice that follows a no-op.
+     */
     override suspend fun previewBook(bookUrl: String): PreviewOutcome {
         val account = accountDao.get() ?: return PreviewOutcome.NotSynced
         val credentials = account.credentials ?: return PreviewOutcome.NotSynced
@@ -100,6 +110,10 @@ class LiseurSyncPositionSync(
         } catch (e: IOException) {
             return PreviewOutcome.Failed(reasonFor(e))
         } ?: return PreviewOutcome.NotSynced
+
+        if (head.deviceId == null || head.deviceId != account.deviceId) {
+            forAccount(account) { land(account, bookUrl, head) }
+        }
 
         val stored = progressDao.get(bookUrl)
         return PreviewOutcome.Ready(
@@ -305,7 +319,17 @@ class LiseurSyncPositionSync(
         for (candidate in ordered) {
             val cached = known[candidate.url]
             if (cached != null) {
-                if (cached.usable) out += candidate to cached
+                if (cached.usable) {
+                    out += candidate to cached
+                    // A name that arrived without the one-off question —
+                    // a doubtful match confirmed by hand — still owes
+                    // it: whatever the server heard before the name was
+                    // usable is behind the cursor.
+                    if (!cached.seeded && budget > 0) {
+                        budget--
+                        seed(account, credentials, candidate, cached)
+                    }
+                }
                 continue
             }
             if (budget <= 0) continue
@@ -348,10 +372,17 @@ class LiseurSyncPositionSync(
         val head = try {
             latestOp(account.baseUrl, credentials, alias.workId)
         } catch (e: IOException) {
+            // Not marked seeded: the question was asked and never
+            // answered, so it is still owed.
             Log.i(TAG, "Could not fetch a newly named book's position", e)
-            null
-        } ?: return
-        land(account, book.url, head)
+            return
+        }
+        forAccount(account) {
+            head?.let { land(account, book.url, it) }
+            // An empty answer is still an answer: the server has heard
+            // nothing about this book, and there is nothing to recover.
+            identityDao.markSeeded(book.url, account.peerId)
+        }
     }
 
     /**
