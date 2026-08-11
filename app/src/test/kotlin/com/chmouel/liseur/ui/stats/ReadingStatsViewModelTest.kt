@@ -9,8 +9,13 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingSession
+import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.InsightsSummary
+import com.chmouel.liseur.data.liseursync.WorkInsights
+import com.chmouel.liseur.domain.BookReadingStats
+import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
+import com.chmouel.liseur.domain.StatsBook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -123,6 +128,51 @@ class ReadingStatsViewModelTest {
         assertEquals(90_000L, headline.totalMs)
         assertEquals(null, headline.rangeDays)
         assertEquals(null, headline.streakDays)
+    }
+
+    @Test
+    fun `server calendar and book totals replace their local device slices`() {
+        val monday = LocalDate.of(2026, 8, 10)
+        val tuesday = monday.plusDays(1)
+        val local = ReadingStats(
+            totalMs = 80 * 60_000L,
+            booksRead = 1,
+            booksFinished = 0,
+            books = listOf(
+                BookReadingStats(
+                    bookUrl = "book",
+                    title = "A book",
+                    author = "An author",
+                    totalMs = 80 * 60_000L,
+                    lastReadAt = 100,
+                    progression = 0.5,
+                    finished = false,
+                ),
+            ),
+            recent = listOf(ReadingDay(monday, 0), ReadingDay(tuesday, 80 * 60_000L)),
+        )
+        val known = mapOf(
+            "book" to StatsBook("book", "A book", "An author", 0.5, finished = false),
+        )
+
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = local,
+            knownBooks = known,
+            serverRecent = listOf(InsightDay(monday, 23.5), InsightDay(tuesday, 137.0)),
+            serverBooks = mapOf(
+                "book" to WorkInsights(
+                    sessions = 98,
+                    activeMinutes = 160.5,
+                    etaSeconds = null,
+                    lastReadAt = 200,
+                ),
+            ),
+        )
+
+        assertEquals((23.5 * 60_000).toLong(), merged.recent[0].totalMs)
+        assertEquals(137 * 60_000L, merged.recent[1].totalMs)
+        assertEquals((160.5 * 60_000).toLong(), merged.books.single().totalMs)
+        assertEquals(200, merged.books.single().lastReadAt)
     }
 
     private fun localStats(totalMs: Long) = ReadingStats(

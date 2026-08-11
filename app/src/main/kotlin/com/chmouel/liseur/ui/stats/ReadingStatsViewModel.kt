@@ -10,27 +10,30 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.liseursync.InsightDay
+import com.chmouel.liseur.data.liseursync.InsightsSummary
+import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
+import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.domain.BookReadingStats
+import com.chmouel.liseur.domain.RECENT_DAYS
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.SessionSpan
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.readingStats
-import com.chmouel.liseur.data.liseursync.InsightsSummary
-import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
-import com.chmouel.liseur.data.liseursync.WorkInsights
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToLong
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 sealed interface ReadingStatsUiState {
     data object Loading : ReadingStatsUiState
@@ -64,10 +67,10 @@ sealed interface BookReadingStatsUiState {
 /**
  * What the reading dashboard shows.
  *
- * The sums are recomputed from the sessions each time rather than kept
- * as a running total anywhere: a total is a second copy of the truth,
- * and the two would drift the first time a book was deleted. There are
- * at most a few thousand rows and the arithmetic is addition.
+ * Local sums are recomputed from the sessions each time rather than kept
+ * as a running total anywhere. When liseur-sync answers, its calendar and
+ * per-book aggregates replace the matching local slices because they already
+ * contain this device's uploads as well as every other device's.
  */
 class ReadingStatsViewModel(
     sessionDao: ReadingSessionDao,
@@ -79,6 +82,8 @@ class ReadingStatsViewModel(
 ) : ViewModel() {
 
     private val _acrossDevices = MutableStateFlow<InsightsSummary?>(null)
+    private val _recentAcrossDevices = MutableStateFlow<List<InsightDay>?>(null)
+    private val _booksAcrossDevices = MutableStateFlow<Map<String, WorkInsights>?>(null)
 
     /**
      * The same reading, counted on every device rather than this one.
@@ -88,23 +93,41 @@ class ReadingStatsViewModel(
      * answer the same question differently are a doubt, not a feature.
      */
     private val acrossDevices: StateFlow<InsightsSummary?> = _acrossDevices.asStateFlow()
+    private val recentAcrossDevices = _recentAcrossDevices.asStateFlow()
+    private val booksAcrossDevices = _booksAcrossDevices.asStateFlow()
 
-    init {
-        viewModelScope.launch { _acrossDevices.value = insights?.summary() }
+    /** Refreshes the server decoration whenever a statistics screen opens. */
+    fun refreshServerInsights() {
+        val source = insights ?: return
+        viewModelScope.launch { _acrossDevices.value = source.summary() }
+        viewModelScope.launch {
+            val end = today()
+            _recentAcrossDevices.value = source.calendar(
+                from = end.minusDays((RECENT_DAYS - 1).toLong()),
+                to = end,
+            )
+        }
+        viewModelScope.launch { _booksAcrossDevices.value = source.allBooks() }
     }
 
     /**
      * How much longer this book has, according to every device.
      *
-     * A fresh request each time rather than a cached one: the number is
-     * only interesting immediately after reading, which is exactly when
-     * a cached copy would be stale.
+     * This is the same aggregate used by the dashboard row, so its total
+     * and estimate are fetched together and cannot describe different
+     * snapshots of the server.
      */
-    fun serverEstimateFor(bookUrl: String): StateFlow<WorkInsights?> {
-        val answer = MutableStateFlow<WorkInsights?>(null)
-        viewModelScope.launch { answer.value = insights?.forBook(bookUrl) }
-        return answer.asStateFlow()
-    }
+    fun serverEstimateFor(bookUrl: String): StateFlow<WorkInsights?> =
+        booksAcrossDevices.map { it?.get(bookUrl) }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            null,
+        )
+
+    private data class LocalStats(
+        val stats: ReadingStats,
+        val books: Map<String, StatsBook>,
+    )
 
     private val local = combine(
         sessionDao.observeAll(),
@@ -112,34 +135,43 @@ class ReadingStatsViewModel(
         progressDao.observeProgressions(),
     ) { sessions, books, progressions ->
         val progressionByUrl = progressions.associateBy({ it.bookUrl }, { it.totalProgression })
-        readingStats(
-            sessions = sessions.map {
-                SessionSpan(
-                    bookUrl = it.bookUrl,
-                    startedAt = it.startedAt,
-                    durationMs = it.durationMs,
-                    lastReadAt = it.lastCheckpointAt,
-                )
-            },
-            books = books.associate { book ->
-                book.url to StatsBook(
-                    bookUrl = book.url,
-                    title = book.displayTitle,
-                    author = book.displayAuthor,
-                    progression = progressionByUrl[book.url],
-                    finished = book.finished,
-                )
-            },
-            zone = zone(),
-            today = today(),
+        val statsBooks = books.associate { book ->
+            book.url to StatsBook(
+                bookUrl = book.url,
+                title = book.displayTitle,
+                author = book.displayAuthor,
+                progression = progressionByUrl[book.url],
+                finished = book.finished,
+            )
+        }
+        LocalStats(
+            stats = readingStats(
+                sessions = sessions.map {
+                    SessionSpan(
+                        bookUrl = it.bookUrl,
+                        startedAt = it.startedAt,
+                        durationMs = it.durationMs,
+                        lastReadAt = it.lastCheckpointAt,
+                    )
+                },
+                books = statsBooks,
+                zone = zone(),
+                today = today(),
+            ),
+            books = statsBooks,
         )
     }
 
     val state: StateFlow<ReadingStatsUiState> = combine(
         local,
         acrossDevices,
-    ) { stats, server ->
-        ReadingStatsUiState.Ready(stats, mergeHeadline(stats, server))
+        recentAcrossDevices,
+        booksAcrossDevices,
+    ) { local, server, recent, serverBooks ->
+        ReadingStatsUiState.Ready(
+            stats = mergeDashboard(local.stats, local.books, recent, serverBooks),
+            headline = mergeHeadline(local.stats, server),
+        )
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -195,6 +227,57 @@ class ReadingStatsViewModel(
                 streakDays = null,
             )
         }
+
+        /**
+         * Prefer server aggregates only where the server supplied them.
+         * Local rows remain the fallback for an offline server, an unshared
+         * book, and old sessions that could not name their progression.
+         */
+        internal fun mergeDashboard(
+            local: ReadingStats,
+            knownBooks: Map<String, StatsBook>,
+            serverRecent: List<InsightDay>?,
+            serverBooks: Map<String, WorkInsights>?,
+        ): ReadingStats {
+            val mergedBooks = local.books.associateBy { it.bookUrl }.toMutableMap()
+            serverBooks?.forEach { (bookUrl, insight) ->
+                val metadata = knownBooks[bookUrl] ?: return@forEach
+                val localBook = mergedBooks[bookUrl]
+                val lastReadAt = insight.lastReadAt ?: localBook?.lastReadAt ?: return@forEach
+                if (insight.activeMinutes <= 0 && localBook == null) return@forEach
+                mergedBooks[bookUrl] = BookReadingStats(
+                    bookUrl = bookUrl,
+                    title = metadata.title,
+                    author = metadata.author,
+                    totalMs = (insight.activeMinutes * 60_000).roundToLong(),
+                    lastReadAt = lastReadAt,
+                    progression = metadata.progression,
+                    finished = metadata.finished,
+                )
+            }
+            val books = mergedBooks.values.sortedWith(
+                compareByDescending<BookReadingStats> { it.totalMs }.thenBy { it.title },
+            )
+            val recent = if (serverRecent == null) {
+                local.recent
+            } else {
+                val minutesByDate = serverRecent.associateBy({ it.date }, { it.activeMinutes })
+                local.recent.map { day ->
+                    day.copy(
+                        totalMs = (minutesByDate[day.date].orZero() * 60_000).roundToLong(),
+                    )
+                }
+            }
+            return ReadingStats(
+                totalMs = books.sumOf { it.totalMs },
+                booksRead = books.size,
+                booksFinished = books.count { it.finished },
+                books = books,
+                recent = recent,
+            )
+        }
+
+        private fun Double?.orZero(): Double = this ?: 0.0
 
         fun factory(): ViewModelProvider.Factory = viewModelFactory {
             initializer {

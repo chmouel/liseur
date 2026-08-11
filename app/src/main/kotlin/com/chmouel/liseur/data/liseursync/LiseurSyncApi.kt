@@ -31,6 +31,12 @@ object LiseurSyncApi {
     fun insightsSummary(baseUrl: String, range: String): String =
         url(baseUrl, "/v1/insights/summary?range=$range")
 
+    fun insightsCalendar(baseUrl: String, year: Int): String =
+        url(baseUrl, "/v1/insights/calendar?year=$year")
+
+    fun workInsights(baseUrl: String): String =
+        url(baseUrl, "/v1/insights/works")
+
     fun workInsights(baseUrl: String, workId: String): String =
         url(baseUrl, "/v1/insights/works/$workId")
 }

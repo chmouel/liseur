@@ -7,6 +7,8 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.SyncAccount
 import com.chmouel.liseur.data.db.WorkAlias
 import java.net.InetAddress
+import java.time.Instant
+import java.time.LocalDate
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -125,6 +127,48 @@ class LiseurSyncInsightsTest {
         server.enqueue(ok("""{"sessions":3,"eta_seconds":5400.0}"""))
 
         assertEquals(5400.0, insights().forBook(BOOK)!!.etaSeconds!!, 0.001)
+    }
+
+    @Test
+    fun `calendar returns only the requested days`() = runTest {
+        connect()
+        server.enqueue(
+            ok(
+                """{"year":2026,"days":[""" +
+                    """{"date":"2026-08-09","minutes":5},""" +
+                    """{"date":"2026-08-10","minutes":23.5}]}""",
+            ),
+        )
+
+        val days = insights().calendar(
+            from = LocalDate.of(2026, 8, 10),
+            to = LocalDate.of(2026, 8, 11),
+        )!!
+
+        assertEquals(listOf(LocalDate.of(2026, 8, 10)), days.map { it.date })
+        assertEquals(23.5, days.single().activeMinutes, 0.001)
+        assertEquals("/v1/insights/calendar?year=2026", server.takeRequest().target)
+    }
+
+    @Test
+    fun `all book totals are mapped back through usable local aliases`() = runTest {
+        connect()
+        alias()
+        val lastRead = "2026-08-11T16:30:00Z"
+        server.enqueue(
+            ok(
+                """{"works":[{"work_id":"w-1","sessions":8,""" +
+                    """"total_active_minutes":106.25,"eta_seconds":3600,""" +
+                    """"last_read_at":"$lastRead"}]}""",
+            ),
+        )
+
+        val book = insights().allBooks()!![BOOK]!!
+
+        assertEquals(8, book.sessions)
+        assertEquals(106.25, book.activeMinutes, 0.001)
+        assertEquals(Instant.parse(lastRead).toEpochMilli(), book.lastReadAt)
+        assertEquals("/v1/insights/works", server.takeRequest().target)
     }
 
     private fun insights() = LiseurSyncInsights(

@@ -197,6 +197,7 @@ private fun LiseurApp(settings: AppSettings) {
             val model: ReadingStatsViewModel = viewModel(
                 factory = ReadingStatsViewModel.factory(),
             )
+            LaunchedEffect(model) { model.refreshServerInsights() }
             val statsState by model.state.collectAsStateWithLifecycle()
             ReadingStatsScreen(
                 state = statsState,
@@ -222,6 +223,7 @@ private fun LiseurApp(settings: AppSettings) {
                 val model: ReadingStatsViewModel = viewModel(
                     factory = ReadingStatsViewModel.factory(),
                 )
+                LaunchedEffect(model, target.bookUrl) { model.refreshServerInsights() }
                 val bookStatsState by remember(model, target.bookUrl) { model.forBook(target.bookUrl) }
                     .collectAsStateWithLifecycle()
                 val serverInsights by remember(model, target.bookUrl) {
