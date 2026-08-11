@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -51,9 +52,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.BuildConfig
@@ -67,6 +73,8 @@ import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
+
+private const val LISEUR_SYNC_REPO_URL = "https://github.com/chmouel/liseur-sync"
 
 /** Everything about the app that is not about one particular book. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -184,7 +192,62 @@ fun SettingsScreen(
                     }
                 }
 
-                SettingsGroup(stringResource(R.string.settings_library)) {
+                val showLibraryHelp = remember { mutableStateOf(false) }
+                if (showLibraryHelp.value) {
+                    val uriHandler = LocalUriHandler.current
+                    val helpBody = stringResource(
+                        R.string.settings_library_help_body,
+                        LISEUR_SYNC_REPO_URL,
+                    )
+                    AlertDialog(
+                        onDismissRequest = { showLibraryHelp.value = false },
+                        title = { Text(stringResource(R.string.settings_library_help_title)) },
+                        text = {
+                            // The address is part of the sentence; mark it
+                            // up after the fact so translations can move it.
+                            val linkColor = MaterialTheme.colorScheme.primary
+                            val annotated = remember(helpBody) {
+                                buildAnnotatedString {
+                                    append(helpBody)
+                                    val start = helpBody.indexOf(LISEUR_SYNC_REPO_URL)
+                                    if (start >= 0) {
+                                        addLink(
+                                            LinkAnnotation.Url(LISEUR_SYNC_REPO_URL),
+                                            start,
+                                            start + LISEUR_SYNC_REPO_URL.length,
+                                        )
+                                        addStyle(
+                                            SpanStyle(color = linkColor),
+                                            start,
+                                            start + LISEUR_SYNC_REPO_URL.length,
+                                        )
+                                    }
+                                }
+                            }
+                            ClickableText(
+                                text = annotated,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                                onClick = { offset ->
+                                    annotated
+                                        .getLinkAnnotations(offset, offset)
+                                        .firstOrNull()
+                                        ?.let { uriHandler.openUri(LISEUR_SYNC_REPO_URL) }
+                                },
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showLibraryHelp.value = false }) {
+                                Text(stringResource(R.string.dismiss))
+                            }
+                        },
+                    )
+                }
+                SettingsGroup(
+                    title = stringResource(R.string.settings_remote_library),
+                    onHelp = { showLibraryHelp.value = true },
+                ) {
                     val catalog by connections.catalog.collectAsStateWithLifecycle(null)
                     val sync by connections.sync.collectAsStateWithLifecycle(null)
                     ConnectionRow(
@@ -350,13 +413,33 @@ private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
  * makes the sections themselves the unit of the screen.
  */
 @Composable
-private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
+private fun SettingsGroup(
+    title: String,
+    onHelp: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
-    )
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        onHelp?.let {
+            Icon(
+                Icons.Outlined.HelpOutline,
+                contentDescription = stringResource(R.string.settings_library_help_title),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(32.dp)
+                    .clickable(onClick = it)
+                    .padding(6.dp),
+            )
+        }
+    }
     Card(Modifier.fillMaxWidth()) {
         Column(content = content)
     }
