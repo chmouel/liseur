@@ -93,7 +93,9 @@ emulator.
   server answers `duplicate`. Do not introduce a random id or a
   `pending_ops` table.
 - A book's name on a sync server is a `work_alias`, resolved from
-  SHA-256 + KOReader partial-MD5 + a normalised `ta:` title/author. A
+  SHA-256 + KOReader partial-MD5 + the catalog server's own id
+  (`source:`, e.g. `komga:<id>` — shared by devices on the same catalog
+  before any download) + a normalised `ta:` title/author. A
   `ta:`-only match is low confidence and syncs nothing until the reader
   confirms it; a rejection is stored as `confidence = 'rejected'` rather
   than deleted, or the next run asks again.
