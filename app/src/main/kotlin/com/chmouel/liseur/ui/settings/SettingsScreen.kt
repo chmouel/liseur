@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
@@ -28,6 +30,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -44,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
@@ -119,124 +124,97 @@ fun SettingsScreen(
                     // reach away from the label that explains it.
                     .padding(horizontal = 20.dp),
             ) {
-                SectionTitle(stringResource(R.string.settings_appearance))
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(
-                            text = stringResource(R.string.settings_theme),
-                            style = MaterialTheme.typography.bodyLarge,
+                SettingsGroup(stringResource(R.string.settings_appearance)) {
+                    ChipRow(
+                        title = stringResource(R.string.settings_theme),
+                        options = ThemeMode.entries,
+                        selected = settings.themeMode,
+                        label = { stringResource(it.label) },
+                        onSelected = onThemeMode,
+                    )
+                    if (dynamicColorAvailable) {
+                        RowDivider()
+                        SwitchRow(
+                            title = stringResource(R.string.settings_dynamic_color),
+                            subtitle = stringResource(R.string.settings_dynamic_color_detail),
+                            checked = settings.dynamicColor,
+                            onCheckedChange = onDynamicColor,
                         )
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 12.dp)
-                                .selectableGroup(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ThemeMode.entries.forEach { mode ->
-                                FilterChip(
-                                    selected = settings.themeMode == mode,
-                                    onClick = { onThemeMode(mode) },
-                                    label = { Text(stringResource(mode.label)) },
-                                )
-                            }
-                        }
                     }
                 }
-                if (dynamicColorAvailable) {
+
+                SettingsGroup(stringResource(R.string.settings_reading)) {
                     SwitchRow(
-                        title = stringResource(R.string.settings_dynamic_color),
-                        subtitle = stringResource(R.string.settings_dynamic_color_detail),
-                        checked = settings.dynamicColor,
-                        onCheckedChange = onDynamicColor,
+                        title = stringResource(R.string.settings_volume_keys),
+                        subtitle = stringResource(R.string.settings_volume_keys_detail),
+                        checked = settings.volumeKeysTurnPages,
+                        onCheckedChange = onVolumeKeys,
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = stringResource(R.string.settings_resume),
+                        subtitle = stringResource(R.string.settings_resume_detail),
+                        checked = settings.resumeLastBook,
+                        onCheckedChange = onResumeLastBook,
+                    )
+                    RowDivider()
+                    ChipRow(
+                        title = stringResource(R.string.settings_eink),
+                        subtitle = stringResource(R.string.settings_eink_detail),
+                        options = EInkMode.entries,
+                        selected = settings.eInkMode,
+                        label = { stringResource(it.label) },
+                        onSelected = onEInkMode,
                     )
                 }
 
-                SectionTitle(stringResource(R.string.settings_reading))
-                SwitchRow(
-                    title = stringResource(R.string.settings_volume_keys),
-                    subtitle = stringResource(R.string.settings_volume_keys_detail),
-                    checked = settings.volumeKeysTurnPages,
-                    onCheckedChange = onVolumeKeys,
-                )
-                SwitchRow(
-                    title = stringResource(R.string.settings_resume),
-                    subtitle = stringResource(R.string.settings_resume_detail),
-                    checked = settings.resumeLastBook,
-                    onCheckedChange = onResumeLastBook,
-                )
-                Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(
-                            text = stringResource(R.string.settings_eink),
-                            style = MaterialTheme.typography.bodyLarge,
+                SettingsGroup(stringResource(R.string.settings_dictionary)) {
+                    SwitchRow(
+                        title = stringResource(R.string.settings_dictionary_lookup),
+                        subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
+                        checked = settings.dictionaryLookupEnabled,
+                        onCheckedChange = onDictionaryLookup,
+                    )
+                    if (settings.dictionaryLookupEnabled) {
+                        RowDivider()
+                        DictionarySiteRow(
+                            baseUrl = settings.dictionaryBaseUrl,
+                            onBaseUrl = onDictionaryBaseUrl,
                         )
-                        Text(
-                            text = stringResource(R.string.settings_eink_detail),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 12.dp)
-                                .selectableGroup(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            EInkMode.entries.forEach { mode ->
-                                FilterChip(
-                                    selected = settings.eInkMode == mode,
-                                    onClick = { onEInkMode(mode) },
-                                    label = { Text(stringResource(mode.label)) },
-                                )
-                            }
-                        }
                     }
                 }
 
-                SectionTitle(stringResource(R.string.settings_dictionary))
-                SwitchRow(
-                    title = stringResource(R.string.settings_dictionary_lookup),
-                    subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
-                    checked = settings.dictionaryLookupEnabled,
-                    onCheckedChange = onDictionaryLookup,
-                )
-                if (settings.dictionaryLookupEnabled) {
-                    DictionarySiteCard(
-                        baseUrl = settings.dictionaryBaseUrl,
-                        onBaseUrl = onDictionaryBaseUrl,
+                SettingsGroup(stringResource(R.string.settings_library)) {
+                    val catalog by connections.catalog.collectAsStateWithLifecycle(null)
+                    val sync by connections.sync.collectAsStateWithLifecycle(null)
+                    ConnectionRow(
+                        icon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
+                        title = stringResource(R.string.server_account),
+                        // Connected: say to what. Not connected: say what it
+                        // would do. A row that always reads as an invitation
+                        // makes a connected server look unconnected.
+                        subtitle = catalog?.let {
+                            stringResource(
+                                R.string.server_connected,
+                                it.baseUrl,
+                                it.username ?: "",
+                            )
+                        } ?: stringResource(R.string.settings_account_detail),
+                        onClick = onOpenAccount,
+                    )
+                    RowDivider()
+                    ConnectionRow(
+                        icon = { Icon(Icons.Outlined.CloudSync, contentDescription = null) },
+                        title = stringResource(R.string.sync_server_account),
+                        subtitle = sync?.let {
+                            stringResource(R.string.server_connected, it.baseUrl, it.username)
+                        } ?: stringResource(R.string.sync_server_account_detail),
+                        onClick = onOpenSyncServer,
                     )
                 }
-
-                SectionTitle(stringResource(R.string.settings_library))
-                val catalog by connections.catalog.collectAsStateWithLifecycle(null)
-                val sync by connections.sync.collectAsStateWithLifecycle(null)
-                ConnectionRow(
-                    icon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
-                    title = stringResource(R.string.server_account),
-                    // Connected: say to what. Not connected: say what it
-                    // would do. A row that always reads as an invitation
-                    // makes a connected server look unconnected.
-                    subtitle = catalog?.let {
-                        stringResource(
-                            R.string.server_connected,
-                            it.baseUrl,
-                            it.username ?: "",
-                        )
-                    } ?: stringResource(R.string.settings_account_detail),
-                    onClick = onOpenAccount,
-                )
-                ConnectionRow(
-                    icon = { Icon(Icons.Outlined.CloudSync, contentDescription = null) },
-                    title = stringResource(R.string.sync_server_account),
-                    subtitle = sync?.let {
-                        stringResource(R.string.server_connected, it.baseUrl, it.username)
-                    } ?: stringResource(R.string.sync_server_account_detail),
-                    onClick = onOpenSyncServer,
-                )
                 HighlightsBackupCard(backup = backup)
 
-                SectionTitle(stringResource(R.string.settings_about))
-                Card(Modifier.fillMaxWidth()) {
-                    Column {
+                SettingsGroup(stringResource(R.string.settings_about)) {
                         Row(
                             modifier = Modifier.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -279,11 +257,10 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                        HorizontalDivider()
+                        RowDivider()
                         PlainRow(stringResource(R.string.about_source), onOpenSource)
-                        HorizontalDivider()
+                        RowDivider()
                         PlainRow(stringResource(R.string.about_licences), onOpenLicences)
-                    }
                 }
                 Text(
                     text = stringResource(R.string.about_licence_line),
@@ -318,61 +295,76 @@ private val EInkMode.label: Int
  * parses, so a half-typed address never becomes the stored one.
  */
 @Composable
-private fun DictionarySiteCard(baseUrl: String, onBaseUrl: (String) -> Unit) {
+private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
     var typed by remember(baseUrl) { mutableStateOf(baseUrl) }
     val normalised = remember(typed) { DictionaryUrl.normalise(typed) }
     val invalid = typed.isNotBlank() && normalised == null
 
-    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.settings_dictionary_site),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = stringResource(R.string.settings_dictionary_site_detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = typed,
-                onValueChange = {
-                    typed = it
-                    DictionaryUrl.normalise(it)?.let(onBaseUrl)
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(
+            text = stringResource(R.string.settings_dictionary_site),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            text = stringResource(R.string.settings_dictionary_site_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = typed,
+            onValueChange = {
+                typed = it
+                DictionaryUrl.normalise(it)?.let(onBaseUrl)
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            singleLine = true,
+            isError = invalid,
+            placeholder = { Text(stringResource(R.string.settings_dictionary_site_hint)) },
+            supportingText = if (invalid) {
+                { Text(stringResource(R.string.settings_dictionary_site_invalid)) }
+            } else {
+                null
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        )
+        if (normalised != DictionaryUrl.DEFAULT_BASE_URL) {
+            TextButton(
+                onClick = {
+                    typed = DictionaryUrl.DEFAULT_BASE_URL
+                    onBaseUrl(DictionaryUrl.DEFAULT_BASE_URL)
                 },
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                singleLine = true,
-                isError = invalid,
-                placeholder = { Text(stringResource(R.string.settings_dictionary_site_hint)) },
-                supportingText = if (invalid) {
-                    { Text(stringResource(R.string.settings_dictionary_site_invalid)) }
-                } else {
-                    null
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-            )
-            if (normalised != DictionaryUrl.DEFAULT_BASE_URL) {
-                TextButton(
-                    onClick = {
-                        typed = DictionaryUrl.DEFAULT_BASE_URL
-                        onBaseUrl(DictionaryUrl.DEFAULT_BASE_URL)
-                    },
-                ) {
-                    Text(stringResource(R.string.settings_dictionary_site_reset))
-                }
+            ) {
+                Text(stringResource(R.string.settings_dictionary_site_reset))
             }
         }
     }
 }
 
+/**
+ * A section of the settings: a title over one rounded card, with the
+ * rows inside it divided by hairlines.
+ *
+ * The screen used to put every switch in a card of its own, which read
+ * as a stack of boxed islands whose padding changed from section to
+ * section. One card per section puts the rows on a single axis and
+ * makes the sections themselves the unit of the screen.
+ */
 @Composable
-private fun SectionTitle(text: String) {
+private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Text(
-        text = text,
+        text = title,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
     )
+    Card(Modifier.fillMaxWidth()) {
+        Column(content = content)
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable
@@ -382,63 +374,74 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Card(Modifier.padding(top = 8.dp).fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                // One tap target for the whole row, so the switch is not the
-                // only thing you are allowed to hit. Toggleable rather than
-                // merely clickable, so the row carries its own on-or-off state
-                // and a screen reader can say which it is.
-                .toggleable(
-                    value = checked,
-                    role = Role.Switch,
-                    onValueChange = onCheckedChange,
-                )
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f).padding(end = 16.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = checked, onCheckedChange = null)
-        }
-    }
-}
-
-@Composable
-private fun LinkRow(title: String, subtitle: String, onClick: () -> Unit) {
-    Card(Modifier.padding(top = 8.dp).fillMaxWidth()) {
-        Column(
-            Modifier
-                .clickable(onClick = onClick)
-                .fillMaxWidth()
-                .padding(16.dp),
-        ) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier
+            // One tap target for the whole row, so the switch is not the
+            // only thing you are allowed to hit. Toggleable rather than
+            // merely clickable, so the row carries its own on-or-off state
+            // and a screen reader can say which it is.
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            ),
+    )
 }
 
 @Composable
 private fun PlainRow(title: String, onClick: () -> Unit) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.bodyLarge,
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .fillMaxWidth()
-            .padding(16.dp),
+    ListItem(
+        headlineContent = { Text(title) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick),
     )
+}
+
+/**
+ * A row whose answer is one of a few chips — the theme, the e-ink
+ * behaviour. Shaped like the other rows so it sits on the same axis:
+ * the label where a headline would be, the chips where supporting
+ * text would go.
+ */
+@Composable
+private fun <T> ChipRow(
+    title: String,
+    subtitle: String? = null,
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelected: (T) -> Unit,
+) {
+    Column(
+        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        subtitle?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = selected == option,
+                    onClick = { onSelected(option) },
+                    label = { Text(label(option)) },
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -539,28 +542,22 @@ private fun BackupActionRow(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val tint = if (enabled) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() }
-        Column(Modifier.padding(start = 16.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = tint)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = { Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() } },
+        colors = if (enabled) {
+            ListItemDefaults.colors(containerColor = Color.Transparent)
+        } else {
+            ListItemDefaults.colors(
+                containerColor = Color.Transparent,
+                headlineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                supportingColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             )
-        }
-    }
+        },
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
+    )
 }
 
 /**
@@ -576,23 +573,14 @@ private fun ConnectionRow(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    Card(Modifier.padding(top = 8.dp).fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .clickable(onClick = onClick)
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() }
-            Column(Modifier.padding(start = 16.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = { Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() } },
+        trailingContent = {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick),
+    )
 }
