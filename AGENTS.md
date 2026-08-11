@@ -21,7 +21,9 @@ the project is pinned to Gradle 9.6.1 via `gradle/wrapper/`.
 CI (`.github/workflows/build.yml`) runs `testDebugUnitTest`, `lintDebug`, and
 `assembleDebug` on every push/PR to `main`.
 
-Releases go out with `hack/release`. It also updates the F-Droid
+Releases go out with `hack/release`. **Never cut a release, create a
+tag, or install/replace an app on a device without asking the user
+first.** The script also updates the F-Droid
 submission, whose pipeline runs on GitLab and can fail after the script
 has finished, because the long `fdroid build` is not waited for. Check
 the pipeline it links before calling a release done. `DEVELOPER.md`
@@ -70,6 +72,9 @@ into pure Kotlin so it stays unit-testable without Robolectric or an
 emulator.
 
 ## Conventions
+
+- Never add a `Co-authored-by` (or any co-author/AI attribution)
+  trailer to commits.
 
 - Reading positions are Readium `Locator`s locally. calibre-web sync
   exchanges percentage progression (`locations.totalProgression`); Komga
