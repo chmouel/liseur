@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -44,7 +45,9 @@ import com.chmouel.liseur.reader.annotations.markedPassage
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ReaderProgress
+import com.chmouel.liseur.reader.progress.ReadingPace
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
+import com.chmouel.liseur.reader.progress.StableBookProgress
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -361,7 +364,8 @@ class ReaderViewModel(
             val stored = progressDao.get(bookId)
             speed = ReadingSpeedEstimator(
                 learned = readingPace.pace(),
-                bookSpeed = stored?.readingSpeed,
+                bookPace = stored?.readingPace
+                    ?: ReadingPace.Unknown,
             )
             var initialLocator = stored?.locatorJson
                 ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
@@ -410,17 +414,17 @@ class ReaderViewModel(
         if (!readerActive) return
         val samePosition = lastLocator?.sameReadingPositionAs(locator) == true
         lastLocator = locator
-        _progress.value = progressAt(locator)
+        val stable = bookPositions?.resolve(locator)
+        _progress.value = progressAt(locator, stable)
         // Readium recalculates totalProgression for a different viewport,
         // even when its stable resource position has not moved. Keep the
         // display current, but do not turn that layout detail into reading.
         if (samePosition) return
-        val positions = bookPositions
         val totalProgression = locator.locations.totalProgression
-        if (positions != null && positions.isUsable && totalProgression != null) {
+        if (stable != null) {
             val sample = speed.record(
-                position = totalProgression * positions.totalPositions,
-                atMillis = System.currentTimeMillis(),
+                position = stable.coordinate,
+                atMillis = SystemClock.elapsedRealtime(),
             )
             // A page that was really read teaches this reader's pace to
             // every book, not just this one.
@@ -437,7 +441,10 @@ class ReaderViewModel(
                 bookUrl = bookId,
                 locatorJson = locator.toJSON().toString(),
                 progression = locator.locations.totalProgression,
-                readingSpeed = speed.speed,
+                readingSecondsPerPosition = speed.secondsPerPosition,
+                readingPaceSamples = speed.pace.samples,
+                readingPaceElapsedMs = speed.pace.elapsedMs,
+                readingPaceEvidence = speed.pace.evidence,
                 status = readingStatusFor(
                     locator.locations.totalProgression,
                     progressDao.get(bookId)?.override ?: FinishedOverride.NONE,
@@ -587,29 +594,32 @@ class ReaderViewModel(
     /** Chapter starts as whole-book progressions, for the scrubber ticks. */
     fun chapterTicks(): List<Float> {
         val positions = bookPositions?.takeIf { it.isUsable } ?: return emptyList()
-        val total = positions.totalPositions.toFloat()
+        val denominator = (positions.totalPositions - 1).coerceAtLeast(1).toFloat()
         return positions.chapters
-            .map { (it.firstPosition - 1) / total }
+            .map { (it.firstPosition - 1) / denominator }
             .filter { it > 0f }
     }
 
-    private fun progressAt(locator: Locator): ReaderProgress? {
+    private fun progressAt(
+        locator: Locator,
+        stable: StableBookProgress? = bookPositions?.resolve(locator),
+    ): ReaderProgress? {
         val positions = bookPositions?.takeIf { it.isUsable } ?: return null
         val publication = publication ?: return null
-        val totalProgression = (locator.locations.totalProgression ?: 0.0).toFloat()
-        val position = locator.locations.position
-            ?: positions.positionAtProgression(totalProgression)
+        stable ?: return null
+        val totalProgression = stable.progression.toFloat()
+        val position = stable.position
         val chapter = publication.readingOrder.indexOfFirstWithHref(locator.href)
             ?.let(positions::chapterOfResource)
             ?: positions.chapterAt(position)
         val chapterEnd = chapter?.lastPosition ?: positions.totalPositions
         return ReaderProgress(
-            position = position.coerceIn(1, positions.totalPositions),
+            position = position,
             totalPositions = positions.totalPositions,
             totalProgression = totalProgression,
             chapterTitle = chapter?.title,
-            minutesLeftInChapter = speed.minutesFor((chapterEnd - position).toDouble()),
-            minutesLeftInBook = speed.minutesFor((positions.totalPositions - position).toDouble()),
+            minutesLeftInChapter = speed.minutesFor(chapterEnd - stable.coordinate),
+            minutesLeftInBook = speed.minutesFor(positions.totalPositions - stable.coordinate),
             isSpeedMeasured = speed.isMeasured,
         )
     }

@@ -22,7 +22,7 @@ import androidx.sqlite.execSQL
         WorkAlias::class,
         WorkAmbiguity::class,
     ],
-    version = 24,
+    version = 25,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -597,6 +597,28 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds resumable v2 reading-pace evidence without trusting v1 speed. */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `reading_progress` " +
+                        "ADD COLUMN `reading_seconds_per_position` REAL",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `reading_progress` " +
+                        "ADD COLUMN `reading_pace_samples` INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `reading_progress` " +
+                        "ADD COLUMN `reading_pace_elapsed_ms` INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `reading_progress` " +
+                        "ADD COLUMN `reading_pace_evidence` REAL NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
         /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
@@ -625,6 +647,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_21_22,
             MIGRATION_22_23,
             MIGRATION_23_24,
+            MIGRATION_24_25,
         )
     }
 }

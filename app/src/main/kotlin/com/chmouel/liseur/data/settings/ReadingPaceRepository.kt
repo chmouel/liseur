@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.chmouel.liseur.reader.progress.PaceSample
 import com.chmouel.liseur.reader.progress.ReadingPace
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -31,13 +33,22 @@ class ReadingPaceRepository(private val store: DataStore<Preferences>) {
 
 
     private object Keys {
-        val SPEED = doublePreferencesKey("speed")
-        val SAMPLES = intPreferencesKey("samples")
+        val SECONDS_PER_POSITION = doublePreferencesKey("v2_seconds_per_position")
+        val SAMPLES = intPreferencesKey("v2_samples")
+        val ELAPSED_MS = longPreferencesKey("v2_elapsed_ms")
+        val EVIDENCE = doublePreferencesKey("v2_evidence")
     }
 
     /** What is known about this reader so far. */
     suspend fun pace(): ReadingPace = store.data
-        .map { ReadingPace.of(it[Keys.SPEED], it[Keys.SAMPLES]) }
+        .map {
+            ReadingPace.of(
+                secondsPerPosition = it[Keys.SECONDS_PER_POSITION],
+                samples = it[Keys.SAMPLES],
+                elapsedMs = it[Keys.ELAPSED_MS],
+                evidence = it[Keys.EVIDENCE],
+            )
+        }
         .first()
 
     /**
@@ -47,12 +58,20 @@ class ReadingPaceRepository(private val store: DataStore<Preferences>) {
      * across two processes and a read-then-write would have the second
      * one quietly discard the first one's page.
      */
-    suspend fun record(sample: Double) {
+    suspend fun record(sample: PaceSample) {
         store.edit { stored ->
-            val next = ReadingPace.of(stored[Keys.SPEED], stored[Keys.SAMPLES]).after(sample)
+            val current = ReadingPace.of(
+                secondsPerPosition = stored[Keys.SECONDS_PER_POSITION],
+                samples = stored[Keys.SAMPLES],
+                elapsedMs = stored[Keys.ELAPSED_MS],
+                evidence = stored[Keys.EVIDENCE],
+            )
+            val next = current.after(sample)
             if (!next.isKnown) return@edit
-            stored[Keys.SPEED] = next.speed
+            stored[Keys.SECONDS_PER_POSITION] = next.secondsPerPosition
             stored[Keys.SAMPLES] = next.samples
+            stored[Keys.ELAPSED_MS] = next.elapsedMs
+            stored[Keys.EVIDENCE] = next.evidence
         }
     }
 }

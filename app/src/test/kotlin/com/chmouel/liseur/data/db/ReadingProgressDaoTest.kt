@@ -81,6 +81,51 @@ class ReadingProgressDaoTest {
     }
 
     @Test
+    fun `v2 pace is stored without rewriting sync state`() = runTest {
+        read(0.1)
+        dao.ackPush(book, 1, 0.1, "Reading", account, now = 2_000)
+
+        dao.recordLocal(
+            bookUrl = book,
+            locatorJson = """{"at":0.2}""",
+            progression = 0.2,
+            readingSecondsPerPosition = 55.0,
+            readingPaceSamples = 8,
+            readingPaceElapsedMs = 6 * 60_000L,
+            readingPaceEvidence = 5.5,
+            status = "Reading",
+            updatedAt = 3_000,
+        )
+
+        val row = row()
+        assertEquals(55.0, row.readingPace.secondsPerPosition, 0.0)
+        assertEquals(8, row.readingPace.samples)
+        assertEquals(2L, row.localRevision)
+        assertEquals(1L, row.ackedRevision)
+        assertEquals(0.1, row.agreedProgression!!, 0.0)
+    }
+
+    @Test
+    fun `position-only write preserves an existing v2 pace`() = runTest {
+        dao.recordLocal(
+            bookUrl = book,
+            locatorJson = """{"at":0.1}""",
+            progression = 0.1,
+            readingSecondsPerPosition = 55.0,
+            readingPaceSamples = 8,
+            readingPaceElapsedMs = 6 * 60_000L,
+            readingPaceEvidence = 5.5,
+            status = "Reading",
+            updatedAt = 1_000,
+        )
+
+        read(0.2, updatedAt = 2_000)
+
+        assertEquals(55.0, row().readingPace.secondsPerPosition, 0.0)
+        assertEquals(8, row().readingPace.samples)
+    }
+
+    @Test
     fun `dirtiness survives a clock that goes backwards`() = runTest {
         // Dirtiness is a counter, not a comparison of timestamps, exactly
         // so that a phone correcting its clock cannot make unsent reading

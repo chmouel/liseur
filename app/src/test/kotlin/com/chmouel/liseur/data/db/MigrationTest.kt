@@ -65,6 +65,55 @@ class MigrationTest {
     }
 
     @Test
+    fun `pace upgrade leaves reading and sync state untouched`() {
+            helper.createDatabase(TEST_DB, 24).use { old ->
+                old.execSQL(
+                    """
+                    INSERT INTO reading_progress (
+                        book_url, locator_json, total_progression, reading_speed, updated_at,
+                        status, local_revision, acked_revision,
+                        agreed_progression, agreed_status,
+                        pending_progression, pending_status, pending_account
+                    ) VALUES (
+                        'calibre:uuid-1', '{"exact":"place"}', 0.42, 9.0, 1000,
+                        'Reading', 7, 5,
+                        0.40, 'Reading',
+                        0.60, 'Reading', 'peer'
+                    )
+                    """.trimIndent(),
+                )
+            }
+
+            helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+                .use { db ->
+                    db.query(
+                        """
+                        SELECT locator_json, total_progression, reading_speed,
+                               local_revision, acked_revision,
+                               agreed_progression, pending_progression, pending_account,
+                               reading_seconds_per_position, reading_pace_samples,
+                               reading_pace_elapsed_ms, reading_pace_evidence
+                        FROM reading_progress WHERE book_url = 'calibre:uuid-1'
+                        """.trimIndent(),
+                    ).use { cursor ->
+                        assertTrue(cursor.moveToFirst())
+                        assertEquals("""{"exact":"place"}""", cursor.getString(0))
+                        assertEquals(0.42, cursor.getDouble(1), 1e-9)
+                        assertEquals(9.0, cursor.getDouble(2), 1e-9)
+                        assertEquals(7, cursor.getInt(3))
+                        assertEquals(5, cursor.getInt(4))
+                        assertEquals(0.40, cursor.getDouble(5), 1e-9)
+                        assertEquals(0.60, cursor.getDouble(6), 1e-9)
+                        assertEquals("peer", cursor.getString(7))
+                        assertTrue(cursor.isNull(8))
+                        assertEquals(0, cursor.getInt(9))
+                        assertEquals(0, cursor.getLong(10))
+                        assertEquals(0.0, cursor.getDouble(11), 0.0)
+                    }
+                }
+    }
+
+    @Test
     fun `a book survives every upgrade`() {
         helper.createDatabase(TEST_DB, 1).use { old ->
             old.execSQL(
@@ -222,6 +271,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 23
+        const val LATEST = 25
     }
 }

@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import com.chmouel.liseur.reader.progress.ReadingPace
 
 /**
  * Last reading position for a book, keyed by the book's URL
@@ -35,7 +36,16 @@ data class ReadingProgress(
     @PrimaryKey @ColumnInfo(name = "book_url") val bookUrl: String,
     @ColumnInfo(name = "locator_json") val locatorJson: String,
     @ColumnInfo(name = "total_progression") val totalProgression: Double?,
+    /** Legacy v1 pace in positions per minute. Kept only for schema history. */
     @ColumnInfo(name = "reading_speed") val readingSpeed: Double? = null,
+    @ColumnInfo(name = "reading_seconds_per_position")
+    val readingSecondsPerPosition: Double? = null,
+    @ColumnInfo(name = "reading_pace_samples", defaultValue = "0")
+    val readingPaceSamples: Int = 0,
+    @ColumnInfo(name = "reading_pace_elapsed_ms", defaultValue = "0")
+    val readingPaceElapsedMs: Long = 0,
+    @ColumnInfo(name = "reading_pace_evidence", defaultValue = "0")
+    val readingPaceEvidence: Double = 0.0,
     /** When this device last touched the position. */
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
     /** Reading status as calibre-web's Kobo sync understands it. */
@@ -76,6 +86,15 @@ data class ReadingProgress(
     /** What someone has said about this book being read, if anything. */
     val override: com.chmouel.liseur.domain.FinishedOverride
         get() = com.chmouel.liseur.domain.FinishedOverride.fromStored(finishedOverride)
+
+    /** The versioned pace learned for this book, excluding legacy v1 data. */
+    val readingPace: ReadingPace
+        get() = ReadingPace.of(
+            secondsPerPosition = readingSecondsPerPosition,
+            samples = readingPaceSamples,
+            elapsedMs = readingPaceElapsedMs,
+            evidence = readingPaceEvidence,
+        )
 }
 
 /** When a book was last read, on this device or another one. */
@@ -150,14 +169,24 @@ abstract class ReadingProgressDao {
         """
         INSERT INTO reading_progress (
             book_url, locator_json, total_progression, reading_speed,
+            reading_seconds_per_position, reading_pace_samples,
+            reading_pace_elapsed_ms, reading_pace_evidence,
             updated_at, status, synced_at, local_revision, acked_revision
         )
-        VALUES (:bookUrl, :locatorJson, :progression, :readingSpeed,
+        VALUES (:bookUrl, :locatorJson, :progression, NULL,
+                :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
+                COALESCE(:readingPaceElapsedMs, 0), COALESCE(:readingPaceEvidence, 0),
                 :updatedAt, :status, NULL, 1, 0)
         ON CONFLICT(book_url) DO UPDATE SET
             locator_json = :locatorJson,
             total_progression = :progression,
-            reading_speed = COALESCE(:readingSpeed, reading_speed),
+            reading_seconds_per_position =
+                COALESCE(:readingSecondsPerPosition, reading_seconds_per_position),
+            reading_pace_samples = COALESCE(:readingPaceSamples, reading_pace_samples),
+            reading_pace_elapsed_ms =
+                COALESCE(:readingPaceElapsedMs, reading_pace_elapsed_ms),
+            reading_pace_evidence =
+                COALESCE(:readingPaceEvidence, reading_pace_evidence),
             updated_at = :updatedAt,
             status = :status,
             local_revision = local_revision + 1
@@ -167,9 +196,37 @@ abstract class ReadingProgressDao {
         bookUrl: String,
         locatorJson: String,
         progression: Double?,
-        readingSpeed: Double?,
+        readingSecondsPerPosition: Double?,
+        readingPaceSamples: Int?,
+        readingPaceElapsedMs: Long?,
+        readingPaceEvidence: Double?,
         status: String?,
         updatedAt: Long,
+    )
+
+    /**
+     * Compatibility overload for callers that do not measure v2 pace.
+     *
+     * [readingSpeed] is deliberately ignored: it belongs to the biased v1
+     * estimator and must not seed the replacement.
+     */
+    suspend fun recordLocal(
+        bookUrl: String,
+        locatorJson: String,
+        progression: Double?,
+        @Suppress("UNUSED_PARAMETER") readingSpeed: Double?,
+        status: String?,
+        updatedAt: Long,
+    ) = recordLocal(
+        bookUrl = bookUrl,
+        locatorJson = locatorJson,
+        progression = progression,
+        readingSecondsPerPosition = null,
+        readingPaceSamples = null,
+        readingPaceElapsedMs = null,
+        readingPaceEvidence = null,
+        status = status,
+        updatedAt = updatedAt,
     )
 
     // -- The pending remote state, and the feed's durability ---------------
