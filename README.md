@@ -122,6 +122,10 @@ which on electronic paper is everything that would otherwise ghost.
 
 ***See [DEVELOPER.md](DEVELOPER.md) for how to build Liseur from source.***
 
+## Related
+
+* Check out [liseur-desktop](https://github.com/chmouel/liseur-desktop) for the desktop (electron based) version of liseur.
+
 ## Author
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github)](https://github.com/sponsors/chmouel)
 ### Chmouel Boudjnah 
