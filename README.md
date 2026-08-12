@@ -111,12 +111,9 @@ network traffic is to the book server you configured, the sync server if you
 added one, and, if you switch online definitions on, to the dictionary site you
 chose.
 
-On a tablet or an e-ink reader the page is laid out in two columns rather
-than one long line, the library shows fewer and larger covers, sheets and
-dialogs stop spanning the whole screen, and a keyboard's Page Up/Down and
-arrow keys turn pages. One column is still a setting away. An e-ink mode — detected automatically, overridable by hand — drops the
-app to black and white and stops everything that would otherwise animate,
-which on electronic paper is everything that would otherwise ghost.
+## Install
+
+Install from F-droid repository: [f-droid](https://f-droid.org/en/packages/com.chmouel.liseur/) or download the apk from  [Github Relesaes](https://github.com/chmouel/liseur/releases/).
 
 ## Development
 
