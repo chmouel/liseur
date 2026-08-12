@@ -113,7 +113,7 @@ chose.
 
 ## Install
 
-Install from F-droid repository: [f-droid](https://f-droid.org/en/packages/com.chmouel.liseur/) or download the apk from  [Github Relesaes](https://github.com/chmouel/liseur/releases/).
+Install from the [F-droid repository](https://f-droid.org/en/packages/com.chmouel.liseur/) or download the apk from the [Github Relesaes](https://github.com/chmouel/liseur/releases/).
 
 ## Development
 
