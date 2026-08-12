@@ -35,6 +35,11 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.settings.SessionStateRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
+import com.chmouel.liseur.sync.LatestPositionSync
+import com.chmouel.liseur.sync.PositionSyncWorker
+import com.chmouel.liseur.sync.ReadingPositionPublisher
+import com.chmouel.liseur.sync.SyncScope
+import android.util.Log
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -241,6 +246,35 @@ class AppContainer(context: Context) {
                 ),
             ),
         ),
+    )
+
+    private val latestPositionSync = LatestPositionSync(
+        scope = applicationScope,
+        request = { positionSync.request(SyncScope.Book(it)) },
+        scheduleRetry = { PositionSyncWorker.retryBook(context.applicationContext, it) },
+        onError = { message, error -> Log.e("position-sync", message, error) },
+    )
+
+    val readingPositions = ReadingPositionPublisher(
+        scope = applicationScope,
+        overrideFor = { database.readingProgressDao().get(it)?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE },
+        persist = { update, status ->
+            database.readingProgressDao().recordLocal(
+                bookUrl = update.bookUrl,
+                locatorJson = update.locatorJson,
+                progression = update.progression,
+                readingSecondsPerPosition = update.readingSecondsPerPosition,
+                readingPaceSamples = update.readingPaceSamples,
+                readingPaceElapsedMs = update.readingPaceElapsedMs,
+                readingPaceEvidence = update.readingPaceEvidence,
+                status = status,
+                updatedAt = update.updatedAt,
+            )
+        },
+        refreshFinished = finishedState::refreshFromProgress,
+        latestSync = latestPositionSync,
+        scheduleClose = { PositionSyncWorker.pushBook(context.applicationContext, it) },
+        onError = { message, error -> Log.e("reading-position", message, error) },
     )
 
     /** Reading added up across every device, when a server keeps it. */

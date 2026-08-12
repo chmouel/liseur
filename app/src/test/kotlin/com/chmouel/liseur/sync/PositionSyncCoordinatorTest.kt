@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -148,6 +149,32 @@ class PositionSyncCoordinatorTest {
         b.await()
 
         assertEquals(listOf(SyncScope.Full, SyncScope.Book("b")), sync.started)
+    }
+
+    @Test
+    fun `cancelling a queued leader does not strand later requests`() = runTest {
+        val sync = FakeSync()
+        val gate = CompletableDeferred<Unit>()
+        sync.gate = gate
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val running = async { coordinator.request(SyncScope.Full, requestedAt = 0) }
+        advanceUntilIdle()
+        val cancelled = async {
+            coordinator.request(SyncScope.Book("book"), requestedAt = Long.MAX_VALUE)
+        }
+        advanceUntilIdle()
+        cancelled.cancelAndJoin()
+
+        sync.gate = null
+        gate.complete(Unit)
+        running.await()
+
+        assertEquals(
+            SyncOutcome.Success,
+            coordinator.request(SyncScope.Book("book"), requestedAt = Long.MAX_VALUE),
+        )
+        assertEquals(listOf(SyncScope.Full, SyncScope.Book("book")), sync.started)
     }
 
     @Test

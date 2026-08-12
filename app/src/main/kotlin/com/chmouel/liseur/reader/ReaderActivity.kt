@@ -18,7 +18,6 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.reader.chrome.BookSyncDialog
 import com.chmouel.liseur.reader.chrome.PageTurner
-import com.chmouel.liseur.sync.PositionSyncWorker
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.container
 import com.chmouel.liseur.ui.theme.LiseurTheme
@@ -232,7 +231,7 @@ class ReaderActivity : FragmentActivity() {
         super.onStop()
         // Leaving the book is the moment the position is worth sending:
         // it is settled, and the reader is likely to pick up elsewhere.
-        PositionSyncWorker.pushBook(this, bookId)
+        viewModel.onReaderStopped()
     }
 
     /**

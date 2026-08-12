@@ -7,6 +7,9 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -92,24 +95,36 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
         }
         if (!isLeader) return slot.await()
 
-        return turn.withLock {
-            state.withLock {
-                queued.remove(scope)
-                inFlight = Running(scope, System.currentTimeMillis(), slot)
-            }
-            val outcome = try {
-                when (scope) {
-                    SyncScope.Full -> sync.syncAll(snapshot)
-                    is SyncScope.Book -> sync.syncBook(scope.bookUrl)
+        try {
+            return turn.withLock {
+                state.withLock {
+                    queued.remove(scope)
+                    inFlight = Running(scope, System.currentTimeMillis(), slot)
                 }
-            } catch (e: Throwable) {
-                state.withLock { inFlight = null }
-                slot.completeExceptionally(e)
-                throw e
+                val outcome = try {
+                    when (scope) {
+                        SyncScope.Full -> sync.syncAll(snapshot)
+                        is SyncScope.Book -> sync.syncBook(scope.bookUrl)
+                    }
+                } catch (e: Throwable) {
+                    clearInFlight(slot)
+                    slot.completeExceptionally(e)
+                    throw e
+                }
+                clearInFlight(slot)
+                slot.complete(outcome)
+                outcome
             }
-            state.withLock { inFlight = null }
-            slot.complete(outcome)
-            outcome
+        } catch (e: CancellationException) {
+            // A caller can disappear before its leader gets the turn. Do not
+            // leave that leader's deferred in queued forever.
+            withContext(NonCancellable) {
+                state.withLock {
+                    if (queued[scope] === slot) queued.remove(scope)
+                }
+            }
+            slot.cancel(e)
+            throw e
         }
     }
 
@@ -151,6 +166,14 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
      */
     suspend fun preservedConflict(bookUrl: String): SyncPreview? =
         turn.withLock { sync.preservedConflict(bookUrl) }
+
+    private suspend fun clearInFlight(result: CompletableDeferred<SyncOutcome>) {
+        withContext(NonCancellable) {
+            state.withLock {
+                if (inFlight?.result === result) inFlight = null
+            }
+        }
+    }
 
     /**
      * Whether a run already under way can answer this request.

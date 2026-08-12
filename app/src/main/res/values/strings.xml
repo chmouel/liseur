@@ -131,6 +131,7 @@
     <string name="reader_sync_book_not_synced">This book is not one the server knows about, so there is nothing to sync.</string>
     <string name="reader_sync_book_moved">You turned a page while that was running, so nothing was changed. Try syncing this book again.</string>
     <string name="reader_sync_book_sent">This device has read further; sent this position to the server.</string>
+    <string name="reader_position_not_saved">This reading position could not be saved. Keep the book open and turn another page to try again.</string>
     <string name="server_sync_timeout">The server took too long to answer; positions will sync later.</string>
     <string name="server_sync_unauthorised">The server no longer accepts this sign-in. Reconnect the account to sync positions again.</string>
     <string name="server_sync_forbidden">This account is not allowed to sync reading positions. Ask whoever runs the server for Kobo sync rights.</string>

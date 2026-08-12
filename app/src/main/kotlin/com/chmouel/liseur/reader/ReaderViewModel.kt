@@ -20,7 +20,6 @@ import com.chmouel.liseur.data.db.BookTypographyDao
 import com.chmouel.liseur.data.db.withTypographyOf
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
-import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -30,14 +29,14 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
+import com.chmouel.liseur.sync.PositionUpdate
+import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.isSamePassage
-import com.chmouel.liseur.domain.FinishedOverride
-import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.exportNotebookMarkdown
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.locator
@@ -90,11 +89,11 @@ class ReaderViewModel(
     private val annotationDao: BookAnnotationDao,
     private val typographyDao: BookTypographyDao,
     private val library: LocalLibraryRepository,
-    private val finishedState: FinishedState,
     private val prefsRepo: ReaderPreferencesRepository,
     private val readingPace: ReadingPaceRepository,
     private val positionSync: PositionSyncCoordinator,
     private val appSettings: AppSettingsRepository,
+    private val positionPublisher: ReadingPositionPublisher,
     sessionManager: ReadingSessionManager,
 ) : ViewModel() {
 
@@ -329,6 +328,13 @@ class ReaderViewModel(
         private set
 
     init {
+        viewModelScope.launch {
+            positionPublisher.failures.collect { failedBook ->
+                if (failedBook == bookId) {
+                    _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
+                }
+            }
+        }
         open()
     }
 
@@ -433,11 +439,8 @@ class ReaderViewModel(
         // Capture the page's moment before suspendable position writes,
         // so database latency cannot become reading time.
         sessions.onPageTurned(totalProgression)
-        viewModelScope.launch {
-            // One statement, so two page turns cannot interleave and a
-            // stale acknowledgement cannot be carried back over a fresh
-            // one. Everything about the server is left to the sync.
-            progressDao.recordLocal(
+        val accepted = positionPublisher.publish(
+            PositionUpdate(
                 bookUrl = bookId,
                 locatorJson = locator.toJSON().toString(),
                 progression = locator.locations.totalProgression,
@@ -445,17 +448,17 @@ class ReaderViewModel(
                 readingPaceSamples = speed.pace.samples,
                 readingPaceElapsedMs = speed.pace.elapsedMs,
                 readingPaceEvidence = speed.pace.evidence,
-                status = readingStatusFor(
-                    locator.locations.totalProgression,
-                    progressDao.get(bookId)?.override ?: FinishedOverride.NONE,
-                ).wireName,
                 updatedAt = System.currentTimeMillis(),
-            )
-            // Reaching the end marks the book read, so the library shows it
-            // as done and the app stops dropping you back into it. Marking
-            // it unread by hand sticks, because that is recorded as a thing
-            // someone said rather than guessed at from the position.
-            finishedState.refreshFromProgress(bookId)
+            ),
+        )
+        if (!accepted) {
+            _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
+        }
+    }
+
+    fun onReaderStopped() {
+        if (!positionPublisher.closeBook(bookId)) {
+            _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
         }
     }
 
@@ -931,11 +934,11 @@ class ReaderViewModel(
                     annotationDao = container.database.annotationDao(),
                     typographyDao = container.database.typographyDao(),
                     library = container.libraryRepository,
-                    finishedState = container.finishedState,
                     prefsRepo = container.readerPreferences,
                     readingPace = container.readingPace,
                     positionSync = container.positionSync,
                     appSettings = container.appSettings,
+                    positionPublisher = container.readingPositions,
                     sessionManager = container.readingSessions,
                 )
             }

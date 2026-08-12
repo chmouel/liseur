@@ -76,9 +76,22 @@ class PositionSyncWorker(
 
         /** Sends one book's position, for the moment it is closed. */
         fun pushBook(context: Context, bookUrl: String) {
+            enqueueBook(context, bookUrl, ExistingWorkPolicy.APPEND_OR_REPLACE)
+        }
+
+        /** Retries a failed foreground send without resetting existing backoff. */
+        fun retryBook(context: Context, bookUrl: String) {
+            enqueueBook(context, bookUrl, ExistingWorkPolicy.KEEP)
+        }
+
+        private fun enqueueBook(
+            context: Context,
+            bookUrl: String,
+            policy: ExistingWorkPolicy,
+        ) {
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "$FULL_SYNC:$bookUrl",
-                ExistingWorkPolicy.REPLACE,
+                policy,
                 OneTimeWorkRequestBuilder<PositionSyncWorker>()
                     .setInputData(Data.Builder().putString(KEY_BOOK_URL, bookUrl).build())
                     .setConstraints(onNetwork)
