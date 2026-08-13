@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.reader.annotations.BookmarkRibbon
 import com.chmouel.liseur.reader.annotations.DECORATION_GROUP
 import com.chmouel.liseur.reader.annotations.HighlightTint
@@ -457,7 +458,7 @@ fun ReaderScreen(
         SelectionPopup(
             offset = active.popupOffset(),
             activeTint = active.existing?.tint?.let(HighlightTint::fromName),
-            actions = remember(active) {
+            actions = remember(active, dictionary) {
                 SelectionActions(
                     onHighlight = { tint ->
                         onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
@@ -475,7 +476,12 @@ fun ReaderScreen(
                         selection = null
                     },
                     onLookUp = {
-                        defineWord = active.text
+                        when (dictionary.target) {
+                            DefinitionTarget.BUILT_IN -> defineWord = active.text
+                            DefinitionTarget.EXTERNAL_APP -> {
+                                context.lookUpExternally(active.text, dictionary.baseUrl)
+                            }
+                        }
                         navigator?.clearSelection()
                         selection = null
                     },

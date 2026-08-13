@@ -68,6 +68,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.ConnectionsState
 import com.chmouel.liseur.data.library.Inspection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -87,6 +88,7 @@ fun SettingsScreen(
     onVolumeKeys: (Boolean) -> Unit,
     onEInkMode: (EInkMode) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
+    onDefinitionTarget: (DefinitionTarget) -> Unit,
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
     onOpenAccount: () -> Unit,
@@ -261,18 +263,28 @@ fun SettingsScreen(
                 }
 
                 SettingsGroup(stringResource(R.string.settings_dictionary)) {
-                    SwitchRow(
-                        title = stringResource(R.string.settings_dictionary_lookup),
-                        subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
-                        checked = settings.dictionaryLookupEnabled,
-                        onCheckedChange = onDictionaryLookup,
+                    ChipRow(
+                        title = stringResource(R.string.settings_define_with),
+                        options = DefinitionTarget.entries,
+                        selected = settings.definitionTarget,
+                        label = { stringResource(it.label) },
+                        onSelected = onDefinitionTarget,
                     )
-                    if (settings.dictionaryLookupEnabled) {
+                    if (settings.definitionTarget == DefinitionTarget.BUILT_IN) {
                         RowDivider()
-                        DictionarySiteRow(
-                            baseUrl = settings.dictionaryBaseUrl,
-                            onBaseUrl = onDictionaryBaseUrl,
+                        SwitchRow(
+                            title = stringResource(R.string.settings_dictionary_lookup),
+                            subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
+                            checked = settings.dictionaryLookupEnabled,
+                            onCheckedChange = onDictionaryLookup,
                         )
+                        if (settings.dictionaryLookupEnabled) {
+                            RowDivider()
+                            DictionarySiteRow(
+                                baseUrl = settings.dictionaryBaseUrl,
+                                onBaseUrl = onDictionaryBaseUrl,
+                            )
+                        }
                     }
                 }
 
@@ -351,6 +363,12 @@ private val EInkMode.label: Int
         EInkMode.AUTO -> R.string.eink_auto
         EInkMode.ON -> R.string.eink_on
         EInkMode.OFF -> R.string.eink_off
+    }
+
+private val DefinitionTarget.label: Int
+    get() = when (this) {
+        DefinitionTarget.BUILT_IN -> R.string.definition_target_builtin
+        DefinitionTarget.EXTERNAL_APP -> R.string.definition_target_external
     }
 
 /**
