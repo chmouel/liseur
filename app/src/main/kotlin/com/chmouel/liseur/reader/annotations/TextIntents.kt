@@ -34,14 +34,13 @@ fun Context.lookUpExternally(text: String, dictionaryBaseUrl: String) {
         putExtra(Intent.EXTRA_PROCESS_TEXT, word)
         putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
     }
-    // A chooser with nothing in it still opens, so ask first rather than
-    // showing the reader an empty sheet when no dictionary is installed.
+    // Ask first so devices without a handler fall back to the browser.
     if (packageManager.queryIntentActivities(process, 0).isEmpty()) {
         openDictionaryEntry(word, dictionaryBaseUrl)
         return
     }
     try {
-        startActivity(Intent.createChooser(process, null))
+        startActivity(process)
     } catch (_: ActivityNotFoundException) {
         openDictionaryEntry(word, dictionaryBaseUrl)
     }

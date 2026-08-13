@@ -23,6 +23,7 @@ import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -100,19 +101,27 @@ class ReaderViewModel(
     private val sessions = sessionManager.recorder(bookId)
 
     /**
-     * What the definition card needs to know before it may fetch anything.
+     * What the Define action needs before it opens a card or another app.
      *
+     * @param target Where the Define action sends selected text.
      * @param enabled Whether the reader has agreed to online lookups.
      * @param baseUrl The dictionary site they chose.
      */
     data class DictionarySettings(
+        val target: DefinitionTarget = DefinitionTarget.Default,
         val enabled: Boolean = false,
         val baseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
     )
 
     /** The dictionary's opt-in state, watched so the card reacts to it. */
     val dictionary: StateFlow<DictionarySettings> = appSettings.settings
-        .map { DictionarySettings(it.dictionaryLookupEnabled, it.dictionaryBaseUrl) }
+        .map {
+            DictionarySettings(
+                it.definitionTarget,
+                it.dictionaryLookupEnabled,
+                it.dictionaryBaseUrl,
+            )
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DictionarySettings())
 
     /** Turns online definitions on, from the card that asked for them. */
