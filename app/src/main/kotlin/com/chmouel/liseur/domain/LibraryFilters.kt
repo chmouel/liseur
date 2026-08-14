@@ -40,7 +40,7 @@ enum class LibraryFilterOption(val id: String, val group: FilterGroup) {
     IN_PROGRESS("in_progress", FilterGroup.READING),
     FINISHED("finished", FilterGroup.READING),
 
-    /** The books put away. */
+    /** The books archived. */
     ARCHIVED("archived", FilterGroup.PLACE),
     ;
 
@@ -50,13 +50,42 @@ enum class LibraryFilterOption(val id: String, val group: FilterGroup) {
 }
 
 /**
+ * How much of a book has to be read before it counts as started, when
+ * nothing is known about how long the book is. Roughly a page of a
+ * novel, which is the shape of most of a library.
+ */
+private const val DEFAULT_STARTED_PROGRESSION = 0.01
+
+/**
+ * The band a length-derived threshold is held inside.
+ *
+ * A four-page pamphlet would otherwise have to be a third read before it
+ * counted as started, and a thousand-page omnibus would count after two
+ * paragraphs. Both are the arithmetic being right and the answer being
+ * useless.
+ */
+private const val MIN_STARTED_PROGRESSION = 0.002
+private const val MAX_STARTED_PROGRESSION = 0.05
+
+/**
  * How much of a book has to be read before it counts as started.
  *
  * A locator is written the moment a book is opened, so *any* progress at
- * all would move a book out of Unread for having been glanced at. This
- * is roughly one page of a novel.
+ * all would move a book out of Unread for having been glanced at. What
+ * counts as a glance depends on the book: one page of a short story is a
+ * twentieth of it, and one page of a novel is a rounding error, so the
+ * threshold is a page of *this* book wherever its length is known.
+ *
+ * Only Komga counts pages, so most books fall back to
+ * [DEFAULT_STARTED_PROGRESSION]. That is a fair guess for a novel, and
+ * the case it is wrong about — a short story in a loose file — is the
+ * case where being wrong costs a card in the wrong list for one tap.
  */
-private const val STARTED_PROGRESSION = 0.01
+fun startedAfter(pageCount: Int?): Double {
+    val onePage = pageCount?.takeIf { it > 0 }?.let { 1.0 / it }
+        ?: return DEFAULT_STARTED_PROGRESSION
+    return onePage.coerceIn(MIN_STARTED_PROGRESSION, MAX_STARTED_PROGRESSION)
+}
 
 /**
  * Everything narrowing the library at once.
@@ -74,6 +103,17 @@ data class LibraryFilters(
 
     /** Whether anything at all is narrowing the shelf. */
     val isEmpty: Boolean get() = options.isEmpty() && !groupBySeries
+
+    /**
+     * Whether finished books are being kept off the shelf by nothing
+     * more than the reader not having asked for them.
+     *
+     * The one place the menu's arithmetic is not what it looks like, so
+     * the screens that have to explain themselves ask here rather than
+     * working it out again.
+     */
+    val hidesFinished: Boolean
+        get() = !archived && options.none { it.group == FilterGroup.READING }
 
     fun toggle(option: LibraryFilterOption): LibraryFilters = copy(
         options = if (option in options) options - option else options + option,
@@ -107,15 +147,28 @@ data class LibraryFilters(
             if (wanted !in availability) return false
         }
 
+        val started = (progression ?: 0.0) >= startedAfter(book.remotePageCount)
+        val state = when {
+            book.finished -> LibraryFilterOption.FINISHED
+            started -> LibraryFilterOption.IN_PROGRESS
+            else -> LibraryFilterOption.UNREAD
+        }
         val reading = group(FilterGroup.READING)
         if (reading.isNotEmpty()) {
-            val started = (progression ?: 0.0) >= STARTED_PROGRESSION
-            val wanted = when {
-                book.finished -> LibraryFilterOption.FINISHED
-                started -> LibraryFilterOption.IN_PROGRESS
-                else -> LibraryFilterOption.UNREAD
-            }
-            if (wanted !in reading) return false
+            if (state !in reading) return false
+        } else if (hidesFinished && state == LibraryFilterOption.FINISHED) {
+            // The one asymmetry in the menu, and a deliberate one. An
+            // untouched axis narrows nothing everywhere else, but a
+            // library is mostly books that have been read, and a shelf
+            // led by them is a shelf where what you are reading now is
+            // three rows down. So a finished book leaves by itself, the
+            // way an archived one does, and the box that brings it back
+            // is right there in the menu.
+            //
+            // Not in the archive, though: a book is usually archived
+            // *because* it was finished, and a room emptied by the rule
+            // that filled it would be a locked door.
+            return false
         }
 
         return true
