@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.chmouel.liseur.domain.DictionaryUrl
+import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibrarySort
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -84,6 +85,7 @@ enum class DefinitionTarget(val id: String) {
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param librarySort How the library grid is arranged.
  * @param librarySortReversed The library order read back to front.
+ * @param libraryFilters What the library grid is narrowed to.
  * @param eInkMode Whether to drop animation for an electronic paper screen.
  * @param definitionTarget Whether Define opens Liseur's definition card or
  *   sends the text to another app.
@@ -101,6 +103,7 @@ data class AppSettings(
     val resumeLastBook: Boolean = true,
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
+    val libraryFilters: LibraryFilters = LibraryFilters.None,
     val eInkMode: EInkMode = EInkMode.Default,
     val definitionTarget: DefinitionTarget = DefinitionTarget.Default,
     val dictionaryLookupEnabled: Boolean = false,
@@ -121,6 +124,8 @@ class AppSettingsRepository(private val context: Context) {
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val LIBRARY_SORT = stringPreferencesKey("library_sort")
         val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
+        val LIBRARY_FILTERS = stringPreferencesKey("library_filters")
+        val LIBRARY_GROUP_BY_SERIES = booleanPreferencesKey("library_group_by_series")
         val EINK_MODE = stringPreferencesKey("eink_mode")
         val DEFINITION_TARGET = stringPreferencesKey("definition_target")
         val DICTIONARY_ENABLED = booleanPreferencesKey("dictionary_lookup_enabled")
@@ -151,6 +156,10 @@ class AppSettingsRepository(private val context: Context) {
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
+            libraryFilters = LibraryFilters(
+                options = LibraryFilters.parse(p[Keys.LIBRARY_FILTERS]),
+                groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: false,
+            ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             definitionTarget = DefinitionTarget.fromId(p[Keys.DEFINITION_TARGET]),
             dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
@@ -183,6 +192,13 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setLibrarySortReversed(reversed: Boolean) {
         context.appSettingsStore.edit { it[Keys.LIBRARY_SORT_REVERSED] = reversed }
+    }
+
+    suspend fun setLibraryFilters(filters: LibraryFilters) {
+        context.appSettingsStore.edit {
+            it[Keys.LIBRARY_FILTERS] = filters.serialise()
+            it[Keys.LIBRARY_GROUP_BY_SERIES] = filters.groupBySeries
+        }
     }
 
     suspend fun setEInkMode(mode: EInkMode) {

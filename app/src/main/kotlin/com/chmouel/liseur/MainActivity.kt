@@ -650,7 +650,9 @@ private fun LibraryRoute(
         failedOpens = viewModel.failedOpens,
         onPendingOpenHandled = viewModel::forgetPendingOpen,
         onSearchQueryChange = viewModel::setSearchQuery,
-        onSetFilter = viewModel::setFilter,
+        onToggleFilter = viewModel::toggleFilter,
+        onSetGroupBySeries = viewModel::setGroupBySeries,
+        onClearFilters = viewModel::clearFilters,
         onSetSearchActive = viewModel::setSearchActive,
         onSeriesSelected = { shelf ->
             viewModel.openSeries(shelf)
