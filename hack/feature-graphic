@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Render the store feature graphic from the library banner.
+"""Render the store feature graphic from the brand emblem.
 
 F-Droid and Play both want a 1024x500 image above the screenshots, and both
 crop and scale it freely, so this keeps the title well inside the frame and
-lets the illustration run to the edges. The artwork is the app's own banner
-drawable, so the listing and the app bar can never drift apart.
+lets the mark sit large below it. The artwork is the app's own emblem, so
+the listing and the launcher icon can never drift apart.
 
-Needs rsvg-convert and Pillow, as hack/icon does.
+Needs Pillow.
 
 Usage: hack/feature-graphic [OUTPUT]
        (default fastlane/metadata/android/en-US/images/featureGraphic.png)
@@ -14,59 +14,46 @@ Usage: hack/feature-graphic [OUTPUT]
 
 from __future__ import annotations
 
-import subprocess
 import sys
-import tempfile
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-ANDROID = "{http://schemas.android.com/apk/res/android}"
 ROOT = Path(__file__).resolve().parent.parent
-BANNER = ROOT / "app/src/main/res/drawable/ic_reading_banner.xml"
+EMBLEM = ROOT / "app/src/main/res/drawable-xxxhdpi/ic_brand_emblem.webp"
 FONTS = ROOT / "app/src/main/assets/fonts"
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else (
     ROOT / "fastlane/metadata/android/en-US/images/featureGraphic.png"
 )
 
 WIDTH, HEIGHT = 1024, 500
-ART_WIDTH = 820
+ART_HEIGHT = 320
+TAGLINE_MAX_WIDTH = 900
+TAGLINE_FONT_SIZE = 27
 PLATE = "#F0DFCA"  # MarkFieldLight, the plate the app bar draws behind the mark
 INK = (24, 52, 83)
 SOFT = (98, 82, 66)
 TITLE = "Liseur"
 TAGLINE = (ROOT / "fastlane/metadata/android/en-US/short_description.txt").read_text().strip()
 
+art = Image.open(EMBLEM).convert("RGBA")
+art = art.resize(
+    (round(art.width * ART_HEIGHT / art.height), ART_HEIGHT),
+    Image.LANCZOS,
+)
 
-def banner_svg() -> str:
-    """The banner drawable as SVG. Its pathData is already SVG path syntax."""
-    root = ET.parse(BANNER).getroot()
-    box = f'0 0 {root.get(ANDROID + "viewportWidth")} {root.get(ANDROID + "viewportHeight")}'
-    paths = []
-    for path in root:
-        colour = path.get(ANDROID + "fillColor")
-        # #AARRGGBB is Android's order; SVG wants #RRGGBB and these are opaque.
-        if len(colour) == 9:
-            colour = "#" + colour[3:]
-        rule = "evenodd" if path.get(ANDROID + "fillType", "").lower() == "evenodd" else "nonzero"
-        paths.append(f'<path d="{path.get(ANDROID + "pathData")}" fill="{colour}" fill-rule="{rule}"/>')
-    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{box}">{"".join(paths)}</svg>'
-
-
-with tempfile.TemporaryDirectory() as tmp:
-    svg, png = Path(tmp) / "banner.svg", Path(tmp) / "banner.png"
-    svg.write_text(banner_svg())
-    subprocess.run(["rsvg-convert", "-w", str(ART_WIDTH), str(svg), "-o", str(png)], check=True)
-    art = Image.open(png).convert("RGBA")
-
-    image = Image.new("RGB", (WIDTH, HEIGHT), PLATE)
-    image.paste(art, ((WIDTH - art.width) // 2, HEIGHT - art.height), art)
-    draw = ImageDraw.Draw(image)
-    draw.text((WIDTH // 2, 62), TITLE, anchor="mm", fill=INK,
-              font=ImageFont.truetype(str(FONTS / "Literata.ttf"), 88))
-    draw.text((WIDTH // 2, 122), TAGLINE, anchor="mm", fill=SOFT,
-              font=ImageFont.truetype(str(FONTS / "Inter.ttf"), 27))
-    image.save(OUT)
+image = Image.new("RGB", (WIDTH, HEIGHT), PLATE)
+image.paste(art, ((WIDTH - art.width) // 2, HEIGHT - art.height), art)
+draw = ImageDraw.Draw(image)
+draw.text((WIDTH // 2, 62), TITLE, anchor="mm", fill=INK,
+          font=ImageFont.truetype(str(FONTS / "Literata.ttf"), 88))
+tagline_font = ImageFont.truetype(str(FONTS / "Inter.ttf"), TAGLINE_FONT_SIZE)
+if draw.textlength(TAGLINE, font=tagline_font) > TAGLINE_MAX_WIDTH:
+    fitted_size = round(TAGLINE_FONT_SIZE * TAGLINE_MAX_WIDTH /
+                        draw.textlength(TAGLINE, font=tagline_font))
+    tagline_font = ImageFont.truetype(str(FONTS / "Inter.ttf"), fitted_size)
+draw.text((WIDTH // 2, 122), TAGLINE, anchor="mm", fill=SOFT,
+          font=tagline_font)
+image.save(OUT)
 
 print(f"wrote {OUT.relative_to(ROOT)}")

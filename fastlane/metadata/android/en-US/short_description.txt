@@ -1,1 +1,1 @@
-An open-source EPUB reader and calibre-web or Komga client
+EPUB and ebook reader for local libraries, Komga, and calibre-web
