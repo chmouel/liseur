@@ -9,7 +9,7 @@ import org.junit.Test
 /**
  * Which books each view of the library shows.
  *
- * The rule that matters is that a book put away is out of every view but
+ * The rule that matters is that an archived book is out of every view but
  * its own. Get that wrong and putting a book away does nothing useful:
  * it still turns up in Unread, which is exactly where the reader was
  * trying to stop meeting it.
@@ -34,7 +34,7 @@ class LibraryFilterTest {
     )
 
     @Test
-    fun `a book on the shelf is in every view but the drawer`() {
+    fun `a book on the shelf is in every view but the archive`() {
         val on = book()
         assertTrue(LibraryFilter.ALL.accepts(on))
         assertTrue(LibraryFilter.DOWNLOADED.accepts(on))
@@ -43,7 +43,7 @@ class LibraryFilterTest {
     }
 
     @Test
-    fun `a book put away is in no view but the drawer`() {
+    fun `an archived book is in no view but the archive`() {
         val away = book(archived = true)
         assertFalse(LibraryFilter.ALL.accepts(away))
         assertFalse(LibraryFilter.DOWNLOADED.accepts(away))
@@ -58,7 +58,7 @@ class LibraryFilterTest {
     }
 
     @Test
-    fun `a book put away is still in the drawer once it is read`() {
+    fun `an archived book is still in the archive once it is read`() {
         assertTrue(LibraryFilter.ARCHIVED.accepts(book(archived = true, finished = true)))
     }
 

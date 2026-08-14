@@ -277,7 +277,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
-        /** Lets a book be put away without deleting anything. */
+        /** Lets a book be archived without deleting anything. */
         val MIGRATION_14_15 = object : Migration(14, 15) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE books ADD COLUMN archived_at INTEGER")

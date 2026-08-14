@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
  *
  * The one that is easy to miss is the Continue reading card: it is
  * chosen by its own query rather than by the library's filters, so a
- * book put away would otherwise carry on being the first thing offered
+ * archived book would otherwise carry on being the first thing offered
  * on opening the app.
  */
 @Config(sdk = [35], application = android.app.Application::class)
@@ -50,7 +50,7 @@ class BookArchiveTest {
     )
 
     @Test
-    fun `a book put away is not what you are offered to carry on with`() = runTest {
+    fun `an archived book is not what you are offered to carry on with`() = runTest {
         add("recent", lastOpenedAt = 100)
         add("older", lastOpenedAt = 50)
 
@@ -62,7 +62,7 @@ class BookArchiveTest {
     }
 
     @Test
-    fun `with everything put away there is nothing to carry on with`() = runTest {
+    fun `with everything archived there is nothing to carry on with`() = runTest {
         add("only", lastOpenedAt = 100)
         db.bookDao().setArchived("only", 1_000)
 

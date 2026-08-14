@@ -80,9 +80,9 @@ enum class LibraryFilter {
     SERIES,
 
     /**
-     * The books put away. Its own view rather than a chip beside the
-     * others, because everything else means "of the books on the shelf",
-     * and these are not on it.
+     * The books archived. Its own view, reached from the overflow menu
+     * rather than from a chip beside the others, because everything else
+     * means "of the books on the shelf", and these are not on it.
      */
     ARCHIVED,
     ;
@@ -90,8 +90,8 @@ enum class LibraryFilter {
     /**
      * Whether a book belongs in this view.
      *
-     * Put-away books are out of every other view, not merely absent from
-     * a chip of their own: the whole point of putting one away is not to
+     * Archived books are out of every other view, not merely absent from
+     * a view of their own: the whole point of archiving one is not to
      * meet it again while looking for something else.
      */
     fun accepts(book: Book): Boolean = when (this) {
@@ -192,7 +192,7 @@ data class LibraryUiState(
      * changing.
      */
     val libraryIsEmpty: Boolean = true,
-    /** Whether anything has been put away, so the way to it is only offered when there is one. */
+    /** Whether anything is archived, so the way to it is only offered when there is one. */
     val hasArchived: Boolean = false,
     /**
      * Whether a book server is connected.
@@ -373,6 +373,11 @@ class LibraryViewModel(
             val effectiveFilter = when {
                 server == null && filter == LibraryFilter.DOWNLOADED -> LibraryFilter.ALL
                 shelves.isEmpty() && filter == LibraryFilter.SERIES -> LibraryFilter.ALL
+                // Restoring the last archived book empties the view you
+                // are standing in, and takes the menu entry that leads
+                // back to it away with it.
+                books.none { it.archived } && filter == LibraryFilter.ARCHIVED ->
+                    LibraryFilter.ALL
                 else -> filter
             }
 
