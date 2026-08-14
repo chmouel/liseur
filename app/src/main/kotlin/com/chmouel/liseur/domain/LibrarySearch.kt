@@ -10,12 +10,33 @@ import java.text.Normalizer
  * searched from half-remembered fragments, and "brown morning" should
  * find *Morning Star* by Pierce Brown even though those words never
  * appear together in that order.
+ *
+ * The series counts as much as the title, so a half-remembered series
+ * name finds every volume of it -- which is a thing people look for far
+ * more often than they look for a title they cannot quite recall -- and
+ * "expanse 3" finds the one volume of it.
+ *
+ * That last part is why the volume number is matched whole rather than
+ * as a substring: a 3 found inside 13 would answer "expanse 3" with
+ * volumes 3, 13, 23 and 30 through 39, which is the opposite of what
+ * naming a volume is for.
  */
-fun matchesLibrarySearch(query: String, title: String, author: String?): Boolean {
+fun matchesLibrarySearch(
+    query: String,
+    title: String,
+    author: String?,
+    series: String? = null,
+    seriesIndex: Double? = null,
+): Boolean {
     val words = query.foldForSearch().split(' ').filter { it.isNotEmpty() }
     if (words.isEmpty()) return true
-    val haystack = "${title.foldForSearch()} ${author.orEmpty().foldForSearch()}"
-    return words.all { haystack.contains(it) }
+    val haystack = listOf(
+        title,
+        author.orEmpty(),
+        series.orEmpty(),
+    ).joinToString(" ") { it.foldForSearch() }
+    val volume = seriesIndexLabel(seriesIndex)
+    return words.all { haystack.contains(it) || it == volume }
 }
 
 /**
@@ -31,7 +52,9 @@ fun survivesLibrarySearch(
     searchActive: Boolean,
     title: String,
     author: String?,
-): Boolean = !searchActive || matchesLibrarySearch(query, title, author)
+    series: String? = null,
+    seriesIndex: Double? = null,
+): Boolean = !searchActive || matchesLibrarySearch(query, title, author, series, seriesIndex)
 
 /**
  * Reduces text to something two spellings of the same word agree on.

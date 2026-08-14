@@ -192,4 +192,67 @@ class LibrarySortTest {
             listOf(c, b, a).arrangedBy(LibrarySort.RECENT).titles(),
         )
     }
+
+    private fun inSeries(title: String, series: String?, index: Double?) =
+        book(title).copy(seriesName = series, seriesIndex = index)
+
+    @Test
+    fun `series order runs by name and then by number`() {
+        val books = listOf(
+            inSeries("Dune Messiah", "Dune", 2.0),
+            inSeries("Leviathan Wakes", "The Expanse", 1.0),
+            inSeries("Dune", "Dune", 1.0),
+        )
+
+        assertEquals(
+            listOf("Dune", "Dune Messiah", "Leviathan Wakes"),
+            books.arrangedBy(LibrarySort.SERIES, reversed = false).titles(),
+        )
+    }
+
+    @Test
+    fun `books in no series file after the ones that are`() {
+        val books = listOf(
+            inSeries("Emma", null, null),
+            inSeries("Dune", "Dune", 1.0),
+        )
+
+        assertEquals(
+            listOf("Dune", "Emma"),
+            books.arrangedBy(LibrarySort.SERIES, reversed = false).titles(),
+        )
+        // Reversing the shelf still does not bury the series under the
+        // standalone books.
+        assertEquals(
+            listOf("Dune", "Emma"),
+            books.arrangedBy(LibrarySort.SERIES, reversed = true).titles(),
+        )
+    }
+
+    @Test
+    fun `reversing turns the shelf around and never a series`() {
+        val books = listOf(
+            inSeries("Dune", "Dune", 1.0),
+            inSeries("Dune Messiah", "Dune", 2.0),
+            inSeries("Leviathan Wakes", "The Expanse", 1.0),
+        )
+
+        assertEquals(
+            listOf("Leviathan Wakes", "Dune", "Dune Messiah"),
+            books.arrangedBy(LibrarySort.SERIES, reversed = true).titles(),
+        )
+    }
+
+    @Test
+    fun `an unnumbered companion sits under the numbered volumes`() {
+        val books = listOf(
+            inSeries("Companion", "Dune", null),
+            inSeries("Dune Messiah", "Dune", 2.0),
+        )
+
+        assertEquals(
+            listOf("Dune Messiah", "Companion"),
+            books.arrangedBy(LibrarySort.SERIES, reversed = false).titles(),
+        )
+    }
 }

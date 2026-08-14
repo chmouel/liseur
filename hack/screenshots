@@ -48,6 +48,20 @@ readonly -a DEMO_BOOKS=(
     "bram-stoker/dracula"
     "charlotte-bronte/jane-eyre"
     "h-g-wells/the-time-machine"
+    # Two real series, for the series screens. Standard Ebooks records
+    # them the way an EPUB is supposed to, so nothing here is faked: the
+    # numbers on the shelf are the ones in the files.
+    #
+    # The gaps are deliberate. Sherlock Holmes is here as 1, 2, 3 and 5,
+    # and the Martian books as 1 and 3, so the series screen has
+    # something real to say about the volumes that are missing between
+    # the ones you own -- which is the whole point of showing it.
+    "arthur-conan-doyle/a-study-in-scarlet"
+    "arthur-conan-doyle/the-sign-of-the-four"
+    "arthur-conan-doyle/the-adventures-of-sherlock-holmes"
+    "arthur-conan-doyle/the-hound-of-the-baskervilles"
+    "edgar-rice-burroughs/a-princess-of-mars"
+    "edgar-rice-burroughs/the-warlord-of-mars"
 )
 
 # The word held down to raise the selection popup, and the one searched
@@ -206,6 +220,14 @@ tap_on() {
     # shellcheck disable=SC2086
     adb shell input tap $at
     sleep 2
+}
+
+# Settings now lives in the shelf's overflow menu rather than on the bar,
+# so it has to be opened before it can be found.
+open_settings() {
+    on_screen "Settings" || tap_on "More" exact
+    tap_on "Settings"
+    wait_for "Theme" >/dev/null || sleep 2
 }
 
 # Same, but a missing target is not fatal: for things that are only there
@@ -943,8 +965,7 @@ step "Light"
 # happens to be showing -- and would tell a store visitor nothing about
 # what the app looks like.
 open_library
-tap_on "Settings"
-wait_for "Theme" >/dev/null || sleep 2
+open_settings
 set_switch "Colours from your wallpaper" off
 back
 
@@ -1075,10 +1096,36 @@ for across in 0.60 0.35 0.72 0.50 0.28 0.66 0.42 0.78 0.55 0.31; do
 done
 ((defined)) || note "no word worth defining; keeping the old 12-dictionary.png"
 
+step "Series"
+
+# The Series view only exists once the shelf holds a series, which the
+# demo books provide. Failing here is right: a run that quietly captured
+# the plain shelf twice would publish a picture of a feature that is not
+# in it.
+open_library
+shelf_to_top
+tap_on "Series"
+sleep 3
+on_screen "Sherlock Holmes" || die "the Series view never showed a series"
+shot 13-series
+
+# Into one series: the volumes in order, where you are in it, and the
+# ones missing in between.
+tap_on_shelf "Sherlock Holmes"
+sleep 3
+on_screen "The Hound of the Baskervilles" ||
+    die "the series screen never opened"
+shot 14-series-detail
+back
+sleep 2
+# Back to the whole shelf, so the screens after this start where the
+# earlier ones did.
+tap_on "All"
+sleep 2
+
 step "Settings"
 open_library
-tap_on "Settings"
-wait_for "Theme" >/dev/null || sleep 2
+open_settings
 shot 08-settings
 
 tap_on "Book server"
@@ -1106,7 +1153,7 @@ reader_chrome_down
 
 step "The F-Droid set"
 i=1
-for name in 01-library 02-reading 06-highlights 04-typography 11-reading-dark 08-settings; do
+for name in 01-library 02-reading 13-series 04-typography 11-reading-dark 06-highlights; do
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
     note "$FASTLANE_DIR/$i.png"
     i=$((i + 1))

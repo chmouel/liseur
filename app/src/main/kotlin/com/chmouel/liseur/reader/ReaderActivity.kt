@@ -134,6 +134,12 @@ class ReaderActivity : FragmentActivity() {
                                 progressFlow = viewModel.progress,
                                 jumpBackFlow = viewModel.jumpBack,
                                 catchUpFlow = viewModel.catchUp,
+                                nextUpFlow = viewModel.nextUp,
+                                onOpenNextUp = { next ->
+                                    startActivity(intent(this@ReaderActivity, next.fileUrl, next.id))
+                                    finish()
+                                },
+                                onDismissNextUp = viewModel::dismissNextUp,
                                 onLocatorChanged = viewModel::onLocatorChanged,
                                 onNavigatorChanged = { navigator = it },
                                 onPageTurnerChanged = { pageTurner = it },

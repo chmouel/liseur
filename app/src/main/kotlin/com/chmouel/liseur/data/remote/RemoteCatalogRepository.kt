@@ -7,6 +7,8 @@ import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.library.BookRemoval
+import com.chmouel.liseur.domain.SeriesMetadata
+import com.chmouel.liseur.domain.mergeSeries
 import java.io.IOException
 import java.net.SocketTimeoutException
 import kotlinx.coroutines.CoroutineScope
@@ -216,7 +218,7 @@ class RemoteCatalogRepository(
         // page folds into one insert, rather than two rows racing for
         // the same unique URL and being refused.
         val inserts = LinkedHashMap<String, Book>()
-        val updates = mutableListOf<Book>()
+        val updates = mutableListOf<Pair<Book, RemoteBook>>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
             // A book first seen earlier in this walk was written without
@@ -232,23 +234,26 @@ class RemoteCatalogRepository(
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
             if (merged == existing) return@forEach
-            if (merged.id == 0L) inserts[url] = merged else updates += merged
+            if (merged.id == 0L) inserts[url] = merged else updates += merged to remote
         }
         // Rows the library already has get only the catalog's columns.
         // What is known about them was read once, before the walk began,
         // and a whole row written from that copy would put back a
         // download, an opening or an archiving that happened since.
-        updates.forEach {
+        updates.forEach { (book, remote) ->
             bookDao.updateCatalogFields(
-                url = it.url,
-                title = it.title,
-                author = it.author,
-                remoteUuid = it.remoteUuid,
-                remoteBookId = it.remoteBookId,
-                coverUrl = it.coverUrl,
-                downloadHref = it.downloadHref,
-                remoteUpdatedAt = it.remoteUpdatedAt,
-                remotePageCount = it.remotePageCount,
+                url = book.url,
+                title = book.title,
+                author = book.author,
+                remoteUuid = book.remoteUuid,
+                remoteBookId = book.remoteBookId,
+                coverUrl = book.coverUrl,
+                downloadHref = book.downloadHref,
+                remoteUpdatedAt = book.remoteUpdatedAt,
+                remotePageCount = book.remotePageCount,
+                catalogSeriesName = remote.seriesName,
+                catalogSeriesIndex = remote.seriesIndex,
+                seriesId = remote.seriesId,
             )
         }
         if (inserts.isNotEmpty()) bookDao.upsertAll(inserts.values.toList())
@@ -375,6 +380,14 @@ internal fun mergeCatalogEntry(
         lastOpenedAt = null,
         downloadState = DownloadState.REMOTE,
     )
+    // What the server says wins, and what it leaves out is filled in by
+    // whatever the file itself said when it was indexed. A feed that
+    // names a series without numbering it should not throw away a number
+    // the EPUB was carrying all along.
+    val series = mergeSeries(
+        catalog = SeriesMetadata(remote.seriesName, remote.seriesIndex, remote.seriesId),
+        file = SeriesMetadata(book.fileSeriesName, book.fileSeriesIndex),
+    )
     return book.copy(
         url = url,
         title = remote.title,
@@ -385,5 +398,8 @@ internal fun mergeCatalogEntry(
         downloadHref = remote.downloadHref,
         remoteUpdatedAt = remote.updatedAt,
         remotePageCount = remote.pageCount,
+        seriesName = series.name,
+        seriesIndex = series.index,
+        seriesId = series.id,
     )
 }

@@ -13,11 +13,15 @@ import com.chmouel.liseur.data.db.LibraryFolderDao
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.domain.SeriesMetadata
 import com.chmouel.liseur.domain.isSameWork
 import com.chmouel.liseur.domain.workIdOf
 import java.io.File
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import org.readium.r2.shared.publication.Publication
@@ -95,21 +99,18 @@ class LocalLibraryRepository(
         bookDao.touchLastOpened(url, System.currentTimeMillis())
     }
 
-    /**
-     * Pulls the cover out of a book that has just been downloaded, so the
-     * library keeps showing it once the server is out of reach. [identity]
-     * is the book's permanent URL, not the file's, so the cover survives
-     * the download being removed.
-     */
-    suspend fun extractCover(fileUrl: AbsoluteUrl, identity: String): String? {
-        val asset = assetRetriever.retrieve(fileUrl).getOrElse { return null }
+    /** Indexes the metadata that only becomes available once a download is on the device. */
+    suspend fun indexDownloadedFile(fileUrl: AbsoluteUrl, identity: String) {
+        val asset = assetRetriever.retrieve(fileUrl).getOrElse { return }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
                 asset.close()
-                return null
-            }
-        return try {
-            saveCover(publication, identity)
+                return
+        }
+        try {
+            val series = seriesOf(publication)
+            bookDao.fillSeriesFromFile(identity, series.name, series.index)
+            saveCover(publication, identity)?.let { bookDao.setCoverPath(identity, it) }
         } finally {
             publication.close()
         }
@@ -223,6 +224,7 @@ class LocalLibraryRepository(
                 .joinToString(", ") { it.name }
                 .ifBlank { null }
             val workId = workIdOf(publication.metadata.identifier, title, author)
+            val series = seriesOf(publication)
             bookDao.refreshIndexedFile(
                 url = url.toString(),
                 title = title,
@@ -230,6 +232,8 @@ class LocalLibraryRepository(
                 coverPath = saveCover(publication, url.toString()),
                 fileModifiedAt = modifiedAt,
                 workId = workId,
+                seriesName = series.name,
+                seriesIndex = series.index,
             )
             if (!isSameWork(previousWorkId, workId)) {
                 Log.i(TAG, "A different book took over a path; starting it fresh")
@@ -261,6 +265,7 @@ class LocalLibraryRepository(
             val author = publication.metadata.authors
                 .joinToString(", ") { it.name }
                 .ifBlank { null }
+            val series = seriesOf(publication)
             val book = Book(
                 url = url.toString(),
                 title = title,
@@ -271,9 +276,124 @@ class LocalLibraryRepository(
                 lastOpenedAt = null,
                 fileModifiedAt = modifiedAt,
                 workId = workIdOf(publication.metadata.identifier, title, author),
+                seriesName = series.name,
+                seriesIndex = series.index,
+                fileSeriesName = series.name,
+                fileSeriesIndex = series.index,
+                seriesChecked = true,
             )
             val id = bookDao.upsert(book)
             book.copy(id = id)
+        } finally {
+            publication.close()
+        }
+    }
+
+    /**
+     * What the file itself says about its series.
+     *
+     * Readium has already done the awkward part: EPUB 3 states this with
+     * a collection of type `series` and a group position, calibre wrote
+     * it for years as two bare `calibre:series` meta tags, and both
+     * arrive here as the same list. Which matters, because a library
+     * exported from calibre is exactly the library this feature is for.
+     *
+     * Only the first series is kept. A book can declare several, but the
+     * shelf has one place to put it and the first is the one calibre and
+     * every EPUB tool writes as the real one.
+     */
+    private fun seriesOf(publication: Publication): SeriesMetadata {
+        val series = publication.metadata.belongsToSeries.firstOrNull()
+            ?: return SeriesMetadata.None
+        val name = series.name.trim().takeIf { it.isNotEmpty() }
+            ?: return SeriesMetadata.None
+        return SeriesMetadata(name = name, index = series.position)
+    }
+
+    /**
+     * Reads the series out of books that were indexed before the library
+     * knew what a series was.
+     *
+     * Nothing else will ever look at them: a file is only re-read when
+     * its modification time moves, and these have not been touched since
+     * the day they arrived. Without this pass the feature is empty on
+     * upgrade for every book already on the shelf, which is all of them.
+     *
+     * A book that was read is marked as checked whatever the answer, so
+     * a shelf of standalone novels is walked once and never again. A
+     * book that could not be read is left unchecked and skipped for the
+     * rest of the pass: a card that was not mounted, or a provider that
+     * was busy, is a reason to ask again later, and marking it would
+     * hide the book's series for good over a moment's bad luck.
+     *
+     * The work is done in batches and the reader is not waiting on it:
+     * the shelf is already drawn, and series appear on it as the files
+     * are read.
+     *
+     * It runs until there is nothing left rather than stopping at a
+     * ceiling. There is only one caller, in the view model's `init`, and
+     * that view model outlives every trip out of the library and back,
+     * so a run that gave up early would leave the rest of the shelf
+     * without series until the process was killed. The pause between
+     * batches is what keeps a long catch-up from holding the disk: the
+     * cost of a big library is that it takes a while, not that the app
+     * is busy while it does.
+     */
+    suspend fun backfillSeries(batchSize: Int = BACKFILL_BATCH) = withContext(Dispatchers.IO) {
+        // Skipping these locally is what stops the pass from claiming
+        // the same unreadable batch over and over: they stay unchecked
+        // in the database, so the next run does try them again.
+        val unreadable = mutableSetOf<String>()
+        while (true) {
+            // The DAO cannot know which failures belong only to this
+            // run, so read past them before filtering. Otherwise a full
+            // first page of unavailable files would be returned forever
+            // and hide every readable book after it.
+            val batch = bookDao.needingSeriesCheck(batchSize + unreadable.size)
+                .asSequence()
+                .filter { it.url !in unreadable }
+                .take(batchSize)
+                .toList()
+            if (batch.isEmpty()) return@withContext
+            for (book in batch) {
+                // Cancellation here is ordinary: the library screen went
+                // away. What has been read is written, and the next run
+                // carries on from the next unchecked book.
+                currentCoroutineContext().ensureActive()
+                val fileUrl = book.openableUrl?.let { AbsoluteUrl(it) }
+                if (fileUrl == null) {
+                    // Nothing here to open. It has been looked at as far
+                    // as it can be; a download will index it properly.
+                    bookDao.fillSeriesFromFile(book.url, null, null)
+                    continue
+                }
+                val series = readSeries(fileUrl)
+                if (series == null) {
+                    unreadable += book.url
+                    continue
+                }
+                bookDao.fillSeriesFromFile(book.url, series.name, series.index)
+            }
+            delay(BACKFILL_PAUSE_MS)
+        }
+    }
+
+    /**
+     * Opens a book only far enough to ask it what series it is in.
+     *
+     * Null when the file could not be read at all, which is not the same
+     * answer as [SeriesMetadata.None] — that one means the book was read
+     * and belongs to no series.
+     */
+    private suspend fun readSeries(url: AbsoluteUrl): SeriesMetadata? {
+        val asset = assetRetriever.retrieve(url).getOrElse { return null }
+        val publication = publicationOpener.open(asset, allowUserInteraction = false)
+            .getOrElse {
+                asset.close()
+                return null
+            }
+        return try {
+            seriesOf(publication)
         } finally {
             publication.close()
         }
@@ -293,6 +413,16 @@ class LocalLibraryRepository(
 
     private companion object {
         const val TAG = "local-library"
+
+        /** How many books to claim from the database at a time. */
+        const val BACKFILL_BATCH = 32
+
+        /**
+         * A breath between batches, so that catching up on a library of
+         * thousands stays in the background where it belongs instead of
+         * competing with the covers the reader is waiting for.
+         */
+        const val BACKFILL_PAUSE_MS = 250L
     }
 }
 

@@ -73,6 +73,15 @@ object KomgaBooks {
                 sizeBytes = json.optLong("sizeBytes").takeIf { it > 0 },
                 updatedAt = KomgaTime.parse(json.stringOrNull("lastModified")),
                 pageCount = media?.optInt("pagesCount")?.takeIf { it > 0 },
+                // A one-shot is a book Komga holds on its own. It is
+                // given a series of its own name so the API has
+                // something to answer with, and putting that on the
+                // shelf would fill it with series of one book.
+                seriesName = json.stringOrNull("seriesTitle")
+                    ?.takeIf { !json.optBoolean("oneshot", false) },
+                seriesIndex = metadata?.seriesIndex(),
+                seriesId = json.stringOrNull("seriesId")
+                    ?.takeIf { !json.optBoolean("oneshot", false) },
             ),
             progress = json.optJSONObject("readProgress")?.let(::parseProgress),
         )
@@ -96,5 +105,24 @@ object KomgaBooks {
         val authors = objects("authors")
         val writer = authors.firstOrNull { it.optString("role").equals("writer", true) }
         return (writer ?: authors.firstOrNull())?.stringOrNull("name")
+    }
+
+    /**
+     * Where in its series Komga puts the book.
+     *
+     * `numberSort` is the one to ask: it is what Komga itself orders a
+     * series by, and it is already a number. `number` beside it is what
+     * gets shown and need not be one at all — "Annual 2023" is a
+     * perfectly ordinary value there — so it is only a fallback for the
+     * rare book whose sort number is missing.
+     *
+     * The book's other `number`, on the DTO rather than its metadata, is
+     * the file's place in the folder and means nothing here.
+     */
+    private fun JSONObject.seriesIndex(): Double? {
+        if (has("numberSort") && !isNull("numberSort")) {
+            optDouble("numberSort").takeIf { !it.isNaN() }?.let { return it }
+        }
+        return stringOrNull("number")?.trim()?.toDoubleOrNull()
     }
 }

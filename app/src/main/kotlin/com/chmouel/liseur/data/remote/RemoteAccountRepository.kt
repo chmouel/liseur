@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.calibre.CalibreParsing
 import com.chmouel.liseur.data.calibre.CalibreSetupClient
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.SeriesExtraDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
@@ -26,6 +27,7 @@ class RemoteAccountRepository(
     private val bookDao: BookDao,
     private val progressDao: ReadingProgressDao,
     private val bookRemoval: BookRemoval,
+    private val seriesExtraDao: SeriesExtraDao,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -283,6 +285,7 @@ class RemoteAccountRepository(
         progressDao.retireAccountState()
         bookRemoval.deleteRemoteNotDownloaded()
         bookDao.unlinkDownloadedFromRemote()
+        seriesExtraDao.clear()
     }
 
     /** Re-runs the probes for the saved account, e.g. after a permission change. */
@@ -329,6 +332,8 @@ class RemoteAccountRepository(
             inTransaction {
                 bookRemoval.deleteRemoteNotDownloaded()
                 bookDao.unlinkDownloadedFromRemote()
+                // Series summaries belong to the server that wrote them.
+                seriesExtraDao.clear()
                 dao.delete()
             }
         }

@@ -19,6 +19,35 @@
     <string name="filter_all">All</string>
     <string name="filter_downloaded">Downloaded</string>
     <string name="filter_unread">Unread</string>
+    <string name="filter_series">Series</string>
+
+    <string name="sort_series">Series</string>
+    <string name="series_position">%1$s · #%2$s</string>
+    <string name="series_volume_number">#%s</string>
+    <plurals name="series_book_count">
+        <item quantity="one">%d book</item>
+        <item quantity="other">%d books</item>
+    </plurals>
+    <string name="series_read_count">%d read</string>
+    <string name="series_in_progress_count">%d in progress</string>
+    <string name="series_meta_separator"> · </string>
+    <string name="series_continue">Continue with %s</string>
+    <string name="series_start">Start %s</string>
+    <string name="series_all_read">You\'ve read the whole series</string>
+    <string name="series_missing_volume">Book %s — not in your library</string>
+    <string name="series_not_published_yet">Book %s — not published yet</string>
+    <string name="series_download_missing">Download the rest</string>
+    <string name="series_mark_read">Mark the series as read</string>
+    <string name="series_archive">Archive the series</string>
+    <string name="series_actions">Series actions</string>
+    <string name="series_open">Open the series</string>
+    <string name="series_status_ongoing">Ongoing</string>
+    <string name="series_status_ended">Ended</string>
+    <string name="series_status_abandoned">Abandoned</string>
+    <string name="series_status_hiatus">On hiatus</string>
+    <string name="series_published_count">%1$d of %2$d published</string>
+    <string name="next_in_series">Next: %1$s</string>
+    <string name="next_in_series_numbered">Next: #%1$s %2$s</string>
     <string name="clear">Clear</string>
     <string name="continue_reading">Continue reading</string>
     <string name="empty_library_title">Your library is empty</string>

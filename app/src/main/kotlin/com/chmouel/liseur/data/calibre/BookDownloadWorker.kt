@@ -62,9 +62,7 @@ class BookDownloadWorker(
                     System.currentTimeMillis(),
                 )
                 AbsoluteUrl(localUri)?.let { fileUrl ->
-                    container.libraryRepository.extractCover(fileUrl, bookUrl)?.let { cover ->
-                        bookDao.setCoverPath(bookUrl, cover)
-                    }
+                    container.libraryRepository.indexDownloadedFile(fileUrl, bookUrl)
                 }
                 Result.success()
             }

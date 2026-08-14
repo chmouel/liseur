@@ -166,6 +166,7 @@ class RemoteAccountRepositoryTest {
             db.syncPeerStateDao(),
             db.workIdentityDao(),
         ),
+        seriesExtraDao = db.seriesExtraDao(),
         setups = mapOf(ServerKind.KOMGA to AlwaysConnects),
     )
 
