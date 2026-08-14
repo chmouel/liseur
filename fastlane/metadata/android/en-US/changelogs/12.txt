@@ -1,0 +1,1 @@
+Books in a series are now grouped across the whole library, with manual ordering and a way to refile a book into another series. The library filter chips became a multi-select menu in the overflow, and 'put away' is now called 'archived'. An empty library says where the books went when everything has been read.
