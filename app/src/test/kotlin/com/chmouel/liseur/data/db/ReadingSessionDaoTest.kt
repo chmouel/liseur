@@ -377,6 +377,12 @@ class ReadingSessionDaoTest {
         now += minute
         advanceTimeBy(minute)
         runCurrent()
+        // Firing the checkpoint is not the same as its having landed:
+        // the write leaves for Room's own executor, and pumping the test
+        // clock says nothing about a real thread pool. The barrier goes
+        // through the same queue as the checkpoint, so it can only
+        // arrive after it.
+        recorder.awaitIdle()
 
         assertEquals(minute, dao.openSessions().single().durationMs)
     }
