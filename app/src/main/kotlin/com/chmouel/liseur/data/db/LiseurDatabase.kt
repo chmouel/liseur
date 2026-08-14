@@ -21,8 +21,9 @@ import androidx.sqlite.execSQL
         BookFingerprintRow::class,
         WorkAlias::class,
         WorkAmbiguity::class,
+        SeriesExtra::class,
     ],
-    version = 25,
+    version = 26,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -37,6 +38,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun remoteServerDao(): RemoteServerDao
     abstract fun annotationDao(): BookAnnotationDao
     abstract fun typographyDao(): BookTypographyDao
+    abstract fun seriesExtraDao(): SeriesExtraDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -620,6 +622,41 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Adds where a book sits in its series.
+         *
+         * `series_checked` starts at 0 for every existing row, including
+         * ones that will turn out to have no series at all: it records
+         * that the file has been looked at, not that a series was found,
+         * which is what stops a standalone book being reopened on every
+         * launch for ever.
+         */
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `series_name` TEXT")
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `series_index` REAL")
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `file_series_name` TEXT")
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `file_series_index` REAL")
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `series_id` TEXT")
+                connection.execSQL(
+                    "ALTER TABLE `books` ADD COLUMN `series_checked` INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_books_series_name` " +
+                        "ON `books` (`series_name`)",
+                )
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `series_extra` (" +
+                        "`series_id` TEXT NOT NULL, " +
+                        "`summary` TEXT, " +
+                        "`status` TEXT, " +
+                        "`total_book_count` INTEGER, " +
+                        "`fetched_at` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`series_id`))",
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -648,6 +685,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_22_23,
             MIGRATION_23_24,
             MIGRATION_24_25,
+            MIGRATION_25_26,
         )
     }
 }

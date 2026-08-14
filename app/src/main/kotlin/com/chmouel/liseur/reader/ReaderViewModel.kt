@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
+import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookTypography
 import com.chmouel.liseur.data.db.BookTypographyDao
 import com.chmouel.liseur.data.db.withTypographyOf
@@ -36,6 +37,8 @@ import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.EPSILON
+import com.chmouel.liseur.domain.nextInSeries
+import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.isSamePassage
 import com.chmouel.liseur.domain.exportNotebookMarkdown
@@ -87,6 +90,7 @@ class ReaderViewModel(
     private val assetRetriever: AssetRetriever,
     private val publicationOpener: PublicationOpener,
     private val progressDao: ReadingProgressDao,
+    private val bookDao: BookDao,
     private val annotationDao: BookAnnotationDao,
     private val typographyDao: BookTypographyDao,
     private val library: LocalLibraryRepository,
@@ -152,6 +156,65 @@ class ReaderViewModel(
 
     /** Offer to return to where reading was before the last jump. */
     val jumpBack: StateFlow<JumpBack?> = _jumpBack.asStateFlow()
+
+    /**
+     * The book to read after this one, once this one is done.
+     *
+     * Offered only when the file is already here. A series is exactly
+     * where "read the next one" is a real answer rather than a guess,
+     * but an offer that turns into a download, a wait and a failure is
+     * not the same offer, and the last page of a book is the worst place
+     * to find that out.
+     */
+    data class NextUp(
+        /** The file to open. */
+        val fileUrl: String,
+        /** The book's identity in the library, so its position is its own. */
+        val id: String,
+        val title: String,
+        val volume: String?,
+    )
+
+    /**
+     * Raised when the book being read is finished and the next volume of
+     * its series is on the shelf, unread.
+     *
+     * Dismissing it is remembered for as long as the book is open, so it
+     * is offered once and does not come back every time the last page is
+     * turned to.
+     */
+    private val dismissedNextUp = MutableStateFlow(false)
+
+    val nextUp: StateFlow<NextUp?> = combine(
+        bookDao.observeAll(),
+        progressDao.observeProgressions(),
+        dismissedNextUp,
+        _progress,
+    ) { books, progressions, dismissed, readerProgress ->
+        if (dismissed) return@combine null
+        val current = books.firstOrNull { it.url == bookId } ?: return@combine null
+        if (!shouldOfferNextInSeries(current.finished, readerProgress)) return@combine null
+        val next = nextInSeries(
+            finished = current,
+            library = books,
+            progressions = progressions
+                .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
+                .toMap(),
+        ) ?: return@combine null
+        // Only a book that can be opened right now.
+        val openable = next.openableUrl ?: return@combine null
+        NextUp(
+            fileUrl = openable,
+            id = next.url,
+            title = next.title,
+            volume = seriesIndexLabel(next.seriesIndex),
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The offer was declined, or taken. Either way it is done with. */
+    fun dismissNextUp() {
+        dismissedNextUp.value = true
+    }
 
     /** An offer to continue where another device has read further. */
     data class CatchUp(val progression: Double, val position: Int?)
@@ -940,6 +1003,7 @@ class ReaderViewModel(
                     assetRetriever = container.assetRetriever,
                     publicationOpener = container.publicationOpener,
                     progressDao = container.database.readingProgressDao(),
+                    bookDao = container.database.bookDao(),
                     annotationDao = container.database.annotationDao(),
                     typographyDao = container.database.typographyDao(),
                     library = container.libraryRepository,
@@ -954,3 +1018,8 @@ class ReaderViewModel(
         }
     }
 }
+
+/** A completed flag alone is not enough: manually finished books can be reopened anywhere. */
+internal fun shouldOfferNextInSeries(finished: Boolean, progress: ReaderProgress?): Boolean =
+    finished && progress != null && progress.totalPositions > 0 &&
+        progress.position >= progress.totalPositions

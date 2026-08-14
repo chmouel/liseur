@@ -17,6 +17,7 @@ import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.BookProgression
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgressDao
@@ -25,6 +26,10 @@ import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.data.remote.SeriesExtrasRepository
+import com.chmouel.liseur.domain.SeriesExtras
+import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.domain.groupedIntoSeries
 import com.chmouel.liseur.domain.matchesLibrarySearch
 import com.chmouel.liseur.domain.survivesLibrarySearch
 import com.chmouel.liseur.domain.arrangedBy
@@ -32,7 +37,9 @@ import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.data.db.RemoteServer
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +65,15 @@ enum class LibraryFilter {
     UNREAD,
 
     /**
+     * The series, as series rather than as loose books.
+     *
+     * A view like [ARCHIVED] rather than a narrowing like the rest: what
+     * it shows is not a shorter shelf but a different kind of thing on
+     * it, one card per series instead of one per book.
+     */
+    SERIES,
+
+    /**
      * The books put away. Its own view rather than a chip beside the
      * others, because everything else means "of the books on the shelf",
      * and these are not on it.
@@ -78,6 +94,7 @@ enum class LibraryFilter {
         DOWNLOADED -> !book.archived &&
             (book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED)
         UNREAD -> !book.archived && !book.finished
+        SERIES -> !book.archived && !book.seriesName.isNullOrBlank()
     }
 }
 
@@ -86,6 +103,12 @@ data class ContinueReading(val book: Book, val progression: Double?)
 data class LibraryUiState(
     val loading: Boolean = true,
     val books: List<Book> = emptyList(),
+    /**
+     * The library gathered into series, for the series view. Worked out
+     * whether or not that view is showing, because the chip offering it
+     * only appears when there is something behind it.
+     */
+    val series: List<SeriesShelf> = emptyList(),
     val continueReading: ContinueReading? = null,
     val catalogStatus: CatalogStatus = CatalogStatus.Idle,
     val downloads: Map<String, DownloadProgress> = emptyMap(),
@@ -113,6 +136,8 @@ data class LibraryUiState(
      * Downloaded filter would only ever say "all of them".
      */
     val hasServer: Boolean = false,
+    /** Whether any book knows what series it is in, so the chip is worth offering. */
+    val hasSeries: Boolean = false,
 )
 
 /**
@@ -132,7 +157,18 @@ class LibraryViewModel(
     private val appSettings: AppSettingsRepository,
     private val progressDao: ReadingProgressDao,
     private val bookDao: BookDao,
+    private val seriesExtras: SeriesExtrasRepository,
 ) : ViewModel() {
+
+    /**
+     * What the server adds to the series being looked at, if anything
+     * and if there is a server that has anything to add.
+     *
+     * Null until it arrives and null for ever on calibre-web, which is
+     * why the screen is built to want nothing from it.
+     */
+    private val _openSeriesExtras = MutableStateFlow<SeriesExtras?>(null)
+    val openSeriesExtras: StateFlow<SeriesExtras?> = _openSeriesExtras
 
     /**
      * The book someone tapped to read while it was still on the server.
@@ -203,6 +239,7 @@ class LibraryViewModel(
                 refresher.refreshing,
                 appSettings.settings,
                 progressDao.observeReadAt(),
+                progressDao.observeProgressions(),
             ) { values -> values },
             _searchQuery,
             _filter,
@@ -220,16 +257,27 @@ class LibraryViewModel(
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
             val readAt = readAtList.associate { it.bookUrl to it.updatedAt }
+            @Suppress("UNCHECKED_CAST")
+            val progressionList = baseValues[8] as List<BookProgression>
+            val progressions = progressionList
+                .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
+                .toMap()
 
             // Disconnecting a server takes its filter away with it,
             // rather than leaving the shelf narrowed by a chip that is
             // no longer on screen to widen it again.
-            val effectiveFilter =
-                if (server == null && filter == LibraryFilter.DOWNLOADED) {
-                    LibraryFilter.ALL
-                } else {
-                    filter
-                }
+            val onTheShelf = books.filter { !it.archived }
+            val shelves = onTheShelf.groupedIntoSeries(progressions)
+
+            // Disconnecting a server takes its filter away with it, and
+            // so does the last series leaving the library: a chip that
+            // is no longer on screen cannot be used to widen the shelf
+            // it narrowed.
+            val effectiveFilter = when {
+                server == null && filter == LibraryFilter.DOWNLOADED -> LibraryFilter.ALL
+                shelves.isEmpty() && filter == LibraryFilter.SERIES -> LibraryFilter.ALL
+                else -> filter
+            }
 
             val sortedBooks = books.arrangedBy(
                 settings.librarySort,
@@ -245,12 +293,35 @@ class LibraryViewModel(
                         searchActive,
                         book.displayTitle,
                         book.displayAuthor,
+                        book.seriesName,
+                        book.seriesIndex,
                     )
                 }
+
+            // A series answers to its own name and to the names of the
+            // books in it, so searching for a title still finds the
+            // series that title is part of.
+            val filteredSeries = shelves.filter { shelf ->
+                !searchActive || matchesLibrarySearch(query, shelf.name, shelf.author) ||
+                    shelf.volumes.any {
+                        matchesLibrarySearch(
+                            query,
+                            it.book.displayTitle,
+                            it.book.displayAuthor,
+                            shelf.name,
+                            it.book.seriesIndex,
+                        )
+                    }
+            }
 
             LibraryUiState(
                 loading = false,
                 books = filteredBooks,
+                series = filteredSeries.arrangedBy(
+                    settings.librarySort,
+                    settings.librarySortReversed,
+                    readAt,
+                ),
                 continueReading = recent,
                 catalogStatus = catalogStatus,
                 downloads = running,
@@ -264,6 +335,7 @@ class LibraryViewModel(
                 libraryIsEmpty = books.none { !it.archived },
                 hasArchived = books.any { it.archived },
                 hasServer = server != null,
+                hasSeries = shelves.isNotEmpty(),
             )
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
@@ -288,6 +360,10 @@ class LibraryViewModel(
         // screen. All a fresh start owes the reader is a look at the
         // folders on the device; the server is asked when they ask.
         refresher.scanQuietly()
+        // Books indexed before the library knew what a series was will
+        // never be looked at again on their own. This fills them in
+        // behind the shelf, which is already drawn and does not wait.
+        viewModelScope.launch { library.backfillSeries() }
     }
 
     /**
@@ -395,6 +471,61 @@ class LibraryViewModel(
         }
     }
 
+    /**
+     * A series was opened. Ask whoever holds it what else it knows,
+     * having first forgotten the last series' answer so a slow reply
+     * cannot arrive under the wrong name.
+     *
+     * The ask for the last series is cancelled outright rather than left
+     * to land late: opening one series, going back, and opening another
+     * would otherwise let the first server reply overwrite the second,
+     * and a summary of the wrong series is worse than none.
+     */
+    fun openSeries(shelf: SeriesShelf) {
+        seriesExtrasJob?.cancel()
+        _openSeriesExtras.value = null
+        openSeriesId = null
+        val seriesId = shelf.volumes.firstNotNullOfOrNull { it.book.seriesId } ?: return
+        openSeriesId = seriesId
+        seriesExtrasJob = viewModelScope.launch {
+            val extras = try {
+                seriesExtras.extras(seriesId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            if (openSeriesId == seriesId) _openSeriesExtras.value = extras
+        }
+    }
+
+    private var seriesExtrasJob: Job? = null
+    private var openSeriesId: String? = null
+
+    /** Fetches every volume of a series that is not on the device yet. */
+    fun downloadMissing(shelf: SeriesShelf) {
+        viewModelScope.launch {
+            shelf.missing.forEach { downloads.enqueue(it.book) }
+        }
+    }
+
+    /** Marks the whole series read, for a series read before Liseur held it. */
+    fun setSeriesFinished(shelf: SeriesShelf, finished: Boolean) {
+        viewModelScope.launch {
+            shelf.volumes.filter { it.finished != finished }
+                .forEach { finishedState.setFinished(it.book.url, finished) }
+        }
+    }
+
+    /** Puts every volume away at once; nothing is deleted, as ever. */
+    fun setSeriesArchived(shelf: SeriesShelf, archived: Boolean) {
+        viewModelScope.launch {
+            val at = if (archived) System.currentTimeMillis() else null
+            shelf.volumes.filter { it.book.archived != archived }
+                .forEach { bookDao.setArchived(it.book.url, at) }
+        }
+    }
+
     fun addFolder(treeUri: Uri) {
         viewModelScope.launch { library.addFolder(treeUri) }
     }
@@ -418,6 +549,7 @@ class LibraryViewModel(
                     appSettings = container.appSettings,
                     progressDao = container.database.readingProgressDao(),
                     bookDao = container.database.bookDao(),
+                    seriesExtras = container.seriesExtras,
                 )
             }
         }

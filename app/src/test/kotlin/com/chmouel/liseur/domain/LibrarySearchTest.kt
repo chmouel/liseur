@@ -100,4 +100,54 @@ class LibrarySearchTest {
             ),
         )
     }
+
+    @Test
+    fun `a series name finds every volume of it`() {
+        assertTrue(
+            matchesLibrarySearch(
+                "wheel of time",
+                "The Great Hunt",
+                "Robert Jordan",
+                series = "The Wheel of Time",
+            ),
+        )
+    }
+
+    @Test
+    fun `a series and a word from the title narrow together`() {
+        assertTrue(
+            matchesLibrarySearch("wheel hunt", "The Great Hunt", null, series = "Wheel of Time"),
+        )
+        assertFalse(
+            matchesLibrarySearch("wheel dune", "The Great Hunt", null, series = "Wheel of Time"),
+        )
+    }
+
+    @Test
+    fun `a series name and volume index narrow to one volume`() {
+        assertTrue(
+            matchesLibrarySearch(
+                "expanse 3",
+                "Caliban's War",
+                "James S. A. Corey",
+                series = "The Expanse",
+                seriesIndex = 3.0,
+            ),
+        )
+        assertFalse(
+            matchesLibrarySearch(
+                "expanse 2",
+                "Caliban's War",
+                "James S. A. Corey",
+                series = "The Expanse",
+                seriesIndex = 3.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a book in no series is unaffected`() {
+        assertTrue(matchesLibrarySearch("emma", "Emma", null, series = null))
+        assertFalse(matchesLibrarySearch("wheel", "Emma", null, series = null))
+    }
 }

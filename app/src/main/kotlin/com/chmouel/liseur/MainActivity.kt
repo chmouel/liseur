@@ -40,7 +40,10 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
+import com.chmouel.liseur.ui.library.BookActionsSheet
+import com.chmouel.liseur.ui.library.ConfirmServerDeleteDialog
 import com.chmouel.liseur.ui.library.LibraryScreen
+import com.chmouel.liseur.ui.library.SeriesScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
 import com.chmouel.liseur.ui.settings.SyncServerScreen
@@ -494,6 +497,75 @@ private fun LibraryRoute(
             }
         }
     }
+    // Which series is open, if any. Kept here rather than in the screen
+    // enum because it is a step inside the library rather than away from
+    // it: the same view model, the same books, one level down.
+    var openSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val openSeries = openSeriesKey?.let { key -> state.series.firstOrNull { it.key == key } }
+    var seriesSheetBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    var seriesServerDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    val seriesExtras by viewModel.openSeriesExtras.collectAsStateWithLifecycle()
+
+    if (openSeries != null) {
+        BackHandler { openSeriesKey = null }
+        SeriesScreen(
+            shelf = openSeries,
+            downloads = state.downloads,
+            extras = seriesExtras,
+            deleteFailures = viewModel.deleteFailures,
+            canDownload = state.canDownload,
+            onBack = { openSeriesKey = null },
+            onVolumeSelected = { book ->
+                val local = book.openableUrl
+                if (local != null) {
+                    context.startActivity(ReaderActivity.intent(context, local, book.url))
+                } else {
+                    viewModel.downloadAndOpen(book)
+                }
+            },
+            onVolumeLongPress = { seriesSheetBook = it },
+            onDownloadMissing = { viewModel.downloadMissing(openSeries) },
+            onMarkSeriesRead = { viewModel.setSeriesFinished(openSeries, true) },
+            onArchiveSeries = {
+                viewModel.setSeriesArchived(openSeries, true)
+                openSeriesKey = null
+            },
+        )
+        seriesSheetBook?.let { book ->
+            BookActionsSheet(
+                book = book,
+                downloading = book.url in state.downloads,
+                canDownload = state.canDownload,
+                onDismiss = { seriesSheetBook = null },
+                onDownload = { viewModel.download(book); seriesSheetBook = null },
+                onCancelDownload = { viewModel.cancelDownload(book); seriesSheetBook = null },
+                onRemoveDownload = { viewModel.removeDownload(book); seriesSheetBook = null },
+                onSetFinished = { viewModel.setFinished(book, it); seriesSheetBook = null },
+                onSetArchived = { viewModel.setArchived(book, it); seriesSheetBook = null },
+                onOpenStats = { onOpenBookStats(book); seriesSheetBook = null },
+                onDeleteLocal = { viewModel.deleteLocalBook(book); seriesSheetBook = null },
+                // The same warning the shelf puts in front of it. An
+                // action offered here and answered nowhere would be a
+                // button that quietly does nothing.
+                onDeleteFromServer = {
+                    seriesServerDelete = book
+                    seriesSheetBook = null
+                },
+            )
+        }
+        seriesServerDelete?.let { book ->
+            ConfirmServerDeleteDialog(
+                book = book,
+                onConfirm = {
+                    viewModel.deleteFromServer(book)
+                    seriesServerDelete = null
+                },
+                onDismiss = { seriesServerDelete = null },
+            )
+        }
+        return
+    }
+
     LibraryScreen(
         state = state,
         onOpenBook = { openBook.launch(arrayOf("application/epub+zip")) },
@@ -524,6 +596,10 @@ private fun LibraryRoute(
         onSearchQueryChange = viewModel::setSearchQuery,
         onSetFilter = viewModel::setFilter,
         onSetSearchActive = viewModel::setSearchActive,
+        onSeriesSelected = { shelf ->
+            viewModel.openSeries(shelf)
+            openSeriesKey = shelf.key
+        },
     )
 }
 

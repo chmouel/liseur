@@ -74,6 +74,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import androidx.compose.material3.IconButton
@@ -171,6 +172,7 @@ fun LibraryScreen(
     onSearchQueryChange: (String) -> Unit = {},
     onSetFilter: (LibraryFilter) -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
+    onSeriesSelected: (SeriesShelf) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -524,6 +526,7 @@ fun LibraryScreen(
                             }
                         },
                         onBookLongPress = { sheetBook = it },
+                        onSeriesSelected = onSeriesSelected,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -532,28 +535,13 @@ fun LibraryScreen(
     }
 
     confirmServerDelete?.let { book ->
-        AlertDialog(
-            onDismissRequest = { confirmServerDelete = null },
-            title = { Text(stringResource(R.string.delete_from_server)) },
-            text = { Text(stringResource(R.string.delete_from_server_warning, book.title)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteFromServer(book)
-                        confirmServerDelete = null
-                    },
-                ) {
-                    Text(
-                        text = stringResource(R.string.delete),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+        ConfirmServerDeleteDialog(
+            book = book,
+            onConfirm = {
+                onDeleteFromServer(book)
+                confirmServerDelete = null
             },
-            dismissButton = {
-                TextButton(onClick = { confirmServerDelete = null }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
+            onDismiss = { confirmServerDelete = null },
         )
     }
 
@@ -575,10 +563,43 @@ fun LibraryScreen(
     }
 }
 
+/**
+ * The warning that stands in front of deleting a book from the server.
+ *
+ * Shared by every screen that offers the action, because a screen that
+ * offers it without the warning is a screen that deletes someone's book
+ * on a mis-tap.
+ */
+@Composable
+internal fun ConfirmServerDeleteDialog(
+    book: Book,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.delete_from_server)) },
+        text = { Text(stringResource(R.string.delete_from_server_warning, book.title)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = stringResource(R.string.delete),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
 /** Long-press actions for a book: chiefly, freeing the space it takes. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BookActionsSheet(
+internal fun BookActionsSheet(
     book: Book,
     downloading: Boolean,
     canDownload: Boolean,
@@ -685,6 +706,7 @@ private fun BookGrid(
     gridState: LazyGridState,
     onBookSelected: (Book) -> Unit,
     onBookLongPress: (Book) -> Unit,
+    onSeriesSelected: (SeriesShelf) -> Unit,
     onSetSort: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
     onSetFilter: (LibraryFilter) -> Unit,
@@ -749,6 +771,25 @@ private fun BookGrid(
                         onClick = { onSetFilter(LibraryFilter.UNREAD) },
                         label = { FilterChipLabel(stringResource(R.string.filter_unread)) },
                     )
+                    // Only once something on the shelf says which series
+                    // it belongs to. A library of standalone novels has
+                    // no series view worth offering, and a chip that
+                    // leads to an empty screen is a broken promise.
+                    if (state.hasSeries || state.filter == LibraryFilter.SERIES) {
+                        FilterChip(
+                            selected = state.filter == LibraryFilter.SERIES,
+                            onClick = {
+                                onSetFilter(
+                                    if (state.filter == LibraryFilter.SERIES) {
+                                        LibraryFilter.ALL
+                                    } else {
+                                        LibraryFilter.SERIES
+                                    },
+                                )
+                            },
+                            label = { FilterChipLabel(stringResource(R.string.filter_series)) },
+                        )
+                    }
                     // Offered only once something has been put away: an
                     // empty drawer is not worth a permanent chip.
                     if (state.hasArchived || state.filter == LibraryFilter.ARCHIVED) {
@@ -781,13 +822,25 @@ private fun BookGrid(
                 )
             }
         }
-        items(state.books, key = { it.id }) { book ->
-            BookCard(
-                book = book,
-                progress = state.downloads[book.url],
-                onClick = { onBookSelected(book) },
-                onLongClick = { onBookLongPress(book) },
-            )
+        if (state.filter == LibraryFilter.SERIES) {
+            items(state.series, key = { it.key }) { shelf ->
+                SeriesStackCard(
+                    shelf = shelf,
+                    onClick = { onSeriesSelected(shelf) },
+                    // A pile has no actions of its own on the shelf; the
+                    // long press opens it, which is where they live.
+                    onLongClick = { onSeriesSelected(shelf) },
+                )
+            }
+        } else {
+            items(state.books, key = { it.id }) { book ->
+                BookCard(
+                    book = book,
+                    progress = state.downloads[book.url],
+                    onClick = { onBookSelected(book) },
+                    onLongClick = { onBookLongPress(book) },
+                )
+            }
         }
     }
 }
@@ -908,6 +961,12 @@ private fun BookCard(
             if (book.finished && progress == null) {
                 FinishedBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
+            if (progress == null) {
+                SeriesIndexRibbon(
+                    index = book.seriesIndex.takeIf { !book.seriesName.isNullOrBlank() },
+                    modifier = Modifier.align(Alignment.TopStart),
+                )
+            }
         }
         Column(
             modifier = Modifier
@@ -932,6 +991,7 @@ private fun BookCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            SeriesLine(book, Modifier.padding(top = 2.dp))
         }
     }
 }
@@ -1011,7 +1071,7 @@ private const val SKELETON_COUNT = 9
 
 /** The tick that says you have read this one. */
 @Composable
-private fun FinishedBadge(modifier: Modifier = Modifier) {
+internal fun FinishedBadge(modifier: Modifier = Modifier) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -1086,7 +1146,7 @@ private fun CatalogFailureNotice(
 }
 
 @Composable
-private fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
+internal fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -1125,7 +1185,7 @@ private fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BookCover(book: Book, modifier: Modifier = Modifier) {
+internal fun BookCover(book: Book, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(10.dp)
     val artwork = book.coverPath ?: book.coverUrl
     val borderModifier = modifier
@@ -1156,8 +1216,8 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier) {
  * is dark in the dark theme, which left the badge invisible against the
  * scrim behind it and against a dark cover.
  */
-private val CoverBadgeScrim = Color.Black.copy(alpha = 0.6f)
-private val CoverBadgeContent = Color.White
+internal val CoverBadgeScrim = Color.Black.copy(alpha = 0.6f)
+internal val CoverBadgeContent = Color.White
 
 /**
  * Dims the cover and shows how far the download has got.
@@ -1202,7 +1262,7 @@ private fun DownloadOverlay(
 
 /** Marks a book that is in the catalog but not yet on the device. */
 @Composable
-private fun OnServerBadge(modifier: Modifier = Modifier) {
+internal fun OnServerBadge(modifier: Modifier = Modifier) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
@@ -1356,6 +1416,7 @@ private fun LibrarySort.label(): String = stringResource(
         LibrarySort.TITLE -> R.string.sort_title
         LibrarySort.AUTHOR -> R.string.sort_author
         LibrarySort.ADDED -> R.string.sort_added
+        LibrarySort.SERIES -> R.string.sort_series
     },
 )
 

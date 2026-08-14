@@ -135,6 +135,43 @@ class MigrationTest {
     }
 
     @Test
+    fun `a book keeps its series across the upgrade that adds one`() {
+        // Series arrives at 26 filled in from the sources, so an
+        // existing book must come through with room for it and nothing
+        // of its own lost.
+        helper.createDatabase(TEST_DB, 25).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books
+                  (url, title, author, cover_path, source, added_at, last_opened_at, download_state)
+                VALUES
+                  ('file:///eye', 'The Eye of the World', 'Robert Jordan', NULL, NULL, 1, 2, 'DOWNLOADED')
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT title, series_name, series_index, file_series_name, " +
+                        "file_series_index, series_id, series_checked " +
+                        "FROM books WHERE url = 'file:///eye'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("The Eye of the World", cursor.getString(0))
+                    assertTrue("series is unknown, not empty", cursor.isNull(1))
+                    assertTrue(cursor.isNull(2))
+                    assertTrue(cursor.isNull(3))
+                    assertTrue(cursor.isNull(4))
+                    assertTrue(cursor.isNull(5))
+                    // Nothing has been looked at yet, so the backfill
+                    // still has this book to visit.
+                    assertEquals(0, cursor.getInt(6))
+                }
+            }
+    }
+
+    @Test
     fun `a connected calibre account survives becoming a generic server`() {
         // The account row is renamed and widened at 16. Anyone upgrading
         // is by definition on calibre-web, and has to stay connected —
@@ -271,6 +308,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 25
+        const val LATEST = 26
     }
 }

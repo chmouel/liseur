@@ -17,6 +17,8 @@ data class OpdsBook(
     val downloadHref: String?,
     val sizeBytes: Long?,
     val updatedAt: Long?,
+    val seriesName: String? = null,
+    val seriesIndex: Double? = null,
 )
 
 /**
@@ -34,6 +36,8 @@ fun OpdsBook.toRemote(): RemoteBook = RemoteBook(
     sizeBytes = sizeBytes,
     updatedAt = updatedAt,
     calibreBookId = bookId,
+    seriesName = seriesName,
+    seriesIndex = seriesIndex,
 )
 
 /** One page of a catalog feed, and where the next one is. */
@@ -161,6 +165,7 @@ object OpdsParser {
             ?: links.firstOrNull { it.getAttribute("rel") == THUMBNAIL_REL }
 
         val href = download?.getAttribute("href")?.takeIf { it.isNotEmpty() }
+        val series = parseSeries(entry)
 
         return OpdsBook(
             uuid = uuid,
@@ -174,8 +179,77 @@ object OpdsParser {
             downloadHref = href,
             sizeBytes = download?.getAttribute("length")?.toLongOrNull(),
             updatedAt = entry.childText("updated")?.let(::parseTimestamp),
+            seriesName = series?.name,
+            seriesIndex = series?.index,
         )
     }
+
+    /** A series line as calibre-web writes it, once it has been read. */
+    private class OpdsSeries(val name: String, val index: Double?)
+
+    /**
+     * `SERIES: The Wheel of Time [1.00]`, out of the entry's summary
+     * block.
+     *
+     * calibre-web has no element for a series: `feed.xml` writes it into
+     * the human-readable `<content>` as a line of prose, between the
+     * ratings and the tags. Reading it there is what gives calibre-web
+     * users series at all, and it costs nothing — the feed is already
+     * being walked for everything else.
+     *
+     * That it is prose is the risk, so both halves have to agree before
+     * anything is believed: the line must be labelled `SERIES`, and it
+     * must end in a bracketed number. A custom column of calibre's own
+     * series type is written to the same block in the same shape, under
+     * its own name, and would otherwise be mistaken for the real one.
+     * A feed that does not match is a book without a series, never an
+     * error; a downloaded book has its own OPF to ask as well.
+     */
+    private fun parseSeries(entry: Element): OpdsSeries? {
+        val content = entry.children("content").firstOrNull() ?: return null
+        return directText(content)
+            .lineSequence()
+            .mapNotNull { line -> SERIES_LINE.matchEntire(line.trim()) }
+            .firstNotNullOfOrNull { match ->
+                val name = match.groupValues[1].trim().takeIf { it.isNotEmpty() }
+                    ?: return@firstNotNullOfOrNull null
+                OpdsSeries(name, match.groupValues[2].replace(',', '.').toDoubleOrNull())
+            }
+    }
+
+    /**
+     * The text written straight into an element, and into the plain
+     * wrappers it uses for layout — not the text of everything under it.
+     *
+     * calibre-web puts the book's own description in a `<p>` inside the
+     * same block. A description quoting a series line would be read as
+     * one if the whole subtree were flattened, so the prose lines are
+     * taken where they are written and the paragraphs are stepped over.
+     */
+    private fun directText(element: Element): String {
+        val text = StringBuilder()
+        val nodes = element.childNodes
+        for (index in 0 until nodes.length) {
+            val node = nodes.item(index)
+            when {
+                node.nodeType == Node.TEXT_NODE || node.nodeType == Node.CDATA_SECTION_NODE ->
+                    text.append(node.textContent)
+                // The xhtml wrapper the template always opens with, and
+                // the line breaks between the prose lines.
+                node.nodeType == Node.ELEMENT_NODE && node.localName == "div" ->
+                    text.append(directText(node as Element))
+                node.nodeType == Node.ELEMENT_NODE && node.localName == "br" ->
+                    text.append('\n')
+            }
+        }
+        return text.toString()
+    }
+
+    private val SERIES_LINE = Regex(
+        // Greedy up to the last bracketed number, so a series whose own
+        // name carries brackets keeps them.
+        """(?i)SERIES\s*:\s*(.+)\[\s*(-?\d+(?:[.,]\d+)?)\s*]""",
+    )
 
     /** calibre's integer id, as it appears in `/opds/download/74/epub/`. */
     private fun bookIdFromHref(href: String): Int? =

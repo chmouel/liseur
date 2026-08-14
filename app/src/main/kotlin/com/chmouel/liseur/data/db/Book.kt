@@ -36,7 +36,10 @@ enum class DownloadState {
  */
 @Entity(
     tableName = "books",
-    indices = [Index(value = ["url"], unique = true)],
+    indices = [
+        Index(value = ["url"], unique = true),
+        Index(value = ["series_name"]),
+    ],
 )
 data class Book(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -76,6 +79,37 @@ data class Book(
      * does not count, and for every local book.
      */
     @ColumnInfo(name = "remote_page_count") val remotePageCount: Int? = null,
+    /**
+     * The series this book belongs to, spelled the way its source spells
+     * it. Which books make up that series is worked out from this name
+     * rather than from [seriesId], so a book downloaded from a server
+     * and a loose file of the same series end up on one shelf.
+     */
+    @ColumnInfo(name = "series_name") val seriesName: String? = null,
+    /**
+     * Where in the series it sits: 1, 2, 7.5. Null when the source names
+     * a series but will not say where — a book can belong somewhere
+     * without anybody knowing quite where.
+     */
+    @ColumnInfo(name = "series_index") val seriesIndex: Double? = null,
+    /** The EPUB's series name, kept separately from the effective value above. */
+    @ColumnInfo(name = "file_series_name") val fileSeriesName: String? = null,
+    /** The EPUB's series index, kept so a catalog refresh cannot mistake old catalog data for it. */
+    @ColumnInfo(name = "file_series_index") val fileSeriesIndex: Double? = null,
+    /**
+     * The server's own name for the series, which only Komga has. Used
+     * to ask it for what it knows about the series and for nothing else;
+     * grouping never touches it.
+     */
+    @ColumnInfo(name = "series_id") val seriesId: String? = null,
+    /**
+     * Whether this book's file has been read for series metadata.
+     *
+     * Set once the file has been looked at, whatever the answer was, so
+     * a book that genuinely belongs to no series is not reopened on
+     * every launch by the backfill.
+     */
+    @ColumnInfo(name = "series_checked") val seriesChecked: Boolean = false,
 ) {
     val finished: Boolean get() = finishedAt != null
 
@@ -133,7 +167,9 @@ interface BookDao {
      */
     @Query(
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
-            "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL " +
+            "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
+            "series_name = file_series_name, series_index = file_series_index, " +
+            "series_id = NULL " +
             "WHERE remote_uuid IS NOT NULL",
     )
     suspend fun unlinkDownloadedFromRemote()
@@ -145,7 +181,9 @@ interface BookDao {
      */
     @Query(
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
-            "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL " +
+            "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
+            "series_name = file_series_name, series_index = file_series_index, " +
+            "series_id = NULL " +
             "WHERE url IN (:urls)",
     )
     suspend fun unlinkFromRemote(urls: List<String>)
@@ -172,7 +210,17 @@ interface BookDao {
         """
         UPDATE books
         SET title = :title, author = :author, cover_path = :coverPath,
-            file_modified_at = :fileModifiedAt, work_id = :workId
+            file_modified_at = :fileModifiedAt, work_id = :workId,
+            file_series_name = :seriesName, file_series_index = :seriesIndex,
+            series_name = CASE
+                WHEN remote_uuid IS NULL THEN :seriesName
+                ELSE COALESCE(series_name, :seriesName)
+            END,
+            series_index = CASE
+                WHEN remote_uuid IS NULL THEN :seriesIndex
+                ELSE COALESCE(series_index, :seriesIndex)
+            END,
+            series_checked = 1
         WHERE url = :url
         """,
     )
@@ -183,7 +231,55 @@ interface BookDao {
         coverPath: String?,
         fileModifiedAt: Long?,
         workId: String?,
+        seriesName: String?,
+        seriesIndex: Double?,
     )
+
+    /**
+     * Books whose file is here but has never been read for a series.
+     *
+     * The library kept before series existed is full of them, and
+     * nothing else will ever look: a file is only re-read when its
+     * modification time moves, and these have not been touched.
+     */
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE series_checked = 0
+          AND (local_uri IS NOT NULL OR download_state = 'DOWNLOADED')
+        ORDER BY last_opened_at DESC, added_at DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun needingSeriesCheck(limit: Int): List<Book>
+
+    /**
+     * Records what a file said about its series, or that it said
+     * nothing.
+     *
+     * The catalog's answer is the better one where there is one, so what
+     * the file knows is only written into a gap. Marking the book
+     * checked either way is the point: it is what stops the backfill
+     * asking the same standalone book again tomorrow.
+     */
+    @Query(
+        """
+        UPDATE books
+        SET file_series_name = :seriesName,
+            file_series_index = :seriesIndex,
+            series_name = CASE
+                WHEN remote_uuid IS NULL THEN :seriesName
+                ELSE COALESCE(series_name, :seriesName)
+            END,
+            series_index = CASE
+                WHEN remote_uuid IS NULL THEN :seriesIndex
+                ELSE COALESCE(series_index, :seriesIndex)
+            END,
+            series_checked = 1
+        WHERE url = :url
+        """,
+    )
+    suspend fun fillSeriesFromFile(url: String, seriesName: String?, seriesIndex: Double?)
 
     /**
      * Forgets that this book was ever opened, for when the file at a path
@@ -223,7 +319,13 @@ interface BookDao {
         SET title = :title, author = :author, remote_uuid = :remoteUuid,
             remote_book_id = :remoteBookId, cover_url = :coverUrl,
             download_href = :downloadHref, remote_updated_at = :remoteUpdatedAt,
-            remote_page_count = :remotePageCount
+            remote_page_count = :remotePageCount,
+            series_name = COALESCE(:catalogSeriesName, file_series_name),
+            series_index = CASE
+                WHEN COALESCE(:catalogSeriesName, file_series_name) IS NULL THEN NULL
+                ELSE COALESCE(:catalogSeriesIndex, file_series_index)
+            END,
+            series_id = :seriesId
         WHERE url = :url
         """,
     )
@@ -237,6 +339,9 @@ interface BookDao {
         downloadHref: String?,
         remoteUpdatedAt: Long?,
         remotePageCount: Int?,
+        catalogSeriesName: String?,
+        catalogSeriesIndex: Double?,
+        seriesId: String?,
     )
 
     @Query("DELETE FROM books WHERE url IN (:urls)")

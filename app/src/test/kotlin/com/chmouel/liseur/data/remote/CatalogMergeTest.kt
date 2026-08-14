@@ -115,4 +115,46 @@ class CatalogMergeTest {
         assertNull(merged.finishedAt)
         assertNull(merged.localUri)
     }
+
+    @Test
+    fun `a refresh clears series metadata removed from the catalog`() {
+        val previouslyCategorised = downloadedAndFinished.copy(
+            seriesName = "The Old Series",
+            seriesIndex = 4.0,
+            seriesId = "old-series",
+        )
+
+        val merged = mergeCatalogEntry(
+            entry,
+            previouslyCategorised,
+            url = "calibre:abc-123",
+            baseUrl = "https://books.example.com",
+            now = 9_999L,
+        )
+
+        assertNull(merged.seriesName)
+        assertNull(merged.seriesIndex)
+        assertNull(merged.seriesId)
+    }
+
+    @Test
+    fun `a refresh falls back only to series metadata read from the file`() {
+        val fromFile = downloadedAndFinished.copy(
+            seriesName = "Stale Catalog Series",
+            seriesIndex = 9.0,
+            fileSeriesName = "The File Series",
+            fileSeriesIndex = 2.0,
+        )
+
+        val merged = mergeCatalogEntry(
+            entry,
+            fromFile,
+            url = "calibre:abc-123",
+            baseUrl = "https://books.example.com",
+            now = 9_999L,
+        )
+
+        assertEquals("The File Series", merged.seriesName)
+        assertEquals(2.0, merged.seriesIndex)
+    }
 }

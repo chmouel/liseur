@@ -12,6 +12,13 @@ enum class LibrarySort(val id: String) {
 
     /** When the book joined the library. */
     ADDED("added"),
+
+    /**
+     * By series, then by number within it. Books that belong to no
+     * series come last: they are not a series of one, and scattering
+     * them between the series would undo the point of the order.
+     */
+    SERIES("series"),
     ;
 
     companion object {
@@ -68,7 +75,7 @@ fun sortKey(text: String?): String {
  * been opened on this device, which is how a book picked up on another
  * phone finds its way to the front of this one's shelf.
  */
-private fun Book.recentRank(readAt: Long?): Int = when {
+internal fun Book.recentRank(readAt: Long?): Int = when {
     lastOpenedAt != null || readAt != null -> 0
     downloadState == DownloadState.DOWNLOADED -> 1
     else -> 2
@@ -81,7 +88,7 @@ private fun Book.recentRank(readAt: Long?): Int = when {
  * to rise, so the later of the two wins. Opening without reading still
  * counts, and so does reading without ever having opened it here.
  */
-private fun Book.recentAt(readAt: Long?): Long {
+internal fun Book.recentAt(readAt: Long?): Long {
     val opened = lastOpenedAt
     val read = readAt
     return when {
@@ -129,6 +136,25 @@ fun List<Book>.arrangedBy(
         LibrarySort.ADDED -> compareByDescending<Book> { it.addedAt }
             .let { if (reversed) it.reversed() else it }
             .then(byTitle)
+
+        LibrarySort.SERIES -> {
+            val bySeries = compareBy<Book> { seriesKey(it.seriesName) }
+                // Within a series the numbers are the order, and
+                // reversing the shelf must not read a series backwards:
+                // book 3 before book 2 is not a useful view of anything.
+                .thenBy { it.seriesIndex == null }
+                .thenBy { it.seriesIndex ?: 0.0 }
+            val ordered = if (reversed) {
+                compareByDescending<Book> { seriesKey(it.seriesName) }
+                    .thenBy { it.seriesIndex == null }
+                    .thenBy { it.seriesIndex ?: 0.0 }
+            } else {
+                bySeries
+            }
+            compareBy<Book> { if (it.seriesName.isNullOrBlank()) 1 else 0 }
+                .then(ordered)
+                .then(byTitle)
+        }
     }
 
     return sortedWith(comparator)
