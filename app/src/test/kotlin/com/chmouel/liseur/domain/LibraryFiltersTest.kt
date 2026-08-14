@@ -42,10 +42,46 @@ class LibraryFiltersTest {
         LibraryFilters(options = options.toSet())
 
     @Test
-    fun `nothing ticked shows the whole shelf`() {
+    fun `nothing ticked shows the shelf but not the books read`() {
         assertTrue(LibraryFilters.None.accepts(book()))
-        assertTrue(LibraryFilters.None.accepts(book(finished = true)))
         assertTrue(LibraryFilters.None.accepts(book(downloaded = false)))
+        assertTrue(LibraryFilters.None.accepts(book(), progression = 0.5))
+        // The one axis that narrows without being asked: a library is
+        // mostly books already read, and a shelf led by them buries the
+        // one being read now.
+        assertFalse(LibraryFilters.None.accepts(book(finished = true)))
+    }
+
+    @Test
+    fun `asking for finished books hands them back`() {
+        assertTrue(filters(LibraryFilterOption.FINISHED).accepts(book(finished = true)))
+    }
+
+    @Test
+    fun `ticking every reading box shows the whole shelf`() {
+        val everything = filters(
+            LibraryFilterOption.UNREAD,
+            LibraryFilterOption.IN_PROGRESS,
+            LibraryFilterOption.FINISHED,
+        )
+        assertTrue(everything.accepts(book()))
+        assertTrue(everything.accepts(book(), progression = 0.5))
+        assertTrue(everything.accepts(book(finished = true)))
+    }
+
+    @Test
+    fun `the archive is not emptied by the rule that filled it`() {
+        // A book is usually archived because it was finished, so hiding
+        // finished books in there would be a locked door.
+        val filed = book(archived = true, finished = true)
+        assertTrue(filters(LibraryFilterOption.ARCHIVED).accepts(filed))
+    }
+
+    @Test
+    fun `only an untouched reading axis hides the books read`() {
+        assertTrue(LibraryFilters.None.hidesFinished)
+        assertFalse(filters(LibraryFilterOption.UNREAD).hidesFinished)
+        assertFalse(filters(LibraryFilterOption.ARCHIVED).hidesFinished)
     }
 
     @Test

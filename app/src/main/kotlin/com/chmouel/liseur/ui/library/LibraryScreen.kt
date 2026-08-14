@@ -577,6 +577,21 @@ fun LibraryScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
 
+                    // Every book on the shelf has been read. The rule
+                    // that hides them is the app's own, not something
+                    // the reader asked for, so this is the one empty
+                    // state that has to undo it rather than merely say
+                    // what happened.
+                    state.books.isEmpty() && state.hasFinished &&
+                        state.filters.hidesFinished &&
+                        !(state.isSearchActive && state.searchQuery.isNotBlank()) ->
+                        EverythingFinished(
+                            onShowFinished = {
+                                onToggleFilter(LibraryFilterOption.FINISHED)
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+
                     // Books exist, they are simply all hidden. Offering to
                     // add a folder here would be answering a question nobody
                     // asked, and would suggest the shelf had been lost.
@@ -1481,6 +1496,40 @@ private fun LibrarySort.label(): String = stringResource(
         LibrarySort.SERIES -> R.string.sort_series
     },
 )
+
+/**
+ * What the library says once every book on it has been read.
+ *
+ * The shelf is hiding them by a rule of the app's own rather than by
+ * anything the reader asked for, so this cannot merely report an empty
+ * shelf: it has to hand back the books it took.
+ */
+@Composable
+private fun EverythingFinished(
+    onShowFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier) {
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .heightIn(min = maxHeight)
+                .padding(horizontal = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        ) {
+            Text(
+                text = stringResource(R.string.everything_finished),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            TextButton(onClick = onShowFinished) {
+                Text(stringResource(R.string.show_finished_books))
+            }
+        }
+    }
+}
 
 /** The name of one way of narrowing the library. */
 @Composable

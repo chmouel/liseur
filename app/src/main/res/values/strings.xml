@@ -353,6 +353,8 @@
     <string name="filter_archived">Archived</string>
     <string name="filter_archived_only">Only archived books</string>
     <string name="everything_archived">Every book is archived.</string>
+    <string name="everything_finished">You have finished every book on the shelf.</string>
+    <string name="show_finished_books">Show finished books</string>
     <string name="archive_book">Archive</string>
     <string name="unarchive_book">Unarchive</string>
     <string name="export_annotations">Export</string>
