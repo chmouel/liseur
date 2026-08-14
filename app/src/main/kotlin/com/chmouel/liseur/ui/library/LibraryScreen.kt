@@ -18,7 +18,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -60,20 +59,23 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import com.chmouel.liseur.domain.LibraryFilterOption
+import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.displayAuthor
@@ -174,7 +176,9 @@ fun LibraryScreen(
     failedOpens: Flow<Book>,
     onPendingOpenHandled: () -> Unit,
     onSearchQueryChange: (String) -> Unit = {},
-    onSetFilter: (LibraryFilter) -> Unit = {},
+    onToggleFilter: (LibraryFilterOption) -> Unit = {},
+    onSetGroupBySeries: (Boolean) -> Unit = {},
+    onClearFilters: () -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
     notice: Notice? = null,
@@ -267,9 +271,9 @@ fun LibraryScreen(
     // them is Back, not un-picking a chip. Held apart from the handler
     // above by its own enabled flag: with search open over the archive,
     // the first Back closes search and the second comes back here.
-    val archived = state.filter == LibraryFilter.ARCHIVED
+    val archived = state.filters.archived
     BackHandler(enabled = archived && !state.isSearchActive) {
-        onSetFilter(LibraryFilter.ALL)
+        onToggleFilter(LibraryFilterOption.ARCHIVED)
     }
 
     Scaffold(
@@ -401,7 +405,9 @@ fun LibraryScreen(
                     },
                     navigationIcon = {
                         if (archived) {
-                            IconButton(onClick = { onSetFilter(LibraryFilter.ALL) }) {
+                            IconButton(
+                                onClick = { onToggleFilter(LibraryFilterOption.ARCHIVED) },
+                            ) {
                                 Icon(
                                     Icons.AutoMirrored.Outlined.ArrowBack,
                                     contentDescription = stringResource(R.string.back),
@@ -477,8 +483,11 @@ fun LibraryScreen(
                                 // Only once something has been archived:
                                 // an empty archive is not worth a
                                 // permanent entry, and the way in should
-                                // not lead to an empty screen.
-                                if (state.hasArchived) {
+                                // not lead to an empty screen. Gone once
+                                // you are in it, where the way out is
+                                // the arrow in the bar rather than the
+                                // entry that led you here.
+                                if (state.hasArchived && !archived) {
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.filter_archived)) },
                                         leadingIcon = {
@@ -489,7 +498,7 @@ fun LibraryScreen(
                                         },
                                         onClick = {
                                             moreOpen = false
-                                            onSetFilter(LibraryFilter.ARCHIVED)
+                                            onToggleFilter(LibraryFilterOption.ARCHIVED)
                                         },
                                     )
                                 }
@@ -555,7 +564,9 @@ fun LibraryScreen(
                     // books are all still here, behind one tap.
                     state.books.isEmpty() && state.libraryIsEmpty && state.hasArchived ->
                         EverythingArchived(
-                            onShowArchived = { onSetFilter(LibraryFilter.ARCHIVED) },
+                            onShowArchived = {
+                                onToggleFilter(LibraryFilterOption.ARCHIVED)
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
 
@@ -573,7 +584,7 @@ fun LibraryScreen(
                         searching = state.isSearchActive && state.searchQuery.isNotBlank(),
                         onClear = {
                             onSearchQueryChange("")
-                            onSetFilter(LibraryFilter.ALL)
+                            onClearFilters()
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -583,7 +594,9 @@ fun LibraryScreen(
                         gridState = gridState,
                         onSetSort = onSetSort,
                         onToggleSortDirection = onToggleSortDirection,
-                        onSetFilter = onSetFilter,
+                        onToggleFilter = onToggleFilter,
+                        onSetGroupBySeries = onSetGroupBySeries,
+                        onClearFilters = onClearFilters,
                         onBookSelected = { book ->
                             when {
                                 book.openableUrl != null -> onBookSelected(book)
@@ -808,7 +821,9 @@ private fun BookGrid(
     onSeriesSelected: (SeriesShelf) -> Unit,
     onSetSort: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
-    onSetFilter: (LibraryFilter) -> Unit,
+    onToggleFilter: (LibraryFilterOption) -> Unit,
+    onSetGroupBySeries: (Boolean) -> Unit,
+    onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalGrid(
@@ -824,7 +839,7 @@ private fun BookGrid(
         // archived book, so in the archive it is a book from somewhere
         // else entirely.
         state.continueReading
-            ?.takeIf { !state.isSearchActive && state.filter != LibraryFilter.ARCHIVED }
+            ?.takeIf { !state.isSearchActive && !state.filters.archived }
             ?.let { recent ->
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ContinueReadingCard(
@@ -842,69 +857,16 @@ private fun BookGrid(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // In the archive none of the chips means anything: they
-                // all read "of the books on the shelf", and these are
-                // not on it. The row goes; the sort stays, because an
-                // archive is still worth putting in order.
-                if (state.filter == LibraryFilter.ARCHIVED) {
-                    Spacer(Modifier.weight(1f))
-                } else {
-                    // The chips scroll rather than wrap or clip, so a
-                    // narrow phone with every chip showing still reaches
-                    // the last one instead of losing it off the edge.
-                    Row(
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        FilterChip(
-                            selected = state.filter == LibraryFilter.ALL,
-                            onClick = { onSetFilter(LibraryFilter.ALL) },
-                            label = { FilterChipLabel(stringResource(R.string.filter_all)) },
-                        )
-                        // Only worth asking once some books are on a server
-                        // and some are not: with nothing but local files,
-                        // everything is downloaded and the chip is a no-op.
-                        if (state.hasServer) {
-                            FilterChip(
-                                selected = state.filter == LibraryFilter.DOWNLOADED,
-                                onClick = { onSetFilter(LibraryFilter.DOWNLOADED) },
-                                label = {
-                                    FilterChipLabel(stringResource(R.string.filter_downloaded))
-                                },
-                            )
-                        }
-                        FilterChip(
-                            selected = state.filter == LibraryFilter.UNREAD,
-                            onClick = { onSetFilter(LibraryFilter.UNREAD) },
-                            label = { FilterChipLabel(stringResource(R.string.filter_unread)) },
-                        )
-                        // Only once something on the shelf says which series
-                        // it belongs to. A library of standalone novels has
-                        // no series view worth offering, and a chip that
-                        // leads to an empty screen is a broken promise.
-                        if (state.hasSeries || state.filter == LibraryFilter.SERIES) {
-                            FilterChip(
-                                selected = state.filter == LibraryFilter.SERIES,
-                                onClick = {
-                                    onSetFilter(
-                                        if (state.filter == LibraryFilter.SERIES) {
-                                            LibraryFilter.ALL
-                                        } else {
-                                            LibraryFilter.SERIES
-                                        },
-                                    )
-                                },
-                                label = { FilterChipLabel(stringResource(R.string.filter_series)) },
-                            )
-                        }
-                    }
-                }
+                FilterMenu(
+                    state = state,
+                    onToggleFilter = onToggleFilter,
+                    onSetGroupBySeries = onSetGroupBySeries,
+                    onClearFilters = onClearFilters,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 // Pinned to the far end of the row and laid out last, so
-                // it is never squeezed: the chips give way to it rather
-                // than the other way round.
+                // it is never squeezed: the filter summary gives way to
+                // it rather than the other way round.
                 SortRow(
                     sort = state.sort,
                     reversed = state.sortReversed,
@@ -914,8 +876,8 @@ private fun BookGrid(
                 )
             }
         }
-        if (state.filter == LibraryFilter.SERIES) {
-            items(state.series, key = { it.key }) { shelf ->
+        if (state.filters.groupBySeries) {
+            items(state.shelfSeries, key = { it.key }) { shelf ->
                 SeriesStackCard(
                     shelf = shelf,
                     onClick = { onSeriesSelected(shelf) },
@@ -1520,21 +1482,189 @@ private fun LibrarySort.label(): String = stringResource(
     },
 )
 
+/** The name of one way of narrowing the library. */
+@Composable
+private fun LibraryFilterOption.label(): String = stringResource(
+    when (this) {
+        LibraryFilterOption.DOWNLOADED -> R.string.filter_downloaded
+        LibraryFilterOption.NOT_DOWNLOADED -> R.string.filter_not_downloaded
+        LibraryFilterOption.UNREAD -> R.string.filter_unread
+        LibraryFilterOption.IN_PROGRESS -> R.string.filter_in_progress
+        LibraryFilterOption.FINISHED -> R.string.filter_finished
+        LibraryFilterOption.ARCHIVED -> R.string.filter_archived
+    },
+)
+
 /**
- * A filter chip's text, one line and never wider than its words.
+ * What is narrowing the library, and the way to change it.
  *
- * Sharing a line with the sort control leaves the chips less room than
- * they had to themselves, so they are set a step down and kept from
- * wrapping: a chip two lines tall would push the whole row out of the
- * grid's rhythm.
+ * A menu of checkboxes rather than a row of chips. Chips were one line
+ * of a phone's width, so each new way of narrowing the shelf cost the
+ * one before it, and being chips they were exclusive: *downloaded books
+ * I have not finished* could not be asked for at all. A menu has as many
+ * rows as it needs and every one of them can be ticked at once.
+ *
+ * Options on the same axis are read as *or* and different axes as *and*,
+ * which is the only combination that makes ticking two boxes useful:
+ * *downloaded* and *not downloaded* together have to mean "either",
+ * because meaning "both" would mean nothing.
+ *
+ * The summary is the button, so what is in force is still legible with
+ * the menu shut. That is what the chips were good at, and what a bare
+ * "Filter" label would have thrown away.
  */
 @Composable
-private fun FilterChipLabel(text: String) {
+private fun FilterMenu(
+    state: LibraryUiState,
+    onToggleFilter: (LibraryFilterOption) -> Unit,
+    onSetGroupBySeries: (Boolean) -> Unit,
+    onClearFilters: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+    val filters = state.filters
+    val active = LibraryFilterOption.entries.filter { it in filters.options }
+    val grouped = stringResource(R.string.filter_group_series)
+    val summary = when {
+        active.isEmpty() && !filters.groupBySeries -> stringResource(R.string.filter_none)
+        else -> (if (filters.groupBySeries) listOf(grouped) else emptyList())
+            .plus(active.map { it.label() })
+            .joinToString(" · ")
+    }
+
+    Box(modifier = modifier) {
+        TextButton(
+            onClick = { open = true },
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.FilterList,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .size(16.dp),
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            // First and on its own, because it is not a narrowing: what
+            // it changes is what one card stands for, not how many are
+            // on the shelf. Offered only once something says which
+            // series it is in, and never in the archive, where there are
+            // no series to gather.
+            if (state.hasSeries && !filters.archived) {
+                FilterMenuItem(
+                    label = grouped,
+                    checked = filters.groupBySeries,
+                    onToggle = { onSetGroupBySeries(!filters.groupBySeries) },
+                )
+                HorizontalDivider()
+            }
+            // Only worth asking once some books are on a server and some
+            // are not: with nothing but local files, everything is
+            // downloaded and the question has one answer.
+            if (state.hasServer) {
+                FilterMenuHeading(stringResource(R.string.filter_availability))
+                FilterMenuOptions(
+                    options = listOf(
+                        LibraryFilterOption.DOWNLOADED,
+                        LibraryFilterOption.NOT_DOWNLOADED,
+                    ),
+                    filters = filters,
+                    onToggleFilter = onToggleFilter,
+                )
+                HorizontalDivider()
+            }
+            FilterMenuHeading(stringResource(R.string.filter_reading))
+            FilterMenuOptions(
+                options = listOf(
+                    LibraryFilterOption.UNREAD,
+                    LibraryFilterOption.IN_PROGRESS,
+                    LibraryFilterOption.FINISHED,
+                ),
+                filters = filters,
+                onToggleFilter = onToggleFilter,
+            )
+            // The archive is a place rather than a narrowing, so it is
+            // below the line and only there once something is in it: an
+            // empty archive is a door onto an empty room.
+            if (state.hasArchived || filters.archived) {
+                HorizontalDivider()
+                FilterMenuItem(
+                    label = LibraryFilterOption.ARCHIVED.label(),
+                    checked = filters.archived,
+                    onToggle = { onToggleFilter(LibraryFilterOption.ARCHIVED) },
+                )
+            }
+            if (!filters.isEmpty) {
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.filter_clear)) },
+                    onClick = {
+                        onClearFilters()
+                        open = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** The name of one axis, above the boxes that share it. */
+@Composable
+private fun FilterMenuHeading(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelMedium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun FilterMenuOptions(
+    options: List<LibraryFilterOption>,
+    filters: LibraryFilters,
+    onToggleFilter: (LibraryFilterOption) -> Unit,
+) {
+    options.forEach { option ->
+        FilterMenuItem(
+            label = option.label(),
+            checked = option in filters.options,
+            onToggle = { onToggleFilter(option) },
+        )
+    }
+}
+
+/**
+ * One box in the menu.
+ *
+ * The menu deliberately stays open under a tap: filters are chosen
+ * several at a time now, and closing after each one would make the
+ * second choice cost as much as the first.
+ */
+@Composable
+private fun FilterMenuItem(
+    label: String,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        onClick = onToggle,
+        leadingIcon = {
+            Checkbox(
+                checked = checked,
+                // The whole row is the target, so the box itself is not
+                // a second, smaller one beside it.
+                onCheckedChange = null,
+            )
+        },
     )
 }
 

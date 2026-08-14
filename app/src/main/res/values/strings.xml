@@ -16,10 +16,16 @@
     <string name="add_folder">Add a folder</string>
     <string name="add_books">Add books</string>
     <string name="search_books">Search books</string>
-    <string name="filter_all">All</string>
+    <string name="filter_none">All books</string>
+    <string name="filter_availability">On the device</string>
+    <string name="filter_reading">Reading</string>
     <string name="filter_downloaded">Downloaded</string>
+    <string name="filter_not_downloaded">Not downloaded</string>
     <string name="filter_unread">Unread</string>
-    <string name="filter_series">Series</string>
+    <string name="filter_in_progress">Reading now</string>
+    <string name="filter_finished">Finished</string>
+    <string name="filter_group_series">Group by series</string>
+    <string name="filter_clear">Clear filters</string>
 
     <string name="sort_series">Series</string>
     <string name="series_position">%1$s · #%2$s</string>

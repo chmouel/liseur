@@ -56,56 +56,18 @@ import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import com.chmouel.liseur.domain.FilterGroup
+import com.chmouel.liseur.domain.LibraryFilterOption
+import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import kotlinx.coroutines.launch
-
-enum class LibraryFilter {
-    ALL,
-    DOWNLOADED,
-    UNREAD,
-
-    /**
-     * The series, as series rather than as loose books.
-     *
-     * A view like [ARCHIVED] rather than a narrowing like the rest: what
-     * it shows is not a shorter shelf but a different kind of thing on
-     * it, one card per series instead of one per book.
-     */
-    SERIES,
-
-    /**
-     * The books archived. Its own view, reached from the overflow menu
-     * rather than from a chip beside the others, because everything else
-     * means "of the books on the shelf", and these are not on it.
-     */
-    ARCHIVED,
-    ;
-
-    /**
-     * Whether a book belongs in this view.
-     *
-     * Archived books are out of every other view, not merely absent from
-     * a view of their own: the whole point of archiving one is not to
-     * meet it again while looking for something else.
-     */
-    fun accepts(book: Book): Boolean = when (this) {
-        ARCHIVED -> book.archived
-        ALL -> !book.archived
-        DOWNLOADED -> !book.archived &&
-            (book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED)
-        UNREAD -> !book.archived && !book.finished
-        // Only half the answer: whether the book's series is shown at
-        // all takes two books, which is a property of the group and is
-        // decided in the view model.
-        SERIES -> !book.archived && !book.seriesName.isNullOrBlank()
-    }
-}
 
 data class ContinueReading(val book: Book, val progression: Double?)
 
@@ -175,6 +137,14 @@ data class LibraryUiState(
      * only appears when there is something behind it.
      */
     val series: List<SeriesShelf> = emptyList(),
+    /**
+     * The series the grid draws, which is [series] narrowed by the
+     * filters as well. Held apart from [series] because that list is
+     * also what an open series screen looks itself up in, and a shelf
+     * that stops matching a filter under the reader's finger must not
+     * take the screen they are standing on with it.
+     */
+    val shelfSeries: List<SeriesShelf> = emptyList(),
     val continueReading: ContinueReading? = null,
     val catalogStatus: CatalogStatus = CatalogStatus.Idle,
     val downloads: Map<String, DownloadProgress> = emptyMap(),
@@ -183,7 +153,7 @@ data class LibraryUiState(
     val sort: LibrarySort = LibrarySort.Default,
     val sortReversed: Boolean = false,
     val searchQuery: String = "",
-    val filter: LibraryFilter = LibraryFilter.ALL,
+    val filters: LibraryFilters = LibraryFilters.None,
     val isSearchActive: Boolean = false,
     /**
      * Whether the shelf itself is bare, as opposed to a search or a
@@ -292,7 +262,6 @@ class LibraryViewModel(
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
     private val _searchQuery = MutableStateFlow("")
-    private val _filter = MutableStateFlow(LibraryFilter.ALL)
     private val _isSearchActive = MutableStateFlow(false)
 
     private val refresher = LibraryRefresh(
@@ -327,9 +296,8 @@ class LibraryViewModel(
                 progressDao.observeProgressions(),
             ) { values -> values },
             _searchQuery,
-            _filter,
             _isSearchActive,
-        ) { baseValues, query, filter, searchActive ->
+        ) { baseValues, query, searchActive ->
             @Suppress("UNCHECKED_CAST")
             val books = baseValues[0] as List<Book>
             val recent = baseValues[1] as ContinueReading?
@@ -348,9 +316,6 @@ class LibraryViewModel(
                 .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
                 .toMap()
 
-            // Disconnecting a server takes its filter away with it,
-            // rather than leaving the shelf narrowed by a chip that is
-            // no longer on screen to widen it again.
             val onTheShelf = books.filter { !it.archived }
             val allShelves = onTheShelf.groupedIntoSeries(progressions)
 
@@ -366,20 +331,32 @@ class LibraryViewModel(
             // number when the Put away chip brings it back up.
             val shownSeries = shelves.mapTo(mutableSetOf()) { it.key }
 
-            // Disconnecting a server takes its filter away with it, and
-            // so does the last series leaving the library: a chip that
-            // is no longer on screen cannot be used to widen the shelf
-            // it narrowed.
-            val effectiveFilter = when {
-                server == null && filter == LibraryFilter.DOWNLOADED -> LibraryFilter.ALL
-                shelves.isEmpty() && filter == LibraryFilter.SERIES -> LibraryFilter.ALL
-                // Restoring the last archived book empties the view you
-                // are standing in, and takes the menu entry that leads
-                // back to it away with it.
-                books.none { it.archived } && filter == LibraryFilter.ARCHIVED ->
-                    LibraryFilter.ALL
-                else -> filter
-            }
+            // An option whose control is no longer on screen cannot be
+            // used to widen the shelf it narrowed, so it stops counting.
+            // Only for the showing, though: what the reader chose stays
+            // written down, and reconnecting a server hands it back
+            // rather than making them ask for it twice.
+            val stored = settings.libraryFilters
+            val filters = LibraryFilters(
+                options = stored.options.filterTo(mutableSetOf()) { option ->
+                    when (option) {
+                        LibraryFilterOption.DOWNLOADED,
+                        LibraryFilterOption.NOT_DOWNLOADED,
+                        -> server != null
+                        // Restoring the last archived book empties the
+                        // view you are standing in, and takes the way
+                        // back to it away with it.
+                        LibraryFilterOption.ARCHIVED -> books.any { it.archived }
+                        else -> true
+                    }
+                },
+                // The grouping is built from the shelf, so there are no
+                // series in the archive to group: a book put away is out
+                // of its series card as much as it is out of the shelf.
+                groupBySeries = stored.groupBySeries &&
+                    shelves.isNotEmpty() &&
+                    LibraryFilterOption.ARCHIVED !in stored.options,
+            )
 
             val sortedBooks = books.arrangedBy(
                 settings.librarySort,
@@ -388,15 +365,12 @@ class LibraryViewModel(
             )
 
             val filteredBooks = sortedBooks
-                .filter { effectiveFilter.accepts(it) }
+                .filter { filters.accepts(it, progressions[it.url]) }
                 // Whether a book's series is big enough to be shown is a
-                // property of the group, which [LibraryFilter.accepts]
+                // property of the group, which [LibraryFilters.accepts]
                 // cannot see from one book. It is applied here, where
                 // the grouping is already in hand.
-                .filter {
-                    effectiveFilter != LibraryFilter.SERIES ||
-                        seriesKey(it.seriesName) in shownSeries
-                }
+                .filter { !filters.groupBySeries || seriesKey(it.seriesName) in shownSeries }
                 .filter { book ->
                     survivesLibrarySearch(
                         query,
@@ -424,14 +398,24 @@ class LibraryViewModel(
                     }
             }
 
+            val arrangedSeries = filteredSeries.arrangedBy(
+                settings.librarySort,
+                settings.librarySortReversed,
+                readAt,
+            )
+
             LibraryUiState(
                 loading = false,
                 books = filteredBooks,
-                series = filteredSeries.arrangedBy(
-                    settings.librarySort,
-                    settings.librarySortReversed,
-                    readAt,
-                ),
+                series = arrangedSeries,
+                // A series stands for its volumes, so it survives a
+                // narrowing as long as one of them does: asking for
+                // unread books should leave a part-read series on the
+                // shelf rather than hide the volume that has not been
+                // started.
+                shelfSeries = arrangedSeries.filter { shelf ->
+                    shelf.volumes.any { filters.accepts(it.book, progressions[it.book.url]) }
+                },
                 continueReading = recent,
                 catalogStatus = catalogStatus,
                 downloads = running,
@@ -440,7 +424,7 @@ class LibraryViewModel(
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
                 searchQuery = query,
-                filter = effectiveFilter,
+                filters = filters,
                 isSearchActive = searchActive,
                 libraryIsEmpty = books.none { !it.archived },
                 hasArchived = books.any { it.archived },
@@ -456,8 +440,38 @@ class LibraryViewModel(
         _searchQuery.value = query
     }
 
-    fun setFilter(filter: LibraryFilter) {
-        _filter.value = filter
+    /**
+     * Changes the filters as they are *stored*, not as they are shown.
+     *
+     * The two differ whenever an option has been quietly ignored — a
+     * Downloaded filter with no server behind it — and editing the shown
+     * copy would throw that choice away on the next unrelated tap.
+     */
+    private fun editFilters(edit: (LibraryFilters) -> LibraryFilters) {
+        viewModelScope.launch {
+            appSettings.setLibraryFilters(edit(appSettings.current().libraryFilters))
+        }
+    }
+
+    fun toggleFilter(option: LibraryFilterOption) {
+        editFilters { it.toggle(option) }
+    }
+
+    fun setGroupBySeries(grouped: Boolean) {
+        editFilters { it.copy(groupBySeries = grouped) }
+    }
+
+    fun clearFilters() {
+        // The archive is a place rather than a narrowing, so Clear
+        // widens the shelf you are standing on instead of walking you
+        // off it without asking.
+        editFilters { stored ->
+            LibraryFilters(
+                options = stored.options.filterTo(mutableSetOf()) {
+                    it.group == FilterGroup.PLACE
+                },
+            )
+        }
     }
 
     fun setSearchActive(active: Boolean) {
@@ -472,6 +486,20 @@ class LibraryViewModel(
         // screen. All a fresh start owes the reader is a look at the
         // folders on the device; the server is asked when they ask.
         refresher.scanQuietly()
+        // The archive is a place, and taking the last book out of it
+        // shuts the door. Written down rather than merely ignored: a
+        // narrowing is worth keeping until it can be used again, but
+        // being put back in a room you were shown out of months ago is
+        // only ever a surprise.
+        viewModelScope.launch {
+            combine(library.books, appSettings.settings) { books, settings ->
+                settings.libraryFilters.archived && books.none { it.archived }
+            }.distinctUntilChanged().collect { stranded ->
+                if (stranded) {
+                    editFilters { it.copy(options = it.options - LibraryFilterOption.ARCHIVED) }
+                }
+            }
+        }
         // Books indexed before the library knew what a series was will
         // never be looked at again on their own. This fills them in
         // behind the shelf, which is already drawn and does not wait.
