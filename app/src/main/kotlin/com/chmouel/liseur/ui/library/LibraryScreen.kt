@@ -48,6 +48,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Close
@@ -245,6 +246,15 @@ fun LibraryScreen(
     // activity and closes the app.
     BackHandler(enabled = state.isSearchActive) { onSetSearchActive(false) }
 
+    // The archived books are a place rather than a narrowing, so leaving
+    // them is Back, not un-picking a chip. Held apart from the handler
+    // above by its own enabled flag: with search open over the archive,
+    // the first Back closes search and the second comes back here.
+    val archived = state.filter == LibraryFilter.ARCHIVED
+    BackHandler(enabled = archived && !state.isSearchActive) {
+        onSetFilter(LibraryFilter.ALL)
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -293,75 +303,98 @@ fun LibraryScreen(
                 // gets all the time rather than only once you scroll.
                 TopAppBar(
                     title = {
-                        Row(
-                            modifier = Modifier.clickable {
-                                scope.launch {
-                                    // Scrolling the whole way is a long
-                                    // animation on a screen that repaints
-                                    // in frames; e-paper gets there in one.
-                                    if (eInk) {
-                                        gridState.scrollToItem(0)
-                                    } else {
-                                        gridState.animateScrollToItem(0)
-                                    }
-                                }
-                            },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            // A woman reading stretched out on her couch,
-                            // cut from the banner art — the reading mark,
-                            // in place of a plain wordmark or the launcher
-                            // icon.  Painted art with its own wall and
-                            // floor, so it is framed as a small tile
-                            // rather than knocked out to line work.
-                            //
-                            // Which cut to draw is asked of the theme in
-                            // force here, not of a -night qualifier: those
-                            // follow the system, and the app's own
-                            // light/dark setting is allowed to disagree.
-                            Image(
-                                painter = painterResource(
-                                    if (darkMark) R.drawable.ic_reading_scene_night
-                                    else R.drawable.ic_reading_scene,
-                                ),
-                                contentDescription = null,
-                                // Fit, not Crop, and the frame pinned to
-                                // the picture's own aspect: whatever
-                                // height the bar ends up granting, the
-                                // box can never come out wider than the
-                                // art and take a slice off her head.
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .height(tileHeight)
-                                    .aspectRatio(BRAND_TILE_ASPECT)
-                                    .clip(RoundedCornerShape(if (wide) 14.dp else 10.dp)),
+                        // The archive is a place of its own, so the bar
+                        // says where you are instead of whose shelf it
+                        // is: the brand tile and the book count both
+                        // belong to the library you have stepped out of.
+                        if (archived) {
+                            Text(
+                                text = stringResource(R.string.archived),
+                                style = MaterialTheme.typography.titleLarge,
                             )
-                            Spacer(Modifier.width(if (wide) 16.dp else 10.dp))
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.library_title),
-                                    style = if (wide) {
-                                        MaterialTheme.typography.headlineMedium
-                                    } else {
-                                        MaterialTheme.typography.titleLarge
-                                    },
+                        } else {
+                            Row(
+                                modifier = Modifier.clickable {
+                                    scope.launch {
+                                        // Scrolling the whole way is a long
+                                        // animation on a screen that repaints
+                                        // in frames; e-paper gets there in one.
+                                        if (eInk) {
+                                            gridState.scrollToItem(0)
+                                        } else {
+                                            gridState.animateScrollToItem(0)
+                                        }
+                                    }
+                                },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // A woman reading stretched out on her couch,
+                                // cut from the banner art — the reading mark,
+                                // in place of a plain wordmark or the launcher
+                                // icon.  Painted art with its own wall and
+                                // floor, so it is framed as a small tile
+                                // rather than knocked out to line work.
+                                //
+                                // Which cut to draw is asked of the theme in
+                                // force here, not of a -night qualifier: those
+                                // follow the system, and the app's own
+                                // light/dark setting is allowed to disagree.
+                                Image(
+                                    painter = painterResource(
+                                        if (darkMark) R.drawable.ic_reading_scene_night
+                                        else R.drawable.ic_reading_scene,
+                                    ),
+                                    contentDescription = null,
+                                    // Fit, not Crop, and the frame pinned to
+                                    // the picture's own aspect: whatever
+                                    // height the bar ends up granting, the
+                                    // box can never come out wider than the
+                                    // art and take a slice off her head.
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .height(tileHeight)
+                                        .aspectRatio(BRAND_TILE_ASPECT)
+                                        .clip(RoundedCornerShape(if (wide) 14.dp else 10.dp)),
                                 )
-                                if (!state.loading && state.books.isNotEmpty()) {
+                                Spacer(Modifier.width(if (wide) 16.dp else 10.dp))
+                                Column {
                                     Text(
-                                        text = pluralStringResource(
-                                            R.plurals.library_book_count,
-                                            state.books.size,
-                                            state.books.size,
-                                        ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        letterSpacing = 0.8.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        text = stringResource(R.string.library_title),
+                                        style = if (wide) {
+                                            MaterialTheme.typography.headlineMedium
+                                        } else {
+                                            MaterialTheme.typography.titleLarge
+                                        },
                                     )
+                                    if (!state.loading && state.books.isNotEmpty()) {
+                                        Text(
+                                            text = pluralStringResource(
+                                                R.plurals.library_book_count,
+                                                state.books.size,
+                                                state.books.size,
+                                            ),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            letterSpacing = 0.8.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         }
                     },
-                    expandedHeight = libraryBarHeight(barWidth),
+                    navigationIcon = {
+                        if (archived) {
+                            IconButton(onClick = { onSetFilter(LibraryFilter.ALL) }) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.ArrowBack,
+                                    contentDescription = stringResource(R.string.back),
+                                )
+                            }
+                        }
+                    },
+                    // The tall bar exists to hold the brand tile; without
+                    // it, a title alone in that much space is just a gap.
+                    expandedHeight = if (archived) 64.dp else libraryBarHeight(barWidth),
                     actions = {
                         IconButton(onClick = { onSetSearchActive(true) }) {
                             Icon(
@@ -424,6 +457,25 @@ fun LibraryScreen(
                                 expanded = moreOpen,
                                 onDismissRequest = { moreOpen = false },
                             ) {
+                                // Only once something has been archived:
+                                // an empty archive is not worth a
+                                // permanent entry, and the way in should
+                                // not lead to an empty screen.
+                                if (state.hasArchived) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.archived)) },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Outlined.Archive,
+                                                contentDescription = null,
+                                            )
+                                        },
+                                        onClick = {
+                                            moreOpen = false
+                                            onSetFilter(LibraryFilter.ARCHIVED)
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.reading_stats)) },
                                     leadingIcon = {
@@ -481,11 +533,11 @@ fun LibraryScreen(
                 when {
                     state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
 
-                    // Everything on the shelf has been put away. Not an
+                    // Everything on the shelf has been archived. Not an
                     // empty library, and saying so would be alarming — the
                     // books are all still here, behind one tap.
                     state.books.isEmpty() && state.libraryIsEmpty && state.hasArchived ->
-                        EverythingPutAway(
+                        EverythingArchived(
                             onShowArchived = { onSetFilter(LibraryFilter.ARCHIVED) },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -721,8 +773,12 @@ private fun BookGrid(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Not a search result, so it has no business sitting above them
-        // and pushing the real answers off the screen.
-        state.continueReading?.takeIf { !state.isSearchActive }?.let { recent ->
+        // and pushing the real answers off the screen. Nor is it an
+        // archived book, so in the archive it is a book from somewhere
+        // else entirely.
+        state.continueReading
+            ?.takeIf { !state.isSearchActive && state.filter != LibraryFilter.ARCHIVED }
+            ?.let { recent ->
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ContinueReadingCard(
                     entry = recent,
@@ -739,75 +795,64 @@ private fun BookGrid(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // The chips scroll rather than wrap or clip, so a narrow
-                // phone with every chip showing still reaches the last
-                // one instead of losing it off the edge.
-                Row(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FilterChip(
-                        selected = state.filter == LibraryFilter.ALL,
-                        onClick = { onSetFilter(LibraryFilter.ALL) },
-                        label = { FilterChipLabel(stringResource(R.string.filter_all)) },
-                    )
-                    // Only worth asking once some books are on a server
-                    // and some are not: with nothing but local files,
-                    // everything is downloaded and the chip is a no-op.
-                    if (state.hasServer) {
+                // In the archive none of the chips means anything: they
+                // all read "of the books on the shelf", and these are
+                // not on it. The row goes; the sort stays, because an
+                // archive is still worth putting in order.
+                if (state.filter == LibraryFilter.ARCHIVED) {
+                    Spacer(Modifier.weight(1f))
+                } else {
+                    // The chips scroll rather than wrap or clip, so a
+                    // narrow phone with every chip showing still reaches
+                    // the last one instead of losing it off the edge.
+                    Row(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         FilterChip(
-                            selected = state.filter == LibraryFilter.DOWNLOADED,
-                            onClick = { onSetFilter(LibraryFilter.DOWNLOADED) },
-                            label = {
-                                FilterChipLabel(stringResource(R.string.filter_downloaded))
-                            },
+                            selected = state.filter == LibraryFilter.ALL,
+                            onClick = { onSetFilter(LibraryFilter.ALL) },
+                            label = { FilterChipLabel(stringResource(R.string.filter_all)) },
                         )
-                    }
-                    FilterChip(
-                        selected = state.filter == LibraryFilter.UNREAD,
-                        onClick = { onSetFilter(LibraryFilter.UNREAD) },
-                        label = { FilterChipLabel(stringResource(R.string.filter_unread)) },
-                    )
-                    // Only once something on the shelf says which series
-                    // it belongs to. A library of standalone novels has
-                    // no series view worth offering, and a chip that
-                    // leads to an empty screen is a broken promise.
-                    if (state.hasSeries || state.filter == LibraryFilter.SERIES) {
+                        // Only worth asking once some books are on a server
+                        // and some are not: with nothing but local files,
+                        // everything is downloaded and the chip is a no-op.
+                        if (state.hasServer) {
+                            FilterChip(
+                                selected = state.filter == LibraryFilter.DOWNLOADED,
+                                onClick = { onSetFilter(LibraryFilter.DOWNLOADED) },
+                                label = {
+                                    FilterChipLabel(stringResource(R.string.filter_downloaded))
+                                },
+                            )
+                        }
                         FilterChip(
-                            selected = state.filter == LibraryFilter.SERIES,
-                            onClick = {
-                                onSetFilter(
-                                    if (state.filter == LibraryFilter.SERIES) {
-                                        LibraryFilter.ALL
-                                    } else {
-                                        LibraryFilter.SERIES
-                                    },
-                                )
-                            },
-                            label = { FilterChipLabel(stringResource(R.string.filter_series)) },
+                            selected = state.filter == LibraryFilter.UNREAD,
+                            onClick = { onSetFilter(LibraryFilter.UNREAD) },
+                            label = { FilterChipLabel(stringResource(R.string.filter_unread)) },
                         )
-                    }
-                    // Offered only once something has been put away: an
-                    // empty drawer is not worth a permanent chip.
-                    if (state.hasArchived || state.filter == LibraryFilter.ARCHIVED) {
-                        FilterChip(
-                            selected = state.filter == LibraryFilter.ARCHIVED,
-                            onClick = {
-                                onSetFilter(
-                                    if (state.filter == LibraryFilter.ARCHIVED) {
-                                        LibraryFilter.ALL
-                                    } else {
-                                        LibraryFilter.ARCHIVED
-                                    },
-                                )
-                            },
-                            label = {
-                                FilterChipLabel(stringResource(R.string.filter_archived))
-                            },
-                        )
+                        // Only once something on the shelf says which series
+                        // it belongs to. A library of standalone novels has
+                        // no series view worth offering, and a chip that
+                        // leads to an empty screen is a broken promise.
+                        if (state.hasSeries || state.filter == LibraryFilter.SERIES) {
+                            FilterChip(
+                                selected = state.filter == LibraryFilter.SERIES,
+                                onClick = {
+                                    onSetFilter(
+                                        if (state.filter == LibraryFilter.SERIES) {
+                                            LibraryFilter.ALL
+                                        } else {
+                                            LibraryFilter.SERIES
+                                        },
+                                    )
+                                },
+                                label = { FilterChipLabel(stringResource(R.string.filter_series)) },
+                            )
+                        }
                     }
                 }
                 // Pinned to the far end of the row and laid out last, so
@@ -1376,13 +1421,14 @@ private fun NothingMatched(
 }
 
 /**
- * What the library says once every book on it has been put away.
+ * What the library says once every book on it has been archived.
  *
- * It has to lead somewhere, because the only way back to those books is
- * a chip that lives in the grid this screen is standing in for.
+ * It has to lead somewhere, because the way to those books is an entry
+ * in a menu, and a menu is not where anyone looks when the screen in
+ * front of them is empty.
  */
 @Composable
-private fun EverythingPutAway(
+private fun EverythingArchived(
     onShowArchived: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1397,12 +1443,12 @@ private fun EverythingPutAway(
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         ) {
             Text(
-                text = stringResource(R.string.everything_put_away),
+                text = stringResource(R.string.everything_archived),
                 style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center,
             )
             TextButton(onClick = onShowArchived) {
-                Text(stringResource(R.string.filter_archived))
+                Text(stringResource(R.string.archived))
             }
         }
     }

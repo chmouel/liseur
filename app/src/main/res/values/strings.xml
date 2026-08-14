@@ -326,7 +326,7 @@
     <string name="state_on_server">On the server</string>
     <string name="state_on_device">On this device</string>
     <string name="archived">Archived</string>
-    <string name="everything_put_away">Every book is archived.</string>
+    <string name="everything_archived">Every book is archived.</string>
     <string name="archive_book">Archive</string>
     <string name="unarchive_book">Restore to shelf</string>
     <string name="export_annotations">Export</string>

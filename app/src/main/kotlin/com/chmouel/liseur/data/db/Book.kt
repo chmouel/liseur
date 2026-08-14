@@ -68,7 +68,7 @@ data class Book(
     /** When the book was marked read, by hand or by reaching the end. */
     @ColumnInfo(name = "finished_at") val finishedAt: Long? = null,
     /**
-     * When the book was put away: off the shelf, but still here, still
+     * When the book was archived: off the shelf, but still here, still
      * synced, and still holding your place. Null while it is on the shelf.
      */
     @ColumnInfo(name = "archived_at") val archivedAt: Long? = null,
