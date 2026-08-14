@@ -1104,7 +1104,16 @@ step "Series"
 # in it.
 open_library
 shelf_to_top
-tap_on "Series"
+# The filter button carries a summary of what is in force rather than a
+# fixed word, so the way in is whatever it reads now: with nothing
+# ticked, that is the bare "Filter". The menu stays open under a tap --
+# boxes are meant to be ticked several at a time -- so Back is what
+# closes it.
+tap_on "Filter"
+sleep 1
+tap_on "Group by series"
+sleep 1
+back
 sleep 3
 on_screen "Sherlock Holmes" || die "the Series view never showed a series"
 shot 13-series
@@ -1119,8 +1128,14 @@ shot 14-series-detail
 back
 sleep 2
 # Back to the whole shelf, so the screens after this start where the
-# earlier ones did.
-tap_on "All"
+# earlier ones did. The filters are written down now and survive a
+# restart, so leaving this on would quietly put every later shelf into
+# series view. The summary reads "Group by series" at this point, which
+# is both the way back into the menu and the only thing on screen saying
+# so; Clear inside it puts the shelf back and closes the menu itself.
+tap_on "Group by series"
+sleep 1
+tap_on "Clear filters"
 sleep 2
 
 step "Settings"
