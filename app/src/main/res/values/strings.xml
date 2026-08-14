@@ -16,7 +16,7 @@
     <string name="add_folder">Add a folder</string>
     <string name="add_books">Add books</string>
     <string name="search_books">Search books</string>
-    <string name="filter_none">All books</string>
+    <string name="filter_menu">Filter</string>
     <string name="filter_availability">On the device</string>
     <string name="filter_reading">Reading</string>
     <string name="filter_downloaded">Downloaded</string>

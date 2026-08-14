@@ -1558,9 +1558,11 @@ private fun LibraryFilterOption.label(): String = stringResource(
  * *downloaded* and *not downloaded* together have to mean "either",
  * because meaning "both" would mean nothing.
  *
- * The summary is the button, so what is in force is still legible with
- * the menu shut. That is what the chips were good at, and what a bare
- * "Filter" label would have thrown away.
+ * The button carries the active filters as its label, so what is in
+ * force is still legible with the menu shut -- that is what the chips
+ * were good at. It falls back to a plain "Filter" only when nothing is
+ * ticked, where there is nothing to report and naming the default rule
+ * ("Unfinished") would read as a choice the reader had made.
  */
 @Composable
 private fun FilterMenu(
@@ -1575,7 +1577,7 @@ private fun FilterMenu(
     val active = LibraryFilterOption.entries.filter { it in filters.options }
     val grouped = stringResource(R.string.filter_group_series)
     val summary = when {
-        active.isEmpty() && !filters.groupBySeries -> stringResource(R.string.filter_none)
+        active.isEmpty() && !filters.groupBySeries -> stringResource(R.string.filter_menu)
         else -> (if (filters.groupBySeries) listOf(grouped) else emptyList())
             .plus(active.map { it.label() })
             .joinToString(" · ")
