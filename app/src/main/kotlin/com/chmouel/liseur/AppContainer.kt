@@ -29,6 +29,7 @@ import com.chmouel.liseur.data.liseursync.SyncAccountRepository
 import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
+import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
 import com.chmouel.liseur.data.remote.RoutedPositionSync
 import com.chmouel.liseur.data.remote.ServerKind
@@ -124,6 +125,7 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
         bookRemoval = bookRemoval,
+        seriesExtraDao = database.seriesExtraDao(),
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -301,6 +303,11 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         bookRemoval = bookRemoval,
         inTransaction = { work -> database.withTransaction { work() } },
+    )
+
+    val seriesExtras = SeriesExtrasRepository(
+        account = remoteAccount,
+        dao = database.seriesExtraDao(),
     )
 }
 

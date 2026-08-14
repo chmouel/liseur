@@ -92,6 +92,7 @@ import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.chrome.CatchUpPill
+import com.chmouel.liseur.reader.chrome.NextInSeriesPill
 import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
@@ -138,6 +139,9 @@ fun ReaderScreen(
     progressFlow: StateFlow<ReaderProgress?>,
     jumpBackFlow: StateFlow<ReaderViewModel.JumpBack?>,
     catchUpFlow: StateFlow<ReaderViewModel.CatchUp?>,
+    nextUpFlow: StateFlow<ReaderViewModel.NextUp?>,
+    onOpenNextUp: (ReaderViewModel.NextUp) -> Unit,
+    onDismissNextUp: () -> Unit,
     onLocatorChanged: (Locator) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onPageTurnerChanged: (PageTurner?) -> Unit,
@@ -176,6 +180,7 @@ fun ReaderScreen(
     val progress by progressFlow.collectAsStateWithLifecycle()
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
     val catchUp by catchUpFlow.collectAsStateWithLifecycle()
+    val nextUp by nextUpFlow.collectAsStateWithLifecycle()
     val annotations by annotationsFlow.collectAsStateWithLifecycle()
     val searchState by searchFlow.collectAsStateWithLifecycle()
     val bookmarked by bookmarkedFlow.collectAsStateWithLifecycle()
@@ -369,6 +374,19 @@ fun ReaderScreen(
                         onDismiss = onProgressAction.dismissCatchUp,
                     )
                 }
+                // The book is finished, so nothing about this one is
+                // still pending: the next one is the only offer left.
+                if (catchUp == null) {
+                    nextUp?.let { offer ->
+                        NextInSeriesPill(
+                            title = offer.title,
+                            volume = offer.volume,
+                            theme = prefs.theme,
+                            onOpen = { onOpenNextUp(offer) },
+                            onDismiss = onDismissNextUp,
+                        )
+                    }
+                }
             }
             if (chromeVisible) {
                 ReadingScrubber(
@@ -386,7 +404,7 @@ fun ReaderScreen(
                         }
                     },
                 )
-            } else if (jumpBack == null && catchUp == null) {
+            } else if (jumpBack == null && catchUp == null && nextUp == null) {
                 ReadingFooter(
                     progress = progress,
                     mode = prefs.footerMode,

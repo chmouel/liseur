@@ -34,6 +34,73 @@ class KomgaBooksTest {
     }
 
     @Test
+    fun `a book carries the series it belongs to`() {
+        val book = KomgaBooks.parsePage(JSONObject(REAL_PAGE)).books.single().book
+
+        assertEquals("0R57273CEZ4HD", book.seriesId)
+        assertEquals(1.0, book.seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `the sort number is what places a volume, not the shown one`() {
+        // Komga orders by numberSort; `number` is a label and `number`
+        // on the DTO itself is only where the file sits in its folder.
+        val book = bookWith(
+            """"seriesTitle": "Sandman", "number": 99,
+               "metadata": {"title": "Annual", "number": "Annual 2023", "numberSort": 4.5}""",
+        )
+
+        assertEquals("Sandman", book.seriesName)
+        assertEquals(4.5, book.seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `a label that is not a number leaves the volume unplaced`() {
+        val book = bookWith(
+            """"seriesTitle": "Sandman",
+               "metadata": {"title": "Annual", "number": "Annual 2023"}""",
+        )
+
+        assertEquals("Sandman", book.seriesName)
+        assertNull(book.seriesIndex)
+    }
+
+    @Test
+    fun `a shown number is used when there is no sort number`() {
+        val book = bookWith(
+            """"seriesTitle": "Sandman", "metadata": {"title": "Two", "number": "2"}""",
+        )
+
+        assertEquals(2.0, book.seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `a one-shot is not a series of one`() {
+        val book = bookWith(
+            """"seriesId": "s-1", "seriesTitle": "Ulysses", "oneshot": true,
+               "metadata": {"title": "Ulysses", "numberSort": 1}""",
+        )
+
+        assertNull(book.seriesName)
+        assertNull(book.seriesId)
+    }
+
+    @Test
+    fun `a server that says nothing about a series is not made to`() {
+        val book = bookWith(""""metadata": {"title": "Alone"}""")
+
+        assertNull(book.seriesName)
+        assertNull(book.seriesId)
+        assertNull(book.seriesIndex)
+    }
+
+    private fun bookWith(fields: String) = KomgaBooks.parsePage(
+        JSONObject(
+            """{"content":[{"id":"b1","name":"file.epub",$fields}],"last":true}""",
+        ),
+    ).books.single().book
+
+    @Test
     fun `a book nobody has opened has no progress`() {
         assertNull(KomgaBooks.parsePage(JSONObject(REAL_PAGE)).books.single().progress)
     }

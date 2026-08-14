@@ -39,15 +39,15 @@ modern reader that is equally at home with the files on your phone and with a
     <td align="center"><sub>Hold a word for a definition, without leaving the page.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/08-settings.png" alt="Settings"></td>
+    <td><img src="docs/screenshots/13-series.png" alt="Series"></td>
+    <td><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
     <td><img src="docs/screenshots/09-server.png" alt="Server setup"></td>
-    <td><img src="docs/screenshots/10-library-dark.png" alt="Library in dark mode"></td>
     <td><img src="docs/screenshots/11-reading-dark.png" alt="Reading in the dark theme"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Theme, volume keys, and where your books come from.</sub></td>
+    <td align="center"><sub>Each series on the shelf as one stack, however many books it holds.</sub></td>
+    <td align="center"><sub>The series in order, how far you are into it, and the volumes you are missing.</sub></td>
     <td align="center"><sub>calibre-web or Komga: an address and a way in. Liseur does the rest.</sub></td>
-    <td align="center"><sub>The same shelf after dark.</sub></td>
     <td align="center"><sub>The Dark page theme, chosen separately from the app's.</sub></td>
   </tr>
 </table>
@@ -84,6 +84,15 @@ works either way.
 Point `Liseur` at folders of EPUBs and it indexes them, covers and
 all. Books you are actually using sort to the front, finished ones get a tick,
 and pull to refresh picks up whatever changed behind the app's back.
+
+Books that belong to a series say so. calibre-web, Komga and any EPUB
+exported from calibre all carry the series and the volume number, and Liseur
+reads them from whichever of the three a book came from. The title on the
+shelf gains a quiet `Sherlock Holmes · #2`, searching for a series name finds
+every volume of it, and a Series view stacks each one into a single card. Open
+the stack and you get the series in order, where you are in it, which volumes
+you are missing between the ones you have, and a button to carry on with the
+next. Finish a book and the one after it is offered on the last page.
 
 Pick [calibre-web](https://github.com/janeczku/calibre-web) or [Komga](https://komga.org/), connect to it and Liseur works
 out the rest: the catalog, whether the account may download, and how to sync. 

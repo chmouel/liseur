@@ -221,7 +221,7 @@ hack/screenshots            # capture from a device already set up
 hack/screenshots --setup-only   # build the shelf and stop, to check it
 hack/screenshots --class tablet  # file the captures as a tablet set
 hack/icon                   # fastlane icon.png, from the vector drawables
-hack/feature-graphic        # fastlane featureGraphic.png, from the banner
+hack/feature-graphic        # fastlane featureGraphic.png, from the brand emblem
 ```
 
 `hack/screenshots` drives a connected device through adb and writes both

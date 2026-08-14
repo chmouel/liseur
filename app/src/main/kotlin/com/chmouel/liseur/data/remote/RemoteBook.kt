@@ -35,4 +35,18 @@ data class RemoteBook(
      * nothing else uses.
      */
     val calibreBookId: Int? = null,
+    /**
+     * The series the book belongs to, as the server names it. Komga says
+     * so outright; calibre-web writes it into the prose of its feed, and
+     * the OPDS parser digs it back out.
+     */
+    val seriesName: String? = null,
+    /** Where in that series it sits, when the server says. */
+    val seriesIndex: Double? = null,
+    /**
+     * The server's own id for the series, which only Komga has. Worth
+     * keeping because it is the only way to ask Komga what else it knows
+     * about the series; it never decides which books belong together.
+     */
+    val seriesId: String? = null,
 )

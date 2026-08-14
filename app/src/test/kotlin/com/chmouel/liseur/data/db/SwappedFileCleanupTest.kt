@@ -117,6 +117,8 @@ class SwappedFileCleanupTest {
             coverPath = null,
             fileModifiedAt = 2_000,
             workId = "urn:uuid:new",
+            seriesName = null,
+            seriesIndex = null,
         )
 
         val book = db.bookDao().getByUrl(swapped)

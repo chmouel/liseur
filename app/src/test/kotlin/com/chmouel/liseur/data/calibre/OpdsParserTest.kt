@@ -145,4 +145,100 @@ class OpdsParserTest {
 
         assertEquals(listOf("abc"), page.books.map { it.uuid })
     }
+
+    /**
+     * calibre-web writes the series into the human-readable block, as a
+     * line of prose between the rating and the tags, exactly as
+     * `cps/templates/feed.xml` lays it out.
+     */
+    private fun entryWithContent(content: String) = OpdsParser.parse(
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <title>The Great Hunt</title>
+            <id>urn:uuid:aaaabbbb-0000-1111-2222-333344445555</id>
+            <link rel="http://opds-spec.org/acquisition" href="/opds/download/74/epub/"
+                  length="1" type="application/epub+zip"/>
+            <content type="xhtml">
+              <div xmlns="http://www.w3.org/1999/xhtml">CONTENT</div>
+            </content>
+          </entry>
+        </feed>
+        """.trimIndent().replace("CONTENT", content),
+    ).books.single()
+
+    @Test
+    fun `the series line names the series and places the book in it`() {
+        val book = entryWithContent(
+            """RATING: 4<br/>SERIES: Wheel of Time [2.00]<br/>TAGS: fantasy<br/>""",
+        )
+
+        assertEquals("Wheel of Time", book.seriesName)
+        assertEquals(2.0, book.seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `a padded whole number is still a whole number`() {
+        assertEquals(1.0, entryWithContent("SERIES: Dune [1.00]<br/>").seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `a novella between two volumes keeps its half`() {
+        assertEquals(7.5, entryWithContent("SERIES: Dune [7.50]<br/>").seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `a comma is a decimal point on a French server`() {
+        assertEquals(7.5, entryWithContent("SERIES: Dune [7,50]<br/>").seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `a series whose own name has brackets keeps them`() {
+        val book = entryWithContent("SERIES: Foundation [Expanded] [3.00]<br/>")
+
+        assertEquals("Foundation [Expanded]", book.seriesName)
+        assertEquals(3.0, book.seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `a book in no series says so`() {
+        val book = entryWithContent("RATING: 4<br/>TAGS: fantasy<br/>")
+
+        assertNull(book.seriesName)
+        assertNull(book.seriesIndex)
+    }
+
+    @Test
+    fun `an entry with no content block is not an error`() {
+        assertNull(OpdsParser.parse(feed).books.single().seriesName)
+    }
+
+    @Test
+    fun `a custom column that merely mentions a series is not one`() {
+        // Custom columns are written to the same block in the same
+        // shape, so the label has to be the real one.
+        val book = entryWithContent("MY SERIES OF NOTE: Wheel of Time<br/>")
+
+        assertNull(book.seriesName)
+    }
+
+    @Test
+    fun `a description quoting a series line is not read as one`() {
+        // The description is a paragraph inside the same block; the
+        // prose lines are not.
+        val book = entryWithContent(
+            """SERIES: Wheel of Time [2.00]<br/><p>SERIES: Some Other Thing [9.00]</p>""",
+        )
+
+        assertEquals("Wheel of Time", book.seriesName)
+        assertEquals(2.0, book.seriesIndex!!, 0.0)
+    }
+
+    @Test
+    fun `only the description mentioning a series leaves the book out of one`() {
+        val book = entryWithContent("""<p>SERIES: Some Other Thing [9.00]</p>""")
+
+        assertNull(book.seriesName)
+    }
 }
