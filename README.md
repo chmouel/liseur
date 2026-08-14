@@ -154,6 +154,17 @@ Install from the [F-droid repository](https://f-droid.org/en/packages/com.chmoue
 
 * Check out [liseur-desktop](https://github.com/chmouel/liseur-desktop) for the desktop (electron based) version of liseur.
 
+## How to pronounce Liseur
+
+**Liseur** is a French word for someone who reads — basically, a *reader*.
+
+It has a slightly old-school, literary feel in French, which fits the app nicely.
+
+Pronunciation: **lee-ZUR**
+IPA: **/li.zœʁ/**
+
+Think of it as the French cousin of “reader” - short, simple, and made for books.
+
 ## Author
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github)](https://github.com/sponsors/chmouel)
 ### Chmouel Boudjnah 
