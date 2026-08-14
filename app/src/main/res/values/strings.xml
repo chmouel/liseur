@@ -22,7 +22,7 @@
     <string name="filter_downloaded">Downloaded</string>
     <string name="filter_not_downloaded">Not downloaded</string>
     <string name="filter_unread">Unread</string>
-    <string name="filter_in_progress">Reading now</string>
+    <string name="filter_in_progress">Started</string>
     <string name="filter_finished">Finished</string>
     <string name="filter_group_series">Group by series</string>
     <string name="filter_clear">Clear filters</string>
@@ -350,10 +350,11 @@
     <string name="state_finished">Finished</string>
     <string name="state_on_server">On the server</string>
     <string name="state_on_device">On this device</string>
-    <string name="filter_archived">Put away</string>
-    <string name="everything_put_away">Every book is put away.</string>
-    <string name="archive_book">Put away</string>
-    <string name="unarchive_book">Put back on the shelf</string>
+    <string name="filter_archived">Archived</string>
+    <string name="filter_archived_only">Only archived books</string>
+    <string name="everything_archived">Every book is archived.</string>
+    <string name="archive_book">Archive</string>
+    <string name="unarchive_book">Unarchive</string>
     <string name="export_annotations">Export</string>
     <string name="annotations_backup_title">Highlights and notes</string>
     <string name="annotations_backup_summary" formatted="true">%1$d marks across %2$d books</string>

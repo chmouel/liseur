@@ -328,7 +328,7 @@ class LibraryViewModel(
             val shelves = allShelves.worthShowing()
             // Keyed by series rather than by book, so that a volume kept
             // out of the grouping — an archived one — still wears its
-            // number when the Put away chip brings it back up.
+            // number when the archive brings it back up.
             val shownSeries = shelves.mapTo(mutableSetOf()) { it.key }
 
             // An option whose control is no longer on screen cannot be
@@ -351,7 +351,7 @@ class LibraryViewModel(
                     }
                 },
                 // The grouping is built from the shelf, so there are no
-                // series in the archive to group: a book put away is out
+                // series in the archive to group: an archived book is out
                 // of its series card as much as it is out of the shelf.
                 groupBySeries = stored.groupBySeries &&
                     shelves.isNotEmpty() &&

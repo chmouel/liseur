@@ -1459,7 +1459,7 @@ private fun EverythingArchived(
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         ) {
             Text(
-                text = stringResource(R.string.everything_put_away),
+                text = stringResource(R.string.everything_archived),
                 style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center,
             )
@@ -1596,7 +1596,12 @@ private fun FilterMenu(
             if (state.hasArchived || filters.archived) {
                 HorizontalDivider()
                 FilterMenuItem(
-                    label = LibraryFilterOption.ARCHIVED.label(),
+                    // Not the plain name it wears in the summary and in
+                    // the bar: every other box in this menu widens the
+                    // shelf, and this one swaps it. The label is where
+                    // that has to be said, because the checkbox itself
+                    // says the opposite.
+                    label = stringResource(R.string.filter_archived_only),
                     checked = filters.archived,
                     onToggle = { onToggleFilter(LibraryFilterOption.ARCHIVED) },
                 )

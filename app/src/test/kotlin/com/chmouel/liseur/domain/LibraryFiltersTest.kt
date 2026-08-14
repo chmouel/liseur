@@ -23,6 +23,7 @@ class LibraryFiltersTest {
         archived: Boolean = false,
         finished: Boolean = false,
         downloaded: Boolean = true,
+        pageCount: Int? = null,
     ) = Book(
         url = "book",
         title = "A book",
@@ -34,6 +35,7 @@ class LibraryFiltersTest {
         downloadState = if (downloaded) DownloadState.DOWNLOADED else DownloadState.REMOTE,
         finishedAt = if (finished) 1 else null,
         archivedAt = if (archived) 1 else null,
+        remotePageCount = pageCount,
     )
 
     private fun filters(vararg options: LibraryFilterOption) =
@@ -94,6 +96,31 @@ class LibraryFiltersTest {
         // must not move it out of Unread.
         assertTrue(filters(LibraryFilterOption.UNREAD).accepts(book(), progression = 0.001))
         assertFalse(filters(LibraryFilterOption.IN_PROGRESS).accepts(book(), progression = 0.001))
+    }
+
+    @Test
+    fun `a page of a short book is more of it than a page of a long one`() {
+        // Two per cent is a page and a half of a fifty-page story and
+        // eight pages into a four-hundred-page novel. It cannot mean
+        // "started" for one and not the other.
+        val story = book(pageCount = 50)
+        val novel = book(pageCount = 400)
+        assertTrue(filters(LibraryFilterOption.UNREAD).accepts(story, progression = 0.015))
+        assertTrue(filters(LibraryFilterOption.IN_PROGRESS).accepts(novel, progression = 0.015))
+    }
+
+    @Test
+    fun `a length nobody counted falls back to a page of a novel`() {
+        assertEquals(0.01, startedAfter(null), 0.0)
+        assertEquals(0.01, startedAfter(0), 0.0)
+    }
+
+    @Test
+    fun `a page is never an absurd share of the book`() {
+        // A four-page pamphlet is not a quarter read after one page,
+        // and an omnibus is not started after two paragraphs.
+        assertEquals(0.05, startedAfter(4), 0.0)
+        assertEquals(0.002, startedAfter(2000), 0.0)
     }
 
     @Test
