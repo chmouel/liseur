@@ -66,6 +66,11 @@ private val Components = listOf(
     Component("OkHttp", "Apache 2.0"),
     Component("Coil", "Apache 2.0"),
     Component(
+        name = "Reorderable",
+        licence = "Apache 2.0",
+        notice = "Copyright 2023 Calvin Liang",
+    ),
+    Component(
         name = "Literata",
         licence = "SIL Open Font License 1.1",
         notice = "Copyright 2017 The Literata Project Authors",

@@ -110,10 +110,57 @@ data class Book(
      * every launch by the backfill.
      */
     @ColumnInfo(name = "series_checked") val seriesChecked: Boolean = false,
+    /** The catalog's series name, kept beside the file's for the same reason. */
+    @ColumnInfo(name = "catalog_series_name") val catalogSeriesName: String? = null,
+    /** The catalog's series index. */
+    @ColumnInfo(name = "catalog_series_index") val catalogSeriesIndex: Double? = null,
+    /**
+     * The series the reader filed the book under themselves, null when
+     * they filed it under none.
+     *
+     * Only meaningful while [seriesOverridden] is set: the column cannot
+     * tell "no series" from "nothing said", and the two are different
+     * answers.
+     */
+    @ColumnInfo(name = "user_series_name") val userSeriesName: String? = null,
+    /** Where the reader put it in that series. */
+    @ColumnInfo(name = "user_series_index") val userSeriesIndex: Double? = null,
+    /**
+     * Whether the reader has filed this book under a series by hand.
+     *
+     * What it buys is durability: every write that comes from a server
+     * or from the file checks it first, so a catalog refresh cannot put
+     * back a series the reader took the book out of.
+     *
+     * The name only. Where the book sits *within* the series is
+     * [indexOverridden], because reordering a shelf has to move a book
+     * without also freezing the name the server gave it.
+     */
+    @ColumnInfo(name = "series_override") val seriesOverridden: Boolean = false,
+    /**
+     * Whether the reader has set this book's place in its series by
+     * hand, by typing a number or by dragging the shelf into order.
+     *
+     * Independent of [seriesOverridden] in both directions: a dragged
+     * book keeps the server's series name, and a book filed by hand
+     * always sets this too — saying where a book goes and saying nothing
+     * about its number both mean the source no longer decides it.
+     */
+    @ColumnInfo(name = "series_index_override") val indexOverridden: Boolean = false,
 ) {
     val finished: Boolean get() = finishedAt != null
 
     val archived: Boolean get() = archivedAt != null
+
+    /**
+     * The series id worth asking a server about.
+     *
+     * A book the reader has refiled keeps the id of the series it came
+     * from — that series still exists on the server — but the shelf it
+     * is on now is not that series, and fetching its summary would put
+     * the wrong blurb under the right name.
+     */
+    val shelfSeriesId: String? get() = seriesId?.takeIf { !seriesOverridden }
 
     /** The URL to hand to Readium, or null when the file is not here yet. */
     val openableUrl: String? get() = localUri ?: url.takeIf { downloadState == DownloadState.DOWNLOADED }
@@ -168,7 +215,16 @@ interface BookDao {
     @Query(
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
-            "series_name = file_series_name, series_index = file_series_index, " +
+            "catalog_series_name = NULL, catalog_series_index = NULL, " +
+            "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
+            "ELSE file_series_name END, " +
+            "series_index = CASE " +
+            "WHEN series_override = 1 THEN CASE " +
+            "WHEN user_series_name IS NOT NULL AND series_index_override = 1 " +
+            "THEN user_series_index ELSE NULL END " +
+            "WHEN file_series_name IS NULL THEN NULL " +
+            "WHEN series_index_override = 1 THEN user_series_index " +
+            "ELSE file_series_index END, " +
             "series_id = NULL " +
             "WHERE remote_uuid IS NOT NULL",
     )
@@ -182,7 +238,16 @@ interface BookDao {
     @Query(
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
-            "series_name = file_series_name, series_index = file_series_index, " +
+            "catalog_series_name = NULL, catalog_series_index = NULL, " +
+            "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
+            "ELSE file_series_name END, " +
+            "series_index = CASE " +
+            "WHEN series_override = 1 THEN CASE " +
+            "WHEN user_series_name IS NOT NULL AND series_index_override = 1 " +
+            "THEN user_series_index ELSE NULL END " +
+            "WHEN file_series_name IS NULL THEN NULL " +
+            "WHEN series_index_override = 1 THEN user_series_index " +
+            "ELSE file_series_index END, " +
             "series_id = NULL " +
             "WHERE url IN (:urls)",
     )
@@ -213,12 +278,25 @@ interface BookDao {
             file_modified_at = :fileModifiedAt, work_id = :workId,
             file_series_name = :seriesName, file_series_index = :seriesIndex,
             series_name = CASE
-                WHEN remote_uuid IS NULL THEN :seriesName
-                ELSE COALESCE(series_name, :seriesName)
+                WHEN series_override = 1 THEN user_series_name
+                -- The catalog's own answer, not the resolved column: a
+                -- resolved series_name that came from this very file
+                -- would outrank the file on every later reading of it,
+                -- and a corrected OPF could never take.
+                ELSE COALESCE(catalog_series_name, :seriesName)
             END,
             series_index = CASE
-                WHEN remote_uuid IS NULL THEN :seriesIndex
-                ELSE COALESCE(series_index, :seriesIndex)
+                -- A number belongs to a series, so the name is resolved
+                -- first and an index of any provenance is dropped when
+                -- it turns out to name nothing.  This repeats the
+                -- series_name ladder above; the two must stay in step.
+                WHEN (CASE
+                    WHEN series_override = 1 THEN user_series_name
+                    ELSE COALESCE(catalog_series_name, :seriesName)
+                END) IS NULL THEN NULL
+                WHEN series_index_override = 1 THEN user_series_index
+                WHEN series_override = 1 THEN NULL
+                ELSE COALESCE(catalog_series_index, :seriesIndex)
             END,
             series_checked = 1
         WHERE url = :url
@@ -268,18 +346,79 @@ interface BookDao {
         SET file_series_name = :seriesName,
             file_series_index = :seriesIndex,
             series_name = CASE
-                WHEN remote_uuid IS NULL THEN :seriesName
-                ELSE COALESCE(series_name, :seriesName)
+                WHEN series_override = 1 THEN user_series_name
+                -- The catalog's own answer, not the resolved column: a
+                -- resolved series_name that came from this very file
+                -- would outrank the file on every later reading of it,
+                -- and a corrected OPF could never take.
+                ELSE COALESCE(catalog_series_name, :seriesName)
             END,
             series_index = CASE
-                WHEN remote_uuid IS NULL THEN :seriesIndex
-                ELSE COALESCE(series_index, :seriesIndex)
+                -- A number belongs to a series, so the name is resolved
+                -- first and an index of any provenance is dropped when
+                -- it turns out to name nothing.  This repeats the
+                -- series_name ladder above; the two must stay in step.
+                WHEN (CASE
+                    WHEN series_override = 1 THEN user_series_name
+                    ELSE COALESCE(catalog_series_name, :seriesName)
+                END) IS NULL THEN NULL
+                WHEN series_index_override = 1 THEN user_series_index
+                WHEN series_override = 1 THEN NULL
+                ELSE COALESCE(catalog_series_index, :seriesIndex)
             END,
             series_checked = 1
         WHERE url = :url
         """,
     )
     suspend fun fillSeriesFromFile(url: String, seriesName: String?, seriesIndex: Double?)
+
+    /**
+     * Files a book where the reader says it goes, or nowhere at all.
+     *
+     * A null [name] is the "not in a series" answer and is kept as one:
+     * `series_override` stays set, so the next catalog refresh finds a
+     * decision already made rather than an empty field to fill in.
+     *
+     * Both flags are set, even when [index] is null. "I filed this book
+     * here and said nothing about its number" is an answer too — the
+     * book has no number — and leaving the index to the source would let
+     * it keep the number its old series gave it and get it back on the
+     * next refresh.
+     */
+    @Query(
+        """
+        UPDATE books
+        SET user_series_name = :name,
+            user_series_index = CASE WHEN :name IS NULL THEN NULL ELSE :index END,
+            series_override = 1,
+            series_index_override = 1,
+            series_name = :name,
+            series_index = CASE WHEN :name IS NULL THEN NULL ELSE :index END
+        WHERE url = :url
+        """,
+    )
+    suspend fun setSeriesOverride(url: String, name: String?, index: Double?)
+
+    /**
+     * Hands the book back to whoever described it, for when the reader
+     * decides the server had it right after all.
+     */
+    @Query(
+        """
+        UPDATE books
+        SET user_series_name = NULL,
+            user_series_index = NULL,
+            series_override = 0,
+            series_index_override = 0,
+            series_name = COALESCE(catalog_series_name, file_series_name),
+            series_index = CASE
+                WHEN COALESCE(catalog_series_name, file_series_name) IS NULL THEN NULL
+                ELSE COALESCE(catalog_series_index, file_series_index)
+            END
+        WHERE url = :url
+        """,
+    )
+    suspend fun clearSeriesOverride(url: String)
 
     /**
      * Forgets that this book was ever opened, for when the file at a path
@@ -320,9 +459,21 @@ interface BookDao {
             remote_book_id = :remoteBookId, cover_url = :coverUrl,
             download_href = :downloadHref, remote_updated_at = :remoteUpdatedAt,
             remote_page_count = :remotePageCount,
-            series_name = COALESCE(:catalogSeriesName, file_series_name),
+            catalog_series_name = :catalogSeriesName,
+            catalog_series_index = :catalogSeriesIndex,
+            series_name = CASE
+                WHEN series_override = 1 THEN user_series_name
+                ELSE COALESCE(:catalogSeriesName, file_series_name)
+            END,
             series_index = CASE
-                WHEN COALESCE(:catalogSeriesName, file_series_name) IS NULL THEN NULL
+                -- Same ladder as series_name above, so that a number
+                -- never outlives the name it counts within.
+                WHEN (CASE
+                    WHEN series_override = 1 THEN user_series_name
+                    ELSE COALESCE(:catalogSeriesName, file_series_name)
+                END) IS NULL THEN NULL
+                WHEN series_index_override = 1 THEN user_series_index
+                WHEN series_override = 1 THEN NULL
                 ELSE COALESCE(:catalogSeriesIndex, file_series_index)
             END,
             series_id = :seriesId

@@ -43,6 +43,7 @@ import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
 import com.chmouel.liseur.ui.library.ConfirmServerDeleteDialog
 import com.chmouel.liseur.ui.library.LibraryScreen
+import com.chmouel.liseur.ui.library.SeriesAssignDialog
 import com.chmouel.liseur.ui.library.SeriesScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
@@ -62,6 +63,7 @@ import android.net.Uri
 import androidx.core.net.toUri
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
+import com.chmouel.liseur.domain.SeriesShelf
 
 class MainActivity : ComponentActivity() {
 
@@ -501,13 +503,37 @@ private fun LibraryRoute(
     // enum because it is a step inside the library rather than away from
     // it: the same view model, the same books, one level down.
     var openSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
-    val openSeries = openSeriesKey?.let { key -> state.series.firstOrNull { it.key == key } }
+    val liveSeries = openSeriesKey?.let { key -> state.series.firstOrNull { it.key == key } }
+    val reorder by viewModel.reorder.collectAsStateWithLifecycle()
+    val notice by viewModel.notice.collectAsStateWithLifecycle()
+
+    // The lookup is by name, so a catalog refresh that renames the
+    // series — or the last volume being refiled out of it — turns it
+    // null and takes the screen with it. Harmless while reading; with an
+    // unsaved draft on it, that is losing the reader's work without a
+    // word. So the last shelf seen is held while the mode is open.
+    val pinnedSeries = remember { mutableStateOf<SeriesShelf?>(null) }
+    if (liveSeries != null) pinnedSeries.value = liveSeries
+    val openSeries = liveSeries ?: pinnedSeries.value?.takeIf { reorder != null }
+
+    LaunchedEffect(liveSeries == null, reorder != null) {
+        if (liveSeries == null && reorder != null) {
+            // Closing with the same message the failed commit uses,
+            // rather than vanishing.
+            viewModel.seriesWentAway()
+            openSeriesKey = null
+        }
+    }
+
     var seriesSheetBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesServerDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    var seriesSheetRefile by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     val seriesExtras by viewModel.openSeriesExtras.collectAsStateWithLifecycle()
 
     if (openSeries != null) {
-        BackHandler { openSeriesKey = null }
+        // Yields to reorder mode's own handler, which cancels the draft
+        // before anything leaves the screen.
+        BackHandler(enabled = reorder == null) { openSeriesKey = null }
         SeriesScreen(
             shelf = openSeries,
             downloads = state.downloads,
@@ -530,6 +556,15 @@ private fun LibraryRoute(
                 viewModel.setSeriesArchived(openSeries, true)
                 openSeriesKey = null
             },
+            reorder = reorder,
+            onStartReorder = { viewModel.startReorder(openSeries) },
+            onMoveVolume = viewModel::moveVolume,
+            onCommitReorder = viewModel::commitReorder,
+            onCancelReorder = viewModel::cancelReorder,
+            hasCustomNumbers = openSeries.volumes.any { it.book.indexOverridden },
+            onClearCustomNumbers = { viewModel.clearCustomVolumeNumbers(openSeries) },
+            notice = notice,
+            onNoticeShown = viewModel::noticeShown,
         )
         seriesSheetBook?.let { book ->
             BookActionsSheet(
@@ -543,6 +578,10 @@ private fun LibraryRoute(
                 onSetFinished = { viewModel.setFinished(book, it); seriesSheetBook = null },
                 onSetArchived = { viewModel.setArchived(book, it); seriesSheetBook = null },
                 onOpenStats = { onOpenBookStats(book); seriesSheetBook = null },
+                // Refiling from inside a series is chiefly how a volume
+                // that landed on the wrong shelf gets off it, so it is
+                // offered here as well as on the shelf.
+                onEditSeries = { seriesSheetRefile = book; seriesSheetBook = null },
                 onDeleteLocal = { viewModel.deleteLocalBook(book); seriesSheetBook = null },
                 // The same warning the shelf puts in front of it. An
                 // action offered here and answered nowhere would be a
@@ -551,6 +590,21 @@ private fun LibraryRoute(
                     seriesServerDelete = book
                     seriesSheetBook = null
                 },
+            )
+        }
+        seriesSheetRefile?.let { book ->
+            SeriesAssignDialog(
+                book = book,
+                seriesNames = state.seriesNames,
+                onConfirm = { name, index ->
+                    viewModel.setBookSeries(book, name, index)
+                    seriesSheetRefile = null
+                },
+                onReset = {
+                    viewModel.resetBookSeries(book)
+                    seriesSheetRefile = null
+                },
+                onDismiss = { seriesSheetRefile = null },
             )
         }
         seriesServerDelete?.let { book ->
@@ -586,6 +640,8 @@ private fun LibraryRoute(
         onSetArchived = viewModel::setArchived,
         onDeleteLocal = viewModel::deleteLocalBook,
         onDeleteFromServer = viewModel::deleteFromServer,
+        onSetSeries = viewModel::setBookSeries,
+        onResetSeries = viewModel::resetBookSeries,
         deleteFailures = viewModel.deleteFailures,
         onRefresh = viewModel::refreshAll,
         onSetSort = viewModel::setSort,
@@ -600,6 +656,8 @@ private fun LibraryRoute(
             viewModel.openSeries(shelf)
             openSeriesKey = shelf.key
         },
+        notice = notice,
+        onNoticeShown = viewModel::noticeShown,
     )
 }
 

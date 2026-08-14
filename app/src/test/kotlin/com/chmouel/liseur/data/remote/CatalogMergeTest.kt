@@ -157,4 +157,62 @@ class CatalogMergeTest {
         assertEquals("The File Series", merged.seriesName)
         assertEquals(2.0, merged.seriesIndex)
     }
+
+    @Test
+    fun `a refresh leaves a book the reader filed themselves alone`() {
+        val refiled = downloadedAndFinished.copy(
+            seriesName = "My Shelf",
+            seriesIndex = 1.0,
+            fileSeriesName = "The File Series",
+            fileSeriesIndex = 2.0,
+            userSeriesName = "My Shelf",
+            userSeriesIndex = 1.0,
+            seriesOverridden = true,
+            indexOverridden = true,
+        )
+
+        val merged = mergeCatalogEntry(
+            entry.copy(seriesName = "Catalog Series", seriesIndex = 8.0),
+            refiled,
+            url = "calibre:abc-123",
+            baseUrl = "https://books.example.com",
+            now = 9_999L,
+        )
+
+        assertEquals("My Shelf", merged.seriesName)
+        assertEquals(1.0, merged.seriesIndex)
+        assertEquals(true, merged.seriesOverridden)
+        // What the catalog says is still taken down, so undoing the
+        // filing has the server's answer to go back to.
+        assertEquals("Catalog Series", merged.catalogSeriesName)
+        assertEquals(8.0, merged.catalogSeriesIndex)
+    }
+
+    @Test
+    fun `a book filed by hand with no number keeps none through a refresh`() {
+        // Volume 4 of one series filed into another is not volume 4 of
+        // the one it was filed into, and the catalog's number is about
+        // the series the book just left.
+        val refiled = downloadedAndFinished.copy(
+            seriesName = "My Shelf",
+            seriesIndex = null,
+            fileSeriesName = "The File Series",
+            fileSeriesIndex = 4.0,
+            userSeriesName = "My Shelf",
+            userSeriesIndex = null,
+            seriesOverridden = true,
+            indexOverridden = true,
+        )
+
+        val merged = mergeCatalogEntry(
+            entry.copy(seriesName = "Catalog Series", seriesIndex = 8.0),
+            refiled,
+            url = "calibre:abc-123",
+            baseUrl = "https://books.example.com",
+            now = 9_999L,
+        )
+
+        assertEquals("My Shelf", merged.seriesName)
+        assertEquals(null, merged.seriesIndex)
+    }
 }

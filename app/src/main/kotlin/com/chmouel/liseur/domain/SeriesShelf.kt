@@ -70,6 +70,30 @@ data class SeriesShelf(
 }
 
 /**
+ * The shelves worth putting on screen.
+ *
+ * A shelf of one is not a series, it is one book wearing a series card:
+ * a tap that opens a screen showing exactly what the library already
+ * showed. They arrive by the dozen — one for every standalone with a
+ * series field filled in, one for every first volume bought before its
+ * second.
+ *
+ * This narrows the *showing* only, which is why it is not folded into
+ * [groupedIntoSeries]. A series created by hand on its first book has to
+ * stay offerable to the second one, and a grouping that had already
+ * dropped it could never be added to.
+ *
+ * A volume a server knows about but that is not downloaded is a row in
+ * the shelf like any other and counts towards the two. One book of
+ * twelve is a series; the missing volumes are the point of showing it.
+ */
+fun List<SeriesShelf>.worthShowing(): List<SeriesShelf> =
+    filter { it.volumes.size >= MIN_SERIES_VOLUMES }
+
+/** How many books it takes to make a series. */
+const val MIN_SERIES_VOLUMES = 2
+
+/**
  * Sorts the volumes of one series.
  *
  * Numbered volumes first and in their numbers, then anything the source

@@ -23,7 +23,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 26,
+    version = 28,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -34,6 +34,7 @@ abstract class LiseurDatabase : RoomDatabase() {
 
     abstract fun workIdentityDao(): WorkIdentityDao
     abstract fun bookDao(): BookDao
+    abstract fun seriesOrderDao(): SeriesOrderDao
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun remoteServerDao(): RemoteServerDao
     abstract fun annotationDao(): BookAnnotationDao
@@ -657,6 +658,125 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Adds the reader's own filing of a book into a series.
+         *
+         * `catalog_series_name` arrives empty and stays empty until the
+         * next catalog walk fills it in. Nothing reads it before then
+         * except the undo, which falls back to what the file said —
+         * which is what an un-refreshed library has anyway.
+         *
+         * Every column is added only if it is not already there, and
+         * that includes two that version 26 was supposed to have. 26 was
+         * never released, and it was not one shape: devices carrying a
+         * build from the middle of the series work have a `books` table
+         * without `file_series_name`. Room only checks the columns when
+         * the version moves, so those devices ran happily until this
+         * migration and would then have failed the check on the way out
+         * of it, for a column this migration never touched. Repairing
+         * what we find is the only way past that, and it costs one
+         * PRAGMA on an upgrade that happens once.
+         */
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(connection: SQLiteConnection) {
+                val existing = connection.columnsOf("books")
+                fun add(name: String, type: String) {
+                    if (name !in existing) {
+                        connection.execSQL("ALTER TABLE `books` ADD COLUMN `$name` $type")
+                    }
+                }
+                add("file_series_name", "TEXT")
+                add("file_series_index", "REAL")
+                add("catalog_series_name", "TEXT")
+                add("catalog_series_index", "REAL")
+                add("user_series_name", "TEXT")
+                add("user_series_index", "REAL")
+                add("series_override", "INTEGER NOT NULL DEFAULT 0")
+                if ("file_series_name" !in existing) {
+                    // A book with no server behind it was only ever
+                    // described by its own file, so what it says now is
+                    // what the file said. Recovering it matters because
+                    // it is what a book falls back to when the reader
+                    // undoes their own filing.
+                    connection.execSQL(
+                        "UPDATE `books` SET `file_series_name` = `series_name`, " +
+                            "`file_series_index` = `series_index` " +
+                            "WHERE `remote_uuid` IS NULL",
+                    )
+                }
+            }
+        }
+
+        /**
+         * Splits the series override in two, so a book can be moved
+         * within a series without freezing the series' name.
+         *
+         * The old `series_override` is kept and narrowed to mean the
+         * name; only `series_index_override` is added. Rewriting it into
+         * two new columns would mean dropping the old one, and
+         * `ALTER TABLE … DROP COLUMN` wants SQLite 3.35 — this app runs
+         * from API 26, where most devices cannot, and the alternative is
+         * rebuilding `books` with its indices and its data.
+         *
+         * Version 27 is unreleased and 26→27 was itself a repair, so the
+         * column guard runs again over everything canonical v27 owes
+         * before anything else happens.
+         */
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(connection: SQLiteConnection) {
+                val existing = connection.columnsOf("books")
+                fun add(name: String, type: String) {
+                    if (name !in existing) {
+                        connection.execSQL("ALTER TABLE `books` ADD COLUMN `$name` $type")
+                    }
+                }
+                add("file_series_name", "TEXT")
+                add("file_series_index", "REAL")
+                add("catalog_series_name", "TEXT")
+                add("catalog_series_index", "REAL")
+                add("user_series_name", "TEXT")
+                add("user_series_index", "REAL")
+                add("series_override", "INTEGER NOT NULL DEFAULT 0")
+                add("series_index_override", "INTEGER NOT NULL DEFAULT 0")
+
+                if ("file_series_name" !in existing) {
+                    // As in 26→27: a book with no server behind it was
+                    // only ever described by its own file. Skipped on a
+                    // row filed by hand, where `series_name` holds the
+                    // reader's answer and copying it here would forge a
+                    // provenance the file never gave — after which the
+                    // refresh would find its own value already in place
+                    // and agree with itself forever.
+                    connection.execSQL(
+                        "UPDATE `books` SET `file_series_name` = `series_name`, " +
+                            "`file_series_index` = `series_index` " +
+                            "WHERE `remote_uuid` IS NULL AND `series_override` = 0",
+                    )
+                }
+
+                // `catalog_series_*` is deliberately not recovered.
+                // `remote_uuid` says the book came from a server, not
+                // that the server is where its series came from: the
+                // merge falls back field by field, so a linked book can
+                // carry a name the catalog gave beside an index the file
+                // gave, or a series the catalog never mentioned. A wrong
+                // value here is worse than an empty one, because the
+                // merge will trust it. The next refresh knows.
+
+                if ("series_index_override" !in existing) {
+                    // Filing a book by hand has always set its number
+                    // too, so every existing override is an index
+                    // override as well. Only on the way in: a device
+                    // that already carries the column has been through
+                    // an earlier build of this migration and may hold
+                    // index-only overrides this would flatten.
+                    connection.execSQL(
+                        "UPDATE `books` SET `series_index_override` = `series_override`",
+                    )
+                }
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -686,6 +806,20 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_23_24,
             MIGRATION_24_25,
             MIGRATION_25_26,
+            MIGRATION_26_27,
+            MIGRATION_27_28,
         )
     }
+}
+
+/** Which columns a table actually has, whatever the version number claims. */
+private fun SQLiteConnection.columnsOf(table: String): Set<String> {
+    val names = mutableSetOf<String>()
+    val statement = prepare("PRAGMA table_info(`$table`)")
+    try {
+        while (statement.step()) names += statement.getText(1)
+    } finally {
+        statement.close()
+    }
+    return names
 }

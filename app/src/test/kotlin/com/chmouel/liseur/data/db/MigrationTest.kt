@@ -304,10 +304,210 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `a half-built version 26 is repaired on the way to 27`() {
+        // Version 26 was never released and was not one shape: a build
+        // from the middle of the series work left a books table without
+        // the file_series columns. Room only looks at the columns when
+        // the version moves, so the first upgrade after that is where it
+        // would be found out.
+        helper.createDatabase(TEST_DB, 26).use { old ->
+            old.execSQL("ALTER TABLE books DROP COLUMN file_series_name")
+            old.execSQL("ALTER TABLE books DROP COLUMN file_series_index")
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_name, series_index
+                ) VALUES (
+                    'file:///books/a.epub', 'A Book', 'An Author', NULL, NULL, 1, NULL,
+                    'DOWNLOADED', 1, 'The Expanse', 3.0
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT file_series_name, file_series_index, series_override FROM books " +
+                        "WHERE url = 'file:///books/a.epub'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    // A local book was only ever described by its file,
+                    // so what it says is what the file said.
+                    assertEquals("The Expanse", cursor.getString(0))
+                    assertEquals(3.0, cursor.getDouble(1), 1e-9)
+                    assertEquals(0, cursor.getInt(2))
+                }
+            }
+    }
+
+    @Test
+    fun `filing a book by hand is carried into the split flag`() {
+        // Filing a book by hand has always set its number as well, so
+        // every override that exists is an index override too.
+        helper.createDatabase(TEST_DB, 27).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_name, series_index,
+                    user_series_name, user_series_index, series_override
+                ) VALUES
+                ('file:///books/filed.epub', 'Filed', NULL, NULL, NULL, 1, NULL,
+                 'DOWNLOADED', 1, 'My Shelf', 2.0, 'My Shelf', 2.0, 1),
+                ('file:///books/unnumbered.epub', 'Unnumbered', NULL, NULL, NULL, 1, NULL,
+                 'DOWNLOADED', 1, 'My Shelf', NULL, 'My Shelf', NULL, 1),
+                ('file:///books/nowhere.epub', 'Nowhere', NULL, NULL, NULL, 1, NULL,
+                 'DOWNLOADED', 1, NULL, NULL, NULL, NULL, 1),
+                ('file:///books/plain.epub', 'Plain', NULL, NULL, NULL, 1, NULL,
+                 'DOWNLOADED', 1, 'The Expanse', 3.0, NULL, NULL, 0)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT url, series_override, series_index_override FROM books " +
+                        "ORDER BY url",
+                ).use { cursor ->
+                    val flags = buildMap {
+                        while (cursor.moveToNext()) {
+                            put(cursor.getString(0), cursor.getInt(1) to cursor.getInt(2))
+                        }
+                    }
+                    assertEquals(1 to 1, flags["file:///books/filed.epub"])
+                    assertEquals(1 to 1, flags["file:///books/unnumbered.epub"])
+                    // "In no series" is still an answer, and it is still
+                    // an answer about the number.
+                    assertEquals(1 to 1, flags["file:///books/nowhere.epub"])
+                    assertEquals(0 to 0, flags["file:///books/plain.epub"])
+                }
+            }
+    }
+
+    @Test
+    fun `a version 27 missing its override columns is repaired on the way to 28`() {
+        // 26 to 27 was itself a repair, and 27 is unreleased too, so a
+        // dev device can be sitting on a books table that never grew the
+        // override columns at all.
+        helper.createDatabase(TEST_DB, 27).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_name, series_index,
+                    series_override
+                ) VALUES (
+                    'file:///books/a.epub', 'A Book', NULL, NULL, NULL, 1, NULL,
+                    'DOWNLOADED', 1, 'The Expanse', 3.0, 0
+                )
+                """.trimIndent(),
+            )
+            old.execSQL("ALTER TABLE books DROP COLUMN user_series_name")
+            old.execSQL("ALTER TABLE books DROP COLUMN user_series_index")
+            old.execSQL("ALTER TABLE books DROP COLUMN series_override")
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT user_series_name, series_override, series_index_override " +
+                        "FROM books WHERE url = 'file:///books/a.epub'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    // Nothing can be recovered: a database that never
+                    // had the columns cannot say which books had been
+                    // filed by hand, so it says none had, and they fall
+                    // back to the catalog and the file as before.
+                    assertTrue(cursor.isNull(0))
+                    assertEquals(0, cursor.getInt(1))
+                    assertEquals(0, cursor.getInt(2))
+                }
+            }
+    }
+
+    @Test
+    fun `a version 27 missing its file series columns recovers only local books`() {
+        helper.createDatabase(TEST_DB, 27).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_name, series_index,
+                    remote_uuid, user_series_name, user_series_index, series_override
+                ) VALUES
+                ('file:///books/local.epub', 'Local', NULL, NULL, NULL, 1, NULL,
+                 'DOWNLOADED', 1, 'The Expanse', 3.0, NULL, NULL, NULL, 0),
+                ('file:///books/filed.epub', 'Filed', NULL, NULL, NULL, 1, NULL,
+                 'DOWNLOADED', 1, 'My Shelf', 1.0, NULL, 'My Shelf', 1.0, 1)
+                """.trimIndent(),
+            )
+            old.execSQL("ALTER TABLE books DROP COLUMN file_series_name")
+            old.execSQL("ALTER TABLE books DROP COLUMN file_series_index")
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT url, file_series_name FROM books ORDER BY url",
+                ).use { cursor ->
+                    val names = buildMap {
+                        while (cursor.moveToNext()) {
+                            put(cursor.getString(0), cursor.getString(1))
+                        }
+                    }
+                    assertEquals("The Expanse", names["file:///books/local.epub"])
+                    // On a book filed by hand, series_name holds the
+                    // reader's answer. Copying it into the file's column
+                    // would forge a provenance the file never gave, and
+                    // the next refresh would find it and agree.
+                    assertEquals(null, names["file:///books/filed.epub"])
+                }
+            }
+    }
+
+    @Test
+    fun `an index override already set is not flattened by the backfill`() {
+        // A dev device that has been through an earlier build of this
+        // migration may hold a book that was dragged but never refiled:
+        // an index override with no name override. Re-running the
+        // backfill over it would clear it.
+        helper.createDatabase(TEST_DB, 27).use { old ->
+            old.execSQL("ALTER TABLE books ADD COLUMN series_index_override INTEGER NOT NULL DEFAULT 0")
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_name, series_index,
+                    user_series_index, series_override, series_index_override
+                ) VALUES (
+                    'file:///books/dragged.epub', 'Dragged', NULL, NULL, NULL, 1, NULL,
+                    'DOWNLOADED', 1, 'The Expanse', 2.0, 2.0, 0, 1
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT series_override, series_index_override FROM books " +
+                        "WHERE url = 'file:///books/dragged.epub'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0, cursor.getInt(0))
+                    assertEquals(1, cursor.getInt(1))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 26
+        const val LATEST = 28
     }
 }

@@ -41,6 +41,67 @@ data class SeriesMetadata(
  * the one thing that is only true while the link is; it must not take
  * the series itself.
  */
+/**
+ * Where the reader put the book, when they have put it anywhere.
+ *
+ * A null [name] is an answer rather than a gap: it is "this book is in
+ * no series", said out loud, which is why it is kept instead of falling
+ * back to whatever the file or the server thought. Nothing said at all
+ * is the absence of the whole override, not a null name inside one.
+ */
+data class SeriesOverride(val name: String?, val index: Double?)
+
+/**
+ * Which series a book is actually filed under, and where in it.
+ *
+ * The reader outranks both the server and the file, and stays
+ * outranking them: a catalog refresh that arrives an hour later must
+ * not quietly undo the filing. That is why the override is a layer of
+ * its own rather than a write into [SeriesMetadata.name] — a write
+ * would last until the next sync and no longer.
+ *
+ * The two halves are answered separately. [name] is the shelf the book
+ * is on, [index] is where it sits on that shelf, and reordering a shelf
+ * has to set the second without touching the first: overriding the name
+ * as well would freeze it, so a series later renamed on the server
+ * would keep its old name on the one book that had been dragged.
+ *
+ * Three rules fall out of that:
+ *
+ * - A null effective name forces a null effective index. An index
+ *   belongs to nothing on its own and would file the book under an
+ *   empty series.
+ * - A name override with no index override yields **no** index. The
+ *   source's number belongs to the series the source thinks the book is
+ *   in, and a book filed somewhere else by hand is not in that series;
+ *   volume 4 of *The Expanse* refiled into *Star Wars* is not volume 4
+ *   of *Star Wars*. (Checking whether the source's series is the same
+ *   one is not open to us: [mergeSeries] resolves name and index
+ *   independently, so which source supplied the index is already gone,
+ *   and the pair can be a catalog name beside a file index.)
+ * - The server's id is left as it was, because it names a series on the
+ *   server and the override has not moved anything there. Whether it is
+ *   still the right thing to ask about is the shelf's business, not
+ *   this function's.
+ */
+fun effectiveSeries(
+    name: SeriesOverride?,
+    index: Double?,
+    indexOverridden: Boolean,
+    source: SeriesMetadata,
+): SeriesMetadata {
+    val effectiveName = if (name != null) name.name else source.name
+    val effectiveIndex = when {
+        effectiveName == null -> null
+        indexOverridden -> index
+        // The source numbered the book for a series it may no longer be
+        // in, and there is no way left to tell.
+        name != null -> null
+        else -> source.index
+    }
+    return SeriesMetadata(name = effectiveName, index = effectiveIndex, id = source.id)
+}
+
 fun mergeSeries(catalog: SeriesMetadata, file: SeriesMetadata): SeriesMetadata =
     SeriesMetadata(
         name = catalog.name ?: file.name,
