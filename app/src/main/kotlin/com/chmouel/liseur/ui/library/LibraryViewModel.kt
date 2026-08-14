@@ -17,6 +17,7 @@ import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.SeriesOrderDao
 import com.chmouel.liseur.data.db.BookProgression
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
@@ -31,7 +32,11 @@ import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.groupedIntoSeries
 import com.chmouel.liseur.domain.matchesLibrarySearch
+import com.chmouel.liseur.domain.movedItem
+import com.chmouel.liseur.domain.renumbered
+import com.chmouel.liseur.domain.seriesKey
 import com.chmouel.liseur.domain.survivesLibrarySearch
+import com.chmouel.liseur.domain.worthShowing
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
@@ -55,6 +60,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import kotlinx.coroutines.launch
@@ -94,11 +100,71 @@ enum class LibraryFilter {
         DOWNLOADED -> !book.archived &&
             (book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED)
         UNREAD -> !book.archived && !book.finished
+        // Only half the answer: whether the book's series is shown at
+        // all takes two books, which is a property of the group and is
+        // decided in the view model.
         SERIES -> !book.archived && !book.seriesName.isNullOrBlank()
     }
 }
 
 data class ContinueReading(val book: Book, val progression: Double?)
+
+/**
+ * A shelf mid-rearrangement.
+ *
+ * [original] is what it looked like when the mode opened, and is what
+ * decides whether Done has anything to write: opening the mode and
+ * closing it again must not renumber a series.
+ */
+data class SeriesReorder(
+    val key: String,
+    val order: List<String>,
+    val original: List<String>,
+    val saving: Boolean = false,
+)
+
+/** What a [Notice] is about. */
+enum class NoticeKind {
+    /** The shelf moved under a draft, so nothing was written. */
+    SeriesChangedWhileReordering,
+}
+
+/**
+ * Something the reader is told once.
+ *
+ * The [id] is what makes it a distinct message rather than a distinct
+ * kind of message: the same thing failing twice has to be shown twice,
+ * and a `StateFlow` set to a value equal to the one it holds emits
+ * nothing at all.
+ */
+data class Notice(val kind: NoticeKind, val id: Long)
+
+/**
+ * The one message waiting to be shown, held above the screens.
+ *
+ * Reorder mode can end by the series screen going away underneath it,
+ * which is the one moment its own snackbar host cannot show anything.
+ * Kept here instead, so whichever screen is mounted picks it up in the
+ * host it already has, and one dismissed mid-message hands it on.
+ *
+ * Acknowledgement is by id rather than by clearing the field. A
+ * coroutine cancelled by the branch changing underneath it would
+ * otherwise clear a message nobody read, and a consumer that gets there
+ * late would wipe a newer one it never showed.
+ */
+class Notices {
+    private val _current = MutableStateFlow<Notice?>(null)
+    val current: StateFlow<Notice?> = _current
+    private var nextId = 1L
+
+    fun raise(kind: NoticeKind) {
+        _current.value = Notice(kind, nextId++)
+    }
+
+    fun shown(id: Long) {
+        _current.update { if (it?.id == id) null else it }
+    }
+}
 
 data class LibraryUiState(
     val loading: Boolean = true,
@@ -138,6 +204,24 @@ data class LibraryUiState(
     val hasServer: Boolean = false,
     /** Whether any book knows what series it is in, so the chip is worth offering. */
     val hasSeries: Boolean = false,
+    /**
+     * Every series name in the library, for filing a book into one by
+     * hand. Taken from the whole shelf rather than from what a search
+     * left showing: the series a book is being moved into has nothing to
+     * do with the words typed to find the book.
+     */
+    val seriesNames: List<String> = emptyList(),
+    /**
+     * The keys of the series big enough to be shown as series.
+     *
+     * A card carries a *#3* and a *The Expanse · #3* under its title
+     * because the book is one of several; on the only book calling
+     * itself a series — which is most of a calibre library, where every
+     * standalone is its own series of one — both are noise. The rule is
+     * about the size of a group, so it cannot be answered from the book,
+     * and the whole grouping is in hand here.
+     */
+    val shownSeries: Set<String> = emptySet(),
 )
 
 /**
@@ -157,6 +241,7 @@ class LibraryViewModel(
     private val appSettings: AppSettingsRepository,
     private val progressDao: ReadingProgressDao,
     private val bookDao: BookDao,
+    private val seriesOrderDao: SeriesOrderDao,
     private val seriesExtras: SeriesExtrasRepository,
 ) : ViewModel() {
 
@@ -267,7 +352,19 @@ class LibraryViewModel(
             // rather than leaving the shelf narrowed by a chip that is
             // no longer on screen to widen it again.
             val onTheShelf = books.filter { !it.archived }
-            val shelves = onTheShelf.groupedIntoSeries(progressions)
+            val allShelves = onTheShelf.groupedIntoSeries(progressions)
+
+            // A shelf of one is not a series, it is one book wearing a
+            // series card. Only the *showing* is narrowed, though: the
+            // grouping still knows about them, because a series created
+            // by hand on its first book has to stay offerable to the
+            // second one. Hiding it from the assign dialog too would
+            // make the rule enforce itself, permanently.
+            val shelves = allShelves.worthShowing()
+            // Keyed by series rather than by book, so that a volume kept
+            // out of the grouping — an archived one — still wears its
+            // number when the Put away chip brings it back up.
+            val shownSeries = shelves.mapTo(mutableSetOf()) { it.key }
 
             // Disconnecting a server takes its filter away with it, and
             // so does the last series leaving the library: a chip that
@@ -287,6 +384,14 @@ class LibraryViewModel(
 
             val filteredBooks = sortedBooks
                 .filter { effectiveFilter.accepts(it) }
+                // Whether a book's series is big enough to be shown is a
+                // property of the group, which [LibraryFilter.accepts]
+                // cannot see from one book. It is applied here, where
+                // the grouping is already in hand.
+                .filter {
+                    effectiveFilter != LibraryFilter.SERIES ||
+                        seriesKey(it.seriesName) in shownSeries
+                }
                 .filter { book ->
                     survivesLibrarySearch(
                         query,
@@ -336,6 +441,8 @@ class LibraryViewModel(
                 hasArchived = books.any { it.archived },
                 hasServer = server != null,
                 hasSeries = shelves.isNotEmpty(),
+                seriesNames = allShelves.map { it.name },
+                shownSeries = shownSeries,
             )
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
@@ -485,7 +592,7 @@ class LibraryViewModel(
         seriesExtrasJob?.cancel()
         _openSeriesExtras.value = null
         openSeriesId = null
-        val seriesId = shelf.volumes.firstNotNullOfOrNull { it.book.seriesId } ?: return
+        val seriesId = shelf.volumes.firstNotNullOfOrNull { it.book.shelfSeriesId } ?: return
         openSeriesId = seriesId
         seriesExtrasJob = viewModelScope.launch {
             val extras = try {
@@ -526,6 +633,116 @@ class LibraryViewModel(
         }
     }
 
+    /**
+     * Files a book into a series by hand, or out of every series when
+     * [name] is blank.
+     *
+     * Out of every series is a decision and is stored as one: a book
+     * taken off a shelf must not be put back on it by the next catalog
+     * refresh, which is exactly what a cleared field would let happen.
+     */
+    fun setBookSeries(book: Book, name: String?, index: Double?) {
+        viewModelScope.launch {
+            bookDao.setSeriesOverride(book.url, name?.trim()?.takeIf { it.isNotEmpty() }, index)
+        }
+    }
+
+    /** Gives the book back to whatever the server or the file said. */
+    fun resetBookSeries(book: Book) {
+        viewModelScope.launch { bookDao.clearSeriesOverride(book.url) }
+    }
+
+    /**
+     * The shelf being put into order, while it is being put into order.
+     *
+     * Null except in reorder mode. It holds the draft rather than the
+     * database because nothing is written until Done, so a half-finished
+     * rearrangement costs nothing.
+     */
+    private val _reorder = MutableStateFlow<SeriesReorder?>(null)
+    val reorder: StateFlow<SeriesReorder?> = _reorder
+
+    private val notices = Notices()
+    val notice: StateFlow<Notice?> = notices.current
+
+    fun startReorder(shelf: SeriesShelf) {
+        _reorder.value = SeriesReorder(
+            key = shelf.key,
+            order = shelf.volumes.map { it.book.url },
+            original = shelf.volumes.map { it.book.url },
+        )
+    }
+
+    fun cancelReorder() {
+        _reorder.value = null
+    }
+
+    /**
+     * The shelf being reordered stopped existing.
+     *
+     * A rename or the last volume leaving takes the screen down with the
+     * draft on it; saying so is the difference between a refusal and a
+     * disappearance.
+     */
+    fun seriesWentAway() {
+        if (_reorder.value == null) return
+        _reorder.value = null
+        notices.raise(NoticeKind.SeriesChangedWhileReordering)
+    }
+
+    fun moveVolume(from: Int, to: Int) {
+        _reorder.update { it?.copy(order = it.order.movedItem(from, to)) }
+    }
+
+    /**
+     * Writes the drafted order, if the shelf still holds the books it
+     * was drafted from.
+     *
+     * The membership is re-checked inside the write's own transaction,
+     * not here: between reading a flow and committing, a sync worker can
+     * add a volume, and the numbering would then be one book short of
+     * the shelf it claims to number.
+     */
+    fun commitReorder() {
+        val draft = _reorder.value ?: return
+        if (draft.saving) return
+        val numbering = renumbered(draft.order, draft.original)
+        if (numbering.isEmpty()) {
+            _reorder.value = null
+            return
+        }
+        _reorder.value = draft.copy(saving = true)
+        viewModelScope.launch {
+            val committed = seriesOrderDao.renumber(draft.key, numbering.map { (url, _) -> url })
+            if (committed) {
+                _reorder.value = null
+            } else {
+                // Not a guess at what the reader meant for books they
+                // never saw: the draft is dropped and the shelf is
+                // offered again as it now stands.
+                _reorder.value = null
+                notices.raise(NoticeKind.SeriesChangedWhileReordering)
+            }
+        }
+    }
+
+    /**
+     * Gives a shelf's numbering back to the catalog and the files.
+     *
+     * Named for what it does. Hand-typed numbers share a column with
+     * dragged ones and cannot be told apart, so they go too, and the
+     * confirmation says so.
+     */
+    fun clearCustomVolumeNumbers(shelf: SeriesShelf) {
+        viewModelScope.launch {
+            val cleared = seriesOrderDao.clearOrder(shelf.key, shelf.volumes.map { it.book.url })
+            if (!cleared) notices.raise(NoticeKind.SeriesChangedWhileReordering)
+        }
+    }
+
+    /** Marks a message as shown. */
+    fun noticeShown(id: Long) = notices.shown(id)
+
     fun addFolder(treeUri: Uri) {
         viewModelScope.launch { library.addFolder(treeUri) }
     }
@@ -549,6 +766,7 @@ class LibraryViewModel(
                     appSettings = container.appSettings,
                     progressDao = container.database.readingProgressDao(),
                     bookDao = container.database.bookDao(),
+                    seriesOrderDao = container.database.seriesOrderDao(),
                     seriesExtras = container.seriesExtras,
                 )
             }

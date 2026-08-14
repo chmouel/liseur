@@ -172,6 +172,53 @@ class SeriesShelfTest {
 
         assertEquals(listOf("Dune", "The Expanse"), shelves.map { it.name })
     }
+
+    @Test
+    fun `a series of one book is not worth showing`() {
+        val shelves = listOf(
+            book("The Eye of the World"),
+            book("Dune", series = "Dune"),
+        ).groupedIntoSeries()
+
+        assertEquals(listOf("Dune", "Wheel of Time"), shelves.map { it.name })
+        assertTrue(shelves.worthShowing().isEmpty())
+    }
+
+    @Test
+    fun `a second book makes the series worth showing`() {
+        val shelves = listOf(
+            book("The Eye of the World"),
+            book("The Great Hunt"),
+        ).groupedIntoSeries().worthShowing()
+
+        assertEquals(listOf("Wheel of Time"), shelves.map { it.name })
+    }
+
+    @Test
+    fun `a volume the server has but the device does not counts towards the two`() {
+        val shelves = listOf(
+            book("The Eye of the World"),
+            book("The Great Hunt", state = DownloadState.REMOTE),
+        ).groupedIntoSeries().worthShowing()
+
+        assertEquals(1, shelves.size)
+        assertEquals(1, shelves.single().missing.size)
+    }
+
+    @Test
+    fun `showing narrows the shelves without touching the grouping`() {
+        val books = listOf(
+            book("The Eye of the World"),
+            book("The Great Hunt"),
+            book("Dune", series = "Dune"),
+        )
+        val all = books.groupedIntoSeries()
+
+        // The one-book shelf is still grouped, which is what keeps its
+        // name offerable when a second book comes along.
+        assertEquals(listOf("Dune", "Wheel of Time"), all.map { it.name })
+        assertEquals(listOf("Wheel of Time"), all.worthShowing().map { it.name })
+    }
 }
 
 class NextInSeriesTest {
@@ -384,4 +431,5 @@ class SeriesShelfOrderTest {
                 .map { it.name },
         )
     }
+
 }

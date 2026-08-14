@@ -78,6 +78,19 @@ import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.ui.LocalEInk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DragHandle
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
  * One series: what is in it, in order, and where the reader is in it.
@@ -101,15 +114,45 @@ fun SeriesScreen(
     onDownloadMissing: () -> Unit,
     onMarkSeriesRead: () -> Unit,
     onArchiveSeries: () -> Unit,
+    /** The draft order, or null when the shelf is only being read. */
+    reorder: SeriesReorder?,
+    onStartReorder: () -> Unit,
+    onMoveVolume: (from: Int, to: Int) -> Unit,
+    onCommitReorder: () -> Unit,
+    onCancelReorder: () -> Unit,
+    /** Whether anything on this shelf carries a number set by hand. */
+    hasCustomNumbers: Boolean,
+    onClearCustomNumbers: () -> Unit,
+    notice: Notice?,
+    onNoticeShown: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     var menuOpen by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)
     val localDeleteFailed = stringResource(R.string.delete_local_failed)
+    val reordering = reorder != null
+
+    // Back leaves the mode before it leaves the screen: a draft is
+    // unsaved work, and the gesture that discards it should be the one
+    // that says so.
+    BackHandler(enabled = reordering) { onCancelReorder() }
+
+    // The same message the library shows, shown here too: a refused
+    // commit leaves the reader on this screen, and a snackbar that
+    // waits for them to navigate away explains nothing.
+    val seriesChanged = stringResource(R.string.series_reorder_changed)
+    LaunchedEffect(notice) {
+        val pending = notice ?: return@LaunchedEffect
+        when (pending.kind) {
+            NoticeKind.SeriesChangedWhileReordering -> snackbarHost.showSnackbar(seriesChanged)
+        }
+        onNoticeShown(pending.id)
+    }
 
     LaunchedEffect(deleteFailures) {
         deleteFailures.collect { failure ->
@@ -142,59 +185,98 @@ fun SeriesScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = if (reordering) onCancelReorder else onBack) {
                         Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
+                            if (reordering) {
+                                Icons.Outlined.Close
+                            } else {
+                                Icons.AutoMirrored.Outlined.ArrowBack
+                            },
+                            contentDescription = stringResource(
+                                if (reordering) R.string.cancel else R.string.back,
+                            ),
                         )
                     }
                 },
                 actions = {
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(
-                                Icons.Outlined.MoreVert,
-                                contentDescription = stringResource(R.string.series_actions),
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = menuOpen,
-                            onDismissRequest = { menuOpen = false },
+                    if (reordering) {
+                        TextButton(
+                            onClick = onCommitReorder,
+                            enabled = !reorder.saving,
                         ) {
-                            if (shelf.missing.isNotEmpty() && canDownload) {
+                            Text(stringResource(R.string.done))
+                        }
+                    } else {
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(
+                                    Icons.Outlined.MoreVert,
+                                    contentDescription = stringResource(R.string.series_actions),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false },
+                            ) {
+                                if (shelf.missing.isNotEmpty() && canDownload) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(stringResource(R.string.series_download_missing))
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.CloudDownload, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            menuOpen = false
+                                            onDownloadMissing()
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
-                                    text = {
-                                        Text(stringResource(R.string.series_download_missing))
-                                    },
+                                    text = { Text(stringResource(R.string.series_mark_read)) },
                                     leadingIcon = {
-                                        Icon(Icons.Outlined.CloudDownload, contentDescription = null)
+                                        Icon(Icons.Outlined.Check, contentDescription = null)
                                     },
                                     onClick = {
                                         menuOpen = false
-                                        onDownloadMissing()
+                                        onMarkSeriesRead()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.series_reorder)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.SwapVert, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        onStartReorder()
+                                    },
+                                )
+                                if (hasCustomNumbers) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(stringResource(R.string.series_clear_numbers))
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.Restore, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            menuOpen = false
+                                            confirmClear = true
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.series_archive)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Inventory2, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        onArchiveSeries()
                                     },
                                 )
                             }
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.series_mark_read)) },
-                                leadingIcon = {
-                                    Icon(Icons.Outlined.Check, contentDescription = null)
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    onMarkSeriesRead()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.series_archive)) },
-                                leadingIcon = {
-                                    Icon(Icons.Outlined.Inventory2, contentDescription = null)
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    onArchiveSeries()
-                                },
-                            )
                         }
                     }
                 },
@@ -202,6 +284,15 @@ fun SeriesScreen(
             )
         },
     ) { padding ->
+        if (reorder != null) {
+            ReorderableVolumes(
+                shelf = shelf,
+                order = reorder.order,
+                onMove = onMoveVolume,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
+            return@Scaffold
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 24.dp),
@@ -235,6 +326,146 @@ fun SeriesScreen(
             // four is how a shelf starts nagging.
             items(unpublishedTail(shelf, extras)) { number ->
                 MissingVolumeRow(number, published = false)
+            }
+        }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.series_clear_numbers)) },
+            text = { Text(stringResource(R.string.series_clear_numbers_warning)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        onClearCustomNumbers()
+                    },
+                ) {
+                    Text(stringResource(R.string.series_clear_numbers_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+/**
+ * The shelf, and nothing else, while it is being put in order.
+ *
+ * The hero, the Continue button, the missing-volume rail, the inferred
+ * gaps and the unpublished tail are all gone. Every one of them is
+ * computed from the numbers that are about to be replaced, so leaving
+ * them up would mean answering "what do I read next" from an order the
+ * reader is in the middle of disagreeing with.
+ */
+@Composable
+private fun ReorderableVolumes(
+    shelf: SeriesShelf,
+    order: List<String>,
+    onMove: (from: Int, to: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val byUrl = shelf.volumes.associateBy { it.book.url }
+    val volumes = order.mapNotNull { byUrl[it] }
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        // These are indices into the LazyColumn, not into the draft. The
+        // two only agree because every item in this list is a volume,
+        // which is why the explainer sits outside it: a single header
+        // would silently shift every drag by one and make the last row
+        // undraggable.
+        onMove(from.index, to.index)
+    }
+    val eInk = LocalEInk.current
+
+    Column(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.series_reorder_explainer),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            itemsIndexed(volumes, key = { _, volume -> volume.book.id }) { index, volume ->
+                ReorderableItem(reorderState, key = volume.book.id) { dragging ->
+                    ReorderableVolumeRow(
+                        volume = volume,
+                        dragging = dragging,
+                        // A drag is unreachable from a switch or a screen
+                        // reader, and on e-ink it repaints the whole screen
+                        // on every frame. The arrows are not a fallback.
+                        canMoveUp = index > 0,
+                        canMoveDown = index < volumes.lastIndex,
+                        onMoveUp = { onMove(index, index - 1) },
+                        onMoveDown = { onMove(index, index + 1) },
+                        dragHandle = Modifier.draggableHandle(),
+                        animate = !eInk,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** One volume, with the two ways of moving it. */
+@Composable
+private fun ReorderableVolumeRow(
+    volume: SeriesVolume,
+    dragging: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    dragHandle: Modifier,
+    animate: Boolean,
+) {
+    Surface(
+        tonalElevation = if (dragging && animate) 4.dp else 0.dp,
+        shadowElevation = if (dragging && animate) 4.dp else 0.dp,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        ) {
+            Icon(
+                Icons.Outlined.DragHandle,
+                contentDescription = stringResource(R.string.series_reorder_drag),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = dragHandle.padding(horizontal = 8.dp),
+            )
+            BookCover(
+                book = volume.book,
+                modifier = Modifier.width(36.dp).aspectRatio(2f / 3f),
+            )
+            Text(
+                text = volume.book.displayTitle,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
+            )
+            IconButton(onClick = onMoveUp, enabled = canMoveUp) {
+                Icon(
+                    Icons.Outlined.KeyboardArrowUp,
+                    contentDescription = stringResource(R.string.series_reorder_up),
+                )
+            }
+            IconButton(onClick = onMoveDown, enabled = canMoveDown) {
+                Icon(
+                    Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = stringResource(R.string.series_reorder_down),
+                )
             }
         }
     }

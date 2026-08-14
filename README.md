@@ -94,6 +94,28 @@ the stack and you get the series in order, where you are in it, which volumes
 you are missing between the ones you have, and a button to carry on with the
 next. Finish a book and the one after it is offered on the last page.
 
+Where nobody said, you can say. Long-press a book and you can put it into a
+series — one you already have or a new name — give it a volume number, or take
+it out of a series it never belonged in. Your answer outranks the server's and
+survives every refresh, and there is a way back to whatever the file or the
+catalog originally claimed.
+
+Two books make a series. calibre gives most standalones a series of their own,
+so a book alone in one is shown as a book, with no card and no volume number;
+file a second beside it and the series appears.
+
+Sometimes the numbers are wrong: a folder of EPUBs that carries none, or a
+translation a publisher numbered to suit itself. Open the series and put it in
+order, by the drag handle or the arrows, and Done renumbers it 1, 2, 3 the way
+you left it. Everything that asks what to read next reads that order, so
+Continue and the offer on the last page follow it too.
+
+Renumbering is all it does, so a `#1.5` becomes a 2 and the series stops
+counting the volumes it thinks are missing between the ones you have. Clear
+the custom numbers and the server's and the files' numbering comes back,
+hand-typed ones included. Nothing is sent to your server; the order lives on
+the device.
+
 Pick [calibre-web](https://github.com/janeczku/calibre-web) or [Komga](https://komga.org/), connect to it and Liseur works
 out the rest: the catalog, whether the account may download, and how to sync. 
 Your server's books merge into the same library with a cloud badge; tap one and

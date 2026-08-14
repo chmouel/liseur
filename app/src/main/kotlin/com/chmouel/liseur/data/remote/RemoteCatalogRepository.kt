@@ -8,6 +8,8 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.domain.SeriesMetadata
+import com.chmouel.liseur.domain.SeriesOverride
+import com.chmouel.liseur.domain.effectiveSeries
 import com.chmouel.liseur.domain.mergeSeries
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -388,6 +390,19 @@ internal fun mergeCatalogEntry(
         catalog = SeriesMetadata(remote.seriesName, remote.seriesIndex, remote.seriesId),
         file = SeriesMetadata(book.fileSeriesName, book.fileSeriesIndex),
     )
+    // The reader outranks the feed. Worked out here as well as in the
+    // update statement, so that a book they refiled compares equal to
+    // the row already stored and the sync leaves it alone entirely.
+    val filed = effectiveSeries(
+        name = if (book.seriesOverridden) {
+            SeriesOverride(book.userSeriesName, book.userSeriesIndex)
+        } else {
+            null
+        },
+        index = book.userSeriesIndex,
+        indexOverridden = book.indexOverridden,
+        source = series,
+    )
     return book.copy(
         url = url,
         title = remote.title,
@@ -398,8 +413,10 @@ internal fun mergeCatalogEntry(
         downloadHref = remote.downloadHref,
         remoteUpdatedAt = remote.updatedAt,
         remotePageCount = remote.pageCount,
-        seriesName = series.name,
-        seriesIndex = series.index,
+        seriesName = filed.name,
+        seriesIndex = filed.index,
         seriesId = series.id,
+        catalogSeriesName = remote.seriesName,
+        catalogSeriesIndex = remote.seriesIndex,
     )
 }

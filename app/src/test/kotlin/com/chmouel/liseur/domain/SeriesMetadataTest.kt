@@ -48,4 +48,116 @@ class SeriesMetadataTest {
     fun `two sources that know nothing say nothing`() {
         assertTrue(mergeSeries(SeriesMetadata.None, SeriesMetadata.None).isEmpty)
     }
+
+    @Test
+    fun `with nothing said by the reader the sources stand`() {
+        val source = SeriesMetadata("The Expanse", 3.0, "komga-1")
+        assertEquals(
+            source,
+            effectiveSeries(
+                name = null,
+                index = null,
+                indexOverridden = false,
+                source = source,
+            ),
+        )
+    }
+
+    @Test
+    fun `the reader outranks the server`() {
+        val filed = effectiveSeries(
+            name = SeriesOverride("My Shelf", 1.0),
+            index = 1.0,
+            indexOverridden = true,
+            source = SeriesMetadata("The Expanse", 3.0, "komga-1"),
+        )
+        assertEquals("My Shelf", filed.name)
+        assertEquals(1.0, filed.index!!, 0.0)
+    }
+
+    @Test
+    fun `taking a book out of a series is an answer and not a gap`() {
+        val filed = effectiveSeries(
+            name = SeriesOverride(null, null),
+            index = null,
+            indexOverridden = true,
+            source = SeriesMetadata("The Expanse", 3.0, "komga-1"),
+        )
+        assertNull(filed.name)
+        assertNull(filed.index)
+    }
+
+    @Test
+    fun `a number without a series to belong to is dropped from an override too`() {
+        val filed = effectiveSeries(
+            name = SeriesOverride(null, 2.0),
+            index = 2.0,
+            indexOverridden = true,
+            source = SeriesMetadata("The Expanse", 3.0),
+        )
+        assertNull(filed.index)
+    }
+
+    @Test
+    fun `a dragged book keeps the name its server gave it`() {
+        val filed = effectiveSeries(
+            name = null,
+            index = 2.0,
+            indexOverridden = true,
+            source = SeriesMetadata("The Expanse", 7.0, "komga-1"),
+        )
+        assertEquals("The Expanse", filed.name)
+        assertEquals(2.0, filed.index!!, 0.0)
+        assertEquals("komga-1", filed.id)
+    }
+
+    @Test
+    fun `a book filed by hand does not carry its old number over`() {
+        // Volume 4 of The Expanse refiled into Star Wars is not volume 4
+        // of Star Wars, and which source supplied the 4 is already lost
+        // by the time the merge is done.
+        val filed = effectiveSeries(
+            name = SeriesOverride("Star Wars", null),
+            index = null,
+            indexOverridden = false,
+            source = SeriesMetadata("The Expanse", 4.0, "komga-1"),
+        )
+        assertEquals("Star Wars", filed.name)
+        assertNull(filed.index)
+    }
+
+    @Test
+    fun `a book filed by hand and then numbered keeps the number`() {
+        val filed = effectiveSeries(
+            name = SeriesOverride("Star Wars", 2.0),
+            index = 2.0,
+            indexOverridden = true,
+            source = SeriesMetadata("The Expanse", 4.0),
+        )
+        assertEquals(2.0, filed.index!!, 0.0)
+    }
+
+    @Test
+    fun `no series means no number, however the number was set`() {
+        val filed = effectiveSeries(
+            name = SeriesOverride(null, null),
+            index = 3.0,
+            indexOverridden = true,
+            source = SeriesMetadata("The Expanse", 4.0),
+        )
+        assertNull(filed.name)
+        assertNull(filed.index)
+    }
+
+    @Test
+    fun `a source that names no series gives no number either`() {
+        val filed = effectiveSeries(
+            name = null,
+            index = null,
+            indexOverridden = false,
+            source = SeriesMetadata(null, 4.0),
+        )
+        assertNull(filed.name)
+        assertNull(filed.index)
+    }
 }

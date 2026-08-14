@@ -18,6 +18,7 @@ work = "2.11.2"
 desugar = "2.1.5"
 json = "20260719"
 coroutines = "1.11.0"
+reorderable = "3.1.0"
 robolectric = "4.16.1"
 junit = "4.13.2"
 
@@ -37,6 +38,7 @@ compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 readium-shared = { module = "org.readium.kotlin-toolkit:readium-shared", version.ref = "readium" }
 readium-streamer = { module = "org.readium.kotlin-toolkit:readium-streamer", version.ref = "readium" }
 readium-navigator = { module = "org.readium.kotlin-toolkit:readium-navigator", version.ref = "readium" }

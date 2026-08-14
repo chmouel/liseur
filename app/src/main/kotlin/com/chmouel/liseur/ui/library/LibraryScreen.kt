@@ -143,6 +143,7 @@ import com.chmouel.liseur.ui.coverMinSize
 import com.chmouel.liseur.ui.libraryBarHeight
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
+import com.chmouel.liseur.domain.seriesKey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -162,6 +163,8 @@ fun LibraryScreen(
     onSetArchived: (Book, Boolean) -> Unit,
     onDeleteLocal: (Book) -> Unit,
     onDeleteFromServer: (Book) -> Unit,
+    onSetSeries: (Book, String?, Double?) -> Unit,
+    onResetSeries: (Book) -> Unit,
     deleteFailures: Flow<DeleteFailure>,
     onRefresh: () -> Unit,
     onSetSort: (LibrarySort) -> Unit,
@@ -173,6 +176,8 @@ fun LibraryScreen(
     onSetFilter: (LibraryFilter) -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
+    notice: Notice? = null,
+    onNoticeShown: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -193,6 +198,7 @@ fun LibraryScreen(
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     var sheetBook by remember { mutableStateOf<Book?>(null) }
     var confirmServerDelete by remember { mutableStateOf<Book?>(null) }
+    var editSeriesOf by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
     val eInk = LocalEInk.current
     val notYetHere = stringResource(R.string.book_not_downloaded)
@@ -212,6 +218,17 @@ fun LibraryScreen(
             onPendingOpenHandled()
             snackbarHost.showSnackbar(downloadFailed.format(book.title))
         }
+    }
+
+    // Raised on the series screen, shown here: the screen that raised it
+    // is often the one going away.
+    val seriesChanged = stringResource(R.string.series_reorder_changed)
+    LaunchedEffect(notice) {
+        val pending = notice ?: return@LaunchedEffect
+        when (pending.kind) {
+            NoticeKind.SeriesChangedWhileReordering -> snackbarHost.showSnackbar(seriesChanged)
+        }
+        onNoticeShown(pending.id)
     }
 
     LaunchedEffect(state.catalogStatus) {
@@ -557,8 +574,25 @@ fun LibraryScreen(
             onSetFinished = { onSetFinished(book, it); sheetBook = null },
             onSetArchived = { onSetArchived(book, it); sheetBook = null },
             onOpenStats = { onOpenBookStats(book); sheetBook = null },
+            onEditSeries = { editSeriesOf = book; sheetBook = null },
             onDeleteLocal = { onDeleteLocal(book); sheetBook = null },
             onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
+        )
+    }
+
+    editSeriesOf?.let { book ->
+        SeriesAssignDialog(
+            book = book,
+            seriesNames = state.seriesNames,
+            onConfirm = { name, index ->
+                onSetSeries(book, name, index)
+                editSeriesOf = null
+            },
+            onReset = {
+                onResetSeries(book)
+                editSeriesOf = null
+            },
+            onDismiss = { editSeriesOf = null },
         )
     }
 }
@@ -610,6 +644,7 @@ internal fun BookActionsSheet(
     onSetFinished: (Boolean) -> Unit,
     onSetArchived: (Boolean) -> Unit,
     onOpenStats: () -> Unit,
+    onEditSeries: () -> Unit,
     onDeleteLocal: () -> Unit,
     onDeleteFromServer: () -> Unit,
 ) {
@@ -684,6 +719,18 @@ internal fun BookActionsSheet(
             }
             TextButton(onClick = onOpenStats, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.reading_stats))
+            }
+            // Reads as one action rather than two, because a book with
+            // no series and a book in the wrong one want the same
+            // dialog; which of them it is only decides what it opens
+            // filled in with.
+            TextButton(onClick = onEditSeries, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(
+                        if (book.seriesName.isNullOrBlank()) R.string.series_add_to
+                        else R.string.series_change,
+                    ),
+                )
             }
             if (book.remoteUuid != null) {
                 // Kept apart from the others on purpose: everything above
@@ -837,6 +884,7 @@ private fun BookGrid(
                 BookCard(
                     book = book,
                     progress = state.downloads[book.url],
+                    inASeries = seriesKey(book.seriesName) in state.shownSeries,
                     onClick = { onBookSelected(book) },
                     onLongClick = { onBookLongPress(book) },
                 )
@@ -917,6 +965,12 @@ private fun ContinueReadingCard(
 private fun BookCard(
     book: Book,
     progress: DownloadProgress?,
+    /**
+     * Whether the book's series has anyone else in it. A series of one
+     * is a name the catalog happens to carry, not something to label the
+     * cover with.
+     */
+    inASeries: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -961,9 +1015,9 @@ private fun BookCard(
             if (book.finished && progress == null) {
                 FinishedBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
-            if (progress == null) {
+            if (progress == null && inASeries) {
                 SeriesIndexRibbon(
-                    index = book.seriesIndex.takeIf { !book.seriesName.isNullOrBlank() },
+                    index = book.seriesIndex,
                     modifier = Modifier.align(Alignment.TopStart),
                 )
             }
@@ -991,7 +1045,7 @@ private fun BookCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            SeriesLine(book, Modifier.padding(top = 2.dp))
+            if (inASeries) SeriesLine(book, Modifier.padding(top = 2.dp))
         }
     }
 }
