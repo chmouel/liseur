@@ -456,7 +456,7 @@ class LibraryViewModel(
      */
     private fun editFilters(edit: (LibraryFilters) -> LibraryFilters) {
         viewModelScope.launch {
-            appSettings.setLibraryFilters(edit(appSettings.current().libraryFilters))
+            appSettings.editLibraryFilters(edit)
         }
     }
 

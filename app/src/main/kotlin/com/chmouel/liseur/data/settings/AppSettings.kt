@@ -194,10 +194,30 @@ class AppSettingsRepository(private val context: Context) {
         context.appSettingsStore.edit { it[Keys.LIBRARY_SORT_REVERSED] = reversed }
     }
 
-    suspend fun setLibraryFilters(filters: LibraryFilters) {
-        context.appSettingsStore.edit {
-            it[Keys.LIBRARY_FILTERS] = filters.serialise()
-            it[Keys.LIBRARY_GROUP_BY_SERIES] = filters.groupBySeries
+    /**
+     * Changes the filters from whatever is stored at the moment of the
+     * write.
+     *
+     * A read of [current] followed by a write would be two steps, and
+     * every checkbox in the filter menu is one tap away from the next:
+     * two taps in quick succession would both read the selection as it
+     * was before either, and the second write would drop the first
+     * option. A menu whose boxes are meant to be ticked together cannot
+     * afford to behave as single-select under a fast hand.
+     *
+     * DataStore serialises `edit`, so doing the reading inside it is
+     * what makes the whole change atomic.
+     */
+    suspend fun editLibraryFilters(edit: (LibraryFilters) -> LibraryFilters) {
+        context.appSettingsStore.edit { p ->
+            val filters = edit(
+                LibraryFilters(
+                    options = LibraryFilters.parse(p[Keys.LIBRARY_FILTERS]),
+                    groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: false,
+                ),
+            )
+            p[Keys.LIBRARY_FILTERS] = filters.serialise()
+            p[Keys.LIBRARY_GROUP_BY_SERIES] = filters.groupBySeries
         }
     }
 

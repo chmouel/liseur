@@ -562,7 +562,13 @@ fun LibraryScreen(
                     // Everything on the shelf has been archived. Not an
                     // empty library, and saying so would be alarming — the
                     // books are all still here, behind one tap.
-                    state.books.isEmpty() && state.libraryIsEmpty && state.hasArchived ->
+                    //
+                    // Only from outside the archive: in it, the same
+                    // three facts hold whenever a reading filter matches
+                    // nothing, and the door this offers is the one the
+                    // reader already came through.
+                    state.books.isEmpty() && state.libraryIsEmpty && state.hasArchived &&
+                        !state.filters.archived ->
                         EverythingArchived(
                             onShowArchived = {
                                 onToggleFilter(LibraryFilterOption.ARCHIVED)
@@ -582,8 +588,14 @@ fun LibraryScreen(
                     // the reader asked for, so this is the one empty
                     // state that has to undo it rather than merely say
                     // what happened.
+                    //
+                    // Which is also why it is claimed only when nothing
+                    // else is narrowing: with Downloaded ticked, an
+                    // empty shelf means the books are elsewhere, not
+                    // that they are finished, and blaming the default
+                    // rule would send the reader to undo the wrong one.
                     state.books.isEmpty() && state.hasFinished &&
-                        state.filters.hidesFinished &&
+                        state.filters.hidesFinished && state.filters.options.isEmpty() &&
                         !(state.isSearchActive && state.searchQuery.isNotBlank()) ->
                         EverythingFinished(
                             onShowFinished = {
