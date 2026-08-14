@@ -165,6 +165,12 @@ data class LibraryUiState(
     /** Whether anything is archived, so the way to it is only offered when there is one. */
     val hasArchived: Boolean = false,
     /**
+     * Whether the shelf holds a finished book, which by default is a
+     * book it is not showing. What lets an empty-looking shelf say where
+     * its books have gone instead of implying they are lost.
+     */
+    val hasFinished: Boolean = false,
+    /**
      * Whether a book server is connected.
      *
      * Without one there is nothing to have not downloaded yet: every
@@ -428,6 +434,7 @@ class LibraryViewModel(
                 isSearchActive = searchActive,
                 libraryIsEmpty = books.none { !it.archived },
                 hasArchived = books.any { it.archived },
+                hasFinished = books.any { !it.archived && it.finished },
                 hasServer = server != null,
                 hasSeries = shelves.isNotEmpty(),
                 seriesNames = allShelves.map { it.name },

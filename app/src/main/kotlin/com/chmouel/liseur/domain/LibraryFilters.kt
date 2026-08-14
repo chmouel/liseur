@@ -128,6 +128,9 @@ data class LibraryFilters(
      * [progression] is how far through the book the reader is, which the
      * book row does not know: it lives in the progress table, and the
      * caller has it in hand.
+     *
+     * With nothing ticked this is every book on the shelf *except* the
+     * finished ones — see [hidesFinished].
      */
     fun accepts(book: Book, progression: Double? = null): Boolean {
         // Checked before anything else, and never as one condition among
