@@ -109,6 +109,12 @@ data class ServerCapabilities(
      */
     val liseurToken: String? = null,
     /**
+     * liseur-sync's stable account id, when the server reports it
+     * (ADR-0016 follow-up). It survives a token rotation, which is what
+     * tells a re-pasted token apart from a different account signing in.
+     */
+    val liseurAccountId: String? = null,
+    /**
      * calibre-web's Kobo sync token, obtained during setup. Nothing else
      * has one, and nothing but the Kobo sync uses it.
      */
@@ -134,6 +140,9 @@ sealed interface SetupFailure {
     /** The server insists on HTTPS and the address given was plain HTTP. */
     data object InsecureTransport : SetupFailure
 
+    /** Too many sign-in attempts; the server is asking us to wait. */
+    data object RateLimited : SetupFailure
+
     /** Nothing answered over HTTPS; the user may want to allow plain HTTP. */
     data class Unreachable(val message: String, val httpMayWork: Boolean) : SetupFailure
 }
@@ -153,4 +162,28 @@ interface ServerSetup {
         credentials: RemoteCredentials,
         allowHttp: Boolean = false,
     ): SetupResult
+}
+
+/** How deleting a book from the server went. */
+sealed interface ServerDeleteResult {
+    data object Deleted : ServerDeleteResult
+
+    /** The account cannot delete books, or the server said no. */
+    data object NotAllowed : ServerDeleteResult
+
+    data class Failed(val message: String?) : ServerDeleteResult
+}
+
+/**
+ * Deleting a book off the server, for the kinds that allow it at all.
+ *
+ * Komga has no entry: deleting a file there is an administrator's job,
+ * and the action stays hidden rather than offered and failed.
+ */
+interface BookDeleter {
+    suspend fun delete(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        book: Book,
+    ): ServerDeleteResult
 }

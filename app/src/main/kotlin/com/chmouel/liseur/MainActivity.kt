@@ -546,6 +546,7 @@ private fun LibraryRoute(
                 uploading = book.url in state.uploads,
                 canDownload = state.canDownload,
                 canUpload = state.canUpload,
+                canDeleteFromServer = state.canDeleteFromServer,
                 onDismiss = { seriesSheetBook = null },
                 onDownload = { viewModel.download(book); seriesSheetBook = null },
                 onUpload = { viewModel.upload(book); seriesSheetBook = null },

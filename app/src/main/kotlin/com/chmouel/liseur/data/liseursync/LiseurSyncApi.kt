@@ -66,6 +66,10 @@ object LiseurSyncApi {
     fun bookDownload(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/download")
 
+    /** The book itself; `DELETE` here moves it to the trash. */
+    fun book(baseUrl: String, bookId: String): String =
+        url(baseUrl, "/v1/books/$bookId")
+
     fun bookCover(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/cover")
 

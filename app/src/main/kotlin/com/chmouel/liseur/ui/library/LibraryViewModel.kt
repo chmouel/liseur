@@ -11,11 +11,12 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.liseursync.BookUploadRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
-import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.calibre.DownloadProgress
-import com.chmouel.liseur.data.calibre.ServerDeleteResult
+import com.chmouel.liseur.data.remote.ServerDeleteResult
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
+import com.chmouel.liseur.data.remote.RemoteRouter
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.SeriesOrderDao
@@ -155,6 +156,12 @@ data class LibraryUiState(
      * account whose token carries `library-manage`.
      */
     val canUpload: Boolean = false,
+    /**
+     * Whether the connected server lets this account delete books from
+     * it. Komga has no such affordance at all; liseur-sync wants the
+     * manage scope.
+     */
+    val canDeleteFromServer: Boolean = false,
     /** Books with an upload running or queued. */
     val uploads: Set<String> = emptySet(),
     val refreshing: Boolean = false,
@@ -223,6 +230,7 @@ class LibraryViewModel(
     private val downloads: BookDownloadRepository,
     private val uploads: BookUploadRepository,
     private val account: RemoteAccountRepository,
+    private val router: RemoteRouter,
     private val appSettings: AppSettingsRepository,
     private val progressDao: ReadingProgressDao,
     private val bookDao: BookDao,
@@ -437,6 +445,9 @@ class LibraryViewModel(
                 downloads = running,
                 canDownload = server?.canDownload != false,
                 canUpload = server?.canUpload == true,
+                canDeleteFromServer = server != null &&
+                    router.deleterFor(server.kind) != null &&
+                    (server.kind != ServerKind.LISEUR_SYNC || server.canUpload),
                 uploads = uploading,
                 refreshing = refreshing || catalogStatus is CatalogStatus.Refreshing,
                 sort = settings.librarySort,
@@ -612,17 +623,21 @@ class LibraryViewModel(
         }
     }
 
-    /** Deletes the book from calibre-web itself. */
+    /**
+     * Deletes the book from the server itself.
+     *
+     * Only offered where the server has the notion and the account the
+     * right: calibre-web by login, liseur-sync by manage scope. Komga
+     * never reaches here — the action is not drawn for it.
+     */
     fun deleteFromServer(book: Book) {
         viewModelScope.launch {
             val server = account.current()
-            // Only calibre-web offers this: on Komga, deleting a file is
-            // an administrator's job and the action stays hidden.
-            val credentials = account.credentials() as? RemoteCredentials.Basic
-            val result = if (server == null || credentials == null) {
+            val deleter = server?.let { router.deleterFor(it.kind) }
+            val result = if (server == null || deleter == null) {
                 ServerDeleteResult.Failed(null)
             } else {
-                downloads.deleteFromServer(book, server.baseUrl, credentials)
+                downloads.deleteFromServer(book, deleter, server)
             }
             if (result !is ServerDeleteResult.Deleted) {
                 _deleteFailures.emit(DeleteFailure(book, onServer = true))
@@ -830,6 +845,7 @@ class LibraryViewModel(
                     downloads = container.bookDownloads,
                     uploads = container.bookUploads,
                     account = container.remoteAccount,
+                    router = container.remoteRouter,
                     appSettings = container.appSettings,
                     progressDao = container.database.readingProgressDao(),
                     bookDao = container.database.bookDao(),

@@ -1,20 +1,14 @@
 package com.chmouel.liseur.data.calibre
 
 import android.util.Log
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.remote.BookDeleter
+import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.ServerDeleteResult
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
-
-/** How deleting a book from the server went. */
-sealed interface ServerDeleteResult {
-    data object Deleted : ServerDeleteResult
-
-    /** The account cannot delete books, or the server said no. */
-    data object NotAllowed : ServerDeleteResult
-
-    data class Failed(val message: String?) : ServerDeleteResult
-}
 
 /**
  * Deletes a book from calibre-web itself.
@@ -61,5 +55,24 @@ class CalibreDeleteClient {
 
     private companion object {
         const val TAG = "CalibreDelete"
+    }
+}
+
+/**
+ * calibre-web's [BookDeleter]: the web form's delete route, which is the
+ * only way in — neither OPDS nor the Kobo API can remove a book.
+ */
+class CalibreBookDeleter(
+    private val client: CalibreDeleteClient = CalibreDeleteClient(),
+) : BookDeleter {
+    override suspend fun delete(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        book: Book,
+    ): ServerDeleteResult {
+        val basic = credentials as? RemoteCredentials.Basic
+            ?: return ServerDeleteResult.NotAllowed
+        val remoteBookId = book.remoteBookId ?: return ServerDeleteResult.Failed(null)
+        return client.delete(baseUrl, basic.username, basic.password, remoteBookId)
     }
 }

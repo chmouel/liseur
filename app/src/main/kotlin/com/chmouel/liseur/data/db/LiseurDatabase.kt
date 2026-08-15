@@ -22,7 +22,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 29,
+    version = 30,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -871,6 +871,19 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Room for liseur-sync's stable account id (ADR-0016 follow-up):
+         * what tells "same account, rotated token" apart from "another
+         * person signed in" once the server reports it.
+         */
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `liseur_account_id` TEXT",
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -903,6 +916,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_26_27,
             MIGRATION_27_28,
             MIGRATION_28_29,
+            MIGRATION_29_30,
         )
     }
 }

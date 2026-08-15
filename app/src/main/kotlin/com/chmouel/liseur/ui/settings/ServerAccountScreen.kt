@@ -801,6 +801,7 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.UNREACHABLE_TRY_HTTP -> R.string.server_error_https
     AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
     AccountError.INSUFFICIENT_SCOPES -> R.string.server_error_scopes_liseur_sync
+    AccountError.RATE_LIMITED -> R.string.server_error_rate_limited
 }
 
 /** Plain words for how the last position sync went. */

@@ -17,7 +17,9 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.library.BookRemoval
-import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.BookDeleter
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.ServerDeleteResult
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +50,6 @@ class BookDownloadRepository(
     private val context: Context,
     private val bookDao: BookDao,
     private val bookRemoval: BookRemoval,
-    private val deleteClient: CalibreDeleteClient = CalibreDeleteClient(),
 ) {
     private val workManager get() = WorkManager.getInstance(context)
 
@@ -118,24 +119,20 @@ class BookDownloadRepository(
     }
 
     /**
-     * Deletes a book from calibre-web and forgets it here.
+     * Deletes a book from the server and forgets it here.
      *
      * Everything else in the app only ever removes a copy; this is the one
      * action that reaches the server, so it is the only one that can lose
-     * the book for good.
+     * the book for good. (liseur-sync trashes rather than destroys, but
+     * the reader asked for it to be gone, and gone it is.)
      */
     suspend fun deleteFromServer(
         book: Book,
-        baseUrl: String,
-        credentials: RemoteCredentials.Basic,
+        deleter: BookDeleter,
+        server: RemoteServer,
     ): ServerDeleteResult {
-        val remoteId = book.remoteBookId ?: return ServerDeleteResult.Failed(null)
-        val result = deleteClient.delete(
-            baseUrl = baseUrl,
-            username = credentials.username,
-            password = credentials.password,
-            remoteBookId = remoteId,
-        )
+        val credentials = server.credentials ?: return ServerDeleteResult.Failed(null)
+        val result = deleter.delete(server.baseUrl, credentials, book)
         if (result is ServerDeleteResult.Deleted) {
             book.remoteUuid?.let { fileFor(it).delete() }
             // The book is gone from the server too, so this is not a

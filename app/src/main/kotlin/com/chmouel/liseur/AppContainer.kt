@@ -24,6 +24,7 @@ import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
 import com.chmouel.liseur.data.liseursync.BookUploadRepository
+import com.chmouel.liseur.data.liseursync.LiseurSyncBookDeleter
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
@@ -241,6 +242,12 @@ class AppContainer(context: Context) {
             ServerKind.CALIBRE to koboSync,
             ServerKind.KOMGA to komgaSync,
             ServerKind.LISEUR_SYNC to liseurSync,
+        ),
+        // Komga is absent on purpose: deleting a file there is an
+        // administrator's job, so the action is never offered for it.
+        deleters = mapOf(
+            ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreBookDeleter(),
+            ServerKind.LISEUR_SYNC to LiseurSyncBookDeleter(),
         ),
     )
 

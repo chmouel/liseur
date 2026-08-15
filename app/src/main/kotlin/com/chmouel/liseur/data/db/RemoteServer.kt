@@ -48,8 +48,21 @@ data class RemoteServer(
     @ColumnInfo(name = "catalog_synced_at") val catalogSyncedAt: Long?,
     @ColumnInfo(name = "position_synced_at") val positionSyncedAt: Long?,
     @ColumnInfo(name = "sync_token") val syncToken: String?,
-    /** The liseur-sync device token; null for every other kind. */
+    /**
+     * The liseur-sync device token; null for every other kind.
+     */
     @ColumnInfo(name = "liseur_token_cipher") val liseurTokenCipher: String? = null,
+    /**
+     * liseur-sync's stable account id (ADR-0016 follow-up), when the
+     * server said it.
+     *
+     * Unlike [accountId] — the *device* id, which a replacement token
+     * changes — this survives a credential rotation, which is what lets
+     * a re-pasted token be told apart from a different person signing
+     * in. Null until the server reports it; the older spellings in
+     * [accountKey] cover rows from before.
+     */
+    @ColumnInfo(name = "liseur_account_id") val liseurAccountId: String? = null,
     /**
      * How far through the liseur-sync op log this device has reconciled.
      *
@@ -118,8 +131,11 @@ data class RemoteServer(
             // The liseur-sync spelling is the one the old sync-only
             // account already wrote into `sync_peer_state` and
             // `work_alias`, and the migration carries it across: the
-            // token's device id when known, the login when not.
-            ServerKind.LISEUR_SYNC -> "liseursync|$baseUrl|${accountId ?: username}"
+            // token's device id when known, the login when not. The
+            // stable account id outranks both once the server reports
+            // it, so a rotated token no longer reads as a new account.
+            ServerKind.LISEUR_SYNC ->
+                "liseursync|$baseUrl|${liseurAccountId ?: accountId ?: username}"
         }
 
     companion object {

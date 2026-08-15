@@ -682,6 +682,7 @@ fun LibraryScreen(
             onDismiss = { sheetBook = null },
             canDownload = state.canDownload,
             canUpload = state.canUpload,
+            canDeleteFromServer = state.canDeleteFromServer,
             onUpload = { onUpload(book); sheetBook = null },
             onDownload = { onDownload(book); sheetBook = null },
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
@@ -754,6 +755,7 @@ internal fun BookActionsSheet(
     uploading: Boolean,
     canDownload: Boolean,
     canUpload: Boolean,
+    canDeleteFromServer: Boolean,
     onDismiss: () -> Unit,
     onDownload: () -> Unit,
     onUpload: () -> Unit,
@@ -866,7 +868,7 @@ internal fun BookActionsSheet(
                     ),
                 )
             }
-            if (book.remoteUuid != null) {
+            if (book.remoteUuid != null && canDeleteFromServer) {
                 // Kept apart from the others on purpose: everything above
                 // touches this device only, this one reaches the server.
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))

@@ -76,15 +76,12 @@ class LiseurSyncServerSetup(
         }
         val token = minted.optString("secret").takeIf { it.isNotEmpty() }
             ?: throw RemoteHttpFailure(SyncFailure.Malformed)
-        val scopes = scopesOf(minted.optJSONArray("scopes"))
-        return ServerCapabilities(
-            baseUrl = baseUrl,
-            canDownload = LiseurSyncApi.SCOPE_LIBRARY_READ in scopes,
-            canUpload = LiseurSyncApi.SCOPE_LIBRARY_MANAGE in scopes,
-            accountId = minted.optString("device_id").takeIf { it.isNotEmpty() },
-            displayName = credentials.username,
-            liseurToken = token,
-        )
+
+        // The token is asked what it holds rather than trusting the mint
+        // answer: one code path reads scopes, device and account id, and
+        // what the server recorded is what governs.
+        return introspect(baseUrl, RemoteCredentials.Bearer(token))
+            .copy(displayName = credentials.username)
     }
 
     /**
@@ -114,6 +111,10 @@ class LiseurSyncServerSetup(
             accountId = answer.optString("device_id").takeIf { it.isNotEmpty() },
             displayName = answer.optString("name").ifEmpty { "liseur-sync" },
             liseurToken = credentials.token,
+            // The stable account discriminator, present once the server
+            // ships the ADR-0016 follow-up; null until then, and the
+            // device id carries the duty.
+            liseurAccountId = answer.optString("account_id").takeIf { it.isNotEmpty() },
         )
     }
 
@@ -206,7 +207,7 @@ class LiseurSyncServerSetup(
 
             is SyncFailure.ServerError ->
                 if (reason.code == TOO_MANY) {
-                    SetupFailure.Unreachable("Rate limited", httpMayWork = false)
+                    SetupFailure.RateLimited
                 } else {
                     SetupFailure.WrongServer
                 }
