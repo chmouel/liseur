@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.CloudDownload
-import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -92,7 +91,6 @@ fun SettingsScreen(
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
     onOpenAccount: () -> Unit,
-    onOpenSyncServer: () -> Unit,
     backup: AnnotationBackupUi,
     connections: ConnectionsState,
     onOpenSource: () -> Unit,
@@ -210,7 +208,6 @@ fun SettingsScreen(
                     onHelp = { showLibraryHelp.value = true },
                 ) {
                     val catalog by connections.catalog.collectAsStateWithLifecycle(null)
-                    val sync by connections.sync.collectAsStateWithLifecycle(null)
                     ConnectionRow(
                         icon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
                         title = stringResource(R.string.server_account),
@@ -225,15 +222,6 @@ fun SettingsScreen(
                             )
                         } ?: stringResource(R.string.settings_account_detail),
                         onClick = onOpenAccount,
-                    )
-                    RowDivider()
-                    ConnectionRow(
-                        icon = { Icon(Icons.Outlined.CloudSync, contentDescription = null) },
-                        title = stringResource(R.string.sync_server_account),
-                        subtitle = sync?.let {
-                            stringResource(R.string.server_connected, it.baseUrl, it.username)
-                        } ?: stringResource(R.string.sync_server_account_detail),
-                        onClick = onOpenSyncServer,
                     )
                 }
 

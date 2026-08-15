@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-An open-source EPUB reader and [calibre-web](https://github.com/janeczku/calibre-web) / [Komga](https://komga.org) client for Android, made for people whose idea of a great evening is a warm blanket and a 900-page book.
+An open-source EPUB reader and [calibre-web](https://github.com/janeczku/calibre-web) / [Komga](https://komga.org) / [liseur-sync](https://github.com/chmouel/liseur-sync) client for Android, made for people whose idea of a great evening is a warm blanket and a 900-page book.
 
 <table>
   <tr>
@@ -43,7 +43,7 @@ An open-source EPUB reader and [calibre-web](https://github.com/janeczku/calibre
   <tr>
     <td align="center"><sub>Series grouped into compact shelf stacks.</sub></td>
     <td align="center"><sub>Reading order, progress, and missing volumes at a glance.</sub></td>
-    <td align="center"><sub>Connect to calibre-web or Komga in moments.</sub></td>
+    <td align="center"><sub>Connect to calibre-web, Komga or liseur-sync in moments.</sub></td>
     <td align="center"><sub>Dark reading theme, independent of system settings.</sub></td>
   </tr>
 </table>
@@ -54,9 +54,9 @@ An open-source EPUB reader and [calibre-web](https://github.com/janeczku/calibre
 
 [Liseur](#whats-in-a-name) is designed to get out of the way and let you read. Pages open cleanly from edge to edge with the Readium engine, set in open typefaces like Literata, Vollkorn, Atkinson Hyperlegible, and Inter, or whatever quirky typography the publisher insisted on. Four dedicated reading themes (Light, Sepia, Dark, and true OLED Black) let you settle into a story at 2 a.m. without being blinded by your phone. Margins, line spacing, brightness, and page turns stay quietly out of your way. A discreet footer shows the time remaining in the chapter (just enough to convince yourself that one more chapter won't hurt), while highlights, margin notes, bookmarks, and instant dictionary lookups remain right under your fingers when you stumble upon a word you pretend to know.
 
-Your library gathers onto a single shelf, whether your books live in messy folders on your phone or on a self-hosted [calibre-web](https://github.com/janeczku/calibre-web) or [Komga](https://komga.org) server. Books that belong to a series politely group into compact stacks that track your reading order, your progress, and the missing volumes you still need to hunt down. When you reach the final page of a novel, the next volume is already sitting there, gently enabling your binge-reading habits.
+Your library gathers onto a single shelf, whether your books live in messy folders on your phone or on a self-hosted [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) or [liseur-sync](https://github.com/chmouel/liseur-sync) server. Books that belong to a series politely group into compact stacks that track your reading order, your progress, and the missing volumes you still need to hunt down. When you reach the final page of a novel, the next volume is already sitting there, gently enabling your binge-reading habits.
 
-When you switch between devices, you have the choice to have your place travel with you across your devices. Two-way synchronization with [calibre-web](https://github.com/janeczku/calibre-web) and [Komga](https://komga.org) keeps your progress aligned, down to the exact sentence on Komga so you never have to play the guessing game of where you were. If you read standalone EPUB files that never touch a server catalog, pairing with [liseur-sync](https://github.com/chmouel/liseur-sync) brings that same precision and reading statistics to your local files.
+When you switch between devices, you have the choice to have your place travel with you across your devices. Two-way synchronization with [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) and [liseur-sync](https://github.com/chmouel/liseur-sync) keeps your progress aligned — down to the exact sentence on Komga and liseur-sync, so you never have to play the guessing game of where you were. liseur-sync goes one further: standalone EPUB files that never came from a catalog sync their position too, matched by the file itself, and it accepts uploads of your local books.
 
 Everything runs privately and without distraction. There are no trackers, no analytics, no ads, and no attempts to sell you a monthly subscription for books you already own. Liseur only talks to the book servers and dictionary sources you choose to add.
 
@@ -68,7 +68,7 @@ Everything runs privately and without distraction. There are no trackers, no ana
 ## Related Projects
 
 - [liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur
-- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight sync backend for reading positions and stats
+- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server — browse, download, upload, positions and reading stats
 
 ## Development
 

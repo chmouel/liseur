@@ -95,6 +95,20 @@ data class ServerCapabilities(
     /** The display name to show for the account. */
     val displayName: String,
     /**
+     * Whether this account may push EPUBs up to the server. Only
+     * liseur-sync has the notion; everywhere else uploading is not a
+     * thing the app offers, so the default is no.
+     */
+    val canUpload: Boolean = false,
+    /**
+     * The liseur-sync device token minted or verified during setup.
+     *
+     * Setup signs in with a password and comes back holding a different
+     * secret — the device token — which is the one stored. Null for the
+     * kinds whose sign-in secret is the stored one.
+     */
+    val liseurToken: String? = null,
+    /**
      * calibre-web's Kobo sync token, obtained during setup. Nothing else
      * has one, and nothing but the Kobo sync uses it.
      */
@@ -108,8 +122,17 @@ sealed interface SetupFailure {
     /** The URL answered, but the credentials were rejected. */
     data object BadCredentials : SetupFailure
 
+    /**
+     * The credentials work but do not grant what the app needs — a
+     * liseur-sync device token without the `sync` scope, say.
+     */
+    data object InsufficientScopes : SetupFailure
+
     /** Something answered, but it was not the kind of server we asked for. */
     data object WrongServer : SetupFailure
+
+    /** The server insists on HTTPS and the address given was plain HTTP. */
+    data object InsecureTransport : SetupFailure
 
     /** Nothing answered over HTTPS; the user may want to allow plain HTTP. */
     data class Unreachable(val message: String, val httpMayWork: Boolean) : SetupFailure

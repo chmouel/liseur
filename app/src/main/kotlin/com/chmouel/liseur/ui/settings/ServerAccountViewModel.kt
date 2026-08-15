@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
@@ -20,11 +22,17 @@ import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.domain.displayAuthor
+import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -34,7 +42,33 @@ enum class AccountError {
     WRONG_SERVER,
     UNREACHABLE,
     UNREACHABLE_TRY_HTTP,
+    INSECURE_TRANSPORT,
+    INSUFFICIENT_SCOPES,
 }
+
+/** Which way a reader proves who they are to a liseur-sync server. */
+enum class LiseurSyncSignIn {
+    /** Username and password, which mint a device token. */
+    PASSWORD,
+
+    /** A device token made on the server and pasted in. */
+    TOKEN,
+}
+
+/**
+ * A book the server thought it recognised, but only by its title and
+ * author.
+ *
+ * Two translations of the same novel look like this to a server, and so
+ * do two editions with different text; exchanging positions between
+ * them would land the reader in the wrong place. So nothing is
+ * exchanged under a match like this until the reader has looked at it.
+ */
+data class WorkConfirmation(
+    val bookUrl: String,
+    val title: String,
+    val author: String?,
+)
 
 data class ServerAccountUiState(
     val server: RemoteServer? = null,
@@ -43,6 +77,9 @@ data class ServerAccountUiState(
     val username: String = "",
     val password: String = "",
     val apiKey: String = "",
+    /** The liseur-sync sign-in mode and its pasted-token field. */
+    val liseurSyncSignIn: LiseurSyncSignIn = LiseurSyncSignIn.PASSWORD,
+    val deviceToken: String = "",
     val connecting: Boolean = false,
     val error: AccountError? = null,
     val storage: StorageUse = StorageUse(count = 0, bytes = 0),
@@ -50,8 +87,13 @@ data class ServerAccountUiState(
     val syncReport: SyncReport = SyncReport(),
     val identity: SyncIdentity? = null,
     val lostToRestore: Boolean = false,
+    /** Matches the server was not sure about, waiting on the reader. */
+    val confirmations: List<WorkConfirmation> = emptyList(),
+    /** Books whose identifiers named two different works on the server. */
+    val ambiguities: Int = 0,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ServerAccountViewModel(
     private val repository: RemoteAccountRepository,
     downloads: BookDownloadRepository,
@@ -59,6 +101,8 @@ class ServerAccountViewModel(
     private val positionSync: PositionSyncCoordinator,
     private val catalog: RemoteCatalogRepository,
     private val appSettings: AppSettingsRepository,
+    private val identityDao: WorkIdentityDao,
+    private val bookDao: BookDao,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ServerAccountUiState())
@@ -93,6 +137,36 @@ class ServerAccountViewModel(
                 _state.update { it.copy(syncReport = report) }
             }
         }
+        viewModelScope.launch {
+            // The questions a liseur-sync server could not answer on its
+            // own. They belong to the account, so they are observed for
+            // whichever account is connected, and there are none to
+            // observe for the other kinds.
+            repository.server.flatMapLatest { server ->
+                if (server?.kind != ServerKind.LISEUR_SYNC) {
+                    flowOf(emptyList<WorkConfirmation>() to 0)
+                } else {
+                    combine(
+                        identityDao.observeAwaitingAnswer(server.accountKey),
+                        identityDao.observeAmbiguityCount(server.accountKey),
+                        bookDao.observeAll(),
+                    ) { aliases, ambiguities, books ->
+                        val byUrl = books.associateBy { it.url }
+                        aliases.mapNotNull { alias ->
+                            byUrl[alias.bookUrl]?.let {
+                                WorkConfirmation(
+                                    bookUrl = alias.bookUrl,
+                                    title = it.displayTitle,
+                                    author = it.displayAuthor,
+                                )
+                            }
+                        } to ambiguities
+                    }
+                }
+            }.collect { (confirmations, ambiguities) ->
+                _state.update { it.copy(confirmations = confirmations, ambiguities = ambiguities) }
+            }
+        }
     }
 
     private suspend fun refreshDiagnostics() {
@@ -115,10 +189,38 @@ class ServerAccountViewModel(
 
     fun setPassword(value: String) = _state.update { it.copy(password = value, error = null) }
 
+    fun setLiseurSyncSignIn(value: LiseurSyncSignIn) =
+        _state.update { it.copy(liseurSyncSignIn = value, error = null) }
+
+    fun setDeviceToken(value: String) =
+        _state.update { it.copy(deviceToken = value.trim(), error = null) }
+
+    /**
+     * Answers the "is this the same book?" question.
+     *
+     * A yes starts exchanging positions under that name on the next run.
+     * A no is remembered rather than acted on and forgotten: the book
+     * would otherwise be resolved again and the same question asked
+     * again, forever.
+     */
+    fun answerConfirmation(bookUrl: String, sameBook: Boolean) {
+        val peerId = _state.value.server
+            ?.takeIf { it.kind == ServerKind.LISEUR_SYNC }
+            ?.accountKey ?: return
+        viewModelScope.launch {
+            if (sameBook) {
+                identityDao.confirm(bookUrl, peerId)
+                positionSync.request(SyncScope.Full)
+            } else {
+                identityDao.reject(bookUrl, peerId)
+            }
+        }
+    }
+
     fun connect(allowHttp: Boolean = false) {
         val current = _state.value
         if (current.connecting || current.url.isBlank()) return
-        if (current.kind == ServerKind.KOMGA && current.apiKey.isBlank()) return
+        if (!current.credentialsSupplied()) return
         _state.update { it.copy(connecting = true, error = null) }
 
         viewModelScope.launch {
@@ -134,6 +236,19 @@ class ServerAccountViewModel(
                     apiKey = current.apiKey.trim(),
                     allowHttp = allowHttp,
                 )
+                ServerKind.LISEUR_SYNC -> when (current.liseurSyncSignIn) {
+                    LiseurSyncSignIn.PASSWORD -> repository.connectLiseurSync(
+                        url = current.url,
+                        username = current.username.trim(),
+                        password = current.password,
+                        allowHttp = allowHttp,
+                    )
+                    LiseurSyncSignIn.TOKEN -> repository.connectLiseurSyncToken(
+                        url = current.url,
+                        token = current.deviceToken,
+                        allowHttp = allowHttp,
+                    )
+                }
             }
             if (result is SetupResult.Success) {
                 fetchCatalogAndPositions()
@@ -142,7 +257,7 @@ class ServerAccountViewModel(
             _state.update {
                 when (result) {
                     is SetupResult.Success ->
-                        it.copy(connecting = false, password = "", apiKey = "")
+                        it.copy(connecting = false, password = "", apiKey = "", deviceToken = "")
                     is SetupResult.Failure ->
                         it.copy(connecting = false, error = result.reason.toUiError())
                 }
@@ -186,6 +301,16 @@ class ServerAccountViewModel(
         viewModelScope.launch { repository.setKoboToken(value.ifBlank { null }) }
     }
 
+    /** Whether enough of the form is filled in to be worth trying. */
+    private fun ServerAccountUiState.credentialsSupplied(): Boolean = when (kind) {
+        ServerKind.CALIBRE -> username.isNotBlank() && password.isNotBlank()
+        ServerKind.KOMGA -> apiKey.isNotBlank()
+        ServerKind.LISEUR_SYNC -> when (liseurSyncSignIn) {
+            LiseurSyncSignIn.PASSWORD -> username.isNotBlank() && password.isNotBlank()
+            LiseurSyncSignIn.TOKEN -> deviceToken.isNotBlank()
+        }
+    }
+
     fun disconnect() {
         viewModelScope.launch {
             repository.disconnect()
@@ -195,7 +320,9 @@ class ServerAccountViewModel(
 
     private fun SetupFailure.toUiError(): AccountError = when (this) {
         SetupFailure.BadCredentials -> AccountError.BAD_CREDENTIALS
+        SetupFailure.InsufficientScopes -> AccountError.INSUFFICIENT_SCOPES
         SetupFailure.WrongServer -> AccountError.WRONG_SERVER
+        SetupFailure.InsecureTransport -> AccountError.INSECURE_TRANSPORT
         is SetupFailure.Unreachable ->
             if (httpMayWork) AccountError.UNREACHABLE_TRY_HTTP else AccountError.UNREACHABLE
     }
@@ -211,6 +338,8 @@ class ServerAccountViewModel(
                     positionSync = container.positionSync,
                     catalog = container.remoteCatalog,
                     appSettings = container.appSettings,
+                    identityDao = container.database.workIdentityDao(),
+                    bookDao = container.database.bookDao(),
                 )
             }
         }

@@ -1,7 +1,8 @@
 package com.chmouel.liseur.data.liseursync
 
 import android.util.Log
-import com.chmouel.liseur.data.db.SyncAccountDao
+import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import java.io.IOException
 import java.time.Instant
@@ -36,7 +37,7 @@ data class WorkInsights(
 data class InsightDay(val date: LocalDate, val activeMinutes: Double)
 
 /**
- * Statistics from the sync server, when there are any.
+ * Statistics from a liseur-sync server, when there are any.
  *
  * Every answer here is decoration. The dashboard is built from this
  * device's own sessions and stands on its own; what this adds is the
@@ -45,19 +46,18 @@ data class InsightDay(val date: LocalDate, val activeMinutes: Double)
  * statistics screen is not worth an error banner, and a reader offline
  * on a train should see their own figures rather than a complaint.
  *
- * It needs the second, narrower token — the one that may read but not
- * write — which a reader who pasted a single sync token will not have.
- * That is the ordinary case for the answer being null.
+ * The token needs the `read-insights` scope; one minted without it is
+ * refused, which lands in the same silent null as being offline.
  */
 class LiseurSyncInsights(
-    private val accountDao: SyncAccountDao,
+    private val serverDao: RemoteServerDao,
     private val identityDao: WorkIdentityDao,
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
 ) {
 
     suspend fun summary(rangeDays: Int = DEFAULT_RANGE_DAYS): InsightsSummary? {
-        val account = accountDao.get() ?: return null
-        val credentials = account.insightsCredentials ?: return null
+        val account = account() ?: return null
+        val credentials = account.credentials ?: return null
         val answer = try {
             http.get(
                 LiseurSyncApi.insightsSummary(account.baseUrl, "${rangeDays}d"),
@@ -84,9 +84,9 @@ class LiseurSyncInsights(
      * invented "about four hours left" is worse than no estimate.
      */
     suspend fun forBook(bookUrl: String): WorkInsights? {
-        val account = accountDao.get() ?: return null
-        val credentials = account.insightsCredentials ?: return null
-        val alias = identityDao.alias(bookUrl, account.peerId)?.takeIf { it.usable } ?: return null
+        val account = account() ?: return null
+        val credentials = account.credentials ?: return null
+        val alias = identityDao.alias(bookUrl, account.accountKey)?.takeIf { it.usable } ?: return null
         val answer = try {
             http.get(LiseurSyncApi.workInsights(account.baseUrl, alias.workId), credentials)
         } catch (e: IOException) {
@@ -98,8 +98,8 @@ class LiseurSyncInsights(
 
     /** The requested calendar span, with absent days filled by the caller. */
     suspend fun calendar(from: LocalDate, to: LocalDate): List<InsightDay>? {
-        val account = accountDao.get() ?: return null
-        val credentials = account.insightsCredentials ?: return null
+        val account = account() ?: return null
+        val credentials = account.credentials ?: return null
         val answers = try {
             (from.year..to.year).map { year ->
                 http.get(LiseurSyncApi.insightsCalendar(account.baseUrl, year), credentials)
@@ -137,9 +137,9 @@ class LiseurSyncInsights(
      * sync.
      */
     suspend fun allBooks(): Map<String, WorkInsights>? {
-        val account = accountDao.get() ?: return null
-        val credentials = account.insightsCredentials ?: return null
-        val aliases = identityDao.aliasesFor(account.peerId).filter { it.usable }
+        val account = account() ?: return null
+        val credentials = account.credentials ?: return null
+        val aliases = identityDao.aliasesFor(account.accountKey).filter { it.usable }
         if (aliases.isEmpty()) return emptyMap()
         val answer = try {
             http.get(LiseurSyncApi.workInsights(account.baseUrl), credentials)
@@ -180,6 +180,15 @@ class LiseurSyncInsights(
                 ?.let { Instant.parse(it).toEpochMilli() },
         )
     }.getOrNull()
+
+    /**
+     * The connected liseur-sync account, or null when the server is of
+     * another kind — statistics from the catalog server are this
+     * provider's answer, and any other kind's are their own business.
+     */
+    private suspend fun account() = serverDao.get()
+        ?.takeIf { it.kind == ServerKind.LISEUR_SYNC }
+        ?.takeIf { it.credentials != null }
 
     private companion object {
         const val TAG = "liseur-sync-insights"

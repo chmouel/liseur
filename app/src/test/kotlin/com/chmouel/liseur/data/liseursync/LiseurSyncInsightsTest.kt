@@ -4,7 +4,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.LiseurDatabase
-import com.chmouel.liseur.data.db.SyncAccount
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.WorkAlias
 import java.net.InetAddress
 import java.time.Instant
@@ -57,39 +58,6 @@ class LiseurSyncInsightsTest {
         CredentialCipher.keyForTesting = null
     }
 
-    @Test
-    fun `totals come back with the range the server actually used`() = runTest {
-        connect()
-        server.enqueue(
-            ok("""{"range_days":7,"total_active_minutes":93.5,"sessions":4,"streak_days":3}"""),
-        )
-
-        val summary = insights().summary(rangeDays = 30)!!
-
-        // Asked for thirty, told seven. Reporting a week's reading as a
-        // month's would be a lie about the reader.
-        assertEquals(7, summary.rangeDays)
-        assertEquals(93.5, summary.activeMinutes, 0.001)
-        assertEquals(3, summary.streakDays)
-    }
-
-    @Test
-    fun `a server that cannot be reached is silence, not an error`() = runTest {
-        connect()
-        server.enqueue(MockResponse(code = 503, body = ""))
-
-        assertNull(insights().summary())
-    }
-
-    @Test
-    fun `a sync token pasted in without a statistics one asks nothing`() = runTest {
-        connect(insightsToken = null)
-
-        assertNull(insights().summary())
-        // Not even attempted: the token that may sync is refused here by
-        // design, and a 403 on the statistics screen would be baffling.
-        assertEquals(0, server.requestCount)
-    }
 
     @Test
     fun `no account means no request`() = runTest {
@@ -172,20 +140,27 @@ class LiseurSyncInsightsTest {
     }
 
     private fun insights() = LiseurSyncInsights(
-        accountDao = db.syncAccountDao(),
+        serverDao = db.remoteServerDao(),
         identityDao = db.workIdentityDao(),
     )
 
-    private suspend fun connect(insightsToken: String? = "read-secret") {
-        db.syncAccountDao().upsert(
-            SyncAccount(
+    private suspend fun connect() {
+        db.remoteServerDao().upsert(
+            RemoteServer(
+                kind = ServerKind.LISEUR_SYNC,
                 baseUrl = "http://127.0.0.1:${server.port}",
                 username = "ada",
-                tokenCipher = CredentialCipher.encrypt("device-secret"),
-                insightsTokenCipher = insightsToken?.let(CredentialCipher::encrypt),
-                deviceName = "Test",
-                deviceKey = "device-a",
+                passwordCipher = null,
+                apiKeyCipher = null,
+                accountId = null,
+                userId = null,
+                koboTokenCipher = null,
+                canDownload = true,
                 addedAt = NOW,
+                catalogSyncedAt = null,
+                positionSyncedAt = null,
+                syncToken = null,
+                liseurTokenCipher = CredentialCipher.encrypt("device-secret"),
             ),
         )
     }

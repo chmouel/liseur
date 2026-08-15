@@ -5,7 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
-import com.chmouel.liseur.data.db.SyncAccount
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PreviewOutcome
@@ -139,7 +140,7 @@ class LiseurSyncPositionSyncTest {
 
         sync().syncAll(null)
 
-        assertEquals(9L, db.syncAccountDao().get()?.cursorSeq)
+        assertEquals(9L, db.remoteServerDao().get()?.syncCursorSeq)
         // A fresh process asks from there, not from the beginning.
         val next = requests().first { it.target.startsWith("/v1/changes") }
         assertTrue(next.target.contains("since=0"))
@@ -158,7 +159,7 @@ class LiseurSyncPositionSyncTest {
 
         sync().syncAll(null)
 
-        assertEquals(42L, db.syncAccountDao().get()?.cursorSeq)
+        assertEquals(42L, db.remoteServerDao().get()?.syncCursorSeq)
         assertEquals(0.6, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
     }
 
@@ -166,7 +167,7 @@ class LiseurSyncPositionSyncTest {
     fun `this device's own reading coming back around is not applied again`() = runTest {
         connect(deviceId = "d-mine")
         db.bookDao().upsert(local())
-        alias()
+        alias(deviceId = "d-mine")
         server.enqueue(
             json(
                 """{"ops":[${op(seq = 3, progression = 0.9, deviceId = "d-mine")}],
@@ -178,7 +179,7 @@ class LiseurSyncPositionSyncTest {
         sync().syncAll(null)
 
         assertNull(db.readingProgressDao().get(LOCAL))
-        assertEquals(3L, db.syncAccountDao().get()?.cursorSeq)
+        assertEquals(3L, db.remoteServerDao().get()?.syncCursorSeq)
     }
 
     @Test
@@ -360,7 +361,7 @@ class LiseurSyncPositionSyncTest {
     private fun sync(): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
-            accountDao = db.syncAccountDao(),
+            serverDao = db.remoteServerDao(),
             bookDao = db.bookDao(),
             progressDao = db.readingProgressDao(),
             peerStateDao = db.syncPeerStateDao(),
@@ -371,22 +372,30 @@ class LiseurSyncPositionSyncTest {
                 fingerprints = BookFingerprintStore(context, db.workIdentityDao()) { NOW },
                 now = { NOW },
             ),
+            deviceKey = { "device-a" },
             finishedState = FinishedState(db.bookDao(), db.readingProgressDao()),
             now = { NOW },
         )
     }
 
     private suspend fun connect(cursor: Long = 0, deviceId: String? = null) {
-        db.syncAccountDao().upsert(
-            SyncAccount(
+        db.remoteServerDao().upsert(
+            RemoteServer(
+                kind = ServerKind.LISEUR_SYNC,
                 baseUrl = "http://127.0.0.1:${server.port}",
                 username = "ada",
-                tokenCipher = CredentialCipher.encrypt("device-secret"),
-                deviceName = "Test",
-                deviceId = deviceId,
-                deviceKey = "device-a",
-                cursorSeq = cursor,
+                passwordCipher = null,
+                apiKeyCipher = null,
+                accountId = deviceId,
+                userId = null,
+                koboTokenCipher = null,
+                canDownload = true,
                 addedAt = NOW,
+                catalogSyncedAt = null,
+                positionSyncedAt = null,
+                syncToken = null,
+                liseurTokenCipher = CredentialCipher.encrypt("device-secret"),
+                syncCursorSeq = cursor,
             ),
         )
     }
@@ -411,11 +420,15 @@ class LiseurSyncPositionSyncTest {
         ),
     )
 
-    private suspend fun alias(seeded: Boolean = true, confidence: String = "high") =
+    private suspend fun alias(
+        seeded: Boolean = true,
+        confidence: String = "high",
+        deviceId: String? = null,
+    ) =
         db.workIdentityDao().upsert(
             com.chmouel.liseur.data.db.WorkAlias(
                 bookUrl = LOCAL,
-                peerId = peer(),
+                peerId = peer(deviceId),
                 workId = "w-1",
                 confidence = confidence,
                 confirmed = true,
@@ -456,7 +469,8 @@ class LiseurSyncPositionSyncTest {
         return id
     }
 
-    private fun peer() = "liseursync|http://127.0.0.1:${server.port}|ada"
+    private fun peer(deviceId: String? = null) =
+        "liseursync|http://127.0.0.1:${server.port}|${deviceId ?: "ada"}"
 
     private fun local() = Book(
         url = LOCAL,

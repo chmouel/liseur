@@ -6,22 +6,22 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
-import com.chmouel.liseur.data.db.SyncAccount
-import com.chmouel.liseur.data.db.SyncAccountDao
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.SyncPeerState
 import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.FinishedState
-import com.chmouel.liseur.data.remote.PeerPositionSync
+import com.chmouel.liseur.data.remote.PositionSync
 import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncIdentity
-import com.chmouel.liseur.data.remote.SyncMove
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncReport
@@ -42,50 +42,49 @@ import org.json.JSONObject
 /**
  * Keeps reading positions in step with a liseur-sync server.
  *
- * The shape is different from a catalog server's. calibre-web and Komga
- * each hold one current position per book and answer "where am I"; this
- * one holds an append-only log and answers "what has happened since
- * `seq`". That is what lets several devices talk to it without any of
- * them being authoritative, and it is why the cursor is the only piece
- * of state that must never be wrong: everything else can be asked for
- * again, but reading that arrived while the cursor moved past it is
- * gone.
+ * The shape is different from the other catalog servers'. calibre-web
+ * and Komga each hold one current position per book and answer "where
+ * am I"; this one holds an append-only log and answers "what has
+ * happened since `seq`". That is what lets several devices talk to it
+ * without any of them being authoritative, and it is why the cursor is
+ * the only piece of state that must never be wrong: everything else can
+ * be asked for again, but reading that arrived while the cursor moved
+ * past it is gone.
  *
  * So the rule throughout is that the cursor advances in the same
  * transaction that writes what the page contained, and never before.
  *
  * The reconciliation itself is `reconcileReadingState`, unchanged and
- * shared with the catalog servers. What is decided about a reader's
- * place is subtle enough to be worth having in exactly one place, and a
- * third kind of server is not a third set of rules.
+ * shared with the other servers. What is decided about a reader's place
+ * is subtle enough to be worth having in exactly one place, and a third
+ * kind of server is not a third set of rules.
  */
 class LiseurSyncPositionSync(
-    private val accountDao: SyncAccountDao,
+    private val serverDao: RemoteServerDao,
     private val bookDao: BookDao,
     private val progressDao: ReadingProgressDao,
     private val peerStateDao: SyncPeerStateDao,
     private val identityDao: WorkIdentityDao,
     private val sessionDao: ReadingSessionDao,
     private val works: WorkResolver,
+    private val deviceKey: suspend () -> String,
     private val finishedState: FinishedState,
     private val reporting: SyncReporting = SyncReporting(),
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
     private val now: () -> Long = System::currentTimeMillis,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
-) : PeerPositionSync {
-
-    override val peerId: String get() = PeerPositionSync.LISEUR_SYNC
+) : PositionSync {
 
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = run(book = null)
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)
 
     override suspend fun canSync(bookUrl: String): Boolean {
-        val account = accountDao.get() ?: return false
-        if (account.credentials == null) return false
-        // Every book can, in principle: this server holds no files and
-        // does not care where a book came from. That is the whole reason
-        // it exists, so the only question is whether the book is here.
+        val account = account() ?: return false
+        // Every book can, in principle: the server resolves a file by
+        // its hashes and does not care where the file came from, which
+        // is what makes it the one account a side-loaded book can sync
+        // against too. The only question is whether the book is here.
         return bookDao.getByUrl(bookUrl) != null
     }
 
@@ -93,20 +92,18 @@ class LiseurSyncPositionSync(
      * Asks the server outright where it thinks the reader is in one book,
      * and reports both positions without acting on either.
      *
-     * The server's answer is written down before returning, exactly as
-     * the catalog peers do. Acting on the answer goes through
-     * `takeRemotePosition`/`keepLocalPosition`, and those are only ever
-     * routed to a peer that has a disagreement on disk — an answer that
+     * The server's answer is written down before returning. Acting on it
+     * goes through `takeRemotePosition`/`keepLocalPosition`, which are
+     * only ever routed here with a disagreement on disk — an answer that
      * was merely returned would make the choice that follows a no-op.
      */
     override suspend fun previewBook(bookUrl: String): PreviewOutcome {
-        val account = accountDao.get() ?: return PreviewOutcome.NotSynced
-        val credentials = account.credentials ?: return PreviewOutcome.NotSynced
+        val account = account() ?: return PreviewOutcome.NotSynced
         val book = bookDao.getByUrl(bookUrl) ?: return PreviewOutcome.NotSynced
         val alias = works.cached(book, account.peerId) ?: return PreviewOutcome.NotSynced
 
         val head = try {
-            latestOp(account.baseUrl, credentials, alias.workId)
+            latestOp(account.baseUrl, account.credentials, alias.workId)
         } catch (e: IOException) {
             return PreviewOutcome.Failed(reasonFor(e))
         } ?: return PreviewOutcome.NotSynced
@@ -126,7 +123,7 @@ class LiseurSyncPositionSync(
     }
 
     override suspend fun preservedConflict(bookUrl: String): SyncPreview? {
-        val account = accountDao.get() ?: return null
+        val account = account() ?: return null
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return null
         if (!state.hasPending) return null
         val there = state.pendingProgression ?: return null
@@ -145,17 +142,16 @@ class LiseurSyncPositionSync(
      * the word it was left on rather than at roughly the right place.
      */
     override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
-        val account = accountDao.get() ?: return ResolveOutcome.Done
+        val account = account() ?: return ResolveOutcome.Done
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
         val progression = state.pendingProgression ?: return ResolveOutcome.Done
 
-        val locator = account.credentials?.let { credentials ->
-            val alias = bookDao.getByUrl(bookUrl)?.let { works.cached(it, account.peerId) }
-            alias?.let {
-                runCatching { latestOp(account.baseUrl, credentials, it.workId) }
+        val locator = bookDao.getByUrl(bookUrl)
+            ?.let { works.cached(it, account.peerId) }
+            ?.let {
+                runCatching { latestOp(account.baseUrl, account.credentials, it.workId) }
                     .getOrNull()?.locatorJson
             }
-        }
 
         var applied = false
         val status = ReadingStatus.fromWire(state.pendingStatus)
@@ -194,40 +190,109 @@ class LiseurSyncPositionSync(
      * on screen.
      */
     override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
-        val account = accountDao.get() ?: return ResolveOutcome.Done
+        val account = account() ?: return ResolveOutcome.Done
         peerStateDao.clearPending(bookUrl, account.peerId)
         return ResolveOutcome.Done
     }
 
     override suspend fun refreshUnresolved() {
-        val account = accountDao.get() ?: return
-        reporting.reportUnresolved(peerStateDao.countPending(account.peerId), peerId)
+        val account = account() ?: return
+        reporting.reportUnresolved(peerStateDao.countPending(account.peerId))
     }
 
     override suspend fun identity(): SyncIdentity? {
-        val account = accountDao.get() ?: return null
-        // Nothing is ever stranded here. This server holds no catalog, so
-        // a book is never bound to it the way a downloaded book is bound
-        // to the account that fetched it.
-        return SyncIdentity(login = account.username, strandedBooks = 0)
+        val account = account() ?: return null
+        // Every book here can be named to this server, by its hashes if
+        // not by a catalog id, so nothing is ever stranded.
+        return SyncIdentity(login = account.login, strandedBooks = 0)
+    }
+
+    // -- The account ------------------------------------------------------
+
+    /**
+     * The connected liseur-sync account, as a sync run saw it.
+     *
+     * Read once from `remote_server` and carried through the run, so a
+     * sign-out landing mid-run cannot split it between two accounts.
+     * Every write checks the row again, in the same transaction.
+     */
+    private class Account(
+        val baseUrl: String,
+        val credentials: RemoteCredentials,
+        /** The key this account's per-book agreements are stored under. */
+        val peerId: String,
+        /** The server's own name for this device, when it said one. */
+        val deviceId: String?,
+        /**
+         * This device, as this device knows itself.
+         *
+         * Part of every op id, so that two phones sitting at the same
+         * revision of the same book do not name the same op and silence
+         * each other. It is the local identity rather than the server's
+         * precisely so that it exists before the server has said
+         * anything.
+         */
+        val deviceKey: String,
+        /** How far through the op log this device has reconciled. */
+        val cursorSeq: Long,
+        /** Who is signed in, for telling accounts apart in the UI. */
+        val login: String,
+        /** The whole row's identity stamp, for the mid-run change guard. */
+        val accountKey: String,
+    )
+
+    /**
+     * The connected account, or null when there is none or it is not
+     * liseur-sync's.
+     *
+     * A row whose token cannot be read back — a backup restored onto
+     * another phone — reports as [PositionSyncStatus.Unavailable] only
+     * from [run]; the quieter callers simply answer "not synced".
+     */
+    private suspend fun server(): RemoteServer? =
+        serverDao.get()?.takeIf { it.kind == ServerKind.LISEUR_SYNC }
+
+    private suspend fun account(): Account? {
+        val server = server() ?: return null
+        val credentials = server.credentials ?: return null
+        return Account(
+            baseUrl = server.baseUrl,
+            credentials = credentials,
+            peerId = server.accountKey,
+            deviceId = server.accountId,
+            deviceKey = deviceKey(),
+            cursorSeq = server.syncCursorSeq,
+            login = server.username?.takeIf { it.isNotBlank() } ?: "liseur-sync",
+            accountKey = server.accountKey,
+        )
     }
 
     // -- The run ----------------------------------------------------------
 
     private suspend fun run(book: String?): SyncOutcome {
-        val account = accountDao.get() ?: run {
-            reporting.report(PositionSyncStatus.Idle, peerId)
+        val server = server() ?: run {
+            reporting.report(PositionSyncStatus.Idle)
             return SyncOutcome.NotApplicable
         }
-        val credentials = account.credentials ?: run {
+        val credentials = server.credentials ?: run {
             // The token cannot be read back: a database restored onto
             // another phone arrives with ciphertext this Keystore cannot
             // open, and there is nothing to do about it here.
-            reporting.report(PositionSyncStatus.Unavailable, peerId)
+            reporting.report(PositionSyncStatus.Unavailable)
             return SyncOutcome.NotApplicable
         }
+        val account = Account(
+            baseUrl = server.baseUrl,
+            credentials = credentials,
+            peerId = server.accountKey,
+            deviceId = server.accountId,
+            deviceKey = deviceKey(),
+            cursorSeq = server.syncCursorSeq,
+            login = server.username?.takeIf { it.isNotBlank() } ?: "liseur-sync",
+            accountKey = server.accountKey,
+        )
 
-        reporting.report(PositionSyncStatus.Syncing, peerId)
+        reporting.report(PositionSyncStatus.Syncing)
         val books = if (book == null) {
             bookDao.allOnce()
         } else {
@@ -238,10 +303,10 @@ class LiseurSyncPositionSync(
 
         // Names first: an op is about a work id, so a book with no name
         // can neither receive what arrived nor send what is owed.
-        val named = name(account, credentials, books, single = book != null)
+        val named = name(account, books, single = book != null)
         firstFailure = firstFailure ?: named.failure
 
-        val pull = pull(account, credentials)
+        val pull = pull(account)
         firstFailure = firstFailure ?: pull
 
         var pulled = 0
@@ -254,12 +319,12 @@ class LiseurSyncPositionSync(
             }
         }
 
-        val pushed = push(account, credentials, pushes) { firstFailure = firstFailure ?: it }
+        val pushed = push(account, pushes) { firstFailure = firstFailure ?: it }
 
         // After the positions, because where the reader is now matters
         // more than how long they took to get there, and a run cut short
         // by a dead network should have spent what it had on the former.
-        uploadSessions(account, credentials) { firstFailure = firstFailure ?: it }
+        uploadSessions(account) { firstFailure = firstFailure ?: it }
 
         val at = now()
         reporting.report(
@@ -271,16 +336,15 @@ class LiseurSyncPositionSync(
                 // found it, and a restart must not make it look settled.
                 unresolved = peerStateDao.countPending(account.peerId),
             ),
-            peerId,
         )
 
         return if (firstFailure == null) {
-            forAccount(account) { accountDao.setSyncedAt(at) }
-            reporting.report(PositionSyncStatus.Synced(at), peerId)
+            forAccount(account) { serverDao.setPositionSyncedAt(at) }
+            reporting.report(PositionSyncStatus.Synced(at))
             SyncOutcome.Success
         } else {
             Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
-            reporting.report(PositionSyncStatus.Failed(firstFailure), peerId)
+            reporting.report(PositionSyncStatus.Failed(firstFailure))
             if (pulled > 0 || pushed > 0) {
                 SyncOutcome.Partial(firstFailure)
             } else {
@@ -305,8 +369,7 @@ class LiseurSyncPositionSync(
      * resolves that book whatever it costs, because somebody is waiting.
      */
     private suspend fun name(
-        account: SyncAccount,
-        credentials: RemoteCredentials,
+        account: Account,
         books: List<Book>,
         single: Boolean,
     ): Named {
@@ -328,7 +391,7 @@ class LiseurSyncPositionSync(
                 if (works.owesSource(cached, candidate) && budget > 0) {
                     budget--
                     val refreshed =
-                        works.resolve(candidate, account.peerId, account.baseUrl, credentials)
+                        works.resolve(candidate, account.peerId, account.baseUrl, account.credentials)
                     if (refreshed is WorkResolution.Named) alias = refreshed.alias
                 }
                 out += candidate to alias
@@ -338,7 +401,7 @@ class LiseurSyncPositionSync(
                 // usable is behind the cursor.
                 if (!alias.seeded && budget > 0) {
                     budget--
-                    seed(account, credentials, candidate, alias)
+                    seed(account, candidate, alias)
                 }
                 continue
             }
@@ -350,14 +413,14 @@ class LiseurSyncPositionSync(
             budget--
             when (
                 val resolved =
-                    works.resolve(candidate, account.peerId, account.baseUrl, credentials)
+                    works.resolve(candidate, account.peerId, account.baseUrl, account.credentials)
             ) {
                 is WorkResolution.Named -> {
                     out += candidate to resolved.alias
                     // Everything that happened to this book before it had
                     // a name is behind the cursor, so it is asked for
                     // once, directly.
-                    seed(account, credentials, candidate, resolved.alias)
+                    seed(account, candidate, resolved.alias)
                 }
 
                 is WorkResolution.NeedsConfirming, is WorkResolution.Ambiguous -> Unit
@@ -378,13 +441,12 @@ class LiseurSyncPositionSync(
      * until somebody happened to read it on the other phone again.
      */
     private suspend fun seed(
-        account: SyncAccount,
-        credentials: RemoteCredentials,
+        account: Account,
         book: Book,
         alias: WorkAlias,
     ) {
         val head = try {
-            latestOp(account.baseUrl, credentials, alias.workId)
+            latestOp(account.baseUrl, account.credentials, alias.workId)
         } catch (e: IOException) {
             // Not marked seeded: the question was asked and never
             // answered, so it is still owed.
@@ -407,18 +469,18 @@ class LiseurSyncPositionSync(
      * reading nobody will ever see again, and unlike everything else
      * here it cannot be asked for a second time.
      */
-    private suspend fun pull(account: SyncAccount, credentials: RemoteCredentials): SyncFailure? {
+    private suspend fun pull(account: Account): SyncFailure? {
         var cursor = account.cursorSeq
         var guard = MAX_PAGES
         while (guard-- > 0) {
             val page = try {
                 http.get(
                     LiseurSyncApi.changes(account.baseUrl, since = cursor, limit = PAGE),
-                    credentials,
+                    account.credentials,
                     expected = setOf(LiseurSyncHttp.GONE),
                 )
             } catch (gone: LiseurSyncRejection) {
-                return resync(account, credentials)
+                return resync(account)
             } catch (e: IOException) {
                 Log.i(TAG, "Could not read what changed", e)
                 return reasonFor(e)
@@ -449,13 +511,10 @@ class LiseurSyncPositionSync(
      * partial history. The snapshot is the newest position per book and
      * per device, which is exactly the baseline to start again from.
      */
-    private suspend fun resync(
-        account: SyncAccount,
-        credentials: RemoteCredentials,
-    ): SyncFailure? {
+    private suspend fun resync(account: Account): SyncFailure? {
         Log.i(TAG, "The cursor fell behind the server's horizon; starting from a snapshot")
         val snapshot = try {
-            http.get(LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.HEADS), credentials)
+            http.get(LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.HEADS), account.credentials)
         } catch (e: IOException) {
             return reasonFor(e)
         }
@@ -464,20 +523,20 @@ class LiseurSyncPositionSync(
     }
 
     /** Lands a page and moves the cursor, together or not at all. */
-    private suspend fun apply(account: SyncAccount, ops: List<SyncOp>, cursor: Long) {
+    private suspend fun apply(account: Account, ops: List<SyncOp>, cursor: Long) {
         val byWork = identityDao.aliasesFor(account.peerId).associateBy { it.workId }
         inTransaction {
-            if (accountDao.get()?.peerId != account.peerId) return@inTransaction
+            if (serverDao.get()?.accountKey != account.accountKey) return@inTransaction
             for (op in ops) {
                 if (op.deviceId != null && op.deviceId == account.deviceId) continue
                 val bookUrl = byWork[op.workId]?.takeIf { it.usable }?.bookUrl ?: continue
                 land(account, bookUrl, op)
             }
-            accountDao.setCursor(cursor)
+            serverDao.setSyncCursor(cursor)
         }
     }
 
-    private suspend fun land(account: SyncAccount, bookUrl: String, op: SyncOp) {
+    private suspend fun land(account: Account, bookUrl: String, op: SyncOp) {
         peerStateDao.persistPending(
             bookUrl = bookUrl,
             peerId = account.peerId,
@@ -505,7 +564,7 @@ class LiseurSyncPositionSync(
     )
 
     private suspend fun reconcile(
-        account: SyncAccount,
+        account: Account,
         named: Pair<Book, WorkAlias>,
     ): Reconciled {
         val (book, alias) = named
@@ -527,7 +586,7 @@ class LiseurSyncPositionSync(
     }
 
     private suspend fun act(
-        account: SyncAccount,
+        account: Account,
         book: Book,
         alias: WorkAlias,
         stored: ReadingProgress?,
@@ -636,8 +695,7 @@ class LiseurSyncPositionSync(
      * is the whole reason the ids are derived rather than drawn.
      */
     private suspend fun push(
-        account: SyncAccount,
-        credentials: RemoteCredentials,
+        account: Account,
         pushes: List<PendingPush>,
         onFailure: (SyncFailure) -> Unit,
     ): Int {
@@ -646,7 +704,7 @@ class LiseurSyncPositionSync(
             val answer = try {
                 http.post(
                     LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.OPS),
-                    credentials,
+                    account.credentials,
                     JSONObject().put(
                         "ops",
                         JSONArray().apply { batch.forEach { put(SyncOps.toJson(it.op)) } },
@@ -701,8 +759,7 @@ class LiseurSyncPositionSync(
      * queue forever and stop every later session behind it.
      */
     private suspend fun uploadSessions(
-        account: SyncAccount,
-        credentials: RemoteCredentials,
+        account: Account,
         onFailure: (SyncFailure) -> Unit,
     ) {
         val sessions = sessionDao.awaitingUpload(SessionUploads.MAX_BATCH)
@@ -725,7 +782,7 @@ class LiseurSyncPositionSync(
         try {
             http.post(
                 LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.SESSIONS),
-                credentials,
+                account.credentials,
                 JSONObject().put(
                     "sessions",
                     JSONArray().apply { sending.forEach { put(it.second) } },
@@ -792,9 +849,9 @@ class LiseurSyncPositionSync(
      * halfway through a run cannot be undone by what the run had already
      * decided.
      */
-    private suspend fun forAccount(account: SyncAccount, work: suspend () -> Unit) {
+    private suspend fun forAccount(account: Account, work: suspend () -> Unit) {
         inTransaction {
-            if (accountDao.get()?.peerId == account.peerId) work()
+            if (serverDao.get()?.accountKey == account.accountKey) work()
         }
     }
 
