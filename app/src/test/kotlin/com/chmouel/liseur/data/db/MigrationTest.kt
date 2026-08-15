@@ -504,10 +504,192 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `a sync-only account becomes the connected liseur-sync server`() {
+        // Version 28 kept liseur-sync in its own `sync_account` row.
+        // Promoting it must carry the cursor — the only irreplaceable
+        // state — and rekey everything the peer agreed to the account
+        // key the row will have as a server.
+        helper.createDatabase(TEST_DB, 28).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO sync_account (
+                    id, base_url, username, token_cipher, insights_token_cipher,
+                    device_name, device_id, device_key, cursor_seq, added_at, synced_at
+                ) VALUES (
+                    1, 'https://sync.example', 'ada', 'cipher', 'insights-cipher',
+                    'Phone', 'dev-1', 'device-key', 41, 100, 900
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO sync_peer_state (
+                    book_url, peer_id, acked_revision, agreed_progression, agreed_status,
+                    pending_progression, pending_status, pending_updated_at, has_pending,
+                    remote_updated_at, synced_at
+                ) VALUES (
+                    'content://sd/book.epub', 'liseursync|https://sync.example|ada',
+                    3, 0.4, 'reading', NULL, NULL, NULL, 0, NULL, 800
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO work_alias (
+                    book_url, peer_id, work_id, confidence, confirmed, seeded,
+                    source_sent, edition_sha, resolved_at
+                ) VALUES (
+                    'content://sd/book.epub', 'liseursync|https://sync.example|ada',
+                    'w-1', 'high', 1, 1, 0, NULL, 700
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT kind, base_url, username, account_id, liseur_token_cipher, " +
+                        "sync_cursor_seq, position_synced_at, can_download FROM remote_server",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("LISEUR_SYNC", cursor.getString(0))
+                    assertEquals("https://sync.example", cursor.getString(1))
+                    assertEquals("ada", cursor.getString(2))
+                    assertEquals("dev-1", cursor.getString(3))
+                    assertEquals("cipher", cursor.getString(4))
+                    assertEquals(41, cursor.getLong(5))
+                    assertEquals(900, cursor.getLong(6))
+                    // Unknown until the token is asked what it may do.
+                    assertEquals(0, cursor.getInt(7))
+                }
+                // The peer's agreements moved to the device-id spelling,
+                // which is what the account key now resolves to.
+                db.query("SELECT peer_id, acked_revision FROM sync_peer_state").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("liseursync|https://sync.example|dev-1", cursor.getString(0))
+                    assertEquals(3, cursor.getLong(1))
+                }
+                db.query("SELECT peer_id, work_id FROM work_alias").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("liseursync|https://sync.example|dev-1", cursor.getString(0))
+                    assertEquals("w-1", cursor.getString(1))
+                }
+            }
+    }
+
+    @Test
+    fun `a sync account without a device id keeps its login-spelled peer key`() {
+        // A token pasted in by hand never said which device it was; the
+        // account key falls back to the login, so the agreements stay
+        // under the spelling they already had.
+        helper.createDatabase(TEST_DB, 28).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO sync_account (
+                    id, base_url, username, token_cipher, insights_token_cipher,
+                    device_name, device_id, device_key, cursor_seq, added_at, synced_at
+                ) VALUES (
+                    1, 'https://sync.example', 'ada', 'cipher', NULL,
+                    'Phone', NULL, 'device-key', 7, 100, NULL
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO sync_peer_state (
+                    book_url, peer_id, acked_revision, agreed_progression, agreed_status,
+                    pending_progression, pending_status, pending_updated_at, has_pending,
+                    remote_updated_at, synced_at
+                ) VALUES (
+                    'content://sd/book.epub', 'liseursync|https://sync.example|ada',
+                    2, 0.5, 'reading', NULL, NULL, NULL, 0, NULL, NULL
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT kind, sync_cursor_seq FROM remote_server").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("LISEUR_SYNC", cursor.getString(0))
+                    assertEquals(7, cursor.getLong(1))
+                }
+                db.query("SELECT peer_id FROM sync_peer_state").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("liseursync|https://sync.example|ada", cursor.getString(0))
+                }
+            }
+    }
+
+    @Test
+    fun `a connected catalog server is never traded for the sync account`() {
+        // Both accounts existed. The connected one stays connected —
+        // silently switching someone's library is not an upgrade — and
+        // the sync account's agreements go with it, as they do whenever
+        // a peer is removed.
+        helper.createDatabase(TEST_DB, 28).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO remote_server (
+                    id, kind, base_url, username, password_cipher, api_key_cipher,
+                    account_id, user_id, kobo_token, can_download, added_at,
+                    catalog_synced_at, position_synced_at, sync_token
+                ) VALUES (
+                    1, 'KOMGA', 'https://books.example', 'ada', NULL, 'key-cipher',
+                    'u-1', NULL, NULL, 1, 50, NULL, NULL, NULL
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO sync_account (
+                    id, base_url, username, token_cipher, insights_token_cipher,
+                    device_name, device_id, device_key, cursor_seq, added_at, synced_at
+                ) VALUES (
+                    1, 'https://sync.example', 'ada', 'cipher', NULL,
+                    'Phone', 'dev-1', 'device-key', 41, 100, NULL
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO sync_peer_state (
+                    book_url, peer_id, acked_revision, agreed_progression, agreed_status,
+                    pending_progression, pending_status, pending_updated_at, has_pending,
+                    remote_updated_at, synced_at
+                ) VALUES (
+                    'content://sd/book.epub', 'liseursync|https://sync.example|ada',
+                    3, 0.4, 'reading', NULL, NULL, NULL, 0, NULL, NULL
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT kind, base_url FROM remote_server").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("KOMGA", cursor.getString(0))
+                }
+                db.query("SELECT COUNT(*) FROM sync_peer_state").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0, cursor.getInt(0))
+                }
+                db.query(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_account'",
+                ).use { cursor ->
+                    assertTrue(!cursor.moveToFirst())
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 28
+        const val LATEST = 29
     }
 }

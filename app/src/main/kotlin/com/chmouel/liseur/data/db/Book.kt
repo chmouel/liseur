@@ -498,6 +498,30 @@ interface BookDao {
     @Query("DELETE FROM books WHERE url IN (:urls)")
     suspend fun deleteByUrls(urls: List<String>)
 
+    /**
+     * Gives a local book a server identity, after an upload landed.
+     *
+     * Only the link itself is written: title, series and the rest are
+     * the catalog's to fill in on the next refresh, and the row keeps
+     * its URL so reading positions and annotations never move.
+     */
+    @Query(
+        """
+        UPDATE books
+        SET remote_uuid = :remoteUuid, download_href = :downloadHref,
+            cover_url = COALESCE(cover_url, :coverUrl),
+            remote_updated_at = :remoteUpdatedAt
+        WHERE url = :url
+        """,
+    )
+    suspend fun linkToRemote(
+        url: String,
+        remoteUuid: String,
+        downloadHref: String,
+        coverUrl: String?,
+        remoteUpdatedAt: Long,
+    )
+
     @Query("UPDATE books SET finished_at = :at WHERE url = :url")
     suspend fun setFinishedAt(url: String, at: Long?)
 

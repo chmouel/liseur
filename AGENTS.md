@@ -1,8 +1,8 @@
 # Liseur — Copilot instructions
 
-Open-source Android ebook reader: local EPUB library + calibre-web and
-Komga clients (browse/download and position sync against either), with a
-Kindle-inspired reading experience. Kotlin + Jetpack Compose + Readium Kotlin Toolkit.
+Open-source Android ebook reader: local EPUB library + calibre-web,
+Komga and liseur-sync clients (browse/download and position sync against
+any of them), with a Kindle-inspired reading experience. Kotlin + Jetpack Compose + Readium Kotlin Toolkit.
 FOSS-only dependencies — the app targets F-Droid inclusion. See `README.md`
 for user-facing goals.
 
@@ -41,7 +41,7 @@ is applied), compileSdk/targetSdk 37, minSdk 26. Dependencies are managed in
   analytics, or Google Play services. In particular, never add
   `readium-lcp` (depends on the proprietary liblcp).
 - Network access is limited to the user-configured book server
-  (calibre-web or Komga) and opt-in dictionary lookups.
+  (calibre-web, Komga or liseur-sync) and opt-in dictionary lookups.
 
 ## Architecture
 
@@ -49,15 +49,13 @@ Single `:app` module, layered packages under `com.chmouel.liseur`:
 
 - `data/` — Room database, DataStore settings, local library repository
   (SAF folder scanning + Readium streamer metadata extraction), and the
-  remote-server layer: `data/remote/` holds provider-neutral contracts,
-  `data/calibre/` (OPDS + Kobo sync) and `data/komga/` (REST) implement
-  them, and `RemoteRouter` dispatches on the connected server's kind.
-  `data/liseursync/` is *not* a third `ServerKind`: liseur-sync holds no
-  catalog and is connected alongside a catalog server rather than
-  instead of one, so it is a second **sync peer**. Both peers implement
-  `PeerPositionSync` and `CompositePositionSync` runs them, which is why
-  a pull bumps `local_revision` — reading that arrived from one peer is
-  new to the other.
+  remote-server layer: `data/remote/` holds provider-neutral contracts;
+  `data/calibre/` (OPDS + Kobo sync), `data/komga/` (REST) and
+  `data/liseursync/` (native REST + append-only op log) implement them,
+  and `RemoteRouter` dispatches on the connected server's kind.
+  liseur-sync is a full `ServerKind` like the other two — it catalogs,
+  serves files, and syncs — and its position sync also covers books
+  that never came from a server, resolving them by their hashes.
 - `domain/` — small use-case layer, only where logic is non-trivial
   (sync merge, time-left estimator). Keep pure and JVM-testable.
 - `reader/` — Readium `EpubNavigatorFragment` hosted in Compose, plus the
@@ -78,28 +76,31 @@ emulator.
 
 - Reading positions are Readium `Locator`s locally. calibre-web sync
   exchanges percentage progression (`locations.totalProgression`); Komga
-  exchanges a full locator, so it also restores the exact spot. Both go
+  and liseur-sync exchange a full locator, so they also restore the
+  exact spot. All three go
   through `domain/ReadingStateMerge.kt` — write conflict rules there, once,
   not per provider.
-- One *catalog* server is connected at a time, and at most one sync
-  server alongside it. Anything provider-shaped belongs behind a
-  `data/remote/` contract, not in a `when (kind)` at the call site.
+- One server is connected at a time. Anything provider-shaped belongs
+  behind a `data/remote/` contract, not in a `when (kind)` at the call
+  site.
 - liseur-sync is an append-only log, not a current-position store. The
-  cursor (`sync_account.cursor_seq`) is the only irreplaceable state:
+  cursor (`remote_server.sync_cursor_seq`) is the only irreplaceable
+  state:
   advance it in the same transaction that writes the page it covers,
   never before. Op and session ids are *derived*
   (`UUIDv3(deviceKey|…)`) and every payload field comes from stored
   state rather than the clock, so a retry is byte-identical and the
   server answers `duplicate`. Do not introduce a random id or a
   `pending_ops` table.
-- A book's name on a sync server is a `work_alias`, resolved from
-  SHA-256 + KOReader partial-MD5 + the catalog server's own id
-  (`source:`, e.g. `komga:<id>` — shared by devices on the same catalog
-  before any download) + a normalised `ta:` title/author. A
+- A book's name on liseur-sync is a `work_alias`. A book from its
+  own catalog resolves through `POST /v1/books/{id}/resolve` — the
+  server reads the identifiers off its record, so no download is needed
+  and two devices name it identically. Any other book resolves from
+  SHA-256 + KOReader partial-MD5 + a normalised `ta:` title/author. A
   `ta:`-only match is low confidence and syncs nothing until the reader
   confirms it; a rejection is stored as `confidence = 'rejected'` rather
   than deleted, or the next run asks again.
-- Statistics from a sync server are decoration. Every failure there is
+- Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
   must stand on its own.
 - Blocking network calls move to `Dispatchers.IO` inside the client that

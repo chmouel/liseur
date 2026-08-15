@@ -12,6 +12,7 @@ import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
@@ -62,6 +63,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -89,11 +91,14 @@ fun ServerAccountScreen(
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
+    onLiseurSyncSignInChange: (LiseurSyncSignIn) -> Unit,
+    onDeviceTokenChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
     onDisconnect: () -> Unit,
     onSyncNow: () -> Unit,
+    onAnswerConfirmation: (String, Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -145,6 +150,8 @@ fun ServerAccountScreen(
                         onUsernameChange = onUsernameChange,
                         onPasswordChange = onPasswordChange,
                         onApiKeyChange = onApiKeyChange,
+                        onLiseurSyncSignInChange = onLiseurSyncSignInChange,
+                        onDeviceTokenChange = onDeviceTokenChange,
                         onConnect = onConnect,
                     )
                 } else {
@@ -160,10 +167,27 @@ fun ServerAccountScreen(
                         onKoboToken = onKoboToken,
                         onDisconnect = onDisconnect,
                     )
+                    if (server.kind == ServerKind.LISEUR_SYNC) {
+                        if (state.confirmations.isNotEmpty()) {
+                            SameBookCard(state.confirmations, onAnswerConfirmation)
+                        }
+                        if (state.ambiguities > 0) {
+                            Text(
+                                pluralStringResource(
+                                    R.plurals.sync_server_ambiguous,
+                                    state.ambiguities,
+                                    state.ambiguities,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 val secretNote = when (server?.kind ?: state.kind) {
                     ServerKind.CALIBRE -> R.string.server_password_storage_note
                     ServerKind.KOMGA -> R.string.server_api_key_storage_note
+                    ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
                 }
                 Text(
                     stringResource(secretNote),
@@ -184,6 +208,8 @@ private fun ConnectForm(
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
+    onLiseurSyncSignInChange: (LiseurSyncSignIn) -> Unit,
+    onDeviceTokenChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
 ) {
     Text(
@@ -208,11 +234,23 @@ private fun ConnectForm(
             when (state.kind) {
                 ServerKind.CALIBRE -> R.string.server_intro_calibre
                 ServerKind.KOMGA -> R.string.server_intro_komga
+                ServerKind.LISEUR_SYNC -> R.string.server_intro_liseur_sync
             },
         ),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    // A reader who has not got a liseur-sync server yet cannot connect
+    // to one, and the form otherwise gives them nowhere to go.
+    if (state.kind == ServerKind.LISEUR_SYNC) {
+        val uriHandler = LocalUriHandler.current
+        TextButton(
+            onClick = { runCatching { uriHandler.openUri(LISEUR_SYNC_SERVER_URL) } },
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Text(stringResource(R.string.liseur_sync_get_one))
+        }
+    }
     OutlinedTextField(
         value = state.url,
         onValueChange = onUrlChange,
@@ -293,6 +331,17 @@ private fun ConnectForm(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        ServerKind.LISEUR_SYNC -> {
+            LiseurSyncForm(
+                state = state,
+                onSignInChange = onLiseurSyncSignInChange,
+                onUsernameChange = onUsernameChange,
+                onPasswordChange = onPasswordChange,
+                onDeviceTokenChange = onDeviceTokenChange,
+                secretMask = secretMask,
+                secretToggle = secretToggle,
+            )
+        }
     }
 
     state.error?.let { error ->
@@ -332,8 +381,15 @@ private fun ConnectForm(
 
     Button(
         onClick = { onConnect(false) },
-        enabled = !state.connecting && state.url.isNotBlank() &&
-            (state.kind == ServerKind.CALIBRE || state.apiKey.isNotBlank()),
+        enabled = !state.connecting && state.url.isNotBlank() && when (state.kind) {
+            ServerKind.CALIBRE -> state.username.isNotBlank() && state.password.isNotBlank()
+            ServerKind.KOMGA -> state.apiKey.isNotBlank()
+            ServerKind.LISEUR_SYNC -> when (state.liseurSyncSignIn) {
+                LiseurSyncSignIn.PASSWORD ->
+                    state.username.isNotBlank() && state.password.isNotBlank()
+                LiseurSyncSignIn.TOKEN -> state.deviceToken.isNotBlank()
+            }
+        },
         modifier = Modifier.fillMaxWidth(),
     ) {
         if (state.connecting) {
@@ -403,6 +459,7 @@ private fun ConnectedCard(
                 when (server.kind) {
                     ServerKind.CALIBRE -> R.string.server_no_download_right
                     ServerKind.KOMGA -> R.string.server_no_download_right_komga
+                    ServerKind.LISEUR_SYNC -> R.string.server_no_download_right_liseur_sync
                 },
             ),
             tone = NoticeTone.PROBLEM,
@@ -470,7 +527,7 @@ private fun ConnectedCard(
         }
     }
 
-    // The Kobo token is a calibre-web notion; Komga has nothing like it.
+    // The Kobo token is a calibre-web notion; the others have nothing like it.
     if (server.kind == ServerKind.CALIBRE) {
         AdvancedSection(server = server, onKoboToken = onKoboToken)
     }
@@ -549,6 +606,151 @@ private fun AdvancedSection(server: RemoteServer, onKoboToken: (String) -> Unit)
     }
 }
 
+/** Where to get a liseur-sync server, for a reader who has not got one yet. */
+private const val LISEUR_SYNC_SERVER_URL = "https://github.com/chmouel/liseur-sync"
+
+/**
+ * The liseur-sync way in: sign in and let the app mint a device token,
+ * or paste a token minted on the server.
+ */
+@Composable
+private fun LiseurSyncForm(
+    state: ServerAccountUiState,
+    onSignInChange: (LiseurSyncSignIn) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onDeviceTokenChange: (String) -> Unit,
+    secretMask: VisualTransformation,
+    secretToggle: @Composable () -> Unit,
+) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        LiseurSyncSignIn.entries.forEachIndexed { index, way ->
+            SegmentedButton(
+                selected = state.liseurSyncSignIn == way,
+                onClick = { onSignInChange(way) },
+                enabled = !state.connecting,
+                shape = SegmentedButtonDefaults.itemShape(index, LiseurSyncSignIn.entries.size),
+            ) {
+                Text(
+                    stringResource(
+                        when (way) {
+                            LiseurSyncSignIn.PASSWORD -> R.string.liseur_sync_sign_in_password
+                            LiseurSyncSignIn.TOKEN -> R.string.liseur_sync_sign_in_token
+                        },
+                    ),
+                )
+            }
+        }
+    }
+    when (state.liseurSyncSignIn) {
+        LiseurSyncSignIn.PASSWORD -> {
+            OutlinedTextField(
+                value = state.username,
+                onValueChange = onUsernameChange,
+                label = { Text(stringResource(R.string.server_username)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.password,
+                onValueChange = onPasswordChange,
+                label = { Text(stringResource(R.string.server_password)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                visualTransformation = secretMask,
+                trailingIcon = secretToggle,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                stringResource(R.string.liseur_sync_password_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        LiseurSyncSignIn.TOKEN -> {
+            OutlinedTextField(
+                value = state.deviceToken,
+                onValueChange = onDeviceTokenChange,
+                label = { Text(stringResource(R.string.liseur_sync_token)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                visualTransformation = secretMask,
+                trailingIcon = secretToggle,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                stringResource(R.string.liseur_sync_token_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * The matches the server was not sure about, one question each.
+ *
+ * Asked here rather than interrupting the reader in the library,
+ * because there is nothing urgent about it: the book still opens, the
+ * position is still kept on this device, and all that waits is whether
+ * it is shared with the other one.
+ */
+@Composable
+private fun SameBookCard(
+    confirmations: List<WorkConfirmation>,
+    onAnswer: (String, Boolean) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                stringResource(R.string.sync_server_same_book_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                stringResource(R.string.sync_server_same_book_detail),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            confirmations.forEach { candidate ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(candidate.title, style = MaterialTheme.typography.bodyLarge)
+                    candidate.author?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onAnswer(candidate.bookUrl, true) }) {
+                            Text(stringResource(R.string.sync_server_same_book_yes))
+                        }
+                        OutlinedButton(onClick = { onAnswer(candidate.bookUrl, false) }) {
+                            Text(stringResource(R.string.sync_server_same_book_no))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** Shared with the sync-server screen so one problem never reads two ways. */
 internal enum class NoticeTone { GOOD, NEUTRAL, PROBLEM }
 
@@ -581,19 +783,24 @@ internal fun Notice(text: String, tone: NoticeTone) {
 private fun ServerKind.labelRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_kind_calibre
     ServerKind.KOMGA -> R.string.server_kind_komga
+    ServerKind.LISEUR_SYNC -> R.string.server_kind_liseur_sync
 }
 
 private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.BAD_CREDENTIALS -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_credentials
         ServerKind.KOMGA -> R.string.server_error_credentials_komga
+        ServerKind.LISEUR_SYNC -> R.string.server_error_credentials_liseur_sync
     }
     AccountError.WRONG_SERVER -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_not_calibre
         ServerKind.KOMGA -> R.string.server_error_not_komga
+        ServerKind.LISEUR_SYNC -> R.string.server_error_not_liseur_sync
     }
     AccountError.UNREACHABLE -> R.string.server_error_unreachable
     AccountError.UNREACHABLE_TRY_HTTP -> R.string.server_error_https
+    AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
+    AccountError.INSUFFICIENT_SCOPES -> R.string.server_error_scopes_liseur_sync
 }
 
 /** Plain words for how the last position sync went. */

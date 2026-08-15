@@ -25,6 +25,12 @@ enum class ServerKind(
 
     /** Komga: its own REST API throughout. */
     KOMGA("komga"),
+
+    /**
+     * liseur-sync: its own REST API to browse and download, the
+     * append-only op log to sync.
+     */
+    LISEUR_SYNC("liseur-sync"),
     ;
 
     /**

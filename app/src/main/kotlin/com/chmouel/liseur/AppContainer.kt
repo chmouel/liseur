@@ -23,9 +23,12 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
+import com.chmouel.liseur.data.liseursync.BookUploadRepository
+import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
+import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
-import com.chmouel.liseur.data.liseursync.SyncAccountRepository
+import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
@@ -126,6 +129,17 @@ class AppContainer(context: Context) {
         progressDao = database.readingProgressDao(),
         bookRemoval = bookRemoval,
         seriesExtraDao = database.seriesExtraDao(),
+        peerStateDao = database.syncPeerStateDao(),
+        identityDao = database.workIdentityDao(),
+        setups = mapOf(
+            ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
+            ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
+            // The device token is minted in the device's own name, since
+            // the server shows it in its device list.
+            ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
+                deviceName = { deviceIdentity.current().name },
+            ),
+        ),
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -134,6 +148,9 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         bookRemoval = bookRemoval,
     )
+
+    /** Pushing local EPUBs up to a liseur-sync server, when one allows it. */
+    val bookUploads = BookUploadRepository(context.applicationContext)
 
     /** This device, as the servers that record who saved a position see it. */
     val deviceIdentity = DeviceIdentityRepository(context.applicationContext)
@@ -168,43 +185,6 @@ class AppContainer(context: Context) {
     )
 
     /**
-     * Which implementation each request goes to, decided by the kind of
-     * server that is connected. Everything above this line is written
-     * once and works for both.
-     */
-    val remoteRouter = RemoteRouter(
-        serverDao = database.remoteServerDao(),
-        catalogs = mapOf(
-            ServerKind.CALIBRE to CalibreCatalogClient(),
-            ServerKind.KOMGA to KomgaCatalogClient(),
-        ),
-        files = mapOf(
-            ServerKind.CALIBRE to CalibreFileSource(),
-            ServerKind.KOMGA to KomgaFileSource(),
-        ),
-        positions = mapOf(
-            ServerKind.CALIBRE to koboSync,
-            ServerKind.KOMGA to komgaSync,
-        ),
-    )
-
-    /**
-     * The dedicated sync server, when there is one.
-     *
-     * Connected as well as a catalog server rather than instead of one,
-     * and the only partner a book that never came from a server can
-     * have.
-     */
-    val syncAccount = SyncAccountRepository(
-        dao = database.syncAccountDao(),
-        peerStateDao = database.syncPeerStateDao(),
-        identityDao = database.workIdentityDao(),
-        device = deviceIdentity,
-        reporting = syncReporting,
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
-
-    /**
      * What a book's file hashes to, worked out on demand.
      *
      * Lazily, and never during a library scan: hashing a large EPUB on a
@@ -216,37 +196,65 @@ class AppContainer(context: Context) {
         dao = database.workIdentityDao(),
     )
 
-    /** What the sync server calls each book, cached per account. */
+    /** What a liseur-sync server calls each book, cached per account. */
     val workResolver = WorkResolver(
         dao = database.workIdentityDao(),
         fingerprints = bookFingerprints,
     )
 
     /**
+     * liseur-sync's position sync: the append-only op log, bound to the
+     * catalog account like the other kinds' syncs are.
+     */
+    val liseurSync = LiseurSyncPositionSync(
+        serverDao = database.remoteServerDao(),
+        bookDao = database.bookDao(),
+        progressDao = database.readingProgressDao(),
+        peerStateDao = database.syncPeerStateDao(),
+        identityDao = database.workIdentityDao(),
+        sessionDao = database.readingSessionDao(),
+        works = workResolver,
+        deviceKey = { deviceIdentity.current().id },
+        finishedState = finishedState,
+        reporting = syncReporting,
+        inTransaction = { work -> database.withTransaction { work() } },
+    )
+
+    /**
+     * Which implementation each request goes to, decided by the kind of
+     * server that is connected. Everything above this line is written
+     * once and works for all three.
+     */
+    val remoteRouter = RemoteRouter(
+        serverDao = database.remoteServerDao(),
+        catalogs = mapOf(
+            ServerKind.CALIBRE to CalibreCatalogClient(),
+            ServerKind.KOMGA to KomgaCatalogClient(),
+            ServerKind.LISEUR_SYNC to LiseurSyncCatalogClient(),
+        ),
+        files = mapOf(
+            ServerKind.CALIBRE to CalibreFileSource(),
+            ServerKind.KOMGA to KomgaFileSource(),
+            ServerKind.LISEUR_SYNC to LiseurSyncFileSource(),
+        ),
+        positions = mapOf(
+            ServerKind.CALIBRE to koboSync,
+            ServerKind.KOMGA to komgaSync,
+            ServerKind.LISEUR_SYNC to liseurSync,
+        ),
+    )
+
+    /**
      * Every partner reading positions are kept in step with.
      *
-     * The catalog server is one of them; a dedicated sync server, once
-     * connected, is another, and it covers books no catalog server has
-     * ever heard of. The coordinator above sees one thing to sync, so
-     * its ordering rules are written once regardless.
+     * Today that is the one connected server, whichever kind it is; the
+     * composite stays because the coordinator's ordering rules are
+     * written against it, and a partner added later — a dedicated sync
+     * server again, say — is one list entry away.
      */
     val positionSync = PositionSyncCoordinator(
         CompositePositionSync(
-            listOf(
-                RoutedPositionSync(remoteRouter),
-                LiseurSyncPositionSync(
-                    accountDao = database.syncAccountDao(),
-                    bookDao = database.bookDao(),
-                    progressDao = database.readingProgressDao(),
-                    peerStateDao = database.syncPeerStateDao(),
-                    identityDao = database.workIdentityDao(),
-                    sessionDao = database.readingSessionDao(),
-                    works = workResolver,
-                    finishedState = finishedState,
-                    reporting = syncReporting,
-                    inTransaction = { work -> database.withTransaction { work() } },
-                ),
-            ),
+            listOf(RoutedPositionSync(remoteRouter)),
         ),
     )
 
@@ -281,20 +289,15 @@ class AppContainer(context: Context) {
 
     /** Reading added up across every device, when a server keeps it. */
     val syncInsights = LiseurSyncInsights(
-        accountDao = database.syncAccountDao(),
+        serverDao = database.remoteServerDao(),
         identityDao = database.workIdentityDao(),
     )
 
     /**
-     * Which servers are connected, for settings to show at a glance.
-     *
-     * Both halves are already observed for their own screens; this only
-     * joins them so the settings rows can say what they are connected to
-     * rather than repeat the invitation to connect.
+     * Which server is connected, for settings to show at a glance.
      */
     val connections = ConnectionsState(
         catalog = remoteAccount.server,
-        sync = syncAccount.account,
     )
 
     val remoteCatalog = RemoteCatalogRepository(

@@ -21,6 +21,9 @@ import kotlinx.coroutines.flow.Flow
  * in with [username] and [passwordCipher] and syncs over the Kobo
  * protocol, so it is the only kind that has a [koboTokenCipher], a
  * [userId] or a [syncToken]. Komga signs in with [apiKeyCipher] alone.
+ * liseur-sync signs in with a device token it minted at setup, kept in
+ * [liseurTokenCipher]; its sync cursor is [syncCursorSeq], and
+ * [canUpload] records the token carrying the `library-manage` scope.
  *
  * Secrets are stored as Keystore-encrypted bytes. All of them are needed
  * back in the clear on every request — one for Basic auth, one for a
@@ -45,6 +48,17 @@ data class RemoteServer(
     @ColumnInfo(name = "catalog_synced_at") val catalogSyncedAt: Long?,
     @ColumnInfo(name = "position_synced_at") val positionSyncedAt: Long?,
     @ColumnInfo(name = "sync_token") val syncToken: String?,
+    /** The liseur-sync device token; null for every other kind. */
+    @ColumnInfo(name = "liseur_token_cipher") val liseurTokenCipher: String? = null,
+    /**
+     * How far through the liseur-sync op log this device has reconciled.
+     *
+     * The only irreplaceable sync state: advance it in the same
+     * transaction that writes the page it covers, never before.
+     */
+    @ColumnInfo(name = "sync_cursor_seq", defaultValue = "0") val syncCursorSeq: Long = 0,
+    /** Whether the liseur-sync token carries the `library-manage` scope. */
+    @ColumnInfo(name = "can_upload", defaultValue = "0") val canUpload: Boolean = false,
 ) {
     /** The Kobo sync token in the clear, or null if there is none to read. */
     @get:Ignore
@@ -64,21 +78,24 @@ data class RemoteServer(
 
             ServerKind.KOMGA ->
                 apiKeyCipher?.let(CredentialCipher::decrypt)?.let(RemoteCredentials::ApiKey)
+
+            ServerKind.LISEUR_SYNC ->
+                liseurTokenCipher?.let(CredentialCipher::decrypt)?.let(RemoteCredentials::Bearer)
         }
 
     /**
      * True once positions can be exchanged with this server.
      *
      * calibre-web needs a Kobo token first, and getting one can fail
-     * without the account being any less usable for reading. Komga syncs
-     * over the same API it does everything else with, so there is
-     * nothing extra to obtain.
+     * without the account being any less usable for reading. Komga and
+     * liseur-sync sync over the same API they do everything else with,
+     * so there is nothing extra to obtain.
      */
     @get:Ignore
     val canSync: Boolean
         get() = when (kind) {
             ServerKind.CALIBRE -> koboTokenCipher != null
-            ServerKind.KOMGA -> true
+            ServerKind.KOMGA, ServerKind.LISEUR_SYNC -> true
         }
 
     /**
@@ -98,6 +115,11 @@ data class RemoteServer(
         get() = when (kind) {
             ServerKind.CALIBRE -> "$baseUrl|$username|${userId ?: -1}"
             ServerKind.KOMGA -> "$baseUrl|$username|${accountId ?: "-1"}"
+            // The liseur-sync spelling is the one the old sync-only
+            // account already wrote into `sync_peer_state` and
+            // `work_alias`, and the migration carries it across: the
+            // token's device id when known, the login when not.
+            ServerKind.LISEUR_SYNC -> "liseursync|$baseUrl|${accountId ?: username}"
         }
 
     companion object {
@@ -140,6 +162,16 @@ interface RemoteServerDao {
 
     @Query("UPDATE remote_server SET can_download = :allowed WHERE id = :id")
     suspend fun setCanDownload(allowed: Boolean, id: Long = RemoteServer.SINGLE_ID)
+
+    /**
+     * Moves the liseur-sync cursor, touching nothing else.
+     *
+     * The cursor only ever advances alongside the page it covers, inside
+     * the caller's transaction; a bare row write would risk carrying a
+     * stale copy of the credentials over a freshly stored one.
+     */
+    @Query("UPDATE remote_server SET sync_cursor_seq = :seq WHERE id = :id")
+    suspend fun setSyncCursor(seq: Long, id: Long = RemoteServer.SINGLE_ID)
 
     @Query("DELETE FROM remote_server WHERE id = :id")
     suspend fun delete(id: Long = RemoteServer.SINGLE_ID)

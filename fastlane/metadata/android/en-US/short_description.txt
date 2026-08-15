@@ -1,1 +1,1 @@
-EPUB and ebook reader for local libraries, Komga, and calibre-web
+EPUB and ebook reader for local libraries, calibre-web, Komga, and liseur-sync

@@ -47,8 +47,6 @@ import com.chmouel.liseur.ui.library.SeriesAssignDialog
 import com.chmouel.liseur.ui.library.SeriesScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
-import com.chmouel.liseur.ui.settings.SyncServerScreen
-import com.chmouel.liseur.ui.settings.SyncServerViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
@@ -150,7 +148,6 @@ private enum class Screen {
     LIBRARY,
     SETTINGS,
     SERVER_ACCOUNT,
-    SYNC_SERVER,
     LICENCES,
     STATS,
     BOOK_STATS,
@@ -266,7 +263,6 @@ private fun LiseurApp(settings: AppSettings) {
                     accountReturnsTo = Screen.SETTINGS
                     screen = Screen.SERVER_ACCOUNT
                 },
-                onOpenSyncServer = { screen = Screen.SYNC_SERVER },
                 backup = annotationBackup,
                 connections = context.container.connections,
                 onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
@@ -280,10 +276,6 @@ private fun LiseurApp(settings: AppSettings) {
             ServerAccountRoute(onBack = { screen = accountReturnsTo })
         }
 
-        Screen.SYNC_SERVER -> {
-            BackHandler { screen = Screen.SETTINGS }
-            SyncServerRoute(onBack = { screen = Screen.SETTINGS })
-        }
 
         Screen.LICENCES -> {
             BackHandler { screen = Screen.SETTINGS }
@@ -410,37 +402,18 @@ private fun ServerAccountRoute(
         onUsernameChange = viewModel::setUsername,
         onPasswordChange = viewModel::setPassword,
         onApiKeyChange = viewModel::setApiKey,
+        onLiseurSyncSignInChange = viewModel::setLiseurSyncSignIn,
+        onDeviceTokenChange = viewModel::setDeviceToken,
         onConnect = viewModel::connect,
         onRetryCapabilities = viewModel::retryCapabilities,
         onKoboToken = viewModel::setKoboToken,
         onDisconnect = viewModel::disconnect,
         onSyncNow = viewModel::syncPositions,
-        onBack = onBack,
-    )
-}
-
-@Composable
-private fun SyncServerRoute(
-    onBack: () -> Unit,
-    viewModel: SyncServerViewModel = viewModel(factory = SyncServerViewModel.Factory),
-) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-
-    SyncServerScreen(
-        state = state,
-        onSignInChange = viewModel::setSignIn,
-        onUrlChange = viewModel::setUrl,
-        onUsernameChange = viewModel::setUsername,
-        onPasswordChange = viewModel::setPassword,
-        onTokenChange = viewModel::setToken,
-        onWantInsights = viewModel::setWantInsights,
-        onConnect = viewModel::connect,
-        onDisconnect = viewModel::disconnect,
-        onSyncNow = viewModel::syncNow,
         onAnswerConfirmation = viewModel::answerConfirmation,
         onBack = onBack,
     )
 }
+
 
 @Composable
 private fun LibraryRoute(
@@ -570,9 +543,12 @@ private fun LibraryRoute(
             BookActionsSheet(
                 book = book,
                 downloading = book.url in state.downloads,
+                uploading = book.url in state.uploads,
                 canDownload = state.canDownload,
+                canUpload = state.canUpload,
                 onDismiss = { seriesSheetBook = null },
                 onDownload = { viewModel.download(book); seriesSheetBook = null },
+                onUpload = { viewModel.upload(book); seriesSheetBook = null },
                 onCancelDownload = { viewModel.cancelDownload(book); seriesSheetBook = null },
                 onRemoveDownload = { viewModel.removeDownload(book); seriesSheetBook = null },
                 onSetFinished = { viewModel.setFinished(book, it); seriesSheetBook = null },
@@ -634,6 +610,8 @@ private fun LibraryRoute(
         onOpenBookStats = onOpenBookStats,
         onConnectServer = onConnectServer,
         onDownload = viewModel::download,
+        onUpload = viewModel::upload,
+        uploadOutcomes = viewModel.uploadOutcomes,
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,
         onSetFinished = viewModel::setFinished,

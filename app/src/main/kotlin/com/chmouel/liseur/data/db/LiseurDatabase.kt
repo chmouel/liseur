@@ -17,20 +17,18 @@ import androidx.sqlite.execSQL
         BookTypography::class,
         ReadingSession::class,
         SyncPeerState::class,
-        SyncAccount::class,
         BookFingerprintRow::class,
         WorkAlias::class,
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 28,
+    version = 29,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun readingSessionDao(): ReadingSessionDao
     abstract fun syncPeerStateDao(): SyncPeerStateDao
-    abstract fun syncAccountDao(): SyncAccountDao
 
     abstract fun workIdentityDao(): WorkIdentityDao
     abstract fun bookDao(): BookDao
@@ -777,6 +775,102 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * liseur-sync becomes a book server: the standalone sync-only
+         * account folds into `remote_server` as a new kind, and its
+         * table goes away.
+         *
+         * A device that had only the sync account ends up with it as the
+         * connected server, cursor and per-book agreements carried over
+         * under the same peer key. A device that also had a catalog
+         * server connected keeps that server — the connected account is
+         * never silently changed — and the sync account's leftover
+         * agreements go with it, as they do whenever a peer is removed.
+         */
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `liseur_token_cipher` TEXT",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `sync_cursor_seq` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `can_upload` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+
+                val promoted = run {
+                    val statement = connection.prepare(
+                        """
+                        INSERT INTO `remote_server` (
+                            `id`, `kind`, `base_url`, `username`,
+                            `password_cipher`, `api_key_cipher`, `account_id`,
+                            `user_id`, `kobo_token`, `can_download`, `added_at`,
+                            `catalog_synced_at`, `position_synced_at`, `sync_token`,
+                            `liseur_token_cipher`, `sync_cursor_seq`, `can_upload`
+                        )
+                        SELECT 1, 'LISEUR_SYNC', s.`base_url`, s.`username`,
+                            NULL, NULL, s.`device_id`,
+                            NULL, NULL, 0, s.`added_at`,
+                            NULL, s.`synced_at`, NULL,
+                            s.`token_cipher`, s.`cursor_seq`, 0
+                        FROM `sync_account` s
+                        WHERE NOT EXISTS (SELECT 1 FROM `remote_server`)
+                        """.trimIndent(),
+                    )
+                    try {
+                        statement.step()
+                        // sqlite3_changes() is the only count available
+                        // through this API; the insert touches at most
+                        // one row, so nonzero means the sync account was
+                        // promoted.
+                        connection.prepare("SELECT changes()").use { it.step(); it.getLong(0) > 0 }
+                    } finally {
+                        statement.close()
+                    }
+                }
+
+                if (promoted) {
+                    // The peer key joins the peer's own spelling, so
+                    // existing rows move to it rather than being
+                    // relearned. A token pasted in by hand never told us
+                    // its device id; those accounts keep the login-based
+                    // spelling, which `RemoteServer.accountKey`
+                    // reproduces for a null `account_id`.
+                    val oldKey =
+                        "(SELECT 'liseursync|' || s.`base_url` || '|' || s.`username` " +
+                            "FROM `sync_account` s)"
+                    val newKey =
+                        "(SELECT 'liseursync|' || s.`base_url` || '|' || s.`device_id` " +
+                            "FROM `sync_account` s)"
+                    val hasDeviceId =
+                        "(SELECT s.`device_id` FROM `sync_account` s) IS NOT NULL"
+                    for (table in listOf("sync_peer_state", "work_alias", "work_ambiguity")) {
+                        connection.execSQL(
+                            "UPDATE `$table` SET `peer_id` = $newKey " +
+                                "WHERE `peer_id` = $oldKey AND $hasDeviceId",
+                        )
+                    }
+                } else {
+                    // A catalog server stayed connected; the sync
+                    // account being dropped takes its agreements with
+                    // it, exactly as a disconnect would.
+                    val oldKey =
+                        "(SELECT 'liseursync|' || s.`base_url` || '|' || s.`username` " +
+                            "FROM `sync_account` s)"
+                    for (table in listOf("sync_peer_state", "work_alias", "work_ambiguity")) {
+                        connection.execSQL(
+                            "DELETE FROM `$table` WHERE `peer_id` = $oldKey",
+                        )
+                    }
+                }
+
+                connection.execSQL("DROP TABLE `sync_account`")
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -808,6 +902,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_25_26,
             MIGRATION_26_27,
             MIGRATION_27_28,
+            MIGRATION_28_29,
         )
     }
 }

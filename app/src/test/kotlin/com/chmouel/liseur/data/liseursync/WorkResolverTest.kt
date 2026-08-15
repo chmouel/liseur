@@ -310,6 +310,57 @@ class WorkResolverTest {
     private fun answer(code: Int, body: String) =
         server.enqueue(MockResponse(code = code, body = body))
 
+    @Test
+    fun `a book from this server's own catalog is resolved by the server`() = runTest {
+        // No identifiers are sent: the catalog knows the file's digests
+        // even here, where the file was never downloaded, and two
+        // devices browsing it name the book identically.
+        answer(
+            200,
+            """{"book_id":"b-1","work_id":"w-9","confidence":"high","created":true,
+                "identifiers":[{"kind":"sha256","value":"ab12cd"}]}
+            """.trimIndent(),
+        )
+
+        val book = downloaded().copy(
+            url = "liseur-sync:b-1",
+            localUri = null,
+            downloadState = DownloadState.REMOTE,
+        )
+        val result = resolver.resolve(book, PEER, baseUrl(), TOKEN)
+
+        assertEquals("w-9", (result as WorkResolution.Named).alias.workId)
+        // The server's own digest is kept: ops carry the edition without
+        // the file ever being hashed here.
+        assertEquals("ab12cd", result.alias.editionSha)
+        // And there is no source left to hand over: the book *is* the
+        // catalog entry.
+        assertTrue(result.alias.sourceSent)
+
+        val asked = server.takeRequest()
+        assertTrue(asked.target!!.endsWith("/v1/books/b-1/resolve"))
+        assertEquals("{}", JSONObject(asked.body!!.utf8()).toString())
+    }
+
+    @Test
+    fun `a doubtful catalog match is confirmed the same way as any other`() = runTest {
+        answer(200, """{"book_id":"b-1","work_id":"w-9","confidence":"low"}""")
+        val book = downloaded().copy(url = "liseur-sync:b-1")
+
+        val first = resolver.resolve(book, PEER, baseUrl(), TOKEN)
+        assertTrue(first is WorkResolution.NeedsConfirming)
+        // The first ask sent nothing: no identifiers, and no yes yet.
+        server.takeRequest()
+
+        resolver.confirm(book, PEER)
+        answer(200, """{"book_id":"b-1","work_id":"w-9","confidence":"high"}""")
+        val second = resolver.resolve(book, PEER, baseUrl(), TOKEN)
+
+        assertTrue(second is WorkResolution.Named)
+        // The earlier yes travelled with the second ask.
+        assertTrue(JSONObject(server.takeRequest().body!!.utf8()).getBoolean("confirmed"))
+    }
+
     private fun baseUrl() = "http://127.0.0.1:${server.port}"
 
     private fun downloaded(modifiedAt: Long = NOW) = Book(

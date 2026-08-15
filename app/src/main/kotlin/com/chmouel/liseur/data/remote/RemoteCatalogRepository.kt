@@ -231,12 +231,17 @@ class RemoteCatalogRepository(
                 ?.let { pending ->
                     if (pending.id == 0L) bookDao.getByUrl(url) ?: pending else pending
                 }
-            val merged = mergeCatalogEntry(remote, existing, url, baseUrl, now)
+            // A row matched on its remote id alone — a local book that
+            // was uploaded and linked — keeps its own URL, which is what
+            // reading positions hang off; the catalog's spelling of the
+            // identity belongs to rows the catalog itself introduced.
+            val rowUrl = existing?.takeIf { it.id != 0L }?.url ?: url
+            val merged = mergeCatalogEntry(remote, existing, rowUrl, baseUrl, now)
             known.remember(merged)
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
             if (merged == existing) return@forEach
-            if (merged.id == 0L) inserts[url] = merged else updates += merged to remote
+            if (merged.id == 0L) inserts[rowUrl] = merged else updates += merged to remote
         }
         // Rows the library already has get only the catalog's columns.
         // What is known about them was read once, before the walk began,

@@ -120,11 +120,17 @@ class WorkResolver(
     /**
      * Asks the server what to call [book], caching whatever it says.
      *
-     * A book with no file on the device still resolves, on its own
-     * identifier and its title: that is weaker, and the server will say
-     * so, but refusing to sync a book until it has been downloaded would
-     * leave the reader's place stranded on whichever device happened to
-     * hold the file.
+     * A book that came from this server's own catalog is resolved
+     * through the catalog route instead: the server reads the
+     * identifiers off its own record, so the answer carries the file's
+     * hashes even when the file itself was never downloaded here, and
+     * two devices browsing the same library name it identically.
+     *
+     * Any other book with no file on the device still resolves, on its
+     * title and author: that is weaker, and the server will say so, but
+     * refusing to sync a book until it has been downloaded would leave
+     * the reader's place stranded on whichever device happened to hold
+     * the file.
      */
     suspend fun resolve(
         book: Book,
@@ -153,6 +159,98 @@ class WorkResolver(
             }
         }
 
+        val catalogBookId = ServerKind.LISEUR_SYNC.remoteId(book.url)
+        if (catalogBookId != null) {
+            return resolveCatalog(book, catalogBookId, existing, peerId, baseUrl, credentials)
+        }
+        return resolveByIdentifiers(book, existing, peerId, baseUrl, credentials)
+    }
+
+    /**
+     * Names a book this server already catalogs.
+     *
+     * No identifiers are sent: the server collects them from the
+     * catalog, which knows the file's digests and embedded ids even
+     * when this device has only browsed and not downloaded. The answer
+     * is idempotent, so asking again on a reinstall returns the same
+     * work rather than a fresh one.
+     */
+    private suspend fun resolveCatalog(
+        book: Book,
+        bookId: String,
+        existing: WorkAlias?,
+        peerId: String,
+        baseUrl: String,
+        credentials: RemoteCredentials,
+    ): WorkResolution {
+        val answer = try {
+            http.post(
+                url = LiseurSyncApi.resolveBook(baseUrl, bookId),
+                credentials = credentials,
+                json = JSONObject().apply {
+                    // The reader's earlier yes to a doubtful match
+                    // travels along, as it does on the identifier path.
+                    if (existing?.confirmed == true) put("confirmed", true)
+                },
+                expected = setOf(LiseurSyncHttp.CONFLICT),
+            )
+        } catch (rejection: LiseurSyncRejection) {
+            return ambiguous(book, peerId, rejection)
+        } catch (e: IOException) {
+            Log.i(TAG, "Could not resolve a catalog book yet", e)
+            return WorkResolution.Unresolved(e)
+        }
+
+        val workId = answer.optString("work_id").takeIf { it.isNotEmpty() }
+            ?: return WorkResolution.Unresolved(cause = null)
+        dao.clearAmbiguity(book.url, peerId)
+
+        // The digest the server matched on, when it said which: kept so
+        // ops can carry the edition without the file ever being hashed
+        // here.
+        val identifiers = answer.optJSONArray("identifiers")
+        val editionSha = (0 until (identifiers?.length() ?: 0))
+            .mapNotNull { identifiers?.optJSONObject(it) }
+            .firstOrNull { it.optString("kind") == "sha256" }
+            ?.optString("value")
+            ?.takeIf { it.isNotEmpty() }
+
+        val sameWork = existing?.workId == workId
+        val confidence = if (answer.optString("confidence") == WorkAlias.LOW) {
+            WorkAlias.LOW
+        } else {
+            WorkAlias.HIGH
+        }
+        val alias = WorkAlias(
+            bookUrl = book.url,
+            peerId = peerId,
+            workId = workId,
+            confidence = confidence,
+            confirmed = sameWork && existing?.confirmed == true,
+            seeded = sameWork && existing?.seeded == true,
+            // A low answer registers nothing server-side, so it still
+            // owes the one re-resolve that carries the reader's yes —
+            // the same debt the identifier path tracks with this flag.
+            sourceSent = confidence == WorkAlias.HIGH,
+            editionSha = editionSha ?: existing?.editionSha,
+            resolvedAt = now(),
+        )
+        dao.upsert(alias)
+
+        return if (alias.usable) {
+            WorkResolution.Named(alias)
+        } else {
+            WorkResolution.NeedsConfirming(alias)
+        }
+    }
+
+    private suspend fun resolveByIdentifiers(
+        book: Book,
+        existing: WorkAlias?,
+        peerId: String,
+        baseUrl: String,
+        credentials: RemoteCredentials,
+    ): WorkResolution {
         val fingerprint = fingerprints.of(book)
         val sourceId = sourceOf(book)
         val identifiers = WorkIdentifiers.of(

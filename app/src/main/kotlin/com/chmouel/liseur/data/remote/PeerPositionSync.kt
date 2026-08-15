@@ -3,11 +3,11 @@ package com.chmouel.liseur.data.remote
 /**
  * One partner this device keeps reading positions in step with.
  *
- * Until now there was exactly one: whichever server the library is
- * connected to. That is no longer true. A dedicated sync server holds
- * positions for books no catalog server has ever heard of — including
- * books that only exist as a file on this phone — so it has to be able
- * to run alongside calibre-web or Komga rather than instead of them.
+ * Today there is exactly one: whichever server the library is connected
+ * to, reached through [RoutedPositionSync]. The interface stays because
+ * the coordinator's ordering rules are written against the composite,
+ * and a partner added later — a dedicated sync server again, say — is
+ * one list entry away.
  *
  * A peer is a [PositionSync] with a name. The name is for reporting and
  * for logs, and is deliberately *not* the key reconciliation state is
@@ -21,9 +21,6 @@ interface PeerPositionSync : PositionSync {
     companion object {
         /** The server the library browses and downloads from. */
         const val CATALOG = "catalog"
-
-        /** A dedicated liseur-sync server. */
-        const val LISEUR_SYNC = "liseursync"
     }
 }
 

@@ -1,4 +1,4 @@
-Liseur is an open-source EPUB books reader for Android, and a client for calibre-web and Komga: a modern reader that is equally at home with the files on your phone and with your own book server.
+Liseur is an open-source EPUB books reader for Android, and a client for calibre-web, Komga and liseur-sync: a modern reader that is equally at home with the files on your phone and with your own book server.
 
 Reading
 
@@ -26,8 +26,9 @@ Your own server
 
 * calibre-web: one screen sets it up with URL, username and password, and Liseur works out the catalog, download rights and sync token
 * Komga: paste the server address and an API key
+* liseur-sync: sign in or paste a device token; it also syncs books that never came from a server, and accepts uploads of your local EPUBs
 * Your server's books merge into the same library with a cloud badge; tap one to download and open it
-* Reading positions sync both ways, through calibre-web's Kobo protocol or Komga's read-progress API
+* Reading positions sync both ways — exactly where you left off, on Komga and liseur-sync
 * Remove the copy on the device, or delete the book from the server
 
 Free software

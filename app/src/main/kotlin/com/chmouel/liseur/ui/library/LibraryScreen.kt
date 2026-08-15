@@ -160,6 +160,8 @@ fun LibraryScreen(
     onOpenBookStats: (Book) -> Unit,
     onConnectServer: () -> Unit,
     onDownload: (Book) -> Unit,
+    onUpload: (Book) -> Unit = {},
+    uploadOutcomes: Flow<Pair<String, com.chmouel.liseur.data.liseursync.UploadOutcome>>? = null,
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
     onSetFinished: (Book, Boolean) -> Unit,
@@ -218,6 +220,24 @@ fun LibraryScreen(
             snackbarHost.showSnackbar(message.format(failure.book.title))
         }
     }
+    val uploadedOk = stringResource(R.string.upload_done)
+    val uploadFailed = stringResource(R.string.upload_failed)
+    LaunchedEffect(uploadOutcomes) {
+        uploadOutcomes?.collect { (url, outcome) ->
+            val title = state.books.firstOrNull { it.url == url }?.title.orEmpty()
+            snackbarHost.showSnackbar(
+                when (outcome) {
+                    is com.chmouel.liseur.data.liseursync.UploadOutcome.Done ->
+                        uploadedOk.format(title)
+                    is com.chmouel.liseur.data.liseursync.UploadOutcome.Refused ->
+                        uploadFailed.format(title, outcome.reason)
+                    com.chmouel.liseur.data.liseursync.UploadOutcome.Unreachable ->
+                        uploadFailed.format(title, "")
+                },
+            )
+        }
+    }
+
     LaunchedEffect(failedOpens) {
         failedOpens.collect { book ->
             onPendingOpenHandled()
@@ -658,8 +678,11 @@ fun LibraryScreen(
         BookActionsSheet(
             book = book,
             downloading = book.url in state.downloads,
+            uploading = book.url in state.uploads,
             onDismiss = { sheetBook = null },
             canDownload = state.canDownload,
+            canUpload = state.canUpload,
+            onUpload = { onUpload(book); sheetBook = null },
             onDownload = { onDownload(book); sheetBook = null },
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
             onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
@@ -728,9 +751,12 @@ internal fun ConfirmServerDeleteDialog(
 internal fun BookActionsSheet(
     book: Book,
     downloading: Boolean,
+    uploading: Boolean,
     canDownload: Boolean,
+    canUpload: Boolean,
     onDismiss: () -> Unit,
     onDownload: () -> Unit,
+    onUpload: () -> Unit,
     onCancelDownload: () -> Unit,
     onRemoveDownload: () -> Unit,
     onSetFinished: (Boolean) -> Unit,
@@ -781,6 +807,22 @@ internal fun BookActionsSheet(
                 }
 
                 else -> Unit
+            }
+            // A purely local book is the only one with something to
+            // upload; a book the server already knows has nothing to send.
+            if (book.remoteUuid == null && canUpload) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onUpload,
+                    enabled = !uploading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        stringResource(
+                            if (uploading) R.string.upload_running else R.string.upload_book,
+                        ),
+                    )
+                }
             }
             if (book.remoteUuid == null) {
                 Spacer(Modifier.height(8.dp))

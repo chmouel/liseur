@@ -8,8 +8,11 @@ import com.chmouel.liseur.data.db.SeriesExtraDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.db.SyncPeerStateDao
+import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.komga.KomgaSetupClient
+import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicLong
@@ -28,9 +31,18 @@ class RemoteAccountRepository(
     private val progressDao: ReadingProgressDao,
     private val bookRemoval: BookRemoval,
     private val seriesExtraDao: SeriesExtraDao,
+    /**
+     * liseur-sync keeps its per-book agreements in tables of its own,
+     * keyed by the account; leaving or switching away from one forgets
+     * them, exactly as it always has. Null in tests that do not exercise
+     * a liseur-sync account.
+     */
+    private val peerStateDao: SyncPeerStateDao? = null,
+    private val identityDao: WorkIdentityDao? = null,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
+        ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(),
     ),
     /**
      * Connecting and disconnecting each touch several tables, and a sync
@@ -186,6 +198,41 @@ class RemoteAccountRepository(
         allowHttp = allowHttp,
     )
 
+    /**
+     * Signs into a liseur-sync server and keeps the minted device token.
+     *
+     * The password goes no further than the setup call: it buys an
+     * hour-long credential that can do nothing but mint device tokens,
+     * and once one exists neither is needed again. Nothing writes the
+     * password down.
+     */
+    suspend fun connectLiseurSync(
+        url: String,
+        username: String,
+        password: String,
+        allowHttp: Boolean = false,
+    ): SetupResult = connect(
+        kind = ServerKind.LISEUR_SYNC,
+        url = url,
+        credentials = RemoteCredentials.Basic(username, password),
+        allowHttp = allowHttp,
+    )
+
+    /**
+     * Connects to a liseur-sync server with a device token minted
+     * elsewhere, once the server has said what it allows.
+     */
+    suspend fun connectLiseurSyncToken(
+        url: String,
+        token: String,
+        allowHttp: Boolean = false,
+    ): SetupResult = connect(
+        kind = ServerKind.LISEUR_SYNC,
+        url = url,
+        credentials = RemoteCredentials.Bearer(token),
+        allowHttp = allowHttp,
+    )
+
     private suspend fun connect(
         kind: ServerKind,
         url: String,
@@ -227,9 +274,10 @@ class RemoteAccountRepository(
         val username = when (credentials) {
             is RemoteCredentials.Basic -> credentials.username
             is RemoteCredentials.ApiKey -> capabilities.displayName
-            // No catalog server signs in this way, so nothing reaches
-            // here; the name the server gave is still the honest answer.
-            is RemoteCredentials.Bearer -> capabilities.displayName
+            // A pasted liseur-sync token does not say whose it is; the
+            // token's own name is the honest answer.
+            is RemoteCredentials.Bearer ->
+                capabilities.displayName.takeIf { it.isNotBlank() }
         }
         val stored = dao.get()
         val sameAccount = stored != null &&
@@ -248,6 +296,7 @@ class RemoteAccountRepository(
                 baseUrl = capabilities.baseUrl,
                 username = username,
                 passwordCipher = (credentials as? RemoteCredentials.Basic)
+                    ?.takeIf { kind == ServerKind.CALIBRE }
                     ?.let { CredentialCipher.encrypt(it.password) },
                 apiKeyCipher = (credentials as? RemoteCredentials.ApiKey)
                     ?.let { CredentialCipher.encrypt(it.key) },
@@ -260,6 +309,15 @@ class RemoteAccountRepository(
                 catalogSyncedAt = existing?.catalogSyncedAt,
                 positionSyncedAt = existing?.positionSyncedAt,
                 syncToken = existing?.syncToken,
+                liseurTokenCipher = RemoteServer.seal(capabilities.liseurToken)
+                    ?: existing?.liseurTokenCipher,
+                // The cursor is the account's memory of what it has
+                // reconciled. The same account reconnecting keeps it —
+                // that is the difference between resuming and replaying
+                // the whole log — and a different account starts at
+                // nothing, because its log is a different world.
+                syncCursorSeq = existing?.syncCursorSeq ?: 0,
+                canUpload = capabilities.canUpload,
             ),
         )
     }
@@ -282,6 +340,7 @@ class RemoteAccountRepository(
      * happens to answer to that id.
      */
     private suspend fun retireForAccountSwitch() {
+        forgetSyncPeer(dao.get())
         progressDao.retireAccountState()
         bookRemoval.deleteRemoteNotDownloaded()
         bookDao.unlinkDownloadedFromRemote()
@@ -330,6 +389,7 @@ class RemoteAccountRepository(
     suspend fun disconnect() {
         changingAccount {
             inTransaction {
+                forgetSyncPeer(dao.get())
                 bookRemoval.deleteRemoteNotDownloaded()
                 bookDao.unlinkDownloadedFromRemote()
                 // Series summaries belong to the server that wrote them.
@@ -337,6 +397,24 @@ class RemoteAccountRepository(
                 dao.delete()
             }
         }
+    }
+
+    /**
+     * Forgets what a liseur-sync account had agreed or named.
+     *
+     * The reading itself stays: it is this device's, it was here before
+     * any server was, and losing your place in every book because an
+     * account was removed would be indefensible. What goes is the record
+     * of what that server had confirmed, which means nothing once it is
+     * no longer being talked to — and if the same server is connected
+     * again as somebody else, their names are theirs, not the last
+     * account's.
+     */
+    private suspend fun forgetSyncPeer(server: RemoteServer?) {
+        if (server?.kind != ServerKind.LISEUR_SYNC) return
+        peerStateDao?.forgetPeer(server.accountKey)
+        identityDao?.forgetPeerAliases(server.accountKey)
+        identityDao?.forgetPeerAmbiguities(server.accountKey)
     }
 
     private companion object {
