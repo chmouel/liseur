@@ -186,6 +186,95 @@ class RemoteAccountRepositoryTest {
         )
     }
 
+    /**
+     * A liseur-sync setup whose answers are scripted: each connect mints
+     * a fresh device id (as a real token rotation does) but keeps the
+     * account id it was given.
+     */
+    private class RotatingLiseurSync(private val accountId: String) : ServerSetup {
+        var mints = 0
+
+        override suspend fun connect(
+            rawUrl: String,
+            credentials: RemoteCredentials,
+            allowHttp: Boolean,
+        ): SetupResult = SetupResult.Success(
+            ServerCapabilities(
+                baseUrl = rawUrl,
+                canDownload = true,
+                accountId = "device-${++mints}",
+                displayName = "reader",
+                liseurToken = "token-$mints",
+                liseurAccountId = accountId,
+            ),
+        )
+    }
+
+    @Test
+    fun `a rotated liseur-sync token is a refresh, not a new account`() = runTest {
+        val setup = RotatingLiseurSync(accountId = "acc-1")
+        val repository = repository(db.remoteServerDao(), setup)
+        repository.connectLiseurSyncToken(BASE, "token-1")
+        db.remoteServerDao().setSyncCursor(41)
+        val addedAt = db.remoteServerDao().get()!!.addedAt
+
+        // The credential is replaced, as after a revocation. The device
+        // id changes; the account does not.
+        repository.connectLiseurSyncToken(BASE, "token-2")
+
+        val stored = db.remoteServerDao().get()!!
+        assertEquals("device-2", stored.accountId)
+        assertEquals(41, stored.syncCursorSeq)
+        assertEquals(addedAt, stored.addedAt)
+        assertEquals(
+            RemoteCredentials.Bearer("token-2"),
+            account.credentialsForUrl("$BASE/v1/libraries"),
+        )
+    }
+
+    @Test
+    fun `a different account behind the same address still switches`() = runTest {
+        val repository = repository(db.remoteServerDao(), RotatingLiseurSync(accountId = "acc-1"))
+        repository.connectLiseurSyncToken(BASE, "token-1")
+        db.remoteServerDao().setSyncCursor(41)
+
+        val other = RemoteAccountRepository(
+            dao = db.remoteServerDao(),
+            bookDao = db.bookDao(),
+            progressDao = db.readingProgressDao(),
+            bookRemoval = BookRemoval(
+                db.bookDao(),
+                db.readingSessionDao(),
+                db.syncPeerStateDao(),
+                db.workIdentityDao(),
+            ),
+            seriesExtraDao = db.seriesExtraDao(),
+            setups = mapOf(ServerKind.LISEUR_SYNC to RotatingLiseurSync(accountId = "acc-2")),
+        )
+        other.connectLiseurSyncToken(BASE, "token-x")
+
+        // A genuinely different account starts at the beginning of its
+        // own log.
+        assertEquals(0, db.remoteServerDao().get()!!.syncCursorSeq)
+    }
+
+    private fun repository(
+        dao: RemoteServerDao,
+        liseurSyncSetup: ServerSetup,
+    ) = RemoteAccountRepository(
+        dao = dao,
+        bookDao = db.bookDao(),
+        progressDao = db.readingProgressDao(),
+        bookRemoval = BookRemoval(
+            db.bookDao(),
+            db.readingSessionDao(),
+            db.syncPeerStateDao(),
+            db.workIdentityDao(),
+        ),
+        seriesExtraDao = db.seriesExtraDao(),
+        setups = mapOf(ServerKind.LISEUR_SYNC to liseurSyncSetup),
+    )
+
     private open class DelegatingDao(private val dao: RemoteServerDao) :
         RemoteServerDao by dao
 

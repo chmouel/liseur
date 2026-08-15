@@ -16,6 +16,11 @@ class RemoteRouter(
     private val catalogs: Map<ServerKind, CatalogSource>,
     private val files: Map<ServerKind, FileSource>,
     private val positions: Map<ServerKind, PositionSync>,
+    /**
+     * Which kinds can delete a book on the server at all. Absent from
+     * the map means the action is never offered for that kind.
+     */
+    private val deleters: Map<ServerKind, BookDeleter> = emptyMap(),
 ) {
     private suspend fun kind(): ServerKind? = serverDao.get()?.kind
 
@@ -36,6 +41,9 @@ class RemoteRouter(
     fun filesFor(kind: ServerKind): FileSource? = files[kind]
 
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
+
+    /** The deleter for a server already in hand, when the kind has one. */
+    fun deleterFor(kind: ServerKind): BookDeleter? = deleters[kind]
 }
 
 /**

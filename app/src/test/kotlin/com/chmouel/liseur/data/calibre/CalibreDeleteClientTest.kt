@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.calibre
 
+import com.chmouel.liseur.data.remote.ServerDeleteResult
 import java.net.InetAddress
 import kotlinx.coroutines.runBlocking
 import okhttp3.Cookie

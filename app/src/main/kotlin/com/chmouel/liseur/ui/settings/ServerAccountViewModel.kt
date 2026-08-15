@@ -44,6 +44,7 @@ enum class AccountError {
     UNREACHABLE_TRY_HTTP,
     INSECURE_TRANSPORT,
     INSUFFICIENT_SCOPES,
+    RATE_LIMITED,
 }
 
 /** Which way a reader proves who they are to a liseur-sync server. */
@@ -323,6 +324,7 @@ class ServerAccountViewModel(
         SetupFailure.InsufficientScopes -> AccountError.INSUFFICIENT_SCOPES
         SetupFailure.WrongServer -> AccountError.WRONG_SERVER
         SetupFailure.InsecureTransport -> AccountError.INSECURE_TRANSPORT
+        SetupFailure.RateLimited -> AccountError.RATE_LIMITED
         is SetupFailure.Unreachable ->
             if (httpMayWork) AccountError.UNREACHABLE_TRY_HTTP else AccountError.UNREACHABLE
     }

@@ -280,12 +280,22 @@ class RemoteAccountRepository(
                 capabilities.displayName.takeIf { it.isNotBlank() }
         }
         val stored = dao.get()
+        // Once both sides carry the stable account id, it alone decides:
+        // a rotated token changes the device id and may carry any name,
+        // and neither must read as a different account.
+        val stableIdentity = stored?.kind == ServerKind.LISEUR_SYNC &&
+            stored.liseurAccountId != null && capabilities.liseurAccountId != null
         val sameAccount = stored != null &&
             stored.kind == kind &&
             stored.baseUrl == capabilities.baseUrl &&
-            stored.username == username &&
-            (stored.userId == capabilities.calibreUserId || capabilities.calibreUserId == null) &&
-            (stored.accountId == capabilities.accountId || capabilities.accountId == null)
+            if (stableIdentity) {
+                stored.liseurAccountId == capabilities.liseurAccountId
+            } else {
+                stored.username == username &&
+                    (stored.userId == capabilities.calibreUserId ||
+                        capabilities.calibreUserId == null) &&
+                    (stored.accountId == capabilities.accountId || capabilities.accountId == null)
+            }
         val existing = stored?.takeIf { sameAccount }
 
         if (stored != null && !sameAccount) retireForAccountSwitch()
@@ -318,6 +328,8 @@ class RemoteAccountRepository(
                 // nothing, because its log is a different world.
                 syncCursorSeq = existing?.syncCursorSeq ?: 0,
                 canUpload = capabilities.canUpload,
+                liseurAccountId = capabilities.liseurAccountId
+                    ?: existing?.liseurAccountId,
             ),
         )
     }

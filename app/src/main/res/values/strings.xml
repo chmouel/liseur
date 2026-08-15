@@ -148,11 +148,12 @@
     <string name="server_error_credentials_liseur_sync">The server did not accept that sign-in or token.</string>
     <string name="server_error_not_liseur_sync">That address answered, but not like a liseur-sync server.</string>
     <string name="server_error_scopes_liseur_sync">That token works but may not sync reading positions. Make one with at least the “sync” scope — the full set is sync, read-insights, library-read and library-manage.</string>
+    <string name="server_error_rate_limited">Too many attempts. Wait a moment and try again.</string>
     <string name="server_error_unreachable">The server did not answer. Check the address and that you are online.</string>
     <string name="server_error_https">The server did not answer over a secure connection.</string>
     <string name="server_no_download_right">This account is not allowed to download books. Ask whoever runs the server to tick \"Allow Downloads\" for your user in calibre-web, then check again.</string>
     <string name="server_no_download_right_komga">This API key is not allowed to download books. Ask whoever runs the server to give your account the file download role, then check again.</string>
-    <string name="server_no_download_right_liseur_sync">This token is not allowed to read the library. Give it the library-read scope, then check again.</string>
+    <string name="server_no_download_right_liseur_sync">This token is not allowed to read the library — tokens from before liseur-sync served books cannot browse it. Mint a fresh one with the library-read scope, or disconnect and sign in again, then check again.</string>
     <string name="server_token_storage_note">Your device token is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it. Revoke it on the server if you lose the phone.</string>
     <string name="upload_book">Upload to the server</string>
     <string name="upload_running">Uploading…</string>

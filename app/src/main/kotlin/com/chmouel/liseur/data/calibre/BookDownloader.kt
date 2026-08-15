@@ -66,6 +66,10 @@ class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
                 when (response.code) {
                     401, 403 -> return@withContext DownloadOutcome.Failed(DownloadFailure.NotAllowed)
                     404, 410 -> return@withContext DownloadOutcome.Failed(DownloadFailure.Gone)
+                    // The book's bytes changed on the server since they
+                    // were catalogued (liseur-sync in-place storage): the
+                    // file this row describes is gone, not unreachable.
+                    409 -> return@withContext DownloadOutcome.Failed(DownloadFailure.Gone)
                 }
                 if (!response.isSuccessful) {
                     return@withContext DownloadOutcome.Failed(
