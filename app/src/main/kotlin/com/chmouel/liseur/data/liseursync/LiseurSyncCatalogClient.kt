@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.remote.CatalogSource
 import com.chmouel.liseur.data.remote.CatalogWalk
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteSeriesMembership
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
@@ -133,7 +134,8 @@ internal fun books(array: JSONArray?): List<RemoteBook> =
 private fun book(json: JSONObject): RemoteBook? {
     val id = json.optString("book_id").takeIf { it.isNotEmpty() } ?: return null
     val title = json.optString("title").takeIf { it.isNotEmpty() } ?: return null
-    val series = json.optJSONArray("series")?.optJSONObject(0)
+    val memberships = series(json.optJSONArray("series"))
+    val series = memberships.firstOrNull()
     // A book the last complete pass did not find keeps its place and its
     // reading history — a disconnected disk is not a deleted book — but
     // there are no bytes to fetch, so it is offered without a download.
@@ -146,12 +148,28 @@ private fun book(json: JSONObject): RemoteBook? {
         downloadHref = if (present) "/v1/books/$id/download" else null,
         sizeBytes = json.optLong("size_bytes").takeIf { it > 0 },
         updatedAt = SyncOps.parseTime(json.optString("updated_at")),
-        seriesName = series?.optString("name")?.takeIf { it.isNotEmpty() },
-        seriesIndex = series?.takeIf { it.has("position") }?.optDouble("position"),
-        seriesId = series?.optString("id")?.takeIf { it.isNotEmpty() },
+        seriesName = series?.name,
+        seriesIndex = series?.position,
+        seriesId = series?.id,
+        series = memberships,
+        seriesSource = series?.source,
+        folderId = json.optString("folder_id").takeIf { it.isNotEmpty() },
         sha256 = json.optString("sha256").takeIf { it.isNotEmpty() },
     )
 }
+
+internal fun series(array: JSONArray?): List<RemoteSeriesMembership> =
+    (0 until (array?.length() ?: 0)).mapNotNull { index ->
+        array?.optJSONObject(index)?.let { json ->
+            val name = json.optString("name").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            RemoteSeriesMembership(
+                id = json.optString("id").takeIf { it.isNotEmpty() },
+                name = name,
+                position = json.takeIf { it.has("position") }?.optDouble("position"),
+                source = json.optString("source").takeIf { it.isNotEmpty() },
+            )
+        }
+    }
 
 private fun authors(contributors: JSONArray?): String? {
     val names = (0 until (contributors?.length() ?: 0)).mapNotNull { index ->

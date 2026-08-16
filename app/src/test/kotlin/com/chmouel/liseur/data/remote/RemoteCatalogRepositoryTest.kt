@@ -54,22 +54,28 @@ class RemoteCatalogRepositoryTest {
         CredentialCipher.keyForTesting = null
     }
 
-    private suspend fun connect() {
+    private suspend fun connect(kind: ServerKind = ServerKind.KOMGA) {
         db.remoteServerDao().upsert(
             RemoteServer(
-                kind = ServerKind.KOMGA,
+                kind = kind,
                 baseUrl = "https://books.example",
                 username = "reader",
                 passwordCipher = null,
-                apiKeyCipher = RemoteServer.seal("a-key"),
+                apiKeyCipher = if (kind == ServerKind.KOMGA) RemoteServer.seal("a-key") else null,
                 accountId = "u1",
                 userId = null,
                 koboTokenCipher = null,
                 canDownload = true,
+                canManageLibrary = kind == ServerKind.LISEUR_SYNC,
                 addedAt = 0L,
                 catalogSyncedAt = null,
                 positionSyncedAt = null,
                 syncToken = null,
+                liseurTokenCipher = if (kind == ServerKind.LISEUR_SYNC) {
+                    RemoteServer.seal("token")
+                } else {
+                    null
+                },
             ),
         )
     }
@@ -98,7 +104,7 @@ class RemoteCatalogRepositoryTest {
     private fun repository(catalog: CatalogSource) = RemoteCatalogRepository(
         router = RemoteRouter(
             serverDao = db.remoteServerDao(),
-            catalogs = mapOf(ServerKind.KOMGA to catalog),
+            catalogs = mapOf(ServerKind.KOMGA to catalog, ServerKind.LISEUR_SYNC to catalog),
             files = emptyMap(),
             positions = emptyMap(),
         ),
@@ -139,7 +145,7 @@ class RemoteCatalogRepositoryTest {
     private fun repository(catalog: CatalogSource, bookDao: BookDao) = RemoteCatalogRepository(
         router = RemoteRouter(
             serverDao = db.remoteServerDao(),
-            catalogs = mapOf(ServerKind.KOMGA to catalog),
+            catalogs = mapOf(ServerKind.KOMGA to catalog, ServerKind.LISEUR_SYNC to catalog),
             files = emptyMap(),
             positions = emptyMap(),
         ),
@@ -164,6 +170,50 @@ class RemoteCatalogRepositoryTest {
         updatedAt = null,
         pageCount = null,
     )
+
+    @Test
+    fun `liseur-sync personal series becomes the local override`() = runTest {
+        connect(ServerKind.LISEUR_SYNC)
+        val remote = book("b1").copy(
+            updatedAt = 20,
+            seriesName = "Imperial Radch",
+            seriesIndex = 2.0,
+            seriesId = "s1",
+            seriesSource = "personal",
+            folderId = "f1",
+        )
+
+        assertEquals(true, repository(FakeCatalog { onPage -> onPage(listOf(remote)) }).refresh().completed)
+
+        val stored = db.bookDao().allOnce().single()
+        assertEquals("Imperial Radch", stored.userSeriesName)
+        assertEquals(2.0, stored.userSeriesIndex!!, 0.0)
+        assertEquals(true, stored.seriesOverridden)
+        assertEquals("personal", stored.catalogSeriesSource)
+        assertEquals("f1", stored.catalogFolderId)
+    }
+
+    @Test
+    fun `non liseur-sync catalog refresh keeps a local series override local`() = runTest {
+        connect(ServerKind.KOMGA)
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
+        val url = db.bookDao().allOnce().single().url
+        db.bookDao().setSeriesOverride(url, "My Shelf", 7.0, updatedAt = 30)
+
+        val remote = book("b1").copy(
+            updatedAt = 40,
+            seriesName = "Server Shelf",
+            seriesIndex = 1.0,
+            seriesId = "ks1",
+        )
+        repository(FakeCatalog { onPage -> onPage(listOf(remote)) }).refresh()
+
+        val stored = db.bookDao().allOnce().single()
+        assertEquals("My Shelf", stored.seriesName)
+        assertEquals("My Shelf", stored.userSeriesName)
+        assertEquals("Server Shelf", stored.catalogSeriesName)
+        assertEquals(true, stored.seriesOverridden)
+    }
 
     @Test
     fun `a refused sign-in is reported as such, not as being offline`() = runTest {

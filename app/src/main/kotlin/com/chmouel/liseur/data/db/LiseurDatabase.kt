@@ -22,7 +22,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 30,
+    version = 31,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -880,6 +880,27 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Caches liseur-sync series-claim metadata beside the local
+         * override, so offline edits and catalog refreshes can reconcile
+         * instead of racing two separate answers on screen.
+         */
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `catalog_folder_id` TEXT")
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `catalog_series_source` TEXT")
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `user_series_updated_at` INTEGER")
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `can_manage_library` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `can_admin` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -913,6 +934,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_27_28,
             MIGRATION_28_29,
             MIGRATION_29_30,
+            MIGRATION_30_31,
         )
     }
 }

@@ -98,9 +98,13 @@ class LiseurSyncServerSetup(
         if (LiseurSyncApi.SCOPE_SYNC !in scopes) {
             throw InsufficientScopes()
         }
+        val isAdmin = "admin" in scopes
         return ServerCapabilities(
             baseUrl = baseUrl,
-            canDownload = LiseurSyncApi.SCOPE_LIBRARY_READ in scopes,
+            canDownload = LiseurSyncApi.SCOPE_LIBRARY_READ in scopes ||
+                LiseurSyncApi.SCOPE_LIBRARY_MANAGE in scopes || isAdmin,
+            canManageLibrary = LiseurSyncApi.SCOPE_LIBRARY_MANAGE in scopes || isAdmin,
+            canAdmin = isAdmin,
             accountId = answer.optString("device_id").takeIf { it.isNotEmpty() },
             displayName = answer.optString("name").ifEmpty { "liseur-sync" },
             liseurToken = credentials.token,

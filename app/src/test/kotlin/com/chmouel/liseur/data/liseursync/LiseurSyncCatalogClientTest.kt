@@ -130,7 +130,9 @@ class LiseurSyncCatalogClientTest {
                     "contributors":[
                         {"id":"a-1","name":"Pierce Brown","role":"author"},
                         {"id":"a-2","name":"calibre","role":"bkp"}],
-                    "series":[{"id":"s-1","name":"Red Rising","position":4.5}]}]}
+                    "series":[
+                        {"id":"s-1","name":"Red Rising","position":4.5,"source":"shared"},
+                        {"id":"s-2","name":"Solar War","position":1,"source":"folder"}]}]}
                 """.trimIndent(),
             ),
         )
@@ -143,6 +145,10 @@ class LiseurSyncCatalogClientTest {
         assertEquals("Red Rising", book.seriesName)
         assertEquals(4.5, book.seriesIndex!!, 0.0)
         assertEquals("s-1", book.seriesId)
+        assertEquals("shared", book.seriesSource)
+        assertEquals("f-1", book.folderId)
+        assertEquals(listOf("Red Rising", "Solar War"), book.series.map { it.name })
+        assertEquals(listOf("shared", "folder"), book.series.map { it.source })
         assertEquals(1126528L, book.sizeBytes)
         assertEquals("ab12", book.sha256)
         assertEquals("/v1/books/b-1/cover", book.coverHref)
@@ -151,6 +157,92 @@ class LiseurSyncCatalogClientTest {
             SyncOps.parseTime("2026-08-15T08:30:34.105Z"),
             book.updatedAt,
         )
+    }
+
+    @Test
+    fun `personal series writes use the liseur-sync layer routes`() = runTest {
+        server.enqueue(
+            json(
+                """{"book_id":"b-1","source":"personal",
+                    "series":[{"id":"s-1","name":"Murderbot","position":2,"source":"personal"}],
+                    "folder":[{"id":"s-2","name":"Old","source":"folder"}],
+                    "shared":null,
+                    "personal":[{"id":"s-1","name":"Murderbot","position":2,"source":"personal"}]}
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(
+            json(
+                """{"book_id":"b-1","source":"folder",
+                    "series":[{"id":"s-2","name":"Old","source":"folder"}],
+                    "folder":[{"id":"s-2","name":"Old","source":"folder"}],
+                    "shared":null,"personal":null}
+                """.trimIndent(),
+            ),
+        )
+
+        val book = com.chmouel.liseur.data.db.Book(
+            url = "liseur-sync:b-1",
+            title = "Exit Strategy",
+            author = null,
+            coverPath = null,
+            source = null,
+            addedAt = 0,
+            lastOpenedAt = null,
+            remoteUuid = "b-1",
+        )
+        val client = LiseurSyncSeriesClient()
+
+        val written = client.setPersonalSeries(BASE, credentials, book, "Murderbot", 2.0)
+        val reset = client.resetPersonalSeries(BASE, credentials, book)
+
+        assertEquals("personal", written?.source)
+        assertEquals("Murderbot", written?.personal?.single()?.name)
+        assertEquals(null, reset?.personal)
+        val put = server.takeRequest()
+        assertEquals("PUT", put.method)
+        assertEquals("/v1/books/b-1/series", put.target)
+        assertTrue(put.body?.utf8()?.contains(""""scope":"personal"""") == true)
+        val delete = server.takeRequest()
+        assertEquals("DELETE", delete.method)
+        assertEquals("/v1/books/b-1/series?scope=personal", delete.target)
+    }
+
+    /**
+     * The server places a book the renumbering finds unplaced, so a
+     * shelf sent under the wrong series id would not merely misnumber
+     * it, it would refile every book on it. A shelf whose books do not
+     * agree which series they are in is refused rather than guessed at,
+     * and a book refiled by hand has no id at all until its claim has
+     * been accepted.
+     */
+    @Test
+    fun `renumbering is refused when the shelf does not agree on a series`() = runTest {
+        val client = LiseurSyncSeriesClient()
+        fun volume(id: String, series: String?) = com.chmouel.liseur.data.db.Book(
+            url = "liseur-sync:$id",
+            title = id,
+            author = null,
+            coverPath = null,
+            source = null,
+            addedAt = 0,
+            lastOpenedAt = null,
+            remoteUuid = id,
+            catalogFolderId = "f-1",
+            seriesId = series,
+        )
+
+        assertFalse(
+            client.reorderPersonalSeries(
+                BASE, credentials, listOf(volume("b-1", "s-1"), volume("b-2", "s-2")),
+            ),
+        )
+        assertFalse(
+            client.reorderPersonalSeries(
+                BASE, credentials, listOf(volume("b-1", null), volume("b-2", "s-1")),
+            ),
+        )
+        assertEquals(0, server.requestCount)
     }
 
     @Test

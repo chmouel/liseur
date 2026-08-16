@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.library
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -68,6 +69,7 @@ import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
+import java.io.IOException
 import kotlinx.coroutines.launch
 
 data class ContinueReading(val book: Book, val progression: Double?)
@@ -156,6 +158,8 @@ data class LibraryUiState(
      * liseur-sync book is a file in a folder the server only reads.
      */
     val canDeleteFromServer: Boolean = false,
+    /** Whether a shared liseur-sync series claim can be cleared. */
+    val canResetSharedSeries: Boolean = false,
     val refreshing: Boolean = false,
     val sort: LibrarySort = LibrarySort.Default,
     val sortReversed: Boolean = false,
@@ -436,6 +440,7 @@ class LibraryViewModel(
                 canDownload = server?.canDownload != false,
                 canDeleteFromServer = server != null &&
                     router.deleterFor(server.kind) != null,
+                canResetSharedSeries = server?.kind == ServerKind.LISEUR_SYNC && server.canAdmin,
                 refreshing = refreshing || catalogStatus is CatalogStatus.Refreshing,
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
@@ -697,13 +702,63 @@ class LibraryViewModel(
      */
     fun setBookSeries(book: Book, name: String?, index: Double?) {
         viewModelScope.launch {
-            bookDao.setSeriesOverride(book.url, name?.trim()?.takeIf { it.isNotEmpty() }, index)
+            val clean = name?.trim()?.takeIf { it.isNotEmpty() }
+            bookDao.setSeriesOverride(book.url, clean, index)
+            pushSeriesClaim(book, clean, index)
         }
     }
 
     /** Gives the book back to whatever the server or the file said. */
     fun resetBookSeries(book: Book) {
-        viewModelScope.launch { bookDao.clearSeriesOverride(book.url) }
+        viewModelScope.launch {
+            bookDao.clearSeriesOverride(book.url)
+            resetSeriesClaim(book)
+        }
+    }
+
+    private suspend fun pushSeriesClaim(book: Book, name: String?, index: Double?) {
+        val server = account.current()?.takeIf {
+            it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
+        } ?: return
+        val credentials = server.credentials ?: return
+        val claims = router.seriesClaimsFor(server.kind) ?: return
+        try {
+            val layers = claims.setPersonalSeries(server.baseUrl, credentials, book, name, index)
+            bookDao.setRemoteSeriesId(
+                book.url,
+                layers?.personal?.firstOrNull()?.id,
+            )
+        } catch (e: IOException) {
+            // The local row is the offline cache, and leaving it in
+            // place is what keeps the reader's edit on screen. It is not
+            // queued: nothing re-pushes it, so a claim made offline
+            // reaches the server only when the reader edits again, and
+            // a catalog refresh whose `updated_at` is newer will take it
+            // back. There is no outbox in this app to hang it on —
+            // positions carry their own pending state rather than a
+            // general one — and inventing one for series alone would be
+            // the wrong place to start.
+            Log.i(TAG, "Could not push the series claim", e)
+        }
+    }
+
+    private suspend fun resetSeriesClaim(book: Book) {
+        val server = account.current()?.takeIf {
+            it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
+        } ?: return
+        val credentials = server.credentials ?: return
+        val claims = router.seriesClaimsFor(server.kind) ?: return
+        try {
+            if (!book.seriesOverridden && book.catalogSeriesSource == "shared" && server.canAdmin) {
+                claims.resetSharedSeries(server.baseUrl, credentials, book)
+                catalog.refresh()
+            } else {
+                claims.resetPersonalSeries(server.baseUrl, credentials, book)
+                catalog.refresh()
+            }
+        } catch (e: IOException) {
+            Log.i(TAG, "Could not reset the series claim", e)
+        }
     }
 
     /**
@@ -769,6 +824,7 @@ class LibraryViewModel(
         viewModelScope.launch {
             val committed = seriesOrderDao.renumber(draft.key, numbering.map { (url, _) -> url })
             if (committed) {
+                pushSeriesOrder(numbering.map { (url, _) -> url })
                 _reorder.value = null
             } else {
                 // Not a guess at what the reader meant for books they
@@ -794,6 +850,22 @@ class LibraryViewModel(
         }
     }
 
+    private suspend fun pushSeriesOrder(urlsInOrder: List<String>) {
+        val server = account.current()?.takeIf {
+            it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
+        } ?: return
+        val credentials = server.credentials ?: return
+        val claims = router.seriesClaimsFor(server.kind) ?: return
+        val byUrl = bookDao.getByUrls(urlsInOrder).associateBy { it.url }
+        val books = urlsInOrder.mapNotNull(byUrl::get)
+        if (books.size != urlsInOrder.size) return
+        try {
+            claims.reorderPersonalSeries(server.baseUrl, credentials, books)
+        } catch (e: IOException) {
+            Log.i(TAG, "Could not push the series order", e)
+        }
+    }
+
     /** Marks a message as shown. */
     fun noticeShown(id: Long) = notices.shown(id)
 
@@ -807,6 +879,8 @@ class LibraryViewModel(
     }
 
     companion object {
+        private const val TAG = "LibraryViewModel"
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container

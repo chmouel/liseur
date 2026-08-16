@@ -71,6 +71,9 @@
     <string name="series_assign_volume">Book number (optional)</string>
     <string name="series_assign_reset">Restore the original series</string>
     <string name="series_assign_hint">Leave the name empty to take this book out of its series.</string>
+    <string name="series_source_folder">Series from the watched folder</string>
+    <string name="series_source_shared">Series corrected by the library admin</string>
+    <string name="series_source_personal">Your personal series claim</string>
     <string name="next_in_series">Next: %1$s</string>
     <string name="next_in_series_numbered">Next: #%1$s %2$s</string>
     <string name="clear">Clear</string>

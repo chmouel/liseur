@@ -16,6 +16,7 @@ class RemoteRouter(
     private val catalogs: Map<ServerKind, CatalogSource>,
     private val files: Map<ServerKind, FileSource>,
     private val positions: Map<ServerKind, PositionSync>,
+    private val seriesClaims: Map<ServerKind, SeriesClaimSync> = emptyMap(),
     /**
      * Which kinds can delete a book on the server at all. Absent from
      * the map means the action is never offered for that kind.
@@ -44,6 +45,9 @@ class RemoteRouter(
 
     /** The deleter for a server already in hand, when the kind has one. */
     fun deleterFor(kind: ServerKind): BookDeleter? = deleters[kind]
+
+    /** The series-claim writer for a server already in hand, when it has one. */
+    fun seriesClaimsFor(kind: ServerKind): SeriesClaimSync? = seriesClaims[kind]
 }
 
 /**

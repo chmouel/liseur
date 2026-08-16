@@ -69,6 +69,36 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
         expected,
     )
 
+    suspend fun put(
+        url: String,
+        credentials: RemoteCredentials?,
+        json: JSONObject,
+        expected: Set<Int> = emptySet(),
+    ): JSONObject = send(
+        Request.Builder().url(url).put(json.toString().toRequestBody(JSON)),
+        credentials,
+        expected,
+    )
+
+    suspend fun delete(
+        url: String,
+        credentials: RemoteCredentials?,
+        expected: Set<Int> = emptySet(),
+    ): JSONObject = send(Request.Builder().url(url).delete(), credentials, expected)
+
+    suspend fun putNoContent(
+        url: String,
+        credentials: RemoteCredentials?,
+        json: JSONObject,
+        expected: Set<Int> = emptySet(),
+    ) {
+        sendMaybeEmpty(
+            Request.Builder().url(url).put(json.toString().toRequestBody(JSON)),
+            credentials,
+            expected,
+        )
+    }
+
     /**
      * Runs a request and insists on JSON back.
      *
@@ -90,6 +120,21 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
             }
             if (!response.isSuccessful) throw failureFor(response, text)
             parseOrNull(text) ?: throw RemoteHttpFailure(SyncFailure.Malformed)
+        }
+    }
+
+    private suspend fun sendMaybeEmpty(
+        builder: Request.Builder,
+        credentials: RemoteCredentials?,
+        expected: Set<Int>,
+    ) = withContext(Dispatchers.IO) {
+        val request = builder.also { credentials?.signInto(it) }.build()
+        http.client.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (response.code in expected) {
+                throw LiseurSyncRejection(response.code, parseOrNull(text))
+            }
+            if (!response.isSuccessful) throw failureFor(response, text)
         }
     }
 

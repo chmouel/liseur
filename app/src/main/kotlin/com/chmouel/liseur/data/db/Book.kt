@@ -114,6 +114,10 @@ data class Book(
     @ColumnInfo(name = "catalog_series_name") val catalogSeriesName: String? = null,
     /** The catalog's series index. */
     @ColumnInfo(name = "catalog_series_index") val catalogSeriesIndex: Double? = null,
+    /** The watched folder that named this catalog row, for liseur-sync series writes. */
+    @ColumnInfo(name = "catalog_folder_id") val catalogFolderId: String? = null,
+    /** Whether the catalog series came from the folder, shared layer or personal layer. */
+    @ColumnInfo(name = "catalog_series_source") val catalogSeriesSource: String? = null,
     /**
      * The series the reader filed the book under themselves, null when
      * they filed it under none.
@@ -137,6 +141,8 @@ data class Book(
      * without also freezing the name the server gave it.
      */
     @ColumnInfo(name = "series_override") val seriesOverridden: Boolean = false,
+    /** When this device last changed its personal series claim. */
+    @ColumnInfo(name = "user_series_updated_at") val userSeriesUpdatedAt: Long? = null,
     /**
      * Whether the reader has set this book's place in its series by
      * hand, by typing a number or by dragging the shelf into order.
@@ -196,6 +202,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE url = :url")
     suspend fun getByUrl(url: String): Book?
 
+    @Query("SELECT * FROM books WHERE url IN (:urls)")
+    suspend fun getByUrls(urls: List<String>): List<Book>
+
     /** Puts a book away, or brings it back to the shelf. */
     @Query("UPDATE books SET archived_at = :archivedAt WHERE url = :url")
     suspend fun setArchived(url: String, archivedAt: Long?)
@@ -216,6 +225,7 @@ interface BookDao {
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
+            "catalog_folder_id = NULL, catalog_series_source = NULL, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +
@@ -239,6 +249,7 @@ interface BookDao {
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
+            "catalog_folder_id = NULL, catalog_series_source = NULL, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +
@@ -391,13 +402,33 @@ interface BookDao {
         SET user_series_name = :name,
             user_series_index = CASE WHEN :name IS NULL THEN NULL ELSE :index END,
             series_override = 1,
+            user_series_updated_at = :updatedAt,
             series_index_override = 1,
             series_name = :name,
-            series_index = CASE WHEN :name IS NULL THEN NULL ELSE :index END
+            series_index = CASE WHEN :name IS NULL THEN NULL ELSE :index END,
+            series_id = NULL
         WHERE url = :url
         """,
     )
-    suspend fun setSeriesOverride(url: String, name: String?, index: Double?)
+    suspend fun setSeriesOverride(
+        url: String,
+        name: String?,
+        index: Double?,
+        updatedAt: Long = System.currentTimeMillis(),
+    )
+
+    /**
+     * Records the server's own id for the series this book now sits in.
+     *
+     * [setSeriesOverride] clears the id rather than keeping the old one,
+     * because a book refiled by hand is no longer in the series the last
+     * refresh named, and renumbering a shelf sends this id: a stale one
+     * would renumber — and quietly re-file into — the previous series.
+     * Null until the claim reaches the server, which is the safe way
+     * round, since a shelf with no id simply cannot be pushed.
+     */
+    @Query("UPDATE books SET series_id = :seriesId WHERE url = :url")
+    suspend fun setRemoteSeriesId(url: String, seriesId: String?)
 
     /**
      * Hands the book back to whoever described it, for when the reader
@@ -409,7 +440,8 @@ interface BookDao {
         SET user_series_name = NULL,
             user_series_index = NULL,
             series_override = 0,
-            series_index_override = 0,
+        user_series_updated_at = :updatedAt,
+        series_index_override = 0,
             series_name = COALESCE(catalog_series_name, file_series_name),
             series_index = CASE
                 WHEN COALESCE(catalog_series_name, file_series_name) IS NULL THEN NULL
@@ -418,7 +450,7 @@ interface BookDao {
         WHERE url = :url
         """,
     )
-    suspend fun clearSeriesOverride(url: String)
+    suspend fun clearSeriesOverride(url: String, updatedAt: Long = System.currentTimeMillis())
 
     /**
      * Forgets that this book was ever opened, for when the file at a path
@@ -461,19 +493,26 @@ interface BookDao {
             remote_page_count = :remotePageCount,
             catalog_series_name = :catalogSeriesName,
             catalog_series_index = :catalogSeriesIndex,
+            catalog_folder_id = :catalogFolderId,
+            catalog_series_source = :catalogSeriesSource,
+            user_series_name = :userSeriesName,
+            user_series_index = :userSeriesIndex,
+            series_override = :seriesOverridden,
+            series_index_override = :indexOverridden,
+            user_series_updated_at = :userSeriesUpdatedAt,
             series_name = CASE
-                WHEN series_override = 1 THEN user_series_name
+                WHEN :seriesOverridden = 1 THEN :userSeriesName
                 ELSE COALESCE(:catalogSeriesName, file_series_name)
             END,
             series_index = CASE
                 -- Same ladder as series_name above, so that a number
                 -- never outlives the name it counts within.
                 WHEN (CASE
-                    WHEN series_override = 1 THEN user_series_name
+                    WHEN :seriesOverridden = 1 THEN :userSeriesName
                     ELSE COALESCE(:catalogSeriesName, file_series_name)
                 END) IS NULL THEN NULL
-                WHEN series_index_override = 1 THEN user_series_index
-                WHEN series_override = 1 THEN NULL
+                WHEN :indexOverridden = 1 THEN :userSeriesIndex
+                WHEN :seriesOverridden = 1 THEN NULL
                 ELSE COALESCE(:catalogSeriesIndex, file_series_index)
             END,
             series_id = :seriesId
@@ -492,6 +531,13 @@ interface BookDao {
         remotePageCount: Int?,
         catalogSeriesName: String?,
         catalogSeriesIndex: Double?,
+        catalogFolderId: String?,
+        catalogSeriesSource: String?,
+        userSeriesName: String?,
+        userSeriesIndex: Double?,
+        seriesOverridden: Boolean,
+        indexOverridden: Boolean,
+        userSeriesUpdatedAt: Long?,
         seriesId: String?,
     )
 

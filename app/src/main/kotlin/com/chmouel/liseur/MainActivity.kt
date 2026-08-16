@@ -570,6 +570,7 @@ private fun LibraryRoute(
             SeriesAssignDialog(
                 book = book,
                 seriesNames = state.seriesNames,
+                canResetSharedSeries = state.canResetSharedSeries,
                 onConfirm = { name, index ->
                     viewModel.setBookSeries(book, name, index)
                     seriesSheetRefile = null

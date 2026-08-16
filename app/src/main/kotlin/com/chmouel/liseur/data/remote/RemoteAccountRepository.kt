@@ -315,6 +315,8 @@ class RemoteAccountRepository(
                 koboTokenCipher = RemoteServer.seal(capabilities.koboToken)
                     ?: existing?.koboTokenCipher,
                 canDownload = capabilities.canDownload,
+                canManageLibrary = capabilities.canManageLibrary,
+                canAdmin = capabilities.canAdmin,
                 addedAt = existing?.addedAt ?: System.currentTimeMillis(),
                 catalogSyncedAt = existing?.catalogSyncedAt,
                 positionSyncedAt = existing?.positionSyncedAt,

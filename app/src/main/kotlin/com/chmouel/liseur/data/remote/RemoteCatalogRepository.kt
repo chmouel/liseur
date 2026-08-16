@@ -236,7 +236,7 @@ class RemoteCatalogRepository(
             // reading positions hang off; the catalog's spelling of the
             // identity belongs to rows the catalog itself introduced.
             val rowUrl = existing?.takeIf { it.id != 0L }?.url ?: url
-            val merged = mergeCatalogEntry(remote, existing, rowUrl, baseUrl, now)
+            val merged = mergeCatalogEntry(remote, existing, rowUrl, baseUrl, now, kind)
             known.remember(merged)
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
@@ -260,7 +260,14 @@ class RemoteCatalogRepository(
                 remotePageCount = book.remotePageCount,
                 catalogSeriesName = remote.seriesName,
                 catalogSeriesIndex = remote.seriesIndex,
-                seriesId = remote.seriesId,
+                catalogFolderId = remote.folderId,
+                catalogSeriesSource = remote.seriesSource,
+                userSeriesName = book.userSeriesName,
+                userSeriesIndex = book.userSeriesIndex,
+                seriesOverridden = book.seriesOverridden,
+                indexOverridden = book.indexOverridden,
+                userSeriesUpdatedAt = book.userSeriesUpdatedAt,
+                seriesId = book.seriesId,
             )
         }
         if (inserts.isNotEmpty()) bookDao.upsertAll(inserts.values.toList())
@@ -374,6 +381,7 @@ internal fun mergeCatalogEntry(
     url: String,
     baseUrl: String,
     now: Long,
+    kind: ServerKind = ServerKind.KOMGA,
 ): Book {
     val book = existing ?: Book(
         url = url,
@@ -395,17 +403,44 @@ internal fun mergeCatalogEntry(
         catalog = SeriesMetadata(remote.seriesName, remote.seriesIndex, remote.seriesId),
         file = SeriesMetadata(book.fileSeriesName, book.fileSeriesIndex),
     )
+    val catalogAt = remote.updatedAt ?: 0L
+    val localClaimAt = book.userSeriesUpdatedAt
+    val serverPersonalWins = kind == ServerKind.LISEUR_SYNC &&
+        (localClaimAt == null || catalogAt >= localClaimAt)
+    val userSeriesName = when {
+        serverPersonalWins && remote.seriesSource == "personal" -> remote.seriesName
+        serverPersonalWins -> null
+        else -> book.userSeriesName
+    }
+    val userSeriesIndex = when {
+        serverPersonalWins && remote.seriesSource == "personal" -> remote.seriesIndex
+        serverPersonalWins -> null
+        else -> book.userSeriesIndex
+    }
+    val seriesOverridden = when {
+        serverPersonalWins -> remote.seriesSource == "personal"
+        else -> book.seriesOverridden
+    }
+    val indexOverridden = when {
+        serverPersonalWins -> remote.seriesSource == "personal"
+        else -> book.indexOverridden
+    }
+    val userSeriesUpdatedAt = when {
+        serverPersonalWins && remote.seriesSource == "personal" -> catalogAt
+        serverPersonalWins -> null
+        else -> book.userSeriesUpdatedAt
+    }
     // The reader outranks the feed. Worked out here as well as in the
     // update statement, so that a book they refiled compares equal to
     // the row already stored and the sync leaves it alone entirely.
     val filed = effectiveSeries(
-        name = if (book.seriesOverridden) {
-            SeriesOverride(book.userSeriesName, book.userSeriesIndex)
+        name = if (seriesOverridden) {
+            SeriesOverride(userSeriesName, userSeriesIndex)
         } else {
             null
         },
-        index = book.userSeriesIndex,
-        indexOverridden = book.indexOverridden,
+        index = userSeriesIndex,
+        indexOverridden = indexOverridden,
         source = series,
     )
     return book.copy(
@@ -420,8 +455,15 @@ internal fun mergeCatalogEntry(
         remotePageCount = remote.pageCount,
         seriesName = filed.name,
         seriesIndex = filed.index,
-        seriesId = series.id,
+        seriesId = if (seriesOverridden) book.seriesId else series.id,
         catalogSeriesName = remote.seriesName,
         catalogSeriesIndex = remote.seriesIndex,
+        catalogFolderId = remote.folderId,
+        catalogSeriesSource = remote.seriesSource,
+        userSeriesName = userSeriesName,
+        userSeriesIndex = userSeriesIndex,
+        seriesOverridden = seriesOverridden,
+        indexOverridden = indexOverridden,
+        userSeriesUpdatedAt = userSeriesUpdatedAt,
     )
 }
