@@ -33,6 +33,30 @@ class SeriesShelfTest {
         seriesIndex = index,
     )
 
+    // A server-side merge (liseur-sync ADR-0021) reaches the app as
+    // nothing more than the books' series name having changed, because
+    // shelves are folded here rather than sent. This pins that: no
+    // client change is needed for a merge, and none for a split either.
+    @Test
+    fun `a merged series arrives as one shelf`() {
+        val before = listOf(
+            book("Metro 2033", series = "Metro 2033", index = 1.0),
+            book("Metro 2034", series = "Metro", index = 2.0),
+        ).groupedIntoSeries()
+        assertEquals(2, before.size)
+
+        val after = listOf(
+            book("Metro 2033", series = "Metro", index = 1.0),
+            book("Metro 2034", series = "Metro", index = 2.0),
+        ).groupedIntoSeries()
+        assertEquals(1, after.size)
+        assertEquals("Metro", after.single().name)
+        assertEquals(2, after.single().volumes.size)
+        // The absorbed shelf's key matches nothing, which is what closes
+        // it if the reader had it open. Their books are on the survivor.
+        assertNull(after.firstOrNull { it.key == seriesKey("Metro 2033") })
+    }
+
     @Test
     fun `books without a series are not shelved`() {
         val shelves = listOf(book("Dune", series = null), book("Emma", series = "  "))
