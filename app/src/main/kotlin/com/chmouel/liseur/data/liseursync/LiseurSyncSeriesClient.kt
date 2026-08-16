@@ -58,12 +58,14 @@ class LiseurSyncSeriesClient(
         booksInOrder: List<Book>,
     ): Boolean {
         val first = booksInOrder.firstOrNull() ?: return false
-        val folder = first.catalogFolderId ?: return false
         val seriesId = first.seriesId ?: return false
         // The server places a book it finds unplaced, so the wrong id
         // here would not merely misnumber the shelf, it would refile
-        // every book on it. A shelf whose books disagree about which
-        // series they are in is not one this route can speak for.
+        // every book on it — and a series id now names a shelf across
+        // the whole library, so a stale one can reach a folder this
+        // reader was not even looking at. A shelf whose books disagree
+        // about which series they are in is not one this route can
+        // speak for.
         if (booksInOrder.any { it.seriesId != seriesId }) return false
         val order = JSONArray().also { array ->
             booksInOrder.forEachIndexed { index, book ->
@@ -72,7 +74,7 @@ class LiseurSyncSeriesClient(
             }
         }
         val body = JSONObject().put("scope", PERSONAL).put("order", order)
-        http.putNoContent(LiseurSyncApi.seriesOrder(baseUrl, folder, seriesId), credentials, body)
+        http.putNoContent(LiseurSyncApi.seriesOrder(baseUrl, seriesId), credentials, body)
         return true
     }
 

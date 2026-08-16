@@ -228,7 +228,6 @@ class LiseurSyncCatalogClientTest {
             addedAt = 0,
             lastOpenedAt = null,
             remoteUuid = id,
-            catalogFolderId = "f-1",
             seriesId = series,
         )
 
@@ -243,6 +242,19 @@ class LiseurSyncCatalogClientTest {
             ),
         )
         assertEquals(0, server.requestCount)
+
+        // A shelf that does agree renumbers through the library-wide
+        // route: a series id names one shelf everywhere, so the folder
+        // a volume was found in has no part in the address.
+        server.enqueue(MockResponse(code = 204))
+        assertTrue(
+            client.reorderPersonalSeries(
+                BASE, credentials, listOf(volume("b-1", "s-1"), volume("b-2", "s-1")),
+            ),
+        )
+        val put = server.takeRequest()
+        assertEquals("PUT", put.method)
+        assertEquals("/v1/entities/series/s-1/order", put.target)
     }
 
     @Test

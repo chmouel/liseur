@@ -93,8 +93,8 @@ object LiseurSyncApi {
                 java.net.URLEncoder.encode(scope, "UTF-8"),
         )
 
-    fun seriesOrder(baseUrl: String, folder: String, seriesId: String): String =
-        url(baseUrl, "$FOLDERS/$folder/entities/series/$seriesId/order")
+    fun seriesOrder(baseUrl: String, seriesId: String): String =
+        url(baseUrl, "/v1/entities/series/$seriesId/order")
 
     fun bookCover(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/cover")
