@@ -163,8 +163,3 @@ private fun authors(contributors: JSONArray?): String? {
     return names.joinToString(", ").ifBlank { null }
 }
 
-private fun firstFile(files: JSONArray?): JSONObject? =
-    (0 until (files?.length() ?: 0))
-        .mapNotNull { files?.optJSONObject(it) }
-        .firstOrNull { it.optString("media_type") == "application/epub+zip" }
-        ?: (0 until (files?.length() ?: 0)).mapNotNull { files?.optJSONObject(it) }.firstOrNull()

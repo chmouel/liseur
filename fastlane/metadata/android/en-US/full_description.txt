@@ -26,7 +26,7 @@ Your own server
 
 * calibre-web: one screen sets it up with URL, username and password, and Liseur works out the catalog, download rights and sync token
 * Komga: paste the server address and an API key
-* liseur-sync: sign in or paste a device token; it also syncs books that never came from a server, and accepts uploads of your local EPUBs
+* liseur-sync: sign in or paste a device token; it also syncs books that never came from a server
 * Your server's books merge into the same library with a cloud badge; tap one to download and open it
 * Reading positions sync both ways — exactly where you left off, on Komga and liseur-sync
 * Remove the copy on the device, or delete the book from the server

@@ -175,13 +175,10 @@ class LiseurSyncServerSetup(
     /**
      * What an exception on the way out means to somebody connecting.
      *
-     * Nothing here carries the exception's own message forward: OkHttp
-     * puts the request URL in some of them, and that request is the one
-     * that carried the password.
-     */
-    /**
-     * The token works but may not sync: told apart from a refused
-     * credential so the message can ask for scopes rather than a
+     * Nothing here carries the exception's own message forward: OkHttp puts the request URL in
+     * some of them, and that request is the one that carried the password.
+     *
+     * Raised when the token works but lacks `sync`, so the UI can prompt for scopes rather than a
      * password.
      */
     private class InsufficientScopes : IOException()
