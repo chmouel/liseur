@@ -680,9 +680,9 @@ fun LibraryScreen(
     }
 
     editSeriesOf?.let { book ->
-        SeriesAssignDialog(
+        SeriesPickerSheet(
             book = book,
-            seriesNames = state.seriesNames,
+            options = state.seriesOptions,
             canResetSharedSeries = state.canResetSharedSeries,
             onConfirm = { name, index ->
                 onSetSeries(book, name, index)

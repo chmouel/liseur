@@ -390,6 +390,43 @@ class RemoteCatalogRepositoryTest {
     }
 
     /**
+     * Series claims are local writes too. A pull can snapshot the shelf,
+     * wait on the network, and then land after the reader has filed a
+     * book. Its old copy must not put the book back where it started.
+     */
+    @Test
+    fun `a manual series edit landing mid-walk survives the catalog refresh`() = runTest {
+        connect(ServerKind.LISEUR_SYNC)
+        val folderBook = book("b1").copy(
+            updatedAt = 20,
+            seriesName = "Old Shelf",
+            seriesIndex = 1.0,
+            seriesId = "old-series",
+            seriesSource = "folder",
+        )
+        repository(FakeCatalog { onPage -> onPage(listOf(folderBook)) }).refresh()
+        val url = db.bookDao().allOnce().single().url
+
+        val repository = repository(
+            FakeCatalog { onPage ->
+                // The refresh has already read its old copy by the time
+                // the catalog callback runs.
+                db.bookDao().setSeriesOverride(url, "My Collection", 4.0, updatedAt = 30)
+                onPage(listOf(folderBook.copy(title = "b1 (revised)")))
+            },
+        )
+        assertEquals(true, repository.refresh().completed)
+
+        val stored = db.bookDao().allOnce().single()
+        assertEquals("b1 (revised)", stored.title)
+        assertEquals("My Collection", stored.seriesName)
+        assertEquals(4.0, stored.seriesIndex!!, 0.0)
+        assertEquals("My Collection", stored.userSeriesName)
+        assertEquals(true, stored.seriesOverridden)
+        assertEquals(30L, stored.userSeriesUpdatedAt)
+    }
+
+    /**
      * A feed that names the same book twice on one page -- pagination
      * shifting under a server-side change does this -- must fold into
      * one row, not two inserts racing for the same unique URL.

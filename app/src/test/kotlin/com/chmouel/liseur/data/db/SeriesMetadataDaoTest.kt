@@ -71,6 +71,53 @@ class SeriesMetadataDaoTest {
     }
 
     @Test
+    fun `a catalog update cannot replace a newer manual series edit`() = runTest {
+        seed(seriesName = "Old Catalog Series", seriesIndex = 1.0)
+        db.bookDao().setSeriesOverride(BOOK_URL, "My Collection", 4.0, updatedAt = 30)
+        db.bookDao().setRemoteSeriesId(BOOK_URL, "current-series-id")
+
+        db.bookDao().updateCatalogFields(
+            url = BOOK_URL,
+            title = "A Revised Book",
+            author = "A Revised Author",
+            remoteUuid = "remote-id",
+            remoteBookId = null,
+            coverUrl = null,
+            downloadHref = null,
+            remoteUpdatedAt = 40,
+            remotePageCount = null,
+            catalogSeriesName = "New Catalog Series",
+            catalogSeriesIndex = 9.0,
+            catalogFolderId = "folder-id",
+            catalogSeriesSource = "personal",
+            userSeriesName = "Stale Personal Claim",
+            userSeriesIndex = 8.0,
+            seriesOverridden = true,
+            indexOverridden = true,
+            userSeriesUpdatedAt = 40,
+            // The refresh saw an older row; 30 is what is stored now.
+            expectedUserSeriesUpdatedAt = 20,
+            seriesId = "stale-series-id",
+        )
+
+        val book = db.bookDao().getByUrl(BOOK_URL)
+        // Catalog-owned fields still refresh.
+        assertEquals("A Revised Book", book?.title)
+        assertEquals("New Catalog Series", book?.catalogSeriesName)
+        assertEquals("folder-id", book?.catalogFolderId)
+        assertEquals("personal", book?.catalogSeriesSource)
+        // The newer manual filing remains internally consistent.
+        assertEquals("My Collection", book?.seriesName)
+        assertEquals(4.0, book?.seriesIndex)
+        assertEquals("My Collection", book?.userSeriesName)
+        assertEquals(4.0, book?.userSeriesIndex)
+        assertEquals(true, book?.seriesOverridden)
+        assertEquals(true, book?.indexOverridden)
+        assertEquals(30L, book?.userSeriesUpdatedAt)
+        assertEquals("current-series-id", book?.seriesId)
+    }
+
+    @Test
     fun `a book taken out of its series stays out of it`() = runTest {
         seed(seriesName = "Catalog Series", seriesIndex = 4.0)
         db.bookDao().fillSeriesFromFile(BOOK_URL, "File Series", 2.0)
@@ -400,6 +447,7 @@ class SeriesMetadataDaoTest {
             seriesOverridden = existing?.seriesOverridden ?: false,
             indexOverridden = existing?.indexOverridden ?: false,
             userSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
+            expectedUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
             seriesId = null,
         )
     }
