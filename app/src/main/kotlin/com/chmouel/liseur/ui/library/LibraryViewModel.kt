@@ -32,7 +32,9 @@ import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.SeriesNameTaken
 import com.chmouel.liseur.domain.SeriesExtras
+import com.chmouel.liseur.domain.SeriesPickOption
 import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.domain.asPickOption
 import com.chmouel.liseur.domain.groupedIntoSeries
 import com.chmouel.liseur.domain.matchesLibrarySearch
 import com.chmouel.liseur.domain.movedItem
@@ -206,12 +208,18 @@ data class LibraryUiState(
     /** Whether any book knows what series it is in, so the chip is worth offering. */
     val hasSeries: Boolean = false,
     /**
-     * Every series name in the library, for filing a book into one by
-     * hand. Taken from the whole shelf rather than from what a search
-     * left showing: the series a book is being moved into has nothing to
-     * do with the words typed to find the book.
+     * Every series in the library, for filing a book into one by hand.
+     *
+     * Taken from the whole shelf rather than from what a search left
+     * showing: the series a book is being moved into has nothing to do
+     * with the words typed to find the book.
+     *
+     * Each one carries its cover, its author and its size, because a
+     * picker offering two hundred bare names is a picker nobody can
+     * choose from — two shelves called *The Expanse* are told apart by
+     * what is around the name, not by the name.
      */
-    val seriesNames: List<String> = emptyList(),
+    val seriesOptions: List<SeriesPickOption> = emptyList(),
     /**
      * The keys of the series big enough to be shown as series.
      *
@@ -468,7 +476,7 @@ class LibraryViewModel(
                 hasFinished = books.any { !it.archived && it.finished },
                 hasServer = server != null,
                 hasSeries = shelves.isNotEmpty(),
-                seriesNames = allShelves.map { it.name },
+                seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
                 shownSeries = shownSeries,
             )
         }.flowOn(Dispatchers.Default)

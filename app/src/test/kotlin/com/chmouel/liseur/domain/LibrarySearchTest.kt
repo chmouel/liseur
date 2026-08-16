@@ -38,6 +38,15 @@ class LibrarySearchTest {
     }
 
     @Test
+    fun `which sigma a Greek word ends in does not matter`() {
+        // ς and σ are the same letter with two spellings; a title
+        // stored with one must answer a keyboard that produced the
+        // other, and lowercasing alone does not promise that.
+        assertTrue(matchesLibrarySearch("κοσμοσ", "Κόσμος", null))
+        assertTrue(matchesLibrarySearch("κόσμος", "ΚΟΣΜΟΣ", null))
+    }
+
+    @Test
     fun `the author is searched too`() {
         assertTrue(matches("laborit"))
     }

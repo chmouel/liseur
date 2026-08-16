@@ -43,7 +43,7 @@ import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
 import com.chmouel.liseur.ui.library.ConfirmServerDeleteDialog
 import com.chmouel.liseur.ui.library.LibraryScreen
-import com.chmouel.liseur.ui.library.SeriesAssignDialog
+import com.chmouel.liseur.ui.library.SeriesPickerSheet
 import com.chmouel.liseur.ui.library.SeriesScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
@@ -586,9 +586,9 @@ private fun LibraryRoute(
             )
         }
         seriesSheetRefile?.let { book ->
-            SeriesAssignDialog(
+            SeriesPickerSheet(
                 book = book,
-                seriesNames = state.seriesNames,
+                options = state.seriesOptions,
                 canResetSharedSeries = state.canResetSharedSeries,
                 onConfirm = { name, index ->
                     viewModel.setBookSeries(book, name, index)

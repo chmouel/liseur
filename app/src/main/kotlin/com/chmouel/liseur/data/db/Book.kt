@@ -479,10 +479,18 @@ interface BookDao {
     suspend fun upsertAll(books: List<Book>)
 
     /**
-     * Writes only what the catalog owns. The row it lands on may have
-     * moved since it was read — a download finishing, a book being
-     * opened or archived — and none of that is the catalog's to put
-     * back, so a full-row write here is never safe.
+     * Writes the catalog's fields without putting back stale local state.
+     *
+     * A liseur-sync catalog also carries the effective personal series
+     * claim. Those user-series fields are adopted only while
+     * [expectedUserSeriesUpdatedAt] still matches the row that the
+     * refresh read. A manual edit made while the request was in flight
+     * wins that refresh; the next refresh reconciles from a fresh row.
+     * Catalog-owned fields still land either way.
+     *
+     * The row may also have moved in unrelated ways since it was read —
+     * a download finishing, a book being opened or archived — so a
+     * full-row write here is never safe.
      */
     @Query(
         """
@@ -495,27 +503,73 @@ interface BookDao {
             catalog_series_index = :catalogSeriesIndex,
             catalog_folder_id = :catalogFolderId,
             catalog_series_source = :catalogSeriesSource,
-            user_series_name = :userSeriesName,
-            user_series_index = :userSeriesIndex,
-            series_override = :seriesOverridden,
-            series_index_override = :indexOverridden,
-            user_series_updated_at = :userSeriesUpdatedAt,
+            user_series_name = CASE
+                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesName
+                ELSE user_series_name
+            END,
+            user_series_index = CASE
+                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesIndex
+                ELSE user_series_index
+            END,
+            series_override = CASE
+                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesOverridden
+                ELSE series_override
+            END,
+            series_index_override = CASE
+                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :indexOverridden
+                ELSE series_index_override
+            END,
+            user_series_updated_at = CASE
+                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesUpdatedAt
+                ELSE user_series_updated_at
+            END,
             series_name = CASE
-                WHEN :seriesOverridden = 1 THEN :userSeriesName
+                WHEN (CASE
+                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                        THEN :seriesOverridden
+                    ELSE series_override
+                END) = 1 THEN CASE
+                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                        THEN :userSeriesName
+                    ELSE user_series_name
+                END
                 ELSE COALESCE(:catalogSeriesName, file_series_name)
             END,
             series_index = CASE
                 -- Same ladder as series_name above, so that a number
                 -- never outlives the name it counts within.
                 WHEN (CASE
-                    WHEN :seriesOverridden = 1 THEN :userSeriesName
+                    WHEN (CASE
+                        WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                            THEN :seriesOverridden
+                        ELSE series_override
+                    END) = 1 THEN CASE
+                        WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                            THEN :userSeriesName
+                        ELSE user_series_name
+                    END
                     ELSE COALESCE(:catalogSeriesName, file_series_name)
                 END) IS NULL THEN NULL
-                WHEN :indexOverridden = 1 THEN :userSeriesIndex
-                WHEN :seriesOverridden = 1 THEN NULL
+                WHEN (CASE
+                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                        THEN :indexOverridden
+                    ELSE series_index_override
+                END) = 1 THEN CASE
+                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                        THEN :userSeriesIndex
+                    ELSE user_series_index
+                END
+                WHEN (CASE
+                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                        THEN :seriesOverridden
+                    ELSE series_override
+                END) = 1 THEN NULL
                 ELSE COALESCE(:catalogSeriesIndex, file_series_index)
             END,
-            series_id = :seriesId
+            series_id = CASE
+                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesId
+                ELSE series_id
+            END
         WHERE url = :url
         """,
     )
@@ -538,6 +592,7 @@ interface BookDao {
         seriesOverridden: Boolean,
         indexOverridden: Boolean,
         userSeriesUpdatedAt: Long?,
+        expectedUserSeriesUpdatedAt: Long?,
         seriesId: String?,
     )
 

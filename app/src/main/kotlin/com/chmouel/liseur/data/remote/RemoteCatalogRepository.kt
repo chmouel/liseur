@@ -220,7 +220,7 @@ class RemoteCatalogRepository(
         // page folds into one insert, rather than two rows racing for
         // the same unique URL and being refused.
         val inserts = LinkedHashMap<String, Book>()
-        val updates = mutableListOf<Pair<Book, RemoteBook>>()
+        val updates = mutableListOf<CatalogUpdate>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
             // A book first seen earlier in this walk was written without
@@ -241,13 +241,24 @@ class RemoteCatalogRepository(
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
             if (merged == existing) return@forEach
-            if (merged.id == 0L) inserts[rowUrl] = merged else updates += merged to remote
+            if (merged.id == 0L) {
+                inserts[rowUrl] = merged
+            } else {
+                updates += CatalogUpdate(
+                    book = merged,
+                    remote = remote,
+                    snapshotUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
+                )
+            }
         }
-        // Rows the library already has get only the catalog's columns.
-        // What is known about them was read once, before the walk began,
-        // and a whole row written from that copy would put back a
-        // download, an opening or an archiving that happened since.
-        updates.forEach { (book, remote) ->
+        // Rows the library already has get a narrow update: catalog
+        // columns always, and liseur-sync's effective personal-series
+        // fields only while the snapshot is still current. What is known
+        // was read once before the walk, so a full-row write would put
+        // back any local change that happened while the network waited.
+        updates.forEach { update ->
+            val book = update.book
+            val remote = update.remote
             bookDao.updateCatalogFields(
                 url = book.url,
                 title = book.title,
@@ -267,6 +278,7 @@ class RemoteCatalogRepository(
                 seriesOverridden = book.seriesOverridden,
                 indexOverridden = book.indexOverridden,
                 userSeriesUpdatedAt = book.userSeriesUpdatedAt,
+                expectedUserSeriesUpdatedAt = update.snapshotUserSeriesUpdatedAt,
                 seriesId = book.seriesId,
             )
         }
@@ -368,12 +380,26 @@ private class KnownBooks(books: List<Book>) {
 }
 
 /**
+ * A catalog row ready to write, tied to the local series revision from
+ * which it was calculated. Keeping the snapshot value named prevents a
+ * future cleanup from accidentally comparing the database with the new
+ * value and turning the optimistic-lock check into a tautology.
+ */
+private data class CatalogUpdate(
+    val book: Book,
+    val remote: RemoteBook,
+    val snapshotUserSeriesUpdatedAt: Long?,
+)
+
+/**
  * Folds a catalog entry into what is already known about a book.
  *
- * Only the fields the catalog owns are taken from the feed. Everything
- * else — whether the book has been downloaded and when, how far it was
- * read, whether it was finished — belongs to this device, and a routine
- * refresh has no business resetting it.
+ * The catalog's fields and liseur-sync's effective personal-series
+ * claim are taken from the feed. Everything else — whether the book has
+ * been downloaded and when, how far it was read, whether it was
+ * finished — belongs to this device, and a routine refresh has no
+ * business resetting it. The DAO still checks that the personal-series
+ * snapshot is current before writing that part.
  */
 internal fun mergeCatalogEntry(
     remote: RemoteBook,
@@ -403,6 +429,10 @@ internal fun mergeCatalogEntry(
         catalog = SeriesMetadata(remote.seriesName, remote.seriesIndex, remote.seriesId),
         file = SeriesMetadata(book.fileSeriesName, book.fileSeriesIndex),
     )
+    // The catalog currently exposes the book's update time, not the
+    // personal claim's own revision. This chooses what the snapshot
+    // would adopt; updateCatalogFields separately refuses to apply that
+    // choice over a manual edit made while the request was in flight.
     val catalogAt = remote.updatedAt ?: 0L
     val localClaimAt = book.userSeriesUpdatedAt
     val serverPersonalWins = kind == ServerKind.LISEUR_SYNC &&
@@ -430,9 +460,9 @@ internal fun mergeCatalogEntry(
         serverPersonalWins -> null
         else -> book.userSeriesUpdatedAt
     }
-    // The reader outranks the feed. Worked out here as well as in the
-    // update statement, so that a book they refiled compares equal to
-    // the row already stored and the sync leaves it alone entirely.
+    // Work out the effective shelf from the refresh snapshot. The DAO
+    // applies it only if that snapshot's local-series timestamp still
+    // matches; otherwise the concurrent local edit remains effective.
     val filed = effectiveSeries(
         name = if (seriesOverridden) {
             SeriesOverride(userSeriesName, userSeriesIndex)

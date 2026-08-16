@@ -62,10 +62,21 @@ fun survivesLibrarySearch(
  * Decomposing first and then dropping the combining marks turns é into
  * e, which is what lets an accented title be found from a keyboard that
  * cannot easily produce the accent.
+ *
+ * Greek's two lower-case sigmas are collapsed onto one. Which of ς or σ
+ * a word ends in is decided by the keyboard that typed it, not by the
+ * word — and lowercasing is itself context-sensitive (a whole string
+ * ends a word in ς, a character at a time never does), so without this
+ * the same name folds two ways depending on who is doing the folding.
  */
-private fun String.foldForSearch(): String =
+internal fun String.foldForSearch(): String =
     Normalizer.normalize(this, Normalizer.Form.NFD)
         .replace(COMBINING_MARKS, "")
         .lowercase()
+        .replace(FINAL_SIGMA, SMALL_SIGMA)
 
-private val COMBINING_MARKS = Regex("\\p{Mn}+")
+internal val COMBINING_MARKS = Regex("\\p{Mn}+")
+
+/** Greek small letter final sigma, folded onto the ordinary one. */
+private const val FINAL_SIGMA = 'ς'
+private const val SMALL_SIGMA = 'σ'
