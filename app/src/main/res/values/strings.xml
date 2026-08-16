@@ -51,6 +51,14 @@
     <string name="series_reorder_up">Move up</string>
     <string name="series_reorder_down">Move down</string>
     <string name="series_reorder_changed">The series changed while you were reordering it, so nothing was saved.</string>
+    <string name="series_rename">Rename the series…</string>
+    <string name="series_rename_title">Rename the series</string>
+    <string name="series_rename_field">Series name</string>
+    <string name="series_rename_hint">Only you see this name. Your server goes on calling the series what it read from your library, so books added to it later still land on this shelf.</string>
+    <string name="series_rename_save">Rename</string>
+    <string name="series_rename_reset">Use the original name</string>
+    <string name="series_rename_taken">Another series is already called that. Renaming one onto another would merge them, which your server will not do.</string>
+    <string name="series_rename_failed">The series could not be renamed. It needs your library server, and a name is not saved to be sent later.</string>
     <string name="series_clear_numbers">Clear the custom volume numbers</string>
     <string name="series_clear_numbers_warning">The books go back to the numbers your server and your files give them. Numbers you typed in yourself are cleared too — they cannot be told apart from a reordering.</string>
     <string name="series_clear_numbers_confirm">Clear</string>

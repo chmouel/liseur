@@ -4,6 +4,8 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.SeriesClaimSync
 import com.chmouel.liseur.data.remote.SeriesLayers
+import com.chmouel.liseur.data.remote.SeriesName
+import com.chmouel.liseur.data.remote.SeriesNameTaken
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -78,10 +80,45 @@ class LiseurSyncSeriesClient(
         return true
     }
 
+    override suspend fun renameSeries(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        seriesId: String,
+        name: String,
+    ): SeriesName? {
+        val body = JSONObject().put("scope", PERSONAL).put("name", name)
+        // 409 is the server saying another shelf answers to that name.
+        // It is a refusal with a meaning, not a failed request, so it is
+        // asked for rather than left to become a generic failure.
+        val json = try {
+            http.put(LiseurSyncApi.seriesName(baseUrl, seriesId), credentials, body, setOf(409))
+        } catch (rejection: LiseurSyncRejection) {
+            if (rejection.code == 409) throw SeriesNameTaken()
+            throw rejection
+        }
+        return seriesName(json)
+    }
+
+    override suspend fun resetSeriesName(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        seriesId: String,
+    ): SeriesName? = seriesName(
+        http.delete(LiseurSyncApi.seriesName(baseUrl, seriesId, PERSONAL), credentials),
+    )
+
     companion object {
         const val PERSONAL = "personal"
         const val SHARED = "shared"
 
+        fun seriesName(json: JSONObject): SeriesName? {
+            val name = json.optString("name").takeIf { it.isNotEmpty() } ?: return null
+            return SeriesName(
+                name = name,
+                scannedName = json.optString("scanned_name").takeIf { it.isNotEmpty() },
+                source = json.optString("name_source").takeIf { it.isNotEmpty() },
+            )
+        }
         fun layers(json: JSONObject): SeriesLayers = SeriesLayers(
             bookId = json.optString("book_id"),
             source = json.optString("source").takeIf { it.isNotEmpty() },

@@ -195,6 +195,34 @@ data class SeriesLayers(
     val personal: List<RemoteSeriesMembership>?,
 )
 
+/**
+ * What a series is called, after a rename or a revert (ADR-0020).
+ *
+ * A rename is a display layer: the server keeps the name its scan
+ * observed as the key it folds by, and shows this one over it. So
+ * [scannedName] is what the shelf would be called again, and [source]
+ * says whether it is currently being called something else.
+ */
+data class SeriesName(
+    val name: String,
+    val scannedName: String?,
+    /** `folder`, `shared` or `personal`. */
+    val source: String?,
+) {
+    /** Whether the shown name is somebody's rename rather than the scan's. */
+    val renamed: Boolean get() = source == "shared" || source == "personal"
+}
+
+/**
+ * Refused because another shelf already answers to that name.
+ *
+ * Not an error to retry: giving two shelves one name is a merge, and
+ * the server does not merge (ADR-0020). It is an [java.io.IOException]
+ * so that a caller with nothing better to do than log it still catches
+ * it.
+ */
+class SeriesNameTaken : java.io.IOException("that series name is already taken")
+
 interface SeriesClaimSync {
     suspend fun setPersonalSeries(
         baseUrl: String,
@@ -221,4 +249,23 @@ interface SeriesClaimSync {
         credentials: RemoteCredentials,
         booksInOrder: List<Book>,
     ): Boolean
+
+    /**
+     * Calls a series something else, for this reader alone.
+     *
+     * Throws [SeriesNameTaken] when a shelf already has that name.
+     */
+    suspend fun renameSeries(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        seriesId: String,
+        name: String,
+    ): SeriesName?
+
+    /** Gives a series back the name the last scan gave it. */
+    suspend fun resetSeriesName(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        seriesId: String,
+    ): SeriesName?
 }

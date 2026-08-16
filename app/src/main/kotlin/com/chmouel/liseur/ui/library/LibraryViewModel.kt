@@ -30,6 +30,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
+import com.chmouel.liseur.data.remote.SeriesNameTaken
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.groupedIntoSeries
@@ -55,6 +56,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -92,6 +94,12 @@ data class SeriesReorder(
 enum class NoticeKind {
     /** The shelf moved under a draft, so nothing was written. */
     SeriesChangedWhileReordering,
+
+    /** Another shelf already answers to the name asked for. */
+    SeriesNameTaken,
+
+    /** The rename never reached the server, so the shelf is unchanged. */
+    SeriesRenameFailed,
 }
 
 /**
@@ -160,6 +168,12 @@ data class LibraryUiState(
     val canDeleteFromServer: Boolean = false,
     /** Whether a shared liseur-sync series claim can be cleared. */
     val canResetSharedSeries: Boolean = false,
+    /**
+     * Whether a series on this server has a name that can be renamed.
+     * Only liseur-sync keeps series as entities of their own; elsewhere
+     * a shelf is only the name its books happen to share.
+     */
+    val canRenameSeries: Boolean = false,
     val refreshing: Boolean = false,
     val sort: LibrarySort = LibrarySort.Default,
     val sortReversed: Boolean = false,
@@ -441,6 +455,8 @@ class LibraryViewModel(
                 canDeleteFromServer = server != null &&
                     router.deleterFor(server.kind) != null,
                 canResetSharedSeries = server?.kind == ServerKind.LISEUR_SYNC && server.canAdmin,
+                canRenameSeries = server?.kind == ServerKind.LISEUR_SYNC &&
+                    server.canManageLibrary,
                 refreshing = refreshing || catalogStatus is CatalogStatus.Refreshing,
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
@@ -847,6 +863,80 @@ class LibraryViewModel(
         viewModelScope.launch {
             val cleared = seriesOrderDao.clearOrder(shelf.key, shelf.volumes.map { it.book.url })
             if (!cleared) notices.raise(NoticeKind.SeriesChangedWhileReordering)
+        }
+    }
+
+    /**
+     * Whether a rename is in flight.
+     *
+     * The shelf a screen is showing is looked up by name, so the catalog
+     * refresh that lands a rename takes the old shelf away before the new
+     * one arrives. The screen holds its place while this is true.
+     */
+    private val _renamingSeries = MutableStateFlow(false)
+    val renamingSeries: StateFlow<Boolean> = _renamingSeries
+
+    /** The key of a shelf that has just been renamed, to follow it. */
+    private val _renamedSeries = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val renamedSeries: SharedFlow<String> = _renamedSeries
+
+    /** Calls a series something else, for this reader alone (ADR-0020). */
+    fun renameSeries(shelf: SeriesShelf, name: String) {
+        val wanted = name.trim()
+        if (wanted.isEmpty() || wanted == shelf.name) return
+        pushSeriesName(shelf, wanted)
+    }
+
+    /** Gives a shelf back the name the server's last scan gave it. */
+    fun resetSeriesName(shelf: SeriesShelf) = pushSeriesName(shelf, null)
+
+    /**
+     * Renames the series this shelf stands for, or reverts it.
+     *
+     * A rename is not stored locally: nothing in this app holds a name
+     * for a series apart from the books on it, and rewriting theirs
+     * would be a claim about their membership rather than about the
+     * shelf. So the server is asked, and the catalog refresh that
+     * follows is what brings the new name back. Offline, the rename is
+     * simply refused and said so — there is no outbox to queue it in.
+     */
+    private fun pushSeriesName(shelf: SeriesShelf, name: String?) {
+        if (_renamingSeries.value) return
+        viewModelScope.launch {
+            val server = account.current()?.takeIf {
+                it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
+            }
+            val credentials = server?.credentials
+            val claims = server?.let { router.seriesClaimsFor(it.kind) }
+            // The same guard the reorder push uses: a series id names a
+            // shelf across the whole library, so renaming from a shelf
+            // whose books disagree about which series they are in could
+            // rename one this reader is not even looking at.
+            val seriesId = shelf.volumes.firstOrNull()?.book?.seriesId
+            if (credentials == null || claims == null || seriesId == null ||
+                shelf.volumes.any { it.book.seriesId != seriesId }
+            ) {
+                notices.raise(NoticeKind.SeriesRenameFailed)
+                return@launch
+            }
+            _renamingSeries.value = true
+            try {
+                val renamed = if (name == null) {
+                    claims.resetSeriesName(server.baseUrl, credentials, seriesId)
+                } else {
+                    claims.renameSeries(server.baseUrl, credentials, seriesId, name)
+                }
+                catalog.refresh()
+                renamed?.let { _renamedSeries.emit(seriesKey(it.name)) }
+            } catch (e: SeriesNameTaken) {
+                Log.i(TAG, "Series name already taken", e)
+                notices.raise(NoticeKind.SeriesNameTaken)
+            } catch (e: IOException) {
+                Log.i(TAG, "Could not rename the series", e)
+                notices.raise(NoticeKind.SeriesRenameFailed)
+            } finally {
+                _renamingSeries.value = false
+            }
         }
     }
 

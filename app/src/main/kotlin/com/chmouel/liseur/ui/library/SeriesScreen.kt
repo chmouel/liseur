@@ -64,6 +64,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,11 +85,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DragHandle
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -123,6 +127,14 @@ fun SeriesScreen(
     /** Whether anything on this shelf carries a number set by hand. */
     hasCustomNumbers: Boolean,
     onClearCustomNumbers: () -> Unit,
+    /**
+     * Whether this shelf can be renamed at all: only a liseur-sync
+     * server has a name to rename, and only for a shelf its own catalog
+     * gathered.
+     */
+    canRename: Boolean,
+    onRenameSeries: (String) -> Unit,
+    onResetSeriesName: () -> Unit,
     notice: Notice?,
     onNoticeShown: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -130,6 +142,7 @@ fun SeriesScreen(
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     var menuOpen by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
@@ -146,11 +159,16 @@ fun SeriesScreen(
     // commit leaves the reader on this screen, and a snackbar that
     // waits for them to navigate away explains nothing.
     val seriesChanged = stringResource(R.string.series_reorder_changed)
+    val nameTaken = stringResource(R.string.series_rename_taken)
+    val renameFailed = stringResource(R.string.series_rename_failed)
     LaunchedEffect(notice) {
         val pending = notice ?: return@LaunchedEffect
-        when (pending.kind) {
-            NoticeKind.SeriesChangedWhileReordering -> snackbarHost.showSnackbar(seriesChanged)
+        val message = when (pending.kind) {
+            NoticeKind.SeriesChangedWhileReordering -> seriesChanged
+            NoticeKind.SeriesNameTaken -> nameTaken
+            NoticeKind.SeriesRenameFailed -> renameFailed
         }
+        snackbarHost.showSnackbar(message)
         onNoticeShown(pending.id)
     }
 
@@ -242,6 +260,18 @@ fun SeriesScreen(
                                         onMarkSeriesRead()
                                     },
                                 )
+                                if (canRename) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.series_rename)) },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.Edit, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            menuOpen = false
+                                            renaming = true
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.series_reorder)) },
                                     leadingIcon = {
@@ -328,6 +358,21 @@ fun SeriesScreen(
                 MissingVolumeRow(number, published = false)
             }
         }
+    }
+
+    if (renaming) {
+        SeriesRenameDialog(
+            current = shelf.name,
+            onDismiss = { renaming = false },
+            onRename = { name ->
+                renaming = false
+                onRenameSeries(name)
+            },
+            onReset = {
+                renaming = false
+                onResetSeriesName()
+            },
+        )
     }
 
     if (confirmClear) {
@@ -863,4 +908,66 @@ private fun unpublishedTail(shelf: SeriesShelf, extras: SeriesExtras?): List<Dou
     // A wildly wrong count from a server must not draw a thousand rows.
     val end = minOf(total.toLong(), last + 50)
     return ((last + 1)..end).map { it.toDouble() }
+}
+
+/**
+ * Giving a shelf a different name.
+ *
+ * The name belongs to the shelf, not to the books on it, which is what
+ * makes this a different gesture from refiling a book: nothing here
+ * changes what is in the series. The server keeps the name its scan
+ * read, so the hint says so — a reader who renames *The Expanse* and
+ * later drops another volume into the same folder should not be
+ * surprised that it lands on this shelf.
+ */
+@Composable
+private fun SeriesRenameDialog(
+    current: String,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onReset: () -> Unit,
+) {
+    var typed by remember { mutableStateOf(TextFieldValue(current, TextRange(current.length))) }
+    val clean = typed.text.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.series_rename_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.series_rename_field)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.series_rename_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                // Always on offer rather than only when this shelf is
+                // known to be renamed: the app is told the name to show,
+                // not which layer it came from, and asking the server to
+                // drop a rename that is not there costs one request and
+                // changes nothing.
+                TextButton(onClick = onReset, modifier = Modifier.align(Alignment.End)) {
+                    Text(stringResource(R.string.series_rename_reset))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onRename(clean) },
+                enabled = clean.isNotEmpty() && clean != current,
+            ) {
+                Text(stringResource(R.string.series_rename_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }

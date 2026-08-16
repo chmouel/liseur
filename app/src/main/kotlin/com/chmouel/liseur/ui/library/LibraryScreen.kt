@@ -228,11 +228,17 @@ fun LibraryScreen(
     // Raised on the series screen, shown here: the screen that raised it
     // is often the one going away.
     val seriesChanged = stringResource(R.string.series_reorder_changed)
+    val nameTaken = stringResource(R.string.series_rename_taken)
+    val renameFailed = stringResource(R.string.series_rename_failed)
     LaunchedEffect(notice) {
         val pending = notice ?: return@LaunchedEffect
-        when (pending.kind) {
-            NoticeKind.SeriesChangedWhileReordering -> snackbarHost.showSnackbar(seriesChanged)
-        }
+        snackbarHost.showSnackbar(
+            when (pending.kind) {
+                NoticeKind.SeriesChangedWhileReordering -> seriesChanged
+                NoticeKind.SeriesNameTaken -> nameTaken
+                NoticeKind.SeriesRenameFailed -> renameFailed
+            },
+        )
         onNoticeShown(pending.id)
     }
 

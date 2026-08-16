@@ -96,6 +96,17 @@ object LiseurSyncApi {
     fun seriesOrder(baseUrl: String, seriesId: String): String =
         url(baseUrl, "/v1/entities/series/$seriesId/order")
 
+    /** What a reader calls a series, over what the scan called it. */
+    fun seriesName(baseUrl: String, seriesId: String): String =
+        url(baseUrl, "/v1/entities/series/$seriesId/name")
+
+    fun seriesName(baseUrl: String, seriesId: String, scope: String): String =
+        url(
+            baseUrl,
+            "/v1/entities/series/$seriesId/name?scope=" +
+                java.net.URLEncoder.encode(scope, "UTF-8"),
+        )
+
     fun bookCover(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/cover")
 

@@ -479,6 +479,17 @@ private fun LibraryRoute(
     val liveSeries = openSeriesKey?.let { key -> state.series.firstOrNull { it.key == key } }
     val reorder by viewModel.reorder.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
+    val renamingSeries by viewModel.renamingSeries.collectAsStateWithLifecycle()
+
+    // A rename moves the shelf: it is keyed by name, so the old key
+    // stops matching the moment the catalog refresh lands. Following it
+    // is the difference between renaming a series and being thrown out
+    // of it.
+    LaunchedEffect(viewModel) {
+        viewModel.renamedSeries.collect { key ->
+            if (openSeriesKey != null) openSeriesKey = key
+        }
+    }
 
     // The lookup is by name, so a catalog refresh that renames the
     // series — or the last volume being refiled out of it — turns it
@@ -487,7 +498,10 @@ private fun LibraryRoute(
     // word. So the last shelf seen is held while the mode is open.
     val pinnedSeries = remember { mutableStateOf<SeriesShelf?>(null) }
     if (liveSeries != null) pinnedSeries.value = liveSeries
-    val openSeries = liveSeries ?: pinnedSeries.value?.takeIf { reorder != null }
+    // Pinned through a rename too: between the request and the refresh
+    // that answers it, no shelf has either name.
+    val openSeries = liveSeries
+        ?: pinnedSeries.value?.takeIf { reorder != null || renamingSeries }
 
     LaunchedEffect(liveSeries == null, reorder != null) {
         if (liveSeries == null && reorder != null) {
@@ -536,6 +550,10 @@ private fun LibraryRoute(
             onCancelReorder = viewModel::cancelReorder,
             hasCustomNumbers = openSeries.volumes.any { it.book.indexOverridden },
             onClearCustomNumbers = { viewModel.clearCustomVolumeNumbers(openSeries) },
+            canRename = state.canRenameSeries &&
+                openSeries.volumes.all { it.book.seriesId != null },
+            onRenameSeries = { name -> viewModel.renameSeries(openSeries, name) },
+            onResetSeriesName = { viewModel.resetSeriesName(openSeries) },
             notice = notice,
             onNoticeShown = viewModel::noticeShown,
         )
