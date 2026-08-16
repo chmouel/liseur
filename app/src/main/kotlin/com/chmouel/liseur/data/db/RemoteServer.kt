@@ -22,8 +22,7 @@ import kotlinx.coroutines.flow.Flow
  * protocol, so it is the only kind that has a [koboTokenCipher], a
  * [userId] or a [syncToken]. Komga signs in with [apiKeyCipher] alone.
  * liseur-sync signs in with a device token it minted at setup, kept in
- * [liseurTokenCipher]; its sync cursor is [syncCursorSeq], and
- * [canUpload] records the token carrying the `library-manage` scope.
+ * [liseurTokenCipher], and its sync cursor is [syncCursorSeq].
  *
  * Secrets are stored as Keystore-encrypted bytes. All of them are needed
  * back in the clear on every request — one for Basic auth, one for a
@@ -70,8 +69,6 @@ data class RemoteServer(
      * transaction that writes the page it covers, never before.
      */
     @ColumnInfo(name = "sync_cursor_seq", defaultValue = "0") val syncCursorSeq: Long = 0,
-    /** Whether the liseur-sync token carries the `library-manage` scope. */
-    @ColumnInfo(name = "can_upload", defaultValue = "0") val canUpload: Boolean = false,
 ) {
     /** The Kobo sync token in the clear, or null if there is none to read. */
     @get:Ignore

@@ -23,8 +23,6 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
-import com.chmouel.liseur.data.liseursync.BookUploadRepository
-import com.chmouel.liseur.data.liseursync.LiseurSyncBookDeleter
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
@@ -150,9 +148,6 @@ class AppContainer(context: Context) {
         bookRemoval = bookRemoval,
     )
 
-    /** Pushing local EPUBs up to a liseur-sync server, when one allows it. */
-    val bookUploads = BookUploadRepository(context.applicationContext)
-
     /** This device, as the servers that record who saved a position see it. */
     val deviceIdentity = DeviceIdentityRepository(context.applicationContext)
 
@@ -243,11 +238,12 @@ class AppContainer(context: Context) {
             ServerKind.KOMGA to komgaSync,
             ServerKind.LISEUR_SYNC to liseurSync,
         ),
-        // Komga is absent on purpose: deleting a file there is an
-        // administrator's job, so the action is never offered for it.
+        // calibre-web is the only one that deletes. Komga treats it as
+        // an administrator's job, and a liseur-sync book is a file in a
+        // folder somebody else looks after: the server has no delete
+        // route at all, and inventing one here would be lying about it.
         deleters = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreBookDeleter(),
-            ServerKind.LISEUR_SYNC to LiseurSyncBookDeleter(),
         ),
     )
 

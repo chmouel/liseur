@@ -9,7 +9,6 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
-import com.chmouel.liseur.data.liseursync.BookUploadRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.remote.ServerDeleteResult
@@ -152,18 +151,11 @@ data class LibraryUiState(
     val downloads: Map<String, DownloadProgress> = emptyMap(),
     val canDownload: Boolean = true,
     /**
-     * Whether the connected server accepts uploads — a liseur-sync
-     * account whose token carries `library-manage`.
-     */
-    val canUpload: Boolean = false,
-    /**
      * Whether the connected server lets this account delete books from
-     * it. Komga has no such affordance at all; liseur-sync wants the
-     * manage scope.
+     * it. Only calibre-web does: Komga has no such affordance, and a
+     * liseur-sync book is a file in a folder the server only reads.
      */
     val canDeleteFromServer: Boolean = false,
-    /** Books with an upload running or queued. */
-    val uploads: Set<String> = emptySet(),
     val refreshing: Boolean = false,
     val sort: LibrarySort = LibrarySort.Default,
     val sortReversed: Boolean = false,
@@ -228,7 +220,6 @@ class LibraryViewModel(
     private val catalog: RemoteCatalogRepository,
     private val positionSync: PositionSyncCoordinator,
     private val downloads: BookDownloadRepository,
-    private val uploads: BookUploadRepository,
     private val account: RemoteAccountRepository,
     private val router: RemoteRouter,
     private val appSettings: AppSettingsRepository,
@@ -320,8 +311,7 @@ class LibraryViewModel(
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
-            uploads.running,
-        ) { baseValues, query, searchActive, uploading ->
+        ) { baseValues, query, searchActive ->
             @Suppress("UNCHECKED_CAST")
             val books = baseValues[0] as List<Book>
             val recent = baseValues[1] as ContinueReading?
@@ -444,11 +434,8 @@ class LibraryViewModel(
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
-                canUpload = server?.canUpload == true,
                 canDeleteFromServer = server != null &&
-                    router.deleterFor(server.kind) != null &&
-                    (server.kind != ServerKind.LISEUR_SYNC || server.canUpload),
-                uploads = uploading,
+                    router.deleterFor(server.kind) != null,
                 refreshing = refreshing || catalogStatus is CatalogStatus.Refreshing,
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
@@ -579,20 +566,6 @@ class LibraryViewModel(
     fun download(book: Book) {
         viewModelScope.launch { downloads.enqueue(book) }
     }
-
-    /**
-     * Pushes a local book up to the server, when the account allows it.
-     *
-     * Only ever an answer to the button: no file leaves the device
-     * unasked. The work survives the app; the outcome arrives on
-     * [uploadOutcomes].
-     */
-    fun upload(book: Book) {
-        viewModelScope.launch { uploads.enqueue(book) }
-    }
-
-    /** How an upload ended, paired with the book's URL. */
-    val uploadOutcomes = uploads.outcomes
 
     /** Fetch a book and open it as soon as it is here. */
     fun downloadAndOpen(book: Book) {
@@ -843,7 +816,6 @@ class LibraryViewModel(
                     catalog = container.remoteCatalog,
                     positionSync = container.positionSync,
                     downloads = container.bookDownloads,
-                    uploads = container.bookUploads,
                     account = container.remoteAccount,
                     router = container.remoteRouter,
                     appSettings = container.appSettings,

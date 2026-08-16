@@ -1,7 +1,6 @@
 package com.chmouel.liseur.data.liseursync
 
 import com.chmouel.liseur.data.remote.RemoteCredentials
-import com.chmouel.liseur.data.remote.ServerDeleteResult
 import com.chmouel.liseur.data.remote.SetupFailure
 import com.chmouel.liseur.data.remote.SetupResult
 import java.net.InetAddress
@@ -11,7 +10,6 @@ import mockwebserver3.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -49,7 +47,7 @@ class LiseurSyncServerSetupTest {
         server.enqueue(
             json(
                 """{"token_id":"t-1","device_id":"d-1","scopes":["sync","read-insights",
-                    "library-read","library-manage"],"secret":"device-secret"}
+                    "library-read"],"secret":"device-secret"}
                 """.trimIndent(),
             ),
         )
@@ -58,7 +56,7 @@ class LiseurSyncServerSetupTest {
         server.enqueue(
             json(
                 """{"id":"t-1","device_id":"d-1","name":"Test phone",
-                    "scopes":["sync","read-insights","library-read","library-manage"],
+                    "scopes":["sync","read-insights","library-read"],
                     "account_id":"acc-9"}
                 """.trimIndent(),
             ),
@@ -71,7 +69,6 @@ class LiseurSyncServerSetupTest {
         assertEquals("d-1", capabilities.accountId)
         assertEquals("acc-9", capabilities.liseurAccountId)
         assertTrue(capabilities.canDownload)
-        assertTrue(capabilities.canUpload)
         assertEquals("ada", capabilities.displayName)
 
         // The password went to the login route and nowhere else, and
@@ -81,36 +78,17 @@ class LiseurSyncServerSetupTest {
         val minted = server.takeRequest()
         assertTrue(minted.target!!.endsWith("/v1/tokens"))
         val body = JSONObject(minted.body!!.utf8())
-        assertEquals(4, body.getJSONArray("scopes").length())
+        // Reading and syncing is all the app does: there is no scope
+        // here for writing to the catalog, so there is nothing a server
+        // might refuse and no second mint to fall back to.
+        val asked = body.getJSONArray("scopes")
+        assertEquals(3, asked.length())
+        assertEquals(
+            setOf("sync", "read-insights", "library-read"),
+            (0 until asked.length()).map { asked.getString(it) }.toSet(),
+        )
         assertTrue(server.takeRequest().target!!.endsWith("/v1/token"))
-    }
-
-    @Test
-    fun `a server that will not grant manage still answers, minus uploading`() = runTest {
-        server.enqueue(json("""{"auth_token":"hour-token"}"""))
-        server.enqueue(MockResponse(code = 403, body = """{"error":"scope not grantable"}"""))
-        server.enqueue(
-            json(
-                """{"token_id":"t-1","device_id":"d-1",
-                    "scopes":["sync","read-insights","library-read"],"secret":"device-secret"}
-                """.trimIndent(),
-            ),
-        )
-        server.enqueue(
-            json(
-                """{"id":"t-1","device_id":"d-1","name":"Test phone",
-                    "scopes":["sync","read-insights","library-read"]}
-                """.trimIndent(),
-            ),
-        )
-
-        val result = connect(RemoteCredentials.Basic("ada", "correct"))
-
-        val capabilities = (result as SetupResult.Success).capabilities
-        assertTrue(capabilities.canDownload)
-        assertFalse(capabilities.canUpload)
-        // The retry asked for the narrower set rather than giving up.
-        assertEquals(4, server.requestCount)
+        assertEquals(3, server.requestCount)
     }
 
     @Test
@@ -129,7 +107,6 @@ class LiseurSyncServerSetupTest {
         assertEquals("pasted-secret", capabilities.liseurToken)
         assertEquals("d-9", capabilities.accountId)
         assertTrue(capabilities.canDownload)
-        assertFalse(capabilities.canUpload)
         val asked = server.takeRequest()
         assertTrue(asked.target!!.endsWith("/v1/token"))
         assertEquals("Bearer pasted-secret", asked.headers["Authorization"])
@@ -166,74 +143,4 @@ class LiseurSyncServerSetupTest {
             .connect("http://127.0.0.1:${server.port}", credentials, allowHttp = false)
 
     private fun json(body: String) = MockResponse(code = 200, body = body)
-}
-
-/** Deleting a book off a liseur-sync server. */
-@Config(sdk = [35], application = android.app.Application::class)
-@RunWith(RobolectricTestRunner::class)
-class LiseurSyncBookDeleterTest {
-
-    private lateinit var server: MockWebServer
-
-    @Before
-    fun open() {
-        server = MockWebServer()
-        server.start(InetAddress.getByName("127.0.0.1"), 0)
-    }
-
-    @After
-    fun close() {
-        server.close()
-    }
-
-    @Test
-    fun `a book is trashed by its catalog id`() = runTest {
-        server.enqueue(json("""{"book_id":"b-1","status":"trashed"}"""))
-
-        val result = deleter().delete(BASE, credentials, book("b-1"))
-
-        assertEquals(ServerDeleteResult.Deleted, result)
-        val asked = server.takeRequest()
-        assertEquals("DELETE", asked.method)
-        assertTrue(asked.target!!.endsWith("/v1/books/b-1"))
-        assertEquals("Bearer token", asked.headers["Authorization"])
-    }
-
-    @Test
-    fun `already gone counts as gone, which is what was asked`() = runTest {
-        server.enqueue(MockResponse(code = 404, body = """{"error":"no such book"}"""))
-        assertEquals(ServerDeleteResult.Deleted, deleter().delete(BASE, credentials, book("b-1")))
-        server.enqueue(MockResponse(code = 409, body = """{"error":"already deleted"}"""))
-        assertEquals(ServerDeleteResult.Deleted, deleter().delete(BASE, credentials, book("b-1")))
-    }
-
-    @Test
-    fun `a token without manage is told no`() = runTest {
-        server.enqueue(MockResponse(code = 403, body = """{"error":"library-manage required"}"""))
-        assertEquals(
-            ServerDeleteResult.NotAllowed,
-            deleter().delete(BASE, credentials, book("b-1")),
-        )
-    }
-
-    private fun deleter() = LiseurSyncBookDeleter()
-
-    private fun book(id: String) = com.chmouel.liseur.data.db.Book(
-        url = "liseur-sync:$id",
-        title = "A Book",
-        author = null,
-        coverPath = null,
-        source = null,
-        addedAt = 0,
-        lastOpenedAt = null,
-        remoteUuid = id,
-    )
-
-    private fun json(body: String) = MockResponse(code = 200, body = body)
-
-    private val BASE: String get() = "http://127.0.0.1:${server.port}"
-
-    private companion object {
-        val credentials = RemoteCredentials.Bearer("token")
-    }
 }

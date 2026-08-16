@@ -13,10 +13,10 @@ import org.json.JSONObject
 /**
  * Fetches book lists from a liseur-sync server.
  *
- * The native API walks one library at a time, so the catalog is every
- * readable library's pages back to back. A page carries the book's
- * contributors, series and files inline (ADR-0015), which is what lets
- * a shelf row be drawn without a second request per book.
+ * The native API walks one watched folder at a time, so the catalog is
+ * every folder's pages back to back. A page carries the book's
+ * contributors, series and file inline (ADR-0015), which is what lets a
+ * shelf row be drawn without a second request per book.
  */
 class LiseurSyncCatalogClient(
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
@@ -27,14 +27,14 @@ class LiseurSyncCatalogClient(
         credentials: RemoteCredentials,
         onPage: suspend (List<RemoteBook>) -> Unit,
     ): CatalogWalk {
-        val libraries = libraries(baseUrl, credentials)
-        for (library in libraries) {
+        val folders = folders(baseUrl, credentials)
+        for (folder in folders) {
             var cursor: String? = null
             var guard = MAX_PAGES
             while (guard-- > 0) {
                 coroutineContext.ensureActive()
                 val page = http.get(
-                    LiseurSyncApi.libraryBooks(baseUrl, library, cursor, PAGE),
+                    LiseurSyncApi.folderBooks(baseUrl, folder, cursor, PAGE),
                     credentials,
                 )
                 val books = page.optJSONArray("books").let(::books)
@@ -46,7 +46,7 @@ class LiseurSyncCatalogClient(
             if (guard <= 0) {
                 // A server that always says there is more would
                 // otherwise keep this walk going forever, and a walk
-                // that stopped short has not seen the whole library.
+                // that stopped short has not seen the whole folder.
                 Log.i(TAG, "Stopped after $MAX_PAGES pages of catalog")
                 return CatalogWalk(complete = false)
             }
@@ -59,29 +59,56 @@ class LiseurSyncCatalogClient(
         credentials: RemoteCredentials,
         query: String,
     ): List<RemoteBook> =
-        libraries(baseUrl, credentials).flatMap { library ->
+        folders(baseUrl, credentials).flatMap { folder ->
             val answer = http.get(
-                LiseurSyncApi.librarySearch(baseUrl, library, query),
+                LiseurSyncApi.folderSearch(baseUrl, folder, query),
                 credentials,
             )
             answer.optJSONArray("books").let(::books)
         }
 
-    /** The libraries this token may read, as ids. */
-    private suspend fun libraries(
+    /**
+     * The folders this server watches, as ids.
+     *
+     * Every signed-in reader sees every folder — the catalog is shared,
+     * and only reading state is per person (ADR-0017) — so this is the
+     * whole shelf rather than a slice of it. The listing pages, and a
+     * walk that stopped short would silently hide a folder's books.
+     */
+    private suspend fun folders(
         baseUrl: String,
         credentials: RemoteCredentials,
     ): List<String> {
-        val answer = http.get(LiseurSyncApi.url(baseUrl, LiseurSyncApi.LIBRARIES), credentials)
-        val array = answer.optJSONArray("libraries") ?: return emptyList()
-        return (0 until array.length()).mapNotNull { index ->
-            array.optJSONObject(index)?.optString("library_id")?.takeIf { it.isNotEmpty() }
+        val ids = mutableListOf<String>()
+        var after: String? = null
+        var guard = MAX_PAGES
+        while (guard-- > 0) {
+            coroutineContext.ensureActive()
+            val answer = http.get(
+                LiseurSyncApi.folders(baseUrl, after, FOLDER_PAGE),
+                credentials,
+            )
+            val array = answer.optJSONArray("folders") ?: break
+            for (index in 0 until array.length()) {
+                array.optJSONObject(index)
+                    ?.optString("folder_id")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let(ids::add)
+            }
+            after = answer.optString("next_after").takeIf { it.isNotEmpty() } ?: break
         }
+        return ids
     }
 
     internal companion object {
         const val TAG = "LiseurSyncCatalog"
         const val PAGE = 200
+
+        /**
+         * A page of folders. The catalog routes share one page-size
+         * cap, so asking for more is a `400` rather than a bigger page.
+         */
+        const val FOLDER_PAGE = 200
 
         /** A guard against a server that never says it is finished. */
         const val MAX_PAGES = 200
@@ -95,7 +122,8 @@ class LiseurSyncCatalogClient(
  * The shape is the same on every route (ADR-0015): contributors carry a
  * normalized role, so the author is picked rather than guessed; a book
  * may claim several series, and the shelf shows the first, which is the
- * order the catalog stored them in.
+ * order the catalog stored them in. A book is one file in one watched
+ * folder, so its file fields are flat rather than a list.
  */
 internal fun books(array: JSONArray?): List<RemoteBook> =
     (0 until (array?.length() ?: 0)).mapNotNull { index ->
@@ -106,18 +134,22 @@ private fun book(json: JSONObject): RemoteBook? {
     val id = json.optString("book_id").takeIf { it.isNotEmpty() } ?: return null
     val title = json.optString("title").takeIf { it.isNotEmpty() } ?: return null
     val series = json.optJSONArray("series")?.optJSONObject(0)
+    // A book the last complete pass did not find keeps its place and its
+    // reading history — a disconnected disk is not a deleted book — but
+    // there are no bytes to fetch, so it is offered without a download.
+    val present = json.optString("status") != "missing"
     return RemoteBook(
         remoteId = id,
         title = title,
         author = authors(json.optJSONArray("contributors")),
         coverHref = json.optString("cover_url").takeIf { it.isNotEmpty() },
-        downloadHref = "/v1/books/$id/download",
-        sizeBytes = firstFile(json.optJSONArray("files"))?.optLong("size_bytes")
-            ?.takeIf { it > 0 },
+        downloadHref = if (present) "/v1/books/$id/download" else null,
+        sizeBytes = json.optLong("size_bytes").takeIf { it > 0 },
         updatedAt = SyncOps.parseTime(json.optString("updated_at")),
         seriesName = series?.optString("name")?.takeIf { it.isNotEmpty() },
         seriesIndex = series?.takeIf { it.has("position") }?.optDouble("position"),
         seriesId = series?.optString("id")?.takeIf { it.isNotEmpty() },
+        sha256 = json.optString("sha256").takeIf { it.isNotEmpty() },
     )
 }
 

@@ -49,10 +49,10 @@ class LiseurSyncServerSetup(
     /**
      * Signs in and mints the device token to keep.
      *
-     * The full scope set is asked for; a server that will not grant
-     * `library-manage` to this account refuses the mint, and the retry
-     * without it leaves a perfectly good read-and-sync account that
-     * simply cannot upload.
+     * One mint, with every scope the app has: reading and syncing is
+     * all it does. Nothing writes to the catalog — books reach the
+     * server by being put in a folder it watches (ADR-0017) — so there
+     * is no scope here that a server might refuse.
      */
     private suspend fun signIn(baseUrl: String, credentials: RemoteCredentials.Basic): ServerCapabilities {
         val login = http.post(
@@ -67,13 +67,7 @@ class LiseurSyncServerSetup(
         val session = RemoteCredentials.Bearer(auth)
         val name = deviceName()
 
-        val minted = try {
-            mint(baseUrl, session, name, LiseurSyncApi.SCOPES_FULL)
-        } catch (e: IOException) {
-            if ((e as? RemoteHttpFailure)?.reason != SyncFailure.Forbidden) throw e
-            Log.i(TAG, "Full scope set refused; minting without library-manage")
-            mint(baseUrl, session, name, LiseurSyncApi.SCOPES_READ)
-        }
+        val minted = mint(baseUrl, session, name, LiseurSyncApi.SCOPES_FULL)
         val token = minted.optString("secret").takeIf { it.isNotEmpty() }
             ?: throw RemoteHttpFailure(SyncFailure.Malformed)
 
@@ -107,7 +101,6 @@ class LiseurSyncServerSetup(
         return ServerCapabilities(
             baseUrl = baseUrl,
             canDownload = LiseurSyncApi.SCOPE_LIBRARY_READ in scopes,
-            canUpload = LiseurSyncApi.SCOPE_LIBRARY_MANAGE in scopes,
             accountId = answer.optString("device_id").takeIf { it.isNotEmpty() },
             displayName = answer.optString("name").ifEmpty { "liseur-sync" },
             liseurToken = credentials.token,
