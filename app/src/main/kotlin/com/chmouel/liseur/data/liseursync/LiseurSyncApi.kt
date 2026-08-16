@@ -17,24 +17,27 @@ object LiseurSyncApi {
     const val CHANGES = "/v1/changes"
     const val HEADS = "/v1/heads"
     const val SESSIONS = "/v1/sessions"
-    const val LIBRARIES = "/v1/libraries"
+
+    /** The folders the server watches, which is where a catalog starts. */
+    const val FOLDERS = "/v1/folders"
 
     /** The scopes the app asks a token for. */
     const val SCOPE_SYNC = "sync"
     const val SCOPE_INSIGHTS = "read-insights"
     const val SCOPE_LIBRARY_READ = "library-read"
-    const val SCOPE_LIBRARY_MANAGE = "library-manage"
 
-    /** Every scope a full account wants, in one mint. */
+    /**
+     * Every scope a full account wants, in one mint.
+     *
+     * There is no scope for writing to the catalog: books reach a
+     * liseur-sync server by being put in a folder it watches, so the
+     * app only ever reads.
+     */
     val SCOPES_FULL = listOf(
         SCOPE_SYNC,
         SCOPE_INSIGHTS,
         SCOPE_LIBRARY_READ,
-        SCOPE_LIBRARY_MANAGE,
     )
-
-    /** What is left to ask for when a server will not grant manage. */
-    val SCOPES_READ = SCOPES_FULL - SCOPE_LIBRARY_MANAGE
 
     fun url(baseUrl: String, path: String): String = RemoteUrl.api(baseUrl, path)
 
@@ -45,17 +48,25 @@ object LiseurSyncApi {
     fun positions(baseUrl: String, workId: String, limit: Int): String =
         url(baseUrl, "/v1/works/$workId/positions?limit=$limit")
 
-    fun libraryBooks(baseUrl: String, library: String, cursor: String?, limit: Int): String =
+    /** One page of the folders this server watches. */
+    fun folders(baseUrl: String, after: String?, limit: Int): String =
         url(
             baseUrl,
-            "$LIBRARIES/$library/books?limit=$limit" +
+            "$FOLDERS?limit=$limit" +
+                (after?.let { "&after=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""),
+        )
+
+    fun folderBooks(baseUrl: String, folder: String, cursor: String?, limit: Int): String =
+        url(
+            baseUrl,
+            "$FOLDERS/$folder/books?limit=$limit" +
                 (cursor?.let { "&cursor=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""),
         )
 
-    fun librarySearch(baseUrl: String, library: String, query: String): String =
+    fun folderSearch(baseUrl: String, folder: String, query: String): String =
         url(
             baseUrl,
-            "$LIBRARIES/$library/search?q=" +
+            "$FOLDERS/$folder/search?q=" +
                 java.net.URLEncoder.encode(query, "UTF-8"),
         )
 
@@ -66,18 +77,12 @@ object LiseurSyncApi {
     fun bookDownload(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/download")
 
-    /** The book itself; `DELETE` here moves it to the trash. */
+    /** The book itself. */
     fun book(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId")
 
     fun bookCover(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/cover")
-
-    fun upload(baseUrl: String, library: String): String =
-        url(baseUrl, "$LIBRARIES/$library/upload")
-
-    fun ingestJob(baseUrl: String, jobId: String): String =
-        url(baseUrl, "/v1/ingest/jobs/$jobId")
 
     fun insightsSummary(baseUrl: String, range: String): String =
         url(baseUrl, "/v1/insights/summary?range=$range")

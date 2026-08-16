@@ -95,12 +95,6 @@ data class ServerCapabilities(
     /** The display name to show for the account. */
     val displayName: String,
     /**
-     * Whether this account may push EPUBs up to the server. Only
-     * liseur-sync has the notion; everywhere else uploading is not a
-     * thing the app offers, so the default is no.
-     */
-    val canUpload: Boolean = false,
-    /**
      * The liseur-sync device token minted or verified during setup.
      *
      * Setup signs in with a password and comes back holding a different

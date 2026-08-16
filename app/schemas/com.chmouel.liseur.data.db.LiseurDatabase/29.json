@@ -377,7 +377,7 @@
       },
       {
         "tableName": "remote_server",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `kind` TEXT NOT NULL, `base_url` TEXT NOT NULL, `username` TEXT, `password_cipher` TEXT, `api_key_cipher` TEXT, `account_id` TEXT, `user_id` INTEGER, `kobo_token` TEXT, `can_download` INTEGER NOT NULL, `added_at` INTEGER NOT NULL, `catalog_synced_at` INTEGER, `position_synced_at` INTEGER, `sync_token` TEXT, `liseur_token_cipher` TEXT, `sync_cursor_seq` INTEGER NOT NULL DEFAULT 0, `can_upload` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `kind` TEXT NOT NULL, `base_url` TEXT NOT NULL, `username` TEXT, `password_cipher` TEXT, `api_key_cipher` TEXT, `account_id` TEXT, `user_id` INTEGER, `kobo_token` TEXT, `can_download` INTEGER NOT NULL, `added_at` INTEGER NOT NULL, `catalog_synced_at` INTEGER, `position_synced_at` INTEGER, `sync_token` TEXT, `liseur_token_cipher` TEXT, `sync_cursor_seq` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -462,13 +462,6 @@
           {
             "fieldPath": "syncCursorSeq",
             "columnName": "sync_cursor_seq",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
-          },
-          {
-            "fieldPath": "canUpload",
-            "columnName": "can_upload",
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"

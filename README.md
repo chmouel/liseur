@@ -56,7 +56,7 @@ An open-source EPUB reader and [calibre-web](https://github.com/janeczku/calibre
 
 Your library gathers onto a single shelf, whether your books live in messy folders on your phone or on a self-hosted [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) or [liseur-sync](https://github.com/chmouel/liseur-sync) server. Books that belong to a series politely group into compact stacks that track your reading order, your progress, and the missing volumes you still need to hunt down. When you reach the final page of a novel, the next volume is already sitting there, gently enabling your binge-reading habits.
 
-When you switch between devices, you have the choice to have your place travel with you across your devices. Two-way synchronization with [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) and [liseur-sync](https://github.com/chmouel/liseur-sync) keeps your progress aligned — down to the exact sentence on Komga and liseur-sync, so you never have to play the guessing game of where you were. liseur-sync goes one further: standalone EPUB files that never came from a catalog sync their position too, matched by the file itself, and it accepts uploads of your local books.
+When you switch between devices, you have the choice to have your place travel with you across your devices. Two-way synchronization with [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) and [liseur-sync](https://github.com/chmouel/liseur-sync) keeps your progress aligned — down to the exact sentence on Komga and liseur-sync, so you never have to play the guessing game of where you were. liseur-sync goes one further: standalone EPUB files that never came from a catalog sync their position too, matched by the file itself. Its books come from folders it watches on the server, so anything you drop there shows up on the shelf.
 
 Everything runs privately and without distraction. There are no trackers, no analytics, no ads, and no attempts to sell you a monthly subscription for books you already own. Liseur only talks to the book servers and dictionary sources you choose to add.
 
@@ -68,7 +68,7 @@ Everything runs privately and without distraction. There are no trackers, no ana
 ## Related Projects
 
 - [liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur
-- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server — browse, download, upload, positions and reading stats
+- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server — watched folders, browse, download, positions and reading stats
 
 ## Development
 

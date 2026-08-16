@@ -21,7 +21,8 @@ import org.robolectric.annotation.Config
  *
  * What the shelf draws comes off one page shape (ADR-0015), so the
  * mapping is pinned hard: the author is picked by role rather than
- * guessed, and a walk that never ends is stopped rather than trusted.
+ * guessed, the file fields are read flat off the book (ADR-0017), and a
+ * walk that never ends is stopped rather than trusted.
  */
 @Config(sdk = [35], application = android.app.Application::class)
 @RunWith(RobolectricTestRunner::class)
@@ -41,16 +42,16 @@ class LiseurSyncCatalogClientTest {
     }
 
     @Test
-    fun `every readable library is walked, page by page`() = runTest {
+    fun `every folder is walked, page by page`() = runTest {
         server.enqueue(
             json(
-                """{"libraries":[
-                    {"library_id":"lib-1","name":"Main","role":"manage"},
-                    {"library_id":"lib-2","name":"Shared","role":"read"}]}
+                """{"folders":[
+                    {"folder_id":"f-1","name":"Main","kind":"calibre"},
+                    {"folder_id":"f-2","name":"Shared","kind":"plain"}]}
                 """.trimIndent(),
             ),
         )
-        // lib-1 answers a full page, so a cursor is followed.
+        // f-1 answers a full page, so a cursor is followed.
         server.enqueue(
             json("""{"books":[${book("b-1")}],"next_cursor":"c-1"}"""),
         )
@@ -65,14 +66,46 @@ class LiseurSyncCatalogClientTest {
         assertTrue(walk.complete)
         assertEquals(listOf(listOf("b-1"), listOf("b-2"), listOf("b-3")), pages)
         val targets = (0 until server.requestCount).map { server.takeRequest().target!! }
-        assertTrue(targets[1].contains("/v1/libraries/lib-1/books"))
+        assertTrue(targets[0].contains("/v1/folders?"))
+        assertTrue(targets[1].contains("/v1/folders/f-1/books"))
         assertTrue(targets[2].contains("cursor=c-1"))
-        assertTrue(targets[3].contains("/v1/libraries/lib-2/books"))
+        assertTrue(targets[3].contains("/v1/folders/f-2/books"))
+    }
+
+    @Test
+    fun `the folder listing itself is paged to the end`() = runTest {
+        // The listing pages like everything else, and a walk that read
+        // only the first page would silently hide a folder's books.
+        server.enqueue(
+            json("""{"folders":[{"folder_id":"f-1","name":"Main","kind":"plain"}],"next_after":"a-1"}"""),
+        )
+        server.enqueue(json("""{"folders":[{"folder_id":"f-2","name":"More","kind":"plain"}]}"""))
+        server.enqueue(json("""{"books":[${book("b-1")}]}"""))
+        server.enqueue(json("""{"books":[${book("b-2")}]}"""))
+
+        val seen = mutableListOf<String>()
+        val walk = client().allBooks(BASE, credentials) { page -> seen += page.map { it.remoteId } }
+
+        assertTrue(walk.complete)
+        assertEquals(listOf("b-1", "b-2"), seen)
+        val targets = (0 until server.requestCount).map { server.takeRequest().target!! }
+        assertTrue(targets[1].contains("after=a-1"))
+    }
+
+    @Test
+    fun `a page is never asked for more than the server allows`() = runTest {
+        // The catalog routes share one cap; asking above it is a 400,
+        // not a bigger page.
+        server.enqueue(json("""{"folders":[]}"""))
+
+        client().allBooks(BASE, credentials) {}
+
+        assertTrue(server.takeRequest().target!!.contains("limit=200"))
     }
 
     @Test
     fun `a walk that never ends is stopped and called incomplete`() = runTest {
-        server.enqueue(json("""{"libraries":[{"library_id":"lib-1","name":"Main","role":"read"}]}"""))
+        server.enqueue(json("""{"folders":[{"folder_id":"f-1","name":"Main","kind":"plain"}]}"""))
         repeat(LiseurSyncCatalogClient.MAX_PAGES) {
             server.enqueue(json("""{"books":[${book("b-x")}],"next_cursor":"c"}"""))
         }
@@ -83,21 +116,21 @@ class LiseurSyncCatalogClientTest {
     }
 
     @Test
-    fun `a book carries its author, series and file size off the page`() = runTest {
-        server.enqueue(json("""{"libraries":[{"library_id":"lib-1","name":"Main","role":"read"}]}"""))
+    fun `a book carries its author, series, digest and size off the page`() = runTest {
+        server.enqueue(json("""{"folders":[{"folder_id":"f-1","name":"Main","kind":"calibre"}]}"""))
         server.enqueue(
             json(
                 """{"books":[{
-                    "book_id":"b-1","library_id":"lib-1","title":"Iron Gold",
+                    "book_id":"b-1","folder_id":"f-1","title":"Iron Gold",
                     "status":"active","created_at":"2026-01-01T00:00:00Z",
                     "updated_at":"2026-08-15T08:30:34.105Z",
                     "cover_url":"/v1/books/b-1/cover",
+                    "media_type":"application/epub+zip","filename":"iron.epub",
+                    "sha256":"ab12","size_bytes":1126528,
                     "contributors":[
                         {"id":"a-1","name":"Pierce Brown","role":"author"},
                         {"id":"a-2","name":"calibre","role":"bkp"}],
-                    "series":[{"id":"s-1","name":"Red Rising","position":4.5}],
-                    "files":[{"file_id":"f-1","media_type":"application/epub+zip",
-                        "filename":"iron.epub","sha256":"ab12","size_bytes":1126528}]}]}
+                    "series":[{"id":"s-1","name":"Red Rising","position":4.5}]}]}
                 """.trimIndent(),
             ),
         )
@@ -111,6 +144,7 @@ class LiseurSyncCatalogClientTest {
         assertEquals(4.5, book.seriesIndex!!, 0.0)
         assertEquals("s-1", book.seriesId)
         assertEquals(1126528L, book.sizeBytes)
+        assertEquals("ab12", book.sha256)
         assertEquals("/v1/books/b-1/cover", book.coverHref)
         assertEquals("/v1/books/b-1/download", book.downloadHref)
         assertEquals(
@@ -120,8 +154,23 @@ class LiseurSyncCatalogClientTest {
     }
 
     @Test
+    fun `a book whose file is missing is kept, with nothing to download`() = runTest {
+        // A disconnected disk is not a deleted book: it keeps its place
+        // and its reading history, but there are no bytes to fetch.
+        server.enqueue(json("""{"folders":[{"folder_id":"f-1","name":"Main","kind":"plain"}]}"""))
+        server.enqueue(json("""{"books":[${book("b-1", status = "missing")}]}"""))
+
+        val page = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        client().allBooks(BASE, credentials) { page += it }
+
+        val book = page.single()
+        assertEquals("b-1", book.remoteId)
+        assertNull(book.downloadHref)
+    }
+
+    @Test
     fun `a book with no author or series still renders`() = runTest {
-        server.enqueue(json("""{"libraries":[{"library_id":"lib-1","name":"Main","role":"read"}]}"""))
+        server.enqueue(json("""{"folders":[{"folder_id":"f-1","name":"Main","kind":"plain"}]}"""))
         server.enqueue(json("""{"books":[${book("b-1")}]}"""))
 
         val page = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
@@ -134,12 +183,12 @@ class LiseurSyncCatalogClientTest {
     }
 
     @Test
-    fun `search asks every library and joins the answers`() = runTest {
+    fun `search asks every folder and joins the answers`() = runTest {
         server.enqueue(
             json(
-                """{"libraries":[
-                    {"library_id":"lib-1","name":"Main","role":"read"},
-                    {"library_id":"lib-2","name":"Shared","role":"read"}]}
+                """{"folders":[
+                    {"folder_id":"f-1","name":"Main","kind":"plain"},
+                    {"folder_id":"f-2","name":"Shared","kind":"plain"}]}
                 """.trimIndent(),
             ),
         )
@@ -150,15 +199,17 @@ class LiseurSyncCatalogClientTest {
 
         assertEquals(listOf("b-1", "b-2"), found.map { it.remoteId })
         val second = (0 until server.requestCount).map { server.takeRequest().target!! }[1]
+        assertTrue(second.contains("/v1/folders/f-1/search"))
         assertTrue(second.contains("q=dune"))
     }
 
     private fun client() = LiseurSyncCatalogClient()
 
-    private fun book(id: String) =
-        """{"book_id":"$id","library_id":"lib-1","title":"A Book","status":"active",
+    private fun book(id: String, status: String = "active") =
+        """{"book_id":"$id","folder_id":"f-1","title":"A Book","status":"$status",
             "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z",
-            "contributors":[],"series":[],"files":[]}
+            "media_type":"application/epub+zip","filename":"a.epub","sha256":"ff01",
+            "size_bytes":0,"contributors":[],"series":[]}
         """.trimIndent()
 
     private fun json(body: String) = MockResponse(code = 200, body = body)

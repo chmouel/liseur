@@ -49,4 +49,13 @@ data class RemoteBook(
      * about the series; it never decides which books belong together.
      */
     val seriesId: String? = null,
+    /**
+     * The digest of the file's content, when the server publishes one.
+     *
+     * liseur-sync does on every catalog book; calibre-web and Komga do
+     * not. It says what the bytes *are*, so a book already sitting on
+     * this device can be recognised as the same file without fetching
+     * it again, and it is never an address of anything on the server.
+     */
+    val sha256: String? = null,
 )

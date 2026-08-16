@@ -327,7 +327,6 @@ class RemoteAccountRepository(
                 // the whole log — and a different account starts at
                 // nothing, because its log is a different world.
                 syncCursorSeq = existing?.syncCursorSeq ?: 0,
-                canUpload = capabilities.canUpload,
                 liseurAccountId = capabilities.liseurAccountId
                     ?: existing?.liseurAccountId,
             ),

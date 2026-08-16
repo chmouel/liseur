@@ -795,10 +795,6 @@ abstract class LiseurDatabase : RoomDatabase() {
                     "ALTER TABLE `remote_server` ADD COLUMN `sync_cursor_seq` " +
                         "INTEGER NOT NULL DEFAULT 0",
                 )
-                connection.execSQL(
-                    "ALTER TABLE `remote_server` ADD COLUMN `can_upload` " +
-                        "INTEGER NOT NULL DEFAULT 0",
-                )
 
                 val promoted = run {
                     val statement = connection.prepare(
@@ -808,13 +804,13 @@ abstract class LiseurDatabase : RoomDatabase() {
                             `password_cipher`, `api_key_cipher`, `account_id`,
                             `user_id`, `kobo_token`, `can_download`, `added_at`,
                             `catalog_synced_at`, `position_synced_at`, `sync_token`,
-                            `liseur_token_cipher`, `sync_cursor_seq`, `can_upload`
+                            `liseur_token_cipher`, `sync_cursor_seq`
                         )
                         SELECT 1, 'LISEUR_SYNC', s.`base_url`, s.`username`,
                             NULL, NULL, s.`device_id`,
                             NULL, NULL, 0, s.`added_at`,
                             NULL, s.`synced_at`, NULL,
-                            s.`token_cipher`, s.`cursor_seq`, 0
+                            s.`token_cipher`, s.`cursor_seq`
                         FROM `sync_account` s
                         WHERE NOT EXISTS (SELECT 1 FROM `remote_server`)
                         """.trimIndent(),
