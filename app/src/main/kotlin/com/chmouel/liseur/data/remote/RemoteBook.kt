@@ -49,6 +49,12 @@ data class RemoteBook(
      * about the series; it never decides which books belong together.
      */
     val seriesId: String? = null,
+    /** Every series membership the server sent, in its own order. */
+    val series: List<RemoteSeriesMembership> = emptyList(),
+    /** Where the first effective series membership came from, if known. */
+    val seriesSource: String? = series.firstOrNull()?.source,
+    /** liseur-sync's watched folder id, needed when renumbering a series. */
+    val folderId: String? = null,
     /**
      * The digest of the file's content, when the server publishes one.
      *
@@ -58,4 +64,11 @@ data class RemoteBook(
      * it again, and it is never an address of anything on the server.
      */
     val sha256: String? = null,
+)
+
+data class RemoteSeriesMembership(
+    val id: String?,
+    val name: String,
+    val position: Double?,
+    val source: String?,
 )

@@ -380,6 +380,7 @@ class SeriesMetadataDaoTest {
     }
 
     private suspend fun refreshCatalog(seriesName: String?, seriesIndex: Double?) {
+        val existing = db.bookDao().getByUrl(BOOK_URL)
         db.bookDao().updateCatalogFields(
             url = BOOK_URL,
             title = "A Book",
@@ -392,6 +393,13 @@ class SeriesMetadataDaoTest {
             remotePageCount = null,
             catalogSeriesName = seriesName,
             catalogSeriesIndex = seriesIndex,
+            catalogFolderId = null,
+            catalogSeriesSource = null,
+            userSeriesName = existing?.userSeriesName,
+            userSeriesIndex = existing?.userSeriesIndex,
+            seriesOverridden = existing?.seriesOverridden ?: false,
+            indexOverridden = existing?.indexOverridden ?: false,
+            userSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
             seriesId = null,
         )
     }

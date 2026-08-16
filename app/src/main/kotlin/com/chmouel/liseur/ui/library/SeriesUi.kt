@@ -354,6 +354,7 @@ internal fun SeriesSummaryLine(shelf: SeriesShelf, modifier: Modifier = Modifier
 internal fun SeriesAssignDialog(
     book: Book,
     seriesNames: List<String>,
+    canResetSharedSeries: Boolean = false,
     onConfirm: (String?, Double?) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
@@ -367,6 +368,7 @@ internal fun SeriesAssignDialog(
 
     val typed = name.text.trim()
     val choices = remember(typed, seriesNames) { seriesChoices(typed, seriesNames) }
+    val sourceLabel = seriesSourceLabel(book)
 
     val pick: (String) -> Unit = { chosen ->
         // Tapping the series already picked unpicks it, which is how a
@@ -395,6 +397,16 @@ internal fun SeriesAssignDialog(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                sourceLabel?.let { label ->
+                    item {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
                 item {
                     OutlinedTextField(
@@ -470,7 +482,9 @@ internal fun SeriesAssignDialog(
                     }
                 }
                 // Only worth offering once there is something to undo.
-                if (book.seriesOverridden) {
+                if (book.seriesOverridden ||
+                    (canResetSharedSeries && book.catalogSeriesSource == "shared")
+                ) {
                     item {
                         TextButton(
                             onClick = onReset,
@@ -538,6 +552,15 @@ private fun SeriesChoiceRow(name: String, selected: Boolean, onClick: () -> Unit
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+@Composable
+private fun seriesSourceLabel(book: Book): String? = when {
+    book.seriesOverridden -> stringResource(R.string.series_source_personal)
+    book.catalogSeriesSource == "folder" -> stringResource(R.string.series_source_folder)
+    book.catalogSeriesSource == "shared" -> stringResource(R.string.series_source_shared)
+    book.catalogSeriesSource == "personal" -> stringResource(R.string.series_source_personal)
+    else -> null
 }
 
 /**

@@ -28,6 +28,7 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
+import com.chmouel.liseur.data.liseursync.LiseurSyncSeriesClient
 import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
@@ -237,6 +238,9 @@ class AppContainer(context: Context) {
             ServerKind.CALIBRE to koboSync,
             ServerKind.KOMGA to komgaSync,
             ServerKind.LISEUR_SYNC to liseurSync,
+        ),
+        seriesClaims = mapOf(
+            ServerKind.LISEUR_SYNC to LiseurSyncSeriesClient(),
         ),
         // calibre-web is the only one that deletes. Komga treats it as
         // an administrator's job, and a liseur-sync book is a file in a

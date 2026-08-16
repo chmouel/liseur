@@ -25,18 +25,20 @@ object LiseurSyncApi {
     const val SCOPE_SYNC = "sync"
     const val SCOPE_INSIGHTS = "read-insights"
     const val SCOPE_LIBRARY_READ = "library-read"
+    const val SCOPE_LIBRARY_MANAGE = "library-manage"
 
     /**
      * Every scope a full account wants, in one mint.
      *
-     * There is no scope for writing to the catalog: books reach a
-     * liseur-sync server by being put in a folder it watches, so the
-     * app only ever reads.
+     * Books still reach a liseur-sync server only by being put in a
+     * watched folder. The one catalog thing the app can now write is a
+     * reader's claim about which series a book belongs to.
      */
     val SCOPES_FULL = listOf(
         SCOPE_SYNC,
         SCOPE_INSIGHTS,
         SCOPE_LIBRARY_READ,
+        SCOPE_LIBRARY_MANAGE,
     )
 
     fun url(baseUrl: String, path: String): String = RemoteUrl.api(baseUrl, path)
@@ -80,6 +82,19 @@ object LiseurSyncApi {
     /** The book itself. */
     fun book(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId")
+
+    fun bookSeries(baseUrl: String, bookId: String): String =
+        url(baseUrl, "/v1/books/$bookId/series")
+
+    fun bookSeries(baseUrl: String, bookId: String, scope: String): String =
+        url(
+            baseUrl,
+            "/v1/books/$bookId/series?scope=" +
+                java.net.URLEncoder.encode(scope, "UTF-8"),
+        )
+
+    fun seriesOrder(baseUrl: String, folder: String, seriesId: String): String =
+        url(baseUrl, "$FOLDERS/$folder/entities/series/$seriesId/order")
 
     fun bookCover(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/cover")

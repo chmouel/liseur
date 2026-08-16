@@ -90,6 +90,10 @@ data class ServerCapabilities(
     val baseUrl: String,
     /** Whether this account may fetch book files at all. */
     val canDownload: Boolean,
+    /** Whether the account can write liseur-sync personal series claims. */
+    val canManageLibrary: Boolean = false,
+    /** Whether the account can also write the shared catalog layer. */
+    val canAdmin: Boolean = false,
     /** Who the server says we are, for telling two logins apart. */
     val accountId: String?,
     /** The display name to show for the account. */
@@ -180,4 +184,41 @@ interface BookDeleter {
         credentials: RemoteCredentials,
         book: Book,
     ): ServerDeleteResult
+}
+
+data class SeriesLayers(
+    val bookId: String,
+    val source: String?,
+    val series: List<RemoteSeriesMembership>,
+    val folder: List<RemoteSeriesMembership>,
+    val shared: List<RemoteSeriesMembership>?,
+    val personal: List<RemoteSeriesMembership>?,
+)
+
+interface SeriesClaimSync {
+    suspend fun setPersonalSeries(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        book: Book,
+        name: String?,
+        index: Double?,
+    ): SeriesLayers?
+
+    suspend fun resetPersonalSeries(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        book: Book,
+    ): SeriesLayers?
+
+    suspend fun resetSharedSeries(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        book: Book,
+    ): SeriesLayers?
+
+    suspend fun reorderPersonalSeries(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        booksInOrder: List<Book>,
+    ): Boolean
 }

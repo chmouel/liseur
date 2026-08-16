@@ -677,6 +677,7 @@ fun LibraryScreen(
         SeriesAssignDialog(
             book = book,
             seriesNames = state.seriesNames,
+            canResetSharedSeries = state.canResetSharedSeries,
             onConfirm = { name, index ->
                 onSetSeries(book, name, index)
                 editSeriesOf = null

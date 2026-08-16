@@ -47,7 +47,7 @@ class LiseurSyncServerSetupTest {
         server.enqueue(
             json(
                 """{"token_id":"t-1","device_id":"d-1","scopes":["sync","read-insights",
-                    "library-read"],"secret":"device-secret"}
+                    "library-read","library-manage"],"secret":"device-secret"}
                 """.trimIndent(),
             ),
         )
@@ -56,7 +56,7 @@ class LiseurSyncServerSetupTest {
         server.enqueue(
             json(
                 """{"id":"t-1","device_id":"d-1","name":"Test phone",
-                    "scopes":["sync","read-insights","library-read"],
+                    "scopes":["sync","read-insights","library-read","library-manage"],
                     "account_id":"acc-9"}
                 """.trimIndent(),
             ),
@@ -69,22 +69,20 @@ class LiseurSyncServerSetupTest {
         assertEquals("d-1", capabilities.accountId)
         assertEquals("acc-9", capabilities.liseurAccountId)
         assertTrue(capabilities.canDownload)
+        assertTrue(capabilities.canManageLibrary)
         assertEquals("ada", capabilities.displayName)
 
         // The password went to the login route and nowhere else, and
-        // the mint asked for everything in one token.
+        // the mint asked for every reader-facing scope in one token.
         val login = server.takeRequest()
         assertTrue(login.target!!.endsWith("/v1/login"))
         val minted = server.takeRequest()
         assertTrue(minted.target!!.endsWith("/v1/tokens"))
         val body = JSONObject(minted.body!!.utf8())
-        // Reading and syncing is all the app does: there is no scope
-        // here for writing to the catalog, so there is nothing a server
-        // might refuse and no second mint to fall back to.
         val asked = body.getJSONArray("scopes")
-        assertEquals(3, asked.length())
+        assertEquals(4, asked.length())
         assertEquals(
-            setOf("sync", "read-insights", "library-read"),
+            setOf("sync", "read-insights", "library-read", "library-manage"),
             (0 until asked.length()).map { asked.getString(it) }.toSet(),
         )
         assertTrue(server.takeRequest().target!!.endsWith("/v1/token"))
@@ -121,6 +119,41 @@ class LiseurSyncServerSetupTest {
         assertTrue(
             (result as SetupResult.Failure).reason is SetupFailure.InsufficientScopes,
         )
+    }
+
+    @Test
+    fun `admin scope implies library-manage and library-read`() = runTest {
+        server.enqueue(
+            json(
+                """{"id":"t-a","device_id":"d-a","name":"Admin",
+                    "scopes":["sync","admin"]}
+                """.trimIndent(),
+            ),
+        )
+
+        val result = connect(RemoteCredentials.Bearer("admin-token"))
+
+        val capabilities = (result as SetupResult.Success).capabilities
+        assertTrue(capabilities.canAdmin)
+        assertTrue(capabilities.canManageLibrary)
+        assertTrue(capabilities.canDownload)
+    }
+
+    @Test
+    fun `library-manage scope implies library-read`() = runTest {
+        server.enqueue(
+            json(
+                """{"id":"t-m","device_id":"d-m","name":"Manager",
+                    "scopes":["sync","library-manage"]}
+                """.trimIndent(),
+            ),
+        )
+
+        val result = connect(RemoteCredentials.Bearer("manage-token"))
+
+        val capabilities = (result as SetupResult.Success).capabilities
+        assertTrue(capabilities.canManageLibrary)
+        assertTrue(capabilities.canDownload)
     }
 
     @Test

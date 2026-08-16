@@ -45,11 +45,12 @@ abstract class SeriesOrderDao {
         UPDATE books
         SET user_series_index = :index,
             series_index_override = 1,
+            user_series_updated_at = :updatedAt,
             series_index = CASE WHEN series_name IS NULL THEN NULL ELSE :index END
         WHERE url = :url
         """,
     )
-    protected abstract suspend fun setIndexOverride(url: String, index: Double?)
+    protected abstract suspend fun setIndexOverride(url: String, index: Double?, updatedAt: Long)
 
     /**
      * Gives the numbering of these books back to their sources.
@@ -98,7 +99,8 @@ abstract class SeriesOrderDao {
     @Transaction
     open suspend fun renumber(key: String, urlsInOrder: List<String>): Boolean {
         if (!stillHolds(key, urlsInOrder)) return false
-        urlsInOrder.forEachIndexed { i, url -> setIndexOverride(url, (i + 1).toDouble()) }
+        val now = System.currentTimeMillis()
+        urlsInOrder.forEachIndexed { i, url -> setIndexOverride(url, (i + 1).toDouble(), now) }
         return true
     }
 
