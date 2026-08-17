@@ -5,7 +5,10 @@ import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
+import android.view.View
+import android.view.ViewGroup
 import android.view.Window
+import android.webkit.WebView
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -27,6 +30,8 @@ import kotlinx.coroutines.launch
 import org.readium.r2.navigator.OverflowableNavigator
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.indexOfFirstWithHref
 
 /**
  * Kindle-style page turn: the departing page is snapshotted, the book
@@ -83,18 +88,33 @@ fun PageTurnOverlay(state: PageTurnEffectState, modifier: Modifier = Modifier) {
  * preference is on and the effect is available, the turn uses the
  * sliding snapshot; otherwise it falls back to the navigator's plain
  * slide, or an instant jump when animations are disabled.
+ *
+ * A scrolled book is a different movement altogether, and [isScrolling]
+ * says so: see [scrollScreenful].
  */
 @OptIn(ExperimentalReadiumApi::class)
 class PageTurner(
     private val effect: PageTurnEffectState,
     private val isAnimated: () -> Boolean,
     private val isEffectSuppressed: () -> Boolean,
+    private val isScrolling: () -> Boolean = { false },
 ) {
     var navigator: OverflowableNavigator? = null
     var window: Window? = null
 
+    /**
+     * The book being read, for the one thing the navigator cannot be
+     * asked once page turns are off while scrolling: what comes after
+     * the chapter on screen.
+     */
+    var publication: Publication? = null
+
     fun turn(forward: Boolean) {
         val nav = navigator ?: return
+        if (isScrolling()) {
+            scrollScreenful(nav, forward)
+            return
+        }
         if (!isAnimated()) {
             navigate(nav, forward, animated = false)
             return
@@ -133,4 +153,98 @@ class PageTurner(
         animated: Boolean,
     ): Boolean =
         if (forward) nav.goForward(animated) else nav.goBackward(animated)
+
+    /**
+     * Moves a screenful through a scrolled book, and on to the next
+     * chapter once this one runs out.
+     *
+     * Readium turns a whole chapter at a time while scrolling, which is
+     * not what a volume key or a D-pad means, so page turns are switched
+     * off in that mode (`disablePageTurnsWhileScrolling`) and the
+     * movement is asked of the page itself. The document knows where it
+     * is in its own units and stops at its own ends; arithmetic on view
+     * heights, densities and web view scale does not.
+     */
+    private fun scrollScreenful(nav: OverflowableNavigator, forward: Boolean) {
+        val web = visibleWebView(nav.publicationView) ?: run {
+            navigate(nav, forward, animated = false)
+            return
+        }
+        web.evaluateJavascript(scrollScreenfulScript(forward, smooth = isAnimated())) { result ->
+            if (result?.contains(AT_END) == true) stepChapter(forward)
+        }
+    }
+
+    /**
+     * Opens the chapter before or after the one on screen.
+     *
+     * Going back lands at the end of the chapter before, because that is
+     * where a reader moving backwards is heading; the beginning is a
+     * whole chapter further than they asked for.
+     *
+     * The reading order is searched with Readium's own comparison, the
+     * one that answered when this locator was made.
+     */
+    fun stepChapter(forward: Boolean): Boolean {
+        val nav = navigator ?: return false
+        val pub = publication ?: return false
+        val readingOrder = pub.readingOrder
+        val index = readingOrder.indexOfFirstWithHref(nav.currentLocator.value.href)
+            ?: return false
+        val next = readingOrder.getOrNull(index + if (forward) 1 else -1) ?: return false
+        val locator = pub.locatorFromLink(next) ?: return nav.go(next, animated = false)
+        return nav.go(
+            if (forward) locator else locator.copyWithLocations(progression = 1.0),
+            animated = false,
+        )
+    }
 }
+
+/**
+ * The one screenful of scrolling a volume key or a D-pad press means in
+ * a scrolled book, or [AT_END] when the page is already against the edge
+ * it was asked to move towards and the chapter has to change instead.
+ *
+ * Every measurement is the document's own. `scrollingElement` is what
+ * Readium scrolls in this mode, and its `clientHeight` is the part of it
+ * the reader can see: `window.innerHeight` is the web view, which is
+ * taller by whatever padding Readium CSS puts around the text, and using
+ * it would call the end of the chapter a screenful before the last line
+ * was read.
+ */
+internal fun scrollScreenfulScript(forward: Boolean, smooth: Boolean): String {
+    val edge = if (forward) "top >= max - $EDGE_SLACK" else "top <= $EDGE_SLACK"
+    val step = if (forward) SCREENFUL else -SCREENFUL
+    val behavior = if (smooth) "smooth" else "auto"
+    return """
+        (function() {
+          var e = document.scrollingElement || document.documentElement;
+          var page = e.clientHeight || window.innerHeight;
+          var max = Math.max(0, e.scrollHeight - page);
+          var top = e.scrollTop;
+          if ($edge) { return "$AT_END"; }
+          e.scrollTo({
+            top: Math.max(0, Math.min(max, top + page * $step)),
+            behavior: "$behavior"
+          });
+          return "$SCROLLED";
+        })();
+    """.trimIndent()
+}
+
+/**
+ * A little less than a screen, so the line that was at the edge is still
+ * there to be picked up again.
+ */
+private const val SCREENFUL = 0.9
+
+/**
+ * Scroll offsets are fractional, and a chapter read to its last pixel
+ * can land a hair short of the end. Two pixels of a chapter are not
+ * worth a key press that does nothing.
+ */
+private const val EDGE_SLACK = 2
+
+internal const val AT_END = "at-end"
+
+private const val SCROLLED = "scrolled"

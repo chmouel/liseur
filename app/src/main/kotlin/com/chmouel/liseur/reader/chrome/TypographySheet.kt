@@ -52,7 +52,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
@@ -83,6 +85,8 @@ fun TypographySheet(
     onColumnModeChanged: (ColumnMode) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChanged: (Boolean) -> Unit,
+    scrollMode: Boolean,
+    onScrollModeChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -103,15 +107,27 @@ fun TypographySheet(
                 lineHeight = prefs.lineHeight,
                 pageMargins = prefs.pageMargins,
                 columnMode = prefs.columnMode,
+                // A scrolled chapter is one running column, so the count
+                // has nothing to divide and the control would take a tap
+                // and change nothing.
+                showColumns = !scrollMode,
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
                 onColumnModeChanged = onColumnModeChanged,
             )
             FooterModeDropdown(selected = prefs.footerMode, onSelected = onFooterModeChanged)
-            PageTurnAnimationToggle(
-                enabled = prefs.pageTurnAnimation,
-                onChanged = onPageTurnAnimationChanged,
+            ScrollModeToggle(
+                enabled = scrollMode,
+                onChanged = onScrollModeChanged,
             )
+            // Nothing lifts off the screen when the text is scrolled, so
+            // the animation has no page to describe.
+            if (!scrollMode) {
+                PageTurnAnimationToggle(
+                    enabled = prefs.pageTurnAnimation,
+                    onChanged = onPageTurnAnimationChanged,
+                )
+            }
             KeepScreenOnToggle(
                 enabled = keepScreenOn,
                 onChanged = onKeepScreenOnChanged,
@@ -353,6 +369,36 @@ private fun BrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
     }
 }
 
+/**
+ * Reads this book by scrolling rather than by turning pages.
+ *
+ * Settings holds the answer for the library, and it is what a book
+ * starts from; flipping it here sets this book apart for good, the same
+ * way the screen switch below does, so a later change in Settings leaves
+ * this book where it was put.
+ */
+@Composable
+private fun ScrollModeToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = enabled,
+                role = Role.Switch,
+                onValueChange = onChanged,
+            ),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.settings_scroll_mode),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = null)
+    }
+}
+
 @Composable
 private fun PageTurnAnimationToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
     Row(
@@ -394,11 +440,6 @@ private fun KeepScreenOnToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
             Text(
                 text = "Keep the screen on",
                 style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = "For this book. Settings decides for the others.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Switch(checked = enabled, onCheckedChange = null)
@@ -445,6 +486,7 @@ private fun LayoutControls(
     lineHeight: Double?,
     pageMargins: Double?,
     columnMode: ColumnMode,
+    showColumns: Boolean,
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
@@ -475,7 +517,7 @@ private fun LayoutControls(
         // Only offered where it can be honoured. Two columns need room
         // for two columns, and on a phone there is none: the control
         // would sit there taking a tap and changing nothing.
-        if (widthClass().isAtLeastMedium) {
+        if (showColumns && widthClass().isAtLeastMedium) {
             SectionLabel("Columns")
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 val options = ColumnMode.entries

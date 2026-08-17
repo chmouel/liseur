@@ -29,6 +29,9 @@ class ReaderTapZonesTest {
     private fun Screen.at(fx: Float, fy: Float) =
         zoneAt(w * fx, h * fy, w, h, density)
 
+    private fun Screen.scrolledAt(fx: Float, fy: Float) =
+        zoneAt(w * fx, h * fy, w, h, density, scrolling = true)
+
     @Test
     fun `phone zones are exactly what they always were`() {
         // Just inside the old 14% strip.
@@ -79,5 +82,18 @@ class ReaderTapZonesTest {
         // forward and back. Left is always BACK here, even though an RTL
         // book turns it into a forward page.
         assertEquals(Zone.BACK, phone.at(0.05f, 0.9f))
+    }
+
+    @Test
+    fun `a scrolled book has no side to turn`() {
+        // Every corner and edge of every screen: there is no page to
+        // turn, so a tap can only mean the menu.
+        for (screen in listOf(phone, eink, tablet, wideCompact)) {
+            for (fx in listOf(0.02f, 0.25f, 0.5f, 0.75f, 0.98f)) {
+                for (fy in listOf(0.02f, 0.25f, 0.5f, 0.75f, 0.98f)) {
+                    assertEquals(Zone.CHROME, screen.scrolledAt(fx, fy))
+                }
+            }
+        }
     }
 }

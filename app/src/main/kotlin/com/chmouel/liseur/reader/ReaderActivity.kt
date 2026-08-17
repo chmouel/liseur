@@ -115,14 +115,24 @@ class ReaderActivity : FragmentActivity() {
                             // Rotating a tablet into a narrow window is the
                             // same event, which is why the width goes through
                             // effectiveFor() rather than being read once.
+                            //
+                            // Scrolling is a key for the same reason: whether
+                            // page turns are disabled is fixed when the
+                            // navigator is configured, and turning scrolling on
+                            // has to take the sideways chapter jumps with it.
                             val prefs by viewModel.prefs.collectAsStateWithLifecycle()
+                            val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
                             val columnMode = prefs.columnMode.effectiveFor(widthClass())
-                            remember(s.navigatorFactory, columnMode) {
+                            remember(s.navigatorFactory, columnMode, scrollMode) {
                                 s.navigatorFactory.createFragmentFactory(
                                     initialLocator = viewModel.lastLocator ?: s.initialLocator,
-                                    initialPreferences = prefs.toEpubPreferences(columnMode),
+                                    initialPreferences = prefs.toEpubPreferences(
+                                        columnMode = columnMode,
+                                        scroll = scrollMode,
+                                    ),
                                     configuration = epubNavigatorConfiguration(
                                         columnMode = columnMode,
+                                        scroll = scrollMode,
                                         onTextSelected = viewModel::onTextSelected,
                                     ),
                                 ).also { supportFragmentManager.fragmentFactory = it }
@@ -144,6 +154,8 @@ class ReaderActivity : FragmentActivity() {
                                 onNavigatorChanged = { navigator = it },
                                 keepScreenOnFlow = viewModel.keepScreenOn,
                                 onKeepScreenOnChanged = viewModel::setKeepScreenOn,
+                                scrollModeFlow = viewModel.scrollMode,
+                                onScrollModeChanged = viewModel::setScrollMode,
                                 onPageTurnerChanged = { pageTurner = it },
                                 onChromeVisibleChanged = { chromeVisible = it },
                                 onPrefsAction = remember {

@@ -16,6 +16,7 @@ import androidx.sqlite.execSQL
         BookAnnotation::class,
         BookTypography::class,
         BookScreen::class,
+        BookReadingMode::class,
         ReadingSession::class,
         SyncPeerState::class,
         BookFingerprintRow::class,
@@ -23,7 +24,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 33,
+    version = 34,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -39,6 +40,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun annotationDao(): BookAnnotationDao
     abstract fun typographyDao(): BookTypographyDao
     abstract fun bookScreenDao(): BookScreenDao
+    abstract fun bookReadingModeDao(): BookReadingModeDao
     abstract fun seriesExtraDao(): SeriesExtraDao
 
     companion object {
@@ -942,6 +944,24 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Lets a single book be read by scrolling, or by turning pages,
+         * against whatever the app-wide setting says.
+         */
+        val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_reading_mode` (
+                        `book_url` TEXT NOT NULL,
+                        `scroll` INTEGER NOT NULL,
+                        PRIMARY KEY(`book_url`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -978,6 +998,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_30_31,
             MIGRATION_31_32,
             MIGRATION_32_33,
+            MIGRATION_33_34,
         )
     }
 }

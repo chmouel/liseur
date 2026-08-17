@@ -311,6 +311,8 @@
     <string name="settings_resume_detail">Skip the library when you left off mid-book.</string>
     <string name="settings_keep_screen_on">Keep the screen on</string>
     <string name="settings_keep_screen_on_detail">The screen stays awake while a book is open, however your device is set to sleep. Costs battery, and a single book can be set apart from the reader\'s own switch.</string>
+    <string name="settings_scroll_mode">Read by scrolling</string>
+    <string name="settings_scroll_mode_detail">The chapter runs on as one long page instead of being broken into pages you turn. A single book can be set apart from the reader\'s own switch.</string>
     <string name="settings_eink">E-ink screen</string>
     <string name="settings_eink_detail">Drops animation, which electronic paper smears rather than draws. Detected automatically; set it yourself if the guess is wrong.</string>
     <string name="eink_auto">Auto</string>

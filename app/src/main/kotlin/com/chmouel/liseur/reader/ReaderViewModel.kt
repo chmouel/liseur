@@ -18,6 +18,9 @@ import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookScreen
 import com.chmouel.liseur.data.db.BookScreenDao
+import com.chmouel.liseur.data.db.BookReadingMode
+import com.chmouel.liseur.data.db.BookReadingModeDao
+import com.chmouel.liseur.data.db.scrollsWith
 import com.chmouel.liseur.data.db.keepsScreenOnWith
 import com.chmouel.liseur.data.db.BookTypography
 import com.chmouel.liseur.data.db.BookTypographyDao
@@ -97,6 +100,7 @@ class ReaderViewModel(
     private val annotationDao: BookAnnotationDao,
     private val typographyDao: BookTypographyDao,
     private val bookScreenDao: BookScreenDao,
+    private val readingModeDao: BookReadingModeDao,
     private val library: LocalLibraryRepository,
     private val prefsRepo: ReaderPreferencesRepository,
     private val readingPace: ReadingPaceRepository,
@@ -406,6 +410,15 @@ class ReaderViewModel(
     val keepScreenOn: StateFlow<Boolean> = appSettings.settings
         .map { it.keepScreenOn }
         .combine(bookScreenDao.observe(bookId)) { global, own -> own.keepsScreenOnWith(global) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Whether this book is read by scrolling: the app-wide setting,
+     * unless the book has been answered for on its own.
+     */
+    val scrollMode: StateFlow<Boolean> = appSettings.settings
+        .map { it.scrollMode }
+        .combine(readingModeDao.observe(bookId)) { global, own -> own.scrollsWith(global) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Most recent position, used to persist progress and to survive recreation. */
@@ -979,6 +992,16 @@ class ReaderViewModel(
         bookScreenDao.upsert(BookScreen(bookUrl = bookId, keepScreenOn = enabled))
     }
 
+    /**
+     * Answers the scrolling question for this book alone, for the same
+     * reason [setKeepScreenOn] does: the switch is reached from inside a
+     * book, so it is about that book, and a later change to the app-wide
+     * setting has no business undoing it.
+     */
+    fun setScrollMode(enabled: Boolean) = viewModelScope.launch {
+        readingModeDao.upsert(BookReadingMode(bookUrl = bookId, scroll = enabled))
+    }
+
     fun setColumnMode(mode: ColumnMode) =
         viewModelScope.launch { prefsRepo.setColumnMode(mode) }
 
@@ -1033,6 +1056,7 @@ class ReaderViewModel(
                     annotationDao = container.database.annotationDao(),
                     typographyDao = container.database.typographyDao(),
                     bookScreenDao = container.database.bookScreenDao(),
+                    readingModeDao = container.database.bookReadingModeDao(),
                     library = container.libraryRepository,
                     prefsRepo = container.readerPreferences,
                     readingPace = container.readingPace,

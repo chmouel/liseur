@@ -86,6 +86,9 @@ enum class DefinitionTarget(val id: String) {
  * @param keepScreenOn The screen stays awake while a book is open. Off
  *   until asked for: it costs battery, and it overrides a device setting
  *   the reader chose themselves.
+ * @param scrollMode Books are read by scrolling rather than by turning
+ *   pages. The default for the whole library; a book read the other way
+ *   is set apart from inside it.
  * @param librarySort How the library grid is arranged.
  * @param librarySortReversed The library order read back to front.
  * @param libraryFilters What the library grid is narrowed to.
@@ -105,6 +108,7 @@ data class AppSettings(
     val volumeKeysTurnPages: Boolean = true,
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = false,
+    val scrollMode: Boolean = false,
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
     val libraryFilters: LibraryFilters = LibraryFilters.None,
@@ -127,6 +131,7 @@ class AppSettingsRepository(private val context: Context) {
         val VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+        val SCROLL_MODE = booleanPreferencesKey("scroll_mode")
         val LIBRARY_SORT = stringPreferencesKey("library_sort")
         val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
         val LIBRARY_FILTERS = stringPreferencesKey("library_filters")
@@ -160,6 +165,7 @@ class AppSettingsRepository(private val context: Context) {
             volumeKeysTurnPages = p[Keys.VOLUME_KEYS] ?: true,
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: false,
+            scrollMode = p[Keys.SCROLL_MODE] ?: false,
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
             libraryFilters = LibraryFilters(
@@ -194,6 +200,10 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setKeepScreenOn(enabled: Boolean) {
         context.appSettingsStore.edit { it[Keys.KEEP_SCREEN_ON] = enabled }
+    }
+
+    suspend fun setScrollMode(enabled: Boolean) {
+        context.appSettingsStore.edit { it[Keys.SCROLL_MODE] = enabled }
     }
 
     suspend fun setLibrarySort(sort: LibrarySort) {
