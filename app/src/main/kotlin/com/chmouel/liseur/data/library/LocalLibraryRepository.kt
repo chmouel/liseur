@@ -241,6 +241,7 @@ class LocalLibraryRepository(
                 annotationDao.deleteForBook(url.toString())
                 sessionDao.deleteForBook(url.toString())
                 bookDao.forgetReadingHistory(url.toString())
+                bookDao.clearSeriesForReplacedWork(url.toString())
             }
         } finally {
             publication.close()

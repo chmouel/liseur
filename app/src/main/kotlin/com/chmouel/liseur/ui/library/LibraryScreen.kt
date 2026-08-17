@@ -168,6 +168,7 @@ fun LibraryScreen(
     onDeleteFromServer: (Book) -> Unit,
     onSetSeries: (Book, String?, Double?) -> Unit,
     onResetSeries: (Book) -> Unit,
+    onResetSharedSeries: (Book) -> Unit,
     deleteFailures: Flow<DeleteFailure>,
     onRefresh: () -> Unit,
     onSetSort: (LibrarySort) -> Unit,
@@ -690,6 +691,10 @@ fun LibraryScreen(
             },
             onReset = {
                 onResetSeries(book)
+                editSeriesOf = null
+            },
+            onResetShared = {
+                onResetSharedSeries(book)
                 editSeriesOf = null
             },
             onDismiss = { editSeriesOf = null },

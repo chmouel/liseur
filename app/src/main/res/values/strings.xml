@@ -81,6 +81,7 @@
     <string name="series_assign_none">No series matches “%s”.</string>
     <string name="series_assign_volume">Book number (optional)</string>
     <string name="series_assign_reset">Restore the original series</string>
+    <string name="series_assign_reset_shared">Restore the series for everyone</string>
     <string name="series_assign_clear_search">Clear the search</string>
     <string name="series_assign_jump">Jump to %s</string>
     <string name="series_assign_selected">Chosen</string>

@@ -6,7 +6,9 @@ import com.chmouel.liseur.domain.seriesKey
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,7 +76,12 @@ class SeriesMetadataDaoTest {
     fun `a catalog update cannot replace a newer manual series edit`() = runTest {
         seed(seriesName = "Old Catalog Series", seriesIndex = 1.0)
         db.bookDao().setSeriesOverride(BOOK_URL, "My Collection", 4.0, updatedAt = 30)
-        db.bookDao().setRemoteSeriesId(BOOK_URL, "current-series-id")
+        db.bookDao().acknowledgeSeriesClaim(
+            url = BOOK_URL,
+            expectedUserSeriesUpdatedAt = 30,
+            seriesId = "current-series-id",
+            personalSeriesUpdatedAt = 30,
+        )
 
         db.bookDao().updateCatalogFields(
             url = BOOK_URL,
@@ -344,6 +351,19 @@ class SeriesMetadataDaoTest {
     }
 
     @Test
+    fun `clearing numbering advances the series claim timestamp`() = runTest {
+        seed(seriesName = "Catalog Series", seriesIndex = 4.0)
+        db.seriesOrderDao().renumber(seriesKey("Catalog Series"), listOf(BOOK_URL))
+        val before = db.bookDao().getByUrl(BOOK_URL)?.userSeriesUpdatedAt
+
+        db.seriesOrderDao().clearOrder(seriesKey("Catalog Series"), listOf(BOOK_URL))
+
+        val after = db.bookDao().getByUrl(BOOK_URL)?.userSeriesUpdatedAt
+        assertNotNull(after)
+        assertTrue(after!! >= before!!)
+    }
+
+    @Test
     fun `renumbering a shelf that changed underneath writes nothing`() = runTest {
         seed(seriesName = "Catalog Series", seriesIndex = 4.0)
         db.bookDao().upsert(
@@ -450,6 +470,37 @@ class SeriesMetadataDaoTest {
             expectedUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
             seriesId = null,
         )
+    }
+
+    /**
+     * Giving a shelf's numbering back is a different mutation depending
+     * on what else the reader claimed. A book they only numbered has
+     * nothing left in its personal layer, so that layer goes; a book
+     * they also filed by hand keeps the claim, minus the number.
+     */
+    @Test
+    fun `clearing numbers on a book filed only by the catalog asks for a reset`() = runTest {
+        seed(seriesName = "Catalog Series", seriesIndex = 4.0)
+
+        assertTrue(db.seriesOrderDao().clearOrder(seriesKey("Catalog Series"), listOf(BOOK_URL)))
+
+        val book = db.bookDao().getByUrl(BOOK_URL)
+        assertEquals(true, book?.seriesClaimPending)
+        assertEquals(true, book?.seriesClaimReset)
+        assertEquals(false, book?.indexOverridden)
+    }
+
+    @Test
+    fun `clearing numbers on a book filed by hand keeps its claim`() = runTest {
+        seed(seriesName = "Catalog Series", seriesIndex = 4.0)
+        db.bookDao().setSeriesOverride(BOOK_URL, "My Shelf", 4.0)
+
+        assertTrue(db.seriesOrderDao().clearOrder(seriesKey("My Shelf"), listOf(BOOK_URL)))
+
+        val book = db.bookDao().getByUrl(BOOK_URL)
+        assertEquals(true, book?.seriesClaimPending)
+        assertEquals(false, book?.seriesClaimReset)
+        assertEquals(true, book?.seriesOverridden)
     }
 
     private companion object {

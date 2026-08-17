@@ -46,6 +46,8 @@ abstract class SeriesOrderDao {
         SET user_series_index = :index,
             series_index_override = 1,
             user_series_updated_at = :updatedAt,
+            series_claim_pending = 1,
+            series_claim_reset = 0,
             series_index = CASE WHEN series_name IS NULL THEN NULL ELSE :index END
         WHERE url = :url
         """,
@@ -71,6 +73,12 @@ abstract class SeriesOrderDao {
         UPDATE books
         SET user_series_index = NULL,
             series_index_override = 0,
+            user_series_updated_at = :updatedAt,
+            series_claim_pending = 1,
+            -- A book the reader only numbered has nothing else in its personal
+            -- layer, so giving the numbering back means dropping that layer. A
+            -- book they also filed by hand keeps its claim, minus the number.
+            series_claim_reset = CASE WHEN series_override = 1 THEN 0 ELSE 1 END,
             series_index = CASE
                 WHEN series_override = 1 THEN NULL
                 WHEN COALESCE(catalog_series_name, file_series_name) IS NULL THEN NULL
@@ -79,7 +87,7 @@ abstract class SeriesOrderDao {
         WHERE url IN (:urls)
         """,
     )
-    protected abstract suspend fun clearIndexOverrides(urls: List<String>)
+    protected abstract suspend fun clearIndexOverrides(urls: List<String>, updatedAt: Long)
 
     /**
      * Numbers a series 1…n in the order given.
@@ -108,7 +116,7 @@ abstract class SeriesOrderDao {
     @Transaction
     open suspend fun clearOrder(key: String, urls: List<String>): Boolean {
         if (!stillHolds(key, urls)) return false
-        clearIndexOverrides(urls)
+        clearIndexOverrides(urls, System.currentTimeMillis())
         return true
     }
 
