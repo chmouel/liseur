@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -214,6 +216,11 @@ fun ReaderScreen(
             isAnimated = { prefsFlow.value.pageTurnAnimation && !eInkNow },
             isEffectSuppressed = { chromeVisibleNow },
             isScrolling = { scrollModeNow },
+            // Readium reads this off the book rather than the reader:
+            // vertical text is always scrolled, because CSS columns
+            // cannot paginate it, so a book can be scrolling here with
+            // the setting switched off.
+            isVerticalText = { navigatorNow?.settings?.value?.verticalText == true },
         )
     }
 
@@ -305,6 +312,7 @@ fun ReaderScreen(
                 ScrollEdgeTurner(
                     navigator = it,
                     isScrolling = { scrollModeNow },
+                    isVerticalText = { it.settings.value.verticalText },
                     onStepChapter = { forward -> pageTurner.stepChapter(forward) },
                 ),
             ).onEach(it::addInputListener)
@@ -349,9 +357,11 @@ fun ReaderScreen(
         // detection this needs, and no more than the hardware costs on a
         // phone that has one.
         //
-        // A scrolled book refuses even that: it has no last line to
-        // protect, and whatever the hole covers is a moment's scrolling
-        // away.
+        // A scrolled book keeps only the sides of it. Text moving up the
+        // screen passes under a hole at the top and out again, so the
+        // reader loses a word for a moment and gets it back; a hole on
+        // the side, which is where it lands in landscape, sits over the
+        // same end of every line and never gives any of them back.
         // Keyed on the column mode: the count is part of the ReadiumCSS
         // properties the navigator is constructed with and cannot be
         // changed on a live fragment, so the fragment is rebuilt instead.
@@ -366,7 +376,9 @@ fun ReaderScreen(
                     .fillMaxSize()
                     .then(
                         if (scrollMode) {
-                            Modifier
+                            Modifier.windowInsetsPadding(
+                                WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal),
+                            )
                         } else {
                             Modifier
                                 .windowInsetsPadding(WindowInsets.displayCutout)
