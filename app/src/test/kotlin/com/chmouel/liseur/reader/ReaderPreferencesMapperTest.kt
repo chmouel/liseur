@@ -68,4 +68,20 @@ class ReaderPreferencesMapperTest {
         val two = ReaderPrefs(columnMode = ColumnMode.TWO).toEpubPreferences()
         assertEquals(one.copy(columnCount = null), two.copy(columnCount = null))
     }
+
+    @Test
+    fun `a book is paginated unless it is asked to scroll`() {
+        assertEquals(false, ReaderPrefs().toEpubPreferences().scroll)
+        assertEquals(
+            true,
+            ReaderPrefs().toEpubPreferences(scroll = true).scroll,
+        )
+    }
+
+    @Test
+    fun `scrolling is the only thing the scroll flag changes`() {
+        val paginated = ReaderPrefs().toEpubPreferences(scroll = false)
+        val scrolled = ReaderPrefs().toEpubPreferences(scroll = true)
+        assertEquals(paginated.copy(scroll = null), scrolled.copy(scroll = null))
+    }
 }

@@ -52,13 +52,29 @@ An open-source EPUB reader and [calibre-web](https://github.com/janeczku/calibre
 
 ## About Liseur
 
-[Liseur](#whats-in-a-name) is designed to get out of the way and let you read. Pages open cleanly from edge to edge with the Readium engine, set in open typefaces like Literata, Vollkorn, Atkinson Hyperlegible, and Inter, or whatever quirky typography the publisher insisted on. Four dedicated reading themes (Light, Sepia, Dark, and true OLED Black) let you settle into a story at 2 a.m. without being blinded by your phone. Margins, line spacing, brightness, and page turns stay quietly out of your way. A discreet footer shows the time remaining in the chapter (just enough to convince yourself that one more chapter won't hurt), while highlights, margin notes, bookmarks, and instant dictionary lookups remain right under your fingers when you stumble upon a word you pretend to know.
+[Liseur](#whats-in-a-name) is designed to get out of the way and let you read.
+Pages open cleanly from edge to edge with the Readium engine, set in open
+typefaces like Literata, Vollkorn, Atkinson Hyperlegible, and Inter, or
+whatever quirky typography the publisher insisted on. Four dedicated reading
+themes (Light, Sepia, Dark, and true OLED Black) let you settle into a story at
+2 a.m. without being blinded by your phone. Margins, line spacing, brightness,
+and page turns stay quietly out of your way. Prefer one long scroll to turning
+pages? Switch it on for the whole library, or for the one book that wants it,
+and keep scrolling past the end of a chapter to fall into the next one.
+
+A discreet footer shows the time remaining in the chapter (just enough to
+convince yourself that one more chapter won't hurt), while highlights, margin
+notes, bookmarks, and instant dictionary lookups remain right under your
+fingers when you stumble upon a word you pretend to know.
 
 Your library gathers onto a single shelf, whether your books live in messy folders on your phone or on a self-hosted [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) or [liseur-sync](https://github.com/chmouel/liseur-sync) server. Books that belong to a series politely group into compact stacks that track your reading order, your progress, and the missing volumes you still need to hunt down. When you reach the final page of a novel, the next volume is already sitting there, gently enabling your binge-reading habits.
 
 When you switch between devices, you have the choice to have your place travel with you across your devices. Two-way synchronization with [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) and [liseur-sync](https://github.com/chmouel/liseur-sync) keeps your progress aligned — down to the exact sentence on Komga and liseur-sync, so you never have to play the guessing game of where you were. liseur-sync goes one further: standalone EPUB files that never came from a catalog sync their position too, matched by the file itself. Its books come from folders it watches on the server, so anything you drop there shows up on the shelf.
 
-Everything runs privately and without distraction. There are no trackers, no analytics, no ads, and no attempts to sell you a monthly subscription for books you already own. Liseur only talks to the book servers and dictionary sources you choose to add.
+Everything runs privately and without distraction. There are no trackers, no
+analytics, no ads, and no attempts to sell you a monthly subscription for books
+you already own. Liseur only talks to the book servers and dictionary sources
+you choose to add.
 
 ## Install
 
@@ -76,7 +92,7 @@ See [DEVELOPER.md](DEVELOPER.md) for build instructions and architecture notes.
 
 ## What's in a name?
 
-**Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified, which is useful when you are caught reading under the covers well past bedtime.
+**Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified just like the English word *leisure*, which is exactly what you should be doing when you curl up with a good book.
 
 ## Author
 

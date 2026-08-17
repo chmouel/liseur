@@ -14,16 +14,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
-import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
-import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -100,6 +98,7 @@ import com.chmouel.liseur.reader.chrome.PageTurnOverlay
 import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
+import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.TypographySheet
@@ -160,6 +159,8 @@ fun ReaderScreen(
     onEnableDictionary: () -> Unit,
     keepScreenOnFlow: StateFlow<Boolean>,
     onKeepScreenOnChanged: (Boolean) -> Unit,
+    scrollModeFlow: StateFlow<Boolean>,
+    onScrollModeChanged: (Boolean) -> Unit,
     goTo: SharedFlow<Locator>,
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
@@ -174,6 +175,8 @@ fun ReaderScreen(
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
     val keepScreenOn by keepScreenOnFlow.collectAsStateWithLifecycle()
+    val scrollMode by scrollModeFlow.collectAsStateWithLifecycle()
+    val scrollModeNow by rememberUpdatedState(scrollMode)
     val columnMode = prefs.columnMode.effectiveFor(widthClass())
 
     // The activity decides what a keyboard's arrows mean, and the
@@ -206,8 +209,11 @@ fun ReaderScreen(
             // which is the one thing electronic paper cannot draw: it
             // arrives as a trail of half-erased pages. The instant jump
             // the preference already had is what e-paper wants anyway.
+            // A scrolled book has no page to lift off, and reads the same
+            // answer as whether its scrolling glides or jumps.
             isAnimated = { prefsFlow.value.pageTurnAnimation && !eInkNow },
             isEffectSuppressed = { chromeVisibleNow },
+            isScrolling = { scrollModeNow },
         )
     }
 
@@ -228,13 +234,15 @@ fun ReaderScreen(
     // The column mode is filtered through the window width for the same
     // reason it is in ReaderActivity: a narrow window cannot carry a
     // choice made on a wide one, and the control to undo it is hidden.
-    LaunchedEffect(navigator, columnMode) {
+    LaunchedEffect(navigator, columnMode, scrollMode) {
         val nav = navigator ?: return@LaunchedEffect
         // The factory already built this navigator with the current
         // preferences. Submitting that same value once more reflows the
         // freshly opened book and emits a second restoration locator,
         // which must not be recorded as a page the reader turned.
-        prefsFlow.drop(1).collect { nav.submitPreferences(it.toEpubPreferences(columnMode)) }
+        prefsFlow.drop(1).collect {
+            nav.submitPreferences(it.toEpubPreferences(columnMode, scrollMode))
+        }
     }
 
     // Picking the selection up from the navigator when it tells us the
@@ -282,20 +290,30 @@ fun ReaderScreen(
         val nav = navigator
         pageTurner.navigator = nav
         pageTurner.window = (view.context as? Activity)?.window
+        pageTurner.publication = publication
         onPageTurnerChanged(if (nav != null) pageTurner else null)
-        val listener = nav?.let {
-            ReaderTapZones(
-                navigator = it,
-                isChromeVisible = { chromeVisibleNow },
-                onTurnPage = pageTurner::turn,
-                onShowChrome = { chromeVisible = true },
-                onHideChrome = { chromeVisible = false },
-            ).also(it::addInputListener)
+        val listeners = nav?.let {
+            listOf(
+                ReaderTapZones(
+                    navigator = it,
+                    isChromeVisible = { chromeVisibleNow },
+                    isScrolling = { scrollModeNow },
+                    onTurnPage = pageTurner::turn,
+                    onShowChrome = { chromeVisible = true },
+                    onHideChrome = { chromeVisible = false },
+                ),
+                ScrollEdgeTurner(
+                    navigator = it,
+                    isScrolling = { scrollModeNow },
+                    onStepChapter = { forward -> pageTurner.stepChapter(forward) },
+                ),
+            ).onEach(it::addInputListener)
         }
         onDispose {
-            if (nav != null && listener != null) nav.removeInputListener(listener)
+            if (nav != null) listeners?.forEach(nav::removeInputListener)
             pageTurner.navigator = null
             pageTurner.window = null
+            pageTurner.publication = null
             onPageTurnerChanged(null)
             onNavigatorChanged(null)
         }
@@ -310,26 +328,51 @@ fun ReaderScreen(
             .fillMaxSize()
             .background(prefs.theme.background),
     ) {
-        // The page keeps its own breathing room: Readium's own padding
-        // is switched off (see dimens.xml) because it is applied after
-        // the page is laid out, which cuts the last line in half.
+        // The page runs the whole screen in both modes. Readium's own
+        // padding is switched off (see dimens.xml) because it is applied
+        // after the page is laid out, which cuts the last line in half;
+        // the small margin here is applied before the page loads, and is
+        // the only thing between the text and the edges of the screen.
         //
-        // The bars and the cutout are measured *ignoring visibility*, so
-        // hiding the chrome does not change the height Readium paginates
-        // against. Otherwise every page would be re-laid-out on each tap,
-        // and a line would end up hidden under the gesture bar or the
-        // notch — close enough to fit that the page becomes scrollable by
-        // a few pixels, which is exactly the itch we are scratching.
+        // The system bars used to be inset out of the way. They are
+        // hidden while reading, so all that space bought was a band of
+        // background at the top and bottom of every page. They are not
+        // inset now, and because the layout no longer depends on where
+        // the bars are, showing and hiding the chrome cannot reflow the
+        // page either, which was the other half of what the insets were
+        // for.
+        //
+        // The camera hole is the one thing still kept clear of a page
+        // that is turned, because a line behind it is a line that never
+        // comes back. The inset is the hole's own height on the hole's
+        // own edge — zero on a phone that has none, which is all the
+        // detection this needs, and no more than the hardware costs on a
+        // phone that has one.
+        //
+        // A scrolled book refuses even that: it has no last line to
+        // protect, and whatever the hole covers is a moment's scrolling
+        // away.
         // Keyed on the column mode: the count is part of the ReadiumCSS
         // properties the navigator is constructed with and cannot be
         // changed on a live fragment, so the fragment is rebuilt instead.
         // The factory hands it lastLocator, so the page stays where it was.
-        key(columnMode) {
+        //
+        // Scrolling is keyed for the same reason: whether a sideways
+        // swipe turns a page is fixed at construction too, and it has to
+        // stop turning them when the pages become one long column.
+        key(columnMode, scrollMode) {
             AndroidFragment<EpubNavigatorFragment>(
                 modifier = Modifier
                     .fillMaxSize()
-                    .windowInsetsPadding(readerInsets())
-                    .padding(top = 12.dp, bottom = 26.dp),
+                    .then(
+                        if (scrollMode) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .windowInsetsPadding(WindowInsets.displayCutout)
+                                .padding(top = 12.dp, bottom = 26.dp)
+                        },
+                    ),
             ) { fragment ->
                 navigator = fragment
                 fragment.view?.let(::consumeInsetsForReadium)
@@ -409,7 +452,10 @@ fun ReaderScreen(
                         }
                     },
                 )
-            } else if (jumpBack == null && catchUp == null && nextUp == null) {
+            } else if (!scrollMode && jumpBack == null && catchUp == null && nextUp == null) {
+                // A scrolled page runs under this corner, so a footer
+                // left drawn there prints itself over the text. The
+                // figures are one tap away with the rest of the chrome.
                 ReadingFooter(
                     progress = progress,
                     mode = prefs.footerMode,
@@ -574,6 +620,8 @@ fun ReaderScreen(
             onColumnModeChanged = onPrefsAction.setColumnMode,
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
+            scrollMode = scrollMode,
+            onScrollModeChanged = onScrollModeChanged,
             onDismiss = { showTypography = false },
         )
     }
@@ -837,25 +885,17 @@ fun ReaderErrorScreen(message: String, onBack: () -> Unit) {
 }
 
 /**
- * The space a page of text may actually use: everything but the system bars
- * and the display cutout, whether or not the bars happen to be on screen.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun readerInsets(): WindowInsets =
-    WindowInsets.systemBarsIgnoringVisibility.union(WindowInsets.displayCutout)
-
-/**
  * Stops the window insets at Readium's own view.
  *
  * Readium lays its web view out inside a `CoordinatorLayout`, which offsets
  * its children by whatever insets reach it. Compose does not consume insets
- * on behalf of the views it hosts, so they arrive here a second time even
- * though [readerInsets] has already made room for them: the web view ends up
- * pushed down by the height of the status bar, hanging that far past the
- * bottom of the pager that clips it. Readium paginates against the web view's
- * full height, so the text in that hidden strip — a line or two of every
- * page — is laid out and then never drawn, and the reader simply loses it.
+ * on behalf of the views it hosts, so the status bar's height is added under
+ * the page: the web view ends up pushed down by that much, hanging as far
+ * past the bottom of the pager that clips it. Readium paginates against the
+ * web view's full height, so the text in that hidden strip — a line or two
+ * of every page — is laid out and then never drawn, and the reader simply
+ * loses it. The page is meant to run the whole screen, so nothing gets to
+ * move it.
  */
 private fun consumeInsetsForReadium(view: View) {
     ViewCompat.setOnApplyWindowInsetsListener(view) { _, _ -> WindowInsetsCompat.CONSUMED }

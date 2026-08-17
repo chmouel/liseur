@@ -89,6 +89,7 @@ fun SettingsScreen(
     onResumeLastBook: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
     onGroupSeries: (Boolean) -> Unit,
+    onScrollMode: (Boolean) -> Unit,
     onDefinitionTarget: (DefinitionTarget) -> Unit,
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
@@ -249,6 +250,13 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_resume_detail),
                         checked = settings.resumeLastBook,
                         onCheckedChange = onResumeLastBook,
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = stringResource(R.string.settings_scroll_mode),
+                        subtitle = stringResource(R.string.settings_scroll_mode_detail),
+                        checked = settings.scrollMode,
+                        onCheckedChange = onScrollMode,
                     )
                     RowDivider()
                     SwitchRow(

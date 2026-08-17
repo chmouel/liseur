@@ -27,6 +27,11 @@ import kotlin.math.abs
  * any tap on the page dismisses it. Page turns are delegated to
  * [onTurnPage] so they can run the page-turn effect.
  *
+ * A book read by scrolling has no page to turn, so the whole page
+ * becomes the chrome zone and the text is moved by dragging it. Side
+ * taps there would scroll by a screenful with no page-turn to make
+ * sense of it, and would take the tap the reader has anywhere else.
+ *
  * The zones are proportional, which is right for turning pages — a
  * third of the page is a third of the page whatever the page is — but
  * wrong for the chrome. Two fifths of a phone is a thumb's worth of
@@ -39,6 +44,7 @@ import kotlin.math.abs
 class ReaderTapZones(
     private val navigator: OverflowableNavigator,
     private val isChromeVisible: () -> Boolean,
+    private val isScrolling: () -> Boolean = { false },
     private val onTurnPage: (forward: Boolean) -> Unit,
     private val onShowChrome: () -> Unit,
     private val onHideChrome: () -> Unit,
@@ -58,7 +64,7 @@ class ReaderTapZones(
         val dp = view.resources.displayMetrics.density
         val rtl = navigator.overflow.value.readingProgression == ReadingProgression.RTL
 
-        when (zoneAt(event.point.x, event.point.y, width, height, dp)) {
+        when (zoneAt(event.point.x, event.point.y, width, height, dp, isScrolling())) {
             Zone.CHROME -> onShowChrome()
             Zone.BACK -> onTurnPage(rtl)
             Zone.FORWARD -> onTurnPage(!rtl)
@@ -101,6 +107,9 @@ class ReaderTapZones(
          *
          * Split out from the tap handling so the shape of the page can be
          * checked at any screen size without a navigator to tap on.
+         *
+         * [scrolling] answers the whole page at once: there is nothing to
+         * turn, so every tap is a tap on the chrome.
          */
         fun zoneAt(
             x: Float,
@@ -108,7 +117,9 @@ class ReaderTapZones(
             width: Float,
             height: Float,
             density: Float,
+            scrolling: Boolean = false,
         ): Zone {
+            if (scrolling) return Zone.CHROME
             val fx = x / width
             val fy = y / height
             val capped = width / density >= WidthClass.MEDIUM_MIN_DP

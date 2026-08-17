@@ -21,14 +21,22 @@ import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.ExperimentalReadiumApi
 
-/** Maps the app's reading preferences onto Readium's EPUB preferences. */
+/**
+ * Maps the app's reading preferences onto Readium's EPUB preferences.
+ *
+ * [scroll] is not part of [ReaderPrefs]: it is answered per book against
+ * an app-wide default, so it arrives from the reader's own flow rather
+ * than from the shared reading settings.
+ */
 @OptIn(ExperimentalReadiumApi::class)
 fun ReaderPrefs.toEpubPreferences(
     columnMode: ColumnMode = this.columnMode,
+    scroll: Boolean = false,
 ): EpubPreferences =
     EpubPreferences(
         fontFamily = font.cssName?.let { FontFamily(it) },
         fontSize = fontSize,
+        scroll = scroll,
         theme = when (theme) {
             ReaderTheme.LIGHT -> Theme.LIGHT
             ReaderTheme.SEPIA -> Theme.SEPIA
@@ -122,14 +130,21 @@ fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode = when {
  * The system's own selection menu is refused so the app can put its own
  * bar next to the words instead: the platform bar floats where it likes,
  * offers actions a book has no use for, and cannot show highlight colours.
+ *
+ * [scroll] switches off Readium's page turns, which in a scrolled book
+ * are a whole chapter at a time: a sideways swipe would throw the reader
+ * out of the chapter they are in the middle of, and the volume keys are
+ * given a screenful of scrolling instead (see `PageTurner`).
  */
 @OptIn(ExperimentalReadiumApi::class)
 fun epubNavigatorConfiguration(
     columnMode: ColumnMode = ColumnMode.Default,
+    scroll: Boolean = false,
     onTextSelected: () -> Unit = {},
 ): EpubNavigatorFragment.Configuration =
     EpubNavigatorFragment.Configuration {
         servedAssets = listOf("fonts/.*")
+        disablePageTurnsWhileScrolling = scroll
         readiumCssRsProperties = when (columnMode) {
             ColumnMode.AUTO -> RsProperties()
             ColumnMode.ONE -> RsProperties(colCount = ColCount.ONE)

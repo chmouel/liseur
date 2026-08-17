@@ -256,6 +256,7 @@ private fun LiseurApp(settings: AppSettings) {
                         repository.editLibraryFilters { it.copy(groupBySeries = grouped) }
                     }
                 },
+                onScrollMode = { scope.launch { repository.setScrollMode(it) } },
                 onDefinitionTarget = {
                     scope.launch { repository.setDefinitionTarget(it) }
                 },
