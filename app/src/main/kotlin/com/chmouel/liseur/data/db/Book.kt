@@ -143,6 +143,12 @@ data class Book(
     @ColumnInfo(name = "series_override") val seriesOverridden: Boolean = false,
     /** When this device last changed its personal series claim. */
     @ColumnInfo(name = "user_series_updated_at") val userSeriesUpdatedAt: Long? = null,
+    /** A local personal claim that has not yet been acknowledged by liseur-sync. */
+    @ColumnInfo(name = "series_claim_pending") val seriesClaimPending: Boolean = false,
+    /** Whether the pending claim removes the personal layer instead of setting it. */
+    @ColumnInfo(name = "series_claim_reset") val seriesClaimReset: Boolean = false,
+    /** The last personal-layer revision observed from liseur-sync. */
+    @ColumnInfo(name = "personal_series_updated_at") val personalSeriesUpdatedAt: Long? = null,
     /**
      * Whether the reader has set this book's place in its series by
      * hand, by typing a number or by dragging the shelf into order.
