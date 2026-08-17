@@ -251,6 +251,11 @@ private fun LiseurApp(settings: AppSettings) {
                 onEInkMode = { scope.launch { repository.setEInkMode(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
+                onGroupSeries = { grouped ->
+                    scope.launch {
+                        repository.editLibraryFilters { it.copy(groupBySeries = grouped) }
+                    }
+                },
                 onDefinitionTarget = {
                     scope.launch { repository.setDefinitionTarget(it) }
                 },

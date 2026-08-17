@@ -328,6 +328,8 @@
     <string name="settings_dictionary_site_invalid">Needs to be an https address, like https://fr.wiktionary.org</string>
     <string name="settings_dictionary_site_reset">Use the default</string>
     <string name="settings_library">Library</string>
+    <string name="settings_group_series">Group series</string>
+    <string name="settings_group_series_detail">Show the books of a series as one pile on the shelf, alongside your other books.</string>
     <string name="settings_remote_library">Remote libraries</string>
     <string name="settings_export_import">Export and import</string>
     <string name="settings_library_help_title">Book servers</string>

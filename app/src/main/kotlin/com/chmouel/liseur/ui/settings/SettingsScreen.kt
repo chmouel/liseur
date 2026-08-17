@@ -88,6 +88,7 @@ fun SettingsScreen(
     onEInkMode: (EInkMode) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
+    onGroupSeries: (Boolean) -> Unit,
     onDefinitionTarget: (DefinitionTarget) -> Unit,
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
@@ -223,6 +224,15 @@ fun SettingsScreen(
                             )
                         } ?: stringResource(R.string.settings_account_detail),
                         onClick = onOpenAccount,
+                    )
+                }
+
+                SettingsGroup(stringResource(R.string.settings_library)) {
+                    SwitchRow(
+                        title = stringResource(R.string.settings_group_series),
+                        subtitle = stringResource(R.string.settings_group_series_detail),
+                        checked = settings.libraryFilters.groupBySeries,
+                        onCheckedChange = onGroupSeries,
                     )
                 }
 

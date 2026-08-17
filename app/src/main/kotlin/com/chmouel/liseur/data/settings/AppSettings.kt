@@ -164,7 +164,7 @@ class AppSettingsRepository(private val context: Context) {
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
             libraryFilters = LibraryFilters(
                 options = LibraryFilters.parse(p[Keys.LIBRARY_FILTERS]),
-                groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: false,
+                groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: true,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             definitionTarget = DefinitionTarget.fromId(p[Keys.DEFINITION_TARGET]),
@@ -223,7 +223,7 @@ class AppSettingsRepository(private val context: Context) {
             val filters = edit(
                 LibraryFilters(
                     options = LibraryFilters.parse(p[Keys.LIBRARY_FILTERS]),
-                    groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: false,
+                    groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: true,
                 ),
             )
             p[Keys.LIBRARY_FILTERS] = filters.serialise()
