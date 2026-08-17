@@ -29,6 +29,8 @@ class LiseurSyncSeriesClient(
         val body = JSONObject()
             .put("scope", PERSONAL)
             .put("series", JSONArray().also { array -> if (item != null) array.put(item) })
+        book.userSeriesUpdatedAt?.let { body.put("client_ts", SyncOps.formatTime(it)) }
+        book.personalSeriesUpdatedAt?.let { body.put("if_updated_at", SyncOps.formatTime(it)) }
         return layers(http.put(LiseurSyncApi.bookSeries(baseUrl, id), credentials, body))
     }
 
@@ -51,7 +53,14 @@ class LiseurSyncSeriesClient(
         scope: String,
     ): SeriesLayers? {
         val id = book.remoteUuid ?: return null
-        return layers(http.delete(LiseurSyncApi.bookSeries(baseUrl, id, scope), credentials))
+        val clientTs = book.userSeriesUpdatedAt?.let(SyncOps::formatTime)
+        val ifUpdatedAt = book.personalSeriesUpdatedAt?.let(SyncOps::formatTime)
+        return layers(
+            http.delete(
+                LiseurSyncApi.bookSeries(baseUrl, id, scope, clientTs, ifUpdatedAt),
+                credentials,
+            ),
+        )
     }
 
     override suspend fun reorderPersonalSeries(
@@ -126,6 +135,9 @@ class LiseurSyncSeriesClient(
             folder = series(json.optJSONArray("folder")),
             shared = json.optJSONArray("shared")?.let(::series),
             personal = json.optJSONArray("personal")?.let(::series),
+            sharedUpdatedAt = SyncOps.parseTime(json.optString("shared_updated_at")),
+            personalUpdatedAt = SyncOps.parseTime(json.optString("personal_updated_at")),
+            outcome = json.optString("outcome").takeIf { it.isNotEmpty() },
         )
     }
 }

@@ -51,8 +51,10 @@ data class RemoteBook(
     val seriesId: String? = null,
     /** Every series membership the server sent, in its own order. */
     val series: List<RemoteSeriesMembership> = emptyList(),
-    /** Where the first effective series membership came from, if known. */
+    /** Where the effective series claim came from, even when it is empty. */
     val seriesSource: String? = series.firstOrNull()?.source,
+    /** When liseur-sync's winning personal or shared claim was changed. */
+    val seriesClaimUpdatedAt: Long? = null,
     /** liseur-sync's watched folder id, needed when renumbering a series. */
     val folderId: String? = null,
     /**

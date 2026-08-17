@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.liseursync
 
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -110,6 +111,7 @@ object SyncOps {
 
     fun parseTime(text: String?): Long? {
         if (text.isNullOrEmpty()) return null
+        runCatching { return Instant.parse(text).toEpochMilli() }
         // Fractional seconds are optional on the wire, and the server
         // trims trailing zeroes, so both shapes have to parse.
         for (pattern in TIME_PATTERNS) {

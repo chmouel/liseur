@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.liseursync
 
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.SeriesNameTaken
 import java.net.InetAddress
@@ -100,6 +101,58 @@ class LiseurSyncSeriesClientTest {
         assertEquals("DELETE", request.method)
         assertEquals("/v1/entities/series/s-1/name?scope=personal", request.target)
     }
+
+    @Test
+    fun `series mutations send the local claim timestamp`() = runTest {
+        repeat(3) { server.enqueue(MockResponse(code = 200, body = "{}")) }
+        val book = book(userSeriesUpdatedAt = 1786968000123L)
+        val client = LiseurSyncSeriesClient()
+
+        client.setPersonalSeries(BASE, credentials, book, "Dune", 1.0)
+        client.resetPersonalSeries(BASE, credentials, book)
+        client.resetSharedSeries(BASE, credentials, book)
+
+        val timestamp = SyncOps.formatTime(book.userSeriesUpdatedAt!!)
+        val put = server.takeRequest()
+        assertEquals(timestamp, org.json.JSONObject(put.body!!.utf8()).getString("client_ts"))
+        val personalDelete = server.takeRequest()
+        assertEquals(
+            "/v1/books/b-1/series?scope=personal&client_ts=2026-08-17T12%3A00%3A00.123Z",
+            personalDelete.target,
+        )
+        val sharedDelete = server.takeRequest()
+        assertEquals(
+            "/v1/books/b-1/series?scope=shared&client_ts=2026-08-17T12%3A00%3A00.123Z",
+            sharedDelete.target,
+        )
+    }
+
+    @Test
+    fun `layers preserve revisions and mutation outcome`() {
+        val layers = LiseurSyncSeriesClient.layers(
+            org.json.JSONObject(
+                """{"book_id":"b-1","source":"personal","series":[],"folder":[],
+                    "shared":[],"personal":[],"shared_updated_at":"2026-08-17T12:00:00Z",
+                    "personal_updated_at":"2026-08-17T12:00:00.123456789Z","outcome":"duplicate"}""",
+            ),
+        )
+
+        assertEquals(1786968000000L, layers.sharedUpdatedAt)
+        assertEquals(1786968000123L, layers.personalUpdatedAt)
+        assertEquals("duplicate", layers.outcome)
+    }
+
+    private fun book(userSeriesUpdatedAt: Long) = Book(
+        url = "liseur-sync:b-1",
+        title = "Dune",
+        author = null,
+        coverPath = null,
+        source = null,
+        addedAt = 0,
+        lastOpenedAt = null,
+        remoteUuid = "b-1",
+        userSeriesUpdatedAt = userSeriesUpdatedAt,
+    )
 
     private companion object {
         val credentials = RemoteCredentials.Bearer("token")
