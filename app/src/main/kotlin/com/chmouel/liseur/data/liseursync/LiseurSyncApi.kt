@@ -86,11 +86,21 @@ object LiseurSyncApi {
     fun bookSeries(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/series")
 
-    fun bookSeries(baseUrl: String, bookId: String, scope: String): String =
+    fun bookSeries(
+        baseUrl: String,
+        bookId: String,
+        scope: String,
+        clientTs: String? = null,
+        ifUpdatedAt: String? = null,
+    ): String =
         url(
             baseUrl,
             "/v1/books/$bookId/series?scope=" +
-                java.net.URLEncoder.encode(scope, "UTF-8"),
+                java.net.URLEncoder.encode(scope, "UTF-8") +
+                (clientTs?.let { "&client_ts=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: "") +
+                (ifUpdatedAt?.let {
+                    "&if_updated_at=" + java.net.URLEncoder.encode(it, "UTF-8")
+                } ?: ""),
         )
 
     fun seriesOrder(baseUrl: String, seriesId: String): String =

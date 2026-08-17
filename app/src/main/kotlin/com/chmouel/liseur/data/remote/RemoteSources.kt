@@ -193,6 +193,9 @@ data class SeriesLayers(
     val folder: List<RemoteSeriesMembership>,
     val shared: List<RemoteSeriesMembership>?,
     val personal: List<RemoteSeriesMembership>?,
+    val sharedUpdatedAt: Long?,
+    val personalUpdatedAt: Long?,
+    val outcome: String?,
 )
 
 /**

@@ -152,7 +152,8 @@ private fun book(json: JSONObject): RemoteBook? {
         seriesIndex = series?.position,
         seriesId = series?.id,
         series = memberships,
-        seriesSource = series?.source,
+        seriesSource = json.optString("series_source").takeIf { it.isNotEmpty() },
+        seriesClaimUpdatedAt = SyncOps.parseTime(json.optString("series_claim_updated_at")),
         folderId = json.optString("folder_id").takeIf { it.isNotEmpty() },
         sha256 = json.optString("sha256").takeIf { it.isNotEmpty() },
     )
@@ -165,7 +166,8 @@ internal fun series(array: JSONArray?): List<RemoteSeriesMembership> =
             RemoteSeriesMembership(
                 id = json.optString("id").takeIf { it.isNotEmpty() },
                 name = name,
-                position = json.takeIf { it.has("position") }?.optDouble("position"),
+                position = json.takeIf { it.has("position") && !it.isNull("position") }
+                    ?.optDouble("position"),
                 source = json.optString("source").takeIf { it.isNotEmpty() },
             )
         }
@@ -180,4 +182,3 @@ private fun authors(contributors: JSONArray?): String? {
     }
     return names.joinToString(", ").ifBlank { null }
 }
-

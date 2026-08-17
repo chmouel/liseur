@@ -130,6 +130,7 @@ class LiseurSyncCatalogClientTest {
                     "contributors":[
                         {"id":"a-1","name":"Pierce Brown","role":"author"},
                         {"id":"a-2","name":"calibre","role":"bkp"}],
+                    "series_source":"shared",
                     "series":[
                         {"id":"s-1","name":"Red Rising","position":4.5,"source":"shared"},
                         {"id":"s-2","name":"Solar War","position":1,"source":"folder"}]}]}
@@ -157,6 +158,30 @@ class LiseurSyncCatalogClientTest {
             SyncOps.parseTime("2026-08-15T08:30:34.105Z"),
             book.updatedAt,
         )
+    }
+
+    @Test
+    fun `a null series position remains absent rather than becoming NaN`() {
+        val memberships = series(
+            org.json.JSONArray("""[{"id":"s-1","name":"Dune","position":null}]"""),
+        )
+
+        assertNull(memberships.single().position)
+    }
+
+    @Test
+    fun `an empty personal claim keeps its catalog source and revision`() {
+        val catalog = books(
+            org.json.JSONArray(
+                """[{"book_id":"b-1","title":"Dune","status":"active","series":[],
+                    "series_source":"personal",
+                    "series_claim_updated_at":"2026-08-17T12:00:00.123456789Z"}]""".trimIndent(),
+            ),
+        ).single()
+
+        assertEquals("personal", catalog.seriesSource)
+        assertEquals(0, catalog.series.size)
+        assertEquals(1786968000123L, catalog.seriesClaimUpdatedAt)
     }
 
     @Test
@@ -313,7 +338,7 @@ class LiseurSyncCatalogClientTest {
         """{"book_id":"$id","folder_id":"f-1","title":"A Book","status":"$status",
             "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z",
             "media_type":"application/epub+zip","filename":"a.epub","sha256":"ff01",
-            "size_bytes":0,"contributors":[],"series":[]}
+            "size_bytes":0,"contributors":[],"series_source":"folder","series":[]}
         """.trimIndent()
 
     private fun json(body: String) = MockResponse(code = 200, body = body)
