@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import android.app.Activity
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -157,6 +158,8 @@ fun ReaderScreen(
     syncableFlow: StateFlow<Boolean>,
     dictionaryFlow: StateFlow<ReaderViewModel.DictionarySettings>,
     onEnableDictionary: () -> Unit,
+    keepScreenOnFlow: StateFlow<Boolean>,
+    onKeepScreenOnChanged: (Boolean) -> Unit,
     goTo: SharedFlow<Locator>,
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
@@ -170,6 +173,7 @@ fun ReaderScreen(
     var showTypography by remember { mutableStateOf(false) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
+    val keepScreenOn by keepScreenOnFlow.collectAsStateWithLifecycle()
     val columnMode = prefs.columnMode.effectiveFor(widthClass())
 
     // The activity decides what a keyboard's arrows mean, and the
@@ -299,6 +303,7 @@ fun ReaderScreen(
 
     ImmersiveMode(hideSystemBars = !chromeVisible)
     ScreenBrightness(brightness = prefs.brightness)
+    KeepScreenOn(enabled = keepScreenOn)
 
     Box(
         Modifier
@@ -567,6 +572,8 @@ fun ReaderScreen(
             onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
             onFooterModeChanged = onProgressAction.setFooterMode,
             onColumnModeChanged = onPrefsAction.setColumnMode,
+            keepScreenOn = keepScreenOn,
+            onKeepScreenOnChanged = onKeepScreenOnChanged,
             onDismiss = { showTypography = false },
         )
     }
@@ -760,6 +767,30 @@ private fun ScreenBrightness(brightness: Float?) {
             if (window != null) {
                 window.attributes = window.attributes.apply { screenBrightness = -1f }
             }
+        }
+    }
+}
+
+/**
+ * Keeps the reader window awake while [enabled].
+ *
+ * A window flag rather than a wake lock: the platform drops it whenever
+ * the window is not in front, so nothing has to be released by hand when
+ * the reader is backgrounded. Clearing it on dispose gives the device's
+ * own screen timeout back the moment the reader is left.
+ */
+@Composable
+private fun KeepScreenOn(enabled: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(enabled) {
+        val window = (view.context as? Activity)?.window
+        if (enabled) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 }

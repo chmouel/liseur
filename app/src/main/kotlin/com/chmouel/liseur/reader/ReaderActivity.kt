@@ -142,6 +142,8 @@ class ReaderActivity : FragmentActivity() {
                                 onDismissNextUp = viewModel::dismissNextUp,
                                 onLocatorChanged = viewModel::onLocatorChanged,
                                 onNavigatorChanged = { navigator = it },
+                                keepScreenOnFlow = viewModel.keepScreenOn,
+                                onKeepScreenOnChanged = viewModel::setKeepScreenOn,
                                 onPageTurnerChanged = { pageTurner = it },
                                 onChromeVisibleChanged = { chromeVisible = it },
                                 onPrefsAction = remember {

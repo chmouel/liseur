@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
@@ -79,6 +81,8 @@ fun TypographySheet(
     onPageTurnAnimationChanged: (Boolean) -> Unit,
     onFooterModeChanged: (FooterMode) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
+    keepScreenOn: Boolean,
+    onKeepScreenOnChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -107,6 +111,10 @@ fun TypographySheet(
             PageTurnAnimationToggle(
                 enabled = prefs.pageTurnAnimation,
                 onChanged = onPageTurnAnimationChanged,
+            )
+            KeepScreenOnToggle(
+                enabled = keepScreenOn,
+                onChanged = onKeepScreenOnChanged,
             )
             JustThisBookToggle(
                 enabled = typographyIsOwn,
@@ -359,6 +367,41 @@ private fun PageTurnAnimationToggle(enabled: Boolean, onChanged: (Boolean) -> Un
             modifier = Modifier.weight(1f),
         )
         Switch(checked = enabled, onCheckedChange = onChanged)
+    }
+}
+
+/**
+ * Holds the screen awake for this book alone.
+ *
+ * Settings holds the answer for the library, and it is what a book
+ * starts from; flipping it here sets this book apart for good, the way a
+ * book can be set apart for its typography, and a later change in
+ * Settings leaves it where it was put.
+ */
+@Composable
+private fun KeepScreenOnToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = enabled,
+                role = Role.Switch,
+                onValueChange = onChanged,
+            ),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "Keep the screen on",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = "For this book. Settings decides for the others.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = null)
     }
 }
 
