@@ -98,6 +98,7 @@ class PageTurner(
     private val isAnimated: () -> Boolean,
     private val isEffectSuppressed: () -> Boolean,
     private val isScrolling: () -> Boolean = { false },
+    private val isVerticalText: () -> Boolean = { false },
 ) {
     var navigator: OverflowableNavigator? = null
     var window: Window? = null
@@ -170,7 +171,12 @@ class PageTurner(
             navigate(nav, forward, animated = false)
             return
         }
-        web.evaluateJavascript(scrollScreenfulScript(forward, smooth = isAnimated())) { result ->
+        val script = scrollScreenfulScript(
+            forward = forward,
+            smooth = isAnimated(),
+            vertical = isVerticalText(),
+        )
+        web.evaluateJavascript(script) { result ->
             if (result?.contains(AT_END) == true) stepChapter(forward)
         }
     }
@@ -211,22 +217,38 @@ class PageTurner(
  * taller by whatever padding Readium CSS puts around the text, and using
  * it would call the end of the chapter a screenful before the last line
  * was read.
+ *
+ * [vertical] is a book set in vertical lines, which Readium scrolls
+ * sideways: the text runs right to left, so the offset it reads is
+ * negative and grows more negative further into the chapter. Only the
+ * axis changes — how far along the chapter is, and how far it goes, are
+ * the same question asked of the other dimension.
  */
-internal fun scrollScreenfulScript(forward: Boolean, smooth: Boolean): String {
-    val edge = if (forward) "top >= max - $EDGE_SLACK" else "top <= $EDGE_SLACK"
+internal fun scrollScreenfulScript(
+    forward: Boolean,
+    smooth: Boolean,
+    vertical: Boolean = false,
+): String {
+    val edge = if (forward) "at >= max - $EDGE_SLACK" else "at <= $EDGE_SLACK"
     val step = if (forward) SCREENFUL else -SCREENFUL
     val behavior = if (smooth) "smooth" else "auto"
+    val page = if (vertical) {
+        "e.clientWidth || window.innerWidth"
+    } else {
+        "e.clientHeight || window.innerHeight"
+    }
+    val span = if (vertical) "e.scrollWidth" else "e.scrollHeight"
+    val at = if (vertical) "Math.abs(e.scrollLeft)" else "e.scrollTop"
+    val target = if (vertical) "left: -to" else "top: to"
     return """
         (function() {
           var e = document.scrollingElement || document.documentElement;
-          var page = e.clientHeight || window.innerHeight;
-          var max = Math.max(0, e.scrollHeight - page);
-          var top = e.scrollTop;
+          var page = $page;
+          var max = Math.max(0, $span - page);
+          var at = $at;
           if ($edge) { return "$AT_END"; }
-          e.scrollTo({
-            top: Math.max(0, Math.min(max, top + page * $step)),
-            behavior: "$behavior"
-          });
+          var to = Math.max(0, Math.min(max, at + page * $step));
+          e.scrollTo({ $target, behavior: "$behavior" });
           return "$SCROLLED";
         })();
     """.trimIndent()

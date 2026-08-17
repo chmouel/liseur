@@ -24,6 +24,7 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 class ScrollEdgeTurner(
     private val navigator: OverflowableNavigator,
     private val isScrolling: () -> Boolean,
+    private val isVerticalText: () -> Boolean = { false },
     private val onStepChapter: (forward: Boolean) -> Unit,
 ) : InputListener {
 
@@ -37,10 +38,24 @@ class ScrollEdgeTurner(
             DragEvent.Type.Move -> {
                 val view = navigator.publicationView
                 val web = visibleWebView(view) ?: return false
+                // A book set in vertical lines is scrolled sideways, and
+                // the reader carries the text along with the finger just
+                // the same: later text lies to the left, so it is brought
+                // in by dragging right, as later text below is brought in
+                // by dragging up.
+                val vertical = isVerticalText()
                 val step = pull.onMove(
-                    offsetY = event.offset.y,
-                    canScrollDown = web.canScrollVertically(1),
-                    canScrollUp = web.canScrollVertically(-1),
+                    forwardTravel = if (vertical) event.offset.x else -event.offset.y,
+                    atForwardEdge = if (vertical) {
+                        !web.canScrollHorizontally(-1)
+                    } else {
+                        !web.canScrollVertically(1)
+                    },
+                    atBackwardEdge = if (vertical) {
+                        !web.canScrollHorizontally(1)
+                    } else {
+                        !web.canScrollVertically(-1)
+                    },
                     threshold = PULL_DP * view.resources.displayMetrics.density,
                 )
                 when (step) {
@@ -81,39 +96,41 @@ class EdgePull {
 
     enum class Step { NONE, FORWARD, BACKWARD }
 
-    private var atBottomSince: Float? = null
-    private var atTopSince: Float? = null
+    private var atEndSince: Float? = null
+    private var atStartSince: Float? = null
     private var stepped = false
 
     fun reset() {
-        atBottomSince = null
-        atTopSince = null
+        atEndSince = null
+        atStartSince = null
         stepped = false
     }
 
     /**
-     * [offsetY] is how far the finger has travelled since the drag
-     * began, in pixels, negative upwards — the direction that moves the
-     * reader forwards through the text.
+     * [forwardTravel] is how far the finger has travelled since the drag
+     * began, in pixels, counted positive in the direction that moves the
+     * reader forwards through the text. Which way that is on the screen
+     * is the caller's business: it is up the page in a book set in lines
+     * across, and rightwards in one set in lines down.
      */
     fun onMove(
-        offsetY: Float,
-        canScrollDown: Boolean,
-        canScrollUp: Boolean,
+        forwardTravel: Float,
+        atForwardEdge: Boolean,
+        atBackwardEdge: Boolean,
         threshold: Float,
     ): Step {
         if (stepped) return Step.NONE
-        atBottomSince = if (canScrollDown) null else atBottomSince ?: offsetY
-        atTopSince = if (canScrollUp) null else atTopSince ?: offsetY
+        atEndSince = if (atForwardEdge) atEndSince ?: forwardTravel else null
+        atStartSince = if (atBackwardEdge) atStartSince ?: forwardTravel else null
 
-        atBottomSince?.let {
-            if (it - offsetY >= threshold) {
+        atEndSince?.let {
+            if (forwardTravel - it >= threshold) {
                 stepped = true
                 return Step.FORWARD
             }
         }
-        atTopSince?.let {
-            if (offsetY - it >= threshold) {
+        atStartSince?.let {
+            if (it - forwardTravel >= threshold) {
                 stepped = true
                 return Step.BACKWARD
             }
