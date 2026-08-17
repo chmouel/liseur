@@ -85,6 +85,13 @@ android {
             // stub in android.jar; without this every call throws.
             isReturnDefaultValues = true
             isIncludeAndroidResources = true
+            all { test ->
+                // The suites are independent (each brings its own
+                // MockWebServer and in-memory Room), so run them across
+                // the cores instead of one after another.
+                test.maxParallelForks =
+                    (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+            }
         }
     }
 }

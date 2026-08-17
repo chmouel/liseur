@@ -58,6 +58,12 @@ class CalibreSetupClientTest {
         // The catalog probe, then the download-rights probe's book feed.
         enqueueCatalog()
         server.enqueue(MockResponse(code = 404))
+        // The Kobo-token probe's login page and login post. Left
+        // unanswered they are not a faster failure but a ten-second
+        // hang: an empty MockWebServer queue holds the socket open
+        // until OkHttp's own timeout gives up on it.
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 404))
 
         val result = CalibreSetupClient().connect(
             typedAddress(),
@@ -74,6 +80,10 @@ class CalibreSetupClientTest {
         // A saved account refreshes with allowHttp on, so an https server
         // that is merely slow must not end up saved as http.
         enqueueCatalog()
+        server.enqueue(MockResponse(code = 404))
+        // The Kobo-token probe's login exchange, answered so it fails
+        // fast instead of hanging on an empty queue.
+        server.enqueue(MockResponse(code = 404))
         server.enqueue(MockResponse(code = 404))
 
         val result = CalibreSetupClient().connect(
