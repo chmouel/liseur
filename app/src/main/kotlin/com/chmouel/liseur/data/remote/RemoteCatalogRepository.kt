@@ -126,6 +126,10 @@ class RemoteCatalogRepository(
 
             _status.value = CatalogStatus.Refreshing
             return try {
+                // Before the catalog is read, not after: a claim made offline has to
+                // reach the server first, or the pull it races would merge against a
+                // personal layer the server has never been told about.
+                retryPendingSeriesClaims(server, credentials)
                 val seen = mutableSetOf<String>()
                 // What is already known, read once. Doing it per book was
                 // a query each against an unindexed column, so the cost of
@@ -209,6 +213,68 @@ class RemoteCatalogRepository(
         }
     }
 
+    /** Tries each durable local claim once; failures stay on the row for the next refresh. */
+    suspend fun retryPendingSeriesClaims() {
+        val server = serverDao.get()
+        if (server == null) {
+            // Nobody left to answer a claim raised before signing out.
+            bookDao.discardPendingSeriesClaims()
+            return
+        }
+        val credentials = server.credentials ?: return
+        retryPendingSeriesClaims(server, credentials)
+    }
+
+    private suspend fun retryPendingSeriesClaims(server: RemoteServer, credentials: RemoteCredentials) {
+        if (server.kind != ServerKind.LISEUR_SYNC || !server.canManageLibrary) {
+            // Komga and calibre-web never speak this protocol, so a claim raised
+            // against either would sit pending forever otherwise, freezing the
+            // row's series fields at whatever they were when it was made.
+            bookDao.discardPendingSeriesClaims()
+            return
+        }
+        val claims = router.seriesClaimsFor(server.kind) ?: return
+        // Snapshot first. A response may update the row and must not change this pass's work list.
+        bookDao.pendingSeriesClaims().forEach { book ->
+            val timestamp = book.userSeriesUpdatedAt ?: return@forEach
+            try {
+                val layers = if (book.seriesClaimReset) {
+                    claims.resetPersonalSeries(server.baseUrl, credentials, book)
+                } else {
+                    // A book-level claim writes the same personal layer the shelf-order
+                    // route writes, so it must carry the position too. Sending none would
+                    // renumber a shelf that was dragged into order moments earlier.
+                    val name = if (book.seriesOverridden) book.userSeriesName else book.seriesName
+                    // Nothing to claim, and no name to hang a claim on. Pushing here would
+                    // turn "this book has no series yet" into "this reader says it has none".
+                    if (name == null && !book.seriesOverridden) return@forEach
+                    val index = if (book.indexOverridden) book.userSeriesIndex else null
+                    claims.setPersonalSeries(server.baseUrl, credentials, book, name, index)
+                } ?: return@forEach
+                // The response answers this account's request; a sign-out or
+                // account switch that landed during it must not let it write.
+                forAccount(server) {
+                    when (layers.outcome) {
+                        "stale" -> bookDao.updatePendingSeriesClaimRevision(
+                            book.url, timestamp, layers.personalUpdatedAt,
+                        )
+                        "applied", "duplicate", null -> bookDao.acknowledgeSeriesClaim(
+                            url = book.url,
+                            expectedUserSeriesUpdatedAt = timestamp,
+                            seriesId = layers.personal?.firstOrNull()?.id,
+                            personalSeriesUpdatedAt = layers.personalUpdatedAt,
+                        )
+                    }
+                }
+            } catch (e: AccountChanged) {
+                Log.i(TAG, "The account changed while a series claim was in flight; stopping the retry pass", e)
+                return
+            } catch (e: IOException) {
+                Log.i(TAG, "Could not push the series claim", e)
+            }
+        }
+    }
+
     private suspend fun store(
         known: KnownBooks,
         kind: ServerKind,
@@ -280,6 +346,7 @@ class RemoteCatalogRepository(
                 userSeriesUpdatedAt = book.userSeriesUpdatedAt,
                 expectedUserSeriesUpdatedAt = update.snapshotUserSeriesUpdatedAt,
                 seriesId = book.seriesId,
+                personalSeriesUpdatedAt = book.personalSeriesUpdatedAt,
             )
         }
         if (inserts.isNotEmpty()) bookDao.upsertAll(inserts.values.toList())
@@ -429,21 +496,22 @@ internal fun mergeCatalogEntry(
         catalog = SeriesMetadata(remote.seriesName, remote.seriesIndex, remote.seriesId),
         file = SeriesMetadata(book.fileSeriesName, book.fileSeriesIndex),
     )
-    // The catalog currently exposes the book's update time, not the
-    // personal claim's own revision. This chooses what the snapshot
-    // would adopt; updateCatalogFields separately refuses to apply that
-    // choice over a manual edit made while the request was in flight.
-    val catalogAt = remote.updatedAt ?: 0L
-    val localClaimAt = book.userSeriesUpdatedAt
-    val serverPersonalWins = kind == ServerKind.LISEUR_SYNC &&
-        (localClaimAt == null || catalogAt >= localClaimAt)
+    // The catalog book timestamp is unrelated to the personal claim and may
+    // come from another clock. Only its own revision decides what may be adopted.
+    //
+    // A book this device has already had acknowledged counts too, even when the
+    // catalog now reports no claim at all: that is a withdrawal made on another
+    // device, and reading it as "no news" would leave this shelf alone forever.
+    val serverPersonalWins = kind == ServerKind.LISEUR_SYNC && !book.seriesClaimPending &&
+        (remote.seriesClaimUpdatedAt != null || book.personalSeriesUpdatedAt != null)
+    val personalMembership = remote.series.firstOrNull { it.source == "personal" }
     val userSeriesName = when {
-        serverPersonalWins && remote.seriesSource == "personal" -> remote.seriesName
+        serverPersonalWins && remote.seriesSource == "personal" -> personalMembership?.name
         serverPersonalWins -> null
         else -> book.userSeriesName
     }
     val userSeriesIndex = when {
-        serverPersonalWins && remote.seriesSource == "personal" -> remote.seriesIndex
+        serverPersonalWins && remote.seriesSource == "personal" -> personalMembership?.position
         serverPersonalWins -> null
         else -> book.userSeriesIndex
     }
@@ -456,7 +524,7 @@ internal fun mergeCatalogEntry(
         else -> book.indexOverridden
     }
     val userSeriesUpdatedAt = when {
-        serverPersonalWins && remote.seriesSource == "personal" -> catalogAt
+        serverPersonalWins && remote.seriesSource == "personal" -> remote.seriesClaimUpdatedAt
         serverPersonalWins -> null
         else -> book.userSeriesUpdatedAt
     }
@@ -485,7 +553,14 @@ internal fun mergeCatalogEntry(
         remotePageCount = remote.pageCount,
         seriesName = filed.name,
         seriesIndex = filed.index,
-        seriesId = if (seriesOverridden) book.seriesId else series.id,
+        // A shelf id is what the reorder route speaks through, so losing one
+        // costs the reader the ability to drag that shelf. Keep the id already
+        // stored when this refresh carries no membership to replace it with.
+        seriesId = if (seriesOverridden) {
+            personalMembership?.id ?: book.seriesId
+        } else {
+            series.id
+        },
         catalogSeriesName = remote.seriesName,
         catalogSeriesIndex = remote.seriesIndex,
         catalogFolderId = remote.folderId,
@@ -495,5 +570,13 @@ internal fun mergeCatalogEntry(
         seriesOverridden = seriesOverridden,
         indexOverridden = indexOverridden,
         userSeriesUpdatedAt = userSeriesUpdatedAt,
+        // Verbatim when the server had the say, so that a withdrawal on another
+        // device clears the revision instead of leaving one that keeps claiming
+        // the personal layer still exists. A pending edit keeps its own.
+        personalSeriesUpdatedAt = if (serverPersonalWins) {
+            remote.seriesClaimUpdatedAt
+        } else {
+            book.personalSeriesUpdatedAt
+        },
     )
 }

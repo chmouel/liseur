@@ -728,7 +728,7 @@ class LibraryViewModel(
         viewModelScope.launch {
             val clean = name?.trim()?.takeIf { it.isNotEmpty() }
             bookDao.setSeriesOverride(book.url, clean, index)
-            pushSeriesClaim(book, clean, index)
+            catalog.retryPendingSeriesClaims()
         }
     }
 
@@ -736,52 +736,36 @@ class LibraryViewModel(
     fun resetBookSeries(book: Book) {
         viewModelScope.launch {
             bookDao.clearSeriesOverride(book.url)
-            resetSeriesClaim(book)
+            // Restoring catalog metadata always removes this reader's personal layer. A shared
+            // delete needs an explicit admin route; silently using one here is unsafe.
+            catalog.retryPendingSeriesClaims()
         }
     }
 
-    private suspend fun pushSeriesClaim(book: Book, name: String?, index: Double?) {
-        val server = account.current()?.takeIf {
-            it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
-        } ?: return
-        val credentials = server.credentials ?: return
-        val claims = router.seriesClaimsFor(server.kind) ?: return
-        try {
-            val layers = claims.setPersonalSeries(server.baseUrl, credentials, book, name, index)
-            bookDao.setRemoteSeriesId(
-                book.url,
-                layers?.personal?.firstOrNull()?.id,
-            )
-        } catch (e: IOException) {
-            // The local row is the offline cache, and leaving it in
-            // place is what keeps the reader's edit on screen. It is not
-            // queued: nothing re-pushes it, so a claim made offline
-            // reaches the server only when the reader edits again, and
-            // a catalog refresh whose `updated_at` is newer will take it
-            // back. There is no outbox in this app to hang it on —
-            // positions carry their own pending state rather than a
-            // general one — and inventing one for series alone would be
-            // the wrong place to start.
-            Log.i(TAG, "Could not push the series claim", e)
-        }
-    }
-
-    private suspend fun resetSeriesClaim(book: Book) {
-        val server = account.current()?.takeIf {
-            it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
-        } ?: return
-        val credentials = server.credentials ?: return
-        val claims = router.seriesClaimsFor(server.kind) ?: return
-        try {
-            if (!book.seriesOverridden && book.catalogSeriesSource == "shared" && server.canAdmin) {
+    /**
+     * Takes the shared claim off a book, for an admin, so that every
+     * reader gets the series the server's last scan found.
+     *
+     * Kept apart from [resetBookSeries] because it undoes a different
+     * layer on everyone's behalf, not this reader's own choice. There is
+     * no pending state for it: it is a library-wide edit an admin makes
+     * deliberately while connected, and quietly replaying one later,
+     * against a shared claim somebody else has since made, would undo
+     * their work instead.
+     */
+    fun resetBookSharedSeries(book: Book) {
+        viewModelScope.launch {
+            val server = account.current()?.takeIf {
+                it.kind == ServerKind.LISEUR_SYNC && it.canAdmin
+            } ?: return@launch
+            val credentials = server.credentials ?: return@launch
+            val claims = router.seriesClaimsFor(server.kind) ?: return@launch
+            try {
                 claims.resetSharedSeries(server.baseUrl, credentials, book)
                 catalog.refresh()
-            } else {
-                claims.resetPersonalSeries(server.baseUrl, credentials, book)
-                catalog.refresh()
+            } catch (e: IOException) {
+                Log.i(TAG, "Could not reset the shared series claim", e)
             }
-        } catch (e: IOException) {
-            Log.i(TAG, "Could not reset the series claim", e)
         }
     }
 
@@ -870,7 +854,11 @@ class LibraryViewModel(
     fun clearCustomVolumeNumbers(shelf: SeriesShelf) {
         viewModelScope.launch {
             val cleared = seriesOrderDao.clearOrder(shelf.key, shelf.volumes.map { it.book.url })
-            if (!cleared) notices.raise(NoticeKind.SeriesChangedWhileReordering)
+            if (!cleared) {
+                notices.raise(NoticeKind.SeriesChangedWhileReordering)
+            } else {
+                catalog.retryPendingSeriesClaims()
+            }
         }
     }
 

@@ -598,6 +598,10 @@ private fun LibraryRoute(
                     viewModel.resetBookSeries(book)
                     seriesSheetRefile = null
                 },
+                onResetShared = {
+                    viewModel.resetBookSharedSeries(book)
+                    seriesSheetRefile = null
+                },
                 onDismiss = { seriesSheetRefile = null },
             )
         }
@@ -636,6 +640,7 @@ private fun LibraryRoute(
         onDeleteFromServer = viewModel::deleteFromServer,
         onSetSeries = viewModel::setBookSeries,
         onResetSeries = viewModel::resetBookSeries,
+        onResetSharedSeries = viewModel::resetBookSharedSeries,
         deleteFailures = viewModel.deleteFailures,
         onRefresh = viewModel::refreshAll,
         onSetSort = viewModel::setSort,

@@ -117,6 +117,7 @@ internal fun SeriesPickerSheet(
     canResetSharedSeries: Boolean = false,
     onConfirm: (String?, Double?) -> Unit,
     onReset: () -> Unit,
+    onResetShared: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     var query by remember(book.url) { mutableStateOf("") }
@@ -202,6 +203,7 @@ internal fun SeriesPickerSheet(
                 },
                 onRemove = { chosen = null },
                 onReset = onReset,
+                onResetShared = onResetShared,
                 onJump = { index -> scope.launch { listState.animateScrollToItem(index) } },
                 modifier = Modifier.weight(1f),
             )
@@ -302,6 +304,7 @@ private fun SeriesPickerList(
     onCreate: (String) -> Unit,
     onRemove: () -> Unit,
     onReset: () -> Unit,
+    onResetShared: () -> Unit,
     onJump: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -343,8 +346,18 @@ private fun SeriesPickerList(
                         )
 
                         is PickerEntry.Reset -> Box(Modifier.padding(horizontal = 12.dp)) {
-                            TextButton(onClick = onReset) {
-                                Text(stringResource(R.string.series_assign_reset))
+                            TextButton(
+                                onClick = { if (entry.shared) onResetShared() else onReset() },
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (entry.shared) {
+                                            R.string.series_assign_reset_shared
+                                        } else {
+                                            R.string.series_assign_reset
+                                        },
+                                    ),
+                                )
                             }
                         }
 
@@ -646,8 +659,9 @@ private fun pickerSections(
     val otherLabel = stringResource(R.string.series_assign_other_initial)
     val emptyNote = stringResource(R.string.series_assign_none, typed)
     val hasSeries = !book.seriesName.isNullOrBlank()
-    val canReset = book.seriesOverridden ||
-        (canResetSharedSeries && book.catalogSeriesSource == "shared")
+    val canReset = book.seriesOverridden
+    val canResetShared = !book.seriesOverridden &&
+        canResetSharedSeries && book.catalogSeriesSource == "shared"
     val title = book.displayTitle
     val author = book.displayAuthor
 
@@ -657,6 +671,7 @@ private fun pickerSections(
         options,
         hasSeries,
         canReset,
+        canResetShared,
         title,
         author,
         suggestedLabel,
@@ -668,7 +683,8 @@ private fun pickerSections(
         buildList {
             val tail = buildList {
                 if (hasSeries) add(PickerEntry.Remove)
-                if (canReset) add(PickerEntry.Reset)
+                if (canReset) add(PickerEntry.Reset(shared = false))
+                if (canResetShared) add(PickerEntry.Reset(shared = true))
             }
 
             if (typed.isNotEmpty()) {
@@ -798,8 +814,14 @@ private sealed interface PickerEntry {
         override val key: String get() = "remove"
     }
 
-    data object Reset : PickerEntry {
-        override val key: String get() = "reset"
+    /**
+     * Restoring a personal claim and restoring a shared one are
+     * different acts against different layers, and only an admin can
+     * do the second. They are told apart here rather than guessed at
+     * from the book's state further down.
+     */
+    data class Reset(val shared: Boolean) : PickerEntry {
+        override val key: String get() = if (shared) "reset-shared" else "reset"
     }
 
     data class Note(val text: String) : PickerEntry {

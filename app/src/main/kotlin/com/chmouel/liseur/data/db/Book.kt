@@ -409,6 +409,8 @@ interface BookDao {
             user_series_index = CASE WHEN :name IS NULL THEN NULL ELSE :index END,
             series_override = 1,
             user_series_updated_at = :updatedAt,
+            series_claim_pending = 1,
+            series_claim_reset = 0,
             series_index_override = 1,
             series_name = :name,
             series_index = CASE WHEN :name IS NULL THEN NULL ELSE :index END,
@@ -424,7 +426,8 @@ interface BookDao {
     )
 
     /**
-     * Records the server's own id for the series this book now sits in.
+     * Records the server's own id for the series this book now sits in,
+     * and only when the response still answers the mutation that asked.
      *
      * [setSeriesOverride] clears the id rather than keeping the old one,
      * because a book refiled by hand is no longer in the series the last
@@ -433,8 +436,60 @@ interface BookDao {
      * Null until the claim reaches the server, which is the safe way
      * round, since a shelf with no id simply cannot be pushed.
      */
-    @Query("UPDATE books SET series_id = :seriesId WHERE url = :url")
-    suspend fun setRemoteSeriesId(url: String, seriesId: String?)
+    @Query(
+        """
+        UPDATE books
+        SET series_id = :seriesId,
+            series_claim_pending = 0,
+            series_claim_reset = 0,
+            personal_series_updated_at = :personalSeriesUpdatedAt
+        WHERE url = :url
+          AND series_claim_pending = 1
+          AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
+        """,
+    )
+    suspend fun acknowledgeSeriesClaim(
+        url: String,
+        expectedUserSeriesUpdatedAt: Long?,
+        seriesId: String?,
+        personalSeriesUpdatedAt: Long?,
+    ): Int
+
+    /** A stale response is useful: it gives the next retry the current precondition. */
+    @Query(
+        """
+        UPDATE books SET personal_series_updated_at = :personalSeriesUpdatedAt
+        WHERE url = :url
+          AND series_claim_pending = 1
+          AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
+        """,
+    )
+    suspend fun updatePendingSeriesClaimRevision(
+        url: String,
+        expectedUserSeriesUpdatedAt: Long?,
+        personalSeriesUpdatedAt: Long?,
+    ): Int
+
+    @Query("SELECT * FROM books WHERE series_claim_pending = 1")
+    suspend fun pendingSeriesClaims(): List<Book>
+
+    /**
+     * Drops every locally pending claim outright, for when there is no
+     * liseur-sync account left to answer it.
+     *
+     * Komga and calibre-web never acknowledge this protocol, so a claim
+     * raised while connected to either would otherwise sit pending
+     * forever — and a pending claim is what [updateCatalogFields] reads
+     * to refuse a catalog refresh, freezing the row's series fields at
+     * whatever they were the moment the claim was made.
+     */
+    @Query(
+        """
+        UPDATE books SET series_claim_pending = 0, series_claim_reset = 0
+        WHERE series_claim_pending = 1
+        """,
+    )
+    suspend fun discardPendingSeriesClaims()
 
     /**
      * Hands the book back to whoever described it, for when the reader
@@ -446,8 +501,10 @@ interface BookDao {
         SET user_series_name = NULL,
             user_series_index = NULL,
             series_override = 0,
-        user_series_updated_at = :updatedAt,
-        series_index_override = 0,
+            user_series_updated_at = :updatedAt,
+            series_claim_pending = 1,
+            series_claim_reset = 1,
+            series_index_override = 0,
             series_name = COALESCE(catalog_series_name, file_series_name),
             series_index = CASE
                 WHEN COALESCE(catalog_series_name, file_series_name) IS NULL THEN NULL
@@ -457,6 +514,29 @@ interface BookDao {
         """,
     )
     suspend fun clearSeriesOverride(url: String, updatedAt: Long = System.currentTimeMillis())
+
+    /** Drops reader-specific series state when a different work replaces this file. */
+    @Query(
+        """
+        UPDATE books
+        SET user_series_name = NULL,
+            user_series_index = NULL,
+            series_override = 0,
+            series_index_override = 0,
+            user_series_updated_at = NULL,
+            series_claim_pending = 0,
+            series_claim_reset = 0,
+            personal_series_updated_at = NULL,
+            series_id = NULL,
+            series_name = COALESCE(catalog_series_name, file_series_name),
+            series_index = CASE
+                WHEN COALESCE(catalog_series_name, file_series_name) IS NULL THEN NULL
+                ELSE COALESCE(catalog_series_index, file_series_index)
+            END
+        WHERE url = :url
+        """,
+    )
+    suspend fun clearSeriesForReplacedWork(url: String)
 
     /**
      * Forgets that this book was ever opened, for when the file at a path
@@ -509,33 +589,46 @@ interface BookDao {
             catalog_series_index = :catalogSeriesIndex,
             catalog_folder_id = :catalogFolderId,
             catalog_series_source = :catalogSeriesSource,
+            personal_series_updated_at = CASE
+                WHEN series_claim_pending = 0
+                    AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                    THEN :personalSeriesUpdatedAt
+                ELSE personal_series_updated_at
+            END,
             user_series_name = CASE
-                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesName
+                WHEN series_claim_pending = 0
+                    AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesName
                 ELSE user_series_name
             END,
             user_series_index = CASE
-                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesIndex
+                WHEN series_claim_pending = 0
+                    AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesIndex
                 ELSE user_series_index
             END,
             series_override = CASE
-                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesOverridden
+                WHEN series_claim_pending = 0
+                    AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesOverridden
                 ELSE series_override
             END,
             series_index_override = CASE
-                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :indexOverridden
+                WHEN series_claim_pending = 0
+                    AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :indexOverridden
                 ELSE series_index_override
             END,
             user_series_updated_at = CASE
-                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesUpdatedAt
+                WHEN series_claim_pending = 0
+                    AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :userSeriesUpdatedAt
                 ELSE user_series_updated_at
             END,
             series_name = CASE
                 WHEN (CASE
-                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                    WHEN series_claim_pending = 0
+                        AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
                         THEN :seriesOverridden
                     ELSE series_override
                 END) = 1 THEN CASE
-                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                    WHEN series_claim_pending = 0
+                        AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
                         THEN :userSeriesName
                     ELSE user_series_name
                 END
@@ -546,34 +639,40 @@ interface BookDao {
                 -- never outlives the name it counts within.
                 WHEN (CASE
                     WHEN (CASE
-                        WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                        WHEN series_claim_pending = 0
+                            AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
                             THEN :seriesOverridden
                         ELSE series_override
                     END) = 1 THEN CASE
-                        WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                        WHEN series_claim_pending = 0
+                            AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
                             THEN :userSeriesName
                         ELSE user_series_name
                     END
                     ELSE COALESCE(:catalogSeriesName, file_series_name)
                 END) IS NULL THEN NULL
                 WHEN (CASE
-                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                    WHEN series_claim_pending = 0
+                        AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
                         THEN :indexOverridden
                     ELSE series_index_override
                 END) = 1 THEN CASE
-                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                    WHEN series_claim_pending = 0
+                        AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
                         THEN :userSeriesIndex
                     ELSE user_series_index
                 END
                 WHEN (CASE
-                    WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt
+                    WHEN series_claim_pending = 0
+                        AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
                         THEN :seriesOverridden
                     ELSE series_override
                 END) = 1 THEN NULL
                 ELSE COALESCE(:catalogSeriesIndex, file_series_index)
             END,
             series_id = CASE
-                WHEN user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesId
+                WHEN series_claim_pending = 0
+                    AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesId
                 ELSE series_id
             END
         WHERE url = :url
@@ -600,6 +699,7 @@ interface BookDao {
         userSeriesUpdatedAt: Long?,
         expectedUserSeriesUpdatedAt: Long?,
         seriesId: String?,
+        personalSeriesUpdatedAt: Long? = null,
     )
 
     @Query("DELETE FROM books WHERE url IN (:urls)")

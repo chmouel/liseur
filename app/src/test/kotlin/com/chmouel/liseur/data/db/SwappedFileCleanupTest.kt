@@ -54,6 +54,16 @@ class SwappedFileCleanupTest {
                 lastOpenedAt = 5,
                 finishedAt = 9,
                 workId = "urn:uuid:old",
+                seriesName = "Old Shelf",
+                seriesIndex = 4.0,
+                fileSeriesName = "Old Shelf",
+                fileSeriesIndex = 4.0,
+                userSeriesName = "Filed By Hand",
+                userSeriesIndex = 7.0,
+                seriesOverridden = true,
+                indexOverridden = true,
+                userSeriesUpdatedAt = 10,
+                seriesId = "old-series",
             ),
         )
         db.readingProgressDao().recordLocal(
@@ -83,6 +93,7 @@ class SwappedFileCleanupTest {
         db.readingProgressDao().forget(swapped)
         db.annotationDao().deleteForBook(swapped)
         db.bookDao().forgetReadingHistory(swapped)
+        db.bookDao().clearSeriesForReplacedWork(swapped)
 
         assertNull("the old position is gone", db.readingProgressDao().get(swapped))
         assertEquals(0, db.annotationDao().count(swapped))
@@ -90,6 +101,14 @@ class SwappedFileCleanupTest {
         assertNotNull("the book itself stays in the library", book)
         assertNull("it does not claim to have been opened", book?.lastOpenedAt)
         assertNull("nor to have been read", book?.finishedAt)
+        assertEquals("Old Shelf", book?.seriesName)
+        assertEquals(4.0, book?.seriesIndex)
+        assertNull(book?.userSeriesName)
+        assertNull(book?.userSeriesIndex)
+        assertEquals(false, book?.seriesOverridden)
+        assertEquals(false, book?.indexOverridden)
+        assertNull(book?.userSeriesUpdatedAt)
+        assertNull(book?.seriesId)
     }
 
     @Test
