@@ -79,7 +79,8 @@ object KomgaBooks {
                 // shelf would fill it with series of one book.
                 seriesName = json.stringOrNull("seriesTitle")
                     ?.takeIf { !json.optBoolean("oneshot", false) },
-                seriesIndex = metadata?.seriesIndex(),
+                seriesIndex = metadata?.seriesIndex()
+                    ?.takeIf { !json.optBoolean("oneshot", false) },
                 seriesId = json.stringOrNull("seriesId")
                     ?.takeIf { !json.optBoolean("oneshot", false) },
             ),

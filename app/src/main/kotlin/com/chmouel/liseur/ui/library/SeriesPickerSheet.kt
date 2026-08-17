@@ -126,10 +126,10 @@ internal fun SeriesPickerSheet(
     var volume by remember(book.url) {
         mutableStateOf(seriesIndexLabel(book.seriesIndex).orEmpty())
     }
-    // True while the volume field holds a suggestion rather than
-    // something the reader typed: a suggestion belongs to the series
-    // that made it, and switching series must not carry it across.
-    var volumeSuggested by remember(book.url) { mutableStateOf(false) }
+    // The number brought in with the book belongs to its old series. A
+    // number typed in this sheet belongs to the reader and travels with
+    // a later change of mind; an inherited or suggested one does not.
+    var volumeTyped by remember(book.url) { mutableStateOf(false) }
 
     val typed = query.trim()
     val ranked = remember(typed, options) { rankSeriesOptions(typed, options) }
@@ -151,11 +151,11 @@ internal fun SeriesPickerSheet(
             chosen = option.name
             // Offered, not imposed: a shelf numbered to eight suggests
             // nine, and a reader who does not know where this one goes
-            // clears it. A suggestion left behind by the previous pick
-            // goes with it — it was never the reader's.
-            if (volume.isBlank() || volumeSuggested) {
+            // clears it. The old series's number is a suggestion too:
+            // it must not turn Star Wars into volume four merely because
+            // this book used to be volume four of The Expanse.
+            if (!volumeTyped) {
                 volume = seriesIndexLabel(suggestedVolume(option)).orEmpty()
-                volumeSuggested = volume.isNotBlank()
             }
         }
     }
@@ -196,9 +196,8 @@ internal fun SeriesPickerSheet(
                     // Nothing to suggest from a series that does not
                     // exist yet; a suggestion made by another shelf
                     // must not follow the book into this one.
-                    if (volumeSuggested) {
+                    if (!volumeTyped) {
                         volume = ""
-                        volumeSuggested = false
                     }
                 },
                 onRemove = { chosen = null },
@@ -216,7 +215,7 @@ internal fun SeriesPickerSheet(
                     // sheet that then loses the whole edit.
                     if (typedVolume.matches(VOLUME_INPUT)) {
                         volume = typedVolume
-                        volumeSuggested = false
+                        volumeTyped = true
                     }
                 },
                 onCancel = onDismiss,

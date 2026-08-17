@@ -184,6 +184,14 @@ class OpdsParserTest {
     }
 
     @Test
+    fun `an unnumbered series is still a series`() {
+        val book = entryWithContent("SERIES: Dune<br/>")
+
+        assertEquals("Dune", book.seriesName)
+        assertNull(book.seriesIndex)
+    }
+
+    @Test
     fun `a novella between two volumes keeps its half`() {
         assertEquals(7.5, entryWithContent("SERIES: Dune [7.50]<br/>").seriesIndex!!, 0.0)
     }
