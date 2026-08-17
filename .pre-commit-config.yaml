@@ -1,0 +1,21 @@
+repos:
+  - repo: local
+    hooks:
+      - id: unit-tests
+        name: Unit tests (testDebugUnitTest)
+        entry: ./gradlew testDebugUnitTest --console=plain --daemon
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: lint
+        name: Android Lint (lintDebug)
+        entry: ./gradlew lintDebug --console=plain --daemon
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+      - id: assemble-release
+        name: Release build (assembleRelease)
+        entry: ./gradlew assembleRelease --console=plain --daemon
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

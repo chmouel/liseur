@@ -34,6 +34,15 @@ Toolchain: JDK 17, AGP 9.x (built-in Kotlin support — **do not** add the
 is applied), compileSdk/targetSdk 37, minSdk 26. Dependencies are managed in
 `gradle/libs.versions.toml` (version catalog).
 
+## Git hooks
+
+Install the [pre-commit](https://pre-commit.com/) hooks once after cloning:
+
+    pre-commit install --hook-type pre-push
+
+This runs unit tests, Android Lint, and the release build before every
+push. Skip with `git push --no-verify`.
+
 ## Hard constraints
 
 - **F-Droid compatibility**: every dependency must be FOSS and come from
