@@ -83,6 +83,7 @@ class KomgaBooksTest {
 
         assertNull(book.seriesName)
         assertNull(book.seriesId)
+        assertNull(book.seriesIndex)
     }
 
     @Test

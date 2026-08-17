@@ -1,7 +1,5 @@
 package com.chmouel.liseur.domain
 
-import java.text.Normalizer
-
 /**
  * The name two spellings of the same series agree on.
  *
@@ -23,14 +21,8 @@ import java.text.Normalizer
 fun seriesKey(name: String?): String {
     val folded = name?.trim().orEmpty()
     if (folded.isEmpty()) return ""
-    return sortKey(
-        Normalizer.normalize(folded, Normalizer.Form.NFD)
-            .replace(SERIES_COMBINING_MARKS, "")
-            .lowercase(),
-    )
+    return sortKey(folded.foldForSearch())
 }
-
-private val SERIES_COMBINING_MARKS = Regex("\\p{Mn}+")
 
 /**
  * How a book's place in its series reads: `#3`, or `#7.5` when a novella
@@ -45,6 +37,6 @@ fun seriesIndexLabel(index: Double?): String? {
     return if (index == Math.floor(index) && Math.abs(index) < 1e9) {
         index.toLong().toString()
     } else {
-        index.toBigDecimal().stripTrailingZeros().toPlainString()
+        java.math.BigDecimal.valueOf(index).stripTrailingZeros().toPlainString()
     }
 }

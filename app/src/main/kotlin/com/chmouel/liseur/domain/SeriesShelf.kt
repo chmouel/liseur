@@ -190,16 +190,29 @@ fun nextInSeries(
     if (key.isEmpty()) return null
     val index = finished.seriesIndex ?: return null
 
-    return library
+    // Walked in order rather than filtered, because the two reasons a
+    // volume is not the answer are different. One already read is
+    // stepped over — the reader has moved past it. One missing from the
+    // shelf altogether is a hole, and offering across a hole means
+    // offering #5 to someone who has just put down #1.
+    val shelf = library
         .asSequence()
         .filter { it.url != finished.url }
         .filter { seriesKey(it.seriesName) == key }
-        .filter { !it.archived && !it.finished }
-        .filter { (progressions[it.url] ?: 0.0) <= 0.0 }
         .mapNotNull { book -> book.seriesIndex?.let { it to book } }
         .filter { (candidate, _) -> candidate > index }
-        .minByOrNull { (candidate, _) -> candidate }
-        ?.second
+        .sortedBy { (candidate, _) -> candidate }
+
+    var previous = index
+    for ((candidate, book) in shelf) {
+        // A novella between two volumes is a step, not a hole: #7 -> #7.5
+        // and #7.5 -> #8 both land inside the next whole number.
+        if (candidate > Math.floor(previous) + 1.0) return null
+        val begun = (progressions[book.url] ?: 0.0) > 0.0
+        if (!book.archived && !book.finished && !begun) return book
+        previous = candidate
+    }
+    return null
 }
 
 /**

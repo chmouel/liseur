@@ -277,11 +277,11 @@ class NextInSeriesTest {
     }
 
     @Test
-    fun `a gap does not stop the offer`() {
+    fun `a missing next volume does not guess past the gap`() {
         val one = book("One", index = 1.0, finishedAt = 1)
         val library = listOf(one, book("Four", index = 4.0))
 
-        assertEquals("Four", nextInSeries(one, library)?.title)
+        assertNull(nextInSeries(one, library))
     }
 
     @Test
@@ -336,6 +336,35 @@ class NextInSeriesTest {
         val library = listOf(one, book("Dune Messiah", series = "Dune", index = 2.0))
 
         assertNull(nextInSeries(one, library))
+    }
+
+    /**
+     * A hole in the shelf and a volume already read are different
+     * things. Stepping over the second is the whole point; stepping
+     * over the first offers #5 to someone who has just put down #1.
+     */
+    @Test
+    fun `a volume missing from the shelf is not read across`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val library = listOf(one, book("Five", index = 5.0))
+
+        assertNull(nextInSeries(one, library))
+    }
+
+    @Test
+    fun `a novella between two volumes is the next step`() {
+        val seven = book("Seven", index = 7.0, finishedAt = 1)
+        val library = listOf(seven, book("Novella", index = 7.5), book("Eight", index = 8.0))
+
+        assertEquals("Novella", nextInSeries(seven, library)?.title)
+    }
+
+    @Test
+    fun `the volume after a novella is the next whole one`() {
+        val novella = book("Novella", index = 7.5, finishedAt = 1)
+        val library = listOf(book("Seven", index = 7.0), novella, book("Eight", index = 8.0))
+
+        assertEquals("Eight", nextInSeries(novella, library)?.title)
     }
 }
 

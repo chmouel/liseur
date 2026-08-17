@@ -197,11 +197,10 @@ object OpdsParser {
      * users series at all, and it costs nothing — the feed is already
      * being walked for everything else.
      *
-     * That it is prose is the risk, so both halves have to agree before
-     * anything is believed: the line must be labelled `SERIES`, and it
-     * must end in a bracketed number. A custom column of calibre's own
-     * series type is written to the same block in the same shape, under
-     * its own name, and would otherwise be mistaken for the real one.
+     * That it is prose is the risk, so the line must be labelled `SERIES`.
+     * A custom column of calibre's own series type is written to the same
+     * block under its own name, and is not mistaken for the real one. The
+     * number is optional: a series without a number is still a series.
      * A feed that does not match is a book without a series, never an
      * error; a downloaded book has its own OPF to ask as well.
      */
@@ -209,7 +208,11 @@ object OpdsParser {
         val content = entry.children("content").firstOrNull() ?: return null
         return directText(content)
             .lineSequence()
-            .mapNotNull { line -> SERIES_LINE.matchEntire(line.trim()) }
+            .mapNotNull { line ->
+                val trimmed = line.trim()
+                SERIES_NUMBERED_LINE.matchEntire(trimmed)
+                    ?: SERIES_UNNUMBERED_LINE.matchEntire(trimmed)
+            }
             .firstNotNullOfOrNull { match ->
                 val name = match.groupValues[1].trim().takeIf { it.isNotEmpty() }
                     ?: return@firstNotNullOfOrNull null
@@ -245,10 +248,16 @@ object OpdsParser {
         return text.toString()
     }
 
-    private val SERIES_LINE = Regex(
+    private val SERIES_NUMBERED_LINE = Regex(
         // Greedy up to the last bracketed number, so a series whose own
         // name carries brackets keeps them.
         """(?i)SERIES\s*:\s*(.+)\[\s*(-?\d+(?:[.,]\d+)?)\s*]""",
+    )
+
+    private val SERIES_UNNUMBERED_LINE = Regex(
+        // This is tried after the numbered form, which keeps a bracketed
+        // number out of the name when there is one.
+        """(?i)SERIES\s*:\s*(.+?)(?:\s*\[\s*(-?\d+(?:[.,]\d+)?)\s*])?""",
     )
 
     /** calibre's integer id, as it appears in `/opds/download/74/epub/`. */
