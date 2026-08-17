@@ -23,7 +23,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 32,
+    version = 33,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -920,6 +920,27 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Makes existing manual series choices retry safely instead of letting a pull replace them. */
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `books` ADD COLUMN `series_claim_pending` INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `books` ADD COLUMN `series_claim_reset` INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `books` ADD COLUMN `personal_series_updated_at` INTEGER",
+                )
+                // Version 32 has no acknowledgement state. A timestamp means the reader made
+                // a local claim, so preserve it as a set claim rather than risk deleting it.
+                connection.execSQL(
+                    "UPDATE `books` SET `series_claim_pending` = 1 " +
+                        "WHERE `user_series_updated_at` IS NOT NULL",
+                )
+            }
+        }
+
         /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
@@ -956,6 +977,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_29_30,
             MIGRATION_30_31,
             MIGRATION_31_32,
+            MIGRATION_32_33,
         )
     }
 }
