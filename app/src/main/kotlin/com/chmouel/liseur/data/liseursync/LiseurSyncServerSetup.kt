@@ -195,7 +195,10 @@ class LiseurSyncServerSetup(
         return when (reason) {
             SyncFailure.Unauthorised, SyncFailure.Forbidden -> SetupFailure.BadCredentials
             SyncFailure.InsecureTransport -> SetupFailure.InsecureTransport
-            SyncFailure.NotFound, SyncFailure.Malformed -> SetupFailure.WrongServer
+            // StaleIdentity is a position-sync answer; setup never
+            // produces it, but the branch has to exist.
+            SyncFailure.NotFound, SyncFailure.Malformed, SyncFailure.StaleIdentity ->
+                SetupFailure.WrongServer
             SyncFailure.Offline, SyncFailure.Timeout ->
                 SetupFailure.Unreachable("No answer", httpMayWork = false)
 

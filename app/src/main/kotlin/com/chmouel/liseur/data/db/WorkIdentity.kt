@@ -165,6 +165,21 @@ interface WorkIdentityDao {
     @Upsert
     suspend fun upsert(alias: WorkAlias)
 
+    /**
+     * Forgets one cached name, but only while it still is that name.
+     *
+     * The work id guard is what makes a delayed answer safe: a recovery
+     * that already refreshed the alias must not be undone by a slower
+     * one deleting whatever now sits under the key.
+     */
+    @Query(
+        """
+        DELETE FROM work_alias
+        WHERE book_url = :bookUrl AND peer_id = :peerId AND work_id = :staleWorkId
+        """,
+    )
+    suspend fun deleteAliasIfStale(bookUrl: String, peerId: String, staleWorkId: String)
+
     @Query("UPDATE work_alias SET confirmed = 1 WHERE book_url = :bookUrl AND peer_id = :peerId")
     suspend fun confirm(bookUrl: String, peerId: String)
 

@@ -319,12 +319,17 @@ class LiseurSyncPositionSync(
             }
         }
 
-        val pushed = push(account, pushes) { firstFailure = firstFailure ?: it }
+        // Books whose name was refreshed after the server disowned it,
+        // once each. A second refusal for the same book in the same run
+        // is left for the next scheduled sync rather than chased.
+        val recovered = mutableSetOf<String>()
+
+        val pushed = push(account, pushes, recovered) { firstFailure = firstFailure ?: it }
 
         // After the positions, because where the reader is now matters
         // more than how long they took to get there, and a run cut short
         // by a dead network should have spent what it had on the former.
-        uploadSessions(account) { firstFailure = firstFailure ?: it }
+        uploadSessions(account, recovered) { firstFailure = firstFailure ?: it }
 
         val at = now()
         reporting.report(
@@ -693,14 +698,25 @@ class LiseurSyncPositionSync(
      * `duplicate` counts as success, and is the ordinary answer to a run
      * that was cut off after the server had already stored the op. That
      * is the whole reason the ids are derived rather than drawn.
+     *
+     * A batch the server refuses wholesale because it no longer holds
+     * one of the works settles nothing: the stale name is refreshed and
+     * the batch retried within the run, so a cleanup on the server side
+     * never strands a position that was dirty when it happened.
      */
     private suspend fun push(
         account: Account,
         pushes: List<PendingPush>,
+        recovered: MutableSet<String>,
         onFailure: (SyncFailure) -> Unit,
     ): Int {
         var pushed = 0
-        for (batch in pushes.chunked(SyncOps.MAX_BATCH)) {
+        val queue = ArrayDeque(pushes.chunked(SyncOps.MAX_BATCH))
+        while (queue.isNotEmpty()) {
+            val batch = queue.removeFirst()
+            // A null answer means a recovery rebuilt the batch and it
+            // goes back on the queue: nothing from the rejected request
+            // is settled.
             val answer = try {
                 http.post(
                     LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.OPS),
@@ -709,20 +725,39 @@ class LiseurSyncPositionSync(
                         "ops",
                         JSONArray().apply { batch.forEach { put(SyncOps.toJson(it.op)) } },
                     ),
+                    expected = setOf(LiseurSyncHttp.BAD_REQUEST),
                 )
+            } catch (rejection: LiseurSyncRejection) {
+                when (val recovery = recoverPush(account, batch, rejection, recovered, onFailure)) {
+                    is PushRecovery.Retry -> {
+                        if (recovery.batch.isNotEmpty()) queue.addFirst(recovery.batch)
+                        null
+                    }
+
+                    PushRecovery.Exhausted -> {
+                        onFailure(SyncFailure.StaleIdentity)
+                        return pushed
+                    }
+
+                    PushRecovery.Ordinary -> {
+                        Log.i(TAG, "The server refused a positions batch")
+                        onFailure(SyncFailure.ServerError(rejection.code))
+                        return pushed
+                    }
+                }
             } catch (e: IOException) {
                 Log.i(TAG, "Could not send positions", e)
                 onFailure(reasonFor(e))
                 return pushed
-            }
+            } ?: continue
 
             val accepted = accepted(answer)
             for (item in batch) {
                 if (item.op.opId !in accepted) {
-                    // The server refused this one on its own terms —
-                    // an id reused with a different payload, or an
-                    // unknown work. Leaving the book dirty is right: the
-                    // next run asks again with whatever it holds then.
+                    // The server refused this one on its own terms — an
+                    // id reused with a different payload. Leaving the
+                    // book dirty is right: the next run asks again with
+                    // whatever it holds then.
                     Log.i(TAG, "The server would not take a position")
                     continue
                 }
@@ -742,7 +777,135 @@ class LiseurSyncPositionSync(
         return pushed
     }
 
+    /** What came of trying to recover a rejected ops batch. */
+    private sealed interface PushRecovery {
+        /** Retry these instead of the rejected batch. */
+        data class Retry(val batch: List<PendingPush>) : PushRecovery
+
+        /** Not a refusal recovery answers; the caller fails the old way. */
+        data object Ordinary : PushRecovery
+
+        /** This run already refreshed the book once; stop asking. */
+        data object Exhausted : PushRecovery
+    }
+
+    /**
+     * Answers a batch the server refused for naming a deleted work.
+     *
+     * Only the book the refusal names is refreshed, and only when the
+     * refusal's `op_id` and `work_id` match an op this batch actually
+     * sent — anything else is a malformed answer, not a stale identity,
+     * and deletes nothing. The refreshed name is reseeded and the push
+     * rebuilt from current stored state, so the retried op carries a
+     * newly derived id under the new work. A book that comes back
+     * unnameable, or whose reading now points the other way, is simply
+     * dropped from the retry: its position stays dirty and loses
+     * nothing.
+     */
+    private suspend fun recoverPush(
+        account: Account,
+        batch: List<PendingPush>,
+        rejection: LiseurSyncRejection,
+        recovered: MutableSet<String>,
+        onFailure: (SyncFailure) -> Unit,
+    ): PushRecovery {
+        if (!rejection.isUnknownWork) return PushRecovery.Ordinary
+        val opId = rejection.opId ?: return PushRecovery.Ordinary
+        val workId = rejection.workId ?: return PushRecovery.Ordinary
+        val stale = batch.firstOrNull { it.op.opId == opId }
+            ?.takeIf { it.op.workId == workId && it.alias.workId == workId }
+            ?: return PushRecovery.Ordinary
+
+        if (!recovered.add(stale.bookUrl)) {
+            // The name fetched in this very run was deleted again before
+            // the retry landed. Forget it and stop: the next run names
+            // the book afresh, with the position still dirty.
+            forAccount(account) {
+                identityDao.deleteAliasIfStale(stale.bookUrl, account.peerId, workId)
+            }
+            return PushRecovery.Exhausted
+        }
+
+        val replacement = when (val refreshed = refreshStaleIdentity(account, stale.bookUrl, workId)) {
+            is IdentityRefresh.Refreshed ->
+                (reconcile(account, refreshed.book to refreshed.alias) as? Reconciled.Owed)?.push
+
+            is IdentityRefresh.Failed -> {
+                onFailure(reasonFor(refreshed.cause))
+                null
+            }
+
+            IdentityRefresh.Unnameable -> null
+        }
+        return PushRecovery.Retry(
+            batch.mapNotNull { if (it.bookUrl == stale.bookUrl) replacement else it },
+        )
+    }
+
+    /** What came of asking the server for a name to replace a stale one. */
+    private sealed interface IdentityRefresh {
+        /** A usable fresh name, already seeded. */
+        data class Refreshed(val book: Book, val alias: WorkAlias) : IdentityRefresh
+
+        /** The book cannot be named without the reader, or at all yet. */
+        data object Unnameable : IdentityRefresh
+
+        /** Asking failed; everything stays as it was and retried later. */
+        data class Failed(val cause: IOException) : IdentityRefresh
+    }
+
+    /**
+     * Forgets the name the server just disowned and asks for a fresh one.
+     *
+     * The delete is conditional on the stale work id, so a delayed
+     * refusal cannot remove a name a faster recovery already wrote.
+     * Resolution then goes the ordinary way — the catalog route for one
+     * of this server's own books, the hashes and fingerprints for any
+     * other — and a usable answer is seeded before it is used, because
+     * everything the refreshed work heard before this device named it
+     * sits behind the cursor, where the delta pull never looks.
+     */
+    private suspend fun refreshStaleIdentity(
+        account: Account,
+        bookUrl: String,
+        staleWorkId: String,
+    ): IdentityRefresh {
+        forAccount(account) {
+            identityDao.deleteAliasIfStale(bookUrl, account.peerId, staleWorkId)
+        }
+        val book = bookDao.getByUrl(bookUrl) ?: return IdentityRefresh.Unnameable
+        return when (
+            val resolved = works.resolve(book, account.peerId, account.baseUrl, account.credentials)
+        ) {
+            is WorkResolution.Named -> {
+                seed(account, book, resolved.alias)
+                IdentityRefresh.Refreshed(book, resolved.alias)
+            }
+
+            is WorkResolution.NeedsConfirming, is WorkResolution.Ambiguous ->
+                IdentityRefresh.Unnameable
+
+            is WorkResolution.Unresolved ->
+                resolved.cause?.let(IdentityRefresh::Failed) ?: IdentityRefresh.Unnameable
+        }
+    }
+
     // -- Sessions ---------------------------------------------------------
+
+    /**
+     * A session ready to send, with everything a retry needs.
+     *
+     * A refusal that names a stale work asks for the batch to be rebuilt
+     * under the book's fresh name, which takes the stored row, the wire
+     * id to match the refusal against, and the name this attempt used.
+     */
+    private data class PreparedSession(
+        val localId: Long,
+        val wireId: String,
+        val bookUrl: String,
+        val workId: String,
+        val json: JSONObject,
+    )
 
     /**
      * Sends finished reading, once each.
@@ -757,9 +920,15 @@ class LiseurSyncPositionSync(
      * marked done rather than retried. Neither will ever be accepted,
      * and a batch that can never succeed would sit at the head of the
      * queue forever and stop every later session behind it.
+     *
+     * The one refusal that is recovered instead is a stale work name:
+     * the book is resolved afresh, its sessions rebuilt under the new
+     * name, and the batch retried. Nothing is marked uploaded until the
+     * server has actually taken it.
      */
     private suspend fun uploadSessions(
         account: Account,
+        recovered: MutableSet<String>,
         onFailure: (SyncFailure) -> Unit,
     ) {
         val sessions = sessionDao.awaitingUpload(SessionUploads.MAX_BATCH)
@@ -768,40 +937,147 @@ class LiseurSyncPositionSync(
             .filter { it.usable }
             .associateBy { it.bookUrl }
 
-        val sending = sessions.mapNotNull { session ->
+        var sending = sessions.mapNotNull { session ->
             val alias = byBook[session.bookUrl] ?: return@mapNotNull null
             SessionUploads.toJson(
                 session = session,
                 deviceKey = account.deviceKey,
                 workId = alias.workId,
                 editionSha = alias.editionSha,
-            )?.let { session.id to it }
+            )?.let {
+                PreparedSession(
+                    localId = session.id,
+                    wireId = SessionUploads.sessionIdFor(account.deviceKey, session.id),
+                    bookUrl = session.bookUrl,
+                    workId = alias.workId,
+                    json = it,
+                )
+            }
         }
         if (sending.isEmpty()) return
 
-        try {
-            http.post(
-                LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.SESSIONS),
-                account.credentials,
-                JSONObject().put(
-                    "sessions",
-                    JSONArray().apply { sending.forEach { put(it.second) } },
-                ),
-            )
-        } catch (rejected: RemoteHttpFailure) {
-            if (!rejected.reason.isFinal()) {
-                Log.i(TAG, "Could not send reading sessions", rejected)
-                onFailure(rejected.reason)
+        var answered = false
+        while (!answered) {
+            answered = try {
+                http.post(
+                    LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.SESSIONS),
+                    account.credentials,
+                    JSONObject().put(
+                        "sessions",
+                        JSONArray().apply { sending.forEach { put(it.json) } },
+                    ),
+                    expected = setOf(LiseurSyncHttp.BAD_REQUEST),
+                )
+                true
+            } catch (rejection: LiseurSyncRejection) {
+                when (val recovery = recoverSessions(account, sending, rejection, recovered)) {
+                    is SessionRecovery.Retry -> {
+                        recovery.failure?.let(onFailure)
+                        if (recovery.sending.isEmpty()) return
+                        sending = recovery.sending
+                        false
+                    }
+
+                    SessionRecovery.Exhausted -> {
+                        onFailure(SyncFailure.StaleIdentity)
+                        return
+                    }
+
+                    SessionRecovery.Ordinary -> {
+                        // A refusal that names no stale work is the same
+                        // dead end as any other malformed batch.
+                        Log.i(TAG, "The server will never take these sessions; not asking again")
+                        true
+                    }
+                }
+            } catch (rejected: RemoteHttpFailure) {
+                if (!rejected.reason.isFinal()) {
+                    Log.i(TAG, "Could not send reading sessions", rejected)
+                    onFailure(rejected.reason)
+                    return
+                }
+                Log.i(TAG, "The server will never take these sessions; not asking again")
+                true
+            } catch (e: IOException) {
+                Log.i(TAG, "Could not send reading sessions", e)
+                onFailure(reasonFor(e))
                 return
             }
-            Log.i(TAG, "The server will never take these sessions; not asking again")
-        } catch (e: IOException) {
-            Log.i(TAG, "Could not send reading sessions", e)
-            onFailure(reasonFor(e))
-            return
         }
 
-        forAccount(account) { sessionDao.markUploaded(sending.map { it.first }, now()) }
+        forAccount(account) { sessionDao.markUploaded(sending.map { it.localId }, now()) }
+    }
+
+    /** What came of trying to recover a rejected session batch. */
+    private sealed interface SessionRecovery {
+        /**
+         * Retry these instead of the rejected batch; [failure] is a
+         * re-resolution that failed along the way, reported but not
+         * allowed to stop the books whose names are still good.
+         */
+        data class Retry(val sending: List<PreparedSession>, val failure: SyncFailure? = null) :
+            SessionRecovery
+
+        /** Not a refusal recovery answers; the caller fails the old way. */
+        data object Ordinary : SessionRecovery
+
+        /** This run already refreshed the book once; stop asking. */
+        data object Exhausted : SessionRecovery
+    }
+
+    /**
+     * Answers a session batch the server refused for naming a deleted
+     * work.
+     *
+     * Only the book the refusal names is refreshed, and only when the
+     * refusal's `session_id` and `work_id` match an entry this batch
+     * actually sent — anything else is a malformed answer, not a stale
+     * identity, and deletes nothing. The affected payloads are rebuilt
+     * from their stored rows under the fresh name; the wire session id
+     * derives from the local row rather than the work, so it survives
+     * as the idempotency key it was. A book that comes back unnameable
+     * keeps its sessions pending while the rest of the batch is retried
+     * without it.
+     */
+    private suspend fun recoverSessions(
+        account: Account,
+        sending: List<PreparedSession>,
+        rejection: LiseurSyncRejection,
+        recovered: MutableSet<String>,
+    ): SessionRecovery {
+        if (!rejection.isUnknownWork) return SessionRecovery.Ordinary
+        val sessionId = rejection.sessionId ?: return SessionRecovery.Ordinary
+        val workId = rejection.workId ?: return SessionRecovery.Ordinary
+        val culprit = sending.firstOrNull { it.wireId == sessionId }
+            ?.takeIf { it.workId == workId }
+            ?: return SessionRecovery.Ordinary
+
+        if (!recovered.add(culprit.bookUrl)) {
+            // The name fetched in this very run was deleted again before
+            // the retry landed. Forget it and stop: the sessions stay
+            // pending for the next run.
+            forAccount(account) {
+                identityDao.deleteAliasIfStale(culprit.bookUrl, account.peerId, workId)
+            }
+            return SessionRecovery.Exhausted
+        }
+
+        val rest = sending.filter { it.bookUrl != culprit.bookUrl }
+        val refreshed = when (val outcome = refreshStaleIdentity(account, culprit.bookUrl, workId)) {
+            is IdentityRefresh.Refreshed -> outcome
+            is IdentityRefresh.Failed -> return SessionRecovery.Retry(rest, reasonFor(outcome.cause))
+            IdentityRefresh.Unnameable -> return SessionRecovery.Retry(rest)
+        }
+        val rebuilt = sending.filter { it.bookUrl == culprit.bookUrl }.mapNotNull { entry ->
+            val session = sessionDao.get(entry.localId) ?: return@mapNotNull null
+            SessionUploads.toJson(
+                session = session,
+                deviceKey = account.deviceKey,
+                workId = refreshed.alias.workId,
+                editionSha = refreshed.alias.editionSha,
+            )?.let { entry.copy(workId = refreshed.alias.workId, json = it) }
+        }
+        return SessionRecovery.Retry(rest + rebuilt)
     }
 
     /**

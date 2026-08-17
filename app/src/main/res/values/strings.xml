@@ -203,6 +203,7 @@
     <string name="server_sync_missing">The server no longer has one of these books, so its position could not be synced.</string>
     <string name="server_sync_insecure">This server refuses to take credentials over plain HTTP. Use an https:// address.</string>
     <string name="server_sync_malformed">The server answered with something unexpected; positions will sync later.</string>
+    <string name="server_sync_stale_identity">The server’s book identity changed; sync will retry.</string>
     <string name="server_sync_server_error">The server ran into trouble; positions will sync later.</string>
     <string name="server_sync_never">Reading positions have not synced yet.</string>
     <string name="server_sync_last">Reading positions synced %1$s</string>

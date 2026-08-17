@@ -51,13 +51,24 @@ sealed interface SyncFailure {
     data object InsecureTransport : SyncFailure
 
     /**
+     * The server no longer knew a book by the name this device had
+     * cached, twice in one run.
+     *
+     * Recovery re-resolves and retries once per book per run; this is
+     * what is left when even the fresh answer was already stale, so the
+     * run gives the book back to the next scheduled sync rather than
+     * asking the server a third time.
+     */
+    data object StaleIdentity : SyncFailure
+
+    /**
      * Whether asking again later stands a chance. A refused sign-in will
      * be refused just as firmly in ten minutes, so retrying it only
      * spends battery.
      */
     val worthRetrying: Boolean
         get() = when (this) {
-            Offline, Timeout, Malformed -> true
+            Offline, Timeout, Malformed, StaleIdentity -> true
             is ServerError -> code >= 500
             Unauthorised, Forbidden, NotFound, InsecureTransport -> false
         }
@@ -73,6 +84,7 @@ sealed interface SyncFailure {
             is ServerError -> "server error $code"
             Malformed -> "malformed response"
             InsecureTransport -> "https required"
+            StaleIdentity -> "stale identity"
         }
 }
 

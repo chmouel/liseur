@@ -32,6 +32,33 @@ class LiseurSyncRejection(
 
     /** The server's own word for what was wrong, if it gave one. */
     val error: String? get() = body?.optString("error")?.takeIf { it.isNotEmpty() }
+
+    /** The machine-readable refusal kind, when the server gave one. */
+    val errorCode: String? get() = body?.optString("code")?.takeIf { it.isNotEmpty() }
+
+    /** The work the server no longer holds, on an [UNKNOWN_WORK] refusal. */
+    val workId: String? get() = body?.optString("work_id")?.takeIf { it.isNotEmpty() }
+
+    /** The op that named the unknown work. */
+    val opId: String? get() = body?.optString("op_id")?.takeIf { it.isNotEmpty() }
+
+    /** The session that named the unknown work. */
+    val sessionId: String? get() = body?.optString("session_id")?.takeIf { it.isNotEmpty() }
+
+    /**
+     * The one refusal a client recovers from: the server no longer
+     * holds a work this device had a cached name for.
+     *
+     * Only this exact shape enters stale-identity recovery — a missing
+     * or malformed code is an ordinary 400 and invalidates nothing.
+     */
+    val isUnknownWork: Boolean
+        get() = code == LiseurSyncHttp.BAD_REQUEST && errorCode == UNKNOWN_WORK
+
+    companion object {
+        /** A batch item named a work the server no longer holds. */
+        const val UNKNOWN_WORK = "unknown_work"
+    }
 }
 
 /**
@@ -173,6 +200,9 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
     companion object {
         private const val TAG = "liseur-sync-http"
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /** A malformed batch — or, with a `code`, a recoverable refusal. */
+        const val BAD_REQUEST = 400
 
         /** Identifiers that name two different books. */
         const val CONFLICT = 409

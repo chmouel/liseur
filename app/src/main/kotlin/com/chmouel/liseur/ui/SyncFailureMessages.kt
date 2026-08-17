@@ -17,5 +17,6 @@ fun SyncFailure.messageRes(): Int = when (this) {
     SyncFailure.NotFound -> R.string.server_sync_missing
     SyncFailure.Malformed -> R.string.server_sync_malformed
     SyncFailure.InsecureTransport -> R.string.server_sync_insecure
+    SyncFailure.StaleIdentity -> R.string.server_sync_stale_identity
     is SyncFailure.ServerError -> R.string.server_sync_server_error
 }

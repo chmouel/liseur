@@ -356,6 +356,210 @@ class LiseurSyncPositionSyncTest {
         assertEquals(0, server.requestCount)
     }
 
+    @Test
+    fun `a deleted work is named afresh and the position retried in the same run`() = runTest {
+        // Orphan cleanup removed the work this device had cached; the
+        // push is refused with the structured unknown_work answer.
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        unknownWork("op_id", SyncOps.opIdFor("device-a", "w-old", 1), "w-old")
+        resolved("w-new")
+        server.enqueue(json("""{"ops":[]}""")) // the reseed question
+        accepted("w-new")
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val pushes = requests().filter { it.target.startsWith("/v1/ops") }
+        assertEquals(2, pushes.size)
+        val first = JSONObject(pushes[0].body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+        val retried = JSONObject(pushes[1].body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+        assertEquals("w-old", first.getString("work_id"))
+        // The retry names the fresh work and derives a fresh op id; the
+        // reading itself is what it was.
+        assertEquals("w-new", retried.getString("work_id"))
+        assertEquals(SyncOps.opIdFor("device-a", "w-new", 1), retried.getString("op_id"))
+        assertEquals(first.getDouble("progression"), retried.getDouble("progression"), 0.0)
+        assertEquals(first.getString("client_ts"), retried.getString("client_ts"))
+        // Settled only now, under the new name.
+        assertEquals("w-new", db.workIdentityDao().alias(LOCAL, peer())?.workId)
+        assertEquals(1L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `a session for a deleted work is rebuilt and sent under the new name`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        val session = closedSession(from = 0.1, to = 0.4)
+        val wireId = SessionUploads.sessionIdFor("device-a", session)
+        server.enqueue(json("""{"ops":[]}"""))
+        unknownWork("session_id", wireId, "w-old")
+        resolved("w-new")
+        server.enqueue(json("""{"ops":[]}""")) // the reseed question
+        server.enqueue(json("""{"accepted":1}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val sent = requests().filter { it.target.startsWith("/v1/sessions") }
+        assertEquals(2, sent.size)
+        val first = JSONObject(sent[0].body!!.utf8()).getJSONArray("sessions").getJSONObject(0)
+        val retried = JSONObject(sent[1].body!!.utf8()).getJSONArray("sessions").getJSONObject(0)
+        assertEquals("w-old", first.getString("work_id"))
+        assertEquals("w-new", retried.getString("work_id"))
+        // The idempotency key derives from the local row, not the work.
+        assertEquals(wireId, retried.getString("session_id"))
+        assertNotNull(db.readingSessionDao().get(session)?.uploadedAt)
+    }
+
+    @Test
+    fun `a session stays unuploaded while its refusal is being worked through`() = runTest {
+        // The rejection answers the batch as a whole: nothing in it was
+        // stored, so nothing in it may be marked done.
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        val session = closedSession(from = 0.1, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        unknownWork("session_id", SessionUploads.sessionIdFor("device-a", session), "w-old")
+        // Re-resolution cannot reach the server; the session is a fact
+        // about the past and waits, no less true next run.
+        server.enqueue(MockResponse(code = 503, body = ""))
+
+        val outcome = sync().syncAll(null)
+
+        assertNull(db.readingSessionDao().get(session)?.uploadedAt)
+        assertTrue(outcome is SyncOutcome.Failure && outcome.reason.worthRetrying)
+    }
+
+    @Test
+    fun `two stale books in one batch recover one at a time`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        db.bookDao().upsert(local().copy(url = LOCAL2, title = "Another Book"))
+        alias(workId = "w-old-1")
+        alias(workId = "w-old-2", bookUrl = LOCAL2)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL2, LOCATOR, 0.7, null, "reading", NOW)
+
+        server.enqueue(json("""{"ops":[]}"""))
+        unknownWork("op_id", SyncOps.opIdFor("device-a", "w-old-1", 1), "w-old-1")
+        resolved("w-new-1")
+        server.enqueue(json("""{"ops":[]}"""))
+        // The retry still names the second book's stale work, and the
+        // server refuses that one next.
+        unknownWork("op_id", SyncOps.opIdFor("device-a", "w-old-2", 1), "w-old-2")
+        resolved("w-new-2")
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            json(
+                """{"results":[
+                    {"op_id":"${SyncOps.opIdFor("device-a", "w-new-1", 1)}","status":"applied"},
+                    {"op_id":"${SyncOps.opIdFor("device-a", "w-new-2", 1)}","status":"applied"}]}
+                """.trimIndent(),
+            ),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val pushes = requests().filter { it.target.startsWith("/v1/ops") }
+        assertEquals(3, pushes.size)
+        val finalOps = JSONObject(pushes[2].body!!.utf8()).getJSONArray("ops")
+        val workIds = (0 until finalOps.length()).map { finalOps.getJSONObject(it).getString("work_id") }
+        assertEquals(setOf("w-new-1", "w-new-2"), workIds.toSet())
+        assertEquals(1L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+        assertEquals(1L, db.syncPeerStateDao().get(LOCAL2, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `a book that comes back unnameable sends nothing and stays dirty`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        unknownWork("op_id", SyncOps.opIdFor("device-a", "w-old", 1), "w-old")
+        // Only a title-and-author guess this time: the reader has to
+        // answer before anything is exchanged under it.
+        server.enqueue(
+            json("""{"work_id":"w-new","confidence":"low","created":false}"""),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        assertEquals(1, requests().count { it.target.startsWith("/v1/ops") })
+        assertNull(db.syncPeerStateDao().get(LOCAL, peer())?.takeIf { it.ackedRevision > 0 })
+        assertEquals(0.4, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a second deletion in the same run stops asking and stays dirty`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        unknownWork("op_id", SyncOps.opIdFor("device-a", "w-old", 1), "w-old")
+        resolved("w-new")
+        server.enqueue(json("""{"ops":[]}"""))
+        // The fresh name was deleted again before the retry landed.
+        unknownWork("op_id", SyncOps.opIdFor("device-a", "w-new", 1), "w-new")
+
+        val outcome = sync().syncAll(null)
+
+        assertEquals(
+            SyncOutcome.Failure(com.chmouel.liseur.data.remote.SyncFailure.StaleIdentity),
+            outcome,
+        )
+        // The second stale name is forgotten too, and the position is
+        // still owed: WorkManager's backoff asks again later.
+        assertNull(db.workIdentityDao().alias(LOCAL, peer()))
+        assertNull(db.syncPeerStateDao().get(LOCAL, peer())?.takeIf { it.ackedRevision > 0 })
+        assertEquals(0.4, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `an ordinary bad request invalidates no name`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 400, body = """{"error":"locator too large"}"""))
+
+        val outcome = sync().syncAll(null)
+
+        // No recovery is even attempted against a refusal that is not
+        // the structured unknown_work answer.
+        assertTrue(outcome is SyncOutcome.Failure)
+        assertEquals("w-old", db.workIdentityDao().alias(LOCAL, peer())?.workId)
+        assertEquals(0, requests().count { it.target.startsWith("/v1/works/resolve") })
+    }
+
+    @Test
+    fun `a refusal naming another op or work invalidates nothing`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        // The shape is right but the op id is not this batch's: the
+        // answer is malformed, not a stale identity.
+        unknownWork("op_id", "op-that-was-never-sent", "w-old")
+
+        assertTrue(sync().syncAll(null) is SyncOutcome.Failure)
+        assertEquals("w-old", db.workIdentityDao().alias(LOCAL, peer())?.workId)
+
+        // Same for a work id that is not the one the op was sent under.
+        server.enqueue(json("""{"ops":[]}"""))
+        unknownWork("op_id", SyncOps.opIdFor("device-a", "w-old", 1), "w-elsewhere")
+
+        assertTrue(sync().syncAll(null) is SyncOutcome.Failure)
+        assertEquals("w-old", db.workIdentityDao().alias(LOCAL, peer())?.workId)
+    }
+
     // -- Scaffolding ------------------------------------------------------
 
     private fun sync(): LiseurSyncPositionSync {
@@ -401,10 +605,25 @@ class LiseurSyncPositionSyncTest {
     }
 
     /** The server is about to be asked what it calls this book. */
-    private fun resolved() = server.enqueue(
+    private fun resolved(workId: String = "w-1") = server.enqueue(
         MockResponse(
             code = 200,
-            body = """{"work_id":"w-1","confidence":"high","created":false}""",
+            body = """{"work_id":"$workId","confidence":"high","created":false}""",
+        ),
+    )
+
+    /**
+     * The server no longer holds the work a batch item named.
+     *
+     * [field] is `op_id` or `session_id` — which item of the batch
+     * blamed the deleted work.
+     */
+    private fun unknownWork(field: String, itemId: String, workId: String) = server.enqueue(
+        MockResponse(
+            code = 400,
+            body = """{"error":"unknown work","code":"unknown_work",
+                "work_id":"$workId","$field":"$itemId"}
+            """.trimIndent(),
         ),
     )
 
@@ -412,24 +631,26 @@ class LiseurSyncPositionSyncTest {
     private fun seeded() = server.enqueue(json("""{"ops":[]}"""))
 
     /** The server takes the op — naming it back, as it must. */
-    private fun accepted(revision: Long = 1) = server.enqueue(
+    private fun accepted(workId: String = "w-1", revision: Long = 1) = server.enqueue(
         json(
-            """{"results":[{"op_id":"${SyncOps.opIdFor("device-a", "w-1", revision)}",
+            """{"results":[{"op_id":"${SyncOps.opIdFor("device-a", workId, revision)}",
                 "status":"applied"}]}
             """.trimIndent(),
         ),
     )
 
     private suspend fun alias(
+        workId: String = "w-1",
         seeded: Boolean = true,
         confidence: String = "high",
         deviceId: String? = null,
+        bookUrl: String = LOCAL,
     ) =
         db.workIdentityDao().upsert(
             com.chmouel.liseur.data.db.WorkAlias(
-                bookUrl = LOCAL,
+                bookUrl = bookUrl,
                 peerId = peer(deviceId),
-                workId = "w-1",
+                workId = workId,
                 confidence = confidence,
                 confirmed = true,
                 seeded = seeded,
@@ -487,6 +708,7 @@ class LiseurSyncPositionSyncTest {
     private companion object {
         const val NOW = 1_700_000_000_000L
         const val LOCAL = "content://sd/book.epub"
+        const val LOCAL2 = "content://sd/other.epub"
         const val LOCATOR = """{"href":"/c1.xhtml"}"""
     }
 }
