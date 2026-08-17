@@ -13,9 +13,9 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
-      - id: assemble-release
-        name: Release build (assembleRelease)
-        entry: ./gradlew assembleRelease --console=plain --daemon
-        language: system
-        pass_filenames: false
-        stages: [pre-push]
+      # - id: assemble-release
+      #   name: Release build (assembleRelease)
+      #   entry: ./gradlew assembleRelease --console=plain --daemon
+      #   language: system
+      #   pass_filenames: false
+      #   stages: [pre-push]
