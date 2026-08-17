@@ -16,6 +16,9 @@ import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.BookScreen
+import com.chmouel.liseur.data.db.BookScreenDao
+import com.chmouel.liseur.data.db.keepsScreenOnWith
 import com.chmouel.liseur.data.db.BookTypography
 import com.chmouel.liseur.data.db.BookTypographyDao
 import com.chmouel.liseur.data.db.withTypographyOf
@@ -93,6 +96,7 @@ class ReaderViewModel(
     private val bookDao: BookDao,
     private val annotationDao: BookAnnotationDao,
     private val typographyDao: BookTypographyDao,
+    private val bookScreenDao: BookScreenDao,
     private val library: LocalLibraryRepository,
     private val prefsRepo: ReaderPreferencesRepository,
     private val readingPace: ReadingPaceRepository,
@@ -394,6 +398,15 @@ class ReaderViewModel(
     val prefs: StateFlow<ReaderPrefs> = prefsRepo.prefs
         .combine(ownTypography) { shared, own -> shared.withTypographyOf(own) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
+
+    /**
+     * Whether this book holds the screen awake: the app-wide setting,
+     * unless the book has been answered for on its own.
+     */
+    val keepScreenOn: StateFlow<Boolean> = appSettings.settings
+        .map { it.keepScreenOn }
+        .combine(bookScreenDao.observe(bookId)) { global, own -> own.keepsScreenOnWith(global) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Most recent position, used to persist progress and to survive recreation. */
     var lastLocator: Locator? = null
@@ -953,6 +966,19 @@ class ReaderViewModel(
     fun setPageTurnAnimation(enabled: Boolean) =
         viewModelScope.launch { prefsRepo.setPageTurnAnimation(enabled) }
 
+    /**
+     * Answers the screen question for this book alone.
+     *
+     * The answer is always written, even when it agrees with Settings
+     * today: a switch flipped by hand is a decision about this book, and
+     * a later change to the app-wide setting has no business undoing it.
+     * It also means nothing is read from the other store on the way,
+     * so what was asked for is what gets stored.
+     */
+    fun setKeepScreenOn(enabled: Boolean) = viewModelScope.launch {
+        bookScreenDao.upsert(BookScreen(bookUrl = bookId, keepScreenOn = enabled))
+    }
+
     fun setColumnMode(mode: ColumnMode) =
         viewModelScope.launch { prefsRepo.setColumnMode(mode) }
 
@@ -1006,6 +1032,7 @@ class ReaderViewModel(
                     bookDao = container.database.bookDao(),
                     annotationDao = container.database.annotationDao(),
                     typographyDao = container.database.typographyDao(),
+                    bookScreenDao = container.database.bookScreenDao(),
                     library = container.libraryRepository,
                     prefsRepo = container.readerPreferences,
                     readingPace = container.readingPace,

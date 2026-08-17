@@ -15,6 +15,7 @@ import androidx.sqlite.execSQL
         RemoteServer::class,
         BookAnnotation::class,
         BookTypography::class,
+        BookScreen::class,
         ReadingSession::class,
         SyncPeerState::class,
         BookFingerprintRow::class,
@@ -22,7 +23,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 31,
+    version = 32,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -37,6 +38,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun remoteServerDao(): RemoteServerDao
     abstract fun annotationDao(): BookAnnotationDao
     abstract fun typographyDao(): BookTypographyDao
+    abstract fun bookScreenDao(): BookScreenDao
     abstract fun seriesExtraDao(): SeriesExtraDao
 
     companion object {
@@ -901,6 +903,24 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Lets a single book keep the screen awake, or let it sleep,
+         * against whatever the app-wide setting says.
+         */
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_screen` (
+                        `book_url` TEXT NOT NULL,
+                        `keep_screen_on` INTEGER NOT NULL,
+                        PRIMARY KEY(`book_url`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -935,6 +955,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_28_29,
             MIGRATION_29_30,
             MIGRATION_30_31,
+            MIGRATION_31_32,
         )
     }
 }

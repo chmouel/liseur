@@ -87,6 +87,7 @@ fun SettingsScreen(
     onVolumeKeys: (Boolean) -> Unit,
     onEInkMode: (EInkMode) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
+    onKeepScreenOn: (Boolean) -> Unit,
     onDefinitionTarget: (DefinitionTarget) -> Unit,
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
@@ -238,6 +239,13 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_resume_detail),
                         checked = settings.resumeLastBook,
                         onCheckedChange = onResumeLastBook,
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = stringResource(R.string.settings_keep_screen_on),
+                        subtitle = stringResource(R.string.settings_keep_screen_on_detail),
+                        checked = settings.keepScreenOn,
+                        onCheckedChange = onKeepScreenOn,
                     )
                     RowDivider()
                     ChipRow(
