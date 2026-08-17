@@ -423,7 +423,7 @@ private fun JustThisBookToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = "Keep this for this book only",
+                text = "Use separate settings for this book",
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
