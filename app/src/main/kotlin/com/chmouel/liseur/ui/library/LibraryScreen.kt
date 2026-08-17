@@ -78,6 +78,7 @@ import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.domain.ShelfEntry
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import androidx.compose.material3.IconButton
@@ -918,14 +919,27 @@ private fun BookGrid(
             }
         }
         if (state.filters.groupBySeries) {
-            items(state.shelfSeries, key = { it.key }) { shelf ->
-                SeriesStackCard(
-                    shelf = shelf,
-                    onClick = { onSeriesSelected(shelf) },
-                    // A pile has no actions of its own on the shelf; the
-                    // long press opens it, which is where they live.
-                    onLongClick = { onSeriesSelected(shelf) },
-                )
+            items(state.shelfEntries, key = { it.gridKey }) { entry ->
+                when (entry) {
+                    is ShelfEntry.Pile -> SeriesStackCard(
+                        shelf = entry.shelf,
+                        onClick = { onSeriesSelected(entry.shelf) },
+                        // A pile has no actions of its own on the shelf;
+                        // the long press opens it, which is where they
+                        // live.
+                        onLongClick = { onSeriesSelected(entry.shelf) },
+                    )
+                    is ShelfEntry.Single -> BookCard(
+                        book = entry.book,
+                        progress = state.downloads[entry.book.url],
+                        // A single here is a book whose series is not on
+                        // the shelf; a pile it belonged to would have
+                        // swallowed it.
+                        inASeries = false,
+                        onClick = { onBookSelected(entry.book) },
+                        onLongClick = { onBookLongPress(entry.book) },
+                    )
+                }
             }
         } else {
             items(state.books, key = { it.id }) { book ->
@@ -1605,11 +1619,12 @@ private fun FilterMenu(
     val filters = state.filters
     val active = LibraryFilterOption.entries.filter { it in filters.options }
     val grouped = stringResource(R.string.filter_group_series)
+    // The grouping is a view mode with a home in Settings, not a
+    // narrowing, so it does not belong in the summary: on by default,
+    // it would caption every library ever opened.
     val summary = when {
-        active.isEmpty() && !filters.groupBySeries -> stringResource(R.string.filter_menu)
-        else -> (if (filters.groupBySeries) listOf(grouped) else emptyList())
-            .plus(active.map { it.label() })
-            .joinToString(" · ")
+        active.isEmpty() -> stringResource(R.string.filter_menu)
+        else -> active.map { it.label() }.joinToString(" · ")
     }
 
     Box(modifier = modifier) {
@@ -1686,7 +1701,10 @@ private fun FilterMenu(
                     onToggle = { onToggleFilter(LibraryFilterOption.ARCHIVED) },
                 )
             }
-            if (!filters.isEmpty) {
+            // On the options, not on [LibraryFilters.isEmpty]: the
+            // grouping no longer clears, so an offer keyed to it would
+            // sit there doing nothing.
+            if (filters.options.isNotEmpty()) {
                 HorizontalDivider()
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.filter_clear)) },

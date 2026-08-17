@@ -37,6 +37,8 @@ import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.asPickOption
 import com.chmouel.liseur.domain.groupedIntoSeries
 import com.chmouel.liseur.domain.matchesLibrarySearch
+import com.chmouel.liseur.domain.ShelfEntry
+import com.chmouel.liseur.domain.mixedShelf
 import com.chmouel.liseur.domain.movedItem
 import com.chmouel.liseur.domain.renumbered
 import com.chmouel.liseur.domain.seriesKey
@@ -158,6 +160,12 @@ data class LibraryUiState(
      * take the screen they are standing on with it.
      */
     val shelfSeries: List<SeriesShelf> = emptyList(),
+    /**
+     * The grouped grid itself: series piles and standalone books in one
+     * order. Empty unless the grouping is on, because it is only built
+     * for the grid that draws it.
+     */
+    val shelfEntries: List<ShelfEntry> = emptyList(),
     val continueReading: ContinueReading? = null,
     val catalogStatus: CatalogStatus = CatalogStatus.Idle,
     val downloads: Map<String, DownloadProgress> = emptyMap(),
@@ -406,11 +414,6 @@ class LibraryViewModel(
 
             val filteredBooks = sortedBooks
                 .filter { filters.accepts(it, progressions[it.url]) }
-                // Whether a book's series is big enough to be shown is a
-                // property of the group, which [LibraryFilters.accepts]
-                // cannot see from one book. It is applied here, where
-                // the grouping is already in hand.
-                .filter { !filters.groupBySeries || seriesKey(it.seriesName) in shownSeries }
                 .filter { book ->
                     survivesLibrarySearch(
                         query,
@@ -444,17 +447,30 @@ class LibraryViewModel(
                 readAt,
             )
 
+            // A series stands for its volumes, so it survives a
+            // narrowing as long as one of them does: asking for
+            // unread books should leave a part-read series on the
+            // shelf rather than hide the volume that has not been
+            // started.
+            val narrowedSeries = arrangedSeries.filter { shelf ->
+                shelf.volumes.any { filters.accepts(it.book, progressions[it.book.url]) }
+            }
+
             LibraryUiState(
                 loading = false,
                 books = filteredBooks,
                 series = arrangedSeries,
-                // A series stands for its volumes, so it survives a
-                // narrowing as long as one of them does: asking for
-                // unread books should leave a part-read series on the
-                // shelf rather than hide the volume that has not been
-                // started.
-                shelfSeries = arrangedSeries.filter { shelf ->
-                    shelf.volumes.any { filters.accepts(it.book, progressions[it.book.url]) }
+                shelfSeries = narrowedSeries,
+                shelfEntries = if (filters.groupBySeries) {
+                    mixedShelf(
+                        books = filteredBooks,
+                        shelves = narrowedSeries,
+                        sort = settings.librarySort,
+                        reversed = settings.librarySortReversed,
+                        readAt = readAt,
+                    )
+                } else {
+                    emptyList()
                 },
                 continueReading = recent,
                 catalogStatus = catalogStatus,
@@ -510,12 +526,14 @@ class LibraryViewModel(
     fun clearFilters() {
         // The archive is a place rather than a narrowing, so Clear
         // widens the shelf you are standing on instead of walking you
-        // off it without asking.
+        // off it without asking. The grouping survives too: it is a view
+        // mode with a home in Settings, not a filter to be cleared.
         editFilters { stored ->
             LibraryFilters(
                 options = stored.options.filterTo(mutableSetOf()) {
                     it.group == FilterGroup.PLACE
                 },
+                groupBySeries = stored.groupBySeries,
             )
         }
     }

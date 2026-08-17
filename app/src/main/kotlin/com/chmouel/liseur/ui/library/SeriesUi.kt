@@ -121,10 +121,11 @@ internal fun SeriesIndexRibbon(index: Double?, modifier: Modifier = Modifier) {
 /**
  * A whole series as one card: a pile of books rather than a book.
  *
- * The cover shown is the volume you would open next, and behind it two
- * offset slivers stand for the rest of the pile — which is what makes a
- * series legible at shelf-scanning speed, before any of the text is
- * read. The count sits on the corner, and a rail along the bottom fills
+ * The cover shown is the volume you would open next, and behind it the
+ * real covers of the other volumes peek out, stepped and faded — which
+ * is what makes a series legible at shelf-scanning speed, before any of
+ * the text is read. The count sits on the corner, and a rail along the
+ * bottom fills
  * in a segment per volume finished, so how far through a series you are
  * is answerable without opening it.
  *
@@ -166,26 +167,50 @@ internal fun SeriesStackCard(
                 // the card next to it.
                 .aspectRatio(2f / 3f * 0.92f),
         ) {
-            // The two behind, furthest first. Insets rather than
-            // rotations: a fan of tilted covers looks like a mistake at
-            // this size, and a stepped pile reads instantly.
+            // The volumes the pile is made of, peeking out behind the
+            // front cover: their real artwork, furthest first, each
+            // faded towards the surface so the front cover stays the
+            // loudest thing on the card. Insets rather than rotations: a
+            // fan of tilted covers looks like a mistake at this size,
+            // and a stepped pile reads instantly.
+            val backers = shelf.volumes
+                .map { it.book }
+                .filter { it.id != shelf.cover.id }
+                .take(2)
+            val shape = RoundedCornerShape(10.dp)
+            val surface = MaterialTheme.colorScheme.surface
             repeat(2) { layer ->
                 val depth = (2 - layer)
+                val backer = backers.getOrNull(depth - 1)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(start = (depth * 5).dp, bottom = (depth * 5).dp)
                         .padding(start = (10 - depth * 5).dp, top = (10 - depth * 5).dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(shape)
                         .background(
                             if (eInk) Color.Transparent
                             else MaterialTheme.colorScheme.surfaceVariant,
                         )
                         .border(
                             BorderStroke(1.dp, outline.copy(alpha = if (eInk) 0.9f else 0.5f)),
-                            RoundedCornerShape(10.dp),
+                            shape,
                         ),
-                )
+                ) {
+                    // On e-paper the pile stays an outline: the fade
+                    // relies on translucency, which sixteen greys and no
+                    // compositing to speak of turn into smudge.
+                    if (backer != null && !eInk) {
+                        BookCover(book = backer, modifier = Modifier.fillMaxSize())
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    surface.copy(alpha = if (depth == 2) 0.55f else 0.35f),
+                                ),
+                        )
+                    }
+                }
             }
             BookCover(
                 book = shelf.cover,
