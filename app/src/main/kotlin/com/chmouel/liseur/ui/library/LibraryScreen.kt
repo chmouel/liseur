@@ -167,6 +167,9 @@ fun LibraryScreen(
     onSetArchived: (Book, Boolean) -> Unit,
     onDeleteLocal: (Book) -> Unit,
     onDeleteFromServer: (Book) -> Unit,
+    onUploadToServer: (Book) -> Unit,
+    onUploadPending: () -> Unit,
+    onDismissUploadPrompt: () -> Unit,
     onSetSeries: (Book, String?, Double?) -> Unit,
     onResetSeries: (Book) -> Unit,
     onResetSharedSeries: (Book) -> Unit,
@@ -662,6 +665,14 @@ fun LibraryScreen(
         )
     }
 
+    if (state.pendingUploads.isNotEmpty()) {
+        UploadOfferDialog(
+            count = state.pendingUploads.size,
+            onConfirm = onUploadPending,
+            onDismiss = onDismissUploadPrompt,
+        )
+    }
+
     sheetBook?.let { book ->
         BookActionsSheet(
             book = book,
@@ -669,6 +680,8 @@ fun LibraryScreen(
             onDismiss = { sheetBook = null },
             canDownload = state.canDownload,
             canDeleteFromServer = state.canDeleteFromServer,
+            canUploadToServer = state.canUploadToServer,
+            uploading = book.url in state.uploading,
             onDownload = { onDownload(book); sheetBook = null },
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
             onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
@@ -678,6 +691,7 @@ fun LibraryScreen(
             onEditSeries = { editSeriesOf = book; sheetBook = null },
             onDeleteLocal = { onDeleteLocal(book); sheetBook = null },
             onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
+            onUploadToServer = { onUploadToServer(book); sheetBook = null },
         )
     }
 
@@ -711,8 +725,7 @@ fun LibraryScreen(
  * on a mis-tap.
  */
 @Composable
-internal fun ConfirmServerDeleteDialog(
-    book: Book,
+internal fun ConfirmServerDeleteDialog(    book: Book,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -736,6 +749,38 @@ internal fun ConfirmServerDeleteDialog(
     )
 }
 
+/**
+ * Offers to send books that are only on this device up to the server.
+ *
+ * One dialog for however many there are, not one each: a folder scan
+ * that finds forty books is still one decision, and asking forty times
+ * is how a reader learns to dismiss without reading.
+ */
+@Composable
+internal fun UploadOfferDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.upload_offer_title)) },
+        text = {
+            Text(pluralStringResource(R.plurals.upload_offer_message, count, count))
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.upload_offer_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.upload_offer_dismiss))
+            }
+        },
+    )
+}
+
 /** Long-press actions for a book: chiefly, freeing the space it takes. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -744,6 +789,8 @@ internal fun BookActionsSheet(
     downloading: Boolean,
     canDownload: Boolean,
     canDeleteFromServer: Boolean,
+    canUploadToServer: Boolean,
+    uploading: Boolean,
     onDismiss: () -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
@@ -754,6 +801,7 @@ internal fun BookActionsSheet(
     onEditSeries: () -> Unit,
     onDeleteLocal: () -> Unit,
     onDeleteFromServer: () -> Unit,
+    onUploadToServer: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -838,6 +886,11 @@ internal fun BookActionsSheet(
                         else R.string.series_change,
                     ),
                 )
+            }
+            if (book.remoteUuid == null && canUploadToServer && !uploading) {
+                TextButton(onClick = onUploadToServer, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.upload_to_server))
+                }
             }
             if (book.remoteUuid != null && canDeleteFromServer) {
                 // Kept apart from the others on purpose: everything above

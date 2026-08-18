@@ -310,6 +310,20 @@
     <string name="delete_local_failed">Could not delete the file for “%1$s”. Liseur may only be allowed to read that folder — add it again to grant deletion.</string>
     <string name="delete">Delete</string>
 
+    <string name="upload_to_server">Upload to server</string>
+    <string name="upload_offer_title">Send to the server?</string>
+    <plurals name="upload_offer_message">
+        <item quantity="one">%d book is only on this device. Sending it to the server puts it in the library on your other devices too. Where you are in it stays where it is.</item>
+        <item quantity="other">%d books are only on this device. Sending them to the server puts them in the library on your other devices too. Where you are in them stays where it is.</item>
+    </plurals>
+    <string name="upload_offer_confirm">Send</string>
+    <string name="upload_offer_dismiss">Not now</string>
+    <string name="upload_policy">Books added on this device</string>
+    <string name="upload_policy_ask">Ask before sending</string>
+    <string name="upload_policy_always">Send automatically</string>
+    <string name="upload_policy_never">Keep them here</string>
+    <string name="upload_policy_summary">A book you open or drop into a watched folder can be sent up to the server, so your other devices see it too.</string>
+
     <string name="settings">Settings</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_theme">Theme</string>

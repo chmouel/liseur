@@ -46,6 +46,13 @@ enum class ServerKind(
 
     companion object {
         /**
+         * Whether a book URL names a book that came from a server, as
+         * opposed to a file the reader added on the device.
+         */
+        fun isRemoteUrl(bookUrl: String): Boolean =
+            entries.any { bookUrl.startsWith("${it.urlPrefix}:") }
+
+        /**
          * The kind stored under [name], defaulting to [CALIBRE].
          *
          * Every row that existed before Komga was added is a calibre-web

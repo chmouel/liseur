@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.remote.BookUploadRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.remote.ServerDeleteResult
@@ -27,6 +28,7 @@ import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
@@ -176,6 +178,19 @@ data class LibraryUiState(
      * liseur-sync book is a file in a folder the server only reads.
      */
     val canDeleteFromServer: Boolean = false,
+    /**
+     * Whether a book the reader added here can be sent up to the server.
+     * True only where the account holds the permission and the server is
+     * one that takes uploads at all.
+     */
+    val canUploadToServer: Boolean = false,
+    /** Books on their way up to the server right now, by URL. */
+    val uploading: Set<String> = emptySet(),
+    /**
+     * Books that are on this device and not on the server, waiting to be
+     * offered. Empty unless the reader asked to be asked.
+     */
+    val pendingUploads: List<Book> = emptyList(),
     /** Whether a shared liseur-sync series claim can be cleared. */
     val canResetSharedSeries: Boolean = false,
     /**
@@ -254,6 +269,7 @@ class LibraryViewModel(
     private val catalog: RemoteCatalogRepository,
     private val positionSync: PositionSyncCoordinator,
     private val downloads: BookDownloadRepository,
+    private val uploads: BookUploadRepository,
     private val account: RemoteAccountRepository,
     private val router: RemoteRouter,
     private val appSettings: AppSettingsRepository,
@@ -279,6 +295,14 @@ class LibraryViewModel(
      * itself; downloads started any other way never do this.
      */
     private val awaitingOpen = MutableStateFlow<String?>(null)
+
+    /**
+     * Whether the offer to upload has been turned down since the app
+     * started. Not written down: "not now" is about now, and a book
+     * still sitting only on this device is worth mentioning again on the
+     * next run. "Never" is the setting, and it is a different answer.
+     */
+    private val uploadPromptDismissed = MutableStateFlow(false)
 
     /** Books that have finished downloading and were asked for by name. */
     val openRequests: Flow<Book> = awaitingOpen.flatMapLatest { url ->
@@ -342,10 +366,12 @@ class LibraryViewModel(
                 appSettings.settings,
                 progressDao.observeReadAt(),
                 progressDao.observeProgressions(),
+                uploads.inFlight,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
-        ) { baseValues, query, searchActive ->
+            uploadPromptDismissed,
+        ) { baseValues, query, searchActive, promptDismissed ->
             @Suppress("UNCHECKED_CAST")
             val books = baseValues[0] as List<Book>
             val recent = baseValues[1] as ContinueReading?
@@ -363,6 +389,8 @@ class LibraryViewModel(
             val progressions = progressionList
                 .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
                 .toMap()
+            @Suppress("UNCHECKED_CAST")
+            val uploading = baseValues[9] as Set<String>
 
             val onTheShelf = books.filter { !it.archived }
             val allShelves = onTheShelf.groupedIntoSeries(progressions)
@@ -478,6 +506,18 @@ class LibraryViewModel(
                 canDownload = server?.canDownload != false,
                 canDeleteFromServer = server != null &&
                     router.deleterFor(server.kind) != null,
+                canUploadToServer = canUploadTo(server, router),
+                uploading = uploading,
+                // Only under Ask: Always has already sent them and Never
+                // is an answer that does not want asking again.
+                pendingUploads = if (
+                    promptDismissed || settings.uploadPolicy != UploadPolicy.ASK
+                ) {
+                    emptyList()
+                } else {
+                    books.awaitingUpload(canUploadTo(server, router))
+                        .filterNot { it.url in uploading }
+                },
                 canResetSharedSeries = server?.kind == ServerKind.LISEUR_SYNC && server.canAdmin,
                 canRenameSeries = server?.kind == ServerKind.LISEUR_SYNC &&
                     server.canManageLibrary,
@@ -568,6 +608,19 @@ class LibraryViewModel(
         // never be looked at again on their own. This fills them in
         // behind the shelf, which is already drawn and does not wait.
         viewModelScope.launch { library.backfillSeries() }
+        // Under Always, a book that arrives on the device goes up
+        // without being asked about. The work is unique per book URL, so
+        // this seeing the same book again while it is still queued keeps
+        // the first attempt rather than starting a second.
+        viewModelScope.launch {
+            combine(library.books, appSettings.settings, account.server) { books, settings, server ->
+                if (settings.uploadPolicy != UploadPolicy.ALWAYS) {
+                    emptyList()
+                } else {
+                    books.awaitingUpload(canUploadTo(server, router))
+                }
+            }.collect { pending -> pending.forEach { uploads.enqueue(it) } }
+        }
     }
 
     /**
@@ -982,6 +1035,23 @@ class LibraryViewModel(
         viewModelScope.launch { library.importBook(uri) }
     }
 
+    /** Sends one book the reader added here up to the server. */
+    fun uploadToServer(book: Book) {
+        uploads.enqueue(book)
+        uploadPromptDismissed.value = true
+    }
+
+    /** Accepts the offer covering everything on the device but not the server. */
+    fun uploadPending() {
+        state.value.pendingUploads.forEach { uploads.enqueue(it) }
+        uploadPromptDismissed.value = true
+    }
+
+    /** Turns the offer down for now; it comes back next time the app does. */
+    fun dismissUploadPrompt() {
+        uploadPromptDismissed.value = true
+    }
+
     companion object {
         private const val TAG = "LibraryViewModel"
 
@@ -994,6 +1064,7 @@ class LibraryViewModel(
                     catalog = container.remoteCatalog,
                     positionSync = container.positionSync,
                     downloads = container.bookDownloads,
+                    uploads = container.bookUploads,
                     account = container.remoteAccount,
                     router = container.remoteRouter,
                     appSettings = container.appSettings,
@@ -1004,5 +1075,32 @@ class LibraryViewModel(
                 )
             }
         }
+    }
+}
+
+/**
+ * Whether a book added here could be sent up at all: there is a server,
+ * the account holds the right, and the kind takes uploads.
+ *
+ * The offer and the per-book action both ask this, so they can never
+ * disagree about whether uploading is a thing that can happen.
+ */
+internal fun canUploadTo(server: RemoteServer?, router: RemoteRouter): Boolean =
+    server != null && server.canUpload && router.uploaderFor(server.kind) != null
+
+/**
+ * The books that are on this device and nowhere else.
+ *
+ * A book qualifies when its identity is a file on the device rather than
+ * a server's name for it, and nothing has linked it to a copy on the
+ * server yet. Archived books are left out: taking a book off the shelf
+ * is not the moment to send it somewhere.
+ */
+internal fun List<Book>.awaitingUpload(canUpload: Boolean): List<Book> {
+    if (!canUpload) return emptyList()
+    return filter {
+        it.remoteUuid == null &&
+            it.archivedAt == null &&
+            !ServerKind.isRemoteUrl(it.url)
     }
 }
