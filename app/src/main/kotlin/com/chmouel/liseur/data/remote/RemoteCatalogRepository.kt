@@ -369,7 +369,15 @@ class RemoteCatalogRepository(
      * it is removed from the server.
      */
     private suspend fun dropVanished(seenUuids: Set<String>) {
-        val gone = bookDao.allRemote().filter { it.remoteUuid !in seenUuids }
+        // Only rows the catalog itself introduced are the catalog's to
+        // forget. A book of the reader's own that was uploaded and
+        // linked is not one: its file is its URL rather than a
+        // download, so the test below would read it as having nothing
+        // to open, and a walk that began before the upload cannot have
+        // seen its id. Between them they would delete the book and
+        // every page ever read of it.
+        val gone = bookDao.allRemote()
+            .filter { it.remoteUuid !in seenUuids && ServerKind.isRemoteUrl(it.url) }
         // Only a book with a file of its own is worth keeping. One that
         // was queued or failed has nothing to read, so it goes with the
         // rest rather than staying as a row that can never be opened.

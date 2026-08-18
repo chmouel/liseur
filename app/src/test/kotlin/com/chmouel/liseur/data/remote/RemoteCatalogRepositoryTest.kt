@@ -205,6 +205,51 @@ class RemoteCatalogRepositoryTest {
         assertEquals(20L, stored.personalSeriesUpdatedAt)
     }
 
+    /**
+     * The catalog may forget a book the reader uploaded from their own
+     * shelf, and must not take the book with it.
+     *
+     * Such a row is not the catalog's: its file is its URL rather than a
+     * download, so the "nothing to open" test reads it as disposable,
+     * and a walk that started before the upload cannot name an id that
+     * did not exist when it began. Deleting it would take the book, the
+     * reading position and every session with it.
+     */
+    @Test
+    fun `a book uploaded from the device survives a walk that never names it`() = runTest {
+        connect(ServerKind.LISEUR_SYNC)
+        val mine = "content://tree/primary%3ABooks/document/mine.epub"
+        db.bookDao().upsertAll(
+            listOf(
+                Book(
+                    url = mine,
+                    title = "Mine",
+                    author = "Me",
+                    coverPath = null,
+                    source = null,
+                    addedAt = 0,
+                    lastOpenedAt = null,
+                    localUri = null,
+                ),
+            ),
+        )
+        db.bookDao().linkToRemote(
+            url = mine,
+            remoteUuid = "uploaded",
+            downloadHref = "/v1/books/uploaded/download",
+            coverUrl = null,
+            remoteUpdatedAt = 1L,
+        )
+
+        // A page that names some other book: the walk simply never saw
+        // the one that was uploaded while it was in flight.
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
+
+        val kept = db.bookDao().getByUrl(mine)
+        assertEquals("the uploaded book was deleted", mine, kept?.url)
+        assertEquals("uploaded", kept?.remoteUuid)
+    }
+
     @Test
     fun `non liseur-sync catalog refresh keeps a local series override local`() = runTest {
         connect(ServerKind.KOMGA)
