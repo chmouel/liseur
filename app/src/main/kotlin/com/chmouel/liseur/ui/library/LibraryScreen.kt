@@ -1304,7 +1304,7 @@ internal fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun BookCover(book: Book, modifier: Modifier = Modifier) {
+fun BookCover(book: Book, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(10.dp)
     val artwork = book.coverPath ?: book.coverUrl
     val borderModifier = modifier

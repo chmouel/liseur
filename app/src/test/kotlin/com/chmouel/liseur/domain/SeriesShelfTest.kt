@@ -277,11 +277,13 @@ class NextInSeriesTest {
     }
 
     @Test
-    fun `a missing next volume does not guess past the gap`() {
+    fun `a missing next volume is named and the later book is still offered`() {
         val one = book("One", index = 1.0, finishedAt = 1)
-        val library = listOf(one, book("Four", index = 4.0))
+        val four = book("Four", index = 4.0)
+        val offer = seriesContinuation(one, listOf(one, four))
 
-        assertNull(nextInSeries(one, library))
+        assertEquals(2.0, offer.missingIndex)
+        assertEquals("Four", offer.next?.title)
     }
 
     @Test
@@ -311,13 +313,47 @@ class NextInSeriesTest {
     }
 
     @Test
-    fun `a volume already begun is not offered as new`() {
+    fun `a remote volume is still the next volume`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val two = Book(
+            url = "https://example.test/Two",
+            title = "Two",
+            author = null,
+            coverPath = null,
+            source = null,
+            addedAt = 0,
+            lastOpenedAt = null,
+            downloadState = DownloadState.REMOTE,
+            seriesName = "Wheel of Time",
+            seriesIndex = 2.0,
+        )
+        assertEquals("Two", nextInSeries(one, listOf(one, two))?.title)
+    }
+
+    @Test
+    fun `a local volume uses a sibling's series id for extras`() {
+        val local = book("Leviathan Wakes", index = 1.0)
+        val fromServer = book("Caliban's War", index = 2.0).copy(seriesId = "komga-expanse")
+        assertEquals(
+            "komga-expanse",
+            seriesIdForExtras(local, listOf(local, fromServer)),
+        )
+    }
+
+    @Test
+    fun `a book with no series has no extras id`() {
+        val alone = book("Dune", series = null)
+        assertNull(seriesIdForExtras(alone, listOf(alone)))
+    }
+
+    @Test
+    fun `an in-progress volume is the next one to continue`() {
         val one = book("One", index = 1.0, finishedAt = 1)
         val two = book("Two", index = 2.0)
         val library = listOf(one, two, book("Three", index = 3.0))
 
         assertEquals(
-            "Three",
+            "Two",
             nextInSeries(one, library, progressions = mapOf(two.url to 0.3))?.title,
         )
     }
@@ -340,15 +376,18 @@ class NextInSeriesTest {
 
     /**
      * A hole in the shelf and a volume already read are different
-     * things. Stepping over the second is the whole point; stepping
-     * over the first offers #5 to someone who has just put down #1.
+     * things. The hole is named; the later book is still the next one
+     * in the library. Offering nothing because #2 is missing would hide
+     * a #5 the reader already has.
      */
     @Test
-    fun `a volume missing from the shelf is not read across`() {
+    fun `a volume missing from the shelf is named without hiding a later book`() {
         val one = book("One", index = 1.0, finishedAt = 1)
-        val library = listOf(one, book("Five", index = 5.0))
+        val five = book("Five", index = 5.0)
+        val offer = seriesContinuation(one, listOf(one, five))
 
-        assertNull(nextInSeries(one, library))
+        assertEquals(2.0, offer.missingIndex)
+        assertEquals("Five", offer.next?.title)
     }
 
     @Test
@@ -365,6 +404,95 @@ class NextInSeriesTest {
         val library = listOf(book("Seven", index = 7.0), novella, book("Eight", index = 8.0))
 
         assertEquals("Eight", nextInSeries(novella, library)?.title)
+        assertNull(seriesContinuation(novella, library).missingIndex)
+    }
+
+    @Test
+    fun `a novella after a whole volume is not a missing book`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val novella = book("Novella", index = 1.5)
+        val offer = seriesContinuation(one, listOf(one, novella))
+
+        assertNull(offer.missingIndex)
+        assertEquals("Novella", offer.next?.title)
+    }
+
+    @Test
+    fun `a jump after a novella proves the skipped whole number is missing`() {
+        val novella = book("Novella", index = 1.5, finishedAt = 1)
+        val three = book("Three", index = 3.0)
+        val offer = seriesContinuation(novella, listOf(novella, three))
+
+        assertEquals(2.0, offer.missingIndex)
+        assertEquals("Three", offer.next?.title)
+    }
+
+    @Test
+    fun `several missing volumes name only the immediate hole`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val five = book("Five", index = 5.0)
+        val six = book("Six", index = 6.0)
+        val offer = seriesContinuation(one, listOf(one, five, six))
+
+        assertEquals(2.0, offer.missingIndex)
+        assertEquals("Five", offer.next?.title)
+    }
+
+    @Test
+    fun `a finished intermediate volume is skipped rather than called missing`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val two = book("Two", index = 2.0, finishedAt = 2)
+        val three = book("Three", index = 3.0)
+        val offer = seriesContinuation(one, listOf(one, two, three))
+
+        assertNull(offer.missingIndex)
+        assertEquals("Three", offer.next?.title)
+    }
+
+    @Test
+    fun `an archived intermediate volume is skipped rather than called missing`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val two = book("Two", index = 2.0, archivedAt = 9)
+        val three = book("Three", index = 3.0)
+        val offer = seriesContinuation(one, listOf(one, two, three))
+
+        assertNull(offer.missingIndex)
+        assertEquals("Three", offer.next?.title)
+    }
+
+    @Test
+    fun `an authoritative total proves the next volume is missing`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val offer = seriesContinuation(
+            one,
+            listOf(one),
+            extras = SeriesExtras(status = "ENDED", totalBookCount = 5),
+        )
+
+        assertEquals(2.0, offer.missingIndex)
+        assertNull(offer.next)
+    }
+
+    @Test
+    fun `a total that is already represented invents no missing volume`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val offer = seriesContinuation(
+            one,
+            listOf(one),
+            extras = SeriesExtras(status = "ENDED", totalBookCount = 1),
+        )
+
+        assertNull(offer.missingIndex)
+        assertNull(offer.next)
+    }
+
+    @Test
+    fun `without a total the next missing number is not guessed`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val offer = seriesContinuation(one, listOf(one))
+
+        assertNull(offer.missingIndex)
+        assertNull(offer.next)
     }
 }
 

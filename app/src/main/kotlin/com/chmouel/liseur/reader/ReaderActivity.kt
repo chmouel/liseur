@@ -7,6 +7,7 @@ import android.view.KeyEvent
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
@@ -15,7 +16,9 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ThemeMode
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.chmouel.liseur.reader.chrome.BookSyncDialog
 import com.chmouel.liseur.reader.chrome.PageTurner
 import androidx.lifecycle.lifecycleScope
@@ -137,6 +140,20 @@ class ReaderActivity : FragmentActivity() {
                                     ),
                                 ).also { supportFragmentManager.fragmentFactory = it }
                             }
+                            LaunchedEffect(viewModel) {
+                                lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                                    viewModel.pendingOpen.collect { next ->
+                                        if (next == null) return@collect
+                                        val url = (next.availability as? NextVolumeAvailability.Ready)
+                                            ?.fileUrl ?: return@collect
+                                        viewModel.consumeOpenNext()
+                                        startActivity(
+                                            intent(this@ReaderActivity, url, next.id),
+                                        )
+                                        finish()
+                                    }
+                                }
+                            }
                             ReaderScreen(
                                 publication = s.publication,
                                 prefsFlow = viewModel.prefs,
@@ -144,12 +161,10 @@ class ReaderActivity : FragmentActivity() {
                                 progressFlow = viewModel.progress,
                                 jumpBackFlow = viewModel.jumpBack,
                                 catchUpFlow = viewModel.catchUp,
-                                nextUpFlow = viewModel.nextUp,
-                                onOpenNextUp = { next ->
-                                    startActivity(intent(this@ReaderActivity, next.fileUrl, next.id))
-                                    finish()
-                                },
-                                onDismissNextUp = viewModel::dismissNextUp,
+                                continuationFlow = viewModel.continuation,
+                                onContinueNext = viewModel::onContinueNext,
+                                onReachedEndpaper = viewModel::onReachedEndpaper,
+                                onLeftEndpaper = viewModel::onLeftEndpaper,
                                 onLocatorChanged = viewModel::onLocatorChanged,
                                 onNavigatorChanged = { navigator = it },
                                 keepScreenOnFlow = viewModel.keepScreenOn,

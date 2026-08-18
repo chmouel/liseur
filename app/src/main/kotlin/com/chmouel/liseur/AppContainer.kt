@@ -289,6 +289,7 @@ class AppContainer(context: Context) {
             )
         },
         refreshFinished = finishedState::refreshFromProgress,
+        markFinished = { finishedState.setFinished(it, true) },
         latestSync = latestPositionSync,
         scheduleClose = { PositionSyncWorker.pushBook(context.applicationContext, it) },
         onError = { message, error -> Log.e("reading-position", message, error) },

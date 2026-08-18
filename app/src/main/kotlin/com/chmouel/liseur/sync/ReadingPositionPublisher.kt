@@ -35,12 +35,14 @@ class ReadingPositionPublisher(
     private val overrideFor: suspend (String) -> FinishedOverride,
     private val persist: suspend (PositionUpdate, String?) -> Unit,
     private val refreshFinished: suspend (String) -> Unit,
+    private val markFinished: suspend (String) -> Unit,
     private val latestSync: LatestPositionSync,
     private val scheduleClose: (String) -> Unit,
     private val onError: (String, Throwable) -> Unit,
 ) {
     private sealed interface Event {
         data class Position(val update: PositionUpdate) : Event
+        data class Complete(val bookUrl: String) : Event
         data class Close(val bookUrl: String) : Event
     }
 
@@ -53,6 +55,7 @@ class ReadingPositionPublisher(
             for (event in events) {
                 when (event) {
                     is Event.Position -> store(event.update)
+                    is Event.Complete -> complete(event.bookUrl)
                     is Event.Close -> scheduleClose(event.bookUrl)
                 }
             }
@@ -61,6 +64,15 @@ class ReadingPositionPublisher(
 
     fun publish(update: PositionUpdate): Boolean =
         events.trySend(Event.Position(update)).isSuccess
+
+    /**
+     * The reader turned past the last page. Queued behind any position
+     * writes already accepted, so the locator that prompted this is on
+     * disk before the finished flag is. A second visit is the same
+     * event and does not need a second write.
+     */
+    fun completeBook(bookUrl: String): Boolean =
+        events.trySend(Event.Complete(bookUrl)).isSuccess
 
     fun closeBook(bookUrl: String): Boolean =
         events.trySend(Event.Close(bookUrl)).isSuccess
@@ -80,6 +92,22 @@ class ReadingPositionPublisher(
         retry {
             refreshFinished(update.bookUrl)
         }
+    }
+
+    private suspend fun complete(bookUrl: String) {
+        var wrote = false
+        val stored = retry {
+            // Already finished is the same visit again: no new revision,
+            // and nothing for the other devices to hear.
+            if (overrideFor(bookUrl) == FinishedOverride.FINISHED) return@retry
+            markFinished(bookUrl)
+            wrote = true
+        }
+        if (!stored) {
+            _failures.tryEmit(bookUrl)
+            return
+        }
+        if (wrote) latestSync.signal(bookUrl)
     }
 
     private suspend fun retry(block: suspend () -> Unit): Boolean {

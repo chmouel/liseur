@@ -40,6 +40,8 @@
     <string name="series_continue">Continue with %s</string>
     <string name="series_start">Start %s</string>
     <string name="series_all_read">You\'ve read the whole series</string>
+    <string name="series_caught_up">You\'re caught up with this series</string>
+    <string name="series_all_known_read">You\'ve read every book here</string>
     <string name="series_missing_volume">Book %s — not in your library</string>
     <string name="series_not_published_yet">Book %s — not published yet</string>
     <string name="series_download_missing">Download the rest</string>
@@ -99,8 +101,15 @@
     <string name="reader_back">Back</string>
     <string name="the_end">The End</string>
     <string name="endpaper_library">Back to the library</string>
-    <string name="endpaper_next">Continue with %1$s</string>
-    <string name="endpaper_next_numbered">Continue with #%1$s %2$s</string>
+    <string name="endpaper_next_kicker">Next in your library</string>
+    <string name="endpaper_next_kicker_numbered">Next in your library · #%1$s</string>
+    <string name="endpaper_no_next_in_library">No next volume from this series is currently in your library</string>
+    <string name="endpaper_continue">Continue</string>
+    <string name="endpaper_download">Download and continue</string>
+    <string name="endpaper_waiting">Waiting to download</string>
+    <string name="endpaper_downloading">Downloading…</string>
+    <string name="endpaper_retry">Couldn\'t download. Try again</string>
+    <string name="endpaper_unavailable">Isn\'t available to download</string>
     <string name="reader_contents">Contents</string>
     <string name="reader_open_failed">Couldn\'t open this book</string>
     <string name="dismiss">Dismiss</string>

@@ -72,10 +72,12 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.domain.SeriesCompletion
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.SeriesVolume
 import com.chmouel.liseur.domain.displayTitle
+import com.chmouel.liseur.domain.seriesCompletion
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.ui.LocalEInk
 import kotlinx.coroutines.flow.Flow
@@ -632,12 +634,14 @@ private fun SeriesHero(
                     )
                 }
             } else {
-                Text(
-                    text = stringResource(R.string.series_all_read),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
+                seriesCompletionCopy(seriesCompletion(shelf, extras))?.let { copy ->
+                    Text(
+                        text = copy,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
             }
 
             extras?.summary?.takeIf { it.isNotBlank() }?.let { summary ->
@@ -970,4 +974,12 @@ private fun SeriesRenameDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
+}
+
+@Composable
+private fun seriesCompletionCopy(completion: SeriesCompletion): String? = when (completion) {
+    SeriesCompletion.COMPLETE -> stringResource(R.string.series_all_read)
+    SeriesCompletion.CAUGHT_UP -> stringResource(R.string.series_caught_up)
+    SeriesCompletion.ALL_KNOWN_READ -> stringResource(R.string.series_all_known_read)
+    SeriesCompletion.IN_PROGRESS -> null
 }

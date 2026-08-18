@@ -9,10 +9,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.remote.PreviewOutcome
+import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.db.AnnotationKind
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
@@ -43,8 +47,8 @@ import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.EPSILON
-import com.chmouel.liseur.domain.nextInSeries
-import com.chmouel.liseur.domain.seriesIndexLabel
+import com.chmouel.liseur.domain.SeriesExtras
+import com.chmouel.liseur.domain.seriesIdForExtras
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.isSamePassage
 import com.chmouel.liseur.domain.exportNotebookMarkdown
@@ -57,6 +61,7 @@ import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingPace
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
 import com.chmouel.liseur.reader.progress.StableBookProgress
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -67,6 +72,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -107,6 +113,9 @@ class ReaderViewModel(
     private val positionSync: PositionSyncCoordinator,
     private val appSettings: AppSettingsRepository,
     private val positionPublisher: ReadingPositionPublisher,
+    private val downloads: BookDownloadRepository,
+    private val seriesExtras: SeriesExtrasRepository,
+    private val remoteAccount: RemoteAccountRepository,
     sessionManager: ReadingSessionManager,
 ) : ViewModel() {
 
@@ -166,63 +175,132 @@ class ReaderViewModel(
     val jumpBack: StateFlow<JumpBack?> = _jumpBack.asStateFlow()
 
     /**
-     * The book to read after this one, once this one is done.
+     * Raised when the last page has been turned: the next volume, if
+     * there is one, and how the series itself reads if there is not.
      *
-     * Offered only when the file is already here. A series is exactly
-     * where "read the next one" is a real answer rather than a guess,
-     * but an offer that turns into a download, a wait and a failure is
-     * not the same offer, and the last page of a book is the worst place
-     * to find that out.
-     */
-    data class NextUp(
-        /** The file to open. */
-        val fileUrl: String,
-        /** The book's identity in the library, so its position is its own. */
-        val id: String,
-        val title: String,
-        val volume: String?,
-    )
-
-    /**
-     * Raised when the book being read is finished and the next volume of
-     * its series is on the shelf, unread.
-     *
-     * Dismissing it is remembered for as long as the book is open, so it
-     * is offered once and does not come back every time the last page is
-     * turned to.
+     * Dismissing the next volume is remembered for as long as this book
+     * is open. Turning back off the endpaper withdraws the offer without
+     * undoing that the book is finished.
      */
     private val dismissedNextUp = MutableStateFlow(false)
+    private val endpaperReached = MutableStateFlow(false)
+    private val continueAfterDownload = MutableStateFlow(false)
+    private val _seriesExtras = MutableStateFlow<SeriesExtras?>(null)
+    private val _pendingOpen = MutableStateFlow<NextUp?>(null)
 
-    val nextUp: StateFlow<NextUp?> = combine(
-        bookDao.observeAll(),
-        progressDao.observeProgressions(),
-        dismissedNextUp,
-        _progress,
-    ) { books, progressions, dismissed, readerProgress ->
-        if (dismissed) return@combine null
-        val current = books.firstOrNull { it.url == bookId } ?: return@combine null
-        if (!shouldOfferNextInSeries(current.finished, readerProgress)) return@combine null
-        val next = nextInSeries(
-            finished = current,
-            library = books,
-            progressions = progressions
-                .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
-                .toMap(),
-        ) ?: return@combine null
-        // Only a book that can be opened right now.
-        val openable = next.openableUrl ?: return@combine null
-        NextUp(
-            fileUrl = openable,
-            id = next.url,
-            title = next.title,
-            volume = seriesIndexLabel(next.seriesIndex),
+    /**
+     * The next volume to open once it is ready, kept until a resumed
+     * reader takes it. A one-shot event would vanish during rotation
+     * and fire while the activity is stopped.
+     */
+    val pendingOpen: StateFlow<NextUp?> = _pendingOpen.asStateFlow()
+
+    private val canDownload: StateFlow<Boolean> = remoteAccount.server
+        .map { it?.canDownload == true }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val continuation: StateFlow<EndpaperContinuation?> = combine(
+        combine(
+            bookDao.observeAll(),
+            progressDao.observeProgressions(),
+            dismissedNextUp,
+            endpaperReached,
+            downloads.progress,
+        ) { books, progressions, dismissed, endpaper, running ->
+            ContinuationInputs(
+                books = books,
+                progressions = progressions
+                    .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
+                    .toMap(),
+                dismissed = dismissed,
+                endpaperReached = endpaper,
+                downloads = running.mapValues { (_, progress) ->
+                    DownloadSnapshot(
+                        queued = progress.queued,
+                        fraction = progress.fraction,
+                        running = !progress.queued,
+                    )
+                },
+            )
+        },
+        canDownload,
+        _seriesExtras,
+    ) { inputs, allowed, extras ->
+        val current = inputs.books.firstOrNull { it.url == bookId } ?: return@combine null
+        endpaperContinuation(
+            current = current,
+            library = inputs.books,
+            progressions = inputs.progressions,
+            dismissed = inputs.dismissed,
+            endpaperReached = inputs.endpaperReached,
+            downloads = inputs.downloads,
+            canDownload = allowed,
+            extras = extras,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    /** The offer was declined, or taken. Either way it is done with. */
+    /** The last page was turned past. The book is finished from here. */
+    fun onReachedEndpaper() {
+        endpaperReached.value = true
+        positionPublisher.completeBook(bookId)
+    }
+
+    /**
+     * The reader turned back, went to the library, or otherwise left
+     * the endpaper. A download already started keeps running; it just
+     * will not open itself.
+     */
+    fun onLeftEndpaper() {
+        endpaperReached.value = false
+        continueAfterDownload.value = false
+        _pendingOpen.value = null
+    }
+
+    /** The offer was declined. Either way it is done with. */
     fun dismissNextUp() {
         dismissedNextUp.value = true
+        continueAfterDownload.value = false
+        _pendingOpen.value = null
     }
+
+    /**
+     * The endpaper action was taken: open a file that is here, or fetch
+     * one that is not. A download that cannot succeed is not started.
+     */
+    fun onContinueNext() {
+        val next = continuation.value?.next ?: return
+        when (next.availability) {
+            is NextVolumeAvailability.Ready,
+            NextVolumeAvailability.Queued,
+            is NextVolumeAvailability.Downloading,
+            -> {
+                continueAfterDownload.value = true
+            }
+            NextVolumeAvailability.Remote, NextVolumeAvailability.Failed -> {
+                if (!canDownload.value) return
+                continueAfterDownload.value = true
+                viewModelScope.launch {
+                    val book = bookDao.getByUrl(next.id) ?: return@launch
+                    downloads.enqueue(book)
+                }
+            }
+            NextVolumeAvailability.Unavailable -> Unit
+        }
+    }
+
+    /** The resumed reader opened the pending volume, so it is spent. */
+    fun consumeOpenNext() {
+        continueAfterDownload.value = false
+        _pendingOpen.value = null
+    }
+
+    private data class ContinuationInputs(
+        val books: List<Book>,
+        val progressions: Map<String, Double>,
+        val dismissed: Boolean,
+        val endpaperReached: Boolean,
+        val downloads: Map<String, DownloadSnapshot>,
+    )
 
     /** An offer to continue where another device has read further. */
     data class CatchUp(val progression: Double, val position: Int?)
@@ -431,6 +509,30 @@ class ReaderViewModel(
                 if (failedBook == bookId) {
                     _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
                 }
+            }
+        }
+        viewModelScope.launch {
+            bookDao.observeAll()
+                .map { books ->
+                    val current = books.firstOrNull { it.url == bookId } ?: return@map null
+                    seriesIdForExtras(current, books)
+                }
+                .distinctUntilChanged()
+                .collect { seriesId ->
+                    _seriesExtras.value = try {
+                        seriesExtras.extras(seriesId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+        }
+        viewModelScope.launch {
+            combine(continuation, continueAfterDownload) { offer, auto ->
+                readyToOpen(offer, auto)
+            }.collect { next ->
+                _pendingOpen.value = next
             }
         }
         open()
@@ -1063,14 +1165,12 @@ class ReaderViewModel(
                     positionSync = container.positionSync,
                     appSettings = container.appSettings,
                     positionPublisher = container.readingPositions,
+                    downloads = container.bookDownloads,
+                    seriesExtras = container.seriesExtras,
+                    remoteAccount = container.remoteAccount,
                     sessionManager = container.readingSessions,
                 )
             }
         }
     }
 }
-
-/** A completed flag alone is not enough: manually finished books can be reopened anywhere. */
-internal fun shouldOfferNextInSeries(finished: Boolean, progress: ReaderProgress?): Boolean =
-    finished && progress != null && progress.totalPositions > 0 &&
-        progress.position >= progress.totalPositions
