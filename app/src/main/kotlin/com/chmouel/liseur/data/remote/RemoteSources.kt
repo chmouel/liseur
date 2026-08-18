@@ -245,6 +245,12 @@ interface BookUploader {
     /**
      * The folders this server will accept a book into, which may be
      * none even for an account that holds the permission.
+     *
+     * An empty list means the server was asked and said none, and the
+     * caller acts on that by turning the offer off. So an implementation
+     * that could not ask must throw rather than return empty: silence
+     * and refusal are different answers, and only one of them should
+     * cost the reader the feature.
      */
     suspend fun targets(
         baseUrl: String,

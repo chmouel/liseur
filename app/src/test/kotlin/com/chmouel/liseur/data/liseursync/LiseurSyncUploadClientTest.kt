@@ -8,6 +8,7 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -132,6 +133,48 @@ class LiseurSyncUploadClientTest {
 
         assertTrue(result is ServerUploadResult.Failed)
         assertEquals("the folder went away", (result as ServerUploadResult.Failed).message)
+    }
+
+    /**
+     * The caller reads an empty list as the server refusing, and acts on
+     * it by putting the feature away until the reader signs in again. So
+     * a connection that dropped must not be able to say that: it throws,
+     * and the worker retries.
+     */
+    @Test
+    fun `a server that could not be reached is not a server with no folders`() = runTest {
+        server.close()
+
+        var thrown: Throwable? = null
+        try {
+            LiseurSyncUploadClient().targets(base(), token())
+        } catch (e: Throwable) {
+            thrown = e
+        }
+
+        assertNotNull("listing folders swallowed the failure", thrown)
+    }
+
+    /** Half an answer is not an answer either. */
+    @Test
+    fun `a page that fails does not shorten the list of folders`() = runTest {
+        server.enqueue(
+            json(
+                """{"folders":[{"folder_id":"f-1","name":"Drop box","accepts_uploads":true}],
+                    "next_after":"f-1"}
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(json("""{"error":"gone"}""", code = 500))
+
+        var thrown: Throwable? = null
+        try {
+            LiseurSyncUploadClient().targets(base(), token())
+        } catch (e: Throwable) {
+            thrown = e
+        }
+
+        assertNotNull("a partial page was passed off as the whole answer", thrown)
     }
 
     private var books = 0
