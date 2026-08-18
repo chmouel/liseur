@@ -130,7 +130,29 @@ data class AppSettings(
     val definitionTarget: DefinitionTarget = DefinitionTarget.Default,
     val dictionaryLookupEnabled: Boolean = false,
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
+    val uploadPolicy: UploadPolicy = UploadPolicy.Default,
 )
+
+/**
+ * What to do with a book that arrives on the device when the connected
+ * server accepts uploads.
+ *
+ * The default is [ASK] because sending a book nobody asked to send, over
+ * whatever connection happens to be up, is the one way this feature can
+ * cost a reader something.
+ */
+enum class UploadPolicy(val id: String) {
+    ASK("ask"),
+    ALWAYS("always"),
+    NEVER("never"),
+    ;
+
+    companion object {
+        val Default = ASK
+
+        fun fromId(id: String?): UploadPolicy = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
 
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
     name = "app_settings",
@@ -155,6 +177,7 @@ class AppSettingsRepository(private val context: Context) {
         val DICTIONARY_ENABLED = booleanPreferencesKey("dictionary_lookup_enabled")
         val DICTIONARY_BASE_URL = stringPreferencesKey("dictionary_base_url")
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
+        val UPLOAD_POLICY = stringPreferencesKey("upload_policy")
     }
 
     /**
@@ -191,6 +214,7 @@ class AppSettingsRepository(private val context: Context) {
             dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
             dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
                 ?: DictionaryUrl.DEFAULT_BASE_URL,
+            uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
         )
     }
 
@@ -198,6 +222,10 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setThemeMode(mode: ThemeMode) {
         context.appSettingsStore.edit { it[Keys.THEME_MODE] = mode.id }
+    }
+
+    suspend fun setUploadPolicy(policy: UploadPolicy) {
+        context.appSettingsStore.edit { it[Keys.UPLOAD_POLICY] = policy.id }
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {
