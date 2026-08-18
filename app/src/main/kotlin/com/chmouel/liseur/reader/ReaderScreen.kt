@@ -103,6 +103,7 @@ import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
+import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.search.SearchScreen
@@ -120,6 +121,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
@@ -203,6 +205,9 @@ fun ReaderScreen(
     val effectScope = rememberCoroutineScope()
     val eInk = LocalEInk.current
     val eInkNow by rememberUpdatedState(eInk)
+    var showingEnd by remember { mutableStateOf(false) }
+    val showingEndNow by rememberUpdatedState(showingEnd)
+    var endpaperRtl by remember { mutableStateOf(false) }
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
     val pageTurner = remember {
         PageTurner(
@@ -221,6 +226,15 @@ fun ReaderScreen(
             // cannot paginate it, so a book can be scrolling here with
             // the setting switched off.
             isVerticalText = { navigatorNow?.settings?.value?.verticalText == true },
+            showingEnd = { showingEndNow },
+            onReachedEnd = {
+                endpaperRtl = navigatorNow?.overflow?.value?.readingProgression ==
+                    ReadingProgression.RTL
+                showingEnd = true
+                chromeVisible = false
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            },
+            onLeaveEnd = { showingEnd = false },
         )
     }
 
@@ -391,19 +405,37 @@ fun ReaderScreen(
             }
         }
 
+        if (showingEnd) {
+            Endpaper(
+                title = publication.metadata.title.orEmpty(),
+                author = publication.metadata.authors
+                    .joinToString(", ") { it.name }
+                    .ifBlank { null },
+                theme = prefs.theme,
+                nextTitle = nextUp?.title,
+                nextVolume = nextUp?.volume,
+                rtl = endpaperRtl,
+                onTurnBack = { showingEnd = false },
+                onLibrary = onBack,
+                onOpenNext = { nextUp?.let(onOpenNextUp) },
+            )
+        }
+
         PageTurnOverlay(pageTurnEffect)
 
-        BookmarkRibbon(
-            bookmarked = bookmarked,
-            theme = prefs.theme,
-            onToggle = {
-                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                onAnnotationAction.toggleBookmark()
-            },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 12.dp),
-        )
+        if (!showingEnd) {
+            BookmarkRibbon(
+                bookmarked = bookmarked,
+                theme = prefs.theme,
+                onToggle = {
+                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    onAnnotationAction.toggleBookmark()
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 12.dp),
+            )
+        }
 
         Column(
             Modifier
@@ -411,69 +443,71 @@ fun ReaderScreen(
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBarsIgnoringVisibility),
         ) {
-            jumpBack?.let { target ->
-                JumpBackPill(
-                    position = target.position,
-                    fromSync = target.fromSync,
-                    theme = prefs.theme,
-                    onJumpBack = {
-                        onProgressAction.dismissJumpBack()
-                        navigator?.go(target.locator, animated = false)
-                    },
-                    onDismiss = onProgressAction.dismissJumpBack,
-                )
-            }
-            // The way back outranks the way forward: a jump that just
-            // happened is the fresher offer, and two pills is a quiz.
-            if (jumpBack == null) {
-                catchUp?.let { offer ->
-                    CatchUpPill(
-                        position = offer.position,
+            if (!showingEnd) {
+                jumpBack?.let { target ->
+                    JumpBackPill(
+                        position = target.position,
+                        fromSync = target.fromSync,
                         theme = prefs.theme,
-                        onCatchUp = onProgressAction.acceptCatchUp,
-                        onDismiss = onProgressAction.dismissCatchUp,
+                        onJumpBack = {
+                            onProgressAction.dismissJumpBack()
+                            navigator?.go(target.locator, animated = false)
+                        },
+                        onDismiss = onProgressAction.dismissJumpBack,
                     )
                 }
-                // The book is finished, so nothing about this one is
-                // still pending: the next one is the only offer left.
-                if (catchUp == null) {
-                    nextUp?.let { offer ->
-                        NextInSeriesPill(
-                            title = offer.title,
-                            volume = offer.volume,
+                // The way back outranks the way forward: a jump that just
+                // happened is the fresher offer, and two pills is a quiz.
+                if (jumpBack == null) {
+                    catchUp?.let { offer ->
+                        CatchUpPill(
+                            position = offer.position,
                             theme = prefs.theme,
-                            onOpen = { onOpenNextUp(offer) },
-                            onDismiss = onDismissNextUp,
+                            onCatchUp = onProgressAction.acceptCatchUp,
+                            onDismiss = onProgressAction.dismissCatchUp,
                         )
                     }
-                }
-            }
-            if (chromeVisible) {
-                ReadingScrubber(
-                    progress = progress,
-                    theme = prefs.theme,
-                    chapterTicks = remember(progress?.totalPositions) {
-                        onProgressAction.chapterTicks()
-                    },
-                    titleAtPosition = onProgressAction.chapterTitleAtPosition,
-                    positionAtProgression = onProgressAction.positionAtProgression,
-                    onSeek = { position ->
-                        onProgressAction.locatorAtPosition(position)?.let {
-                            onProgressAction.onJump()
-                            navigator?.go(it, animated = false)
+                    // The book is finished, so nothing about this one is
+                    // still pending: the next one is the only offer left.
+                    if (catchUp == null) {
+                        nextUp?.let { offer ->
+                            NextInSeriesPill(
+                                title = offer.title,
+                                volume = offer.volume,
+                                theme = prefs.theme,
+                                onOpen = { onOpenNextUp(offer) },
+                                onDismiss = onDismissNextUp,
+                            )
                         }
-                    },
-                )
-            } else if (!scrollMode && jumpBack == null && catchUp == null && nextUp == null) {
-                // A scrolled page runs under this corner, so a footer
-                // left drawn there prints itself over the text. The
-                // figures are one tap away with the rest of the chrome.
-                ReadingFooter(
-                    progress = progress,
-                    mode = prefs.footerMode,
-                    theme = prefs.theme,
-                    onCycleMode = onProgressAction.cycleFooterMode,
-                )
+                    }
+                }
+                if (chromeVisible) {
+                    ReadingScrubber(
+                        progress = progress,
+                        theme = prefs.theme,
+                        chapterTicks = remember(progress?.totalPositions) {
+                            onProgressAction.chapterTicks()
+                        },
+                        titleAtPosition = onProgressAction.chapterTitleAtPosition,
+                        positionAtProgression = onProgressAction.positionAtProgression,
+                        onSeek = { position ->
+                            onProgressAction.locatorAtPosition(position)?.let {
+                                onProgressAction.onJump()
+                                navigator?.go(it, animated = false)
+                            }
+                        },
+                    )
+                } else if (!scrollMode && jumpBack == null && catchUp == null && nextUp == null) {
+                    // A scrolled page runs under this corner, so a footer
+                    // left drawn there prints itself over the text. The
+                    // figures are one tap away with the rest of the chrome.
+                    ReadingFooter(
+                        progress = progress,
+                        mode = prefs.footerMode,
+                        theme = prefs.theme,
+                        onCycleMode = onProgressAction.cycleFooterMode,
+                    )
+                }
             }
         }
 
@@ -483,7 +517,7 @@ fun ReaderScreen(
         // drawn once.
         val chromeAnim = if (LocalEInk.current) 0 else CHROME_ANIM_MS
         AnimatedVisibility(
-            visible = chromeVisible,
+            visible = chromeVisible && !showingEnd,
             enter = slideInVertically(tween(chromeAnim)) { -it } + fadeIn(tween(chromeAnim)),
             exit = slideOutVertically(tween(chromeAnim)) { -it } + fadeOut(tween(chromeAnim)),
             modifier = Modifier.align(Alignment.TopCenter),
@@ -638,6 +672,8 @@ fun ReaderScreen(
         )
     }
 
+    BackHandler(enabled = showingEnd) { showingEnd = false }
+
     searchFor?.let { initial ->
         BackHandler {
             searchFor = null
@@ -669,6 +705,7 @@ fun ReaderScreen(
     // is recorded before the move, so it is not done again here.
     LaunchedEffect(goTo) {
         goTo.collect { locator ->
+            showingEnd = false
             showToc = false
             chromeVisible = false
             navigatorNow?.go(locator, animated = false)

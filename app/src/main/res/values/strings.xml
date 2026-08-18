@@ -97,6 +97,10 @@
     <string name="empty_library_subtitle">Add EPUB books from your device, or connect a calibre-web or Komga server to browse and download your collection.</string>
 
     <string name="reader_back">Back</string>
+    <string name="the_end">The End</string>
+    <string name="endpaper_library">Back to the library</string>
+    <string name="endpaper_next">Continue with %1$s</string>
+    <string name="endpaper_next_numbered">Continue with #%1$s %2$s</string>
     <string name="reader_contents">Contents</string>
     <string name="reader_open_failed">Couldn\'t open this book</string>
     <string name="dismiss">Dismiss</string>

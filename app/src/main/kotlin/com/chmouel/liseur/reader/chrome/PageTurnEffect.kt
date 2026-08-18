@@ -6,9 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
 import android.view.View
-import android.view.ViewGroup
 import android.view.Window
-import android.webkit.WebView
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -30,6 +28,7 @@ import kotlinx.coroutines.launch
 import org.readium.r2.navigator.OverflowableNavigator
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.indexOfFirstWithHref
 
@@ -91,6 +90,10 @@ fun PageTurnOverlay(state: PageTurnEffectState, modifier: Modifier = Modifier) {
  *
  * A scrolled book is a different movement altogether, and [isScrolling]
  * says so: see [scrollScreenful].
+ *
+ * The page past the last page of the book is not another leaf: Readium
+ * paginates leftover CSS columns, so [goForward] keeps succeeding on
+ * empty air. [onReachedEnd] is that extra turn, onto the endpaper.
  */
 @OptIn(ExperimentalReadiumApi::class)
 class PageTurner(
@@ -99,6 +102,9 @@ class PageTurner(
     private val isEffectSuppressed: () -> Boolean,
     private val isScrolling: () -> Boolean = { false },
     private val isVerticalText: () -> Boolean = { false },
+    private val showingEnd: () -> Boolean = { false },
+    private val onReachedEnd: () -> Unit = {},
+    private val onLeaveEnd: () -> Unit = {},
 ) {
     var navigator: OverflowableNavigator? = null
     var window: Window? = null
@@ -110,12 +116,38 @@ class PageTurner(
      */
     var publication: Publication? = null
 
+    /** True while a snapshot of the last page is being taken for the endpaper. */
+    private var pendingEnd = false
+
+    /**
+     * Bumped on every turn so an in-flight last-page probe cannot act
+     * after the reader has already moved.
+     */
+    private var probeGeneration = 0L
+
     fun turn(forward: Boolean) {
-        val nav = navigator ?: return
-        if (isScrolling()) {
-            scrollScreenful(nav, forward)
+        if (showingEnd() || pendingEnd) {
+            if (!forward && showingEnd()) onLeaveEnd()
             return
         }
+        val generation = ++probeGeneration
+        val nav = navigator ?: return
+        if (isScrolling()) {
+            scrollScreenful(nav, forward, generation)
+            return
+        }
+        if (forward && isOnLastResource(nav)) {
+            val probed = nav.currentLocator.value
+            askIfLastContentVisible(nav) { atEnd ->
+                if (!probeStillHolds(generation, nav, probed)) return@askIfLastContentVisible
+                if (atEnd) revealEnd() else turnPaginated(nav, forward = true)
+            }
+            return
+        }
+        turnPaginated(nav, forward)
+    }
+
+    private fun turnPaginated(nav: OverflowableNavigator, forward: Boolean) {
         if (!isAnimated()) {
             navigate(nav, forward, animated = false)
             return
@@ -130,6 +162,49 @@ class PageTurner(
             navigate(nav, forward, animated = !effect.isRunning)
             return
         }
+        copyPage(win, view) { bitmap ->
+            val moved = navigate(nav, forward, animated = false)
+            val rtl = nav.overflow.value.readingProgression == ReadingProgression.RTL
+            if (moved && bitmap != null) {
+                effect.start(bitmap, slideLeft = forward != rtl)
+            }
+        }
+    }
+
+    /**
+     * The extra turn after the last line: lift the last page off and
+     * leave the endpaper underneath, the same motion every other turn
+     * already makes.
+     */
+    private fun revealEnd() {
+        if (showingEnd() || pendingEnd) return
+        pendingEnd = true
+        val nav = navigator
+        val win = window
+        val view = nav?.publicationView
+        val show = {
+            pendingEnd = false
+            onReachedEnd()
+        }
+        if (nav == null || win == null || view == null || !isAnimated() ||
+            isEffectSuppressed() || effect.isRunning ||
+            view.width <= 0 || view.height <= 0
+        ) {
+            show()
+            return
+        }
+        val rtl = nav.overflow.value.readingProgression == ReadingProgression.RTL
+        copyPage(win, view) { bitmap ->
+            show()
+            if (bitmap != null) effect.start(bitmap, slideLeft = !rtl)
+        }
+    }
+
+    private fun copyPage(
+        win: Window,
+        view: View,
+        onCopied: (ImageBitmap?) -> Unit,
+    ) {
         val location = IntArray(2)
         view.getLocationInWindow(location)
         val bounds = Rect(
@@ -139,12 +214,8 @@ class PageTurner(
             location[1] + view.height,
         )
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        val rtl = nav.overflow.value.readingProgression == ReadingProgression.RTL
         PixelCopy.request(win, bounds, bitmap, { result ->
-            val moved = navigate(nav, forward, animated = false)
-            if (moved && result == PixelCopy.SUCCESS) {
-                effect.start(bitmap.asImageBitmap(), slideLeft = forward != rtl)
-            }
+            onCopied(bitmap.takeIf { result == PixelCopy.SUCCESS }?.asImageBitmap())
         }, Handler(Looper.getMainLooper()))
     }
 
@@ -152,8 +223,55 @@ class PageTurner(
         nav: OverflowableNavigator,
         forward: Boolean,
         animated: Boolean,
-    ): Boolean =
-        if (forward) nav.goForward(animated) else nav.goBackward(animated)
+    ): Boolean {
+        val moved = if (forward) nav.goForward(animated) else nav.goBackward(animated)
+        // The last resource can still refuse to move even when the page
+        // itself was not sure it was finished; that refusal is the end.
+        if (forward && !moved && isOnLastResource(nav)) revealEnd()
+        return moved
+    }
+
+    private fun isOnLastResource(nav: OverflowableNavigator): Boolean {
+        val pub = publication ?: return false
+        val index = pub.readingOrder.indexOfFirstWithHref(nav.currentLocator.value.href)
+        return isLastReadingResource(index, pub.readingOrder.lastIndex)
+    }
+
+    /**
+     * Asks the page whether its last line (or last picture) is already
+     * on screen. Scroll width cannot be trusted for this: leftover CSS
+     * columns inflate it past the text, which is how the last page
+     * keeps flipping.
+     */
+    private fun askIfLastContentVisible(
+        nav: OverflowableNavigator,
+        onResult: (Boolean) -> Unit,
+    ) {
+        val web = visibleWebView(nav.publicationView) ?: run {
+            onResult(false)
+            return
+        }
+        web.evaluateJavascript(lastContentVisibleScript()) { result ->
+            onResult(atEndOfBook(lastResource = true, pageReport = result))
+        }
+    }
+
+    /**
+     * True when the page that was asked is still the page on screen.
+     *
+     * `evaluateJavascript` answers later, and a backward turn or a
+     * chapter step in between would otherwise paint the endpaper over
+     * wherever the reader has gone.
+     */
+    private fun probeStillHolds(
+        generation: Long,
+        nav: OverflowableNavigator,
+        probed: Locator,
+    ): Boolean {
+        if (generation != probeGeneration) return false
+        if (navigator !== nav) return false
+        return sameProbeLocator(nav.currentLocator.value, probed)
+    }
 
     /**
      * Moves a screenful through a scrolled book, and on to the next
@@ -166,7 +284,11 @@ class PageTurner(
      * is in its own units and stops at its own ends; arithmetic on view
      * heights, densities and web view scale does not.
      */
-    private fun scrollScreenful(nav: OverflowableNavigator, forward: Boolean) {
+    private fun scrollScreenful(
+        nav: OverflowableNavigator,
+        forward: Boolean,
+        generation: Long,
+    ) {
         val web = visibleWebView(nav.publicationView) ?: run {
             navigate(nav, forward, animated = false)
             return
@@ -177,6 +299,7 @@ class PageTurner(
             vertical = isVerticalText(),
         )
         web.evaluateJavascript(script) { result ->
+            if (generation != probeGeneration || navigator !== nav) return@evaluateJavascript
             if (result?.contains(AT_END) == true) stepChapter(forward)
         }
     }
@@ -192,12 +315,20 @@ class PageTurner(
      * one that answered when this locator was made.
      */
     fun stepChapter(forward: Boolean): Boolean {
+        if (showingEnd() || pendingEnd) {
+            if (!forward && showingEnd()) onLeaveEnd()
+            return false
+        }
+        probeGeneration++
         val nav = navigator ?: return false
         val pub = publication ?: return false
         val readingOrder = pub.readingOrder
         val index = readingOrder.indexOfFirstWithHref(nav.currentLocator.value.href)
             ?: return false
-        val next = readingOrder.getOrNull(index + if (forward) 1 else -1) ?: return false
+        val next = readingOrder.getOrNull(index + if (forward) 1 else -1) ?: run {
+            if (forward) revealEnd()
+            return false
+        }
         val locator = pub.locatorFromLink(next) ?: return nav.go(next, animated = false)
         return nav.go(
             if (forward) locator else locator.copyWithLocations(progression = 1.0),
@@ -270,3 +401,131 @@ private const val EDGE_SLACK = 2
 internal const val AT_END = "at-end"
 
 private const val SCROLLED = "scrolled"
+
+/**
+ * Whether the resource on screen is the last one in the book.
+ *
+ * [indexInReadingOrder] is null when the href is not in the spine at
+ * all; [lastIndex] is -1 when the spine is empty. Neither is the end
+ * of a book — there is no book there.
+ */
+internal fun isLastReadingResource(indexInReadingOrder: Int?, lastIndex: Int): Boolean =
+    lastIndex >= 0 && indexInReadingOrder == lastIndex
+
+/**
+ * The last page of the last resource is the end of the book; the last
+ * page of a middle chapter is only the end of that chapter, and more
+ * content still waiting in the last resource is still a page.
+ */
+internal fun atEndOfBook(lastResource: Boolean, pageReport: String?): Boolean =
+    lastResource && pageReport?.contains(AT_END) == true
+
+/**
+ * Whether a last-page probe still describes the page on screen.
+ *
+ * Href and progression are both required: the last resource is one
+ * file, and a backward turn inside it would otherwise look like the
+ * same place.
+ */
+internal fun sameProbeLocator(current: Locator, probed: Locator): Boolean =
+    sameProbePlace(
+        currentHref = current.href.toString(),
+        currentProgression = current.locations.progression,
+        probedHref = probed.href.toString(),
+        probedProgression = probed.locations.progression,
+    )
+
+internal fun sameProbePlace(
+    currentHref: String,
+    currentProgression: Double?,
+    probedHref: String,
+    probedProgression: Double?,
+): Boolean {
+    if (currentHref != probedHref) return false
+    if (currentProgression == null && probedProgression == null) return true
+    if (currentProgression == null || probedProgression == null) return false
+    return kotlin.math.abs(currentProgression - probedProgression) < PROBE_PROGRESSION_SLACK
+}
+
+/**
+ * Whether the last line (or last picture) of this document is already
+ * on the page the reader can see.
+ *
+ * Scroll width is the wrong question in paginated mode: leftover CSS
+ * columns make the document wider than its text, so a page that has
+ * already shown every word still looks as if it can turn. The last
+ * *rendered* content node's box is the book's own answer.
+ *
+ * Trailing nodes that never paint — `<script>`, `<style>`, hidden
+ * footnotes — are skipped. An empty rectangle is not the end of the
+ * book; it is a node that does not count, and the walker keeps going.
+ */
+internal fun lastContentVisibleScript(): String = """
+    (function() {
+      var w = window.innerWidth, h = window.innerHeight;
+      var slack = $EDGE_SLACK;
+      // No body yet is a page still loading, not a finished book.
+      if (!document.body) { return "$SCROLLED"; }
+      function isHidden(node) {
+        var el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+        while (el && el !== document.documentElement) {
+          var tag = el.tagName;
+          if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "TEMPLATE") {
+            return true;
+          }
+          if (el.hidden) return true;
+          var s = window.getComputedStyle(el);
+          if (s && (s.display === "none" || s.visibility === "hidden")) return true;
+          el = el.parentElement;
+        }
+        return false;
+      }
+      function rectOf(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          var range = document.createRange();
+          range.selectNodeContents(node);
+          var rects = range.getClientRects();
+          return rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+        }
+        return node.getBoundingClientRect();
+      }
+      var walker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+        {
+          acceptNode: function(n) {
+            if (n.nodeType === Node.ELEMENT_NODE) {
+              var tag = n.tagName;
+              if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "TEMPLATE") {
+                return NodeFilter.FILTER_REJECT;
+              }
+              if (isHidden(n)) return NodeFilter.FILTER_REJECT;
+              if (tag === "IMG" || tag === "SVG" || tag === "CANVAS" || tag === "VIDEO") {
+                return NodeFilter.FILTER_ACCEPT;
+              }
+              return NodeFilter.FILTER_SKIP;
+            }
+            if (!(n.nodeValue && n.nodeValue.trim()) || isHidden(n)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        }
+      );
+      var lastRect = null, n;
+      while (n = walker.nextNode()) {
+        var r = rectOf(n);
+        if (r.width < 1 && r.height < 1) continue;
+        lastRect = r;
+      }
+      if (!lastRect) { return "$AT_END"; }
+      if (lastRect.left < w - slack && lastRect.right > slack &&
+          lastRect.top < h - slack && lastRect.bottom > slack) {
+        return "$AT_END";
+      }
+      return "$SCROLLED";
+    })();
+""".trimIndent()
+
+/** Progression slack for deciding two locators are still the same page. */
+private const val PROBE_PROGRESSION_SLACK = 0.0005
