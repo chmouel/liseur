@@ -18,6 +18,30 @@ the project is pinned to Gradle 9.6.1 via `gradle/wrapper/`.
 ./gradlew lintDebug                  # Android Lint; must pass with 0 errors (warnings OK)
 ```
 
+Common workflows are also available through the Makefile:
+
+```bash
+make build                           # build the debug APK
+make release                         # build the release APK
+make test                            # run JVM unit tests
+make lint                            # run Android Lint
+make check                           # run tests, lint, and the debug build
+make run                             # boot headlessly, install, launch, and show with scrcpy
+make run-bg                          # boot headlessly, install, and launch without scrcpy
+make install                         # install the current debug APK
+make emulator                        # boot the default AVD
+make stop                            # stop the selected emulator
+make shutdown                        # shut down the selected emulator
+```
+
+The default AVD is `liseur_phone_api36`. Override it when needed:
+
+```bash
+make AVD=liseur_phone_api26 emulator
+make AVD=liseur_phone_api36 run
+make SERIAL=emulator-5556 run         # use a specific emulator with SERIAL=...
+```
+
 CI (`.github/workflows/build.yml`) runs `testDebugUnitTest`, `lintDebug`, and
 `assembleDebug` on every push/PR to `main`.
 
