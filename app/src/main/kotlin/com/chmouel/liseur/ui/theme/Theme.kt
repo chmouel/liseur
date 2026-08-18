@@ -8,9 +8,11 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.chmouel.liseur.data.settings.ThemeMode
 
 /*
  * Every role M3 draws from is set here, deliberately.
@@ -172,6 +174,17 @@ private val MonoDarkColors = darkColorScheme(
 
 /** Whether this device can take its colours from the wallpaper. */
 val dynamicColorAvailable: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+/**
+ * Whether the app is dark right now.
+ *
+ * Only Compose can answer this, because [ThemeMode.SYSTEM] defers to a
+ * setting that can change under a running activity. Both activities and
+ * the reading theme ask through here, so there is one answer.
+ */
+@Composable
+@ReadOnlyComposable
+fun ThemeMode.isDark(): Boolean = isDark(isSystemInDarkTheme())
 
 @Composable
 fun LiseurTheme(

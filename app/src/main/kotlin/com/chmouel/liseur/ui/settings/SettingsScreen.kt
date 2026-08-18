@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -69,9 +70,11 @@ import com.chmouel.liseur.data.library.Inspection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
+import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.reading.label
 import com.chmouel.liseur.ui.windowWidth
 
 private const val LISEUR_SYNC_REPO_URL = "https://github.com/chmouel/liseur-sync"
@@ -81,6 +84,7 @@ private const val LISEUR_SYNC_REPO_URL = "https://github.com/chmouel/liseur-sync
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
+    readingThemeChoice: ReaderThemeChoice,
     dynamicColorAvailable: Boolean,
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
@@ -94,6 +98,7 @@ fun SettingsScreen(
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenReadingAppearance: () -> Unit,
     backup: AnnotationBackupUi,
     connections: ConnectionsState,
     onOpenSource: () -> Unit,
@@ -152,6 +157,21 @@ fun SettingsScreen(
                             onCheckedChange = onDynamicColor,
                         )
                     }
+                    RowDivider()
+                    // The theme above is the app's, and the page has one of
+                    // its own; a reader who turns this screen dark and finds
+                    // their books still white has nowhere to look unless
+                    // this row says where. Naming the "Aa" button here is
+                    // half of what it is for.
+                    ConnectionRow(
+                        icon = { Icon(Icons.Outlined.TextFormat, contentDescription = null) },
+                        title = stringResource(R.string.settings_reading_appearance),
+                        subtitle = stringResource(
+                            R.string.settings_reading_appearance_current,
+                            stringResource(readingThemeChoice.label),
+                        ),
+                        onClick = onOpenReadingAppearance,
+                    )
                 }
 
                 val showLibraryHelp = remember { mutableStateOf(false) }

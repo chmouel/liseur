@@ -318,6 +318,52 @@
     <string name="theme_dark">Dark</string>
     <string name="settings_dynamic_color">Colours from your wallpaper</string>
     <string name="settings_dynamic_color_detail">Use the system palette instead of Liseur\'s own paper-and-ink one.</string>
+    <string name="settings_reading_appearance">Reading appearance</string>
+    <string name="settings_reading_appearance_detail">Theme, typeface, size and spacing for the page itself. Also on the “Aa” button while you read.</string>
+    <string name="settings_reading_appearance_current">%1$s theme. Also on the “Aa” button while you read.</string>
+
+    <!-- The page itself: shared by the Aa sheet and the reading appearance screen. -->
+    <string name="reader_typography">Reading appearance</string>
+    <string name="reader_font">Font</string>
+    <string name="reader_size">Size</string>
+    <string name="reader_brightness">Brightness</string>
+    <string name="reader_brightness_system">Follow system brightness</string>
+    <string name="reader_progress">Progress</string>
+    <string name="reader_line_spacing">Line spacing</string>
+    <string name="reader_spacing_compact">Compact</string>
+    <string name="reader_spacing_default">Default</string>
+    <string name="reader_spacing_relaxed">Relaxed</string>
+    <string name="reader_margins">Margins</string>
+    <string name="reader_margins_narrow">Narrow</string>
+    <string name="reader_margins_default">Default</string>
+    <string name="reader_margins_wide">Wide</string>
+    <string name="reader_columns">Columns</string>
+    <string name="reader_columns_auto">Auto</string>
+    <string name="reader_columns_one">1</string>
+    <string name="reader_columns_two">2</string>
+    <string name="reader_page_turn_animation">Page turn animation</string>
+    <string name="reader_preview_title">Preview</string>
+    <string name="reader_preview_body">She had read the same page three times, and each time the room had grown a shade darker around it.</string>
+    <string name="reader_theme_auto">Automatic</string>
+    <string name="reader_theme_auto_detail">Automatic follows the app theme: dark pages when the app is dark, light when it is not.</string>
+    <string name="reader_theme_light">Light</string>
+    <string name="reader_theme_sepia">Sepia</string>
+    <string name="reader_theme_dark">Dark</string>
+    <string name="reader_theme_black">Black</string>
+    <string name="reader_font_literata" translatable="false">Literata</string>
+    <string name="reader_font_vollkorn" translatable="false">Vollkorn</string>
+    <string name="reader_font_atkinson" translatable="false">Atkinson Hyperlegible</string>
+    <string name="reader_font_inter" translatable="false">Inter</string>
+    <string name="reader_font_publisher">Publisher font</string>
+    <string name="reader_typography_own">Use separate settings for this book</string>
+    <string name="reader_typography_own_on">Font, size and layout stay with this book.</string>
+    <string name="reader_typography_own_off">Font, size and layout are shared with every book.</string>
+    <string name="footer_mode_smart">Time left, or the chapter</string>
+    <string name="footer_mode_time_book">Time left in book</string>
+    <string name="footer_mode_chapter">Chapter title</string>
+    <string name="footer_mode_empty">Nothing in the middle</string>
+    <string name="footer_mode_none">Hide the footer</string>
+
     <string name="settings_reading">Reading</string>
     <string name="settings_volume_keys">Volume keys turn pages</string>
     <string name="settings_volume_keys_detail">Volume down goes forward, volume up goes back.</string>

@@ -24,12 +24,19 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 /**
  * Maps the app's reading preferences onto Readium's EPUB preferences.
  *
- * [scroll] is not part of [ReaderPrefs]: it is answered per book against
- * an app-wide default, so it arrives from the reader's own flow rather
- * than from the shared reading settings.
+ * [theme] is passed in rather than read off [ReaderPrefs], which holds
+ * the theme as it was *chosen* — and a choice of "follow the app" has no
+ * colours until someone knows how the app is drawn. That is a question
+ * only Compose can answer, so it is answered once at the top of the
+ * reader and the palette arrives here settled.
+ *
+ * [scroll] is not part of [ReaderPrefs] either: it is answered per book
+ * against an app-wide default, so it arrives from the reader's own flow
+ * rather than from the shared reading settings.
  */
 @OptIn(ExperimentalReadiumApi::class)
 fun ReaderPrefs.toEpubPreferences(
+    theme: ReaderTheme,
     columnMode: ColumnMode = this.columnMode,
     scroll: Boolean = false,
 ): EpubPreferences =

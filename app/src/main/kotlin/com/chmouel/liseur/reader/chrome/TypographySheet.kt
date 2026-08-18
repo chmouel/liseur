@@ -1,82 +1,62 @@
 package com.chmouel.liseur.reader.chrome
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.BrightnessAuto
-import androidx.compose.material.icons.outlined.BrightnessHigh
-import androidx.compose.material.icons.outlined.BrightnessLow
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.ui.contentWidthCap
-import com.chmouel.liseur.ui.widthClass
+import com.chmouel.liseur.ui.reading.ReadingBrightnessSlider
+import com.chmouel.liseur.ui.reading.ReadingFontDropdown
+import com.chmouel.liseur.ui.reading.ReadingFontSizeSlider
+import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
+import com.chmouel.liseur.ui.reading.ReadingLayoutControls
+import com.chmouel.liseur.ui.reading.ReadingPageTurnAnimationToggle
+import com.chmouel.liseur.ui.reading.ReadingThemeRow
 import com.chmouel.liseur.ui.windowWidth
 
 /**
  * Kindle-style "Aa" sheet: reading theme, font, size, brightness
  * and layout, applied live as they change.
+ *
+ * The controls themselves live in `ui/reading`, because Settings shows
+ * the same ones on a screen of its own. This sheet is the quick path to
+ * them with a book open, and adds the three answers that only make
+ * sense with one: scrolling, the screen, and setting this book apart.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TypographySheet(
     prefs: ReaderPrefs,
+    readingTheme: ReaderTheme,
     typographyIsOwn: Boolean,
     onTypographyIsOwnChanged: (Boolean) -> Unit,
     onFontSelected: (ReaderFont) -> Unit,
     onFontSizeChanged: (Double) -> Unit,
-    onThemeSelected: (ReaderTheme) -> Unit,
+    onThemeSelected: (ReaderThemeChoice) -> Unit,
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
     onBrightnessChanged: (Float?) -> Unit,
@@ -99,11 +79,15 @@ fun TypographySheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            ThemeRow(selected = prefs.theme, onSelected = onThemeSelected)
-            FontSizeSlider(value = prefs.fontSize, onChanged = onFontSizeChanged)
-            BrightnessSlider(value = prefs.brightness, onChanged = onBrightnessChanged)
-            FontDropdown(selected = prefs.font, onSelected = onFontSelected)
-            LayoutControls(
+            ReadingThemeRow(
+                selected = prefs.themeChoice,
+                resolved = readingTheme,
+                onSelected = onThemeSelected,
+            )
+            ReadingFontSizeSlider(value = prefs.fontSize, onChanged = onFontSizeChanged)
+            ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightnessChanged)
+            ReadingFontDropdown(selected = prefs.font, onSelected = onFontSelected)
+            ReadingLayoutControls(
                 lineHeight = prefs.lineHeight,
                 pageMargins = prefs.pageMargins,
                 columnMode = prefs.columnMode,
@@ -115,7 +99,10 @@ fun TypographySheet(
                 onPageMarginsChanged = onPageMarginsChanged,
                 onColumnModeChanged = onColumnModeChanged,
             )
-            FooterModeDropdown(selected = prefs.footerMode, onSelected = onFooterModeChanged)
+            ReadingFooterModeDropdown(
+                selected = prefs.footerMode,
+                onSelected = onFooterModeChanged,
+            )
             ScrollModeToggle(
                 enabled = scrollMode,
                 onChanged = onScrollModeChanged,
@@ -123,7 +110,7 @@ fun TypographySheet(
             // Nothing lifts off the screen when the text is scrolled, so
             // the animation has no page to describe.
             if (!scrollMode) {
-                PageTurnAnimationToggle(
+                ReadingPageTurnAnimationToggle(
                     enabled = prefs.pageTurnAnimation,
                     onChanged = onPageTurnAnimationChanged,
                 )
@@ -140,234 +127,6 @@ fun TypographySheet(
     }
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-@Composable
-private fun ThemeRow(selected: ReaderTheme, onSelected: (ReaderTheme) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionLabel("Theme")
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            ReaderTheme.entries.forEach { theme ->
-                val isSelected = theme == selected
-                Surface(
-                    shape = CircleShape,
-                    color = theme.background,
-                    border = androidx.compose.foundation.BorderStroke(
-                        width = if (isSelected) 3.dp else 1.dp,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        },
-                    ),
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clickable { onSelected(theme) }
-                        .semantics { contentDescription = theme.displayName },
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "Aa",
-                            color = theme.foreground,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FontDropdown(selected: ReaderFont, onSelected: (ReaderFont) -> Unit) {
-    val context = LocalContext.current
-    var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionLabel("Font")
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
-        ) {
-            OutlinedTextField(
-                value = selected.displayName,
-                onValueChange = {},
-                readOnly = true,
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(
-                    fontFamily = remember(selected) { selected.composeFamily(context.assets) },
-                    fontSize = 18.sp,
-                ),
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                ReaderFont.entries.forEach { font ->
-                    val family = remember(font) { font.composeFamily(context.assets) }
-                    DropdownMenuItem(
-                        text = {
-                            Text(font.displayName, fontFamily = family, fontSize = 18.sp)
-                        },
-                        trailingIcon = {
-                            if (font == selected) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        onClick = {
-                            onSelected(font)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FooterModeDropdown(selected: FooterMode, onSelected: (FooterMode) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionLabel("Progress")
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
-        ) {
-            OutlinedTextField(
-                value = selected.label,
-                onValueChange = {},
-                readOnly = true,
-                singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                FooterMode.entries.forEach { mode ->
-                    DropdownMenuItem(
-                        text = { Text(mode.label) },
-                        trailingIcon = {
-                            if (mode == selected) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        onClick = {
-                            onSelected(mode)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-private val FooterMode.label: String
-    get() = when (this) {
-        FooterMode.SMART -> "Time left, or the chapter"
-        FooterMode.TIME_LEFT_BOOK -> "Time left in book"
-        FooterMode.CHAPTER_TITLE -> "Chapter title"
-        FooterMode.EMPTY -> "Nothing in the middle"
-        FooterMode.NONE -> "Hide the footer"
-    }
-
-private fun ReaderFont.composeFamily(assets: android.content.res.AssetManager): FontFamily? =
-    when (this) {
-        ReaderFont.LITERATA -> FontFamily(Font("fonts/Literata.ttf", assets))
-        ReaderFont.VOLLKORN -> FontFamily(Font("fonts/Vollkorn.ttf", assets))
-        ReaderFont.ATKINSON -> FontFamily(Font("fonts/AtkinsonHyperlegible-Regular.ttf", assets))
-        ReaderFont.INTER -> FontFamily(Font("fonts/Inter.ttf", assets))
-        ReaderFont.PUBLISHER -> null
-    }
-
-@Composable
-private fun FontSizeSlider(value: Double, onChanged: (Double) -> Unit) {
-    var sliderValue by remember(Unit) { mutableFloatStateOf(value.toFloat()) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionLabel("Size")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("A", fontSize = 14.sp)
-            Slider(
-                value = sliderValue,
-                onValueChange = { sliderValue = it },
-                onValueChangeFinished = { onChanged(sliderValue.toDouble()) },
-                valueRange = ReaderPrefs.MIN_FONT_SIZE.toFloat()..ReaderPrefs.MAX_FONT_SIZE.toFloat(),
-                steps = 17,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp),
-            )
-            Text("A", fontSize = 26.sp)
-        }
-    }
-}
-
-@Composable
-private fun BrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
-    var sliderValue by remember(Unit) { mutableFloatStateOf(value ?: 0.5f) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionLabel("Brightness")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Outlined.BrightnessLow,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Slider(
-                value = sliderValue,
-                onValueChange = {
-                    sliderValue = it
-                    onChanged(it)
-                },
-                valueRange = 0f..1f,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp),
-            )
-            Icon(
-                Icons.Outlined.BrightnessHigh,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            IconButton(onClick = { onChanged(null) }) {
-                Icon(
-                    Icons.Outlined.BrightnessAuto,
-                    contentDescription = "Follow system brightness",
-                    tint = if (value == null) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-        }
-    }
-}
 
 /**
  * Reads this book by scrolling rather than by turning pages.
@@ -399,22 +158,6 @@ private fun ScrollModeToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
     }
 }
 
-@Composable
-private fun PageTurnAnimationToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onChanged(!enabled) },
-    ) {
-        Text(
-            text = "Page turn animation",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(checked = enabled, onCheckedChange = onChanged)
-    }
-}
 
 /**
  * Holds the screen awake for this book alone.
@@ -438,7 +181,7 @@ private fun KeepScreenOnToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = "Keep the screen on",
+                text = stringResource(R.string.settings_keep_screen_on),
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
@@ -464,71 +207,19 @@ private fun JustThisBookToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                text = "Use separate settings for this book",
+                text = stringResource(R.string.reader_typography_own),
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
                 text = if (enabled) {
-                    "Font, size and layout stay with this book."
+                    stringResource(R.string.reader_typography_own_on)
                 } else {
-                    "Font, size and layout are shared with every book."
+                    stringResource(R.string.reader_typography_own_off)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Switch(checked = enabled, onCheckedChange = onChanged)
-    }
-}
-
-@Composable
-private fun LayoutControls(
-    lineHeight: Double?,
-    pageMargins: Double?,
-    columnMode: ColumnMode,
-    showColumns: Boolean,
-    onLineHeightChanged: (Double?) -> Unit,
-    onPageMarginsChanged: (Double?) -> Unit,
-    onColumnModeChanged: (ColumnMode) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionLabel("Line spacing")
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            val options = listOf("Compact" to 1.2, "Default" to null, "Relaxed" to 1.8)
-            options.forEachIndexed { index, (label, v) ->
-                SegmentedButton(
-                    selected = lineHeight == v,
-                    onClick = { onLineHeightChanged(v) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                ) { Text(label) }
-            }
-        }
-        SectionLabel("Margins")
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            val options = listOf("Narrow" to 0.5, "Default" to null, "Wide" to 2.0)
-            options.forEachIndexed { index, (label, v) ->
-                SegmentedButton(
-                    selected = pageMargins == v,
-                    onClick = { onPageMarginsChanged(v) },
-                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                ) { Text(label) }
-            }
-        }
-        // Only offered where it can be honoured. Two columns need room
-        // for two columns, and on a phone there is none: the control
-        // would sit there taking a tap and changing nothing.
-        if (showColumns && widthClass().isAtLeastMedium) {
-            SectionLabel("Columns")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                val options = ColumnMode.entries
-                options.forEachIndexed { index, mode ->
-                    SegmentedButton(
-                        selected = columnMode == mode,
-                        onClick = { onColumnModeChanged(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                    ) { Text(mode.displayName) }
-                }
-            }
-        }
     }
 }

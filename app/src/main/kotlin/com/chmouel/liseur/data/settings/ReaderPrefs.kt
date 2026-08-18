@@ -43,6 +43,51 @@ enum class ReaderTheme(
 }
 
 /**
+ * The reading theme as it was chosen, which is not always a palette.
+ *
+ * [ReaderTheme] answers "what colour is the page"; every piece of
+ * reading chrome asks it that. This answers "what was asked for", and
+ * the two differ in exactly one case: [FOLLOW_APP], which has no
+ * colours of its own and takes them from how the app is drawn.
+ *
+ * That case is the point of the type. Reading themes used to be
+ * unreachable from Settings and to default to [ReaderTheme.LIGHT]
+ * whatever the app was set to, so turning the app dark left every book
+ * white with nothing to say why.
+ *
+ * The ids are the ones already written to DataStore, so a reader who
+ * chose a theme before this existed keeps it, and only a reader who
+ * never chose one — who has no stored id at all — lands on
+ * [FOLLOW_APP].
+ */
+enum class ReaderThemeChoice(val id: String, val palette: ReaderTheme?) {
+    FOLLOW_APP("follow_app", null),
+    LIGHT("light", ReaderTheme.LIGHT),
+    SEPIA("sepia", ReaderTheme.SEPIA),
+    DARK("dark", ReaderTheme.DARK),
+    BLACK("black", ReaderTheme.BLACK),
+    ;
+
+    /**
+     * The page this choice comes to, given how the app is drawn.
+     *
+     * [FOLLOW_APP] resolves to [ReaderTheme.DARK] or
+     * [ReaderTheme.LIGHT] and never to [ReaderTheme.SEPIA]: sepia is a
+     * taste, dark is a lighting condition, and only the second is
+     * something asking the app for a dark theme can be read as wanting.
+     */
+    fun resolve(appIsDark: Boolean): ReaderTheme =
+        palette ?: if (appIsDark) ReaderTheme.DARK else ReaderTheme.LIGHT
+
+    companion object {
+        val Default = FOLLOW_APP
+
+        fun fromId(id: String?): ReaderThemeChoice =
+            entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/**
  * What the middle of the reading footer shows.
  *
  * The percentage read and the page number live at the footer's edges
@@ -130,7 +175,7 @@ enum class ColumnMode(val id: String, val displayName: String) {
 data class ReaderPrefs(
     val font: ReaderFont = ReaderFont.Default,
     val fontSize: Double = 1.0,
-    val theme: ReaderTheme = ReaderTheme.Default,
+    val themeChoice: ReaderThemeChoice = ReaderThemeChoice.Default,
     val lineHeight: Double? = null,
     val pageMargins: Double? = null,
     val brightness: Float? = null,

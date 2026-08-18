@@ -9,11 +9,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import com.chmouel.liseur.data.settings.AppSettings
-import com.chmouel.liseur.data.settings.ThemeMode
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -24,6 +22,7 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.container
 import com.chmouel.liseur.ui.theme.LiseurTheme
+import com.chmouel.liseur.ui.theme.isDark
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
 import com.chmouel.liseur.ui.LocalEInk
@@ -80,13 +79,10 @@ class ReaderActivity : FragmentActivity() {
         }
         setContent {
             val settings by container.appSettings.settings.collectAsState(initial = AppSettings())
+            val appIsDark = settings.themeMode.isDark()
             ProvideEInk(settings.eInkMode) {
                 LiseurTheme(
-                    darkTheme = when (settings.themeMode) {
-                        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                        ThemeMode.LIGHT -> false
-                        ThemeMode.DARK -> true
-                    },
+                    darkTheme = appIsDark,
                     dynamicColor = settings.dynamicColor,
                     monochrome = LocalEInk.current,
                 ) {
@@ -124,12 +120,14 @@ class ReaderActivity : FragmentActivity() {
                             // navigator is configured, and turning scrolling on
                             // has to take the sideways chapter jumps with it.
                             val prefs by viewModel.prefs.collectAsStateWithLifecycle()
+                            val readingTheme = prefs.themeChoice.resolve(appIsDark)
                             val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
                             val columnMode = prefs.columnMode.effectiveFor(widthClass())
                             remember(s.navigatorFactory, columnMode, scrollMode) {
                                 s.navigatorFactory.createFragmentFactory(
                                     initialLocator = viewModel.lastLocator ?: s.initialLocator,
                                     initialPreferences = prefs.toEpubPreferences(
+                                        theme = readingTheme,
                                         columnMode = columnMode,
                                         scroll = scrollMode,
                                     ),
@@ -157,6 +155,7 @@ class ReaderActivity : FragmentActivity() {
                             ReaderScreen(
                                 publication = s.publication,
                                 prefsFlow = viewModel.prefs,
+                                readingTheme = readingTheme,
                                 typographyIsOwnFlow = viewModel.typographyIsOwn,
                                 progressFlow = viewModel.progress,
                                 jumpBackFlow = viewModel.jumpBack,

@@ -45,7 +45,7 @@ import com.chmouel.liseur.sync.PositionUpdate
 import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
-import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.seriesIdForExtras
@@ -1068,7 +1068,7 @@ class ReaderViewModel(
         },
     )
 
-    fun setTheme(theme: ReaderTheme) = viewModelScope.launch { prefsRepo.setTheme(theme) }
+    fun setTheme(theme: ReaderThemeChoice) = viewModelScope.launch { prefsRepo.setTheme(theme) }
 
     fun setLineHeight(value: Double?) = typography(
         shared = { prefsRepo.setLineHeight(value) },

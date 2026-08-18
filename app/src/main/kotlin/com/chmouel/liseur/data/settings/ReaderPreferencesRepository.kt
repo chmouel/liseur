@@ -35,7 +35,7 @@ class ReaderPreferencesRepository(private val context: Context) {
         ReaderPrefs(
             font = ReaderFont.fromId(p[Keys.FONT]),
             fontSize = p[Keys.FONT_SIZE] ?: 1.0,
-            theme = ReaderTheme.fromId(p[Keys.THEME]),
+            themeChoice = ReaderThemeChoice.fromId(p[Keys.THEME]),
             lineHeight = p[Keys.LINE_HEIGHT],
             pageMargins = p[Keys.PAGE_MARGINS],
             brightness = p[Keys.BRIGHTNESS],
@@ -55,7 +55,7 @@ class ReaderPreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun setTheme(theme: ReaderTheme) {
+    suspend fun setTheme(theme: ReaderThemeChoice) {
         context.readerPrefsStore.edit { it[Keys.THEME] = theme.id }
     }
 
