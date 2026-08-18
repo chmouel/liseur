@@ -66,6 +66,13 @@ require_command() {
     command -v "$1" >/dev/null || die "missing required command: $1"
 }
 
+# fdroiddata is a public project, so every read against it works
+# unauthenticated. Only the commit that updates the metadata needs a
+# logged-in glab, so that is the one call left going through it.
+gitlab_api_get() {
+    curl -fsS "https://gitlab.com/api/v4/$1"
+}
+
 read_version_name() {
     sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' "$BUILD_FILE"
 }
@@ -375,7 +382,7 @@ report_fdroid_pipeline() {
     local waited=0 pipeline url
 
     while (( waited < FDROID_PIPELINE_WAIT_SECONDS )); do
-        pipeline=$(glab api --hostname gitlab.com \
+        pipeline=$(gitlab_api_get \
             "projects/$project_id/pipelines?sha=$sha&per_page=1" 2>/dev/null |
             jq -r '.[0] // empty')
         [[ -n "$pipeline" ]] && break
@@ -398,7 +405,7 @@ report_fdroid_pipeline() {
     local slow_jobs='.[] | select(.name != "fdroid build" and .name != "check apk")'
     local jobs failed pending
     while (( waited < FDROID_PIPELINE_WAIT_SECONDS )); do
-        jobs=$(glab api --hostname gitlab.com \
+        jobs=$(gitlab_api_get \
             "projects/$project_id/pipelines/$pipeline_id/jobs?per_page=100" 2>/dev/null) || jobs=''
         if [[ -n "$jobs" ]]; then
             failed=$(printf '%s' "$jobs" | jq -r "$slow_jobs"'
@@ -432,7 +439,7 @@ update_fdroid_submission() (
     local encoded_path="metadata%2F$APP_ID.yml"
     local upstream_file
 
-    if upstream_file=$(glab api --hostname gitlab.com \
+    if upstream_file=$(gitlab_api_get \
         "projects/$FDROID_PROJECT/repository/files/$encoded_path?ref=master" 2>/dev/null); then
         local upstream_metadata
         upstream_metadata=$(printf '%s' "$upstream_file" | jq -r .content | base64 --decode)
@@ -445,7 +452,7 @@ update_fdroid_submission() (
     fi
 
     local merge_requests
-    merge_requests=$(glab api --hostname gitlab.com \
+    merge_requests=$(gitlab_api_get \
         "projects/$FDROID_PROJECT/merge_requests?state=opened&source_branch=$FDROID_BRANCH&per_page=100")
 
     local merge_request
@@ -461,7 +468,7 @@ update_fdroid_submission() (
     source_branch=$(printf '%s' "$merge_request" | jq -r .source_branch)
     merge_request_url=$(printf '%s' "$merge_request" | jq -r .web_url)
     encoded_branch=$(jq -rn --arg value "$source_branch" '$value | @uri')
-    file_response=$(glab api --hostname gitlab.com \
+    file_response=$(gitlab_api_get \
         "projects/$source_project_id/repository/files/$encoded_path?ref=$encoded_branch")
 
     local last_commit_id metadata_file updated_file
