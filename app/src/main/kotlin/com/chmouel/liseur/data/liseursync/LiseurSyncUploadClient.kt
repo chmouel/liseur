@@ -4,8 +4,10 @@ import android.util.Log
 import com.chmouel.liseur.data.remote.BookUploader
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttp
+import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.RemoteUploadTarget
 import com.chmouel.liseur.data.remote.ServerUploadResult
+import com.chmouel.liseur.data.remote.SyncFailure
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +50,8 @@ class LiseurSyncUploadClient(
      * caller treats an empty list as the server refusing and turns the
      * feature off until the reader signs in again; a dropped connection
      * must not be able to say that. It throws instead, and the worker
-     * retries.
+     * retries. A body that does not carry a folder list is the same
+     * mistake wearing a 200, and is treated the same way.
      */
     override suspend fun targets(
         baseUrl: String,
@@ -59,7 +62,13 @@ class LiseurSyncUploadClient(
         var guard = MAX_PAGES
         while (guard-- > 0) {
             val answer = json.get(LiseurSyncApi.folders(baseUrl, after, FOLDER_PAGE), credentials)
-            val array = answer.optJSONArray("folders") ?: break
+            // A server with no folders sends an empty array, never an
+            // absent one, so a missing key is a body this code does not
+            // understand rather than an answer of none — a proxy's 200,
+            // most likely. Reading it as "no folders" would spend the
+            // reader's feature on somebody else's error page.
+            val array = answer.optJSONArray("folders")
+                ?: throw RemoteHttpFailure(SyncFailure.Malformed)
             for (index in 0 until array.length()) {
                 val folder = array.optJSONObject(index) ?: continue
                 if (!folder.optBoolean("accepts_uploads")) continue
@@ -69,9 +78,13 @@ class LiseurSyncUploadClient(
                     name = folder.optString("name").ifEmpty { id },
                 )
             }
-            after = answer.optString("next_after").takeIf { it.isNotEmpty() } ?: break
+            after = answer.optString("next_after").takeIf { it.isNotEmpty() } ?: return targets
         }
-        return targets
+        // Ten thousand folders in, still being handed a cursor. Something
+        // is wrong at the other end, and the truncated list this would
+        // otherwise return could be missing every folder that accepts
+        // uploads — which reads as a refusal.
+        throw RemoteHttpFailure(SyncFailure.Malformed)
     }
 
     override suspend fun upload(

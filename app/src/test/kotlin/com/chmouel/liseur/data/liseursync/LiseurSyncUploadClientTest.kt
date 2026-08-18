@@ -177,6 +177,34 @@ class LiseurSyncUploadClientTest {
         assertNotNull("a partial page was passed off as the whole answer", thrown)
     }
 
+    /**
+     * A 200 is not by itself an answer. Anything on the way in can serve
+     * one — a proxy, a portal — and if its JSON happens to parse, the
+     * absent folder list would read as "no folder takes books" and cost
+     * the reader the feature.
+     */
+    @Test
+    fun `a body with no folder list is not a server with no folders`() = runTest {
+        server.enqueue(json("""{"error":"not the server you wanted"}"""))
+
+        var thrown: Throwable? = null
+        try {
+            LiseurSyncUploadClient().targets(base(), token())
+        } catch (e: Throwable) {
+            thrown = e
+        }
+
+        assertNotNull("a body carrying no folders was read as a refusal", thrown)
+    }
+
+    /** An empty list, on the other hand, is the server's to send. */
+    @Test
+    fun `a server with nothing to offer says so, and is believed`() = runTest {
+        server.enqueue(json("""{"folders":[]}"""))
+
+        assertTrue(LiseurSyncUploadClient().targets(base(), token()).isEmpty())
+    }
+
     private var books = 0
 
     private suspend fun upload(): ServerUploadResult {

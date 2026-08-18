@@ -107,24 +107,46 @@ class WorkResolver(
         alias.usable && !alias.sourceSent && sourceOf(book) != null
 
     /**
-     * The catalog server's id for [book], or null for a local file.
+     * The catalog server's id for [book], or null for a book this
+     * server does not hold.
      *
-     * The book's own URL already is that id — `komga:<id>`,
+     * Usually the book's own URL already is that id — `komga:<id>`,
      * `calibre:<uuid>` — and it is the same string on every device
      * connected to the same catalog. A local book's URL names a path on
      * this device and means nothing anywhere else, so it is never sent.
+     *
+     * A book uploaded from here is the exception. It keeps the URL its
+     * reading history hangs off and gains the server's id as a link
+     * instead (ADR-0023), so the URL still says "local" about a book the
+     * server now catalogs. Reading only the URL would leave it resolving
+     * on its title forever: the server would never learn that the work
+     * the device has been syncing all along *is* the book it was just
+     * sent, and the library would show the two side by side — one with
+     * the file, one with the reading.
      */
     fun sourceOf(book: Book): String? =
         book.url.takeIf { url -> ServerKind.entries.any { it.remoteId(url) != null } }
+            ?: book.remoteUuid?.let { ServerKind.LISEUR_SYNC.remoteUrl(it) }
+
+    /**
+     * This server's own id for [book], however the book came by it.
+     *
+     * Both halves of [sourceOf]'s story, narrowed to the server being
+     * talked to: a catalog book names it in its URL, an uploaded one
+     * carries it as a link.
+     */
+    fun catalogIdOf(book: Book): String? =
+        ServerKind.LISEUR_SYNC.remoteId(book.url) ?: book.remoteUuid
 
     /**
      * Asks the server what to call [book], caching whatever it says.
      *
-     * A book that came from this server's own catalog is resolved
-     * through the catalog route instead: the server reads the
-     * identifiers off its own record, so the answer carries the file's
-     * hashes even when the file itself was never downloaded here, and
-     * two devices browsing the same library name it identically.
+     * A book this server catalogs is resolved through the catalog route
+     * instead: the server reads the identifiers off its own record, so
+     * the answer carries the file's hashes even when the file itself was
+     * never downloaded here, and two devices browsing the same library
+     * name it identically. A book uploaded from here counts — that route
+     * is also what tells the server which work its new book belongs to.
      *
      * Any other book with no file on the device still resolves, on its
      * title and author: that is weaker, and the server will say so, but
@@ -159,7 +181,7 @@ class WorkResolver(
             }
         }
 
-        val catalogBookId = ServerKind.LISEUR_SYNC.remoteId(book.url)
+        val catalogBookId = catalogIdOf(book)
         if (catalogBookId != null) {
             return resolveCatalog(book, catalogBookId, existing, peerId, baseUrl, credentials)
         }

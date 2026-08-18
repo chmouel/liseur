@@ -361,6 +361,47 @@ class WorkResolverTest {
         assertTrue(JSONObject(server.takeRequest().body!!.utf8()).getBoolean("confirmed"))
     }
 
+    @Test
+    fun `a book uploaded from here resolves as the catalog book it became`() = runTest {
+        // The ghost this stops. A book added on the device syncs its
+        // position for weeks, so the server holds a work for it and no
+        // file. Uploading it gives the server the file too — but
+        // adoption leaves the URL alone, because all that reading hangs
+        // off it, and writes the server's id as a link instead. Read
+        // only the URL and the book stays "local" for ever: the work and
+        // the new catalog entry never meet, and the library shows the
+        // same book twice, one half with the file and the other with the
+        // reading.
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = LOCAL,
+                peerId = PEER,
+                workId = "w-1",
+                confidence = WorkAlias.HIGH,
+                seeded = true,
+                sourceSent = false,
+                editionSha = "aa",
+                resolvedAt = NOW,
+            ),
+        )
+        answer(200, """{"work_id":"w-1","confidence":"high"}""")
+
+        val adopted = downloaded().copy(url = LOCAL, remoteUuid = "b-7")
+        val result = resolver.resolve(adopted, PEER, baseUrl(), TOKEN)
+
+        // The catalog route, which is the one that tells the server
+        // which work its new book belongs to.
+        assertTrue(server.takeRequest().target!!.endsWith("/v1/books/b-7/resolve"))
+        val alias = (result as WorkResolution.Named).alias
+        assertEquals("w-1", alias.workId)
+        assertEquals(LOCAL, alias.bookUrl)
+        assertTrue(alias.seeded)
+        // Said once, and not asked again.
+        assertTrue(alias.sourceSent)
+        assertEquals("w-1", (resolver.resolve(adopted, PEER, baseUrl(), TOKEN) as WorkResolution.Named).alias.workId)
+        assertEquals(1, server.requestCount)
+    }
+
     private fun baseUrl() = "http://127.0.0.1:${server.port}"
 
     private fun downloaded(modifiedAt: Long = NOW) = Book(
@@ -384,6 +425,7 @@ class WorkResolverTest {
     private companion object {
         const val NOW = 1_700_000_000_000L
         const val BOOK = "calibre:2f9b"
+        const val LOCAL = "file:///sd/books/rois.epub"
         const val PEER = "liseursync|https://sync.example|ada"
         val TOKEN = RemoteCredentials.Bearer("device-secret")
     }
