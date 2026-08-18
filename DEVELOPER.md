@@ -67,6 +67,37 @@ There is no instrumented/emulator test suite. Reader interactions
 (gestures, immersive mode, process-death restore, rotation) are verified
 manually on a booted AVD.
 
+### The upload end-to-end check
+
+Sending a local book to liseur-sync is the one path where a unit test
+proves almost nothing: what can go wrong is the shape of the whole
+round trip, not a function. `hack/e2e-upload` drives it through the
+app's own screens against a real server and then reads both sides.
+
+```bash
+hack/e2e-upload -u http://10.0.2.2:8686 -t <token> -d /srv/books
+```
+
+`-u` is the server as the *device* sees it, so an emulator wants
+`10.0.2.2` and never `127.0.0.1`. `-t` is a device token holding at
+least `sync`, `library-read` and `library-upload`. `-d` is the watched
+folder's root on this machine, which is how the script sees what landed.
+The folder has to accept uploads already:
+
+```bash
+liseur-sync admin folder-uploads <folder-id> on
+```
+
+It asserts four things, and each one is a bug that actually happened:
+the `library-upload` scope reaches the app as `can_upload`, the files
+appear in the folder, no uploaded book had its `url` rewritten (that
+key is what every reading position hangs off), and no book came back
+from the following catalog pass as a second row.
+
+Nothing about it is mocked. Start with a clean shelf — `hack/reset-books`
+then `adb shell pm clear com.chmouel.liseur` — or the counts it compares
+are counting an earlier run.
+
 ### Checking a folder's storage permission
 
 Deleting a book's file needs write access to the folder it lives in, and
@@ -475,6 +506,23 @@ what lets it sync a book that came off an SD card.
 - Statistics (`/v1/insights/*`) are decoration. Every failure is null
   and silent, and a null `eta_seconds` is carried through untouched: no
   estimate beats an invented one.
+- **Uploading is opt-in twice over.** The server advertises the
+  `library-upload` scope on `GET /v1/token` and marks the folders that
+  take uploads in `GET /v1/folders`; without both, the action is not
+  offered at all, which is how an older server needs no version check.
+  `POST /v1/folders/{folder}/books` is `multipart/form-data`, keyed by
+  the file's SHA-256, so a repeated upload answers `200 duplicate` and
+  stores nothing twice. `202` means the bytes are safe but the server
+  had not catalogued them yet; the worker simply asks again, and the
+  digest makes the second ask free.
+- **What follows an upload is adoption, not replacement.** The local row
+  keeps its own `url` and gains `remote_uuid` and `download_href`
+  (`BookDao.linkToRemote`). Rewriting the URL to the server's spelling
+  would take every reading position, annotation and session with it.
+  Because the catalog reads what the library holds once, before its
+  walk begins, both sides guard against the book being introduced twice:
+  the catalog re-asks about the ids on a page it has not accounted for,
+  and adoption drops a catalog row that got there first.
 
 ## F-Droid readiness
 
