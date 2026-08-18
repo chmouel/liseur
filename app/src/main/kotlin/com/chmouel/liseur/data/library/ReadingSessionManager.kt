@@ -6,6 +6,7 @@ import com.chmouel.liseur.domain.ReadingSessionClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
 
 /**
  * App-lifetime owner of reading-session persistence.
@@ -36,4 +37,7 @@ class ReadingSessionManager(
         elapsedNow = elapsedNow,
         checkpointIntervalMs = checkpointIntervalMs,
     )
+
+    /** Local time recorded for one permanent book identity. */
+    fun observeTotal(bookUrl: String): Flow<Long> = dao.observeTotalDuration(bookUrl)
 }

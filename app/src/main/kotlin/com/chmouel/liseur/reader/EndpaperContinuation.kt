@@ -45,6 +45,10 @@ data class NextUp(
 /**
  * What the endpaper can say once the last page has been turned.
  *
+ * [finished] carries the cover-bearing library record for the book that
+ * just closed. [timeSpentMs] is its local reading time once there is at
+ * least a minute worth saying.
+ *
  * [seriesName] and [finishedVolume] name the book that just ended, so
  * the colophon can say which volume of the series this was.
  * [missingIndex] is the volume that should come next and is not in the
@@ -57,6 +61,8 @@ data class NextUp(
 data class EndpaperContinuation(
     val next: NextUp?,
     val seriesCompletion: SeriesCompletion,
+    val finished: Book? = null,
+    val timeSpentMs: Long? = null,
     val seriesName: String? = null,
     val finishedVolume: String? = null,
     val missingIndex: Double? = null,
@@ -97,6 +103,7 @@ internal fun endpaperContinuation(
     downloads: Map<String, DownloadSnapshot>,
     canDownload: Boolean,
     extras: SeriesExtras?,
+    timeSpentMs: Long = 0,
 ): EndpaperContinuation? {
     if (!shouldOfferEndpaperContinuation(current.finished, endpaperReached)) return null
     val seriesName = current.seriesName?.takeIf { it.isNotBlank() }
@@ -109,6 +116,8 @@ internal fun endpaperContinuation(
         return EndpaperContinuation(
             next = null,
             seriesCompletion = SeriesCompletion.IN_PROGRESS,
+            finished = current,
+            timeSpentMs = timeSpentMs.takeIf { it >= MIN_ENDPAPER_TIME_MS },
             seriesName = seriesName,
             finishedVolume = finishedVolume,
         )
@@ -130,6 +139,8 @@ internal fun endpaperContinuation(
     val hasOffer = nextUp != null || offer.missingIndex != null
     return EndpaperContinuation(
         next = nextUp,
+        finished = current,
+        timeSpentMs = timeSpentMs.takeIf { it >= MIN_ENDPAPER_TIME_MS },
         seriesName = seriesName,
         finishedVolume = finishedVolume,
         missingIndex = offer.missingIndex,
@@ -137,6 +148,8 @@ internal fun endpaperContinuation(
         seriesCompletion = if (hasOffer) SeriesCompletion.IN_PROGRESS else completion,
     )
 }
+
+private const val MIN_ENDPAPER_TIME_MS = 60_000L
 
 internal fun readyToOpen(
     continuation: EndpaperContinuation?,

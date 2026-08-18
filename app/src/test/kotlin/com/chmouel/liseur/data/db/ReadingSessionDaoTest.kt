@@ -224,6 +224,33 @@ class ReadingSessionDaoTest {
     }
 
     @Test
+    fun `focused total follows checkpoints for one book`() = runTest {
+        dao.insert(
+            ReadingSession(
+                bookUrl = other,
+                startedAt = 0,
+                endedAt = 4 * minute,
+                lastCheckpointAt = 4 * minute,
+                durationMs = 4 * minute,
+            ),
+        )
+        val recorder = recorder(book)
+        recorder.resumed()
+        now += 2 * minute
+        recorder.checkpoint()
+        recorder.awaitIdle()
+
+        assertEquals(2 * minute, dao.observeTotalDuration(book).first())
+
+        now += minute
+        recorder.checkpoint()
+        recorder.awaitIdle()
+
+        assertEquals(3 * minute, dao.observeTotalDuration(book).first())
+        assertEquals(4 * minute, dao.observeTotalDuration(other).first())
+    }
+
+    @Test
     fun `deleting a book takes its segments with it and leaves the rest`() = runTest {
         recorder(book).let {
             it.resumed()

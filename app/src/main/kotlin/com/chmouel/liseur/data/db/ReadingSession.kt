@@ -129,6 +129,16 @@ interface ReadingSessionDao {
     @Query("SELECT * FROM reading_sessions ORDER BY started_at DESC")
     fun observeAll(): Flow<List<ReadingSession>>
 
+    /** Local reading time for one book, including its current open session. */
+    @Query(
+        """
+        SELECT COALESCE(SUM(duration_ms), 0)
+        FROM reading_sessions
+        WHERE book_url = :bookUrl
+        """,
+    )
+    fun observeTotalDuration(bookUrl: String): Flow<Long>
+
     /**
      * Finished sessions the sync server has not been told about, oldest
      * first.

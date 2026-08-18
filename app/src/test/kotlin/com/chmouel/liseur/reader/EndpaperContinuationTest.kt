@@ -49,6 +49,15 @@ class EndpaperContinuationTest {
         assertEquals(NextVolumeAvailability.Ready("file://Two.epub"), offer?.next?.availability)
         assertEquals("Two", offer?.next?.title)
         assertEquals("/covers/two.jpg", offer?.next?.book?.coverPath)
+        assertEquals(one, offer?.finished)
+    }
+
+    @Test
+    fun `time is carried only after a full minute`() {
+        val one = book("One", 1.0, finished = true)
+
+        assertNull(continuation(one, listOf(one), timeSpentMs = 59_999)?.timeSpentMs)
+        assertEquals(60_000L, continuation(one, listOf(one), timeSpentMs = 60_000)?.timeSpentMs)
     }
 
     @Test
@@ -197,6 +206,7 @@ class EndpaperContinuationTest {
         val one = book("One", 1.0, finished = true)
         val three = book("Three", 3.0)
         val offer = continuation(one, listOf(one, three))
+        assertEquals("1", offer?.finishedVolume)
         assertEquals(2.0, offer?.missingIndex)
         assertEquals("Three", offer?.next?.title)
         assertEquals(SeriesCompletion.IN_PROGRESS, offer?.seriesCompletion)
@@ -308,6 +318,7 @@ class EndpaperContinuationTest {
         downloads: Map<String, DownloadSnapshot> = emptyMap(),
         canDownload: Boolean = true,
         extras: SeriesExtras? = null,
+        timeSpentMs: Long = 0,
     ) = endpaperContinuation(
         current = current,
         library = library,
@@ -317,5 +328,6 @@ class EndpaperContinuationTest {
         downloads = downloads,
         canDownload = canDownload,
         extras = extras,
+        timeSpentMs = timeSpentMs,
     )
 }
