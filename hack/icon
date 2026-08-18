@@ -1,222 +1,92 @@
 #!/usr/bin/env python3
-"""Render the adaptive launcher icon to a PNG for F-Droid and the README.
+"""Render the launcher artwork to a PNG for F-Droid and the README.
 
-F-Droid wants a plain 512x512 image, but the icon lives in the app as two
-Android vector drawables. Their pathData is already SVG path syntax, so the
-conversion is mostly a matter of translating the attribute names and the
-gradient elements; that is what this does, before handing the result to
-rsvg-convert.
+F-Droid wants a plain 512x512 image. The launcher icon is an adaptive one:
+a flat background colour with a raster foreground drawn on top, so this
+composites the two rather than cropping a screenshot of a launcher.
+
+A launcher shows the central 72dp of the 108dp viewport, which leaves the
+mark surrounded by margin the store tile does not need; at the size a list
+row gives it, that margin is most of what you see. So the mark is cropped
+to its own bounds and scaled to fill the tile instead.
+
+Needs Pillow.
 
 Usage: hack/icon [OUTPUT]   (default fastlane/metadata/android/en-US/images/icon.png)
 """
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from PIL import Image
+
 ANDROID = "http://schemas.android.com/apk/res/android"
-AAPT = "http://schemas.android.com/aapt"
-RES = Path("app/src/main/res/drawable")
-VALUES = Path("app/src/main/res/values/colors.xml")
+ROOT = Path(__file__).resolve().parent.parent
+RES = ROOT / "app/src/main/res"
+BACKGROUND = RES / "drawable/ic_launcher_background.xml"
+FOREGROUND = RES / "drawable-xxxhdpi/ic_launcher_foreground.webp"
+VALUES = RES / "values/colors.xml"
 
-# The visible part of an adaptive icon is the central 72dp of its 108dp
-# viewport; anything outside is what launchers crop away.
-VIEWPORT = 108.0
-SAFE = 72.0
 SIZE = 512
-
-
-def attr(element: ET.Element, name: str) -> str | None:
-    return element.get(f"{{{ANDROID}}}{name}")
+# Breathing room around the mark, as a fraction of the output edge.
+MARGIN = 0.03
 
 
 def palette() -> dict[str, str]:
-    """The icon background pulls its colours from values/colors.xml."""
-    if not VALUES.exists():
-        return {}
     return {c.get("name", ""): (c.text or "").strip() for c in ET.parse(VALUES).getroot()}
 
 
-COLOURS = palette()
+def rgb(colour: str) -> tuple[int, int, int]:
+    colour = colour.lstrip("#")
+    if len(colour) == 8:  # AARRGGBB
+        colour = colour[2:]
+    return tuple(int(colour[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def resolve(value: str | None) -> str | None:
-    """Turn a @color/foo reference into the literal it points at."""
-    if value and value.startswith("@color/"):
-        return COLOURS.get(value[len("@color/"):], "#000000")
-    return value
-
-
-def gradient_of(path: ET.Element, index: int) -> tuple[str, str] | None:
-    """Return (gradient id, defs xml) for a path filled with a gradient."""
-    holder = path.find(f"{{{AAPT}}}attr")
-    if holder is None:
-        return None
-    gradient = holder.find("gradient")
-    if gradient is None:
-        return None
-
-    stops = "".join(
-        '<stop offset="{}" stop-color="{}" stop-opacity="{}"/>'.format(
-            attr(item, "offset") or "0",
-            (resolve(attr(item, "color")) or "#000000")[:7],
-            alpha_of(resolve(attr(item, "color")) or "#000000"),
-        )
-        for item in gradient.findall("item")
-    )
-    name = f"g{index}"
-    if attr(gradient, "type") == "radial":
-        defs = (
-            '<radialGradient id="{}" gradientUnits="userSpaceOnUse" '
-            'cx="{}" cy="{}" r="{}">{}</radialGradient>'
-        ).format(
-            name,
-            attr(gradient, "centerX"),
-            attr(gradient, "centerY"),
-            attr(gradient, "gradientRadius"),
-            stops,
-        )
-    else:
-        defs = (
-            '<linearGradient id="{}" gradientUnits="userSpaceOnUse" '
-            'x1="{}" y1="{}" x2="{}" y2="{}">{}</linearGradient>'
-        ).format(
-            name,
-            attr(gradient, "startX"),
-            attr(gradient, "startY"),
-            attr(gradient, "endX"),
-            attr(gradient, "endY"),
-            stops,
-        )
-    return name, defs
-
-
-def alpha_of(colour: str) -> str:
-    """Android colours may be #AARRGGBB; SVG wants the alpha separately."""
-    if len(colour) == 9:
-        return f"{int(colour[1:3], 16) / 255:.3f}"
-    return "1"
-
-
-def colour_of(colour: str | None, default: str = "none") -> str:
-    if not colour:
-        return default
-    if len(colour) == 9:
-        # Fully transparent is Android's way of saying "no fill".
-        return "none" if colour[1:3] == "00" else "#" + colour[3:]
-    return colour
-
-
-def transform_of(group: ET.Element) -> str:
-    """VectorDrawable group transforms, in the order Android applies them."""
-    parts = []
-    tx, ty = attr(group, "translateX"), attr(group, "translateY")
-    if tx or ty:
-        parts.append(f"translate({tx or 0},{ty or 0})")
-    pivot_x, pivot_y = attr(group, "pivotX") or "0", attr(group, "pivotY") or "0"
-    rotation = attr(group, "rotation")
-    if rotation:
-        parts.append(f"rotate({rotation},{pivot_x},{pivot_y})")
-    scale_x, scale_y = attr(group, "scaleX"), attr(group, "scaleY")
-    if scale_x or scale_y:
-        parts.append(
-            f"translate({pivot_x},{pivot_y}) "
-            f"scale({scale_x or 1},{scale_y or 1}) "
-            f"translate(-{pivot_x},-{pivot_y})"
-        )
-    return " ".join(parts)
-
-
-def walk(element: ET.Element, defs: list[str], body: list[str], counter: list[int]) -> None:
-    for child in element:
-        tag = child.tag.rsplit("}", 1)[-1]
-        if tag == "group":
-            body.append(f'<g transform="{transform_of(child)}">')
-            walk(child, defs, body, counter)
-            body.append("</g>")
-        elif tag == "path":
-            data = attr(child, "pathData")
-            if not data:
-                continue
-            counter[0] += 1
-            gradient = gradient_of(child, counter[0])
-            if gradient:
-                fill = f"url(#{gradient[0]})"
-                defs.append(gradient[1])
-            else:
-                fill = colour_of(resolve(attr(child, "fillColor")))
-
-            parts = [f'd="{data}"', f'fill="{fill}"']
-            for android_name, svg_name in (
-                ("fillAlpha", "fill-opacity"),
-                ("strokeWidth", "stroke-width"),
-                ("strokeAlpha", "stroke-opacity"),
-                ("strokeLineCap", "stroke-linecap"),
-                ("strokeLineJoin", "stroke-linejoin"),
-                ("fillType", "fill-rule"),
-            ):
-                value = attr(child, android_name)
-                if value:
-                    if svg_name == "fill-rule":
-                        value = "evenodd" if value == "evenOdd" else "nonzero"
-                    parts.append(f'{svg_name}="{value}"')
-            stroke = attr(child, "strokeColor")
-            if stroke:
-                parts.append(f'stroke="{colour_of(resolve(stroke))}"')
-            body.append("<path " + " ".join(parts) + "/>")
-
-
-def convert(vector: Path, index_base: int) -> tuple[str, str]:
-    defs: list[str] = []
-    body: list[str] = []
-    walk(ET.parse(vector).getroot(), defs, body, [index_base])
-    return "".join(defs), "".join(body)
+def field() -> tuple[int, int, int]:
+    """The flat colour the background vector paints."""
+    root = ET.parse(BACKGROUND).getroot()
+    for path in root.iter("path"):
+        colour = path.get(f"{{{ANDROID}}}fillColor")
+        if not colour:
+            continue
+        if colour.startswith("@color/"):
+            colour = palette().get(colour[len("@color/"):], "#000000")
+        return rgb(colour)
+    raise SystemExit(f"error: no filled path in {BACKGROUND.relative_to(ROOT)}")
 
 
 def main() -> int:
-    output = Path(
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else "fastlane/metadata/android/en-US/images/icon.png"
+    output = Path(sys.argv[1]) if len(sys.argv) > 1 else (
+        ROOT / "fastlane/metadata/android/en-US/images/icon.png"
     )
-    if not RES.exists():
-        print("error: run this from the repository root", file=sys.stderr)
+    for source in (BACKGROUND, FOREGROUND, VALUES):
+        if not source.exists():
+            print(f"error: missing {source}", file=sys.stderr)
+            return 1
+
+    art = Image.open(FOREGROUND).convert("RGBA")
+    bounds = art.getbbox()
+    if bounds is None:
+        print(f"error: {FOREGROUND.relative_to(ROOT)} is empty", file=sys.stderr)
         return 1
+    art = art.crop(bounds)
 
-    background_defs, background = convert(RES / "ic_launcher_background.xml", 0)
-    foreground_defs, foreground = convert(RES / "ic_launcher_foreground.xml", 100)
+    inner = SIZE - 2 * round(SIZE * MARGIN)
+    scale = min(inner / art.width, inner / art.height)
+    art = art.resize((round(art.width * scale), round(art.height * scale)), Image.LANCZOS)
 
-    # Scale the safe zone up to fill the output, which is what a launcher
-    # does, so the medallion is not left swimming in margin.
-    scale = VIEWPORT / SAFE
-    offset = (VIEWPORT - SAFE) / 2 * scale
-
-    svg = (
-        '<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
-        'viewBox="0 0 {v} {v}">'
-        "<defs>{defs}</defs>"
-        '<g transform="translate({o},{o}) scale({s})">{background}{foreground}</g>'
-        "</svg>"
-    ).format(
-        size=SIZE,
-        v=VIEWPORT,
-        defs=background_defs + foreground_defs,
-        o=-offset,
-        s=scale,
-        background=background,
-        foreground=foreground,
-    )
-
+    # The store wants no alpha, so the mark goes onto its own field rather
+    # than onto whatever the client happens to draw behind it.
+    icon = Image.new("RGB", (SIZE, SIZE), field())
+    icon.paste(art, ((SIZE - art.width) // 2, (SIZE - art.height) // 2), art)
     output.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["rsvg-convert", "-w", str(SIZE), "-h", str(SIZE), "-o", str(output)],
-        input=svg.encode(),
-        check=True,
-    )
-    print(f"wrote {output}")
+    icon.save(output)
+
+    print(f"wrote {output.relative_to(ROOT) if output.is_relative_to(ROOT) else output}")
     return 0
 
 

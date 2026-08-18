@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Strip the cream field from the brand emblem for transparent in-app use.
+
+The launcher and splash keep the mark on paper; the About screen floats it
+on whatever surface is behind it. Needs Pillow.
+
+Usage: hack/emblem-transparent
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parent.parent
+RES = ROOT / "app/src/main/res"
+LIGHT_FIELD = (252, 244, 237)  # @color/logo_field
+NIGHT_FIELD = (2, 19, 40)  # field baked into ic_brand_emblem_night
+TOLERANCE = 48
+
+VARIANTS = (
+    ("ic_brand_emblem.webp", "ic_brand_emblem_transparent.webp", LIGHT_FIELD),
+    ("ic_brand_emblem_night.webp", "ic_brand_emblem_night_transparent.webp", NIGHT_FIELD),
+)
+
+
+def make_transparent(src: Path, dst: Path, field: tuple[int, int, int]) -> None:
+    image = Image.open(src).convert("RGBA")
+    pixels = image.load()
+    width, height = image.size
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha < 16:
+                continue
+            delta = (
+                (red - field[0]) ** 2
+                + (green - field[1]) ** 2
+                + (blue - field[2]) ** 2
+            ) ** 0.5
+            if delta <= TOLERANCE:
+                pixels[x, y] = (red, green, blue, 0)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    image.save(dst, "WEBP", lossless=True)
+
+
+def main() -> int:
+    wrote = 0
+    for density in ("mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"):
+        for source_name, target_name, field in VARIANTS:
+            source = RES / f"drawable-{density}/{source_name}"
+            if not source.exists():
+                print(f"skip missing {source}", file=sys.stderr)
+                continue
+            target = RES / f"drawable-{density}/{target_name}"
+            make_transparent(source, target, field)
+            print(f"wrote {target.relative_to(ROOT)}")
+            wrote += 1
+    return 0 if wrote else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

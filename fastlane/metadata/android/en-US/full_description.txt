@@ -1,28 +1,30 @@
-Liseur is an open-source EPUB books reader for Android, and a client for calibre-web, Komga and liseur-sync: a modern reader that is equally at home with the files on your phone and with your own book server.
+Liseur is an open-source ebook reader for Android. It opens EPUB books stored on your phone, and it is also a client for calibre-web, Komga and liseur-sync, so the books on your own server share a shelf with the ones on the device — and the page you stopped on follows you from one to the other.
 
-Reading
+It works offline, has no ads and no account of its own, and asks for nothing beyond the server you point it at.
+
+Reading EPUB books
 
 * Paginated EPUB rendering through the Readium toolkit, full screen by default
 * Tap right to go forward, left to go back, the middle for the controls; volume keys work too
 * A whole page always fits the screen, with no stray scrolling to catch the last line
-* Four reading themes (Light, Sepia, Dark, Black), independent of the app's own theme
+* Four reading themes — Light, Sepia, Dark and a black night mode for OLED screens — independent of the app's own theme
 * Four bundled open fonts or the publisher's own, plus size, line spacing, margins and brightness
 * Time left in the chapter, time left in the book, page or percentage, and a scrubber with chapter ticks
 
-Marking up and looking up
+Highlights, notes and dictionary
 
 * Highlights in four colours, notes, and bookmarks with a corner ribbon
 * A notebook of everything you marked in a book, exportable as Markdown
 * Search the whole book, with snippets and jump-to highlighting
 * Definitions for any selected word, or a hand-off to an offline dictionary app. Online lookups are off until you turn them on, and you choose which Wiktionary edition or mirror answers them
 
-Your library
+Your ebook library
 
-* Index folders of EPUBs, covers and all
+* Index folders of EPUBs on the device or an SD card, covers and all
 * Books you are using sort to the front; finished ones get a tick
 * Pull to refresh picks up whatever changed behind the app's back
 
-Your own server
+Your own book server: calibre-web, Komga, liseur-sync
 
 * calibre-web: one screen sets it up with URL, username and password, and Liseur works out the catalog, download rights and sync token
 * Komga: paste the server address and an API key

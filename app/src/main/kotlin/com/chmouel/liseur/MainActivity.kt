@@ -48,6 +48,7 @@ import com.chmouel.liseur.ui.library.SeriesScreen
 import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
+import com.chmouel.liseur.ui.settings.AboutScreen
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
@@ -147,6 +148,7 @@ private enum class Screen {
     READING_APPEARANCE,
     SERVER_ACCOUNT,
     LICENCES,
+    ABOUT,
     STATS,
     BOOK_STATS,
 }
@@ -161,6 +163,7 @@ private enum class Screen {
 private data class StatsTarget(val bookUrl: String, val title: String)
 
 private const val SOURCE_URL = "https://github.com/chmouel/liseur"
+private const val SPONSOR_URL = "https://github.com/sponsors/chmouel"
 
 @Composable
 private fun LiseurApp(settings: AppSettings) {
@@ -275,8 +278,7 @@ private fun LiseurApp(settings: AppSettings) {
                 onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
                 backup = annotationBackup,
                 connections = context.container.connections,
-                onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
-                onOpenLicences = { screen = Screen.LICENCES },
+                onOpenAbout = { screen = Screen.ABOUT },
                 onBack = { screen = Screen.LIBRARY },
             )
         }
@@ -307,9 +309,19 @@ private fun LiseurApp(settings: AppSettings) {
             ServerAccountRoute(onBack = { screen = accountReturnsTo })
         }
 
-        Screen.LICENCES -> {
+        Screen.ABOUT -> {
             BackHandler { screen = Screen.SETTINGS }
-            LicencesScreen(onBack = { screen = Screen.SETTINGS })
+            AboutScreen(
+                onBack = { screen = Screen.SETTINGS },
+                onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
+                onOpenSponsor = { context.openLink(SPONSOR_URL.toUri()) },
+                onOpenLicences = { screen = Screen.LICENCES },
+            )
+        }
+
+        Screen.LICENCES -> {
+            BackHandler { screen = Screen.ABOUT }
+            LicencesScreen(onBack = { screen = Screen.ABOUT })
         }
     }
 }

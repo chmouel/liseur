@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-An open-source EPUB reader and [calibre-web](https://github.com/janeczku/calibre-web) / [Komga](https://komga.org) / [liseur-sync](https://github.com/chmouel/liseur-sync) client for Android, made for people whose idea of a great evening is a warm blanket and a 900-page book.
+An open-source ebook reader for Android and a [calibre-web](https://github.com/janeczku/calibre-web) / [Komga](https://komga.org) / [liseur-sync](https://github.com/chmouel/liseur-sync) client: EPUBs on your phone, in sync with your own book server, for people whose idea of a great evening is a warm blanket and a 900-page book.
 
 <table>
   <tr>
