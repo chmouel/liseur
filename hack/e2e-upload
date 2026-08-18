@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+#
+# End-to-end check of the upload path: a book that is only on this
+# device gets sent to a real liseur-sync server, and the row that holds
+# the reader's place is linked to the server's copy rather than replaced
+# by it.
+#
+#   hack/e2e-upload -u URL -t TOKEN -d /path/to/folder/root
+#
+#   -u  the server as the *device* sees it (an emulator reaches the host
+#       at 10.0.2.2, never at 127.0.0.1)
+#   -t  a device-token secret holding at least sync, library-read and
+#       library-upload
+#   -d  the watched folder's root on this machine, so the script can see
+#       what landed in it
+#   -s  pick a device when several are attached
+#
+# The folder must already accept uploads:
+#
+#   liseur-sync admin folder-uploads <folder-id> on
+#
+# Nothing here is faked. The app is driven through its own screens, the
+# transfer is a real multipart POST over the network, and the assertions
+# read the server's disk and the app's database.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
+
+# shellcheck source=hack/lib/demo-books.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/demo-books.sh"
+
+serial="" url="" token="" root=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -s | --serial) serial=${2:-}; shift ;;
+        -u | --url) url=${2:-}; shift ;;
+        -t | --token) token=${2:-}; shift ;;
+        -d | --dir) root=${2:-}; shift ;;
+        -h | --help)
+            sed -n '3,24p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) die "unknown argument $1" ;;
+    esac
+    shift
+done
+
+[[ -n "$url" ]] || die "need -u, the server address as the device sees it"
+[[ -n "$token" ]] || die "need -t, a device token with the library-upload scope"
+[[ -d "$root" ]] || die "need -d, the watched folder's root on this machine"
+
+command -v adb >/dev/null || die "adb is not installed"
+command -v python3 >/dev/null || die "python3 is not installed"
+
+if [[ -z "$serial" ]]; then
+    mapfile -t devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+    [[ ${#devices[@]} -eq 1 ]] ||
+        die "expected exactly one attached device, got ${#devices[@]}; pass --serial"
+    serial=${devices[0]}
+fi
+
+adb() { command adb -s "$serial" "$@"; }
+
+adb shell pm path "$APP_ID" >/dev/null 2>&1 ||
+    die "$APP_ID is not installed on $serial; run make install"
+
+work=$(mktemp -d)
+cleanup() {
+    adb shell rm -f /sdcard/liseur-ui.xml >/dev/null 2>&1 || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+# What the app's own database says, which is the only place the outcome
+# of an adoption can be read.
+query() {
+    adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \"$1\"" |
+        tr -d '\r'
+}
+
+type_into() {
+    local needle=$1 text=$2 at
+    hide_keyboard
+    at=$(wait_for "$needle" 25) || die "no field called \"$needle\""
+    # shellcheck disable=SC2086
+    adb shell input tap $at
+    sleep 1
+    adb shell input text "${text//&/\\&}"
+    sleep 1
+}
+
+# The soft keyboard is drawn in its own window, so it is invisible to a
+# uiautomator dump while still swallowing every tap that lands under it.
+# A tap meant for a button then arrives as a keystroke in the field that
+# has focus, which is how a token grows a stray letter. Nothing is typed
+# or tapped here until the keyboard is actually gone.
+hide_keyboard() {
+    local tries=0
+    while ((tries < 5)); do
+        adb shell dumpsys input_method | grep -q "mInputShown=true" || return 0
+        adb shell input keyevent KEYCODE_BACK
+        sleep 1
+        tries=$((tries + 1))
+    done
+    die "the soft keyboard would not go away"
+}
+
+# Like tap_on, but never with the keyboard in the way.
+tap_button() {
+    hide_keyboard
+    tap_on "$@"
+}
+
+before=$(find "$root" -name '*.epub' | wc -l | tr -d ' ')
+
+step "Connecting to $url"
+open_library
+tap_on "More" exact
+tap_on "Settings"
+tap_on "Book server" exact
+# The first visit explains what a book server is, in a dialog, and
+# dismissing it returns to settings rather than revealing the form. Its
+# title is "Book servers", so nothing may be tapped by prefix until the
+# dialog is really gone or the settings row is matched against it.
+if at=$(wait_for "Dismiss" 6 exact); then
+    # shellcheck disable=SC2086
+    adb shell input tap $at
+    waited=0
+    while ((waited < 10)) && on_screen "Dismiss"; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    tap_on "Book server" exact
+fi
+tap_on "liseur-sync" exact
+tap_on "Paste a token"
+type_into "Server address" "$url"
+type_into "Device token" "$token"
+tap_button "Connect" exact
+
+waited=0
+while ((waited < 40)); do
+    [[ $(query "select count(*) from remote_server;") == 1 ]] && break
+    sleep 2
+    waited=$((waited + 2))
+done
+[[ $(query "select count(*) from remote_server;") == 1 ]] ||
+    die "the app never connected; check the address and the token"
+note "connected"
+
+can_upload=$(query "select can_upload from remote_server;")
+[[ "$can_upload" == 1 ]] ||
+    die "the app read the token as not allowed to upload (can_upload=$can_upload)"
+note "the library-upload scope reached the app"
+
+# The offer is drawn over the library, not over the settings screen.
+step "Accepting the offer"
+hide_keyboard
+back
+sleep 2
+back
+tap_on "Send" exact
+
+step "Waiting for the transfer"
+waited=0
+while ((waited < 180)); do
+    linked=$(query "select count(*) from books where remote_uuid is not null;")
+    ((linked > 0)) && break
+    sleep 5
+    waited=$((waited + 5))
+done
+
+linked=$(query "select count(*) from books where remote_uuid is not null;")
+((linked > 0)) || die "nothing was linked to the server after $waited seconds"
+note "$linked books linked to the server"
+
+after=$(find "$root" -name '*.epub' | wc -l | tr -d ' ')
+((after > before)) ||
+    die "the server's folder still holds $after books; nothing was written"
+note "$((after - before)) books landed in $root"
+
+# The point of the whole exercise: adoption links, it does not replace.
+# A rewritten URL would take the reader's place in the book with it.
+local_urls=$(query "select count(*) from books where remote_uuid is not null \
+    and url not like 'file:%' and url not like 'content:%';")
+[[ "$local_urls" == 0 ]] ||
+    die "$local_urls uploaded books had their URL rewritten; positions would be lost"
+note "every uploaded book kept its own URL"
+
+# The other half of adoption: the catalog pass that follows an upload has
+# to recognise the book, not introduce it again beside itself.
+doubled=$(query "select count(*) from (select remote_uuid from books \
+    where remote_uuid is not null group by remote_uuid having count(*) > 1);")
+[[ "$doubled" == 0 ]] ||
+    die "$doubled uploaded books came back from the catalog as a second row"
+note "no book was catalogued twice"
+
+printf '\nDone. %s books uploaded, %s linked, none moved.\n' \
+    "$((after - before))" "$linked"

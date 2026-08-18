@@ -705,6 +705,9 @@ interface BookDao {
     @Query("DELETE FROM books WHERE url IN (:urls)")
     suspend fun deleteByUrls(urls: List<String>)
 
+    @Query("SELECT * FROM books WHERE remote_uuid IN (:remoteUuids)")
+    suspend fun byRemoteUuids(remoteUuids: List<String>): List<Book>
+
     /**
      * Gives a local book a server identity, after an upload landed.
      *
