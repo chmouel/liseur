@@ -29,6 +29,7 @@ make check                           # run tests, lint, and the debug build
 make run                             # boot headlessly, install, launch, and show with scrcpy
 make run-bg                          # boot headlessly, install, and launch without scrcpy
 make install                         # install the current debug APK
+make reset                           # reinstall, wipe app storage, and reseed a demo library
 make emulator                        # boot the default AVD
 make stop                            # stop the selected emulator
 make shutdown                        # shut down the selected emulator

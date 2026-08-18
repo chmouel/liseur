@@ -12,7 +12,7 @@ PACKAGE := com.chmouel.liseur
 ACTIVITY := $(PACKAGE)/.MainActivity
 DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
 
-.PHONY: help build debug release test lint check clean emulator stop shutdown install run run-bg screenshots icon feature-graphic
+.PHONY: help build debug release test lint check clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic
 
 help:
 	@printf '%s\n' \
@@ -27,6 +27,7 @@ help:
 		'make install           Build and install the debug APK' \
 		'make run               Start the emulator, install, launch, and show it with scrcpy' \
 		'make run-bg            Start the emulator, install, and launch without scrcpy' \
+		'make reset             Reinstall the app, wipe its storage, and reseed a demo library' \
 		'make clean             Remove build outputs' \
 		'make screenshots       Capture the UI screenshots' \
 		'make icon              Generate the store icon' \
@@ -79,6 +80,9 @@ run-bg: emulator build
 run: run-bg
 	@command -v $(SCRCPY) >/dev/null || { printf 'error: scrcpy is not installed\n' >&2; exit 1; }
 	$(SCRCPY) -s '$(SERIAL)'
+
+reset: run-bg
+	./hack/reset-books -s $(SERIAL)
 
 screenshots:
 	./hack/screenshots

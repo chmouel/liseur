@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#
+# Wipe the app's local storage and the device's book folder, then reseed
+# both with the demo book shelf, so a dev device looks the same on every
+# reset instead of accumulating whatever got left in it.
+#
+#   hack/reset-books           # reset the one attached device
+#   hack/reset-books -s SERIAL # pick a device when several are attached
+#
+# Books are cached under tmp/books, so a rerun only downloads what is
+# missing there.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
+readonly DEVICE_BOOKS="/sdcard/Books"
+
+# shellcheck source=hack/lib/demo-books.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/demo-books.sh"
+
+serial=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -s | --serial)
+            serial=${2:-}
+            shift
+            ;;
+        -h | --help)
+            sed -n '3,11p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            die "unknown argument $1"
+            ;;
+    esac
+    shift
+done
+
+command -v adb >/dev/null || die "adb is not installed"
+command -v python3 >/dev/null || die "python3 is not installed"
+
+if [[ -z "$serial" ]]; then
+    mapfile -t devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+    [[ ${#devices[@]} -eq 1 ]] ||
+        die "expected exactly one attached device, got ${#devices[@]}; pass --serial"
+    serial=${devices[0]}
+fi
+
+adb() { command adb -s "$serial" "$@"; }
+
+adb shell pm path "$APP_ID" >/dev/null 2>&1 ||
+    die "$APP_ID is not installed on $serial"
+
+work=$(mktemp -d)
+cleanup() {
+    adb shell rm -f /sdcard/liseur-ui.xml >/dev/null 2>&1 || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+step "Clearing app storage"
+adb shell pm clear "$APP_ID" >/dev/null
+note "$APP_ID storage cleared"
+
+step "Clearing the device library folder"
+adb shell rm -rf "$DEVICE_BOOKS"
+note "$DEVICE_BOOKS cleared"
+
+step "Fetching the demo shelf"
+fetch_books
+
+step "Pushing books to the device"
+push_books
+
+step "Granting the folder"
+grant_folder
+
+printf '\nDone. %s books on the shelf.\n' "${#DEMO_BOOKS[@]}"
