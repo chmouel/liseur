@@ -1,1 +1,1 @@
-EPUB and ebook reader for local libraries, calibre-web, Komga, and liseur-sync
+Ebook reader: EPUB on your phone, in sync with your own book server
