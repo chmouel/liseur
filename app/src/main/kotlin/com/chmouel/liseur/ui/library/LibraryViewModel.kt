@@ -1089,18 +1089,28 @@ internal fun canUploadTo(server: RemoteServer?, router: RemoteRouter): Boolean =
     server != null && server.canUpload && router.uploaderFor(server.kind) != null
 
 /**
+ * A book that exists only on this device.
+ *
+ * Its identity is a file here rather than a server's name for it, and
+ * nothing has linked it to a copy on the server yet. Both halves matter:
+ * a book downloaded from a server keeps that server's URL and loses its
+ * `remoteUuid` when the account changes, so neither test alone tells a
+ * book of ours from one that came from somewhere else.
+ *
+ * This is the single answer to "could this book be uploaded?" — the
+ * offer and the per-book action must not each decide for themselves.
+ */
+internal fun Book.livesOnlyOnThisDevice(): Boolean =
+    remoteUuid == null && !ServerKind.isRemoteUrl(url)
+
+/**
  * The books that are on this device and nowhere else.
  *
- * A book qualifies when its identity is a file on the device rather than
- * a server's name for it, and nothing has linked it to a copy on the
- * server yet. Archived books are left out: taking a book off the shelf
- * is not the moment to send it somewhere.
+ * Archived books are left out: taking a book off the shelf is not the
+ * moment to volunteer sending it somewhere. Asking for one by hand is a
+ * different question, so the per-book action does not apply this.
  */
 internal fun List<Book>.awaitingUpload(canUpload: Boolean): List<Book> {
     if (!canUpload) return emptyList()
-    return filter {
-        it.remoteUuid == null &&
-            it.archivedAt == null &&
-            !ServerKind.isRemoteUrl(it.url)
-    }
+    return filter { it.livesOnlyOnThisDevice() && it.archivedAt == null }
 }

@@ -3,6 +3,7 @@ package com.chmouel.liseur.ui.library
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.remote.BookUploadWorker
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,6 +37,23 @@ class AwaitingUploadTest {
     @Test
     fun `nothing is offered where uploading is not on the table`() {
         assertTrue(listOf(local("file:///sd/a.epub")).awaitingUpload(false).isEmpty())
+    }
+
+    /**
+     * Switching accounts clears `remote_uuid` from downloaded books but
+     * leaves them their old server's URL. Asking only whether the book is
+     * linked would offer to upload another server's copy, so the per-book
+     * action asks the same question the offer does.
+     */
+    @Test
+    fun `a downloaded book that lost its link is still not ours to send`() {
+        val orphan = local("komga:9").copy(remoteUuid = null, localUri = "file:///data/9.epub")
+        assertFalse(orphan.livesOnlyOnThisDevice())
+    }
+
+    @Test
+    fun `an archived book can still be sent when it is asked for by hand`() {
+        assertTrue(local("file:///sd/a.epub").copy(archivedAt = 1).livesOnlyOnThisDevice())
     }
 
     @Test
