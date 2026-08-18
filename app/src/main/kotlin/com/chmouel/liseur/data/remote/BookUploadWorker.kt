@@ -87,7 +87,17 @@ class BookUploadWorker(
         bookUrl: String,
         remoteBookId: String,
     ) {
-        container.database.bookDao().linkToRemote(
+        val dao = container.database.bookDao()
+        // A catalog pass that ran between the upload and this line has
+        // already introduced the server's copy under its own URL. That
+        // row is minutes old and holds no reading, while this one holds
+        // all of it, so the catalog's is the one that goes.
+        dao.byRemoteUuids(listOf(remoteBookId))
+            .map { it.url }
+            .filter { it != bookUrl }
+            .takeIf { it.isNotEmpty() }
+            ?.let { dao.deleteByUrls(it) }
+        dao.linkToRemote(
             url = bookUrl,
             remoteUuid = remoteBookId,
             downloadHref = "/v1/books/$remoteBookId/download",

@@ -282,6 +282,17 @@ class RemoteCatalogRepository(
         books: List<RemoteBook>,
     ) {
         val now = System.currentTimeMillis()
+        // What is known was read once before the walk began, so a book
+        // this device uploaded and linked while the walk was in flight
+        // is missing from it — and the catalog would introduce it all
+        // over again as a second row holding none of the reading. One
+        // query a page, on the ids this page actually names, is what
+        // keeps an upload that raced the catalog from doubling. Books
+        // the snapshot already covers are left alone: their snapshot is
+        // what the series write below checks itself against.
+        val unknown = books.map { it.remoteId }
+            .filter { known.find(it, kind.remoteUrl(it)) == null }
+        if (unknown.isNotEmpty()) bookDao.byRemoteUuids(unknown).forEach(known::remember)
         // Keyed by URL so a feed that names the same book twice on one
         // page folds into one insert, rather than two rows racing for
         // the same unique URL and being refused.
