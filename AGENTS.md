@@ -96,7 +96,7 @@ Single `:app` module, layered packages under `com.chmouel.liseur`:
   custom reading chrome (tap zones, typography sheet, progress, annotations,
   search).
 - `ui/` — Compose screens: theme (`ui/theme`), library, settings.
-- `sync/` — WorkManager workers for downloads and position sync.
+- `sync/` — WorkManager workers for downloads, uploads and position sync.
 
 State management: plain `ViewModel` + `StateFlow`, unidirectional data flow.
 DI is a manual composition root (no Hilt/Koin). Extract non-trivial logic
@@ -137,6 +137,15 @@ emulator.
 - Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
   must stand on its own.
+- A book only on this device can be sent to liseur-sync, where the
+  server allows it: `BookUploader`, `ServerCapabilities.canUpload` (read
+  from the `library-upload` scope) and `BookUploadWorker`, whose unique
+  work name `upload:$bookUrl` is itself the no-double-upload guarantee.
+  What follows a successful upload is **adoption, not replacement**: the
+  local row keeps its own `url`, because that is the key every reading
+  position, annotation and session hangs off, and only `remote_uuid` and
+  `download_href` are written (`BookDao.linkToRemote`). Never rewrite
+  `books.url` to the server's spelling — the reader's place goes with it.
 - Blocking network calls move to `Dispatchers.IO` inside the client that
   blocks, not in the caller. A `suspend` signature reads as a promise
   that the thread is safe, and a repository reached from a
