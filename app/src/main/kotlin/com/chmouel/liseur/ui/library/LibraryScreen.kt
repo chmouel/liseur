@@ -887,7 +887,7 @@ internal fun BookActionsSheet(
                     ),
                 )
             }
-            if (book.remoteUuid == null && canUploadToServer && !uploading) {
+            if (book.livesOnlyOnThisDevice() && canUploadToServer && !uploading) {
                 TextButton(onClick = onUploadToServer, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.upload_to_server))
                 }
