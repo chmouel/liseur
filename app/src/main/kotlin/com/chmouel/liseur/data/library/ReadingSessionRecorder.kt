@@ -113,6 +113,11 @@ class ReadingSessionRecorder(
         enqueue(Event.Checkpoint(moment(), progression))
     }
 
+    /** Settles elapsed time without pretending that the locator changed. */
+    fun checkpoint() {
+        enqueue(Event.Checkpoint(moment()))
+    }
+
     /**
      * Finishes anything still open and retires this recorder.
      *

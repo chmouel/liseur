@@ -120,6 +120,7 @@ class ReaderViewModel(
 ) : ViewModel() {
 
     private val sessions = sessionManager.recorder(bookId)
+    private val timeSpent = sessionManager.observeTotal(bookId)
 
     /**
      * What the Define action needs before it opens a card or another app.
@@ -225,7 +226,8 @@ class ReaderViewModel(
         },
         canDownload,
         _seriesExtras,
-    ) { inputs, allowed, extras ->
+        timeSpent,
+    ) { inputs, allowed, extras, totalMs ->
         val current = inputs.books.firstOrNull { it.url == bookId } ?: return@combine null
         endpaperContinuation(
             current = current,
@@ -236,12 +238,14 @@ class ReaderViewModel(
             downloads = inputs.downloads,
             canDownload = allowed,
             extras = extras,
+            timeSpentMs = totalMs,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** The last page was turned past. The book is finished from here. */
     fun onReachedEndpaper() {
         endpaperReached.value = true
+        sessions.checkpoint()
         positionPublisher.completeBook(bookId)
     }
 

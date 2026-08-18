@@ -419,6 +419,8 @@ fun ReaderScreen(
                     .joinToString(", ") { it.name }
                     .ifBlank { null },
                 theme = prefs.theme,
+                finished = continuation?.finished,
+                timeSpentMs = continuation?.timeSpentMs,
                 seriesName = continuation?.seriesName,
                 finishedVolume = continuation?.finishedVolume,
                 next = continuation?.next,

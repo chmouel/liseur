@@ -1,5 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +34,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -46,6 +50,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +60,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.domain.SeriesCompletion
 import com.chmouel.liseur.domain.displayTitle
@@ -64,7 +70,9 @@ import com.chmouel.liseur.reader.NextVolumeAvailability
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.library.BookCover
+import com.chmouel.liseur.ui.stats.readingDuration
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.delay
 
 /**
  * The page past the last page: a quiet colophon instead of the empty
@@ -73,7 +81,7 @@ import com.chmouel.liseur.ui.windowWidth
  * It is a page, so the same tap zones apply — the back side returns to
  * the last page of the book, the forward side stays put. The actions
  * stay at the foot of the page so a short window or a large font cannot
- * push them off the screen; the title above them scrolls if it must.
+ * push them off the screen; the colophon above them scrolls if it must.
  * The next volume is a small card of its own: cover, name, and one
  * action, in the reading colours rather than a second chrome.
  */
@@ -82,6 +90,8 @@ fun Endpaper(
     title: String,
     author: String?,
     theme: ReaderTheme,
+    finished: Book? = null,
+    timeSpentMs: Long? = null,
     seriesName: String? = null,
     finishedVolume: String? = null,
     next: NextUp?,
@@ -95,7 +105,28 @@ fun Endpaper(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current.density
+    val eInk = LocalEInk.current
     var size by remember { mutableStateOf(IntSize.Zero) }
+    var revealNext by remember(next?.id, eInk) {
+        mutableStateOf(eInk || next == null)
+    }
+    LaunchedEffect(next?.id, eInk) {
+        if (next == null || eInk) {
+            revealNext = true
+        } else {
+            revealNext = false
+            delay(NEXT_REVEAL_DELAY_MS)
+            revealNext = true
+        }
+    }
+    val nextReveal by animateFloatAsState(
+        targetValue = if (revealNext) 1f else 0f,
+        animationSpec = tween(if (eInk) 0 else NEXT_REVEAL_ANIM_MS),
+        label = "endpaper next volume",
+    )
+    val missingLabel = seriesIndexLabel(missingIndex)
+    val showSeriesWindow = finishedVolume != null &&
+        (missingLabel != null || next?.volume != null)
     val description = stringResource(R.string.the_end)
     Box(
         modifier
@@ -146,16 +177,26 @@ fun Endpaper(
                         .verticalScroll(rememberScrollState()),
                 ) {
                     EndRule(color = theme.foreground.copy(alpha = 0.35f))
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(18.dp))
                     Text(
                         text = stringResource(R.string.the_end),
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.displaySmall,
                         fontStyle = FontStyle.Italic,
+                        letterSpacing = 1.4.sp,
                         color = theme.foreground,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(16.dp))
+                    if (finished != null) {
+                        Spacer(Modifier.height(18.dp))
+                        BookCover(
+                            book = finished,
+                            modifier = Modifier
+                                .width(88.dp)
+                                .aspectRatio(2f / 3f),
+                        )
+                    }
                     if (title.isNotBlank()) {
+                        Spacer(Modifier.height(16.dp))
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleLarge,
@@ -189,42 +230,72 @@ fun Endpaper(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    Spacer(Modifier.height(18.dp))
+                    EndRule(color = theme.foreground.copy(alpha = 0.35f))
+
+                    if (timeSpentMs != null) {
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.endpaper_time_spent,
+                                readingDuration(timeSpentMs),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = theme.foreground.copy(alpha = 0.65f),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+
+                    if (showSeriesWindow) {
+                        Spacer(Modifier.height(18.dp))
+                        EndpaperSeriesWindow(
+                            finishedVolume = finishedVolume,
+                            missingVolume = missingLabel,
+                            nextVolume = next?.volume,
+                            color = theme.foreground,
+                            background = theme.background,
+                        )
+                    } else if (missingLabel != null) {
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.series_missing_volume, missingLabel),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = theme.foreground.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    } else if (next == null) {
+                        val copy = if (noNextInLibrary) {
+                            stringResource(R.string.endpaper_no_next_in_library)
+                        } else {
+                            seriesCompletionCopy(seriesCompletion)
+                        }
+                        copy?.let {
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = theme.foreground.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
             }
-            val missingLabel = seriesIndexLabel(missingIndex)
-            if (missingLabel != null) {
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.series_missing_volume, missingLabel),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = theme.foreground.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-            }
             if (next != null) {
-                Spacer(Modifier.height(if (missingLabel != null) 10.dp else 16.dp))
+                Spacer(Modifier.height(12.dp))
                 EndpaperNextOffer(
                     next = next,
                     color = theme.foreground,
+                    revealed = revealNext,
                     onOpenNext = onOpenNext,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = nextReveal
+                        translationY = (1f - nextReveal) * 8f * density
+                    },
                 )
-            } else if (missingLabel == null) {
-                val copy = if (noNextInLibrary) {
-                    stringResource(R.string.endpaper_no_next_in_library)
-                } else {
-                    seriesCompletionCopy(seriesCompletion)
-                }
-                copy?.let {
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = theme.foreground.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
-                }
             }
             EndpaperAction(
                 text = stringResource(R.string.endpaper_library),
@@ -241,9 +312,11 @@ fun Endpaper(
 private fun EndpaperNextOffer(
     next: NextUp,
     color: Color,
+    revealed: Boolean,
     onOpenNext: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val clickable = when (next.availability) {
+    val clickable = revealed && when (next.availability) {
         is NextVolumeAvailability.Ready,
         NextVolumeAvailability.Remote,
         NextVolumeAvailability.Failed,
@@ -263,7 +336,7 @@ private fun EndpaperNextOffer(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(shape)
             .then(
@@ -286,13 +359,15 @@ private fun EndpaperNextOffer(
                     Modifier
                 },
             )
-            .semantics(mergeDescendants = true) { contentDescription = description }
+            .semantics(mergeDescendants = true) {
+                if (revealed) contentDescription = description else hideFromAccessibility()
+            }
             .padding(12.dp),
     ) {
         BookCover(
             book = next.book,
             modifier = Modifier
-                .width(76.dp)
+                .width(64.dp)
                 .aspectRatio(2f / 3f),
         )
         Column(
@@ -337,6 +412,81 @@ private fun EndpaperNextOffer(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EndpaperSeriesWindow(
+    finishedVolume: String,
+    missingVolume: String?,
+    nextVolume: String?,
+    color: Color,
+    background: Color,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            EndpaperVolumeChip(finishedVolume, EndpaperVolumeState.FINISHED, color, background)
+            if (missingVolume != null) {
+                EndpaperVolumeChip(missingVolume, EndpaperVolumeState.MISSING, color, background)
+            }
+            if (nextVolume != null) {
+                EndpaperVolumeChip(nextVolume, EndpaperVolumeState.NEXT, color, background)
+            }
+        }
+        if (missingVolume != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.series_missing_volume, missingVolume),
+                style = MaterialTheme.typography.bodyMedium,
+                color = color.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+        }
+    }
+}
+
+private enum class EndpaperVolumeState { FINISHED, MISSING, NEXT }
+
+@Composable
+private fun EndpaperVolumeChip(
+    volume: String,
+    state: EndpaperVolumeState,
+    color: Color,
+    pageBackground: Color,
+) {
+    val eInk = LocalEInk.current
+    val background = if (state == EndpaperVolumeState.FINISHED) color else Color.Transparent
+    val borderAlpha = when (state) {
+        EndpaperVolumeState.FINISHED -> 1f
+        EndpaperVolumeState.MISSING -> if (eInk) 0.55f else 0.28f
+        EndpaperVolumeState.NEXT -> if (eInk) 1f else 0.72f
+    }
+    val content = if (state == EndpaperVolumeState.FINISHED) {
+        pageBackground
+    } else {
+        color.copy(alpha = if (state == EndpaperVolumeState.MISSING) 0.55f else 0.9f)
+    }
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .height(38.dp)
+            .widthIn(min = 38.dp)
+            .clip(CircleShape)
+            .background(background)
+            .border(1.dp, color.copy(alpha = borderAlpha), CircleShape)
+            .padding(horizontal = 10.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.series_volume_number, volume),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = content,
+            maxLines = 1,
+        )
     }
 }
 
@@ -420,3 +570,6 @@ private fun EndRule(color: Color, modifier: Modifier = Modifier) {
         )
     }
 }
+
+private const val NEXT_REVEAL_DELAY_MS = 250L
+private const val NEXT_REVEAL_ANIM_MS = 220

@@ -110,6 +110,7 @@
     <string name="endpaper_downloading">Downloading…</string>
     <string name="endpaper_retry">Couldn\'t download. Try again</string>
     <string name="endpaper_unavailable">Isn\'t available to download</string>
+    <string name="endpaper_time_spent">%s with this book</string>
     <string name="reader_contents">Contents</string>
     <string name="reader_open_failed">Couldn\'t open this book</string>
     <string name="dismiss">Dismiss</string>
