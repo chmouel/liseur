@@ -27,18 +27,24 @@ object LiseurSyncApi {
     const val SCOPE_LIBRARY_READ = "library-read"
     const val SCOPE_LIBRARY_MANAGE = "library-manage"
 
+    /** Adding a book to a folder that accepts one (ADR-0023). */
+    const val SCOPE_LIBRARY_UPLOAD = "library-upload"
+
     /**
      * Every scope a full account wants, in one mint.
      *
-     * Books still reach a liseur-sync server only by being put in a
-     * watched folder. The one catalog thing the app can now write is a
-     * reader's claim about which series a book belongs to.
+     * Books reach a liseur-sync server by being put in a watched folder,
+     * and `library-upload` is the app asking to be one of the things
+     * that can put one there — for a folder an administrator marked, and
+     * no other (ADR-0023). An older server that does not know the scope
+     * refuses to mint it, which is handled where the mint is read.
      */
     val SCOPES_FULL = listOf(
         SCOPE_SYNC,
         SCOPE_INSIGHTS,
         SCOPE_LIBRARY_READ,
         SCOPE_LIBRARY_MANAGE,
+        SCOPE_LIBRARY_UPLOAD,
     )
 
     fun url(baseUrl: String, path: String): String = RemoteUrl.api(baseUrl, path)
@@ -49,6 +55,10 @@ object LiseurSyncApi {
     /** The newest positions recorded for one book, newest first. */
     fun positions(baseUrl: String, workId: String, limit: Int): String =
         url(baseUrl, "/v1/works/$workId/positions?limit=$limit")
+
+    /** Where a book is added to a folder that accepts one (ADR-0023). */
+    fun uploadBook(baseUrl: String, folderId: String): String =
+        url(baseUrl, "$FOLDERS/$folderId/books")
 
     /** One page of the folders this server watches. */
     fun folders(baseUrl: String, after: String?, limit: Int): String =

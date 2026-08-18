@@ -22,6 +22,11 @@ class RemoteRouter(
      * the map means the action is never offered for that kind.
      */
     private val deleters: Map<ServerKind, BookDeleter> = emptyMap(),
+    /**
+     * Which kinds can be sent a book at all. Absent means the action is
+     * never offered for that kind, the same rule [deleters] follows.
+     */
+    private val uploaders: Map<ServerKind, BookUploader> = emptyMap(),
 ) {
     private suspend fun kind(): ServerKind? = serverDao.get()?.kind
 
@@ -45,6 +50,9 @@ class RemoteRouter(
 
     /** The deleter for a server already in hand, when the kind has one. */
     fun deleterFor(kind: ServerKind): BookDeleter? = deleters[kind]
+
+    /** The uploader for a server already in hand, when the kind has one. */
+    fun uploaderFor(kind: ServerKind): BookUploader? = uploaders[kind]
 
     /** The series-claim writer for a server already in hand, when it has one. */
     fun seriesClaimsFor(kind: ServerKind): SeriesClaimSync? = seriesClaims[kind]

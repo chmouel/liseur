@@ -10,6 +10,7 @@ import mockwebserver3.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -56,7 +57,8 @@ class LiseurSyncServerSetupTest {
         server.enqueue(
             json(
                 """{"id":"t-1","device_id":"d-1","name":"Test phone",
-                    "scopes":["sync","read-insights","library-read","library-manage"],
+                    "scopes":["sync","read-insights","library-read","library-manage",
+                    "library-upload"],
                     "account_id":"acc-9"}
                 """.trimIndent(),
             ),
@@ -70,6 +72,7 @@ class LiseurSyncServerSetupTest {
         assertEquals("acc-9", capabilities.liseurAccountId)
         assertTrue(capabilities.canDownload)
         assertTrue(capabilities.canManageLibrary)
+        assertTrue(capabilities.canUpload)
         assertEquals("ada", capabilities.displayName)
 
         // The password went to the login route and nowhere else, and
@@ -80,9 +83,12 @@ class LiseurSyncServerSetupTest {
         assertTrue(minted.target!!.endsWith("/v1/tokens"))
         val body = JSONObject(minted.body!!.utf8())
         val asked = body.getJSONArray("scopes")
-        assertEquals(4, asked.length())
+        assertEquals(5, asked.length())
         assertEquals(
-            setOf("sync", "read-insights", "library-read", "library-manage"),
+            setOf(
+                "sync", "read-insights", "library-read", "library-manage",
+                "library-upload",
+            ),
             (0 until asked.length()).map { asked.getString(it) }.toSet(),
         )
         assertTrue(server.takeRequest().target!!.endsWith("/v1/token"))
@@ -105,6 +111,10 @@ class LiseurSyncServerSetupTest {
         assertEquals("pasted-secret", capabilities.liseurToken)
         assertEquals("d-9", capabilities.accountId)
         assertTrue(capabilities.canDownload)
+        // A token minted before this app asked for library-upload does
+        // not get the permission by being old. The action stays hidden
+        // rather than being offered and refused.
+        assertFalse(capabilities.canUpload)
         val asked = server.takeRequest()
         assertTrue(asked.target!!.endsWith("/v1/token"))
         assertEquals("Bearer pasted-secret", asked.headers["Authorization"])

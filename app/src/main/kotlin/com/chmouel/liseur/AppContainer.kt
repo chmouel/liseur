@@ -29,6 +29,7 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import com.chmouel.liseur.data.liseursync.LiseurSyncSeriesClient
+import com.chmouel.liseur.data.liseursync.LiseurSyncUploadClient
 import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
@@ -248,6 +249,14 @@ class AppContainer(context: Context) {
         // route at all, and inventing one here would be lying about it.
         deleters = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreBookDeleter(),
+        ),
+        // liseur-sync is the only one that takes a book, and only into a
+        // folder an administrator marked (ADR-0023). Komga and
+        // calibre-web have upload routes of their own; they are not
+        // wired here because the app has nothing to say to them yet, and
+        // an entry in this map is a promise that the action works.
+        uploaders = mapOf(
+            ServerKind.LISEUR_SYNC to LiseurSyncUploadClient(),
         ),
     )
 
