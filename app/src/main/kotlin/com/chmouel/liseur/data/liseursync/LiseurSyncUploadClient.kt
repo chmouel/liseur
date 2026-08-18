@@ -43,6 +43,12 @@ class LiseurSyncUploadClient(
      * so a token with the scope can still find nowhere to put a book.
      * That is a real answer and the caller shows it as one rather than
      * offering an action that cannot work.
+     *
+     * Which is why a failure to ask is not an answer of "none". The
+     * caller treats an empty list as the server refusing and turns the
+     * feature off until the reader signs in again; a dropped connection
+     * must not be able to say that. It throws instead, and the worker
+     * retries.
      */
     override suspend fun targets(
         baseUrl: String,
@@ -52,12 +58,7 @@ class LiseurSyncUploadClient(
         var after: String? = null
         var guard = MAX_PAGES
         while (guard-- > 0) {
-            val answer = try {
-                json.get(LiseurSyncApi.folders(baseUrl, after, FOLDER_PAGE), credentials)
-            } catch (e: IOException) {
-                Log.i(TAG, "Could not list folders to upload into", e)
-                return targets
-            }
+            val answer = json.get(LiseurSyncApi.folders(baseUrl, after, FOLDER_PAGE), credentials)
             val array = answer.optJSONArray("folders") ?: break
             for (index in 0 until array.length()) {
                 val folder = array.optJSONObject(index) ?: continue
