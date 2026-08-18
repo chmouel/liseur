@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.FinishedOverride
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -135,6 +136,7 @@ class ReadingPositionPublisherTest {
             overrideFor = { FinishedOverride.NONE },
             persist = { update, _ -> events += "write:${update.progression}" },
             refreshFinished = { events += "refresh:$it" },
+            markFinished = { events += "complete:$it" },
             latestSync = sync,
             scheduleClose = { events += "close:$it" },
             onError = { _, error -> throw error },
@@ -183,6 +185,7 @@ class ReadingPositionPublisherTest {
                 refreshes++
                 error("book flag failed")
             },
+            markFinished = {},
             latestSync = sync,
             scheduleClose = {},
             onError = { _, _ -> },
@@ -196,6 +199,151 @@ class ReadingPositionPublisherTest {
         assertEquals(1, writes)
         assertEquals(2, refreshes)
         assertEquals(1, syncs)
+    }
+
+    @Test
+    fun `completion waits for earlier position writes then syncs`() = runTest {
+        val events = mutableListOf<String>()
+        val sync = LatestPositionSync(
+            scope = backgroundScope,
+            request = {
+                events += "sync:$it"
+                SyncOutcome.Success
+            },
+            scheduleRetry = {},
+            onError = { _, error -> throw error },
+        )
+        val publisher = ReadingPositionPublisher(
+            scope = backgroundScope,
+            overrideFor = { FinishedOverride.NONE },
+            persist = { update, _ -> events += "write:${update.progression}" },
+            refreshFinished = { events += "refresh:$it" },
+            markFinished = { events += "complete:$it" },
+            latestSync = sync,
+            scheduleClose = { events += "close:$it" },
+            onError = { _, error -> throw error },
+        )
+
+        assertTrue(publisher.publish(update(0.99)))
+        assertTrue(publisher.completeBook("book"))
+        assertTrue(publisher.closeBook("book"))
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                "write:0.99",
+                "refresh:book",
+                "complete:book",
+                "close:book",
+                "sync:book",
+            ),
+            events,
+        )
+    }
+
+    @Test
+    fun `a second completion does not write again`() = runTest {
+        var override = FinishedOverride.NONE
+        var completions = 0
+        var syncs = 0
+        val sync = LatestPositionSync(
+            scope = backgroundScope,
+            request = {
+                syncs++
+                SyncOutcome.Success
+            },
+            scheduleRetry = {},
+            onError = { _, error -> throw error },
+        )
+        val publisher = ReadingPositionPublisher(
+            scope = backgroundScope,
+            overrideFor = { override },
+            persist = { _, _ -> },
+            refreshFinished = {},
+            markFinished = {
+                completions++
+                override = FinishedOverride.FINISHED
+            },
+            latestSync = sync,
+            scheduleClose = {},
+            onError = { _, error -> throw error },
+        )
+
+        assertTrue(publisher.completeBook("book"))
+        assertTrue(publisher.completeBook("book"))
+        runCurrent()
+
+        assertEquals(1, completions)
+        assertEquals(1, syncs)
+    }
+
+    @Test
+    fun `an already finished book is not completed again`() = runTest {
+        var completions = 0
+        var syncs = 0
+        val sync = LatestPositionSync(
+            scope = backgroundScope,
+            request = {
+                syncs++
+                SyncOutcome.Success
+            },
+            scheduleRetry = {},
+            onError = { _, error -> throw error },
+        )
+        val publisher = ReadingPositionPublisher(
+            scope = backgroundScope,
+            overrideFor = { FinishedOverride.FINISHED },
+            persist = { _, _ -> },
+            refreshFinished = {},
+            markFinished = { completions++ },
+            latestSync = sync,
+            scheduleClose = {},
+            onError = { _, error -> throw error },
+        )
+
+        assertTrue(publisher.completeBook("book"))
+        assertTrue(publisher.completeBook("book"))
+        runCurrent()
+
+        assertEquals(0, completions)
+        assertEquals(0, syncs)
+    }
+
+    @Test
+    fun `a failing completion is retried and then reported`() = runTest {
+        var attempts = 0
+        val failures = mutableListOf<String>()
+        val sync = LatestPositionSync(
+            scope = backgroundScope,
+            request = { SyncOutcome.Success },
+            scheduleRetry = {},
+            onError = { _, _ -> },
+        )
+        val publisher = ReadingPositionPublisher(
+            scope = backgroundScope,
+            overrideFor = { FinishedOverride.NONE },
+            persist = { _, _ -> },
+            refreshFinished = {},
+            markFinished = {
+                attempts++
+                error("flag failed")
+            },
+            latestSync = sync,
+            scheduleClose = {},
+            onError = { _, _ -> },
+        )
+        val job = backgroundScope.launch {
+            publisher.failures.collect { failures += it }
+        }
+
+        assertTrue(publisher.completeBook("book"))
+        runCurrent()
+        advanceTimeBy(100)
+        runCurrent()
+
+        assertEquals(2, attempts)
+        assertEquals(listOf("book"), failures)
+        job.cancel()
     }
 
     private fun update(progression: Double) = PositionUpdate(

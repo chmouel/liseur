@@ -173,46 +173,96 @@ private fun gapsBetween(volumes: List<SeriesVolume>): List<Double> {
 private const val MAX_GAP_SPAN = 500L
 
 /**
- * The book to offer once one is finished: the next volume along, if it
+ * What the endpaper can say after a volume is finished: the next number
+ * that is missing, if that can be proved, and the next book in the
+ * library that can actually be opened, even when that book sits past
+ * the hole.
+ *
+ * The two answers are independent. A missing #2 does not hide a #3
+ * already on the shelf, and a #3 on the shelf does not invent a title
+ * for the #2 that is not there.
+ */
+data class SeriesContinuation(
+    val missingIndex: Double? = null,
+    val next: Book? = null,
+)
+
+/**
+ * The book to offer once one is finished: the next volume along that
  * is in the library and has not been read.
  *
- * Null for anything the least bit uncertain — a book with no series, one
- * with no number, the last volume, a next volume that is missing or
- * already read. An offer that is wrong is worse than no offer, because
- * it appears at the one moment the reader is not looking for a decision.
+ * A volume already begun is still the next volume — continuing a series
+ * means picking up where that book was left, not skipping it. Finished
+ * and archived volumes are stepped over. A hole in the numbering is
+ * reported separately as [SeriesContinuation.missingIndex] rather than
+ * blocking the offer: #3 is still the next book in the library when #2
+ * is not there.
+ *
+ * Null for anything uncertain: a book with no series, one with no
+ * number, or nothing later on the shelf that can be opened. Whether the
+ * file is on the device is not this function's business.
  */
+@Suppress("UNUSED_PARAMETER")
 fun nextInSeries(
     finished: Book,
     library: List<Book>,
     progressions: Map<String, Double> = emptyMap(),
-): Book? {
-    val key = seriesKey(finished.seriesName)
-    if (key.isEmpty()) return null
-    val index = finished.seriesIndex ?: return null
+): Book? = seriesContinuation(finished, library).next
 
-    // Walked in order rather than filtered, because the two reasons a
-    // volume is not the answer are different. One already read is
-    // stepped over — the reader has moved past it. One missing from the
-    // shelf altogether is a hole, and offering across a hole means
-    // offering #5 to someone who has just put down #1.
-    val shelf = library
+/**
+ * The missing volume immediately after [finished], and the first later
+ * volume in the library that can still be read.
+ *
+ * A later numbered book proves the hole: #1 then #3 means #2 is
+ * missing. #1 then #1.5 is a novella, not a gap; #1.5 then #3 proves
+ * #2. Only that immediate missing number is named. An authoritative
+ * series total can prove the same hole when no later book is on the
+ * shelf; without a total, the number is not guessed.
+ */
+fun seriesContinuation(
+    finished: Book,
+    library: List<Book>,
+    extras: SeriesExtras? = null,
+): SeriesContinuation {
+    val key = seriesKey(finished.seriesName)
+    if (key.isEmpty()) return SeriesContinuation()
+    val index = finished.seriesIndex ?: return SeriesContinuation()
+
+    val later = library
         .asSequence()
         .filter { it.url != finished.url }
         .filter { seriesKey(it.seriesName) == key }
         .mapNotNull { book -> book.seriesIndex?.let { it to book } }
         .filter { (candidate, _) -> candidate > index }
         .sortedBy { (candidate, _) -> candidate }
+        .toList()
 
-    var previous = index
-    for ((candidate, book) in shelf) {
-        // A novella between two volumes is a step, not a hole: #7 -> #7.5
-        // and #7.5 -> #8 both land inside the next whole number.
-        if (candidate > Math.floor(previous) + 1.0) return null
-        val begun = (progressions[book.url] ?: 0.0) > 0.0
-        if (!book.archived && !book.finished && !begun) return book
-        previous = candidate
+    val expected = Math.floor(index) + 1.0
+    val nextPresent = later.firstOrNull()?.first
+    val missing = when {
+        nextPresent != null -> expected.takeIf { nextPresent > expected }
+        else -> extras?.totalBookCount
+            ?.toDouble()
+            ?.let { total -> expected.takeIf { it <= total } }
     }
-    return null
+    val next = later.firstOrNull { (_, book) -> !book.archived && !book.finished }?.second
+    return SeriesContinuation(missingIndex = missing, next = next)
+}
+
+/**
+ * The server id to ask for series extras.
+ *
+ * A local file filed with downloaded volumes has none of its own. The
+ * shelf still might: another volume that came from the server carries
+ * it, and that is the one the series screen uses.
+ */
+fun seriesIdForExtras(book: Book, library: List<Book>): String? {
+    val key = seriesKey(book.seriesName)
+    if (key.isEmpty()) return null
+    return library.groupedIntoSeries()
+        .firstOrNull { it.key == key }
+        ?.volumes
+        ?.firstNotNullOfOrNull { it.book.shelfSeriesId }
 }
 
 /**

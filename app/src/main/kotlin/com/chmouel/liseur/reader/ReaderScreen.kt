@@ -93,7 +93,6 @@ import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.chrome.CatchUpPill
-import com.chmouel.liseur.reader.chrome.NextInSeriesPill
 import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
@@ -143,9 +142,10 @@ fun ReaderScreen(
     progressFlow: StateFlow<ReaderProgress?>,
     jumpBackFlow: StateFlow<ReaderViewModel.JumpBack?>,
     catchUpFlow: StateFlow<ReaderViewModel.CatchUp?>,
-    nextUpFlow: StateFlow<ReaderViewModel.NextUp?>,
-    onOpenNextUp: (ReaderViewModel.NextUp) -> Unit,
-    onDismissNextUp: () -> Unit,
+    continuationFlow: StateFlow<EndpaperContinuation?>,
+    onContinueNext: () -> Unit,
+    onReachedEndpaper: () -> Unit,
+    onLeftEndpaper: () -> Unit,
     onLocatorChanged: (Locator) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onPageTurnerChanged: (PageTurner?) -> Unit,
@@ -191,7 +191,7 @@ fun ReaderScreen(
     val progress by progressFlow.collectAsStateWithLifecycle()
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
     val catchUp by catchUpFlow.collectAsStateWithLifecycle()
-    val nextUp by nextUpFlow.collectAsStateWithLifecycle()
+    val continuation by continuationFlow.collectAsStateWithLifecycle()
     val annotations by annotationsFlow.collectAsStateWithLifecycle()
     val searchState by searchFlow.collectAsStateWithLifecycle()
     val bookmarked by bookmarkedFlow.collectAsStateWithLifecycle()
@@ -234,8 +234,15 @@ fun ReaderScreen(
                 chromeVisible = false
                 view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
             },
-            onLeaveEnd = { showingEnd = false },
+            onLeaveEnd = {
+                showingEnd = false
+                onLeftEndpaper()
+            },
         )
+    }
+
+    LaunchedEffect(showingEnd) {
+        if (showingEnd) onReachedEndpaper()
     }
 
     LaunchedEffect(navigator, lifecycle) {
@@ -412,12 +419,22 @@ fun ReaderScreen(
                     .joinToString(", ") { it.name }
                     .ifBlank { null },
                 theme = prefs.theme,
-                nextTitle = nextUp?.title,
-                nextVolume = nextUp?.volume,
+                seriesName = continuation?.seriesName,
+                finishedVolume = continuation?.finishedVolume,
+                next = continuation?.next,
+                missingIndex = continuation?.missingIndex,
+                noNextInLibrary = continuation?.noNextInLibrary == true,
+                seriesCompletion = continuation?.seriesCompletion,
                 rtl = endpaperRtl,
-                onTurnBack = { showingEnd = false },
-                onLibrary = onBack,
-                onOpenNext = { nextUp?.let(onOpenNextUp) },
+                onTurnBack = {
+                    showingEnd = false
+                    onLeftEndpaper()
+                },
+                onLibrary = {
+                    onLeftEndpaper()
+                    onBack()
+                },
+                onOpenNext = onContinueNext,
             )
         }
 
@@ -467,19 +484,6 @@ fun ReaderScreen(
                             onDismiss = onProgressAction.dismissCatchUp,
                         )
                     }
-                    // The book is finished, so nothing about this one is
-                    // still pending: the next one is the only offer left.
-                    if (catchUp == null) {
-                        nextUp?.let { offer ->
-                            NextInSeriesPill(
-                                title = offer.title,
-                                volume = offer.volume,
-                                theme = prefs.theme,
-                                onOpen = { onOpenNextUp(offer) },
-                                onDismiss = onDismissNextUp,
-                            )
-                        }
-                    }
                 }
                 if (chromeVisible) {
                     ReadingScrubber(
@@ -497,7 +501,7 @@ fun ReaderScreen(
                             }
                         },
                     )
-                } else if (!scrollMode && jumpBack == null && catchUp == null && nextUp == null) {
+                } else if (!scrollMode && jumpBack == null && catchUp == null) {
                     // A scrolled page runs under this corner, so a footer
                     // left drawn there prints itself over the text. The
                     // figures are one tap away with the rest of the chrome.
@@ -672,7 +676,10 @@ fun ReaderScreen(
         )
     }
 
-    BackHandler(enabled = showingEnd) { showingEnd = false }
+    BackHandler(enabled = showingEnd) {
+        showingEnd = false
+        onLeftEndpaper()
+    }
 
     searchFor?.let { initial ->
         BackHandler {
@@ -706,6 +713,7 @@ fun ReaderScreen(
     LaunchedEffect(goTo) {
         goTo.collect { locator ->
             showingEnd = false
+            onLeftEndpaper()
             showToc = false
             chromeVisible = false
             navigatorNow?.go(locator, animated = false)
