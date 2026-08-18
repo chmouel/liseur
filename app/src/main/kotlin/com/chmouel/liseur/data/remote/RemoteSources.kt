@@ -92,6 +92,16 @@ data class ServerCapabilities(
     val canDownload: Boolean,
     /** Whether the account can write liseur-sync personal series claims. */
     val canManageLibrary: Boolean = false,
+    /**
+     * Whether the account may add a book to the server's library.
+     *
+     * A separate permission from [canManageLibrary] on purpose: putting
+     * a file in somebody's library is a bigger thing than claiming a
+     * series for it, and the server gives it its own scope. It is also
+     * only half the answer — the server decides per folder as well — so
+     * this says "worth offering", not "will succeed".
+     */
+    val canUpload: Boolean = false,
     /** Whether the account can also write the shared catalog layer. */
     val canAdmin: Boolean = false,
     /** Who the server says we are, for telling two logins apart. */
@@ -184,6 +194,70 @@ interface BookDeleter {
         credentials: RemoteCredentials,
         book: Book,
     ): ServerDeleteResult
+}
+
+/** A folder on the server that a book could be uploaded into. */
+data class RemoteUploadTarget(
+    val folderId: String,
+    val name: String,
+)
+
+/** How uploading a book to the server went. */
+sealed interface ServerUploadResult {
+    /**
+     * The server has the book, and this is its id there.
+     *
+     * [alreadyThere] means the server recognised the bytes and no
+     * transfer was needed. Both are successes and the caller treats
+     * them the same; they differ only in what it is honest to say.
+     */
+    data class Uploaded(val remoteBookId: String, val alreadyThere: Boolean) : ServerUploadResult
+
+    /**
+     * The bytes arrived and are safe, but the server has not catalogued
+     * them yet, so there is no id to adopt. Not a failure and not worth
+     * retrying the transfer for: the server will get there.
+     */
+    data object Pending : ServerUploadResult
+
+    /** No folder accepts uploads, or the account may not. */
+    data object NotAllowed : ServerUploadResult
+
+    /** The book is bigger than the server will take. */
+    data object TooLarge : ServerUploadResult
+
+    /** The server would not read it as an EPUB. */
+    data object Rejected : ServerUploadResult
+
+    /** Worth trying again: a network failure, or a server that was busy. */
+    data class Failed(val message: String?) : ServerUploadResult
+}
+
+/**
+ * Sending a book the reader added on the device up to the server.
+ *
+ * Only the kinds that can accept one have an entry. Absent from the
+ * router's map means the action is never offered, which is the same rule
+ * [BookDeleter] follows and for the same reason: an action that is
+ * offered and then always fails is worse than one that is not there.
+ */
+interface BookUploader {
+    /**
+     * The folders this server will accept a book into, which may be
+     * none even for an account that holds the permission.
+     */
+    suspend fun targets(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+    ): List<RemoteUploadTarget>
+
+    suspend fun upload(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        folderId: String,
+        file: java.io.File,
+        filename: String,
+    ): ServerUploadResult
 }
 
 data class SeriesLayers(

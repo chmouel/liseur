@@ -24,7 +24,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 34,
+    version = 35,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -962,6 +962,22 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Records whether the connected account may add a book to the
+         * server's library (ADR-0023). Off for every existing row: an
+         * account that has the permission learns so the next time it
+         * talks to the server, and offering the action on a guess would
+         * mean offering one that fails.
+         */
+        val MIGRATION_34_35 = object : Migration(34, 35) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `can_upload` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -999,6 +1015,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_31_32,
             MIGRATION_32_33,
             MIGRATION_33_34,
+            MIGRATION_34_35,
         )
     }
 }

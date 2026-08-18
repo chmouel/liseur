@@ -44,6 +44,7 @@ data class RemoteServer(
     @ColumnInfo(name = "kobo_token") val koboTokenCipher: String?,
     @ColumnInfo(name = "can_download") val canDownload: Boolean,
     @ColumnInfo(name = "can_manage_library") val canManageLibrary: Boolean = false,
+    @ColumnInfo(name = "can_upload") val canUpload: Boolean = false,
     @ColumnInfo(name = "can_admin") val canAdmin: Boolean = false,
     @ColumnInfo(name = "added_at") val addedAt: Long,
     @ColumnInfo(name = "catalog_synced_at") val catalogSyncedAt: Long?,
