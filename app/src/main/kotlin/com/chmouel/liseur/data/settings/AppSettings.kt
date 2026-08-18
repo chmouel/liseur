@@ -21,6 +21,20 @@ enum class ThemeMode(val id: String) {
     DARK("dark"),
     ;
 
+    /**
+     * Whether this mode is asking for a dark app, given what the system
+     * is currently set to.
+     *
+     * [systemDark] is only consulted under [SYSTEM]; the other two have
+     * already answered. Kept here, off Compose, so the reading theme can
+     * be resolved against the same answer the app draws itself with.
+     */
+    fun isDark(systemDark: Boolean): Boolean = when (this) {
+        SYSTEM -> systemDark
+        LIGHT -> false
+        DARK -> true
+    }
+
     companion object {
         val Default = SYSTEM
 

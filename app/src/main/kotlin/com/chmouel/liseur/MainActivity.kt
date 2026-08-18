@@ -50,16 +50,17 @@ import com.chmouel.liseur.ui.settings.ServerAccountScreen
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
+import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
 import com.chmouel.liseur.ui.settings.AnnotationBackupUi
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.ProvideEInk
 import com.chmouel.liseur.data.settings.AppSettings
-import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import com.chmouel.liseur.ui.theme.dynamicColorAvailable
+import com.chmouel.liseur.ui.theme.isDark
 import android.net.Uri
 import androidx.core.net.toUri
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import com.chmouel.liseur.domain.SeriesShelf
 
@@ -87,11 +88,7 @@ class MainActivity : ComponentActivity() {
                 .collectAsState(initial = AppSettings())
             ProvideEInk(settings.eInkMode) {
                 LiseurTheme(
-                    darkTheme = when (settings.themeMode) {
-                        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                        ThemeMode.LIGHT -> false
-                        ThemeMode.DARK -> true
-                    },
+                    darkTheme = settings.themeMode.isDark(),
                     // A palette lifted from a wallpaper is chosen for how
                     // its colours sit together, which is exactly what a
                     // greyscale screen throws away — hence the monochrome
@@ -147,6 +144,7 @@ class MainActivity : ComponentActivity() {
 private enum class Screen {
     LIBRARY,
     SETTINGS,
+    READING_APPEARANCE,
     SERVER_ACCOUNT,
     LICENCES,
     STATS,
@@ -177,6 +175,9 @@ private fun LiseurApp(settings: AppSettings) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(context) { context.container.appSettings }
+    val readerPreferences = remember(context) { context.container.readerPreferences }
+    val readerPrefs by readerPreferences.prefs.collectAsStateWithLifecycle(ReaderPrefs())
+    val appIsDark = settings.themeMode.isDark()
     val annotationBackup = rememberAnnotationBackup()
 
     when (screen) {
@@ -244,6 +245,7 @@ private fun LiseurApp(settings: AppSettings) {
             BackHandler { screen = Screen.LIBRARY }
             SettingsScreen(
                 settings = settings,
+                readingThemeChoice = readerPrefs.themeChoice,
                 dynamicColorAvailable = dynamicColorAvailable,
                 onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
@@ -270,6 +272,7 @@ private fun LiseurApp(settings: AppSettings) {
                     accountReturnsTo = Screen.SETTINGS
                     screen = Screen.SERVER_ACCOUNT
                 },
+                onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
                 backup = annotationBackup,
                 connections = context.container.connections,
                 onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
@@ -278,11 +281,31 @@ private fun LiseurApp(settings: AppSettings) {
             )
         }
 
+        Screen.READING_APPEARANCE -> {
+            val back = { screen = Screen.SETTINGS }
+            BackHandler { back() }
+            ReadingAppearanceScreen(
+                prefs = readerPrefs,
+                appIsDark = appIsDark,
+                onTheme = { scope.launch { readerPreferences.setTheme(it) } },
+                onFont = { scope.launch { readerPreferences.setFont(it) } },
+                onFontSize = { scope.launch { readerPreferences.setFontSize(it) } },
+                onLineHeight = { scope.launch { readerPreferences.setLineHeight(it) } },
+                onPageMargins = { scope.launch { readerPreferences.setPageMargins(it) } },
+                onBrightness = { scope.launch { readerPreferences.setBrightness(it) } },
+                onColumnMode = { scope.launch { readerPreferences.setColumnMode(it) } },
+                onFooterMode = { scope.launch { readerPreferences.setFooterMode(it) } },
+                onPageTurnAnimation = {
+                    scope.launch { readerPreferences.setPageTurnAnimation(it) }
+                },
+                onBack = back,
+            )
+        }
+
         Screen.SERVER_ACCOUNT -> {
             BackHandler { screen = accountReturnsTo }
             ServerAccountRoute(onBack = { screen = accountReturnsTo })
         }
-
 
         Screen.LICENCES -> {
             BackHandler { screen = Screen.SETTINGS }

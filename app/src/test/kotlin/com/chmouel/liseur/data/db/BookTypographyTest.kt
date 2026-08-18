@@ -3,7 +3,7 @@ package com.chmouel.liseur.data.db
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
-import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -19,7 +19,7 @@ class BookTypographyTest {
     private val shared = ReaderPrefs(
         font = ReaderFont.LITERATA,
         fontSize = 1.0,
-        theme = ReaderTheme.DARK,
+        themeChoice = ReaderThemeChoice.DARK,
         lineHeight = 1.4,
         pageMargins = 1.0,
         brightness = 0.3f,
@@ -52,7 +52,7 @@ class BookTypographyTest {
     @Test
     fun `the theme, the brightness and the rest stay shared`() {
         val effective = shared.withTypographyOf(own)
-        assertEquals(ReaderTheme.DARK, effective.theme)
+        assertEquals(ReaderThemeChoice.DARK, effective.themeChoice)
         assertEquals(0.3f, effective.brightness!!, 0f)
         assertEquals(false, effective.pageTurnAnimation)
         assertEquals(FooterMode.SMART, effective.footerMode)

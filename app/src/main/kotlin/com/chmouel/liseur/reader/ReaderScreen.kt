@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +58,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -92,6 +95,7 @@ import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.reader.chrome.CatchUpPill
 import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
@@ -117,6 +121,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
@@ -138,6 +143,7 @@ private const val CHROME_ANIM_MS = 300
 fun ReaderScreen(
     publication: Publication,
     prefsFlow: StateFlow<ReaderPrefs>,
+    readingTheme: ReaderTheme,
     typographyIsOwnFlow: StateFlow<Boolean>,
     progressFlow: StateFlow<ReaderProgress?>,
     jumpBackFlow: StateFlow<ReaderViewModel.JumpBack?>,
@@ -171,6 +177,7 @@ fun ReaderScreen(
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
+    val readingThemeNow by rememberUpdatedState(readingTheme)
     var chromeVisible by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var searchFor by remember { mutableStateOf<String?>(null) }
@@ -268,9 +275,16 @@ fun ReaderScreen(
         // preferences. Submitting that same value once more reflows the
         // freshly opened book and emits a second restoration locator,
         // which must not be recorded as a page the reader turned.
-        prefsFlow.drop(1).collect {
-            nav.submitPreferences(it.toEpubPreferences(columnMode, scrollMode))
+        //
+        // The theme is combined in rather than read once because it can
+        // change without the preferences changing at all: a reader on
+        // the app's theme who leaves their phone to turn itself dark at
+        // dusk has chosen nothing, and the open book should still follow.
+        combine(prefsFlow, snapshotFlow { readingThemeNow }) { p, theme ->
+            p.toEpubPreferences(theme, columnMode, scrollMode)
         }
+            .drop(1)
+            .collect { nav.submitPreferences(it) }
     }
 
     // Picking the selection up from the navigator when it tells us the
@@ -355,7 +369,7 @@ fun ReaderScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(prefs.theme.background),
+            .background(readingTheme.background),
     ) {
         // The page runs the whole screen in both modes. Readium's own
         // padding is switched off (see dimens.xml) because it is applied
@@ -418,7 +432,7 @@ fun ReaderScreen(
                 author = publication.metadata.authors
                     .joinToString(", ") { it.name }
                     .ifBlank { null },
-                theme = prefs.theme,
+                theme = readingTheme,
                 finished = continuation?.finished,
                 timeSpentMs = continuation?.timeSpentMs,
                 seriesName = continuation?.seriesName,
@@ -445,7 +459,7 @@ fun ReaderScreen(
         if (!showingEnd) {
             BookmarkRibbon(
                 bookmarked = bookmarked,
-                theme = prefs.theme,
+                theme = readingTheme,
                 onToggle = {
                     view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                     onAnnotationAction.toggleBookmark()
@@ -467,7 +481,7 @@ fun ReaderScreen(
                     JumpBackPill(
                         position = target.position,
                         fromSync = target.fromSync,
-                        theme = prefs.theme,
+                        theme = readingTheme,
                         onJumpBack = {
                             onProgressAction.dismissJumpBack()
                             navigator?.go(target.locator, animated = false)
@@ -481,7 +495,7 @@ fun ReaderScreen(
                     catchUp?.let { offer ->
                         CatchUpPill(
                             position = offer.position,
-                            theme = prefs.theme,
+                            theme = readingTheme,
                             onCatchUp = onProgressAction.acceptCatchUp,
                             onDismiss = onProgressAction.dismissCatchUp,
                         )
@@ -490,7 +504,7 @@ fun ReaderScreen(
                 if (chromeVisible) {
                     ReadingScrubber(
                         progress = progress,
-                        theme = prefs.theme,
+                        theme = readingTheme,
                         chapterTicks = remember(progress?.totalPositions) {
                             onProgressAction.chapterTicks()
                         },
@@ -510,7 +524,7 @@ fun ReaderScreen(
                     ReadingFooter(
                         progress = progress,
                         mode = prefs.footerMode,
-                        theme = prefs.theme,
+                        theme = readingTheme,
                         onCycleMode = onProgressAction.cycleFooterMode,
                     )
                 }
@@ -552,7 +566,18 @@ fun ReaderScreen(
                             contentDescription = stringResource(R.string.reader_search),
                         )
                     }
-                    IconButton(onClick = { showTypography = true }) {
+                    // "Aa" is what a reader looks for and what every other
+                    // reading app draws here, so it stays — but it is a
+                    // picture of two letters, not a word, and TalkBack
+                    // announcing "Aa" describes nothing. The button says
+                    // what it opens instead.
+                    val typographyLabel = stringResource(R.string.reader_typography)
+                    IconButton(
+                        onClick = { showTypography = true },
+                        modifier = Modifier.semantics {
+                            contentDescription = typographyLabel
+                        },
+                    ) {
                         Text(
                             text = "Aa",
                             style = MaterialTheme.typography.titleMedium,
@@ -566,10 +591,10 @@ fun ReaderScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = prefs.theme.background,
-                    titleContentColor = prefs.theme.foreground,
-                    navigationIconContentColor = prefs.theme.foreground,
-                    actionIconContentColor = prefs.theme.foreground,
+                    containerColor = readingTheme.background,
+                    titleContentColor = readingTheme.foreground,
+                    navigationIconContentColor = readingTheme.foreground,
+                    actionIconContentColor = readingTheme.foreground,
                 ),
             )
         }
@@ -659,6 +684,7 @@ fun ReaderScreen(
     if (showTypography) {
         TypographySheet(
             prefs = prefs,
+            readingTheme = readingTheme,
             typographyIsOwn = typographyIsOwn,
             onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
             onFontSelected = onPrefsAction.setFont,
@@ -691,7 +717,7 @@ fun ReaderScreen(
         }
         SearchScreen(
             state = searchState,
-            theme = prefs.theme,
+            theme = readingTheme,
             initialQuery = initial,
             onSearch = onSearchAction.search,
             onHitSelected = { hit ->
@@ -728,7 +754,7 @@ fun ReaderScreen(
         val here = navigator?.currentLocator?.collectAsStateWithLifecycle()
         ContentsScreen(
             publication = publication,
-            theme = prefs.theme,
+            theme = readingTheme,
             currentHref = here?.value?.href?.toString(),
             annotations = annotations,
             onAnnotationSelected = { annotation ->
@@ -807,7 +833,7 @@ class ReaderAnnotationActions(
 class ReaderPrefsActions(
     val setFont: (ReaderFont) -> Unit,
     val setFontSize: (Double) -> Unit,
-    val setTheme: (ReaderTheme) -> Unit,
+    val setTheme: (ReaderThemeChoice) -> Unit,
     val setLineHeight: (Double?) -> Unit,
     val setPageMargins: (Double?) -> Unit,
     val setBrightness: (Float?) -> Unit,
