@@ -179,6 +179,9 @@ interface RemoteServerDao {
     @Query("UPDATE remote_server SET can_download = :allowed WHERE id = :id")
     suspend fun setCanDownload(allowed: Boolean, id: Long = RemoteServer.SINGLE_ID)
 
+    @Query("UPDATE remote_server SET can_upload = :allowed WHERE id = :id")
+    suspend fun setCanUpload(allowed: Boolean, id: Long = RemoteServer.SINGLE_ID)
+
     /**
      * Moves the liseur-sync cursor, touching nothing else.
      *
