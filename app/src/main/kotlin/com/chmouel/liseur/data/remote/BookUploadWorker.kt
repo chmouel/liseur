@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.remote
 import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
+import androidx.room.withTransaction
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.chmouel.liseur.container
@@ -92,18 +93,24 @@ class BookUploadWorker(
         // already introduced the server's copy under its own URL. That
         // row is minutes old and holds no reading, while this one holds
         // all of it, so the catalog's is the one that goes.
-        dao.byRemoteUuids(listOf(remoteBookId))
-            .map { it.url }
-            .filter { it != bookUrl }
-            .takeIf { it.isNotEmpty() }
-            ?.let { dao.deleteByUrls(it) }
-        dao.linkToRemote(
-            url = bookUrl,
-            remoteUuid = remoteBookId,
-            downloadHref = "/v1/books/$remoteBookId/download",
-            coverUrl = null,
-            remoteUpdatedAt = System.currentTimeMillis(),
-        )
+        //
+        // Looking and linking are one transaction: a pass landing
+        // between the two would otherwise insert the row just after it
+        // was looked for and leave the duplicate this is here to stop.
+        container.database.withTransaction {
+            dao.byRemoteUuids(listOf(remoteBookId))
+                .map { it.url }
+                .filter { it != bookUrl }
+                .takeIf { it.isNotEmpty() }
+                ?.let { dao.deleteByUrls(it) }
+            dao.linkToRemote(
+                url = bookUrl,
+                remoteUuid = remoteBookId,
+                downloadHref = "/v1/books/$remoteBookId/download",
+                coverUrl = null,
+                remoteUpdatedAt = System.currentTimeMillis(),
+            )
+        }
         container.remoteCatalog.refreshDetached()
     }
 
