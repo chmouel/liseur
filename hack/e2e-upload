@@ -14,8 +14,12 @@
 #   -d  the watched folder's root on this machine, so the script can see
 #       what landed in it
 #   -s  pick a device when several are attached
+#   -r  expect the server to refuse: assert the app never offers to
+#       upload, rather than that it succeeds. Use with a token without
+#       the library-upload scope, or a server whose folders are all
+#       closed.
 #
-# The folder must already accept uploads:
+# Without -r the folder must already accept uploads:
 #
 #   liseur-sync admin folder-uploads <folder-id> on
 #
@@ -31,9 +35,10 @@ readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
 # shellcheck source=hack/lib/demo-books.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/demo-books.sh"
 
-serial="" url="" token="" root=""
+serial="" url="" token="" root="" refused=""
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -r | --refused) refused=yes ;;
         -s | --serial) serial=${2:-}; shift ;;
         -u | --url) url=${2:-}; shift ;;
         -t | --token) token=${2:-}; shift ;;
@@ -49,7 +54,9 @@ done
 
 [[ -n "$url" ]] || die "need -u, the server address as the device sees it"
 [[ -n "$token" ]] || die "need -t, a device token with the library-upload scope"
-[[ -d "$root" ]] || die "need -d, the watched folder's root on this machine"
+[[ -n "$root" || -n "$refused" ]] ||
+    die "need -d, the watched folder's root on this machine"
+[[ -z "$root" || -d "$root" ]] || die "$root is not a directory"
 
 command -v adb >/dev/null || die "adb is not installed"
 command -v python3 >/dev/null || die "python3 is not installed"
@@ -113,7 +120,8 @@ tap_button() {
     tap_on "$@"
 }
 
-before=$(find "$root" -name '*.epub' | wc -l | tr -d ' ')
+before=0
+[[ -n "$root" ]] && before=$(find "$root" -name '*.epub' | wc -l | tr -d ' ')
 
 step "Connecting to $url"
 open_library
@@ -151,6 +159,61 @@ done
 note "connected"
 
 can_upload=$(query "select can_upload from remote_server;")
+
+# A server that will not take a book has to be believed, and it can say
+# so in two places: the token may lack the scope, which the app learns
+# on sight, or every folder may be closed, which it can only learn by
+# trying. Both have to end with the app no longer offering, because the
+# capability is what every entry point is drawn from and an offer that
+# can only fail is one the reader is left to repeat.
+if [[ -n "$refused" ]]; then
+    step "Checking the app takes no for an answer"
+    shelved=$(query "select count(*) from books;")
+
+    hide_keyboard
+    back
+    sleep 2
+    back
+    sleep 3
+
+    if [[ "$can_upload" == 1 ]]; then
+        note "the token holds the scope, so only an attempt can settle it"
+        tap_if_there "Send" exact || true
+        waited=0
+        while ((waited < 120)); do
+            [[ $(query "select can_upload from remote_server;") == 0 ]] && break
+            sleep 5
+            waited=$((waited + 5))
+        done
+    else
+        note "the app read the token as not allowed to upload"
+        ! on_screen "Send" ||
+            die "the app offered to send books to a server that refuses them"
+    fi
+
+    can_upload=$(query "select can_upload from remote_server;")
+    [[ "$can_upload" == 0 ]] ||
+        die "the app still thinks it may upload (can_upload=$can_upload)"
+    note "the app stopped offering"
+
+    linked=$(query "select count(*) from books where remote_uuid is not null;")
+    [[ "$linked" == 0 ]] ||
+        die "$linked books were linked to a server that takes no uploads"
+    now=$(query "select count(*) from books;")
+    [[ "$now" == "$shelved" ]] ||
+        die "the shelf went from $shelved books to $now; a refusal must cost nothing"
+    note "all $now books are still on the shelf"
+
+    if [[ -n "$root" ]]; then
+        after=$(find "$root" -name '*.epub' | wc -l | tr -d ' ')
+        [[ "$after" == "$before" ]] ||
+            die "$((after - before)) books were written into a folder that refuses them"
+        note "nothing was written into $root"
+    fi
+    printf '\nDone. The server refused, and the app stopped offering.\n'
+    exit 0
+fi
+
 [[ "$can_upload" == 1 ]] ||
     die "the app read the token as not allowed to upload (can_upload=$can_upload)"
 note "the library-upload scope reached the app"

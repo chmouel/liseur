@@ -92,7 +92,25 @@ It asserts four things, and each one is a bug that actually happened:
 the `library-upload` scope reaches the app as `can_upload`, the files
 appear in the folder, no uploaded book had its `url` rewritten (that
 key is what every reading position hangs off), and no book came back
-from the following catalog pass as a second row.
+from the following catalog pass as a second row. That third one is
+worth the whole script: a book uploaded from the device was being
+deleted by the next refresh, and its reading position with it.
+
+The other half of the capability is refusing, and `-r` checks it:
+
+```bash
+hack/e2e-upload -r -u http://10.0.2.2:8686 -t <token> -d /srv/books
+```
+
+A server says no in two places. A token without the scope is refused on
+sight, and the action is never offered. A token that holds the scope but
+finds every folder closed can only be refused by trying, and the app has
+to remember the answer — otherwise it offers, once per book, an action
+that silently fails every time. Either way `-r` asserts the app ends up
+not offering, no book was linked, none left the shelf and nothing was
+written into the folder. Run it with the folder still closed, then
+`folder-uploads <folder-id> on` and run the check above, and you have
+covered both answers with one server.
 
 Nothing about it is mocked. Start with a clean shelf — `hack/reset-books`
 then `adb shell pm clear com.chmouel.liseur` — or the counts it compares

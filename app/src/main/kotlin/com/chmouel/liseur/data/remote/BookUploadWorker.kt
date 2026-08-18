@@ -40,7 +40,7 @@ class BookUploadWorker(
             ?: runCatching { uploader.targets(server.baseUrl, credentials) }
                 .getOrElse { return retryAfter("could not list upload folders: ${it.message}") }
                 .firstOrNull()?.folderId
-            ?: return giveUp("no folder accepts uploads")
+            ?: return refuse(container, "no folder accepts uploads")
 
         val (file, temporary) = localFile(book.localUri ?: book.url)
             ?: return giveUp("no readable file for $bookUrl")
@@ -62,10 +62,7 @@ class BookUploadWorker(
                 // learnt: the server keys on the book's digest, so the
                 // second ask is recognised rather than stored twice.
                 ServerUploadResult.Pending -> retryAfter("$bookUrl uploaded, not catalogued yet")
-                ServerUploadResult.NotAllowed -> {
-                    container.database.remoteServerDao().setCanUpload(false)
-                    giveUp("server refused the upload")
-                }
+                ServerUploadResult.NotAllowed -> refuse(container, "server refused the upload")
                 ServerUploadResult.TooLarge -> giveUp("$bookUrl is larger than the server takes")
                 ServerUploadResult.Rejected -> giveUp("the server would not read $bookUrl")
                 is ServerUploadResult.Failed -> retryAfter("upload failed: ${result.message}")
@@ -148,6 +145,21 @@ class BookUploadWorker(
     private fun giveUp(why: String): Result {
         Log.w(TAG, why)
         return Result.failure()
+    }
+
+    /**
+     * Gives up, and stops the app offering to send this server a book.
+     *
+     * A token that may upload and a server where no folder will have
+     * one are the same answer to a reader. The capability is what every
+     * entry point is drawn from, so leaving it standing offers an
+     * action that can only fail — silently, once per book, for as long
+     * as they keep asking. Signing in again is what reads the server's
+     * mind afresh, exactly as it is for a refusal on the wire.
+     */
+    private suspend fun refuse(container: com.chmouel.liseur.AppContainer, why: String): Result {
+        container.database.remoteServerDao().setCanUpload(false)
+        return giveUp(why)
     }
 
     private fun retryAfter(why: String): Result {
