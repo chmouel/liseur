@@ -75,6 +75,7 @@ import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 
@@ -96,6 +97,7 @@ fun ServerAccountScreen(
     onConnect: (Boolean) -> Unit,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
+    onSetUploadPolicy: (UploadPolicy) -> Unit,
     onDisconnect: () -> Unit,
     onSyncNow: () -> Unit,
     onAnswerConfirmation: (String, Boolean) -> Unit,
@@ -166,6 +168,8 @@ fun ServerAccountScreen(
                         onRetryCapabilities = onRetryCapabilities,
                         onKoboToken = onKoboToken,
                         onDisconnect = onDisconnect,
+                        uploadPolicy = state.uploadPolicy,
+                        onSetUploadPolicy = onSetUploadPolicy,
                     )
                     if (server.kind == ServerKind.LISEUR_SYNC) {
                         if (state.confirmations.isNotEmpty()) {
@@ -416,6 +420,8 @@ private fun ConnectedCard(
     onKoboToken: (String) -> Unit,
     onDisconnect: () -> Unit,
     onSyncNow: () -> Unit,
+    uploadPolicy: UploadPolicy,
+    onSetUploadPolicy: (UploadPolicy) -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -527,9 +533,33 @@ private fun ConnectedCard(
         }
     }
 
+    // Only where the account may actually send one: an option that
+    // explains a thing the server will refuse is worse than no option.
+    if (server.canUpload) {
+        Text(
+            text = stringResource(R.string.upload_policy),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            text = stringResource(R.string.upload_policy_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            UploadPolicy.entries.forEachIndexed { index, policy ->
+                SegmentedButton(
+                    selected = uploadPolicy == policy,
+                    onClick = { onSetUploadPolicy(policy) },
+                    shape = SegmentedButtonDefaults.itemShape(index, UploadPolicy.entries.size),
+                ) {
+                    Text(stringResource(policy.labelRes()))
+                }
+            }
+        }
+    }
+
     // The Kobo token is a calibre-web notion; the others have nothing like it.
-    if (server.kind == ServerKind.CALIBRE) {
-        AdvancedSection(server = server, onKoboToken = onKoboToken)
+    if (server.kind == ServerKind.CALIBRE) {        AdvancedSection(server = server, onKoboToken = onKoboToken)
     }
 
     OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
@@ -820,3 +850,9 @@ private fun PositionSyncStatus.describe(lastSyncedAt: Long?): String = when (thi
 @Composable
 private fun relative(at: Long): CharSequence =
     DateUtils.getRelativeTimeSpanString(at, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+
+private fun UploadPolicy.labelRes(): Int = when (this) {
+    UploadPolicy.ASK -> R.string.upload_policy_ask
+    UploadPolicy.ALWAYS -> R.string.upload_policy_always
+    UploadPolicy.NEVER -> R.string.upload_policy_never
+}

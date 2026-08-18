@@ -22,6 +22,7 @@ import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.sync.PositionSyncCoordinator
@@ -92,6 +93,8 @@ data class ServerAccountUiState(
     val confirmations: List<WorkConfirmation> = emptyList(),
     /** Books whose identifiers named two different works on the server. */
     val ambiguities: Int = 0,
+    /** What to do with a book that arrives on this device. */
+    val uploadPolicy: UploadPolicy = UploadPolicy.Default,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -131,6 +134,11 @@ class ServerAccountViewModel(
         viewModelScope.launch {
             appSettings.accountLostToRestore.collect { lost ->
                 _state.update { it.copy(lostToRestore = lost) }
+            }
+        }
+        viewModelScope.launch {
+            appSettings.settings.collect { settings ->
+                _state.update { it.copy(uploadPolicy = settings.uploadPolicy) }
             }
         }
         viewModelScope.launch {
@@ -296,6 +304,10 @@ class ServerAccountViewModel(
                 refreshed.forSync(),
             )
         }
+    }
+
+    fun setUploadPolicy(policy: UploadPolicy) {
+        viewModelScope.launch { appSettings.setUploadPolicy(policy) }
     }
 
     fun setKoboToken(value: String) {

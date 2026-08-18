@@ -449,6 +449,7 @@ private fun ServerAccountRoute(
         onConnect = viewModel::connect,
         onRetryCapabilities = viewModel::retryCapabilities,
         onKoboToken = viewModel::setKoboToken,
+        onSetUploadPolicy = viewModel::setUploadPolicy,
         onDisconnect = viewModel::disconnect,
         onSyncNow = viewModel::syncPositions,
         onAnswerConfirmation = viewModel::answerConfirmation,
@@ -605,6 +606,8 @@ private fun LibraryRoute(
                 downloading = book.url in state.downloads,
                 canDownload = state.canDownload,
                 canDeleteFromServer = state.canDeleteFromServer,
+                canUploadToServer = state.canUploadToServer,
+                uploading = book.url in state.uploading,
                 onDismiss = { seriesSheetBook = null },
                 onDownload = { viewModel.download(book); seriesSheetBook = null },
                 onCancelDownload = { viewModel.cancelDownload(book); seriesSheetBook = null },
@@ -622,6 +625,10 @@ private fun LibraryRoute(
                 // button that quietly does nothing.
                 onDeleteFromServer = {
                     seriesServerDelete = book
+                    seriesSheetBook = null
+                },
+                onUploadToServer = {
+                    viewModel.uploadToServer(book)
                     seriesSheetBook = null
                 },
             )
@@ -679,6 +686,9 @@ private fun LibraryRoute(
         onSetArchived = viewModel::setArchived,
         onDeleteLocal = viewModel::deleteLocalBook,
         onDeleteFromServer = viewModel::deleteFromServer,
+        onUploadToServer = viewModel::uploadToServer,
+        onUploadPending = viewModel::uploadPending,
+        onDismissUploadPrompt = viewModel::dismissUploadPrompt,
         onSetSeries = viewModel::setBookSeries,
         onResetSeries = viewModel::resetBookSeries,
         onResetSharedSeries = viewModel::resetBookSharedSeries,
