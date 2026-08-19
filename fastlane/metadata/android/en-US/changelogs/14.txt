@@ -1,0 +1,1 @@
+Download every book on your server in one go. The book server screen says how many books it would fetch and what they weigh, skips the ones already on your device, and leaves archived books alone. It runs once and stops, so there is no sync to set up. Stop it at any time and the books already fetched stay where they are.
