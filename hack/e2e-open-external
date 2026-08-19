@@ -50,7 +50,13 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-command -v adb >/dev/null || die "adb is not installed"
+# The screen dumps go through python3, the handover URI is named by the
+# book's own digest, and the upload policy is read out of a protobuf by
+# eye. A missing one of these should say so here rather than as a
+# "command not found" ten minutes into a run.
+for tool in adb python3 sha256sum strings; do
+    command -v "$tool" >/dev/null || die "$tool is not installed"
+done
 
 if [[ -z "$serial" ]]; then
     mapfile -t devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
@@ -131,6 +137,10 @@ if [[ -z "$book" ]]; then
     book="$CACHE_DIR/${FALLBACK_SLUG//\//_}.epub"
     if [[ ! -s "$book" ]]; then
         step "Fetching a book the shelf does not have"
+        # Only this branch reaches the network, so only this branch needs
+        # curl: --book is the way past it on a machine without one.
+        command -v curl >/dev/null ||
+            die "curl is not installed; pass --book to name an EPUB instead"
         slug=$FALLBACK_SLUG
         curl -fsSL --retry 2 -o "$book.part" \
             "https://standardebooks.org/ebooks/$slug/downloads/${slug%%/*}_${slug#*/}.epub?source=download" ||
