@@ -57,11 +57,13 @@ import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.markedPassage
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
+import com.chmouel.liseur.reader.footnotes.FootnoteResolver
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingPace
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
 import com.chmouel.liseur.reader.progress.StableBookProgress
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -78,9 +80,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.indexOfFirstWithHref
@@ -88,6 +92,7 @@ import org.readium.r2.shared.publication.services.search.search
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
+import org.readium.r2.shared.util.use
 import org.readium.r2.streamer.PublicationOpener
 import java.util.UUID
 
@@ -344,6 +349,49 @@ class ReaderViewModel(
     /** Raised when a choice moves the reader somewhere else in the book. */
     private val _goTo = MutableSharedFlow<Locator>(extraBufferCapacity = 1)
     val goTo: SharedFlow<Locator> = _goTo.asSharedFlow()
+
+    /**
+     * A note to show over the page, and where it was referenced from.
+     *
+     * [link] is kept so the card can offer the way it used to be the only
+     * way: opening the note where it actually lives, for the long ones and
+     * the ones carrying a picture the card cannot draw.
+     */
+    data class Footnote(val html: String, val link: Link)
+
+    private val _footnote = MutableStateFlow<Footnote?>(null)
+
+    /** The note popped up over the page, if the reader tapped one. */
+    val footnote: StateFlow<Footnote?> = _footnote.asStateFlow()
+
+    fun showFootnote(html: String, link: Link) {
+        _footnote.value = Footnote(html = html, link = link)
+    }
+
+    fun dismissFootnote() {
+        _footnote.value = null
+    }
+
+    /**
+     * The note [link] points at, if what it points at is a note.
+     *
+     * This is the half Readium does not do. It only recognises
+     * `epub:type="noteref"` on the marker; every other spelling arrives here
+     * with nothing but a link, so the target is fetched and judged on its own
+     * content. Reading the resource blocks, so it is done off the main thread
+     * inside the thing that blocks rather than at the call site.
+     */
+    suspend fun noteAt(link: Link): String? = withContext(Dispatchers.IO) {
+        val publication = publication ?: return@withContext null
+        val url = link.url()
+        val fragment = url.fragment?.takeIf { it.isNotBlank() } ?: return@withContext null
+        val resource = publication.get(url.removeFragment())
+            ?: return@withContext null
+        val html = resource.use { res ->
+            res.read().getOrNull()?.decodeToString()
+        } ?: return@withContext null
+        FootnoteResolver.noteAt(html, fragment)
+    }
 
     /** Whether this book can sync at all, so the action can stay hidden. */
     val syncable: StateFlow<Boolean> = flow { emit(positionSync.canSync(bookId)) }

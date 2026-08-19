@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -20,8 +21,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.chmouel.liseur.reader.chrome.BookSyncDialog
+import com.chmouel.liseur.reader.chrome.ExternalLinkDialog
 import com.chmouel.liseur.reader.chrome.PageTurner
 import androidx.lifecycle.lifecycleScope
+import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.Book
 import androidx.compose.foundation.layout.Box
@@ -83,6 +86,9 @@ class ReaderActivity : FragmentActivity() {
 
     /** The title of a book on its way up, while the note about it shows. */
     private var sendingNote by mutableStateOf<String?>(null)
+
+    /** A link out of the book, waiting for the reader to allow it. */
+    private var pendingExternalLink by mutableStateOf<AbsoluteUrl?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // The Publication doesn't survive process death, so saved navigator
@@ -206,12 +212,33 @@ class ReaderActivity : FragmentActivity() {
                                             columnMode = columnMode,
                                             scroll = scrollMode,
                                         ),
+                                        // Without a listener the navigator answers
+                                        // every link the same way — go there — and
+                                        // a footnote costs the reader their page.
+                                        listener = ReaderNavigatorListener(
+                                            scope = lifecycleScope,
+                                            noteAt = viewModel::noteAt,
+                                            onFootnote = viewModel::showFootnote,
+                                            onFollow = { link ->
+                                                viewModel.onJump()
+                                                navigator?.go(link, animated = false)
+                                            },
+                                            onExternal = { pendingExternalLink = it },
+                                        ),
                                         configuration = epubNavigatorConfiguration(
                                             columnMode = columnMode,
                                             scroll = scrollMode,
                                             onTextSelected = viewModel::onTextSelected,
                                         ),
                                     ).also { supportFragmentManager.fragmentFactory = it }
+                                }
+                                pendingExternalLink?.let { link ->
+                                    ExternalLinkDialog(
+                                        url = link.toString(),
+                                        host = link.host ?: link.toString(),
+                                        onOpen = { openExternally(it); pendingExternalLink = null },
+                                        onDismiss = { pendingExternalLink = null },
+                                    )
                                 }
                                 LaunchedEffect(viewModel) {
                                     lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -297,6 +324,8 @@ class ReaderActivity : FragmentActivity() {
                                     syncableFlow = viewModel.syncable,
                                     dictionaryFlow = viewModel.dictionary,
                                     onEnableDictionary = viewModel::enableDictionary,
+                                    footnoteFlow = viewModel.footnote,
+                                    onDismissFootnote = viewModel::dismissFootnote,
                                     goTo = viewModel.goTo,
                                     onBookSyncAction = remember {
                                         ReaderBookSyncActions(
@@ -373,6 +402,21 @@ class ReaderActivity : FragmentActivity() {
 
     private fun declineUpload(book: Book) {
         container.uploadPrompts.answer(book.url)
+    }
+
+    /**
+     * Hands a link in a book to whatever the phone uses for links.
+     *
+     * Only ever reached through the dialog that named the host, so this is
+     * the reader's decision being carried out and not the app's. A phone with
+     * nothing to open it with says so rather than doing nothing.
+     */
+    private fun openExternally(url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(intent) }.onFailure {
+            Toast.makeText(this, R.string.reader_external_link_failed, Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onResume() {

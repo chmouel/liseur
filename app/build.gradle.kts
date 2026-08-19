@@ -144,6 +144,12 @@ dependencies {
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
 
+    // Already inside readium-navigator, which uses it to lift footnotes out
+    // of a chapter. Declared here because the reader parses notes of its own
+    // that Readium does not recognise, and a transitive dependency is not a
+    // promise.
+    implementation(libs.jsoup)
+
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

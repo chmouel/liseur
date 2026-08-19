@@ -10,6 +10,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -109,6 +111,7 @@ import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
+import com.chmouel.liseur.reader.chrome.FootnoteCard
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.search.SearchScreen
@@ -170,6 +173,8 @@ fun ReaderScreen(
     syncableFlow: StateFlow<Boolean>,
     dictionaryFlow: StateFlow<ReaderViewModel.DictionarySettings>,
     onEnableDictionary: () -> Unit,
+    footnoteFlow: StateFlow<ReaderViewModel.Footnote?>,
+    onDismissFootnote: () -> Unit,
     keepScreenOnFlow: StateFlow<Boolean>,
     onKeepScreenOnChanged: (Boolean) -> Unit,
     scrollModeFlow: StateFlow<Boolean>,
@@ -206,6 +211,23 @@ fun ReaderScreen(
     val searchState by searchFlow.collectAsStateWithLifecycle()
     val bookmarked by bookmarkedFlow.collectAsStateWithLifecycle()
     val dictionary by dictionaryFlow.collectAsStateWithLifecycle()
+    val footnote by footnoteFlow.collectAsStateWithLifecycle()
+
+    /*
+     * Where the last touch landed, so a note can be shown beside the marker
+     * that raised it.
+     *
+     * Readium reports no point for a tap on a footnote: the moment it
+     * recognises a link it stops forwarding the gesture and starts resolving
+     * the note. The touch is therefore caught here on the way down, on the
+     * initial pass and without consuming anything, which leaves the web view
+     * and the tap zones seeing exactly what they saw before.
+     */
+    var lastTouchY by remember { mutableStateOf<Float?>(null) }
+    // The tracker below outlives every recomposition, so it cannot read
+    // `footnote` directly — it would keep seeing whatever was true when it
+    // started. This gives it a window onto the current value.
+    val noteShowing by rememberUpdatedState(footnote != null)
     var selection by remember { mutableStateOf<ActiveSelection?>(null) }
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var defineWord by remember { mutableStateOf<String?>(null) }
@@ -372,7 +394,21 @@ fun ReaderScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .background(readingTheme.background),
+            .background(readingTheme.background)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        // The card is drawn inside this box, so without this
+                        // guard reading a note would move it: every touch on
+                        // the card would become the new anchor and the card
+                        // would jump out from under the finger scrolling it.
+                        if (noteShowing) continue
+                        event.changes.firstOrNull { it.pressed }
+                            ?.let { lastTouchY = it.position.y }
+                    }
+                }
+            },
     ) {
         // The page runs the whole screen in both modes. Readium's own
         // padding is switched off (see dimens.xml) because it is applied
@@ -599,6 +635,23 @@ fun ReaderScreen(
                     navigationIconContentColor = readingTheme.foreground,
                     actionIconContentColor = readingTheme.foreground,
                 ),
+            )
+        }
+
+        // Last inside the box, and so on top of everything in it: a note is
+        // the thing the reader just asked for, and the page, the pills and
+        // the chrome are all what they asked to be shown it over.
+        footnote?.let { note ->
+            FootnoteCard(
+                html = note.html,
+                theme = readingTheme,
+                anchorY = lastTouchY,
+                onGoToNote = {
+                    onDismissFootnote()
+                    onProgressAction.onJump()
+                    navigator?.go(note.link, animated = false)
+                },
+                onDismiss = onDismissFootnote,
             )
         }
     }

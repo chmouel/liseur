@@ -17,6 +17,7 @@ okhttp = "5.4.0"
 work = "2.11.2"
 desugar = "2.1.5"
 json = "20260719"
+jsoup = "1.22.2"
 coroutines = "1.11.0"
 reorderable = "3.1.0"
 robolectric = "4.16.1"
@@ -56,6 +57,7 @@ okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar" }
 json = { module = "org.json:json", version.ref = "json" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
 mockwebserver = { module = "com.squareup.okhttp3:mockwebserver3-junit4", version.ref = "okhttp" }
