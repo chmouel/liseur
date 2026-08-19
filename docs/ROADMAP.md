@@ -7,6 +7,10 @@ down. Nothing here blocks a release; the release checklist lives in
 Each entry says what the problem is and where in the tree it lives, so
 that picking one up does not start with a search.
 
+Larger reading-experience features are designed before they are built;
+those decisions live in [`adr/`](adr/), starting from
+[the advanced reading menu](adr/0001-advanced-reading-menu.md).
+
 ## Before the first release
 
 ### Say why the account vanished
