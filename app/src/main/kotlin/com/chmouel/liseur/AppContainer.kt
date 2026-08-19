@@ -23,6 +23,7 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.BookUploadRepository
+import com.chmouel.liseur.data.remote.UploadPrompts
 import com.chmouel.liseur.data.remote.CompositePositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
@@ -153,6 +154,9 @@ class AppContainer(context: Context) {
     )
 
     val bookUploads = BookUploadRepository(context.applicationContext)
+
+    /** Which books have already been asked about this run. */
+    val uploadPrompts = UploadPrompts()
 
     /** This device, as the servers that record who saved a position see it. */
     val deviceIdentity = DeviceIdentityRepository(context.applicationContext)

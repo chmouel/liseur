@@ -24,8 +24,15 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.Book
-import com.chmouel.liseur.ui.library.booksToSendUp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import com.chmouel.liseur.data.settings.UploadPolicy
+import com.chmouel.liseur.ui.UploadBookOfferDialog
+import com.chmouel.liseur.ui.library.UploadDecision
 import com.chmouel.liseur.ui.library.canUploadTo
+import com.chmouel.liseur.ui.library.uploadOnOpen
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import com.chmouel.liseur.ui.theme.isDark
 import org.readium.r2.navigator.preferences.ReadingProgression
@@ -71,6 +78,12 @@ class ReaderActivity : FragmentActivity() {
 
     private var target by mutableStateOf<OpenTarget?>(null)
 
+    /** A just-shelved book waiting for the reader to answer for it. */
+    private var pendingOffer by mutableStateOf<Book?>(null)
+
+    /** The title of a book on its way up, while the note about it shows. */
+    private var sendingNote by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // The Publication doesn't survive process death, so saved navigator
         // fragment state can't be restored; drop it and reopen the book at
@@ -109,7 +122,7 @@ class ReaderActivity : FragmentActivity() {
                 if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                     viewModel.onReaderResumed()
                 }
-                if (shelved != null) sendUpIfPolicySays(shelved)
+                if (shelved != null) decideUpload(shelved)
             }
         }
 
@@ -142,143 +155,170 @@ class ReaderActivity : FragmentActivity() {
                         state = bookSync,
                         onDismiss = viewModel::dismissBookSync,
                     )
-                    when (val s = state) {
-                        ReaderViewModel.UiState.Loading ->
-                            ReaderLoadingScreen()
-
-                        is ReaderViewModel.UiState.Failure ->
-                            ReaderErrorScreen(message = s.message, onBack = ::finish)
-
-                        is ReaderViewModel.UiState.Ready -> {
-                            // The factory must be installed before AndroidFragment
-                            // instantiates the navigator, hence remember {} and
-                            // not SideEffect {}.
-                            //
-                            // Column count is baked into the ReadiumCSS
-                            // properties the navigator is built with, so it is
-                            // also a key: changing it rebuilds the factory here
-                            // and ReaderScreen rebuilds the fragment, which
-                            // reopens at lastLocator so the reader stays put.
-                            // Rotating a tablet into a narrow window is the
-                            // same event, which is why the width goes through
-                            // effectiveFor() rather than being read once.
-                            //
-                            // Scrolling is a key for the same reason: whether
-                            // page turns are disabled is fixed when the
-                            // navigator is configured, and turning scrolling on
-                            // has to take the sideways chapter jumps with it.
-                            val prefs by viewModel.prefs.collectAsStateWithLifecycle()
-                            val readingTheme = prefs.themeChoice.resolve(appIsDark)
-                            val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
-                            val columnMode = prefs.columnMode.effectiveFor(widthClass())
-                            remember(s.navigatorFactory, columnMode, scrollMode) {
-                                s.navigatorFactory.createFragmentFactory(
-                                    initialLocator = viewModel.lastLocator ?: s.initialLocator,
-                                    initialPreferences = prefs.toEpubPreferences(
-                                        theme = readingTheme,
-                                        columnMode = columnMode,
-                                        scroll = scrollMode,
-                                    ),
-                                    configuration = epubNavigatorConfiguration(
-                                        columnMode = columnMode,
-                                        scroll = scrollMode,
-                                        onTextSelected = viewModel::onTextSelected,
-                                    ),
-                                ).also { supportFragmentManager.fragmentFactory = it }
-                            }
-                            LaunchedEffect(viewModel) {
-                                lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                                    viewModel.pendingOpen.collect { next ->
-                                        if (next == null) return@collect
-                                        val url = (next.availability as? NextVolumeAvailability.Ready)
-                                            ?.fileUrl ?: return@collect
-                                        viewModel.consumeOpenNext()
-                                        startActivity(
-                                            intent(this@ReaderActivity, url, next.id),
-                                        )
-                                        finish()
-                                    }
-                                }
-                            }
-                            ReaderScreen(
-                                publication = s.publication,
-                                prefsFlow = viewModel.prefs,
-                                readingTheme = readingTheme,
-                                typographyIsOwnFlow = viewModel.typographyIsOwn,
-                                progressFlow = viewModel.progress,
-                                jumpBackFlow = viewModel.jumpBack,
-                                catchUpFlow = viewModel.catchUp,
-                                continuationFlow = viewModel.continuation,
-                                onContinueNext = viewModel::onContinueNext,
-                                onReachedEndpaper = viewModel::onReachedEndpaper,
-                                onLeftEndpaper = viewModel::onLeftEndpaper,
-                                onLocatorChanged = viewModel::onLocatorChanged,
-                                onNavigatorChanged = { navigator = it },
-                                keepScreenOnFlow = viewModel.keepScreenOn,
-                                onKeepScreenOnChanged = viewModel::setKeepScreenOn,
-                                scrollModeFlow = viewModel.scrollMode,
-                                onScrollModeChanged = viewModel::setScrollMode,
-                                onPageTurnerChanged = { pageTurner = it },
-                                onChromeVisibleChanged = { chromeVisible = it },
-                                onPrefsAction = remember {
-                                    ReaderPrefsActions(
-                                        setFont = viewModel::setFont,
-                                        setFontSize = viewModel::setFontSize,
-                                        setTheme = viewModel::setTheme,
-                                        setLineHeight = viewModel::setLineHeight,
-                                        setPageMargins = viewModel::setPageMargins,
-                                        setBrightness = viewModel::setBrightness,
-                                        setPageTurnAnimation = viewModel::setPageTurnAnimation,
-                                        setColumnMode = viewModel::setColumnMode,
-                                        setTypographyIsOwn = viewModel::setTypographyIsOwn,
-                                    )
-                                },
-                                onProgressAction = remember {
-                                    ReaderProgressActions(
-                                        cycleFooterMode = viewModel::cycleFooterMode,
-                                        setFooterMode = viewModel::setFooterMode,
-                                        onJump = viewModel::onJump,
-                                        dismissJumpBack = viewModel::dismissJumpBack,
-                                        acceptCatchUp = viewModel::acceptCatchUp,
-                                        dismissCatchUp = viewModel::dismissCatchUp,
-                                        chapterTicks = viewModel::chapterTicks,
-                                        chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
-                                        positionAtProgression = viewModel::positionAtProgression,
-                                        locatorAtPosition = viewModel::locatorAtPosition,
-                                    )
-                                },
-                                annotationsFlow = viewModel.annotations,
-                                searchFlow = viewModel.search,
-                                bookmarkedFlow = viewModel.bookmarked,
-                                selectionRequests = viewModel.selectionRequests,
-                                onAnnotationAction = remember {
-                                    ReaderAnnotationActions(
-                                        highlight = viewModel::highlight,
-                                        addNote = viewModel::addNote,
-                                        annotationAt = viewModel::annotationAt,
-                                        toggleBookmark = viewModel::toggleBookmark,
-                                        remove = viewModel::remove,
-                                        notebookMarkdown = viewModel::notebookMarkdown,
-                                    )
-                                },
-                                onSearchAction = remember {
-                                    ReaderSearchActions(
-                                        search = viewModel::search,
-                                        clear = viewModel::clearSearch,
-                                    )
-                                },
-                                syncableFlow = viewModel.syncable,
-                                dictionaryFlow = viewModel.dictionary,
-                                onEnableDictionary = viewModel::enableDictionary,
-                                goTo = viewModel.goTo,
-                                onBookSyncAction = remember {
-                                    ReaderBookSyncActions(
-                                        start = viewModel::syncThisBook,
-                                    )
-                                },
-                                onBack = ::finish,
+                    // Only over a book that is actually on screen. Asked
+                    // during the spinner it would be a question about a
+                    // book the reader has not seen yet.
+                    if (state is ReaderViewModel.UiState.Ready) {
+                        pendingOffer?.let { book ->
+                            UploadBookOfferDialog(
+                                title = book.title,
+                                onSend = { sendUp(book); pendingOffer = null },
+                                onAlways = { sendUpAlways(book); pendingOffer = null },
+                                onDismiss = { declineUpload(book); pendingOffer = null },
                             )
                         }
+                    }
+                    Box(Modifier.fillMaxSize()) {
+                        when (val s = state) {
+                            ReaderViewModel.UiState.Loading ->
+                                ReaderLoadingScreen()
+
+                            is ReaderViewModel.UiState.Failure ->
+                                ReaderErrorScreen(message = s.message, onBack = ::finish)
+
+                            is ReaderViewModel.UiState.Ready -> {
+                                // The factory must be installed before AndroidFragment
+                                // instantiates the navigator, hence remember {} and
+                                // not SideEffect {}.
+                                //
+                                // Column count is baked into the ReadiumCSS
+                                // properties the navigator is built with, so it is
+                                // also a key: changing it rebuilds the factory here
+                                // and ReaderScreen rebuilds the fragment, which
+                                // reopens at lastLocator so the reader stays put.
+                                // Rotating a tablet into a narrow window is the
+                                // same event, which is why the width goes through
+                                // effectiveFor() rather than being read once.
+                                //
+                                // Scrolling is a key for the same reason: whether
+                                // page turns are disabled is fixed when the
+                                // navigator is configured, and turning scrolling on
+                                // has to take the sideways chapter jumps with it.
+                                val prefs by viewModel.prefs.collectAsStateWithLifecycle()
+                                val readingTheme = prefs.themeChoice.resolve(appIsDark)
+                                val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
+                                val columnMode = prefs.columnMode.effectiveFor(widthClass())
+                                remember(s.navigatorFactory, columnMode, scrollMode) {
+                                    s.navigatorFactory.createFragmentFactory(
+                                        initialLocator = viewModel.lastLocator ?: s.initialLocator,
+                                        initialPreferences = prefs.toEpubPreferences(
+                                            theme = readingTheme,
+                                            columnMode = columnMode,
+                                            scroll = scrollMode,
+                                        ),
+                                        configuration = epubNavigatorConfiguration(
+                                            columnMode = columnMode,
+                                            scroll = scrollMode,
+                                            onTextSelected = viewModel::onTextSelected,
+                                        ),
+                                    ).also { supportFragmentManager.fragmentFactory = it }
+                                }
+                                LaunchedEffect(viewModel) {
+                                    lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                                        viewModel.pendingOpen.collect { next ->
+                                            if (next == null) return@collect
+                                            val url = (next.availability as? NextVolumeAvailability.Ready)
+                                                ?.fileUrl ?: return@collect
+                                            viewModel.consumeOpenNext()
+                                            startActivity(
+                                                intent(this@ReaderActivity, url, next.id),
+                                            )
+                                            finish()
+                                        }
+                                    }
+                                }
+                                ReaderScreen(
+                                    publication = s.publication,
+                                    prefsFlow = viewModel.prefs,
+                                    readingTheme = readingTheme,
+                                    typographyIsOwnFlow = viewModel.typographyIsOwn,
+                                    progressFlow = viewModel.progress,
+                                    jumpBackFlow = viewModel.jumpBack,
+                                    catchUpFlow = viewModel.catchUp,
+                                    continuationFlow = viewModel.continuation,
+                                    onContinueNext = viewModel::onContinueNext,
+                                    onReachedEndpaper = viewModel::onReachedEndpaper,
+                                    onLeftEndpaper = viewModel::onLeftEndpaper,
+                                    onLocatorChanged = viewModel::onLocatorChanged,
+                                    onNavigatorChanged = { navigator = it },
+                                    keepScreenOnFlow = viewModel.keepScreenOn,
+                                    onKeepScreenOnChanged = viewModel::setKeepScreenOn,
+                                    scrollModeFlow = viewModel.scrollMode,
+                                    onScrollModeChanged = viewModel::setScrollMode,
+                                    onPageTurnerChanged = { pageTurner = it },
+                                    onChromeVisibleChanged = { chromeVisible = it },
+                                    onPrefsAction = remember {
+                                        ReaderPrefsActions(
+                                            setFont = viewModel::setFont,
+                                            setFontSize = viewModel::setFontSize,
+                                            setTheme = viewModel::setTheme,
+                                            setLineHeight = viewModel::setLineHeight,
+                                            setPageMargins = viewModel::setPageMargins,
+                                            setBrightness = viewModel::setBrightness,
+                                            setPageTurnAnimation = viewModel::setPageTurnAnimation,
+                                            setColumnMode = viewModel::setColumnMode,
+                                            setTypographyIsOwn = viewModel::setTypographyIsOwn,
+                                        )
+                                    },
+                                    onProgressAction = remember {
+                                        ReaderProgressActions(
+                                            cycleFooterMode = viewModel::cycleFooterMode,
+                                            setFooterMode = viewModel::setFooterMode,
+                                            onJump = viewModel::onJump,
+                                            dismissJumpBack = viewModel::dismissJumpBack,
+                                            acceptCatchUp = viewModel::acceptCatchUp,
+                                            dismissCatchUp = viewModel::dismissCatchUp,
+                                            chapterTicks = viewModel::chapterTicks,
+                                            chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
+                                            positionAtProgression = viewModel::positionAtProgression,
+                                            locatorAtPosition = viewModel::locatorAtPosition,
+                                        )
+                                    },
+                                    annotationsFlow = viewModel.annotations,
+                                    searchFlow = viewModel.search,
+                                    bookmarkedFlow = viewModel.bookmarked,
+                                    selectionRequests = viewModel.selectionRequests,
+                                    onAnnotationAction = remember {
+                                        ReaderAnnotationActions(
+                                            highlight = viewModel::highlight,
+                                            addNote = viewModel::addNote,
+                                            annotationAt = viewModel::annotationAt,
+                                            toggleBookmark = viewModel::toggleBookmark,
+                                            remove = viewModel::remove,
+                                            notebookMarkdown = viewModel::notebookMarkdown,
+                                        )
+                                    },
+                                    onSearchAction = remember {
+                                        ReaderSearchActions(
+                                            search = viewModel::search,
+                                            clear = viewModel::clearSearch,
+                                        )
+                                    },
+                                    syncableFlow = viewModel.syncable,
+                                    dictionaryFlow = viewModel.dictionary,
+                                    onEnableDictionary = viewModel::enableDictionary,
+                                    goTo = viewModel.goTo,
+                                    onBookSyncAction = remember {
+                                        ReaderBookSyncActions(
+                                            start = viewModel::syncThisBook,
+                                        )
+                                    },
+                                    onBack = ::finish,
+                                )
+                            }
+                        }
+
+                        SendingNote(
+                            // Only once the book is up. Raised while the
+                            // spinner is still turning, the note spends
+                            // its few seconds behind a loading screen and
+                            // is gone by the time anyone could read it.
+                            title = sendingNote.takeIf {
+                                state is ReaderViewModel.UiState.Ready
+                            },
+                            onDone = { sendingNote = null },
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
                     }
                 }
             }
@@ -294,12 +334,45 @@ class ReaderActivity : FragmentActivity() {
      * may not go there for days. The verdict comes from the one place
      * that holds it, so this cannot drift from what the shelf would do.
      */
-    private suspend fun sendUpIfPolicySays(book: Book) {
+    private suspend fun decideUpload(book: Book) {
         val policy = container.appSettings.settings.first().uploadPolicy
         val server = container.remoteAccount.current()
         val canUpload = canUploadTo(server, container.remoteRouter)
-        booksToSendUp(listOf(book), policy, canUpload)
-            .forEach { container.bookUploads.enqueue(it) }
+        when (
+            uploadOnOpen(
+                book = book,
+                policy = policy,
+                canUpload = canUpload,
+                alreadyAnswered = container.uploadPrompts.wasAnswered(book.url),
+            )
+        ) {
+            UploadDecision.SEND -> sendUp(book)
+            // Held rather than shown: the reader tapped a book to read
+            // it, so the book gets the screen first. The composition
+            // raises this once the publication is actually up.
+            UploadDecision.ASK -> pendingOffer = book
+            UploadDecision.NOTHING -> Unit
+        }
+    }
+
+    private fun sendUp(book: Book) {
+        container.bookUploads.enqueue(book)
+        container.uploadPrompts.answer(book.url)
+        // "Sending", not "sent": this is queued work that may wait for a
+        // network and may retry, and the note should not claim an
+        // arrival it has no way of knowing about.
+        sendingNote = book.title
+    }
+
+    private fun sendUpAlways(book: Book) {
+        lifecycleScope.launch {
+            container.appSettings.setUploadPolicy(UploadPolicy.ALWAYS)
+        }
+        sendUp(book)
+    }
+
+    private fun declineUpload(book: Book) {
+        container.uploadPrompts.answer(book.url)
     }
 
     override fun onResume() {
