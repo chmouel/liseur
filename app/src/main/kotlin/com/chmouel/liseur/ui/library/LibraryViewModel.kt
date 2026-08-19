@@ -180,6 +180,17 @@ data class LibraryUiState(
      */
     val canDeleteFromServer: Boolean = false,
     /**
+     * Whether the server could delete but this connection was made
+     * before it was allowed to.
+     *
+     * The capability is read once, at connect, and nothing re-reads it
+     * afterwards. So granting the scope in the server's web UI leaves
+     * the phone unable to use it until it signs in again, and the action
+     * simply is not there. Without saying so the reader is left looking
+     * for a button that has no reason to be missing.
+     */
+    val serverDeleteNeedsReconnect: Boolean = false,
+    /**
      * Whether the server holds a reading of its own that deleting a
      * book could also forget. liseur-sync does; calibre-web's positions
      * live in the Kobo sync layer and go with the book, so there is
@@ -513,6 +524,7 @@ class LibraryViewModel(
                 downloads = running,
                 canDownload = server?.canDownload != false,
                 canDeleteFromServer = canDeleteFrom(server, router),
+                serverDeleteNeedsReconnect = deleteNeedsReconnect(server, router),
                 canForgetServerReading = canDeleteFrom(server, router) &&
                     server?.kind == ServerKind.LISEUR_SYNC,
                 canUploadToServer = canUploadTo(server, router),
@@ -1126,6 +1138,20 @@ internal fun canDeleteFrom(server: RemoteServer?, router: RemoteRouter): Boolean
  */
 internal fun RemoteServer.holdsDeletePermission(): Boolean =
     kind != ServerKind.LISEUR_SYNC || canDelete
+
+/**
+ * Whether deleting is off only because this connection is older than
+ * the permission.
+ *
+ * The kind can delete and the server would allow it; the token this
+ * device holds was minted without the scope. Signing in again is the
+ * whole fix, which is worth saying out loud where the action would
+ * otherwise be.
+ */
+internal fun deleteNeedsReconnect(server: RemoteServer?, router: RemoteRouter): Boolean =
+    server != null &&
+        router.deleterFor(server.kind) != null &&
+        !server.holdsDeletePermission()
 
 /**
  * A book that exists only on this device.

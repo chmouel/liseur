@@ -31,6 +31,21 @@ class CanDeleteFromTest {
         assertTrue(server(ServerKind.CALIBRE, canDelete = false).holdsDeletePermission())
     }
 
+    /**
+     * A liseur-sync connection older than the permission is the case
+     * worth explaining rather than hiding: the fix is a reconnect, and
+     * an absent button says none of that.
+     */
+    @Test
+    fun `only a missing scope asks for a reconnect`() {
+        assertTrue(needsReconnect(ServerKind.LISEUR_SYNC, canDelete = false))
+        assertFalse(needsReconnect(ServerKind.LISEUR_SYNC, canDelete = true))
+        assertFalse(needsReconnect(ServerKind.CALIBRE, canDelete = false))
+    }
+
+    private fun needsReconnect(kind: ServerKind, canDelete: Boolean): Boolean =
+        !server(kind, canDelete).holdsDeletePermission()
+
     private fun server(kind: ServerKind, canDelete: Boolean): RemoteServer = RemoteServer(
         kind = kind,
         baseUrl = "https://example.invalid",

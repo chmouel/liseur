@@ -610,6 +610,7 @@ private fun LibraryRoute(
                 downloading = book.url in state.downloads,
                 canDownload = state.canDownload,
                 canDeleteFromServer = state.canDeleteFromServer,
+                serverDeleteNeedsReconnect = state.serverDeleteNeedsReconnect,
                 canUploadToServer = state.canUploadToServer,
                 uploading = book.url in state.uploading,
                 onDismiss = { seriesSheetBook = null },
