@@ -123,16 +123,22 @@ class BookDownloadRepository(
      *
      * Everything else in the app only ever removes a copy; this is the one
      * action that reaches the server, so it is the only one that can lose
-     * the book for good. (liseur-sync trashes rather than destroys, but
-     * the reader asked for it to be gone, and gone it is.)
+     * the book for good. Neither server this reaches keeps a trash to
+     * undo it from.
+     *
+     * [forgetReading] asks the server to forget the caller's own reading
+     * of the book too, and is the reader's to answer. The local reading
+     * goes regardless, below: with the book gone for every device, hours
+     * kept here would be an entry with nothing behind it.
      */
     suspend fun deleteFromServer(
         book: Book,
         deleter: BookDeleter,
         server: RemoteServer,
+        forgetReading: Boolean = false,
     ): ServerDeleteResult {
         val credentials = server.credentials ?: return ServerDeleteResult.Failed(null)
-        val result = deleter.delete(server.baseUrl, credentials, book)
+        val result = deleter.delete(server.baseUrl, credentials, book, forgetReading)
         if (result is ServerDeleteResult.Deleted) {
             book.remoteUuid?.let { fileFor(it).delete() }
             // The book is gone from the server too, so this is not a

@@ -174,10 +174,18 @@ data class LibraryUiState(
     val canDownload: Boolean = true,
     /**
      * Whether the connected server lets this account delete books from
-     * it. Only calibre-web does: Komga has no such affordance, and a
-     * liseur-sync book is a file in a folder the server only reads.
+     * it. calibre-web always has; liseur-sync does where the connection
+     * carries the capability and the folder accepts uploads (ADR-0025).
+     * Komga has no such affordance at all.
      */
     val canDeleteFromServer: Boolean = false,
+    /**
+     * Whether the server holds a reading of its own that deleting a
+     * book could also forget. liseur-sync does; calibre-web's positions
+     * live in the Kobo sync layer and go with the book, so there is
+     * nothing separate to ask about.
+     */
+    val canForgetServerReading: Boolean = false,
     /**
      * Whether a book the reader added here can be sent up to the server.
      * True only where the account holds the permission and the server is
@@ -504,8 +512,9 @@ class LibraryViewModel(
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
-                canDeleteFromServer = server != null &&
-                    router.deleterFor(server.kind) != null,
+                canDeleteFromServer = canDeleteFrom(server, router),
+                canForgetServerReading = canDeleteFrom(server, router) &&
+                    server?.kind == ServerKind.LISEUR_SYNC,
                 canUploadToServer = canUploadTo(server, router),
                 uploading = uploading,
                 // Only under Ask: Always has already sent them and Never
@@ -700,17 +709,21 @@ class LibraryViewModel(
      * Deletes the book from the server itself.
      *
      * Only offered where the server has the notion and the account the
-     * right: calibre-web by login, liseur-sync by manage scope. Komga
-     * never reaches here — the action is not drawn for it.
+     * right: calibre-web by login, liseur-sync by the delete scope.
+     * Komga never reaches here — the action is not drawn for it.
+     *
+     * [forgetReading] is the reader's separate answer about the
+     * *server's* copy of their reading. The one on this device goes
+     * either way, because the book does.
      */
-    fun deleteFromServer(book: Book) {
+    fun deleteFromServer(book: Book, forgetReading: Boolean = false) {
         viewModelScope.launch {
             val server = account.current()
             val deleter = server?.let { router.deleterFor(it.kind) }
             val result = if (server == null || deleter == null) {
                 ServerDeleteResult.Failed(null)
             } else {
-                downloads.deleteFromServer(book, deleter, server)
+                downloads.deleteFromServer(book, deleter, server, forgetReading)
             }
             if (result !is ServerDeleteResult.Deleted) {
                 _deleteFailures.emit(DeleteFailure(book, onServer = true))
@@ -1087,6 +1100,32 @@ class LibraryViewModel(
  */
 internal fun canUploadTo(server: RemoteServer?, router: RemoteRouter): Boolean =
     server != null && server.canUpload && router.uploaderFor(server.kind) != null
+
+/**
+ * Whether a book on the server could be deleted from it.
+ *
+ * The kind must have a deleter, and — for liseur-sync only — the
+ * connection must carry the capability (ADR-0025). calibre-web keeps
+ * the gate it has always had: its permission is not a stored flag, and
+ * requiring one would silently switch the action off for every server
+ * paired before that column existed.
+ */
+internal fun canDeleteFrom(server: RemoteServer?, router: RemoteRouter): Boolean =
+    server != null && router.deleterFor(server.kind) != null && server.holdsDeletePermission()
+
+/**
+ * Whether the connection itself carries the right to delete, as opposed
+ * to the kind being able to at all.
+ *
+ * liseur-sync says so per connection, because its permission is a token
+ * scope the server grants (ADR-0025). calibre-web has no such flag and
+ * never had: its permission is the login, which is checked when the
+ * delete is attempted. Reading the stored flag for it would turn the
+ * action off for every server paired before the column existed, since
+ * nothing re-runs setup on an upgrade.
+ */
+internal fun RemoteServer.holdsDeletePermission(): Boolean =
+    kind != ServerKind.LISEUR_SYNC || canDelete
 
 /**
  * A book that exists only on this device.
