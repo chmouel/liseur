@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+#
+# End-to-end check that a book handed to Liseur by another app ends up
+# in the library, and not only on the screen.
+#
+#   hack/e2e-open-external [-s SERIAL] [-u URL] [-b BOOK.epub]
+#
+#   -s  pick a device when several are attached
+#   -b  the EPUB to hand over; defaults to a book fetched from
+#       standardebooks.org that the demo shelf does not already hold,
+#       so a new row on the shelf can only have come from this run
+#   -u  a liseur-sync server the app is *already* connected to, as the
+#       device sees it (an emulator reaches the host at 10.0.2.2). Only
+#       used to name the server in the output; pass it to also assert
+#       the book is offered for upload.
+#
+# The book is put somewhere no watched folder covers and opened with a
+# real ACTION_VIEW intent, the way a file manager, a download or an
+# attachment opens one. A folder scan can therefore never account for
+# what lands on the shelf.
+#
+# Nothing here is faked: the app is driven through its own screens and
+# every assertion reads the app's own database.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
+readonly READER_ACTIVITY="$APP_ID/.reader.ReaderActivity"
+readonly DEVICE_BOOKS="/sdcard/Books"
+
+# shellcheck source=hack/lib/demo-books.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/demo-books.sh"
+
+# A book the demo shelf does not hold, so its arrival is unambiguous.
+readonly FALLBACK_SLUG="h-g-wells/the-war-of-the-worlds"
+
+serial="" url="" book=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -s | --serial) serial=${2:-}; shift ;;
+        -u | --url) url=${2:-}; shift ;;
+        -b | --book) book=${2:-}; shift ;;
+        -h | --help)
+            sed -n '3,24p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) die "unknown argument $1" ;;
+    esac
+    shift
+done
+
+command -v adb >/dev/null || die "adb is not installed"
+
+if [[ -z "$serial" ]]; then
+    mapfile -t devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+    [[ ${#devices[@]} -eq 1 ]] ||
+        die "expected exactly one attached device, got ${#devices[@]}; pass --serial"
+    serial=${devices[0]}
+fi
+
+adb() { command adb -s "$serial" "$@"; }
+
+adb shell pm path "$APP_ID" >/dev/null 2>&1 ||
+    die "$APP_ID is not installed on $serial; run make install"
+
+query() {
+    adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \"$1\"" |
+        tr -d '\r'
+}
+
+if [[ -z "$book" ]]; then
+    mkdir -p "$CACHE_DIR"
+    book="$CACHE_DIR/${FALLBACK_SLUG//\//_}.epub"
+    if [[ ! -s "$book" ]]; then
+        step "Fetching a book the shelf does not have"
+        slug=$FALLBACK_SLUG
+        curl -fsSL --retry 2 -o "$book.part" \
+            "https://standardebooks.org/ebooks/$slug/downloads/${slug%%/*}_${slug#*/}.epub?source=download" ||
+            die "could not download $slug from standardebooks.org"
+        head -c 2 "$book.part" | grep -q 'PK' ||
+            { rm -f "$book.part"; die "standardebooks.org served a page rather than $slug"; }
+        mv "$book.part" "$book"
+    fi
+fi
+[[ -s "$book" ]] || die "$book is not a file"
+
+# Somewhere no watched folder reaches, so a scan cannot be what shelves
+# it. /sdcard/Books is the folder the demo shelf grants; Download is not.
+DROP="/sdcard/Download/$(basename "$book")"
+readonly DROP
+[[ "$DROP" != "$DEVICE_BOOKS"/* ]] || die "the drop point must be outside $DEVICE_BOOKS"
+
+step "Putting the book where nothing watches for it"
+adb push "$book" "$DROP" >/dev/null
+note "$DROP"
+
+# An imported book is stored under the digest of its own bytes, which is
+# what makes opening the same file twice shelve it once. That also lets
+# this script name the row a previous run would have left, and clear it,
+# so the import is something this run can actually watch happen.
+digest=$(sha256sum "$book" | cut -d' ' -f1)
+readonly IMPORTED="file:///data/user/0/$APP_ID/files/books/$digest.epub"
+
+step "Starting from nothing"
+adb shell "am force-stop $APP_ID"
+sleep 1
+query "delete from reading_progress where book_url = '$IMPORTED';" >/dev/null
+query "delete from books where url = '$IMPORTED';" >/dev/null
+adb shell "run-as $APP_ID rm -f /data/data/$APP_ID/files/books/$digest.epub" >/dev/null 2>&1 || true
+[[ $(query "select count(*) from books where url = '$IMPORTED';") == 0 ]] ||
+    die "could not clear what an earlier run imported"
+
+# A file manager hands over a content:// URI, not a path, and the grant
+# that comes with it is the ordinary non-persistable kind. Going through
+# MediaStore is how a shell can produce one of those.
+adb shell "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://$DROP" \
+    >/dev/null 2>&1
+sleep 3
+media_id=$(adb shell "content query --uri content://media/external/file \
+    --projection _id --where \"_data like '%$(basename "$book" .epub)%'\"" |
+    tr -d '\r' | sed -n 's/.*_id=\([0-9]*\).*/\1/p' | head -1)
+[[ -n "$media_id" ]] || die "the file never reached MediaStore, so it cannot be handed over"
+readonly HANDOVER="content://media/external/file/$media_id"
+
+before=$(query "select count(*) from books;")
+note "$before books on the shelf to begin with"
+
+step "Opening it the way another app would"
+adb shell "am force-stop $APP_ID"
+sleep 1
+adb shell "am start -a android.intent.action.VIEW --grant-read-uri-permission \
+    -d '$HANDOVER' -t application/epub+zip -n $READER_ACTIVITY" >/dev/null
+
+waited=0
+while ((waited < 60)); do
+    [[ $(query "select count(*) from books where url = '$IMPORTED';") == 1 ]] && break
+    sleep 3
+    waited=$((waited + 3))
+done
+
+# The whole point. A book that only ever opens is one the library cannot
+# show, cannot offer to a server and cannot find again.
+[[ $(query "select count(*) from books where url = '$IMPORTED';") == 1 ]] ||
+    die "the book opened but was never shelved, after $waited seconds"
+after=$(query "select count(*) from books;")
+note "the shelf went from $before to $after books"
+
+readonly SHELVED=$IMPORTED
+note "shelved as $SHELVED"
+
+# The grant a VIEW intent carries dies with the task, so a row pointing
+# at it would stop opening. The bytes were brought in instead, which is
+# why the row is named after them and not after the URI that arrived.
+[[ $(query "select count(*) from books where url like 'content://media/%';") == 0 ]] ||
+    die "the shelf kept a grant that will not survive; the book stops opening after a reboot"
+
+step "Reading it"
+for _ in 1 2 3 4; do
+    adb shell input keyevent KEYCODE_VOLUME_DOWN
+    sleep 2
+done
+adb shell input keyevent KEYCODE_BACK
+sleep 4
+
+# Where the reader got to has to hang off the row that was just made. It
+# is filed under the book's URL, so importing after the book opened
+# would leave the position under a URI the library knows nothing about.
+kept=$(query "select count(*) from reading_progress p join books b on b.url = p.book_url \
+    where b.url = '$SHELVED';")
+[[ "$kept" == 1 ]] ||
+    die "the reader's place was not filed against the shelved book; it would be lost"
+note "the reading position is attached to the shelved book"
+
+step "Handing the same file over again"
+adb shell "am force-stop $APP_ID"
+sleep 1
+adb shell "am start -a android.intent.action.VIEW --grant-read-uri-permission \
+    -d '$HANDOVER' -t application/epub+zip -n $READER_ACTIVITY" >/dev/null
+sleep 15
+
+again=$(query "select count(*) from books;")
+[[ "$again" == "$after" ]] ||
+    die "opening the same book twice shelved it twice ($after then $again)"
+note "the same book opened twice is still one book"
+
+copies=$(adb shell "run-as $APP_ID ls /data/data/$APP_ID/files/books/" |
+    tr -d '\r' | grep -c '\.epub$' || true)
+leftovers=$(adb shell "run-as $APP_ID ls /data/data/$APP_ID/files/books/" |
+    tr -d '\r' | grep -c '\.part$' || true)
+[[ "$leftovers" == 0 ]] || die "$leftovers half-copied books were left behind"
+note "$copies imported books stored, nothing half-written"
+
+if [[ -n "$url" ]]; then
+    step "Checking the server is offered the book"
+    can_upload=$(query "select can_upload from remote_server;")
+    [[ "$can_upload" == 1 ]] ||
+        die "the app is not connected to $url with the library-upload scope"
+    offered=$(query "select count(*) from books where url = '$SHELVED' \
+        and remote_uuid is null and archived_at is null;")
+    [[ "$offered" == 1 ]] ||
+        die "the shelved book is not in a state the upload offer can see"
+    note "the book is one the offer can reach"
+fi
+
+adb shell rm -f "$DROP" >/dev/null 2>&1 || true
+adb shell "am start -n $MAIN_ACTIVITY" >/dev/null 2>&1 || true
+
+printf '\nDone. A book opened from another app is on the shelf, read from there, and only there once.\n'

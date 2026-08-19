@@ -635,11 +635,7 @@ class LibraryViewModel(
         // the first attempt rather than starting a second.
         viewModelScope.launch {
             combine(library.books, appSettings.settings, account.server) { books, settings, server ->
-                if (settings.uploadPolicy != UploadPolicy.ALWAYS) {
-                    emptyList()
-                } else {
-                    books.awaitingUpload(canUploadTo(server, router))
-                }
+                booksToSendUp(books, settings.uploadPolicy, canUploadTo(server, router))
             }.collect { pending -> pending.forEach { uploads.enqueue(it) } }
         }
     }
@@ -1167,6 +1163,26 @@ internal fun deleteNeedsReconnect(server: RemoteServer?, router: RemoteRouter): 
  */
 internal fun Book.livesOnlyOnThisDevice(): Boolean =
     remoteUuid == null && !ServerKind.isRemoteUrl(url)
+
+/**
+ * The books that should go up without anyone being asked.
+ *
+ * The ALWAYS policy is read here and nowhere else. The library watches
+ * the shelf with it and the reader applies it to a book just handed
+ * over by another app; both have to reach the same verdict, so neither
+ * gets to work it out for itself. Whether uploading is possible at all
+ * still comes from [canUploadTo], the single answer to that question.
+ */
+internal fun booksToSendUp(
+    books: List<Book>,
+    policy: UploadPolicy,
+    canUpload: Boolean,
+): List<Book> =
+    if (policy != UploadPolicy.ALWAYS) {
+        emptyList()
+    } else {
+        books.awaitingUpload(canUpload)
+    }
 
 /**
  * The books that are on this device and nowhere else.
