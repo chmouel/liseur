@@ -207,6 +207,14 @@ fun AboutScreen(
                     }
                 }
 
+                Text(
+                    text = stringResource(R.string.about_star_prompt),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+                )
+
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(top = 16.dp, bottom = 48.dp),
