@@ -25,6 +25,7 @@ import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.BookUploadRepository
 import com.chmouel.liseur.data.remote.CompositePositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
+import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
@@ -246,12 +247,15 @@ class AppContainer(context: Context) {
         seriesClaims = mapOf(
             ServerKind.LISEUR_SYNC to LiseurSyncSeriesClient(),
         ),
-        // calibre-web is the only one that deletes. Komga treats it as
-        // an administrator's job, and a liseur-sync book is a file in a
-        // folder somebody else looks after: the server has no delete
-        // route at all, and inventing one here would be lying about it.
+        // Komga has no entry: deleting a file there is an
+        // administrator's job, and the action stays hidden rather than
+        // offered and failed. liseur-sync deletes only what it could
+        // have written — a book in a folder marked as accepting uploads
+        // (ADR-0025) — and says so per book, so the entry here is a
+        // promise the route exists, not that any given book will go.
         deleters = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreBookDeleter(),
+            ServerKind.LISEUR_SYNC to LiseurSyncDeleteClient(),
         ),
         // liseur-sync is the only one that takes a book, and only into a
         // folder an administrator marked (ADR-0023). Komga and

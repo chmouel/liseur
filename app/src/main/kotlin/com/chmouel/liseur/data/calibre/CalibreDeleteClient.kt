@@ -69,6 +69,10 @@ class CalibreBookDeleter(
         baseUrl: String,
         credentials: RemoteCredentials,
         book: Book,
+        // Ignored, and honestly so: calibre-web holds no reading of its
+        // own to forget. Positions there live in the Kobo sync layer,
+        // which a deleted book takes with it.
+        forgetReading: Boolean,
     ): ServerDeleteResult {
         val basic = credentials as? RemoteCredentials.Basic
             ?: return ServerDeleteResult.NotAllowed

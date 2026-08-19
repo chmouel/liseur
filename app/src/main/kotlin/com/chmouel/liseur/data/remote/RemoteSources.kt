@@ -197,12 +197,19 @@ sealed interface ServerDeleteResult {
  *
  * Komga has no entry: deleting a file there is an administrator's job,
  * and the action stays hidden rather than offered and failed.
+ *
+ * [forgetReading] asks the server to forget the caller's own reading of
+ * the book as well. It is about the *server's* copy of that reading:
+ * the phone's goes either way, because the book is gone and hours with
+ * nothing behind them are a ghost entry. An implementation whose server
+ * keeps no reading ignores it.
  */
 interface BookDeleter {
     suspend fun delete(
         baseUrl: String,
         credentials: RemoteCredentials,
         book: Book,
+        forgetReading: Boolean = false,
     ): ServerDeleteResult
 }
 

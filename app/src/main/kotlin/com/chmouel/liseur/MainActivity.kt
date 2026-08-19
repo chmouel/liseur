@@ -656,8 +656,9 @@ private fun LibraryRoute(
         seriesServerDelete?.let { book ->
             ConfirmServerDeleteDialog(
                 book = book,
-                onConfirm = {
-                    viewModel.deleteFromServer(book)
+                canForgetReading = state.canForgetServerReading,
+                onConfirm = { forgetReading ->
+                    viewModel.deleteFromServer(book, forgetReading)
                     seriesServerDelete = null
                 },
                 onDismiss = { seriesServerDelete = null },

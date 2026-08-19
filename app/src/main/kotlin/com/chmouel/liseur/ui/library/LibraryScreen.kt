@@ -104,6 +104,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -166,7 +167,7 @@ fun LibraryScreen(
     onSetFinished: (Book, Boolean) -> Unit,
     onSetArchived: (Book, Boolean) -> Unit,
     onDeleteLocal: (Book) -> Unit,
-    onDeleteFromServer: (Book) -> Unit,
+    onDeleteFromServer: (Book, Boolean) -> Unit,
     onUploadToServer: (Book) -> Unit,
     onUploadPending: () -> Unit,
     onDismissUploadPrompt: () -> Unit,
@@ -657,8 +658,9 @@ fun LibraryScreen(
     confirmServerDelete?.let { book ->
         ConfirmServerDeleteDialog(
             book = book,
-            onConfirm = {
-                onDeleteFromServer(book)
+            canForgetReading = state.canForgetServerReading,
+            onConfirm = { forgetReading ->
+                onDeleteFromServer(book, forgetReading)
                 confirmServerDelete = null
             },
             onDismiss = { confirmServerDelete = null },
@@ -725,16 +727,54 @@ fun LibraryScreen(
  * on a mis-tap.
  */
 @Composable
-internal fun ConfirmServerDeleteDialog(    book: Book,
-    onConfirm: () -> Unit,
+internal fun ConfirmServerDeleteDialog(
+    book: Book,
+    onConfirm: (forgetReading: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    canForgetReading: Boolean = false,
 ) {
+    var forgetReading by rememberSaveable { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.delete_from_server)) },
-        text = { Text(stringResource(R.string.delete_from_server_warning, book.title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.delete_from_server_warning, book.title))
+                // Only where there is a reading on the server to forget.
+                // calibre-web keeps none, so offering the choice there
+                // would be a box that answers nothing.
+                if (canForgetReading) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { forgetReading = !forgetReading },
+                    ) {
+                        Checkbox(
+                            checked = forgetReading,
+                            onCheckedChange = { forgetReading = it },
+                        )
+                        Column(modifier = Modifier.padding(start = 4.dp)) {
+                            Text(
+                                text = stringResource(
+                                    R.string.delete_from_server_forget_reading,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.delete_from_server_forget_reading_hint,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = { onConfirm(forgetReading) }) {
                 Text(
                     text = stringResource(R.string.delete),
                     color = MaterialTheme.colorScheme.error,
