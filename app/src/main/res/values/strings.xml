@@ -230,6 +230,31 @@
     <string name="cancel_download">Cancel download</string>
     <string name="remove_download">Remove download</string>
     <string name="server_credentials_lost">Sign in to your book server again.</string>
+
+    <string name="download_all">Download all books</string>
+    <string name="download_all_summary">Fetch every book in this library that isn\'t already on your device. Books you\'ve archived are left where they are.</string>
+    <string name="download_all_working">Working out how much room that needs…</string>
+    <string name="download_all_none">Every book is already on this device.</string>
+    <plurals name="download_all_confirm">
+        <item quantity="one">Download %1$d book?</item>
+        <item quantity="other">Download %1$d books?</item>
+    </plurals>
+    <string name="download_all_size">About %1$s, with %2$s free. It\'s an estimate from what the server reports, so treat it as rough.</string>
+    <string name="download_all_size_unknown">The server doesn\'t say how big its books are, so there\'s no telling how much room this needs. You have %1$s free.</string>
+    <string name="download_all_tight">About %1$s, with %2$s free. That fits, but not with much to spare.</string>
+    <string name="download_all_will_not_fit">About %1$s, and only %2$s free. Downloading will stop once the device runs low.</string>
+    <string name="download_all_start">Download</string>
+    <string name="download_all_progress">Downloading books: %1$d of %2$d</string>
+    <string name="download_all_cancel">Stop downloading</string>
+    <string name="download_all_done">Downloaded %1$d of %2$d books.</string>
+    <string name="download_all_stopping">Finishing up…</string>
+    <string name="download_all_stopped_cancelled">Stopped. The books already downloaded stay where they are.</string>
+    <string name="download_all_stopped_space">Stopped: the device ran out of room. Free some up and start again to pick up the rest.</string>
+    <string name="download_all_stopped_account">Stopped: the server account changed.</string>
+    <plurals name="download_all_failed">
+        <item quantity="one">%1$d book couldn\'t be downloaded.</item>
+        <item quantity="other">%1$d books couldn\'t be downloaded.</item>
+    </plurals>
     <plurals name="server_storage">
         <item quantity="one">%1$d book downloaded · %2$s</item>
         <item quantity="other">%1$d books downloaded · %2$s</item>

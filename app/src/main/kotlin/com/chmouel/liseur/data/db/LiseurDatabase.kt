@@ -24,7 +24,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 36,
+    version = 37,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -995,6 +995,18 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Records how big the server says each book's file is, so that a
+         * bulk download can price itself before it starts. Null for
+         * every existing row; the next catalog refresh fills in what the
+         * server is willing to say.
+         */
+        val MIGRATION_36_37 = object : Migration(36, 37) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `size_bytes` INTEGER")
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -1034,6 +1046,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_33_34,
             MIGRATION_34_35,
             MIGRATION_35_36,
+            MIGRATION_36_37,
         )
     }
 }

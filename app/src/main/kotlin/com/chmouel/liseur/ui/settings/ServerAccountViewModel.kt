@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.settings
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -11,6 +12,9 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.calibre.BulkBatch
+import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
+import com.chmouel.liseur.data.calibre.BulkStopReason
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.remote.SetupFailure
@@ -95,12 +99,18 @@ data class ServerAccountUiState(
     val ambiguities: Int = 0,
     /** What to do with a book that arrives on this device. */
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
+    /** The bulk download that is running, or the last one's summary. */
+    val bulkBatch: BulkBatch? = null,
+    /** What a "download everything" would cost, once the reader asks. */
+    val bulkEstimate: BulkDownloadEstimate? = null,
+    /** True while the estimate is being worked out. */
+    val estimating: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ServerAccountViewModel(
     private val repository: RemoteAccountRepository,
-    downloads: BookDownloadRepository,
+    private val downloads: BookDownloadRepository,
     private val reporting: SyncReporting,
     private val positionSync: PositionSyncCoordinator,
     private val catalog: RemoteCatalogRepository,
@@ -144,6 +154,11 @@ class ServerAccountViewModel(
         viewModelScope.launch {
             reporting.report.collect { report ->
                 _state.update { it.copy(syncReport = report) }
+            }
+        }
+        viewModelScope.launch {
+            downloads.bulkBatch.collect { batch ->
+                _state.update { it.copy(bulkBatch = batch) }
             }
         }
         viewModelScope.launch {
@@ -324,8 +339,51 @@ class ServerAccountViewModel(
         }
     }
 
+    /**
+     * Works out what fetching everything would cost, and shows it.
+     *
+     * Reading free space touches the filesystem, so it is asked for
+     * only when the reader reaches for the action rather than kept
+     * fresh in the background.
+     */
+    fun askToDownloadAll() {
+        if (_state.value.estimating) return
+        _state.update { it.copy(estimating = true) }
+        viewModelScope.launch {
+            // Cleared however it goes. The flag is also what keeps a
+            // second tap from starting a second estimate, so a throw
+            // that left it standing would take the action with it until
+            // the process was restarted.
+            val estimate = runCatching { downloads.bulkEstimate() }
+                .onFailure { Log.w(TAG, "could not work out what downloading everything would cost", it) }
+                .getOrNull()
+            _state.update { it.copy(estimating = false, bulkEstimate = estimate) }
+        }
+    }
+
+    fun dismissDownloadAll() = _state.update { it.copy(bulkEstimate = null) }
+
+    fun downloadAll() {
+        val accountKey = _state.value.server?.accountKey ?: return
+        _state.update { it.copy(bulkEstimate = null) }
+        viewModelScope.launch { downloads.enqueueAll(accountKey) }
+    }
+
+    fun cancelDownloadAll() {
+        viewModelScope.launch { downloads.cancelAll() }
+    }
+
+    /** Clears the summary of a batch that has ended. */
+    fun dismissBatch() {
+        viewModelScope.launch { downloads.dismissBatch() }
+    }
+
     fun disconnect() {
         viewModelScope.launch {
+            // Before the account goes: work queued against it would
+            // otherwise be handed to whatever is connected next, and the
+            // books it left mid-flight would sit queued forever.
+            downloads.cancelAll(BulkStopReason.ACCOUNT_CHANGED)
             repository.disconnect()
             _state.value = ServerAccountUiState()
         }
@@ -342,6 +400,8 @@ class ServerAccountViewModel(
     }
 
     companion object {
+        private const val TAG = "ServerAccountViewModel"
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container

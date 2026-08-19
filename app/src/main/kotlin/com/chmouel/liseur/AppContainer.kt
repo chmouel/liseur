@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.ConnectionsState
 import com.chmouel.liseur.data.calibre.CalibreCatalogClient
 import com.chmouel.liseur.data.calibre.CalibreFileSource
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
+import com.chmouel.liseur.data.calibre.BulkDownloadStore
 import com.chmouel.liseur.data.komga.KomgaCatalogClient
 import com.chmouel.liseur.data.komga.KomgaFileSource
 import com.chmouel.liseur.data.komga.KomgaSyncRepository
@@ -127,6 +128,9 @@ class AppContainer(context: Context) {
 
     val sessionState = SessionStateRepository(context.applicationContext)
 
+    /** The one bulk download that is running, or was last. */
+    val bulkDownloads = BulkDownloadStore(context.applicationContext)
+
     val remoteAccount = RemoteAccountRepository(
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
@@ -151,6 +155,8 @@ class AppContainer(context: Context) {
         context = context.applicationContext,
         bookDao = database.bookDao(),
         bookRemoval = bookRemoval,
+        scope = applicationScope,
+        bulkStore = bulkDownloads,
     )
 
     val bookUploads = BookUploadRepository(context.applicationContext)

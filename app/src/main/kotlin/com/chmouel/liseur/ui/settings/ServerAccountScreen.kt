@@ -35,12 +35,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import com.chmouel.liseur.data.calibre.BulkBatch
+import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
+import com.chmouel.liseur.data.calibre.BulkStopReason
+import com.chmouel.liseur.data.calibre.SpaceVerdict
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -106,6 +111,11 @@ fun ServerAccountScreen(
     onDisconnect: () -> Unit,
     onSyncNow: () -> Unit,
     onAnswerConfirmation: (String, Boolean) -> Unit,
+    onAskDownloadAll: () -> Unit,
+    onDismissDownloadAll: () -> Unit,
+    onDownloadAll: () -> Unit,
+    onCancelDownloadAll: () -> Unit,
+    onDismissBatch: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -175,6 +185,11 @@ fun ServerAccountScreen(
                         onDisconnect = onDisconnect,
                         uploadPolicy = state.uploadPolicy,
                         onSetUploadPolicy = onSetUploadPolicy,
+                        batch = state.bulkBatch,
+                        estimating = state.estimating,
+                        onAskDownloadAll = onAskDownloadAll,
+                        onCancelDownloadAll = onCancelDownloadAll,
+                        onDismissBatch = onDismissBatch,
                     )
                     if (server.kind == ServerKind.LISEUR_SYNC) {
                         if (state.confirmations.isNotEmpty()) {
@@ -206,6 +221,159 @@ fun ServerAccountScreen(
                 )
             }
         }
+    }
+
+    state.bulkEstimate?.let { estimate ->
+        DownloadAllDialog(
+            estimate = estimate,
+            onConfirm = onDownloadAll,
+            onDismiss = onDismissDownloadAll,
+        )
+    }
+}
+
+/**
+ * Says what fetching everything will cost, before it starts.
+ *
+ * A batch that will not fit is still offered rather than refused: it
+ * will stop of its own accord once the device runs low, and the books it
+ * did fetch are worth having. What the reader needs is to know that in
+ * advance, not to be argued with.
+ */
+@Composable
+private fun DownloadAllDialog(
+    estimate: BulkDownloadEstimate,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val free = Formatter.formatShortFileSize(context, estimate.freeBytes)
+    val size = estimate.bytes?.let { Formatter.formatShortFileSize(context, it) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (estimate.count == 0) {
+                    stringResource(R.string.download_all)
+                } else {
+                    pluralStringResource(
+                        R.plurals.download_all_confirm,
+                        estimate.count,
+                        estimate.count,
+                    )
+                },
+            )
+        },
+        text = {
+            Text(
+                when {
+                    estimate.count == 0 -> stringResource(R.string.download_all_none)
+                    size == null -> stringResource(R.string.download_all_size_unknown, free)
+                    estimate.verdict == SpaceVerdict.WILL_NOT_FIT ->
+                        stringResource(R.string.download_all_will_not_fit, size, free)
+                    estimate.verdict == SpaceVerdict.TIGHT ->
+                        stringResource(R.string.download_all_tight, size, free)
+                    else -> stringResource(R.string.download_all_size, size, free)
+                },
+            )
+        },
+        confirmButton = {
+            if (estimate.count > 0) {
+                TextButton(onClick = onConfirm) {
+                    Text(stringResource(R.string.download_all_start))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    stringResource(
+                        if (estimate.count == 0) R.string.close else R.string.cancel,
+                    ),
+                )
+            }
+        },
+    )
+}
+
+/**
+ * The bulk download, whichever half of its life it is in: a bar and a
+ * way to stop it while it runs, a summary and a way to dismiss that
+ * once it has ended.
+ *
+ * Partial success is the ordinary outcome here — a batch that stopped
+ * for room, or that the reader stopped, still leaves books behind that
+ * are worth having — so it is reported as a count rather than as a
+ * failure.
+ *
+ * A batch that has been asked to stop is not over yet: there is work
+ * still to cancel and rows still to put back, and dismissing it in that
+ * moment would take away the record the teardown navigates by. It says
+ * why it is stopping and offers nothing until it has.
+ */
+@Composable
+private fun BulkDownloadStatus(
+    batch: BulkBatch,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val finished = batch.done + batch.failed
+    val stopping = batch.stopReason != null && !batch.settled
+    if (batch.settled || batch.stopReason != null || finished >= batch.total) {
+        Text(
+            text = if (stopping) {
+                stringResource(R.string.download_all_stopping)
+            } else {
+                stringResource(R.string.download_all_done, batch.done, batch.total)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        batch.stopReason?.let { reason ->
+            Notice(
+                text = stringResource(
+                    when (reason) {
+                        BulkStopReason.CANCELLED -> R.string.download_all_stopped_cancelled
+                        BulkStopReason.OUT_OF_SPACE -> R.string.download_all_stopped_space
+                        BulkStopReason.ACCOUNT_CHANGED -> R.string.download_all_stopped_account
+                    },
+                ),
+                tone = if (reason == BulkStopReason.CANCELLED) {
+                    NoticeTone.NEUTRAL
+                } else {
+                    NoticeTone.PROBLEM
+                },
+            )
+        }
+        if (stopping) return
+        if (batch.failed > 0) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.download_all_failed,
+                    batch.failed,
+                    batch.failed,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onDismiss) {
+            Text(stringResource(R.string.dismiss))
+        }
+        return
+    }
+
+    Text(
+        text = stringResource(R.string.download_all_progress, finished, batch.total),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    if (!LocalEInk.current) {
+        LinearProgressIndicator(
+            progress = { if (batch.total == 0) 0f else finished.toFloat() / batch.total },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    TextButton(onClick = onCancel) {
+        Text(stringResource(R.string.download_all_cancel))
     }
 }
 
@@ -427,6 +595,11 @@ private fun ConnectedCard(
     onSyncNow: () -> Unit,
     uploadPolicy: UploadPolicy,
     onSetUploadPolicy: (UploadPolicy) -> Unit,
+    batch: BulkBatch?,
+    estimating: Boolean,
+    onAskDownloadAll: () -> Unit,
+    onCancelDownloadAll: () -> Unit,
+    onDismissBatch: () -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -477,6 +650,38 @@ private fun ConnectedCard(
         )
         TextButton(onClick = onRetryCapabilities, enabled = !busy) {
             Text(stringResource(R.string.server_check_again))
+        }
+    }
+
+    // Only where the account may actually fetch a file, and only one
+    // batch at a time: a second run started over the first would share
+    // its unique work names and end up counting somebody else's books.
+    if (server.canDownload) {
+        Text(
+            text = stringResource(R.string.download_all),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            text = stringResource(R.string.download_all_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (batch != null) {
+            BulkDownloadStatus(
+                batch = batch,
+                onCancel = onCancelDownloadAll,
+                onDismiss = onDismissBatch,
+            )
+        } else if (estimating) {
+            Text(
+                text = stringResource(R.string.download_all_working),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            TextButton(onClick = onAskDownloadAll, enabled = !busy) {
+                Text(stringResource(R.string.download_all))
+            }
         }
     }
 

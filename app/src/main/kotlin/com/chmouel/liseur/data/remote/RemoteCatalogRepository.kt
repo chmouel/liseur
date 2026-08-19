@@ -358,6 +358,7 @@ class RemoteCatalogRepository(
                 expectedUserSeriesUpdatedAt = update.snapshotUserSeriesUpdatedAt,
                 seriesId = book.seriesId,
                 personalSeriesUpdatedAt = book.personalSeriesUpdatedAt,
+                sizeBytes = book.sizeBytes,
             )
         }
         if (inserts.isNotEmpty()) bookDao.upsertAll(inserts.values.toList())
@@ -570,6 +571,11 @@ internal fun mergeCatalogEntry(
         downloadHref = remote.downloadHref,
         remoteUpdatedAt = remote.updatedAt,
         remotePageCount = remote.pageCount,
+        // A catalog page that leaves the size out should not erase a
+        // figure an earlier one gave: only calibre-web's paged feed
+        // carries it consistently, and losing it silently would make
+        // the bulk-download estimate worse over time, not better.
+        sizeBytes = remote.sizeBytes ?: book.sizeBytes,
         seriesName = filed.name,
         seriesIndex = filed.index,
         // A shelf id is what the reorder route speaks through, so losing one
