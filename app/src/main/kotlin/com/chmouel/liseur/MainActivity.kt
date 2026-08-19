@@ -41,6 +41,8 @@ import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
+import com.chmouel.liseur.ui.library.ConfirmLocalDeleteDialog
+import com.chmouel.liseur.ui.library.ConfirmRemoveDownloadDialog
 import com.chmouel.liseur.ui.library.ConfirmServerDeleteDialog
 import com.chmouel.liseur.ui.library.LibraryScreen
 import com.chmouel.liseur.ui.library.SeriesPickerSheet
@@ -557,6 +559,8 @@ private fun LibraryRoute(
 
     var seriesSheetBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesServerDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    var seriesLocalDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    var seriesRemoveDownload by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesSheetRefile by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     val seriesExtras by viewModel.openSeriesExtras.collectAsStateWithLifecycle()
 
@@ -611,7 +615,7 @@ private fun LibraryRoute(
                 onDismiss = { seriesSheetBook = null },
                 onDownload = { viewModel.download(book); seriesSheetBook = null },
                 onCancelDownload = { viewModel.cancelDownload(book); seriesSheetBook = null },
-                onRemoveDownload = { viewModel.removeDownload(book); seriesSheetBook = null },
+                onRemoveDownload = { seriesRemoveDownload = book; seriesSheetBook = null },
                 onSetFinished = { viewModel.setFinished(book, it); seriesSheetBook = null },
                 onSetArchived = { viewModel.setArchived(book, it); seriesSheetBook = null },
                 onOpenStats = { onOpenBookStats(book); seriesSheetBook = null },
@@ -619,7 +623,7 @@ private fun LibraryRoute(
                 // that landed on the wrong shelf gets off it, so it is
                 // offered here as well as on the shelf.
                 onEditSeries = { seriesSheetRefile = book; seriesSheetBook = null },
-                onDeleteLocal = { viewModel.deleteLocalBook(book); seriesSheetBook = null },
+                onDeleteLocal = { seriesLocalDelete = book; seriesSheetBook = null },
                 // The same warning the shelf puts in front of it. An
                 // action offered here and answered nowhere would be a
                 // button that quietly does nothing.
@@ -662,6 +666,26 @@ private fun LibraryRoute(
                     seriesServerDelete = null
                 },
                 onDismiss = { seriesServerDelete = null },
+            )
+        }
+        seriesLocalDelete?.let { book ->
+            ConfirmLocalDeleteDialog(
+                book = book,
+                onConfirm = {
+                    viewModel.deleteLocalBook(book)
+                    seriesLocalDelete = null
+                },
+                onDismiss = { seriesLocalDelete = null },
+            )
+        }
+        seriesRemoveDownload?.let { book ->
+            ConfirmRemoveDownloadDialog(
+                book = book,
+                onConfirm = {
+                    viewModel.removeDownload(book)
+                    seriesRemoveDownload = null
+                },
+                onDismiss = { seriesRemoveDownload = null },
             )
         }
         return

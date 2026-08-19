@@ -309,6 +309,9 @@
     <string name="delete_from_server_forget_reading">Also delete my reading history on the server</string>
     <string name="delete_from_server_forget_reading_hint">Your position and reading time are kept on the server so another device can pick them up. This only affects your own reading, never anyone else\'s.</string>
     <string name="server_delete_needs_reconnect">This connection cannot delete books from the server. Sign in to the server again to ask for that permission.</string>
+    <string name="delete_file_warning">“%1$s” will be permanently deleted from this device, along with any reading progress. This cannot be undone.</string>
+    <string name="remove_copy_warning">The downloaded copy of “%1$s” will be removed from this device. You can download it again from the server.</string>
+    <string name="remove">Remove</string>
     <string name="delete_from_server_failed">Could not delete “%1$s” from the server.</string>
     <string name="delete_local_failed">Could not delete the file for “%1$s”. Liseur may only be allowed to read that folder — add it again to grant deletion.</string>
     <string name="delete">Delete</string>

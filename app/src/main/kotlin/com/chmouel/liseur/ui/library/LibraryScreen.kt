@@ -209,6 +209,8 @@ fun LibraryScreen(
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     var sheetBook by remember { mutableStateOf<Book?>(null) }
     var confirmServerDelete by remember { mutableStateOf<Book?>(null) }
+    var confirmLocalDelete by remember { mutableStateOf<Book?>(null) }
+    var confirmRemoveDownload by remember { mutableStateOf<Book?>(null) }
     var editSeriesOf by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
     val eInk = LocalEInk.current
@@ -667,6 +669,28 @@ fun LibraryScreen(
         )
     }
 
+    confirmLocalDelete?.let { book ->
+        ConfirmLocalDeleteDialog(
+            book = book,
+            onConfirm = {
+                onDeleteLocal(book)
+                confirmLocalDelete = null
+            },
+            onDismiss = { confirmLocalDelete = null },
+        )
+    }
+
+    confirmRemoveDownload?.let { book ->
+        ConfirmRemoveDownloadDialog(
+            book = book,
+            onConfirm = {
+                onRemoveDownload(book)
+                confirmRemoveDownload = null
+            },
+            onDismiss = { confirmRemoveDownload = null },
+        )
+    }
+
     if (state.pendingUploads.isNotEmpty()) {
         UploadOfferDialog(
             count = state.pendingUploads.size,
@@ -686,12 +710,12 @@ fun LibraryScreen(
             uploading = book.url in state.uploading,
             onDownload = { onDownload(book); sheetBook = null },
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
-            onRemoveDownload = { onRemoveDownload(book); sheetBook = null },
+            onRemoveDownload = { confirmRemoveDownload = book; sheetBook = null },
             onSetFinished = { onSetFinished(book, it); sheetBook = null },
             onSetArchived = { onSetArchived(book, it); sheetBook = null },
             onOpenStats = { onOpenBookStats(book); sheetBook = null },
             onEditSeries = { editSeriesOf = book; sheetBook = null },
-            onDeleteLocal = { onDeleteLocal(book); sheetBook = null },
+            onDeleteLocal = { confirmLocalDelete = book; sheetBook = null },
             onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
             onUploadToServer = { onUploadToServer(book); sheetBook = null },
         )
@@ -779,6 +803,55 @@ internal fun ConfirmServerDeleteDialog(
                     text = stringResource(R.string.delete),
                     color = MaterialTheme.colorScheme.error,
                 )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+@Composable
+internal fun ConfirmLocalDeleteDialog(
+    book: Book,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.delete_file)) },
+        text = { Text(stringResource(R.string.delete_file_warning, book.title)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = stringResource(R.string.delete),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+@Composable
+internal fun ConfirmRemoveDownloadDialog(
+    book: Book,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.remove_copy_on_device)) },
+        text = { Text(stringResource(R.string.remove_copy_warning, book.title)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.remove))
             }
         },
         dismissButton = {
