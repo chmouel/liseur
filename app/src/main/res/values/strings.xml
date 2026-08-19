@@ -508,4 +508,11 @@
     <string name="duration_hours_minutes">%1$d h %2$d min</string>
     <string name="duration_none">None</string>
     <string name="more_options">More</string>
+    <string name="reader_footnote">Note</string>
+    <string name="reader_footnote_dismiss">Close note</string>
+    <string name="reader_footnote_go_to">Go to note</string>
+    <string name="reader_external_link_title">Leave Liseur?</string>
+    <string name="reader_external_link_body">This link opens %1$s in your browser. Liseur will not follow it for you.</string>
+    <string name="reader_external_link_open">Open</string>
+    <string name="reader_external_link_failed">No app on this device can open that link.</string>
 </resources>

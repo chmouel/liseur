@@ -65,7 +65,11 @@ and keep scrolling past the end of a chapter to fall into the next one.
 A discreet footer shows the time remaining in the chapter (just enough to
 convince yourself that one more chapter won't hurt), while highlights, margin
 notes, bookmarks, and instant dictionary lookups remain right under your
-fingers when you stumble upon a word you pretend to know.
+fingers when you stumble upon a word you pretend to know. Footnotes open as a
+small card over the page rather than throwing you to the back of the book, so
+an author's aside costs you nothing more than a tap — and when a note is long
+enough to deserve the full page, "Go to note" takes you there and leaves a way
+back.
 
 Your library gathers onto a single shelf, whether your books live in messy folders on your phone or on a self-hosted [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) or [liseur-sync](https://github.com/chmouel/liseur-sync) server. Books that belong to a series politely group into compact stacks that track your reading order, your progress, and the missing volumes you still need to hunt down. When you reach the final page of a novel, the next volume is already sitting there, gently enabling your binge-reading habits.
 
