@@ -1,6 +1,7 @@
 # 1. One Advanced entry, and nothing else
 
 Status: accepted
+GitHub issue: [#40](https://github.com/chmouel/liseur/issues/40)
 
 ## Context
 

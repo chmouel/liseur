@@ -1,6 +1,7 @@
 # 7. Scrubber page peek
 
 Status: proposed
+GitHub issue: [#47](https://github.com/chmouel/liseur/issues/47)
 
 ## Context
 

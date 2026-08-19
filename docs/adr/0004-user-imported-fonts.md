@@ -1,6 +1,7 @@
 # 4. User-imported fonts
 
 Status: proposed
+GitHub issue: [#6](https://github.com/chmouel/liseur/issues/6)
 
 ## Context
 

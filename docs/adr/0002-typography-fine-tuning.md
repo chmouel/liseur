@@ -1,6 +1,7 @@
 # 2. Typography fine-tuning
 
 Status: proposed
+GitHub issue: [#44](https://github.com/chmouel/liseur/issues/44)
 
 ## Context
 

@@ -1,6 +1,7 @@
 # 6. Auto-scroll
 
 Status: proposed
+GitHub issue: [#45](https://github.com/chmouel/liseur/issues/45)
 
 ## Context
 

@@ -1,6 +1,7 @@
 # 3. Read aloud
 
 Status: proposed
+GitHub issue: [#42](https://github.com/chmouel/liseur/issues/42)
 
 ## Context
 

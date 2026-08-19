@@ -1,6 +1,7 @@
 # 9. Tap-zone presets
 
 Status: proposed
+GitHub issue: [#46](https://github.com/chmouel/liseur/issues/46)
 
 ## Context
 

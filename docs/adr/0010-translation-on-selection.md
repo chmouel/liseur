@@ -1,6 +1,7 @@
 # 10. Translation on selection
 
 Status: proposed
+GitHub issue: [#3](https://github.com/chmouel/liseur/issues/3)
 
 ## Context
 

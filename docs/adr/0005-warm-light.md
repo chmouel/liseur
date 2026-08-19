@@ -1,6 +1,7 @@
 # 5. Warm light
 
 Status: proposed
+GitHub issue: [#43](https://github.com/chmouel/liseur/issues/43)
 
 ## Context
 

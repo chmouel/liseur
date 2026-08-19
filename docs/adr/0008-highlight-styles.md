@@ -1,6 +1,7 @@
 # 8. Highlight styles
 
 Status: proposed
+GitHub issue: [#41](https://github.com/chmouel/liseur/issues/41)
 
 ## Context
 
