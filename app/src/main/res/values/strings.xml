@@ -324,6 +324,10 @@
     </plurals>
     <string name="upload_offer_confirm">Send</string>
     <string name="upload_offer_dismiss">Not now</string>
+    <string name="upload_offer_always">Always send</string>
+    <string name="upload_offer_one_title">Send %1$s to the server?</string>
+    <string name="upload_offer_one_message">This book is only on this device. Sending it puts it in the library on your other devices too. Where you are in it stays where it is.</string>
+    <string name="upload_sending">Sending %1$s to your server</string>
     <string name="upload_policy">Books added on this device</string>
     <string name="upload_policy_ask">Ask before sending</string>
     <string name="upload_policy_ask_detail">You are asked each time, and can say no.</string>

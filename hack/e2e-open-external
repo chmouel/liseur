@@ -64,9 +64,66 @@ adb() { command adb -s "$serial" "$@"; }
 adb shell pm path "$APP_ID" >/dev/null 2>&1 ||
     die "$APP_ID is not installed on $serial; run make install"
 
+# The UI helpers in demo-books.sh dump the screen through here.
+work=$(mktemp -d)
+cleanup() {
+    adb shell rm -f /sdcard/liseur-ui.xml >/dev/null 2>&1 || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
 query() {
     adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \"$1\"" |
         tr -d '\r'
+}
+
+# The policy is a DataStore protobuf, which is no place to be poking a
+# value in by hand. Reading it takes a short string ("ask" is three
+# characters, under what strings(1) reports by default); writing it goes
+# through the screen that owns it, like a reader would.
+# Swipe up until a label is on screen. A settings screen is longer than
+# a phone, and tap_on can only reach what is drawn.
+scroll_to() {
+    local needle=$1 tries=0
+    while ((tries < 6)); do
+        on_screen "$needle" && return 0
+        adb shell input swipe 540 1700 540 700 250
+        sleep 1
+        tries=$((tries + 1))
+    done
+    on_screen "$needle" ||
+        die "never reached \"$needle\" by scrolling"
+}
+
+read_policy() {
+    adb shell "run-as $APP_ID cat /data/data/$APP_ID/files/datastore/app_settings.preferences_pb" |
+        strings -n 3 | grep -A1 upload_policy | tail -1
+}
+
+set_policy() {
+    local want=$1 label
+    case $want in
+        ask) label="Ask before sending" ;;
+        always) label="Send automatically" ;;
+        never) label="Keep them here" ;;
+        *) die "no such upload policy: $want" ;;
+    esac
+    [[ "$(read_policy)" == "$want" ]] && return 0
+    open_library
+    tap_on "More"
+    tap_on "Settings"
+    # Exact: the section's help icon is described "Book servers", and a
+    # prefix match reaches it first.
+    tap_on "Book server" exact
+    # The policy sits below the fold on a phone.
+    scroll_to "$label"
+    tap_on "$label" exact
+    [[ "$(read_policy)" == "$want" ]] ||
+        die "could not set the upload policy to $want"
+    back
+    sleep 1
+    back
+    sleep 2
 }
 
 if [[ -z "$book" ]]; then
@@ -102,7 +159,15 @@ note "$DROP"
 digest=$(sha256sum "$book" | cut -d' ' -f1)
 readonly IMPORTED="file:///data/user/0/$APP_ID/files/books/$digest.epub"
 
+# The policy that sends nothing is the one worth checking, because it
+# is the one where a passing run proves the least: silence looks the
+# same whether it was chosen or the code simply did not run. Shelving
+# still has to happen — keeping a book off the server is not a reason
+# to keep it off the shelf. It also keeps the offer dialog out of the
+# way of the swipe further down.
 step "Starting from nothing"
+policy_before=$(read_policy)
+set_policy never
 adb shell "am force-stop $APP_ID"
 sleep 1
 query "delete from reading_progress where book_url = '$IMPORTED';" >/dev/null
@@ -129,6 +194,7 @@ note "$before books on the shelf to begin with"
 step "Opening it the way another app would"
 adb shell "am force-stop $APP_ID"
 sleep 1
+adb logcat -c >/dev/null 2>&1 || true
 adb shell "am start -a android.intent.action.VIEW --grant-read-uri-permission \
     -d '$HANDOVER' -t application/epub+zip -n $READER_ACTIVITY" >/dev/null
 
@@ -202,6 +268,17 @@ if [[ -n "$url" ]]; then
         die "the shelved book is not in a state the upload offer can see"
     note "the book is one the offer can reach"
 fi
+
+# The policy that sends nothing is the one worth checking, because it
+# is the one where a passing run proves the least: silence looks the
+# same whether it was chosen or the code simply did not run.
+step "Checking nothing was sent when nothing may be"
+attempts=$(adb logcat -d 2>/dev/null | grep -c 'BookUploadWorker' || true)
+[[ "$attempts" == 0 ]] ||
+    die "nothing was meant to be sent, but $attempts uploads were attempted"
+note "shelved, and not one byte offered to the server"
+
+set_policy "$policy_before"
 
 adb shell rm -f "$DROP" >/dev/null 2>&1 || true
 adb shell "am start -n $MAIN_ACTIVITY" >/dev/null 2>&1 || true

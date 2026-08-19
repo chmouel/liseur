@@ -140,6 +140,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.UploadBookOfferDialog
 import com.chmouel.liseur.ui.BRAND_TILE_ASPECT
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.brandTileHeight
@@ -170,6 +171,7 @@ fun LibraryScreen(
     onDeleteFromServer: (Book, Boolean) -> Unit,
     onUploadToServer: (Book) -> Unit,
     onUploadPending: () -> Unit,
+    onUploadPendingAlways: () -> Unit,
     onDismissUploadPrompt: () -> Unit,
     onSetSeries: (Book, String?, Double?) -> Unit,
     onResetSeries: (Book) -> Unit,
@@ -180,6 +182,7 @@ fun LibraryScreen(
     onToggleSortDirection: () -> Unit,
     onDownloadAndOpen: (Book) -> Unit,
     failedOpens: Flow<Book>,
+    sentUp: Flow<Book>,
     onPendingOpenHandled: () -> Unit,
     onSearchQueryChange: (String) -> Unit = {},
     onToggleFilter: (LibraryFilterOption) -> Unit = {},
@@ -231,6 +234,11 @@ fun LibraryScreen(
             onPendingOpenHandled()
             snackbarHost.showSnackbar(downloadFailed.format(book.title))
         }
+    }
+
+    val sending = stringResource(R.string.upload_sending)
+    LaunchedEffect(sentUp) {
+        sentUp.collect { book -> snackbarHost.showSnackbar(sending.format(book.title)) }
     }
 
     // Raised on the series screen, shown here: the screen that raised it
@@ -692,11 +700,25 @@ fun LibraryScreen(
     }
 
     if (state.pendingUploads.isNotEmpty()) {
-        UploadOfferDialog(
-            count = state.pendingUploads.size,
-            onConfirm = onUploadPending,
-            onDismiss = onDismissUploadPrompt,
-        )
+        // One book was added by an act the reader can still remember, so
+        // it is named. A pile of them is a different question, and a
+        // list of titles is not a better way to ask it.
+        val single = state.pendingUploads.singleOrNull()
+        if (single != null) {
+            UploadBookOfferDialog(
+                title = single.title,
+                onSend = onUploadPending,
+                onAlways = onUploadPendingAlways,
+                onDismiss = onDismissUploadPrompt,
+            )
+        } else {
+            UploadOfferDialog(
+                count = state.pendingUploads.size,
+                onConfirm = onUploadPending,
+                onAlways = onUploadPendingAlways,
+                onDismiss = onDismissUploadPrompt,
+            )
+        }
     }
 
     sheetBook?.let { book ->
@@ -900,6 +922,7 @@ internal fun ConfirmRemoveDownloadDialog(
 internal fun UploadOfferDialog(
     count: Int,
     onConfirm: () -> Unit,
+    onAlways: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -909,13 +932,16 @@ internal fun UploadOfferDialog(
             Text(pluralStringResource(R.plurals.upload_offer_message, count, count))
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.upload_offer_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.upload_offer_dismiss))
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = onConfirm) {
+                    Text(stringResource(R.string.upload_offer_confirm))
+                }
+                TextButton(onClick = onAlways) {
+                    Text(stringResource(R.string.upload_offer_always))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.upload_offer_dismiss))
+                }
             }
         },
     )

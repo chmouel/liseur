@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -38,6 +39,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -119,6 +121,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -939,6 +942,47 @@ fun ReaderLoadingScreen() {
         BusyIndicator()
     }
 }
+
+/**
+ * A brief word that a book is on its way to the server.
+ *
+ * Only shown where the policy sends without asking. That path used to
+ * be entirely silent, which is what made a book failing to arrive so
+ * hard to notice — the reader had no reason to think anything had been
+ * attempted at all.
+ *
+ * It leaves on its own because it asks nothing. The offer that does ask
+ * is a dialog, and waits.
+ */
+@Composable
+fun SendingNote(
+    title: String?,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LaunchedEffect(title) {
+        if (title != null) {
+            delay(SENDING_NOTE_MS)
+            onDone()
+        }
+    }
+    AnimatedVisibility(
+        visible = title != null,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier,
+    ) {
+        Snackbar(
+            modifier = Modifier
+                .navigationBarsPadding()
+                .padding(16.dp),
+        ) {
+            Text(stringResource(R.string.upload_sending, title.orEmpty()))
+        }
+    }
+}
+
+private const val SENDING_NOTE_MS = 4_000L
 
 @Composable
 fun ReaderErrorScreen(message: String, onBack: () -> Unit) {

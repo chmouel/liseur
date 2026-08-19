@@ -29,8 +29,12 @@ target wrapping them — run `make help` for the short list. See
   sends, and then asserts against the app's database that the book was
   shelved, that the reading position hangs off that shelved row, that a
   second handover of the same file does not shelve it twice, and that
-  the upload offer can reach it. Pass `-u URL` to name the liseur-sync
-  server. `--help` for the flags.
+  the upload offer can reach it. It runs under the "keep them here"
+  upload policy — which it sets through the settings screen and puts
+  back afterwards — so it also proves that shelving a book and sending
+  it are separate: the book reaches the shelf while not one upload is
+  attempted. Pass `-u URL` to name the liseur-sync server. `--help` for
+  the flags.
 - **`lib/demo-books.sh`** — Library sourced by `screenshots`,
   `reset-books` and the `e2e-*` scripts: the demo book list, the uiautomator-driven UI helpers,
   and the fetch/push/grant-folder logic. Not meant to be run directly.

@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.remote.BookUploadRepository
+import com.chmouel.liseur.data.remote.UploadPrompts
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.remote.ServerDeleteResult
@@ -289,6 +290,7 @@ class LibraryViewModel(
     private val positionSync: PositionSyncCoordinator,
     private val downloads: BookDownloadRepository,
     private val uploads: BookUploadRepository,
+    private val prompts: UploadPrompts,
     private val account: RemoteAccountRepository,
     private val router: RemoteRouter,
     private val appSettings: AppSettingsRepository,
@@ -347,8 +349,12 @@ class LibraryViewModel(
         }
     }
 
-    private val _deleteFailures = MutableSharedFlow<DeleteFailure>(extraBufferCapacity = 1)
+    private val _sentUp = MutableSharedFlow<Book>(extraBufferCapacity = 4)
 
+    /** Books the Always policy sent up without asking anyone. */
+    val sentUp: Flow<Book> = _sentUp
+
+    private val _deleteFailures = MutableSharedFlow<DeleteFailure>(extraBufferCapacity = 1)
     /** Deletions that did not happen, so the library can say so. */
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
@@ -390,7 +396,8 @@ class LibraryViewModel(
             _searchQuery,
             _isSearchActive,
             uploadPromptDismissed,
-        ) { baseValues, query, searchActive, promptDismissed ->
+            prompts.answered,
+        ) { baseValues, query, searchActive, promptDismissed, answered ->
             @Suppress("UNCHECKED_CAST")
             val books = baseValues[0] as List<Book>
             val recent = baseValues[1] as ContinueReading?
@@ -530,14 +537,17 @@ class LibraryViewModel(
                 canUploadToServer = canUploadTo(server, router),
                 uploading = uploading,
                 // Only under Ask: Always has already sent them and Never
-                // is an answer that does not want asking again.
+                // is an answer that does not want asking again. Books
+                // answered in the reader are gone from here too, or
+                // pressing back would ask a second time about a book
+                // that was just declined.
                 pendingUploads = if (
                     promptDismissed || settings.uploadPolicy != UploadPolicy.ASK
                 ) {
                     emptyList()
                 } else {
                     books.awaitingUpload(canUploadTo(server, router))
-                        .filterNot { it.url in uploading }
+                        .filterNot { it.url in uploading || it.url in answered }
                 },
                 canResetSharedSeries = server?.kind == ServerKind.LISEUR_SYNC && server.canAdmin,
                 canRenameSeries = server?.kind == ServerKind.LISEUR_SYNC &&
@@ -636,7 +646,17 @@ class LibraryViewModel(
         viewModelScope.launch {
             combine(library.books, appSettings.settings, account.server) { books, settings, server ->
                 booksToSendUp(books, settings.uploadPolicy, canUploadTo(server, router))
-            }.collect { pending -> pending.forEach { uploads.enqueue(it) } }
+            }.collect { pending ->
+                pending.forEach {
+                    uploads.enqueue(it)
+                    prompts.answer(it.url)
+                    // Sending without asking used to be sending without
+                    // saying, which is how a book could fail to arrive
+                    // with nothing on screen ever having suggested it
+                    // was on its way.
+                    _sentUp.emit(it)
+                }
+            }
         }
     }
 
@@ -1059,17 +1079,34 @@ class LibraryViewModel(
     /** Sends one book the reader added here up to the server. */
     fun uploadToServer(book: Book) {
         uploads.enqueue(book)
+        prompts.answer(book.url)
         uploadPromptDismissed.value = true
     }
 
     /** Accepts the offer covering everything on the device but not the server. */
     fun uploadPending() {
-        state.value.pendingUploads.forEach { uploads.enqueue(it) }
+        state.value.pendingUploads.forEach {
+            uploads.enqueue(it)
+            prompts.answer(it.url)
+        }
         uploadPromptDismissed.value = true
+    }
+
+    /**
+     * Accepts the offer and stops it being made again.
+     *
+     * The setting this writes is the same one the server screen shows;
+     * it is offered beside the question so that "stop asking me" does
+     * not mean going to look for where that is said.
+     */
+    fun uploadPendingAlways() {
+        viewModelScope.launch { appSettings.setUploadPolicy(UploadPolicy.ALWAYS) }
+        uploadPending()
     }
 
     /** Turns the offer down for now; it comes back next time the app does. */
     fun dismissUploadPrompt() {
+        state.value.pendingUploads.forEach { prompts.answer(it.url) }
         uploadPromptDismissed.value = true
     }
 
@@ -1086,6 +1123,7 @@ class LibraryViewModel(
                     positionSync = container.positionSync,
                     downloads = container.bookDownloads,
                     uploads = container.bookUploads,
+                    prompts = container.uploadPrompts,
                     account = container.remoteAccount,
                     router = container.remoteRouter,
                     appSettings = container.appSettings,
@@ -1165,6 +1203,35 @@ internal fun Book.livesOnlyOnThisDevice(): Boolean =
     remoteUuid == null && !ServerKind.isRemoteUrl(url)
 
 /**
+ * What to do about a book that has just been added, in one place.
+ *
+ * The reader asks this of a book handed over by another app, and the
+ * shelf asks it of a book that arrived through the picker. Both must
+ * reach the same verdict, so neither works it out for itself.
+ *
+ * [alreadyAnswered] is what stops the two of them arguing: a book
+ * answered in the reader must not be asked about again on the shelf a
+ * moment later. See `UploadPrompts`, which remembers that for as long
+ * as the process lives and no longer.
+ */
+internal enum class UploadDecision { SEND, ASK, NOTHING }
+
+internal fun uploadOnOpen(
+    book: Book,
+    policy: UploadPolicy,
+    canUpload: Boolean,
+    alreadyAnswered: Boolean,
+): UploadDecision = when {
+    // Offering what the server will refuse is worse than offering
+    // nothing, and a book it already has is not a question.
+    !canUpload || !book.mayGoUp() -> UploadDecision.NOTHING
+    alreadyAnswered -> UploadDecision.NOTHING
+    policy == UploadPolicy.NEVER -> UploadDecision.NOTHING
+    policy == UploadPolicy.ALWAYS -> UploadDecision.SEND
+    else -> UploadDecision.ASK
+}
+
+/**
  * The books that should go up without anyone being asked.
  *
  * The ALWAYS policy is read here and nowhere else. The library watches
@@ -1177,12 +1244,9 @@ internal fun booksToSendUp(
     books: List<Book>,
     policy: UploadPolicy,
     canUpload: Boolean,
-): List<Book> =
-    if (policy != UploadPolicy.ALWAYS) {
-        emptyList()
-    } else {
-        books.awaitingUpload(canUpload)
-    }
+): List<Book> = books.filter {
+    uploadOnOpen(it, policy, canUpload, alreadyAnswered = false) == UploadDecision.SEND
+}
 
 /**
  * The books that are on this device and nowhere else.
@@ -1193,5 +1257,8 @@ internal fun booksToSendUp(
  */
 internal fun List<Book>.awaitingUpload(canUpload: Boolean): List<Book> {
     if (!canUpload) return emptyList()
-    return filter { it.livesOnlyOnThisDevice() && it.archivedAt == null }
+    return filter { it.mayGoUp() }
 }
+
+/** Whether a book is one the server has not got and would be given. */
+internal fun Book.mayGoUp(): Boolean = livesOnlyOnThisDevice() && archivedAt == null
