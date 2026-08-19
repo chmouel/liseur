@@ -3,6 +3,10 @@
 What to build next, and what has been ruled out, is in
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
+What each supported server exposes, what is implemented against it, and
+why the remaining gaps are or are not fixable is in
+[`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
+
 This project uses the Gradle wrapper, so you don't need Gradle installed
 separately — just a JDK 17+ and the Android SDK (command-line tools are
 enough; `compileSdk`/`targetSdk` 37 requires a reasonably recent SDK
