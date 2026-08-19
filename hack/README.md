@@ -30,7 +30,10 @@ target wrapping them — run `make help` for the short list. See
   the F-Droid update. See `DEVELOPER.md` for the full workflow and flags.
 - **`generate-release-notes`** — Writes the GitHub release notes for a
   tag by asking Gemini to turn the commits since the previous tag into
-  prose; falls back to the F-Droid changelog if that fails.
+  prose. It also reads the pull requests associated with those commits,
+  links each described change back to its PR, and carries over a relevant
+  screenshot from the PR body when one is present. It falls back to the
+  F-Droid changelog if generation fails.
 - **`verify-reproducible`** — Builds the release APK twice from two
   independent clean checkouts and diffs them byte for byte, the check
   F-Droid's reproducible-builds requirement demands before submission.
