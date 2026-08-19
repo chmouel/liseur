@@ -58,7 +58,7 @@ class LiseurSyncServerSetupTest {
             json(
                 """{"id":"t-1","device_id":"d-1","name":"Test phone",
                     "scopes":["sync","read-insights","library-read","library-manage",
-                    "library-upload"],
+                    "library-upload","library-delete"],
                     "account_id":"acc-9"}
                 """.trimIndent(),
             ),
@@ -73,6 +73,7 @@ class LiseurSyncServerSetupTest {
         assertTrue(capabilities.canDownload)
         assertTrue(capabilities.canManageLibrary)
         assertTrue(capabilities.canUpload)
+        assertTrue(capabilities.canDelete)
         assertEquals("ada", capabilities.displayName)
 
         // The password went to the login route and nowhere else, and
@@ -83,11 +84,11 @@ class LiseurSyncServerSetupTest {
         assertTrue(minted.target!!.endsWith("/v1/tokens"))
         val body = JSONObject(minted.body!!.utf8())
         val asked = body.getJSONArray("scopes")
-        assertEquals(5, asked.length())
+        assertEquals(6, asked.length())
         assertEquals(
             setOf(
                 "sync", "read-insights", "library-read", "library-manage",
-                "library-upload",
+                "library-upload", "library-delete",
             ),
             (0 until asked.length()).map { asked.getString(it) }.toSet(),
         )

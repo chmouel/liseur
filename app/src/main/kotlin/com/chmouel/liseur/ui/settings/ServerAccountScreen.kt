@@ -558,6 +558,18 @@ private fun ConnectedCard(
         }
     }
 
+    // A token minted before the delete scope existed does not carry it,
+    // and the app cannot widen one: that route authenticates with the
+    // account password, which is never kept here. So say what the
+    // reader has to do rather than hide an action with no explanation.
+    if (server.kind == ServerKind.LISEUR_SYNC && !server.canDelete) {
+        Text(
+            text = stringResource(R.string.server_delete_needs_reconnect),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
     // The Kobo token is a calibre-web notion; the others have nothing like it.
     if (server.kind == ServerKind.CALIBRE) {        AdvancedSection(server = server, onKoboToken = onKoboToken)
     }

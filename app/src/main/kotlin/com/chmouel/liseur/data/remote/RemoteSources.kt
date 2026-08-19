@@ -102,6 +102,16 @@ data class ServerCapabilities(
      * this says "worth offering", not "will succeed".
      */
     val canUpload: Boolean = false,
+    /**
+     * Whether the account may delete a book from the server's library
+     * (ADR-0025).
+     *
+     * Separate from [canUpload] because the server keeps them separate:
+     * adding your own book and destroying everyone's are different
+     * questions. Like [canUpload] it is only half the answer — the
+     * server decides per folder too — so this says "worth offering".
+     */
+    val canDelete: Boolean = false,
     /** Whether the account can also write the shared catalog layer. */
     val canAdmin: Boolean = false,
     /** Who the server says we are, for telling two logins apart. */
