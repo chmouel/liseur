@@ -24,7 +24,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 35,
+    version = 36,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -978,6 +978,23 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
+         * Records whether the connected account may delete a book from
+         * the server's library (ADR-0025). Off for every existing row,
+         * and unlike [MIGRATION_34_35] it stays off until the reader
+         * signs in again: a token minted before the scope existed does
+         * not carry it, and the app cannot widen one without the
+         * account password it never keeps.
+         */
+        val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `can_delete` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
          */
@@ -1016,6 +1033,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_32_33,
             MIGRATION_33_34,
             MIGRATION_34_35,
+            MIGRATION_35_36,
         )
     }
 }

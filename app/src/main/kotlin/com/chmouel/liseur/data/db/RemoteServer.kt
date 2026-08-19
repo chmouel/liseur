@@ -45,6 +45,14 @@ data class RemoteServer(
     @ColumnInfo(name = "can_download") val canDownload: Boolean,
     @ColumnInfo(name = "can_manage_library") val canManageLibrary: Boolean = false,
     @ColumnInfo(name = "can_upload") val canUpload: Boolean = false,
+    /**
+     * Whether this connection may delete a book from the server
+     * (ADR-0025). liseur-sync only: calibre-web's delete is gated on a
+     * deleter existing for the kind, and turning that into a stored
+     * capability would switch it off for every server paired before
+     * this column existed.
+     */
+    @ColumnInfo(name = "can_delete") val canDelete: Boolean = false,
     @ColumnInfo(name = "can_admin") val canAdmin: Boolean = false,
     @ColumnInfo(name = "added_at") val addedAt: Long,
     @ColumnInfo(name = "catalog_synced_at") val catalogSyncedAt: Long?,

@@ -105,6 +105,7 @@ class LiseurSyncServerSetup(
                 LiseurSyncApi.SCOPE_LIBRARY_MANAGE in scopes || isAdmin,
             canManageLibrary = LiseurSyncApi.SCOPE_LIBRARY_MANAGE in scopes || isAdmin,
             canUpload = LiseurSyncApi.SCOPE_LIBRARY_UPLOAD in scopes || isAdmin,
+            canDelete = LiseurSyncApi.SCOPE_LIBRARY_DELETE in scopes || isAdmin,
             canAdmin = isAdmin,
             accountId = answer.optString("device_id").takeIf { it.isNotEmpty() },
             displayName = answer.optString("name").ifEmpty { "liseur-sync" },
