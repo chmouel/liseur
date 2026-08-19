@@ -89,6 +89,9 @@ you choose to add.
 ## Development
 
 See [DEVELOPER.md](DEVELOPER.md) for build instructions and architecture notes.
+What each supported server exposes, what is implemented against it, and
+why the remaining gaps are or are not fixable is in
+[`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
 ## What's in a name?
 
