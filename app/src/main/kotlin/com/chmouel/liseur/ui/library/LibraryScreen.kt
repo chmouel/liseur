@@ -744,6 +744,57 @@ fun LibraryScreen(
 }
 
 /**
+ * The one shape every "are you sure about this book?" question takes.
+ *
+ * They differ only in what they say and whether the deed can be undone,
+ * so they are one composable with those as arguments. Written three
+ * times over they would drift, and the fourth would be written by
+ * copying whichever was nearest.
+ *
+ * [destructive] paints the confirming word in the error colour. It is
+ * for what cannot be taken back; removing a download can, and saying
+ * otherwise in red teaches a reader to read none of them.
+ */
+@Composable
+private fun ConfirmBookActionDialog(
+    title: String,
+    warning: String,
+    confirmLabel: String,
+    destructive: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    extra: (@Composable () -> Unit)? = null,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(warning)
+                extra?.invoke()
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = confirmLabel,
+                    color = if (destructive) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        Color.Unspecified
+                    },
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+/**
  * The warning that stands in front of deleting a book from the server.
  *
  * Shared by every screen that offers the action, because a screen that
@@ -758,107 +809,82 @@ internal fun ConfirmServerDeleteDialog(
     canForgetReading: Boolean = false,
 ) {
     var forgetReading by rememberSaveable { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.delete_from_server)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.delete_from_server_warning, book.title))
-                // Only where there is a reading on the server to forget.
-                // calibre-web keeps none, so offering the choice there
-                // would be a box that answers nothing.
-                if (canForgetReading) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { forgetReading = !forgetReading },
-                    ) {
-                        Checkbox(
-                            checked = forgetReading,
-                            onCheckedChange = { forgetReading = it },
+    ConfirmBookActionDialog(
+        title = stringResource(R.string.delete_from_server),
+        warning = stringResource(R.string.delete_from_server_warning, book.title),
+        confirmLabel = stringResource(R.string.delete),
+        destructive = true,
+        onConfirm = { onConfirm(forgetReading) },
+        onDismiss = onDismiss,
+        // Only where there is a reading on the server to forget.
+        // calibre-web keeps none, so offering the choice there would be a
+        // box that answers nothing.
+        extra = if (!canForgetReading) {
+            null
+        } else {
+            {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { forgetReading = !forgetReading },
+                ) {
+                    Checkbox(
+                        checked = forgetReading,
+                        onCheckedChange = { forgetReading = it },
+                    )
+                    Column(modifier = Modifier.padding(start = 4.dp)) {
+                        Text(
+                            text = stringResource(
+                                R.string.delete_from_server_forget_reading,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
                         )
-                        Column(modifier = Modifier.padding(start = 4.dp)) {
-                            Text(
-                                text = stringResource(
-                                    R.string.delete_from_server_forget_reading,
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.delete_from_server_forget_reading_hint,
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        Text(
+                            text = stringResource(
+                                R.string.delete_from_server_forget_reading_hint,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(forgetReading) }) {
-                Text(
-                    text = stringResource(R.string.delete),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
             }
         },
     )
 }
 
+/** The warning in front of destroying the file on this device. */
 @Composable
 internal fun ConfirmLocalDeleteDialog(
     book: Book,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.delete_file)) },
-        text = { Text(stringResource(R.string.delete_file_warning, book.title)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(
-                    text = stringResource(R.string.delete),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
+    ConfirmBookActionDialog(
+        title = stringResource(R.string.delete_file),
+        warning = stringResource(R.string.delete_file_warning, book.title),
+        confirmLabel = stringResource(R.string.delete),
+        destructive = true,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
     )
 }
 
+/** The check in front of throwing away a copy the server can send again. */
 @Composable
 internal fun ConfirmRemoveDownloadDialog(
     book: Book,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.remove_copy_on_device)) },
-        text = { Text(stringResource(R.string.remove_copy_warning, book.title)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.remove))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
+    ConfirmBookActionDialog(
+        title = stringResource(R.string.remove_copy_on_device),
+        warning = stringResource(R.string.remove_copy_warning, book.title),
+        confirmLabel = stringResource(R.string.remove),
+        destructive = false,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
     )
 }
 
