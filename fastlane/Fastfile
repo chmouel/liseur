@@ -1,0 +1,36 @@
+# Google Play uploads only. Nothing here is part of building Liseur:
+# F-Droid and the GitHub release both build the APK with plain Gradle and
+# never see this directory.
+#
+# The metadata under fastlane/metadata/android is written for F-Droid and
+# happens to be supply's native layout, so Play reads the same files. Only
+# the changelog is pushed from here: the store listing itself is edited in
+# the console, because Play holds the declarations (data safety, content
+# rating, target audience) that no file in this repository describes, and
+# an accidental metadata push is a listing change under review.
+
+default_platform(:android)
+
+platform :android do
+  desc "Upload the release bundle to the Play internal testing track"
+  lane :internal do
+    bundle = "app/build/outputs/bundle/release/app-release.aab"
+    UI.user_error!("no bundle at #{bundle} — run ./gradlew bundleRelease") unless File.exist?(bundle)
+
+    upload_to_play_store(
+      track: "internal",
+      aab: bundle,
+      # A track upload is a release; the APK path belongs to GitHub.
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      # The first upload of all is done by hand, because enrolling the
+      # signing key happens inside the console's release wizard. Every
+      # upload after that goes straight to the testers.
+      release_status: "completed",
+      validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
+    )
+  end
+end

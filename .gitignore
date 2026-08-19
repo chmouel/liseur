@@ -16,3 +16,9 @@ keystore.properties
 *.jks
 *.keystore
 *.p12
+
+# fastlane writes these next to the configuration it is given.
+fastlane/report.xml
+fastlane/README.md
+fastlane/Preview.html
+fastlane/play-service-account.json

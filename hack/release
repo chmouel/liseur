@@ -18,6 +18,7 @@ readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
 readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
 readonly PASS_GEMINI_KEY="google/gemini-api"
+readonly PASS_PLAY_SERVICE_ACCOUNT="android/google.play.service.serviceaccount"
 readonly NOTES_MODEL="gemini-3.6-flash"
 readonly REQUIRED_SECRETS=(
     LISEUR_KEYSTORE_BASE64
@@ -25,6 +26,7 @@ readonly REQUIRED_SECRETS=(
     LISEUR_KEY_ALIAS
     LISEUR_KEY_PASSWORD
     GEMINI_API_KEY
+    LISEUR_PLAY_SERVICE_ACCOUNT_JSON
 )
 
 usage() {
@@ -51,7 +53,8 @@ release wants --no-fdroid. Once the inclusion request is merged, run
 hack/release --fdroid-only VERSION to catch that release up.
 
 The signing key lives in pass, under android/liseur.keystore.p12,
-android/liseur.keystore-password and android/liseur.keystore-alias. Any
+android/liseur.keystore-password and android/liseur.keystore-alias, and the
+Play upload credential under android/google.play.service.serviceaccount. Any
 release secret missing from the GitHub release environment is uploaded
 from there, so a fresh clone needs nothing but an unlocked password store.
 EOF
@@ -132,6 +135,8 @@ sync_release_secrets() {
     set_release_secret LISEUR_KEY_PASSWORD \
         "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
     set_release_secret GEMINI_API_KEY "$(pass_show "$PASS_GEMINI_KEY")"
+    set_release_secret LISEUR_PLAY_SERVICE_ACCOUNT_JSON \
+        "$(pass_show "$PASS_PLAY_SERVICE_ACCOUNT")"
 }
 
 github_release_is_published() {

@@ -78,7 +78,8 @@ When you switch between devices, you have the choice to have your place travel w
 Everything runs privately and without distraction. There are no trackers, no
 analytics, no ads, and no attempts to sell you a monthly subscription for books
 you already own. Liseur only talks to the book servers and dictionary sources
-you choose to add.
+you choose to add. The [privacy policy](https://chmouel.github.io/liseur/PRIVACY)
+spells out exactly what that means.
 
 ## Install
 
