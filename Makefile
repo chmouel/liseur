@@ -12,12 +12,13 @@ PACKAGE := com.chmouel.liseur
 ACTIVITY := $(PACKAGE)/.MainActivity
 DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
 
-.PHONY: help build debug release test lint check clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic
+.PHONY: help build debug release bundle test lint check clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic
 
 help:
 	@printf '%s\n' \
 		'make build             Build the debug APK' \
 		'make release           Build the release APK' \
+		'make bundle            Build the release AAB for Google Play' \
 		'make test              Run JVM unit tests' \
 		'make lint              Run Android Lint' \
 		'make check             Run tests, lint, and debug build' \
@@ -40,6 +41,11 @@ build debug:
 
 release:
 	$(GRADLE) assembleRelease
+
+# Google Play only. F-Droid and the GitHub release both build the APK
+# above, so this target is additive and nothing else depends on it.
+bundle:
+	$(GRADLE) bundleRelease
 
 test:
 	$(GRADLE) testDebugUnitTest

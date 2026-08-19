@@ -1,0 +1,2 @@
+json_key_file(ENV["SUPPLY_JSON_KEY"].to_s)
+package_name("com.chmouel.liseur")
