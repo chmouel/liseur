@@ -293,7 +293,9 @@ thing:
   using the hand-written changelog as the summary to lead with. It also
   gives Gemini the associated pull-request descriptions, links changes
   back to those PRs, and carries a relevant screenshot over from a PR
-  body when one is available.
+  body when one is available. Those screenshots are re-sized to a fixed
+  width (`SCREENSHOT_WIDTH` in the script) before the notes are written,
+  so a full-size PR image cannot blow the page apart.
 
 Without `GEMINI_API_KEY`, or if the request fails, the generated notes
 fall back to the hand-written changelog, so a release is never held up

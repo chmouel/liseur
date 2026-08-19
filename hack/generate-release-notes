@@ -14,6 +14,11 @@ readonly BUILD_FILE="app/build.gradle.kts"
 readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
 readonly GH_REPO="chmouel/liseur"
 readonly MODEL="gemini-3.6-flash"
+# Screenshots come from pull-request bodies, where they were sized for a
+# wide review page. At full size they push a release note apart, so every
+# one of them is re-sized here, in pixels. Only the width is set: the
+# height follows, and a phone screenshot stays a phone screenshot.
+readonly SCREENSHOT_WIDTH=320
 # Roughly the point where the prompt stops being worth the tokens. The
 # commit messages carry the meaning in this repository; the diffstat is
 # only there for scale.
@@ -130,7 +135,8 @@ EOF
         mv "$trimmed" "$prompt"
     fi
 
-    cat >> "$prompt" <<'EOF'
+    {
+        cat <<'EOF'
 
 Rules:
 
@@ -144,11 +150,18 @@ Rules:
 - When a bullet came from a pull request listed above, end it with a
   link such as `([#12](https://github.com/chmouel/liseur/pull/12))`.
   Cite every applicable pull request, but do not invent an association.
+EOF
+        cat <<EOF
 - If that pull request body contains a screenshot for the feature,
-  reproduce its original Markdown image or HTML `<img>` immediately
-  after the bullet. Keep its existing URL and useful alt text. Do not
-  include recordings, empty screenshot sections or "not included"
-  placeholders, and do not show the same image twice.
+  show it immediately after the bullet, on its own line, as an HTML
+  \`<img>\` tag: \`<img src="URL" alt="ALT" width="$SCREENSHOT_WIDTH">\`.
+  Keep the original asset URL and write short, useful alt text. Never
+  use Markdown image syntax, and carry over no other attribute: no
+  height, no style, no width of its own. Do not include recordings,
+  empty screenshot sections or "not included" placeholders, and do not
+  show the same image twice.
+EOF
+        cat <<'EOF'
 - Say what a person can now do, not what a class was renamed to. Never
   name a file, a class or a function.
 - Leave out dependency bumps, CI, release plumbing and documentation
@@ -160,6 +173,22 @@ Rules:
 
 Output only Markdown, with no code fences around it.
 EOF
+    } >> "$prompt"
+}
+
+# Puts every screenshot at one size, whatever the model copied out of the
+# pull request: Markdown images become `<img>`, and any width, height or
+# style that came with the tag is dropped for SCREENSHOT_WIDTH.
+normalize_screenshots() {
+    local notes=$1 normalized
+
+    normalized=$(mktemp -p "$workdir")
+    sed -E \
+        -e "s@!\[([^]]*)\]\(([^)\"[:space:]]+)[^)]*\)@<img src=\"\2\" alt=\"\1\">@g" \
+        -e "/<img/ s@[[:space:]]+(width|height|style)=(\"[^\"]*\"|'[^']*'|[^[:space:]>]+)@@g" \
+        -e "/<img/ s@(<img[^>]*[^[:space:]/])[[:space:]]*/?>@\1 width=\"$SCREENSHOT_WIDTH\">@g" \
+        "$notes" > "$normalized"
+    mv "$normalized" "$notes"
 }
 
 generate() {
@@ -244,6 +273,8 @@ main() {
         if ! generate "$prompt" "$notes"; then
             printf 'Could not generate notes: using the changelog.\n' >&2
             printf '%s\n' "$changelog" > "$notes"
+        else
+            normalize_screenshots "$notes"
         fi
     fi
 
