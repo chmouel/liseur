@@ -97,6 +97,10 @@ why the remaining gaps are or are not fixable is in
 
 **Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified just like the English word *leisure*, which is exactly what you should be doing when you curl up with a good book.
 
+Here is a painting of Pierre-August Renoir portraying C.Monet as "Le liseur"
+
+[<img width="336" height="568" alt="image" src="https://github.com/user-attachments/assets/3a412231-9d5d-4131-8afd-b1a1f6da2a90" />
+](https://fr.wikipedia.org/wiki/Fichier:Pierre-Auguste_Renoir_-_Claude_Monet_(Le_Liseur).jpg)
 ## Author
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github)](https://github.com/sponsors/chmouel)
