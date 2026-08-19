@@ -114,6 +114,36 @@ class MigrationTest {
     }
 
     @Test
+    fun `a book from before sizes were kept arrives with none`() {
+        // The column has to land empty rather than at zero: zero is a
+        // size, and a shelf of them would price a bulk download at
+        // nothing at all.
+        helper.createDatabase(TEST_DB, 36).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_override, series_claim_pending,
+                    series_claim_reset, series_index_override
+                ) VALUES (
+                    'calibre:sized', 'Red Rising', 'Pierce Brown', NULL, NULL, 1, 2,
+                    'REMOTE', 0, 0, 0, 0, 0
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT size_bytes FROM books WHERE url = 'calibre:sized'")
+                    .use { cursor ->
+                        assertTrue(cursor.moveToFirst())
+                        assertTrue(cursor.isNull(0))
+                    }
+            }
+    }
+
+    @Test
     fun `a book survives every upgrade`() {
         helper.createDatabase(TEST_DB, 1).use { old ->
             old.execSQL(
@@ -690,6 +720,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 36
+        const val LATEST = 37
     }
 }

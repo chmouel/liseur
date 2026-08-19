@@ -75,6 +75,8 @@ Your library gathers onto a single shelf, whether your books live in messy folde
 
 When you switch between devices, you have the choice to have your place travel with you across your devices. Two-way synchronization with [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) and [liseur-sync](https://github.com/chmouel/liseur-sync) keeps your progress aligned — down to the exact sentence on Komga and liseur-sync, so you never have to play the guessing game of where you were. liseur-sync goes one further: standalone EPUB files that never came from a catalog sync their position too, matched by the file itself. Its books come from folders it watches on the server, so anything you drop there shows up on the shelf.
 
+About to lose your connection? **Download all books** on the server account screen fetches everything in the catalog that isn't already on your device, in one go. Books you already have are left alone, archived ones are skipped, and it tells you how much room it will need before it starts.
+
 Everything runs privately and without distraction. There are no trackers, no
 analytics, no ads, and no attempts to sell you a monthly subscription for books
 you already own. Liseur only talks to the book servers and dictionary sources

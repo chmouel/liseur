@@ -80,6 +80,16 @@ data class Book(
      */
     @ColumnInfo(name = "remote_page_count") val remotePageCount: Int? = null,
     /**
+     * How big the server says the file is, in bytes. Kept so that
+     * "download everything" can say what that will cost before it
+     * starts, rather than finding out a book at a time.
+     *
+     * Null when the server does not say, and for every local book: the
+     * figure is the catalog's claim, not a measurement, and is treated
+     * as untrusted input wherever it is added up.
+     */
+    @ColumnInfo(name = "size_bytes") val sizeBytes: Long? = null,
+    /**
      * The series this book belongs to, spelled the way its source spells
      * it. Which books make up that series is worked out from this name
      * rather than from [seriesId], so a book downloaded from a server
@@ -585,6 +595,7 @@ interface BookDao {
             remote_book_id = :remoteBookId, cover_url = :coverUrl,
             download_href = :downloadHref, remote_updated_at = :remoteUpdatedAt,
             remote_page_count = :remotePageCount,
+            size_bytes = COALESCE(:sizeBytes, size_bytes),
             catalog_series_name = :catalogSeriesName,
             catalog_series_index = :catalogSeriesIndex,
             catalog_folder_id = :catalogFolderId,
@@ -700,6 +711,7 @@ interface BookDao {
         expectedUserSeriesUpdatedAt: Long?,
         seriesId: String?,
         personalSeriesUpdatedAt: Long? = null,
+        sizeBytes: Long? = null,
     )
 
     @Query("DELETE FROM books WHERE url IN (:urls)")

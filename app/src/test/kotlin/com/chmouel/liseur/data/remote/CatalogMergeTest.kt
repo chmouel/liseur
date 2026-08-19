@@ -215,4 +215,38 @@ class CatalogMergeTest {
         assertEquals("My Shelf", merged.seriesName)
         assertEquals(null, merged.seriesIndex)
     }
+
+    @Test
+    fun `carries the size the server reported`() {
+        // Nothing reads it until a bulk download is priced, and by then
+        // the catalog walk is long over: dropping it here is dropping it
+        // for good.
+        val merged = mergeCatalogEntry(
+            entry,
+            null,
+            url = "calibre:abc-123",
+            baseUrl = "https://books.example.com",
+            now = 9_999L,
+        )
+
+        assertEquals(1_000_000L, merged.sizeBytes)
+    }
+
+    @Test
+    fun `keeps a size a later page forgot to mention`() {
+        // Only calibre-web's feed carries a length on every entry. A
+        // refresh from a server that mentions it once should not make
+        // the estimate worse each time it runs.
+        val known = downloadedAndFinished.copy(sizeBytes = 1_000_000L)
+
+        val merged = mergeCatalogEntry(
+            entry.copy(sizeBytes = null),
+            known,
+            url = "calibre:abc-123",
+            baseUrl = "https://books.example.com",
+            now = 9_999L,
+        )
+
+        assertEquals(1_000_000L, merged.sizeBytes)
+    }
 }

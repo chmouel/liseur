@@ -455,6 +455,11 @@ private fun ServerAccountRoute(
         onDisconnect = viewModel::disconnect,
         onSyncNow = viewModel::syncPositions,
         onAnswerConfirmation = viewModel::answerConfirmation,
+        onAskDownloadAll = viewModel::askToDownloadAll,
+        onDismissDownloadAll = viewModel::dismissDownloadAll,
+        onDownloadAll = viewModel::downloadAll,
+        onCancelDownloadAll = viewModel::cancelDownloadAll,
+        onDismissBatch = viewModel::dismissBatch,
         onBack = onBack,
     )
 }

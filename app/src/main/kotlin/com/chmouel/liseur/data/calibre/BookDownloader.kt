@@ -17,6 +17,9 @@ sealed interface DownloadFailure {
     /** The book is no longer downloadable from the catalog. */
     data object Gone : DownloadFailure
 
+    /** There is no room left on the device for the rest of the file. */
+    data object OutOfSpace : DownloadFailure
+
     data class Network(val message: String) : DownloadFailure
 }
 
@@ -35,7 +38,21 @@ sealed interface DownloadOutcome {
  * so a book edited on the server is fetched again rather than stitched
  * together from two different versions.
  */
-class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
+class BookDownloader(
+    private val http: RemoteHttp = RemoteHttp(),
+    /**
+     * How many bytes are still free where the file is being written, or
+     * null to write without looking.
+     *
+     * Checked as the bytes go down rather than once before they start,
+     * because several downloads can run at once and a check made before
+     * writing is exactly the check they all pass together. Nothing needs
+     * to be coordinated between them: this is not a prediction but a
+     * reading, and every sibling's part-file has already been taken out
+     * of it by the time it is read.
+     */
+    private val freeSpace: (() -> Long)? = null,
+) {
 
     suspend fun download(
         request: Request.Builder,
@@ -96,6 +113,7 @@ class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
                         val buffer = ByteArray(BUFFER)
                         var written = alreadyHave
                         var sinceReport = 0L
+                        var sinceSpaceCheck = 0L
                         while (true) {
                             coroutineContext.ensureActive()
                             val read = input.read(buffer)
@@ -103,6 +121,15 @@ class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
                             output.write(buffer, 0, read)
                             written += read
                             sinceReport += read
+                            sinceSpaceCheck += read
+                            if (sinceSpaceCheck >= CHECK_SPACE_EVERY) {
+                                sinceSpaceCheck = 0
+                                if (outOfSpace()) {
+                                    return@withContext DownloadOutcome.Failed(
+                                        DownloadFailure.OutOfSpace,
+                                    )
+                                }
+                            }
                             if (sinceReport >= REPORT_EVERY) {
                                 onProgress(written, total)
                                 sinceReport = 0
@@ -123,12 +150,48 @@ class BookDownloader(private val http: RemoteHttp = RemoteHttp()) {
             etagFile.delete()
             DownloadOutcome.Done(target)
         } catch (e: IOException) {
-            DownloadOutcome.Failed(DownloadFailure.Network(e.message ?: "The download stopped"))
+            // A periodic check can be overtaken between two readings,
+            // and the filesystem gets the last word either way. Telling
+            // this apart from a dropped connection matters: one is worth
+            // retrying and the other is worth stopping for.
+            if (isOutOfSpace(e)) {
+                DownloadOutcome.Failed(DownloadFailure.OutOfSpace)
+            } else {
+                DownloadOutcome.Failed(DownloadFailure.Network(e.message ?: "The download stopped"))
+            }
         }
+    }
+
+    private fun outOfSpace(): Boolean {
+        val free = freeSpace?.invoke() ?: return false
+        return free < BULK_DOWNLOAD_RESERVE_BYTES
     }
 
     private companion object {
         const val BUFFER = 64 * 1024
         const val REPORT_EVERY = 256 * 1024
+        const val CHECK_SPACE_EVERY = 4L * 1024 * 1024
     }
+}
+
+/**
+ * Whether the filesystem, rather than the network, is what stopped a
+ * write.
+ *
+ * There is no typed exception for it: `ENOSPC` surfaces as a plain
+ * [IOException] whose message the C library wrote, so the message is all
+ * there is to go on. Matched loosely and case-insensitively, and read as
+ * a hint — a miss falls back to treating it as a network failure, which
+ * is retried, and a device that is genuinely full will simply say so
+ * again.
+ */
+internal fun isOutOfSpace(e: IOException): Boolean {
+    val message = generateSequence(e as Throwable) { it.cause }
+        .mapNotNull { it.message }
+        .joinToString(" ")
+        .lowercase()
+    return "enospc" in message ||
+        "no space left" in message ||
+        "not enough space" in message ||
+        "disk full" in message
 }
