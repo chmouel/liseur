@@ -46,6 +46,14 @@ make SERIAL=emulator-5556 run         # use a specific emulator with SERIAL=...
 CI (`.github/workflows/build.yml`) runs `testDebugUnitTest`, `lintDebug`, and
 `assembleDebug` on every push/PR to `main`.
 
+## Pull requests
+
+When creating a pull request for a UI change, if an emulator is available and
+the user has authorized deployment, build and install the debug APK, navigate
+to the affected screen, capture a relevant screenshot, and attach it to the
+pull request description through GitHub's user-attachments API. If a screenshot
+is not possible, state why in the pull request.
+
 Releases go out with `hack/release`. **Never cut a release, create a
 tag, or install/replace an app on a device without asking the user
 first.** The script also updates the F-Droid
