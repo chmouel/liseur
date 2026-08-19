@@ -172,6 +172,7 @@ want:
 ```bash
 hack/release --yes 0.2.1 "Fix page fitting on tall screens."
 hack/release --fdroid-only 0.2.1     # re-run just the F-Droid step
+hack/release --no-play 0.2.1 "..."   # leave Google Play out of this one
 ```
 
 It refuses to run on a dirty tree, off `main`, out of sync with the
@@ -181,13 +182,30 @@ invoking it again with the same version.
 
 Pushing the tag is what starts `.github/workflows/release.yml`, which
 builds and signs the APK in the `release` GitHub environment and
-attaches it to the release. That environment must hold
+attaches it to the release. Signing is what that environment must hold:
 `LISEUR_KEYSTORE_BASE64`, `LISEUR_KEYSTORE_PASSWORD`,
-`LISEUR_KEY_ALIAS`, `LISEUR_KEY_PASSWORD` and
-`LISEUR_PLAY_SERVICE_ACCOUNT_JSON`; `hack/release` creates the
-environment and uploads whichever of them are missing straight from
-`pass`, so an unlocked password store is the only setup a fresh clone
-needs. To refresh them all, after rotating the key for instance:
+`LISEUR_KEY_ALIAS`, `LISEUR_KEY_PASSWORD` and, for the release notes,
+`GEMINI_API_KEY`. Without them there is no release.
+
+`LISEUR_PLAY_SERVICE_ACCOUNT_JSON` is the odd one out. It buys the third
+channel rather than the release itself, and the workflow skips Google
+Play entirely when it is absent. `hack/release` uploads it with the rest
+all the same, so in practice a release goes to Play unless you say
+otherwise:
+
+```bash
+hack/release --no-play 0.9.0 "..."
+```
+
+That is the only way to keep Play out of a release once the credential
+has been uploaded once. Deleting the secret by hand does not do it —
+`hack/release` reads one missing secret as a stale environment and
+uploads them all again from `pass`, Play credential included.
+
+`hack/release` creates the environment and uploads whichever secrets are
+missing straight from `pass`, so an unlocked password store is the only
+setup a fresh clone needs. To refresh them all, after rotating the key
+for instance:
 
 ```bash
 hack/release --sync-secrets
@@ -213,7 +231,9 @@ publishing plugin is applied, and the bundle is an extra output rather
 than a replacement — which is also why the Play step in
 `.github/workflows/release.yml` is `continue-on-error` and skips itself
 entirely when the service account secret is absent. A fork, or a rejected
-upload, must not be what makes a release fail.
+upload, must not be what makes a release fail. `hack/release --no-play`
+turns that skip into something you can ask for, by leaving the credential
+off the release environment instead of topping it up.
 
 The upload runs `fastlane android internal` with
 `SUPPLY_JSON_KEY` pointing at a service account credential written to
