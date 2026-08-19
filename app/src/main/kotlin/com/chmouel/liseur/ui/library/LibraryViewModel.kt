@@ -55,6 +55,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.data.db.RemoteServer
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -349,7 +350,14 @@ class LibraryViewModel(
         }
     }
 
-    private val _sentUp = MutableSharedFlow<Book>(extraBufferCapacity = 4)
+    // Drops rather than waits. The one collector shows a snackbar, and
+    // showSnackbar() does not return until that snackbar is dismissed,
+    // so a suspending emit would put the length of a queue of notices
+    // between a book and the upload it is announcing. A notice four
+    // books out of date is worth less than the one for the book going
+    // up now, which is the one this keeps.
+    private val _sentUp =
+        MutableSharedFlow<Book>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     /** Books the Always policy sent up without asking anyone. */
     val sentUp: Flow<Book> = _sentUp
@@ -653,8 +661,10 @@ class LibraryViewModel(
                     // Sending without asking used to be sending without
                     // saying, which is how a book could fail to arrive
                     // with nothing on screen ever having suggested it
-                    // was on its way.
-                    _sentUp.emit(it)
+                    // was on its way. Best-effort, and deliberately so:
+                    // whether anyone is looking at the shelf to be told
+                    // must not decide whether the book goes up.
+                    _sentUp.tryEmit(it)
                 }
             }
         }
