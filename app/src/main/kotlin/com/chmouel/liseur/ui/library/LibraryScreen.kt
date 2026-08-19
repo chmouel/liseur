@@ -706,6 +706,7 @@ fun LibraryScreen(
             onDismiss = { sheetBook = null },
             canDownload = state.canDownload,
             canDeleteFromServer = state.canDeleteFromServer,
+            serverDeleteNeedsReconnect = state.serverDeleteNeedsReconnect,
             canUploadToServer = state.canUploadToServer,
             uploading = book.url in state.uploading,
             onDownload = { onDownload(book); sheetBook = null },
@@ -928,6 +929,7 @@ internal fun BookActionsSheet(
     downloading: Boolean,
     canDownload: Boolean,
     canDeleteFromServer: Boolean,
+    serverDeleteNeedsReconnect: Boolean,
     canUploadToServer: Boolean,
     uploading: Boolean,
     onDismiss: () -> Unit,
@@ -1041,6 +1043,17 @@ internal fun BookActionsSheet(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+            } else if (book.remoteUuid != null && serverDeleteNeedsReconnect) {
+                // Say why rather than leave a gap. The action is missing
+                // for a reason the reader can act on, and one they would
+                // never guess from an absence.
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = stringResource(R.string.server_delete_needs_reconnect),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
             }
         }
     }
