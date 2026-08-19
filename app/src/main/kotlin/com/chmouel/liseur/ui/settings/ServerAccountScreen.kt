@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -42,6 +44,7 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -66,6 +69,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.PositionSyncStatus
@@ -545,17 +550,7 @@ private fun ConnectedCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            UploadPolicy.entries.forEachIndexed { index, policy ->
-                SegmentedButton(
-                    selected = uploadPolicy == policy,
-                    onClick = { onSetUploadPolicy(policy) },
-                    shape = SegmentedButtonDefaults.itemShape(index, UploadPolicy.entries.size),
-                ) {
-                    Text(stringResource(policy.labelRes()))
-                }
-            }
-        }
+        UploadPolicyChoice(selected = uploadPolicy, onSelected = onSetUploadPolicy)
     }
 
     // A token minted before the delete scope existed does not carry it,
@@ -867,4 +862,60 @@ private fun UploadPolicy.labelRes(): Int = when (this) {
     UploadPolicy.ASK -> R.string.upload_policy_ask
     UploadPolicy.ALWAYS -> R.string.upload_policy_always
     UploadPolicy.NEVER -> R.string.upload_policy_never
+}
+
+private fun UploadPolicy.detailRes(): Int = when (this) {
+    UploadPolicy.ASK -> R.string.upload_policy_ask_detail
+    UploadPolicy.ALWAYS -> R.string.upload_policy_always_detail
+    UploadPolicy.NEVER -> R.string.upload_policy_never_detail
+}
+
+/**
+ * The three ways a new book may reach the server, one under the other.
+ *
+ * A segmented row cannot hold these: three multi-word labels wrap to two
+ * lines each on a phone, and the selected one loses more width still to
+ * its check mark. Stacking them buys the room to say what each choice
+ * does, which matters here because the difference between them is a
+ * book leaving the device or not.
+ */
+@Composable
+private fun UploadPolicyChoice(
+    selected: UploadPolicy,
+    onSelected: (UploadPolicy) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup(),
+    ) {
+        UploadPolicy.entries.forEach { policy ->
+            val chosen = policy == selected
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .selectable(
+                        selected = chosen,
+                        role = Role.RadioButton,
+                        onClick = { onSelected(policy) },
+                    )
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = chosen, onClick = null)
+                Column(Modifier.padding(start = 4.dp)) {
+                    Text(
+                        text = stringResource(policy.labelRes()),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = stringResource(policy.detailRes()),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
 }

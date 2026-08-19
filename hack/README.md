@@ -23,6 +23,14 @@ target wrapping them — run `make help` for the short list. See
   neither can pass on a mock. `e2e-delete -o DIR` also writes
   screenshots of the sheet and the confirmation, which is where the
   pictures in a pull request come from. `--help` for the flags.
+- **`e2e-open-external`** — End-to-end check that a book handed over by
+  another app lands on the shelf. Pushes an EPUB somewhere nothing
+  watches, opens it through the same `VIEW` intent a file manager
+  sends, and then asserts against the app's database that the book was
+  shelved, that the reading position hangs off that shelved row, that a
+  second handover of the same file does not shelve it twice, and that
+  the upload offer can reach it. Pass `-u URL` to name the liseur-sync
+  server. `--help` for the flags.
 - **`lib/demo-books.sh`** — Library sourced by `screenshots`,
   `reset-books` and the `e2e-*` scripts: the demo book list, the uiautomator-driven UI helpers,
   and the fetch/push/grant-folder logic. Not meant to be run directly.

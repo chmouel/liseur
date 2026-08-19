@@ -326,8 +326,11 @@
     <string name="upload_offer_dismiss">Not now</string>
     <string name="upload_policy">Books added on this device</string>
     <string name="upload_policy_ask">Ask before sending</string>
+    <string name="upload_policy_ask_detail">You are asked each time, and can say no.</string>
     <string name="upload_policy_always">Send automatically</string>
+    <string name="upload_policy_always_detail">New books go up on their own.</string>
     <string name="upload_policy_never">Keep them here</string>
+    <string name="upload_policy_never_detail">Nothing is sent. Books stay on this device.</string>
     <string name="upload_policy_summary">A book you open or drop into a watched folder can be sent up to the server, so your other devices see it too.</string>
 
     <string name="settings">Settings</string>

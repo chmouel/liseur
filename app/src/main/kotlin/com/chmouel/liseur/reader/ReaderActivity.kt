@@ -9,6 +9,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import com.chmouel.liseur.data.settings.AppSettings
@@ -21,6 +23,9 @@ import com.chmouel.liseur.reader.chrome.BookSyncDialog
 import com.chmouel.liseur.reader.chrome.PageTurner
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.ui.library.booksToSendUp
+import com.chmouel.liseur.ui.library.canUploadTo
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import com.chmouel.liseur.ui.theme.isDark
 import org.readium.r2.navigator.preferences.ReadingProgression
@@ -29,6 +34,7 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.WidthClass
 import com.chmouel.liseur.ui.widthClass
 import com.chmouel.liseur.ui.ProvideEInk
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -46,17 +52,24 @@ class ReaderActivity : FragmentActivity() {
      */
     private var volumeKeysTurnPages = true
 
-    private val bookUrl: AbsoluteUrl? by lazy {
-        (intent.getStringExtra(EXTRA_URL)?.toUri() ?: intent.data)?.toAbsoluteUrl()
-    }
-
-    private val bookId: String by lazy {
-        intent.getStringExtra(EXTRA_ID) ?: checkNotNull(bookUrl).toString()
-    }
-
     private val viewModel: ReaderViewModel by viewModels {
-        ReaderViewModel.factory(checkNotNull(bookUrl), bookId)
+        val open = checkNotNull(target)
+        ReaderViewModel.factory(open.url, open.id)
     }
+
+    /**
+     * The book to open and the name its reading is filed under.
+     *
+     * Not always the URI the intent carried: a book handed over by
+     * another app is shelved first, and may end up being read from the
+     * copy that put it in the library. Resolving before the view model
+     * exists is what keeps the reader's place attached to the shelf
+     * entry — filing the book afterwards would strand the position
+     * under a URI the library knows nothing about.
+     */
+    private data class OpenTarget(val url: AbsoluteUrl, val id: String)
+
+    private var target by mutableStateOf<OpenTarget?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // The Publication doesn't survive process death, so saved navigator
@@ -65,10 +78,39 @@ class ReaderActivity : FragmentActivity() {
         // recreation via android:configChanges.
         super.onCreate(null)
 
-        val url = bookUrl
-        if (url == null) {
+        val fromLibrary = intent.getStringExtra(EXTRA_URL)
+        val incoming = fromLibrary?.toUri() ?: intent.data
+        val url = incoming?.toAbsoluteUrl()
+        if (incoming == null || url == null) {
             finish()
             return
+        }
+
+        if (fromLibrary != null) {
+            target = OpenTarget(url, intent.getStringExtra(EXTRA_ID) ?: url.toString())
+        } else {
+            // Handed over by another app. Shelve it, then read the copy
+            // the library settled on. If that cannot be done the book is
+            // still opened from where it came: failing to file a book is
+            // no reason to refuse to show it.
+            lifecycleScope.launch {
+                val shelved = container.libraryRepository.importExternalBook(incoming)
+                val openable = shelved?.openableUrl?.toUri()?.toAbsoluteUrl()
+                target = if (shelved != null && openable != null) {
+                    OpenTarget(openable, shelved.url)
+                } else {
+                    OpenTarget(url, url.toString())
+                }
+                // onResume has already come and gone with no book to
+                // start, so the reader has to be started here instead.
+                // Only when it is genuinely in front: any later resume
+                // finds a settled target and does this itself, and the
+                // recorder counts resumes rather than tolerating them.
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    viewModel.onReaderResumed()
+                }
+                if (shelved != null) sendUpIfPolicySays(shelved)
+            }
         }
 
         enableEdgeToEdge()
@@ -86,6 +128,12 @@ class ReaderActivity : FragmentActivity() {
                     dynamicColor = settings.dynamicColor,
                     monochrome = LocalEInk.current,
                 ) {
+                    // Nothing may touch the view model until the book has a
+                    // name, because building it is what fixes that name.
+                    if (target == null) {
+                        ReaderLoadingScreen()
+                        return@LiseurTheme
+                    }
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     // Hosted above the loading state so a note about a manual
                     // sync can show whatever screen the reader is on.
@@ -237,12 +285,30 @@ class ReaderActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * Sends a newly shelved book to the server when the reader has
+     * asked for that to happen by itself.
+     *
+     * The library does the same for books that arrive while it is on
+     * screen, but a reader who only ever opens books from a file manager
+     * may not go there for days. The verdict comes from the one place
+     * that holds it, so this cannot drift from what the shelf would do.
+     */
+    private suspend fun sendUpIfPolicySays(book: Book) {
+        val policy = container.appSettings.settings.first().uploadPolicy
+        val server = container.remoteAccount.current()
+        val canUpload = canUploadTo(server, container.remoteRouter)
+        booksToSendUp(listOf(book), policy, canUpload)
+            .forEach { container.bookUploads.enqueue(it) }
+    }
+
     override fun onResume() {
         super.onResume()
-        // Nothing was ever opened, so there is no view model to ask —
-        // touching it here would build one around a URL that is not
-        // there. See onCreate, which has already called finish().
-        if (bookUrl == null) return
+        // Nothing was ever opened, or the book is still being shelved, so
+        // there is no view model to ask — touching it here would build one
+        // around a URL that is not settled yet. See onCreate, which has
+        // already called finish() in the first case.
+        if (target == null) return
         // The activity is in front of the reader. The recorder also
         // waits until the publication is ready, so loading and failures
         // do not become reading time.
@@ -250,7 +316,7 @@ class ReaderActivity : FragmentActivity() {
     }
 
     override fun onPause() {
-        if (bookUrl != null) {
+        if (target != null) {
             // Mark the reader inactive before FragmentActivity pauses the
             // navigator. Readium can publish a layout/restoration locator
             // from inside that pause; it is not a page the reader turned.
@@ -265,7 +331,7 @@ class ReaderActivity : FragmentActivity() {
         super.onStop()
         // Leaving the book is the moment the position is worth sending:
         // it is settled, and the reader is likely to pick up elsewhere.
-        viewModel.onReaderStopped()
+        if (target != null) viewModel.onReaderStopped()
     }
 
     /**

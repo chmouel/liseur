@@ -95,6 +95,103 @@ class LocalLibraryRepository(
         return indexBook(url, source = null)
     }
 
+    /**
+     * Shelves a book handed over by another app.
+     *
+     * A book opened from a file manager, a download or an attachment
+     * arrives as a bare URI with no library row behind it. Without one
+     * it can be read but never seen again: the shelf is built from
+     * `books`, and so is every offer to send a book to a server.
+     *
+     * The URI usually cannot simply be kept. A `VIEW` grant lasts as
+     * long as the task that received it and is only persistable when the
+     * sender said so, which most file managers do not. Storing it anyway
+     * would shelve a book that stops opening at the next reboot, so the
+     * bytes are copied in when the grant will not persist.
+     *
+     * Returns the shelved book, or null when it could not be read at
+     * all — in which case the caller should still open what it was
+     * given, because failing to file a book is no reason to refuse to
+     * show it.
+     */
+    suspend fun importExternalBook(uri: Uri): Book? {
+        val incoming = uri.toAbsoluteUrl() ?: return null
+        bookDao.getByUrl(incoming.toString())?.let { return it }
+
+        // A real file is already as permanent as the library is, and a
+        // grant that survives is just as good. Either way the book is
+        // indexed where it lies rather than copied.
+        val keepsWorking = incoming.toString().startsWith("file:") || persistPermission(uri)
+        if (keepsWorking) return indexBook(incoming, source = null)
+
+        val copied = copyIntoLibrary(uri) ?: return null
+        // Content addressing makes this idempotent: the same file opened
+        // twice lands on the same path, so the second time finds the row
+        // the first one made instead of shelving the book again.
+        bookDao.getByUrl(copied.toString())?.let { return it }
+        return indexBook(copied, source = null)
+    }
+
+    /**
+     * Whether this URI can still be read once the task that granted it
+     * is gone. Only the sender can make that possible, so being refused
+     * is the ordinary case and not worth a warning.
+     */
+    private fun persistPermission(uri: Uri): Boolean =
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }.onFailure {
+            Log.i(TAG, "The grant on $uri cannot be persisted; copying the book instead")
+        }.isSuccess
+
+    /**
+     * Copies a book into the app's own storage, named after the digest
+     * of its contents, and returns where it landed.
+     *
+     * It is spooled to a temporary file first because the name is not
+     * known until the last byte has been read. A file that is already
+     * there is the same book by definition, so the copy is dropped.
+     */
+    private suspend fun copyIntoLibrary(uri: Uri): AbsoluteUrl? = withContext(Dispatchers.IO) {
+        val dir = File(context.filesDir, "books").apply { mkdirs() }
+        val spool = File.createTempFile("import", ".part", dir)
+        try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val read = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    spool.outputStream().use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n <= 0) break
+                            digest.update(buffer, 0, n)
+                            output.write(buffer, 0, n)
+                        }
+                    }
+                    true
+                } ?: false
+            }.getOrElse {
+                Log.w(TAG, "Could not read $uri to bring it into the library", it)
+                false
+            }
+            if (!read) return@withContext null
+
+            val target = File(dir, importedFileName(digest.digest()))
+            if (target.exists()) {
+                spool.delete()
+            } else if (!spool.renameTo(target)) {
+                Log.w(TAG, "Could not put the imported book at $target")
+                return@withContext null
+            }
+            Uri.fromFile(target).toAbsoluteUrl()
+        } finally {
+            if (spool.exists()) spool.delete()
+        }
+    }
+
     suspend fun markOpened(url: String) {
         bookDao.touchLastOpened(url, System.currentTimeMillis())
     }
@@ -431,3 +528,14 @@ internal fun sha1Hex(value: String): String =
     MessageDigest.getInstance("SHA-1")
         .digest(value.toByteArray())
         .joinToString("") { "%02x".format(it) }
+
+/**
+ * What an imported book is called once it is in the app's own storage.
+ *
+ * The name is the digest of the bytes, so the same book brought in
+ * twice — from a second download, or the same file opened again after
+ * the grant on it lapsed — resolves to one file and one shelf entry
+ * rather than accumulating copies.
+ */
+internal fun importedFileName(digest: ByteArray): String =
+    digest.joinToString("", postfix = ".epub") { "%02x".format(it) }
