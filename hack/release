@@ -28,14 +28,20 @@ readonly REQUIRED_SECRETS=(
     GEMINI_API_KEY
     LISEUR_PLAY_SERVICE_ACCOUNT_JSON
 )
+# Set by --no-play. The release workflow skips Google Play entirely when
+# it finds no service account, so leaving the credential off the release
+# environment is the whole of the opt-out — but only if this script does
+# not put it back, which it otherwise does the moment it notices it
+# missing.
+skip_play=false
 
 usage() {
     cat <<'EOF'
 Usage:
-  hack/release [--no-fdroid]
-  hack/release [--yes] [--no-fdroid] VERSION RELEASE NOTES...
+  hack/release [--no-fdroid] [--no-play]
+  hack/release [--yes] [--no-fdroid] [--no-play] VERSION RELEASE NOTES...
   hack/release --fdroid-only VERSION
-  hack/release --sync-secrets
+  hack/release [--no-play] --sync-secrets
 
 With no version it shows what has landed since the last release, offers
 the next major, minor and patch, and opens an editor on a changelog
@@ -45,6 +51,7 @@ Examples:
   hack/release 0.2.0 "Add in-book search and a Wiktionary lookup card."
   hack/release --yes 0.2.1 "Fix page fitting on tall screens."
   hack/release --no-fdroid 0.1.0 "The first release."
+  hack/release --no-play 0.2.2 "Leave Google Play out of this one."
   hack/release --fdroid-only 0.2.1
   hack/release --sync-secrets
 
@@ -57,6 +64,12 @@ android/liseur.keystore-password and android/liseur.keystore-alias, and the
 Play upload credential under android/google.play.service.serviceaccount. Any
 release secret missing from the GitHub release environment is uploaded
 from there, so a fresh clone needs nothing but an unlocked password store.
+
+--no-play leaves the Play credential alone: it is neither required nor
+uploaded, and the release workflow skips Google Play whenever it finds
+none. Use it while the Play listing is not ready to receive builds. It
+changes nothing else — the GitHub release and the F-Droid submission go
+out as usual.
 EOF
 }
 
@@ -112,14 +125,20 @@ set_release_secret() {
 
 sync_release_secrets() {
     local force=${1:-false}
-    local available missing=() secret
+    local available missing=() secret wanted=()
 
     gh api --silent --method PUT "repos/$GH_REPO/environments/release" ||
         die "could not create the release environment on $GH_REPO"
 
+    for secret in "${REQUIRED_SECRETS[@]}"; do
+        [[ "$skip_play" == true &&
+            "$secret" == LISEUR_PLAY_SERVICE_ACCOUNT_JSON ]] && continue
+        wanted+=("$secret")
+    done
+
     available=$(gh secret list --repo "$GH_REPO" --env release |
         cut -f1) || available=""
-    for secret in "${REQUIRED_SECRETS[@]}"; do
+    for secret in "${wanted[@]}"; do
         grep -qx "$secret" <<<"$available" || missing+=("$secret")
     done
 
@@ -135,8 +154,10 @@ sync_release_secrets() {
     set_release_secret LISEUR_KEY_PASSWORD \
         "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
     set_release_secret GEMINI_API_KEY "$(pass_show "$PASS_GEMINI_KEY")"
-    set_release_secret LISEUR_PLAY_SERVICE_ACCOUNT_JSON \
-        "$(pass_show "$PASS_PLAY_SERVICE_ACCOUNT")"
+    if [[ "$skip_play" == false ]]; then
+        set_release_secret LISEUR_PLAY_SERVICE_ACCOUNT_JSON \
+            "$(pass_show "$PASS_PLAY_SERVICE_ACCOUNT")"
+    fi
 }
 
 github_release_is_published() {
@@ -596,6 +617,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-fdroid)
             skip_fdroid=true
+            shift
+            ;;
+        --no-play)
+            skip_play=true
             shift
             ;;
         --sync-secrets)
