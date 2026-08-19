@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+#
+# End-to-end check of the delete path: a book on a liseur-sync server is
+# deleted from the phone, and it goes from the server's disk as well as
+# from this device.
+#
+#   hack/e2e-delete -u URL -t TOKEN -d /path/to/folder/root
+#
+#   -u  the server as the *device* sees it (an emulator reaches the host
+#       at 10.0.2.2, never at 127.0.0.1)
+#   -t  a device-token secret holding at least sync, library-read and
+#       library-delete
+#   -d  the watched folder's root on this machine, so the script can see
+#       what left it
+#   -s  pick a device when several are attached
+#   -o  also write screenshots of the sheet and the dialog into a
+#       directory, for a pull request
+#
+# The folder must already accept uploads, because that is what makes it
+# a folder this server may delete from (ADR-0025):
+#
+#   liseur-sync admin folder-uploads <folder-id> on
+#
+# Nothing here is faked. The app is driven through its own screens, the
+# delete is a real DELETE over the network, and the assertions read the
+# server's disk and the app's database.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly MAIN_ACTIVITY="$APP_ID/.MainActivity"
+
+# shellcheck source=hack/lib/demo-books.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/demo-books.sh"
+
+serial="" url="" token="" root="" shots=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -s | --serial) serial=${2:-}; shift ;;
+        -u | --url) url=${2:-}; shift ;;
+        -t | --token) token=${2:-}; shift ;;
+        -d | --dir) root=${2:-}; shift ;;
+        -o | --shots) shots=${2:-}; shift ;;
+        -h | --help)
+            sed -n '3,26p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) die "unknown argument $1" ;;
+    esac
+    shift
+done
+
+[[ -n "$url" ]] || die "need -u, the server address as the device sees it"
+[[ -n "$token" ]] || die "need -t, a device token with the library-delete scope"
+[[ -n "$root" ]] || die "need -d, the watched folder's root on this machine"
+[[ -d "$root" ]] || die "$root is not a directory"
+
+command -v adb >/dev/null || die "adb is not installed"
+command -v python3 >/dev/null || die "python3 is not installed"
+
+if [[ -z "$serial" ]]; then
+    mapfile -t devices < <(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+    [[ ${#devices[@]} -eq 1 ]] ||
+        die "expected exactly one attached device, got ${#devices[@]}; pass --serial"
+    serial=${devices[0]}
+fi
+
+adb() { command adb -s "$serial" "$@"; }
+
+adb shell pm path "$APP_ID" >/dev/null 2>&1 ||
+    die "$APP_ID is not installed on $serial; run make install"
+
+work=$(mktemp -d)
+cleanup() {
+    adb shell rm -f /sdcard/liseur-ui.xml >/dev/null 2>&1 || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+query() {
+    adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \"$1\"" |
+        tr -d '\r'
+}
+
+shot() {
+    [[ -n "$shots" ]] || return 0
+    mkdir -p "$shots"
+    adb exec-out screencap -p >"$shots/$1.png"
+    note "wrote $shots/$1.png"
+}
+
+hide_keyboard() {
+    local tries=0
+    while ((tries < 5)); do
+        adb shell dumpsys input_method | grep -q "mInputShown=true" || return 0
+        adb shell input keyevent KEYCODE_BACK
+        sleep 1
+        tries=$((tries + 1))
+    done
+    die "the soft keyboard would not go away"
+}
+
+type_into() {
+    local needle=$1 text=$2 at
+    hide_keyboard
+    at=$(wait_for "$needle" 25) || die "no field called \"$needle\""
+    # shellcheck disable=SC2086
+    adb shell input tap $at
+    sleep 1
+    adb shell input text "${text//&/\\&}"
+    sleep 1
+}
+
+tap_button() {
+    hide_keyboard
+    tap_on "$@"
+}
+
+before=$(find "$root" -name '*.epub' | wc -l | tr -d ' ')
+[[ "$before" -gt 0 ]] || die "$root holds no books to delete"
+
+step "Connecting to $url"
+open_library
+# A device left connected by an earlier run is already where this step
+# was trying to get to, and walking the form again would only find the
+# account screen where it expected the kind picker.
+if [[ $(query "select count(*) from remote_server where base_url = '$url';") == 1 ]]; then
+    note "already connected to $url"
+    already=yes
+fi
+if [[ -z "${already:-}" ]]; then
+tap_on "More" exact
+tap_on "Settings"
+tap_on "Book server" exact
+if at=$(wait_for "Dismiss" 6 exact); then
+    # shellcheck disable=SC2086
+    adb shell input tap $at
+    waited=0
+    while ((waited < 10)) && on_screen "Dismiss"; do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    tap_on "Book server" exact
+fi
+tap_on "liseur-sync" exact
+tap_on "Paste a token"
+type_into "Server address" "$url"
+type_into "Device token" "$token"
+tap_button "Connect" exact
+fi
+
+waited=0
+while ((waited < 40)); do
+    [[ $(query "select count(*) from remote_server;") == 1 ]] && break
+    sleep 2
+    waited=$((waited + 2))
+done
+[[ $(query "select count(*) from remote_server;") == 1 ]] ||
+    die "the app never connected; check the address and the token"
+
+# The capability is the whole gate on the phone: without it the sheet
+# never draws the action, so a token minted without the scope is
+# indistinguishable from a server that cannot delete at all.
+can_delete=$(query "select can_delete from remote_server;")
+[[ "$can_delete" == 1 ]] ||
+    die "the app read the token as not allowed to delete (can_delete=$can_delete)"
+note "connected, and the token carries library-delete"
+
+step "Waiting for the shelf to fill"
+hide_keyboard
+back; sleep 2
+back; sleep 3
+waited=0
+while ((waited < 90)); do
+    shelved=$(query "select count(*) from books where remote_uuid is not null;")
+    [[ "${shelved:-0}" -ge 1 ]] && break
+    sleep 3
+    waited=$((waited + 3))
+done
+[[ "${shelved:-0}" -ge 1 ]] || die "the catalog never arrived"
+note "$shelved books from the server"
+
+# A title the shelf holds twice — once from a folder here and once from
+# the server — is a title the search answers with two cards, and the
+# long press then lands on whichever came first. So the book is chosen
+# for being the server's alone.
+pick="select %s from books b where b.remote_uuid is not null and not exists ("\
+"select 1 from books o where o.title = b.title and o.remote_uuid is null) "\
+"order by b.title limit 1;"
+# shellcheck disable=SC2059
+title=$(query "$(printf "$pick" title)")
+uuid=$(query "$(printf "$pick" remote_uuid)")
+[[ -n "$title" && -n "$uuid" ]] ||
+    die "every book from the server shares a title with one already here"
+note "deleting \"$title\" ($uuid)"
+
+step "Opening the book's sheet"
+open_library
+# A shelf with books of its own may be offering to send them up, and
+# the dialog swallows every tap behind it.
+tap_if_there "Not now" exact || true
+# The shelf is a grid and the book may be several screens down, so it
+# is found by name rather than by scrolling to where it happens to sit.
+tap_on "Search books" exact
+adb shell input text "${title// /%s}"
+sleep 3
+at=$(wait_for "$title" 30) || die "\"$title\" is not on the shelf"
+hide_keyboard
+at=$(wait_for "$title" 10) || die "\"$title\" vanished"
+# shellcheck disable=SC2086
+adb shell input swipe $at $at 800
+sleep 2
+on_screen "Delete from server" ||
+    die "the sheet does not offer to delete from the server"
+shot sheet
+
+step "Confirming, and forgetting the reading with it"
+tap_on "Delete from server"
+wait_for "This cannot be undone" 10 contains >/dev/null ||
+    die "the confirmation never appeared"
+shot dialog
+tap_on "Also delete my reading history"
+sleep 1
+shot dialog-checked
+tap_on "Delete" exact
+
+step "Checking the book really went"
+waited=0
+while ((waited < 60)); do
+    after=$(find "$root" -name '*.epub' | wc -l | tr -d ' ')
+    [[ "$after" -lt "$before" ]] && break
+    sleep 3
+    waited=$((waited + 3))
+done
+[[ "$after" -lt "$before" ]] ||
+    die "the file is still in $root ($after of $before)"
+note "the file left the folder ($before -> $after)"
+
+left=$(query "select count(*) from books where remote_uuid = '$uuid';")
+[[ "$left" == 0 ]] || die "the app still has a row for the deleted book"
+note "and the app forgot it"
+
+printf '\nThe book was deleted from the server and from this device.\n'

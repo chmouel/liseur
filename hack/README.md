@@ -16,8 +16,15 @@ target wrapping them — run `make help` for the short list. See
   demo book shelf as `screenshots --setup`, without capturing anything.
   Backs `make reset`. Downloaded books are cached under `tmp/books`,
   shared with `screenshots`.
-- **`lib/demo-books.sh`** — Library sourced by `screenshots` and
-  `reset-books`: the demo book list, the uiautomator-driven UI helpers,
+- **`e2e-upload`** / **`e2e-delete`** — End-to-end checks of the two
+  actions that reach a liseur-sync server's disk. Both drive the app
+  through its own screens against a real server and then read that
+  server's folder and the app's database to see what happened, so
+  neither can pass on a mock. `e2e-delete -o DIR` also writes
+  screenshots of the sheet and the confirmation, which is where the
+  pictures in a pull request come from. `--help` for the flags.
+- **`lib/demo-books.sh`** — Library sourced by `screenshots`,
+  `reset-books` and the `e2e-*` scripts: the demo book list, the uiautomator-driven UI helpers,
   and the fetch/push/grant-folder logic. Not meant to be run directly.
 - **`install`** — Builds a release-signed APK (key fetched from `pass`)
   and installs it in place over the device's existing release install,
