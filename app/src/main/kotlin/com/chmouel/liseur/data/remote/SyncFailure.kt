@@ -91,10 +91,30 @@ sealed interface SyncFailure {
 /** Either what was asked for, or why it could not be had. */
 sealed interface RemoteResult<out T> {
     data class Ok<T>(val value: T) : RemoteResult<T>
-    data class Failed(val reason: SyncFailure) : RemoteResult<Nothing>
+
+    /**
+     * [answered] records whether the server said this or said nothing.
+     * It defaults to the former because most refusals are decided from
+     * a response in hand; only [remoteCall] can tell silence apart, and
+     * it says so explicitly. See [AnsweredFailure].
+     */
+    data class Failed(
+        val reason: SyncFailure,
+        val answered: Boolean = true,
+    ) : RemoteResult<Nothing>
 
     val failure: SyncFailure?
         get() = (this as? Failed)?.reason
+
+    /**
+     * Why this failed, but only when the server never answered.
+     *
+     * A caller walking a shelf book by book reads this to know when to
+     * stop: every further request to a server that has gone quiet waits
+     * out its own connect timeout and comes back knowing no more.
+     */
+    val unreachable: SyncFailure?
+        get() = (this as? Failed)?.takeUnless { it.answered }?.reason
 }
 
 /** What the value is, or null if the call failed. */
@@ -105,7 +125,26 @@ fun <T> RemoteResult<T>.valueOrNull(): T? = (this as? RemoteResult.Ok)?.value
  * can travel out of the middle of a paged walk; it never escapes
  * [remoteCall].
  */
-internal class RemoteHttpFailure(val reason: SyncFailure) : IOException()
+internal class RemoteHttpFailure(val reason: SyncFailure) : IOException(), AnsweredFailure
+
+/**
+ * Marks a failure that a response actually produced.
+ *
+ * Worn by every exception raised with the server's answer in hand: a
+ * status the caller did not expect, a body that would not parse, a
+ * refusal the protocol treats as ordinary. Anything without it — a
+ * connection refused, a socket that timed out, a name that would not
+ * resolve — reached this point without the server saying anything.
+ *
+ * The distinction decides whether a sync run is worth continuing.
+ * A refusal arrived over a connection that worked, so the next request
+ * is still worth making. Silence has already cost a whole connect
+ * timeout, and the next request will cost another and learn no more.
+ */
+interface AnsweredFailure
+
+/** Whether this failure proves the server answered. See [AnsweredFailure]. */
+internal fun IOException.serverAnswered(): Boolean = this is AnsweredFailure
 
 /**
  * Turns the exceptions OkHttp and the JSON parser throw into the reasons
@@ -118,15 +157,16 @@ internal inline fun <T> remoteCall(body: () -> T): RemoteResult<T> = try {
 } catch (e: RemoteHttpFailure) {
     RemoteResult.Failed(e.reason)
 } catch (_: SocketTimeoutException) {
-    RemoteResult.Failed(SyncFailure.Timeout)
+    RemoteResult.Failed(SyncFailure.Timeout, answered = false)
 } catch (_: UnknownHostException) {
-    RemoteResult.Failed(SyncFailure.Offline)
+    RemoteResult.Failed(SyncFailure.Offline, answered = false)
 } catch (_: ConnectException) {
-    RemoteResult.Failed(SyncFailure.Offline)
+    RemoteResult.Failed(SyncFailure.Offline, answered = false)
 } catch (_: JSONException) {
+    // The body arrived; it was the reading of it that failed.
     RemoteResult.Failed(SyncFailure.Malformed)
 } catch (_: IOException) {
-    RemoteResult.Failed(SyncFailure.Offline)
+    RemoteResult.Failed(SyncFailure.Offline, answered = false)
 }
 
 /** What an unsuccessful HTTP answer means. */

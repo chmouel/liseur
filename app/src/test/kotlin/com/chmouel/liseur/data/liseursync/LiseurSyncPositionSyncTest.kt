@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
+import mockwebserver3.SocketEffect
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -347,6 +348,36 @@ class LiseurSyncPositionSyncTest {
         // Taking the server's side uses the answer paired on disk.
         assertEquals(ResolveOutcome.Done, sync.takeRemotePosition(LOCAL, 0))
         assertEquals(0.8, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `an offline run says so without waiting on a connection`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+
+        assertEquals(
+            SyncOutcome.Failure(SyncFailure.Offline),
+            sync(online = false).syncAll(null),
+        )
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `keeping the local position works offline, because nothing is sent`() = runTest {
+        // Unlike the other two servers, this one settles a disagreement
+        // by clearing it and letting the next run push. That is a local
+        // write, and refusing it offline would leave the book asking the
+        // same question on every open for the rest of the flight.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"ops":[${op(seq = 7, progression = 0.8)}]}"""))
+        sync().previewBook(LOCAL)
+        assertNotNull(sync().preservedConflict(LOCAL))
+
+        assertEquals(ResolveOutcome.Done, sync(online = false).keepLocalPosition(LOCAL))
+        assertNull(sync().preservedConflict(LOCAL))
     }
 
     @Test
@@ -698,37 +729,147 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
-    fun `an offline run says so without waiting on a connection`() = runTest {
+    fun `a server that cannot be reached ends the run instead of asking about every book`() =
+        runTest {
+            // Nothing is listening, so every connection is refused
+            // rather than answered. That is the shape of the failure a
+            // server on the far side of a network the device cannot
+            // route through produces, only without the wait.
+            connect(baseUrl = "http://127.0.0.1:$deadPort")
+            db.bookDao().upsert(local())
+            db.bookDao().upsert(local().copy(url = LOCAL2, lastOpenedAt = NOW - 1))
+            db.bookDao().upsert(local().copy(url = LOCAL3, lastOpenedAt = NOW - 2))
+
+            val outcome = sync().syncAll(null)
+
+            // Each unanswered question costs a whole connect timeout on
+            // a real network, and a reader opening a book waits behind
+            // every one of them, so the run gives up on the first.
+            assertEquals(SyncOutcome.Failure(SyncFailure.Offline), outcome)
+            // The pull, the pushes and the sessions were never tried
+            // either: they would have gone to the same dead address.
+            assertEquals(0, server.requestCount)
+        }
+
+    @Test
+    fun `a server that answers with a refusal is still asked about the next book`() = runTest {
         connect()
         db.bookDao().upsert(local())
-        alias()
+        db.bookDao().upsert(local().copy(url = LOCAL2, lastOpenedAt = NOW - 1))
+        db.bookDao().upsert(local().copy(url = LOCAL3, lastOpenedAt = NOW - 2))
+        // 408 is a *server* saying it grew tired of waiting. It arrived
+        // over a connection that worked, so it says something about the
+        // one request and nothing about whether the server is there.
+        repeat(3) { server.enqueue(MockResponse(code = 408)) }
+        server.enqueue(json("""{"ops":[]}"""))
+        repeat(4) { server.enqueue(json("""{}""")) }
 
-        assertEquals(
-            SyncOutcome.Failure(SyncFailure.Offline),
-            sync(online = false).syncAll(null),
-        )
-        assertEquals(0, server.requestCount)
+        sync().syncAll(null)
+
+        // Every book was asked about, rather than the run stopping at
+        // the first refusal.
+        val asked = requests().count { it.target.startsWith("/v1/works/resolve") }
+        assertTrue("asked $asked times for 3 books", asked >= 3)
+        // And it carried on to the rest of its work afterwards.
+        assertTrue(requests().any { it.target.startsWith("/v1/changes") })
     }
 
     @Test
-    fun `keeping the local position works offline, because nothing is sent`() = runTest {
-        // Unlike the other two servers, this one settles a disagreement
-        // by clearing it and letting the next run push. That is a local
-        // write, and refusing it offline would leave the book asking the
-        // same question on every open for the rest of the flight.
+    fun `a refusal the protocol treats as ordinary is not mistaken for silence`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        db.bookDao().upsert(local().copy(url = LOCAL2, lastOpenedAt = NOW - 1))
+        db.bookDao().upsert(local().copy(url = LOCAL3, lastOpenedAt = NOW - 2))
+        // A 409 that names fewer than two works: the server said this
+        // book is ambiguous but did not say between what, so the name
+        // cannot be settled. It is still an answer, over a connection
+        // that plainly worked, and says nothing about the next book.
+        repeat(3) { server.enqueue(MockResponse(code = 409, body = """{"works":[]}""")) }
+        server.enqueue(json("""{"ops":[]}"""))
+        repeat(4) { server.enqueue(json("""{}""")) }
+
+        sync().syncAll(null)
+
+        val asked = requests().count { it.target.startsWith("/v1/works/resolve") }
+        assertTrue("asked $asked times for 3 books", asked >= 3)
+        assertTrue(requests().any { it.target.startsWith("/v1/changes") })
+    }
+
+    @Test
+    fun `a server that goes quiet after the naming sends nothing further`() = runTest {
+        // Every book is already named, so naming asks nothing and the
+        // run reaches the pull with no idea the network has gone. The
+        // pull is where it finds out, and it must not then spend a
+        // connect timeout on the pushes and another on the sessions.
         connect()
         db.bookDao().upsert(local())
         alias()
-        server.enqueue(json("""{"ops":[${op(seq = 7, progression = 0.8)}]}"""))
-        sync().previewBook(LOCAL)
-        assertNotNull(sync().preservedConflict(LOCAL))
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.5, null, "reading", NOW)
+        // One page arrives and the next says there is more, so the pull
+        // asks again -- and that second request is dropped mid-flight,
+        // with nothing coming back that could be read as the server
+        // having said anything at all.
+        server.enqueue(json("""{"ops":[],"has_more":true,"high_water":1}"""))
+        repeat(4) {
+            server.enqueue(
+                MockResponse.Builder().onResponseStart(SocketEffect.CloseSocket()).build(),
+            )
+        }
 
-        assertEquals(ResolveOutcome.Done, sync(online = false).keepLocalPosition(LOCAL))
-        assertNull(sync().preservedConflict(LOCAL))
+        val outcome = sync().syncAll(null)
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.Offline), outcome)
+        // The position this device owes and the session it recorded were
+        // both held back: each would have waited out a connect timeout
+        // of its own and come back knowing no more than the pull did.
+        assertTrue(requests().any { it.target.startsWith(LiseurSyncApi.CHANGES) })
+        assertTrue(requests().none { it.target.startsWith(LiseurSyncApi.OPS) })
+        assertTrue(requests().none { it.target.startsWith(LiseurSyncApi.SESSIONS) })
+    }
+
+    @Test
+    fun `a refusal on one book does not hide a network that died later`() = runTest {
+        // The server answers the naming with a refusal on one book, which
+        // is its own considered answer and not worth coming back for. Then
+        // the connection dies with this device's position still unsent.
+        // The run has to report the silence, because that is the part
+        // worth retrying -- reporting the refusal would say there is
+        // nothing to come back for.
+        connect()
+        db.bookDao().upsert(local())
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.5, null, "reading", NOW)
+        server.enqueue(MockResponse.Builder().code(404).body("""{"error":"no such work"}""").build())
+        repeat(4) {
+            server.enqueue(
+                MockResponse.Builder().onResponseStart(SocketEffect.CloseSocket()).build(),
+            )
+        }
+
+        val outcome = sync().syncAll(null)
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.Offline), outcome)
+    }
+
+    @Test
+    fun `a refusal is reported as what the server said, not as being offline`() = runTest {
+        // Nothing here is unreachable: the server answered, and said no.
+        // Calling that offline reads wrong to the reader and sends the
+        // retry machinery back for something that will be refused again.
+        connect()
+        db.bookDao().upsert(local())
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.5, null, "reading", NOW)
+        repeat(6) {
+            server.enqueue(
+                MockResponse.Builder().code(404).body("""{"error":"no such work"}""").build(),
+            )
+        }
+
+        val outcome = sync().syncAll(null)
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.NotFound), outcome)
     }
 
     // -- Scaffolding ------------------------------------------------------
-
     private fun sync(online: Boolean = true): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
@@ -750,11 +891,20 @@ class LiseurSyncPositionSyncTest {
         )
     }
 
-    private suspend fun connect(cursor: Long = 0, deviceId: String? = null) {
+    /** A port nothing is listening on, for a server that is simply not there. */
+    private val deadPort: Int by lazy {
+        java.net.ServerSocket(0).use { it.localPort }
+    }
+
+    private suspend fun connect(
+        cursor: Long = 0,
+        deviceId: String? = null,
+        baseUrl: String = "http://127.0.0.1:${server.port}",
+    ) {
         db.remoteServerDao().upsert(
             RemoteServer(
                 kind = ServerKind.LISEUR_SYNC,
-                baseUrl = "http://127.0.0.1:${server.port}",
+                baseUrl = baseUrl,
                 username = "ada",
                 passwordCipher = null,
                 apiKeyCipher = null,
@@ -901,6 +1051,7 @@ class LiseurSyncPositionSyncTest {
         const val NOW = 1_700_000_000_000L
         const val LOCAL = "content://sd/book.epub"
         const val LOCAL2 = "content://sd/other.epub"
+        const val LOCAL3 = "content://sd/third.epub"
         const val LOCATOR = """{"href":"/c1.xhtml"}"""
     }
 }

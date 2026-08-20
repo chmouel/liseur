@@ -14,11 +14,13 @@ import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.data.remote.failureForCode
 import com.chmouel.liseur.data.remote.PositionSync
 import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
+import com.chmouel.liseur.data.remote.serverAnswered
 import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.ServerKind
@@ -333,19 +335,38 @@ class LiseurSyncPositionSync(
             listOfNotNull(bookDao.getByUrl(book))
         }
 
-        var firstFailure: SyncFailure? = null
+        val trouble = Trouble()
 
         // Names first: an op is about a work id, so a book with no name
         // can neither receive what arrived nor send what is owed.
-        val named = name(account, books, single = book != null)
-        firstFailure = firstFailure ?: named.failure
+        val aliases = name(account, books, single = book != null, trouble)
 
-        val pull = pull(account)
-        firstFailure = firstFailure ?: pull
+        /**
+         * Gives up when the server has stopped answering.
+         *
+         * Each remaining stage waits out its own connect timeout for
+         * nothing, so the run ends here and the next scheduled one finds
+         * the network back. This reads the network verdict rather than
+         * the first failure: a book the server refused says nothing
+         * about whether the server is still there.
+         */
+        fun giveUp(): SyncOutcome? {
+            val reason = trouble.unreachable ?: return null
+            Log.i(TAG, "Stopping the run early: ${reason.label}")
+            reporting.report(PositionSyncStatus.Failed(reason))
+            return SyncOutcome.Failure(reason)
+        }
+
+        giveUp()?.let { return it }
+
+        pull(account, trouble)
 
         var pulled = 0
         val pushes = mutableListOf<PendingPush>()
-        for (candidate in named.aliases) {
+        // Reconciling asks the server nothing, so it is worth doing even
+        // when the pull above came back empty-handed: it settles what
+        // earlier pages already delivered.
+        for (candidate in aliases) {
             when (val outcome = reconcile(account, candidate)) {
                 is Reconciled.Pulled -> pulled++
                 is Reconciled.Owed -> pushes += outcome.push
@@ -358,13 +379,29 @@ class LiseurSyncPositionSync(
         // is left for the next scheduled sync rather than chased.
         val recovered = mutableSetOf<String>()
 
-        val pushed = push(account, pushes, recovered) { firstFailure = firstFailure ?: it }
+        // The later stages are skipped rather than returned from, so
+        // that whatever the run did manage is still counted and
+        // reported. Each is dropped once the server has gone quiet, for
+        // the same reason the run gives up above.
+        val pushed = if (trouble.unreachable == null) {
+            push(account, pushes, recovered, trouble)
+        } else {
+            0
+        }
 
         // After the positions, because where the reader is now matters
         // more than how long they took to get there, and a run cut short
         // by a dead network should have spent what it had on the former.
-        uploadSessions(account, recovered) { firstFailure = firstFailure ?: it }
+        if (trouble.unreachable == null) {
+            uploadSessions(account, recovered, trouble)
+        }
 
+        // A server that went quiet outranks anything it managed to say
+        // earlier. The first failure may well be a 404 on one book, which
+        // is nobody's fault and not worth retrying; if the connection then
+        // died with positions still unsent, reporting that 404 would tell
+        // WorkManager there is nothing to come back for.
+        val firstFailure = trouble.unreachable ?: trouble.first
         val at = now()
         reporting.report(
             SyncReport(
@@ -392,11 +429,37 @@ class LiseurSyncPositionSync(
         }
     }
 
-    /** Books with a name on this server, and whatever stopped the rest. */
-    private data class Named(
-        val aliases: List<Pair<Book, WorkAlias>>,
-        val failure: SyncFailure?,
-    )
+    /**
+     * What went wrong over a run, and whether the server stopped
+     * answering at all.
+     *
+     * The two are worth telling apart. [first] is what the run reports,
+     * because the earliest thing to go wrong usually explains the rest.
+     * [unreachable] decides whether there is any point carrying on:
+     * every further request to a server whose packets go nowhere waits
+     * out a whole connect timeout and comes back knowing nothing, and a
+     * reader opening a book is waiting on this run to let go of its
+     * turn. A refusal is not that — it says something about the one
+     * book, and the next question is still worth asking.
+     */
+    private class Trouble {
+        var first: SyncFailure? = null
+            private set
+
+        var unreachable: SyncFailure? = null
+            private set
+
+        /** Notes something the server said itself. */
+        fun refused(reason: SyncFailure) {
+            first = first ?: reason
+        }
+
+        /** Notes a call that failed, and whether it ever got an answer. */
+        fun failed(cause: IOException, reason: SyncFailure) {
+            first = first ?: reason
+            if (!cause.serverAnswered()) unreachable = unreachable ?: reason
+        }
+    }
 
     /**
      * Makes sure the books of interest have a name on this server.
@@ -411,14 +474,21 @@ class LiseurSyncPositionSync(
         account: Account,
         books: List<Book>,
         single: Boolean,
-    ): Named {
+        trouble: Trouble,
+    ): List<Pair<Book, WorkAlias>> {
         val known = identityDao.aliasesFor(account.peerId).associateBy { it.bookUrl }
         val out = mutableListOf<Pair<Book, WorkAlias>>()
-        var failure: SyncFailure? = null
         var budget = if (single) books.size else MAX_RESOLVES_PER_RUN
+
+        /** Notes why something could not be had, and whether it was the network. */
+        fun note(cause: IOException?) {
+            val reason = cause?.let(::reasonFor) ?: return
+            trouble.failed(cause, reason)
+        }
 
         val ordered = books.sortedByDescending { it.lastOpenedAt ?: 0 }
         for (candidate in ordered) {
+            if (trouble.unreachable != null) break
             val cached = known[candidate.url]
             if (cached != null && cached.usable) {
                 var alias = cached
@@ -431,16 +501,20 @@ class LiseurSyncPositionSync(
                     budget--
                     val refreshed =
                         works.resolve(candidate, account.peerId, account.baseUrl, account.credentials)
-                    if (refreshed is WorkResolution.Named) alias = refreshed.alias
+                    if (refreshed is WorkResolution.Named) {
+                        alias = refreshed.alias
+                    } else {
+                        note((refreshed as? WorkResolution.Unresolved)?.cause)
+                    }
                 }
                 out += candidate to alias
                 // A name that arrived without the one-off question —
                 // a doubtful match confirmed by hand — still owes
                 // it: whatever the server heard before the name was
                 // usable is behind the cursor.
-                if (!alias.seeded && budget > 0) {
+                if (!alias.seeded && budget > 0 && trouble.unreachable == null) {
                     budget--
-                    seed(account, candidate, alias)
+                    note(seed(account, candidate, alias))
                 }
                 continue
             }
@@ -459,15 +533,14 @@ class LiseurSyncPositionSync(
                     // Everything that happened to this book before it had
                     // a name is behind the cursor, so it is asked for
                     // once, directly.
-                    seed(account, candidate, resolved.alias)
+                    note(seed(account, candidate, resolved.alias))
                 }
 
                 is WorkResolution.NeedsConfirming, is WorkResolution.Ambiguous -> Unit
-                is WorkResolution.Unresolved ->
-                    failure = failure ?: resolved.cause?.let(::reasonFor)
+                is WorkResolution.Unresolved -> note(resolved.cause)
             }
         }
-        return Named(out, failure)
+        return out
     }
 
     /**
@@ -483,14 +556,16 @@ class LiseurSyncPositionSync(
         account: Account,
         book: Book,
         alias: WorkAlias,
-    ) {
+    ): IOException? {
         val head = try {
             latestOp(account.baseUrl, account.credentials, alias.workId)
         } catch (e: IOException) {
             // Not marked seeded: the question was asked and never
-            // answered, so it is still owed.
+            // answered, so it is still owed. Handed back rather than
+            // only logged, because a seed costs the same connect
+            // timeout a resolve does and the caller is counting them.
             Log.i(TAG, "Could not fetch a newly named book's position", e)
-            return
+            return e
         }
         forAccount(account) {
             head?.let { land(account, book.url, it) }
@@ -498,6 +573,7 @@ class LiseurSyncPositionSync(
             // nothing about this book, and there is nothing to recover.
             identityDao.markSeeded(book.url, account.peerId)
         }
+        return null
     }
 
     /**
@@ -508,7 +584,7 @@ class LiseurSyncPositionSync(
      * reading nobody will ever see again, and unlike everything else
      * here it cannot be asked for a second time.
      */
-    private suspend fun pull(account: Account): SyncFailure? {
+    private suspend fun pull(account: Account, trouble: Trouble) {
         var cursor = account.cursorSeq
         var guard = MAX_PAGES
         while (guard-- > 0) {
@@ -519,10 +595,11 @@ class LiseurSyncPositionSync(
                     expected = setOf(LiseurSyncHttp.GONE),
                 )
             } catch (gone: LiseurSyncRejection) {
-                return resync(account)
+                return resync(account, trouble)
             } catch (e: IOException) {
                 Log.i(TAG, "Could not read what changed", e)
-                return reasonFor(e)
+                trouble.failed(e, reasonFor(e))
+                return
             }
 
             val ops = ops(page.optJSONArray("ops"))
@@ -532,13 +609,12 @@ class LiseurSyncPositionSync(
             apply(account, ops, next)
             cursor = next
 
-            if (!page.optBoolean("has_more", false)) return null
+            if (!page.optBoolean("has_more", false)) return
         }
         // A server that always says there is more would otherwise keep
         // this run going forever. Stopping is safe: the cursor is
         // durable and the next run carries on from it.
         Log.i(TAG, "Stopped reading changes after $MAX_PAGES pages")
-        return null
     }
 
     /**
@@ -550,15 +626,15 @@ class LiseurSyncPositionSync(
      * partial history. The snapshot is the newest position per book and
      * per device, which is exactly the baseline to start again from.
      */
-    private suspend fun resync(account: Account): SyncFailure? {
+    private suspend fun resync(account: Account, trouble: Trouble) {
         Log.i(TAG, "The cursor fell behind the server's horizon; starting from a snapshot")
         val snapshot = try {
             http.get(LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.HEADS), account.credentials)
         } catch (e: IOException) {
-            return reasonFor(e)
+            trouble.failed(e, reasonFor(e))
+            return
         }
         apply(account, ops(snapshot.optJSONArray("ops")), snapshot.optLong("snapshot_seq"))
-        return null
     }
 
     /** Lands a page and moves the cursor, together or not at all. */
@@ -753,11 +829,15 @@ class LiseurSyncPositionSync(
         account: Account,
         pushes: List<PendingPush>,
         recovered: MutableSet<String>,
-        onFailure: (SyncFailure) -> Unit,
+        trouble: Trouble,
     ): Int {
         var pushed = 0
         val queue = ArrayDeque(pushes.chunked(SyncOps.MAX_BATCH))
         while (queue.isNotEmpty()) {
+            // A recovery in the middle of this may have discovered the
+            // server has gone quiet. Retrying then costs another whole
+            // connect timeout and learns nothing.
+            if (trouble.unreachable != null) return pushed
             val batch = queue.removeFirst()
             // A null answer means a recovery rebuilt the batch and it
             // goes back on the queue: nothing from the rejected request
@@ -773,26 +853,26 @@ class LiseurSyncPositionSync(
                     expected = setOf(LiseurSyncHttp.BAD_REQUEST),
                 )
             } catch (rejection: LiseurSyncRejection) {
-                when (val recovery = recoverPush(account, batch, rejection, recovered, onFailure)) {
+                when (val recovery = recoverPush(account, batch, rejection, recovered, trouble)) {
                     is PushRecovery.Retry -> {
                         if (recovery.batch.isNotEmpty()) queue.addFirst(recovery.batch)
                         null
                     }
 
                     PushRecovery.Exhausted -> {
-                        onFailure(SyncFailure.StaleIdentity)
+                        trouble.refused(SyncFailure.StaleIdentity)
                         return pushed
                     }
 
                     PushRecovery.Ordinary -> {
                         Log.i(TAG, "The server refused a positions batch")
-                        onFailure(SyncFailure.ServerError(rejection.code))
+                        trouble.refused(SyncFailure.ServerError(rejection.code))
                         return pushed
                     }
                 }
             } catch (e: IOException) {
                 Log.i(TAG, "Could not send positions", e)
-                onFailure(reasonFor(e))
+                trouble.failed(e, reasonFor(e))
                 return pushed
             } ?: continue
 
@@ -852,7 +932,7 @@ class LiseurSyncPositionSync(
         batch: List<PendingPush>,
         rejection: LiseurSyncRejection,
         recovered: MutableSet<String>,
-        onFailure: (SyncFailure) -> Unit,
+        trouble: Trouble,
     ): PushRecovery {
         if (!rejection.isUnknownWork) return PushRecovery.Ordinary
         val opId = rejection.opId ?: return PushRecovery.Ordinary
@@ -871,12 +951,12 @@ class LiseurSyncPositionSync(
             return PushRecovery.Exhausted
         }
 
-        val replacement = when (val refreshed = refreshStaleIdentity(account, stale.bookUrl, workId)) {
+        val replacement = when (val refreshed = refreshStaleIdentity(account, stale.bookUrl, workId, trouble)) {
             is IdentityRefresh.Refreshed ->
                 (reconcile(account, refreshed.book to refreshed.alias) as? Reconciled.Owed)?.push
 
             is IdentityRefresh.Failed -> {
-                onFailure(reasonFor(refreshed.cause))
+                trouble.failed(refreshed.cause, reasonFor(refreshed.cause))
                 null
             }
 
@@ -914,6 +994,7 @@ class LiseurSyncPositionSync(
         account: Account,
         bookUrl: String,
         staleWorkId: String,
+        trouble: Trouble,
     ): IdentityRefresh {
         forAccount(account) {
             identityDao.deleteAliasIfStale(bookUrl, account.peerId, staleWorkId)
@@ -923,7 +1004,10 @@ class LiseurSyncPositionSync(
             val resolved = works.resolve(book, account.peerId, account.baseUrl, account.credentials)
         ) {
             is WorkResolution.Named -> {
-                seed(account, book, resolved.alias)
+                // Seeding costs the same unanswered wait a resolve does,
+                // so a recovery must not quietly pay it and then go
+                // straight back to the request that failed.
+                seed(account, book, resolved.alias)?.let { trouble.failed(it, reasonFor(it)) }
                 IdentityRefresh.Refreshed(book, resolved.alias)
             }
 
@@ -974,7 +1058,7 @@ class LiseurSyncPositionSync(
     private suspend fun uploadSessions(
         account: Account,
         recovered: MutableSet<String>,
-        onFailure: (SyncFailure) -> Unit,
+        trouble: Trouble,
     ) {
         val sessions = sessionDao.awaitingUpload(SessionUploads.MAX_BATCH)
         if (sessions.isEmpty()) return
@@ -1003,6 +1087,9 @@ class LiseurSyncPositionSync(
 
         var answered = false
         while (!answered) {
+            // As with the pushes: a recovery may have found the server
+            // gone quiet, and going round again would only wait again.
+            if (trouble.unreachable != null) return
             answered = try {
                 http.post(
                     LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.SESSIONS),
@@ -1015,16 +1102,18 @@ class LiseurSyncPositionSync(
                 )
                 true
             } catch (rejection: LiseurSyncRejection) {
-                when (val recovery = recoverSessions(account, sending, rejection, recovered)) {
+                when (
+                    val recovery = recoverSessions(account, sending, rejection, recovered, trouble)
+                ) {
                     is SessionRecovery.Retry -> {
-                        recovery.failure?.let(onFailure)
+                        recovery.failure?.let(trouble::refused)
                         if (recovery.sending.isEmpty()) return
                         sending = recovery.sending
                         false
                     }
 
                     SessionRecovery.Exhausted -> {
-                        onFailure(SyncFailure.StaleIdentity)
+                        trouble.refused(SyncFailure.StaleIdentity)
                         return
                     }
 
@@ -1038,14 +1127,14 @@ class LiseurSyncPositionSync(
             } catch (rejected: RemoteHttpFailure) {
                 if (!rejected.reason.isFinal()) {
                     Log.i(TAG, "Could not send reading sessions", rejected)
-                    onFailure(rejected.reason)
+                    trouble.refused(rejected.reason)
                     return
                 }
                 Log.i(TAG, "The server will never take these sessions; not asking again")
                 true
             } catch (e: IOException) {
                 Log.i(TAG, "Could not send reading sessions", e)
-                onFailure(reasonFor(e))
+                trouble.failed(e, reasonFor(e))
                 return
             }
         }
@@ -1089,6 +1178,7 @@ class LiseurSyncPositionSync(
         sending: List<PreparedSession>,
         rejection: LiseurSyncRejection,
         recovered: MutableSet<String>,
+        trouble: Trouble,
     ): SessionRecovery {
         if (!rejection.isUnknownWork) return SessionRecovery.Ordinary
         val sessionId = rejection.sessionId ?: return SessionRecovery.Ordinary
@@ -1108,11 +1198,20 @@ class LiseurSyncPositionSync(
         }
 
         val rest = sending.filter { it.bookUrl != culprit.bookUrl }
-        val refreshed = when (val outcome = refreshStaleIdentity(account, culprit.bookUrl, workId)) {
-            is IdentityRefresh.Refreshed -> outcome
-            is IdentityRefresh.Failed -> return SessionRecovery.Retry(rest, reasonFor(outcome.cause))
-            IdentityRefresh.Unnameable -> return SessionRecovery.Retry(rest)
-        }
+        val refreshed =
+            when (val outcome = refreshStaleIdentity(account, culprit.bookUrl, workId, trouble)) {
+                is IdentityRefresh.Refreshed -> outcome
+
+                is IdentityRefresh.Failed -> {
+                    // Recorded from the exception itself, so that a
+                    // server which said nothing is remembered as silent
+                    // rather than as one more thing it refused.
+                    trouble.failed(outcome.cause, reasonFor(outcome.cause))
+                    return SessionRecovery.Retry(rest)
+                }
+
+                IdentityRefresh.Unnameable -> return SessionRecovery.Retry(rest)
+            }
         val rebuilt = sending.filter { it.bookUrl == culprit.bookUrl }.mapNotNull { entry ->
             val session = sessionDao.get(entry.localId) ?: return@mapNotNull null
             SessionUploads.toJson(
@@ -1176,8 +1275,19 @@ class LiseurSyncPositionSync(
         }
     }
 
-    private fun reasonFor(error: IOException): SyncFailure =
-        (error as? RemoteHttpFailure)?.reason ?: SyncFailure.Offline
+    /**
+     * What to call a failure that stopped one request.
+     *
+     * Only something that never reached the server is [SyncFailure.Offline].
+     * A refusal is the server talking, and calling that offline both reads
+     * wrong to the reader and tells the retry machinery to come back for
+     * something that will be refused again just as firmly.
+     */
+    private fun reasonFor(error: IOException): SyncFailure = when (error) {
+        is RemoteHttpFailure -> error.reason
+        is LiseurSyncRejection -> failureForCode(error.code)
+        else -> SyncFailure.Offline
+    }
 
     private fun ReadingProgress.asReadingState() = ReadingState(
         progression = totalProgression,
