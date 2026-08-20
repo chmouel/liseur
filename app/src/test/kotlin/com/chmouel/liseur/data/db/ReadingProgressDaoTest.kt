@@ -206,6 +206,122 @@ class ReadingProgressDaoTest {
         assertEquals(0.9, row.pendingProgression!!, 1e-9)
     }
 
+    // -- The open-book fence ----------------------------------------------
+
+    @Test
+    fun `a pull nobody asked for waits its turn while the book is open`() = runTest {
+        read(0.2)
+        dao.persistPending(book, 0.9, "Reading", 4_000, account, now = 4_000)
+        dao.openBooks.enter(book)
+
+        val applied = dao.applyUnattendedPull(
+            bookUrl = book,
+            expectedRevision = 1,
+            progression = 0.9,
+            status = "Reading",
+            account = account,
+            remoteUpdatedAt = 4_000,
+            now = 5_000,
+        )
+
+        assertFalse(applied)
+        val row = row()
+        // The page on screen is untouched, and nothing about the
+        // revisions moved: to every sync partner the row looks exactly
+        // as it did, so nothing is re-sent and nothing is dropped.
+        assertEquals(0.2, row.totalProgression!!, 1e-9)
+        assertEquals(1L, row.localRevision)
+        assertEquals(0L, row.ackedRevision)
+        // The server's position is still pending, so the next open asks
+        // about it rather than it being silently thrown away.
+        assertTrue(row.hasPending)
+        assertEquals(0.9, row.pendingProgression!!, 1e-9)
+    }
+
+    @Test
+    fun `closing the book lets the waiting pull through`() = runTest {
+        read(0.2)
+        dao.persistPending(book, 0.9, "Reading", 4_000, account, now = 4_000)
+        dao.openBooks.enter(book)
+        dao.openBooks.leave(book)
+
+        val applied = dao.applyUnattendedPull(book, 1, 0.9, "Reading", account, 4_000, now = 5_000)
+
+        assertTrue(applied)
+        assertEquals(0.9, row().totalProgression!!, 1e-9)
+    }
+
+    @Test
+    fun `a pull the reader is looking at goes through even while open`() = runTest {
+        // The conflict dialog is answered with the book on screen; that
+        // answer is deliberate and must not be gated with the rest.
+        read(0.2)
+        dao.persistPending(book, 0.9, "Reading", 4_000, account, now = 4_000)
+        dao.openBooks.enter(book)
+
+        val applied = dao.applyPull(book, 1, 0.9, "Reading", account, 4_000, now = 5_000)
+
+        assertTrue(applied)
+        assertEquals(0.9, row().totalProgression!!, 1e-9)
+    }
+
+    @Test
+    fun `an unattended peer pull declines while the book is open`() = runTest {
+        read(0.2)
+        dao.openBooks.enter(book)
+
+        val applied = dao.applyUnattendedPeerPull(
+            bookUrl = book,
+            expectedRevision = 1,
+            progression = 0.9,
+            status = "Reading",
+            now = 5_000,
+        )
+
+        assertFalse(applied)
+        assertEquals(0.2, row().totalProgression!!, 1e-9)
+        assertEquals(1L, row().localRevision)
+    }
+
+    @Test
+    fun `a peer pull for a book never opened here still declines while it is open`() = runTest {
+        // No row exists yet; the gate must decline before the row would
+        // be created, or the create alone would smuggle state in.
+        dao.openBooks.enter(book)
+
+        val applied = dao.applyUnattendedPeerPull(
+            bookUrl = book,
+            expectedRevision = 0,
+            progression = 0.9,
+            status = "Reading",
+            now = 5_000,
+        )
+
+        assertFalse(applied)
+        assertNull(dao.get(book))
+    }
+
+    @Test
+    fun `two readers of the same book both have to leave`() = runTest {
+        read(0.2)
+        dao.openBooks.enter(book)
+        dao.openBooks.enter(book)
+        dao.openBooks.leave(book)
+
+        assertFalse(dao.applyUnattendedPull(book, 1, 0.9, "Reading", account, 4_000, now = 5_000))
+
+        dao.openBooks.leave(book)
+        assertTrue(dao.applyUnattendedPull(book, 1, 0.9, "Reading", account, 4_000, now = 5_000))
+    }
+
+    @Test
+    fun `only the open book is fenced, not the whole library`() = runTest {
+        read(0.2)
+        dao.openBooks.enter("calibre:some-other-book")
+
+        assertTrue(dao.applyUnattendedPull(book, 1, 0.9, "Reading", account, 4_000, now = 5_000))
+    }
+
     @Test
     fun `a pull that is not raced applies and clears the pending state`() = runTest {
         read(0.2)

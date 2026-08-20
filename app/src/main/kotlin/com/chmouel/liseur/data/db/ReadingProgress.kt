@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import com.chmouel.liseur.data.remote.OpenBooks
 import com.chmouel.liseur.reader.progress.ReadingPace
 
 /**
@@ -113,6 +114,16 @@ data class BookProgression(
 
 @Dao
 abstract class ReadingProgressDao {
+
+    /**
+     * The books being read right now, shared with the reader.
+     *
+     * Room hands every caller the same instance of this DAO, so a
+     * default here is one object app-wide without any wiring: the
+     * reader tells it a book is open, and the unattended writes below
+     * decline while it is.
+     */
+    val openBooks = OpenBooks()
     /**
      * Throws away everything remembered about a book: where you were, the
      * baseline both sides agreed on, and anything the server reported.
@@ -592,6 +603,64 @@ abstract class ReadingProgressDao {
         account: String,
         now: Long,
     )
+
+    /**
+     * [applyPull] for a sync run with nobody waiting on it.
+     *
+     * The reader reads a position once, when the book opens, and shows
+     * it for the rest of the session. A pull landing after that read is
+     * invisible — until the next page turn quietly writes over it. So a
+     * run acting on its own declines while the book is open, and what
+     * the server said stays pending on disk, put to the reader on the
+     * next open instead. Nothing about the revisions moves on a refusal.
+     *
+     * A pull someone is waiting on — opening the book, or answering the
+     * conflict dialog — goes through [applyPull] and [applyPeerPull]
+     * directly: the reader is present for those, which is the whole
+     * difference.
+     */
+    open suspend fun applyUnattendedPull(
+        bookUrl: String,
+        expectedRevision: Long,
+        progression: Double,
+        status: String,
+        account: String,
+        remoteUpdatedAt: Long?,
+        now: Long,
+        locatorJson: String? = null,
+    ): Boolean = openBooks.unlessOpen(bookUrl) {
+        applyPull(
+            bookUrl = bookUrl,
+            expectedRevision = expectedRevision,
+            progression = progression,
+            status = status,
+            account = account,
+            remoteUpdatedAt = remoteUpdatedAt,
+            now = now,
+            locatorJson = locatorJson,
+        )
+    } ?: false
+
+    /** [applyPeerPull] for a sync run with nobody waiting on it. */
+    open suspend fun applyUnattendedPeerPull(
+        bookUrl: String,
+        expectedRevision: Long,
+        progression: Double,
+        status: String,
+        now: Long,
+        locatorJson: String? = null,
+        remoteUpdatedAt: Long? = null,
+    ): Boolean = openBooks.unlessOpen(bookUrl) {
+        applyPeerPull(
+            bookUrl = bookUrl,
+            expectedRevision = expectedRevision,
+            progression = progression,
+            status = status,
+            now = now,
+            locatorJson = locatorJson,
+            remoteUpdatedAt = remoteUpdatedAt,
+        )
+    } ?: false
 
     // -- Sync partners other than the catalog server ----------------------
 

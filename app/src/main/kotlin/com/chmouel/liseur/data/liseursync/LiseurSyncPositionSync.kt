@@ -742,7 +742,7 @@ class LiseurSyncPositionSync(
                 val expected = stored?.localRevision ?: 0
                 var applied = false
                 forAccount(account) {
-                    applied = progressDao.applyPeerPull(
+                    applied = progressDao.applyUnattendedPeerPull(
                         bookUrl = book.url,
                         expectedRevision = expected,
                         progression = progression,
