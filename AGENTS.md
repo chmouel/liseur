@@ -62,6 +62,12 @@ has finished, because the long `fdroid build` is not waited for. Check
 the pipeline it links before calling a release done. `DEVELOPER.md`
 explains what those checks are.
 
+The app is **not on Google Play yet**: the release workflow's Play
+upload step fails with `Package not found: com.chmouel.liseur` and that
+is expected, not a release blocker. The first upload must be done by
+hand in the Play Console (see the Google Play section of
+`DEVELOPER.md`); do not try to automate around it.
+
 Toolchain: JDK 17, AGP 9.x (built-in Kotlin support — **do not** add the
 `org.jetbrains.kotlin.android` plugin, only `org.jetbrains.kotlin.plugin.compose`
 is applied), compileSdk/targetSdk 37, minSdk 26. Dependencies are managed in
