@@ -1,0 +1,1 @@
+Books no longer refuse to open when the server stops answering, requests are skipped entirely when the device has no network, and reading positions save again on Android 9 and older.
