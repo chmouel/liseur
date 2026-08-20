@@ -77,6 +77,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            // The only native code in the app arrives prebuilt inside
+            // library AARs. Left alone it is already stripped; letting
+            // AGP strip it again ties the bytes to whichever NDK the
+            // build machine happens to have, which is exactly the kind
+            // of environment leak that breaks reproducible builds.
+            keepDebugSymbols += "**/*.so"
+        }
     }
 
     dependenciesInfo {
