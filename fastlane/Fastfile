@@ -14,7 +14,10 @@ default_platform(:android)
 platform :android do
   desc "Upload the release bundle to the Play internal testing track"
   lane :internal do
-    bundle = "app/build/outputs/bundle/release/app-release.aab"
+    # Anchored to this file rather than the working directory: fastlane
+    # runs lanes from inside fastlane/, so a bare relative path would
+    # look for the bundle one directory too deep and never find it.
+    bundle = File.expand_path("../app/build/outputs/bundle/release/app-release.aab", __dir__)
     UI.user_error!("no bundle at #{bundle} — run ./gradlew bundleRelease") unless File.exist?(bundle)
 
     upload_to_play_store(
