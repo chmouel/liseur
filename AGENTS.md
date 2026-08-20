@@ -88,6 +88,11 @@ push. Skip with `git push --no-verify`.
   Maven Central or Google's Maven repo. No proprietary blobs, trackers,
   analytics, or Google Play services. In particular, never add
   `readium-lcp` (depends on the proprietary liblcp).
+- **The release build must stay reproducible** (`hack/verify-reproducible`
+  must pass): F-Droid rebuilds every tag from source. Do not remove the
+  `dependenciesInfo` or `packaging.jniLibs.keepDebugSymbols` settings in
+  `app/build.gradle.kts` — both exist only for this. `DEVELOPER.md`
+  explains why.
 - Network access is limited to the user-configured book server
   (calibre-web, Komga or liseur-sync) and opt-in dictionary lookups.
 
