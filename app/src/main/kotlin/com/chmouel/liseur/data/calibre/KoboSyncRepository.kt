@@ -36,6 +36,11 @@ import com.chmouel.liseur.domain.reconcileReadingState
 private data class BookOutcome(
     val moved: SyncMove? = null,
     val failure: SyncFailure? = null,
+    /**
+     * Set when the failure was the server saying nothing at all, which
+     * is the shelf's cue to stop rather than ask about the next book.
+     */
+    val unreachable: SyncFailure? = null,
 )
 
 /**
@@ -240,6 +245,7 @@ class KoboSyncRepository(
 
         val books = bookDao.allRemote().filter { book == null || it.url == book }
         var firstFailure: SyncFailure? = null
+        var unreachable: SyncFailure? = null
         var pulled = 0
         var pushed = 0
         for (candidate in books) {
@@ -250,6 +256,15 @@ class KoboSyncRepository(
                 SyncMove.UNRESOLVED, null -> Unit
             }
             if (outcome.failure != null && firstFailure == null) firstFailure = outcome.failure
+            // Nothing more is learned by asking about the next book of
+            // a server that has stopped answering, and each question
+            // costs a whole connect timeout. Whatever the shelf managed
+            // before that is still counted and reported below.
+            unreachable = outcome.unreachable
+            if (unreachable != null) {
+                Log.i(TAG, "Stopping the run early: ${unreachable.label}")
+                break
+            }
         }
 
         val now = System.currentTimeMillis()
@@ -263,7 +278,12 @@ class KoboSyncRepository(
                 unresolved = progressDao.pendingFor(account).size,
             ),
         )
-        return if (firstFailure == null) {
+        // A server that went quiet outranks anything it managed to say
+        // earlier: reporting a 404 on one book would tell the retry
+        // machinery there is nothing to come back for, when in fact the
+        // connection died with positions still unsent.
+        val failure = unreachable ?: firstFailure
+        return if (failure == null) {
             // Only a run that settled everything counts as having synced,
             // and only ever for the account that is still connected: if it
             // went away while this ran, writing it back would sign the user
@@ -277,9 +297,9 @@ class KoboSyncRepository(
             reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success
         } else {
-            Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
-            reporting.report(PositionSyncStatus.Failed(firstFailure))
-            SyncOutcome.Partial(firstFailure)
+            Log.i(TAG, "Some positions did not settle: ${failure.label}")
+            reporting.report(PositionSyncStatus.Failed(failure))
+            SyncOutcome.Partial(failure)
         }
     }
 
@@ -354,7 +374,7 @@ class KoboSyncRepository(
         // position yet is simply unknown, not absent — ask outright, once.
         if (remote == null && stored?.agreedAccountMatches(account) != true) {
             when (val asked = client.readState(base, uuid)) {
-                is RemoteResult.Failed -> return BookOutcome(failure = asked.reason)
+                is RemoteResult.Failed -> return BookOutcome(failure = asked.reason, unreachable = asked.unreachable)
                 is RemoteResult.Ok -> remote = asked.value?.also {
                     forAccount(account) {
                         progressDao.persistPending(
@@ -402,7 +422,7 @@ class KoboSyncRepository(
             if (!stillConnected(account)) return BookOutcome()
             val sent = stored?.localRevision ?: 0
             return when (val pushed = client.pushState(base, uuid, decision.state)) {
-                is RemoteResult.Failed -> BookOutcome(failure = pushed.reason)
+                is RemoteResult.Failed -> BookOutcome(failure = pushed.reason, unreachable = pushed.unreachable)
                 is RemoteResult.Ok -> {
                     var acked = false
                     forAccount(account) {

@@ -42,6 +42,11 @@ import org.json.JSONObject
 private data class BookOutcome(
     val moved: SyncMove? = null,
     val failure: SyncFailure? = null,
+    /**
+     * Set when the failure was the server saying nothing at all, which
+     * is the shelf's cue to stop rather than ask about the next book.
+     */
+    val unreachable: SyncFailure? = null,
 )
 
 /** The server's side of one book: where it is, and when it got there. */
@@ -276,6 +281,7 @@ class KomgaSyncRepository(
         }
 
         var firstFailure: SyncFailure? = null
+        var unreachable: SyncFailure? = null
         var pulled = 0
         var pushed = 0
         for (candidate in books) {
@@ -286,6 +292,15 @@ class KomgaSyncRepository(
                 SyncMove.UNRESOLVED, null -> Unit
             }
             if (outcome.failure != null && firstFailure == null) firstFailure = outcome.failure
+            // Nothing more is learned by asking about the next book of
+            // a server that has stopped answering, and each question
+            // costs a whole connect timeout. Whatever the shelf managed
+            // before that is still counted and reported below.
+            unreachable = outcome.unreachable
+            if (unreachable != null) {
+                Log.i(TAG, "Stopping the run early: ${unreachable.label}")
+                break
+            }
         }
 
         val now = System.currentTimeMillis()
@@ -299,7 +314,12 @@ class KomgaSyncRepository(
                 unresolved = progressDao.pendingFor(server.accountKey).size,
             ),
         )
-        return if (firstFailure == null) {
+        // A server that went quiet outranks anything it managed to say
+        // earlier: reporting a 404 on one book would tell the retry
+        // machinery there is nothing to come back for, when in fact the
+        // connection died with positions still unsent.
+        val failure = unreachable ?: firstFailure
+        return if (failure == null) {
             // Only a run that settled everything counts as having synced,
             // and only ever for the account that is still connected: if it
             // went away while this ran, writing it back would sign the user
@@ -313,9 +333,9 @@ class KomgaSyncRepository(
             reporting.report(PositionSyncStatus.Synced(now))
             SyncOutcome.Success
         } else {
-            Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
-            reporting.report(PositionSyncStatus.Failed(firstFailure))
-            SyncOutcome.Partial(firstFailure)
+            Log.i(TAG, "Some positions did not settle: ${failure.label}")
+            reporting.report(PositionSyncStatus.Failed(failure))
+            SyncOutcome.Partial(failure)
         }
     }
 
@@ -366,7 +386,7 @@ class KomgaSyncRepository(
         var stored = progressDao.get(book.url)
 
         var remote = when (val side = remoteSide(server, credentials, id, progress[id], stored)) {
-            is RemoteResult.Failed -> return BookOutcome(failure = side.reason)
+            is RemoteResult.Failed -> return BookOutcome(failure = side.reason, unreachable = side.unreachable)
             is RemoteResult.Ok -> side.value
         }
 
@@ -664,7 +684,7 @@ class KomgaSyncRepository(
         val unread = !finished && stored?.override == FinishedOverride.UNREAD
         if (unread) {
             when (val cleared = positions.clear(server.baseUrl, credentials, id)) {
-                is RemoteResult.Failed -> return BookOutcome(failure = cleared.reason)
+                is RemoteResult.Failed -> return BookOutcome(failure = cleared.reason, unreachable = cleared.unreachable)
                 is RemoteResult.Ok -> Unit
             }
         }
@@ -685,7 +705,7 @@ class KomgaSyncRepository(
         }
 
         when (placed) {
-            is RemoteResult.Failed -> return BookOutcome(failure = placed.reason)
+            is RemoteResult.Failed -> return BookOutcome(failure = placed.reason, unreachable = placed.unreachable)
             is RemoteResult.Ok -> when (placed.value) {
                 // The server already holds something at least as new.
                 // Overwriting it would be wrong, so the row stays dirty
@@ -708,7 +728,7 @@ class KomgaSyncRepository(
 
         if (finished) {
             when (val marked = positions.markCompleted(server.baseUrl, credentials, id)) {
-                is RemoteResult.Failed -> return BookOutcome(failure = marked.reason)
+                is RemoteResult.Failed -> return BookOutcome(failure = marked.reason, unreachable = marked.unreachable)
                 is RemoteResult.Ok -> Unit
             }
         }

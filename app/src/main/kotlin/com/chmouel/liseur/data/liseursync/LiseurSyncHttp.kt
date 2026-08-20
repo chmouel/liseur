@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.liseursync
 
 import android.util.Log
+import com.chmouel.liseur.data.remote.AnsweredFailure
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
@@ -28,7 +29,7 @@ import org.json.JSONObject
 class LiseurSyncRejection(
     val code: Int,
     val body: JSONObject?,
-) : java.io.IOException("liseur-sync refused with $code") {
+) : java.io.IOException("liseur-sync refused with $code"), AnsweredFailure {
 
     /** The server's own word for what was wrong, if it gave one. */
     val error: String? get() = body?.optString("error")?.takeIf { it.isNotEmpty() }
