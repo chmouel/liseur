@@ -13,6 +13,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -152,7 +153,14 @@ class PositionSyncCoordinatorTest {
     }
 
     @Test
-    fun `cancelling a queued leader does not strand later requests`() = runTest {
+    fun `a caller that stops waiting does not stop the run it asked for`() = runTest {
+        // Giving up on an answer is not revoking the question. Opening a
+        // book bounds how long it waits here, and that bound only works
+        // if walking away actually returns -- the run itself makes
+        // blocking network calls that outlive any caller's patience, so
+        // it belongs to nobody's deadline. And the run is still wanted:
+        // whatever positions it reconciles are read from disk on the
+        // next open regardless of who was listening when it finished.
         val sync = FakeSync()
         val gate = CompletableDeferred<Unit>()
         sync.gate = gate
@@ -160,21 +168,27 @@ class PositionSyncCoordinatorTest {
 
         val running = async { coordinator.request(SyncScope.Full, requestedAt = 0) }
         advanceUntilIdle()
-        val cancelled = async {
+        val abandoned = async {
             coordinator.request(SyncScope.Book("book"), requestedAt = Long.MAX_VALUE)
         }
         advanceUntilIdle()
-        cancelled.cancelAndJoin()
+        abandoned.cancelAndJoin()
 
         sync.gate = null
         gate.complete(Unit)
         running.await()
+        advanceUntilIdle()
 
+        // The abandoned request's run still happened, exactly once.
+        assertEquals(listOf(SyncScope.Full, SyncScope.Book("book")), sync.started)
+
+        // And nothing was left stranded: a fresh request is answered
+        // with a fresh run, not parked behind a ghost.
         assertEquals(
             SyncOutcome.Success,
             coordinator.request(SyncScope.Book("book"), requestedAt = Long.MAX_VALUE),
         )
-        assertEquals(listOf(SyncScope.Full, SyncScope.Book("book")), sync.started)
+        assertEquals(3, sync.started.size)
     }
 
     @Test
@@ -299,12 +313,48 @@ class PositionSyncCoordinatorTest {
         val running = async { coordinator.request(SyncScope.Full, requestedAt = 0) }
         advanceUntilIdle()
         val asked = async { coordinator.preservedConflict("b") }
-        advanceUntilIdle()
+        runCurrent()
         assertTrue(asked.isActive)
 
         gate.complete(Unit)
         running.await()
         assertNull(asked.await())
+    }
+
+    @Test
+    fun `a caller that gave up on a run does not queue behind it`() = runTest {
+        // A run against a server it cannot reach holds its turn for as
+        // long as the sockets take to give up, and a book on a loading
+        // screen must not be held there with it. Answering "nothing to
+        // settle" is safe: the disagreement stays preserved and is put
+        // to the reader on the next open, which is what preserving it
+        // was for.
+        val sync = FakeSync()
+        val gate = CompletableDeferred<Unit>()
+        sync.gate = gate
+        sync.conflict = SyncPreview(local = 0.2, remote = 0.8, remoteAt = null)
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val running = async { coordinator.request(SyncScope.Full, requestedAt = 0) }
+        advanceUntilIdle()
+
+        assertNull(coordinator.preservedConflict("b", abandonedRun = true))
+
+        gate.complete(Unit)
+        running.await()
+    }
+
+    @Test
+    fun `a caller that gave up still reads the conflict when no run holds the turn`() = runTest {
+        // Having given up on a run is not a reason to skip the answer.
+        // Only a turn that is actually held is, and once the run is done
+        // there is nothing to wait for.
+        val sync = FakeSync()
+        val conflict = SyncPreview(local = 0.2, remote = 0.8, remoteAt = null)
+        sync.conflict = conflict
+        val coordinator = PositionSyncCoordinator(sync)
+
+        assertSame(conflict, coordinator.preservedConflict("b", abandonedRun = true))
     }
 
     @Test

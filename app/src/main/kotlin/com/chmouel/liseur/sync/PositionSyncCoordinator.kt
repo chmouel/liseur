@@ -8,6 +8,10 @@ import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -93,10 +97,33 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
             queued[scope] = fresh
             fresh to true
         }
-        if (!isLeader) return slot.await()
+        if (isLeader) {
+            // Deliberately not run inside the caller. Opening a book bounds
+            // how long it will wait here, and a bound is only a bound if
+            // giving up actually returns: the run makes blocking network
+            // calls that ignore cancellation, so a caller running the work
+            // itself stays inside them for the full connect timeout no
+            // matter what deadline it set. Detaching leaves the caller with
+            // nothing to do but await, which it can stop doing at once.
+            //
+            // The dispatcher is the caller's, so nothing about where the
+            // work happens changes; only the job does, which is what keeps
+            // the run alive after the caller has walked away.
+            CoroutineScope(currentCoroutineContext() + Job()).launch {
+                lead(scope, snapshot, slot)
+            }
+        }
+        return slot.await()
+    }
 
+    /** Takes the turn, runs [scope], and hands the answer to everyone waiting. */
+    private suspend fun lead(
+        scope: SyncScope,
+        snapshot: SyncSnapshot?,
+        slot: CompletableDeferred<SyncOutcome>,
+    ) {
         try {
-            return turn.withLock {
+            turn.withLock {
                 state.withLock {
                     queued.remove(scope)
                     inFlight = Running(scope, System.currentTimeMillis(), slot)
@@ -109,15 +136,15 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
                 } catch (e: Throwable) {
                     clearInFlight(slot)
                     slot.completeExceptionally(e)
-                    throw e
+                    return@withLock
                 }
                 clearInFlight(slot)
                 slot.complete(outcome)
-                outcome
             }
         } catch (e: CancellationException) {
-            // A caller can disappear before its leader gets the turn. Do not
-            // leave that leader's deferred in queued forever.
+            // Only reachable if the run itself is stopped, which now takes
+            // the whole app going away. Do not leave the deferred in queued
+            // for a run that will never happen.
             withContext(NonCancellable) {
                 state.withLock {
                     if (queued[scope] === slot) queued.remove(scope)
@@ -162,10 +189,39 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
     /**
      * The disagreement an ordinary sync preserved rather than resolved,
      * if there is one. Reads what is already on disk and asks the server
-     * nothing, so it is safe to call while opening a book.
+     * nothing.
+     *
+     * Ordinarily it waits for a run in flight, so it cannot read a
+     * position out from under one halfway through writing it.
+     *
+     * [abandonedRun] is for the one caller that has already stopped
+     * waiting for that run: opening a book bounds its own sync and
+     * carries on without it. Waiting on the turn afterwards would undo
+     * that bound entirely — blocking network calls are not interrupted
+     * by giving up on them, so a run against a server whose packets go
+     * nowhere keeps the turn for as long as the sockets take to expire,
+     * and the book stays on its loading screen for all of it. Told the
+     * run was abandoned, this takes the turn if it is free and otherwise
+     * answers "nothing to settle" at once.
+     *
+     * That answer is safe: the disagreement stays preserved on disk and
+     * is put to the reader on the next open, which is what preserving it
+     * was for. It is deliberately not a timeout — a run that is merely
+     * slow but working is still worth waiting for, and only its own
+     * caller knows whether it gave up on one.
      */
-    suspend fun preservedConflict(bookUrl: String): SyncPreview? =
-        turn.withLock { sync.preservedConflict(bookUrl) }
+    suspend fun preservedConflict(
+        bookUrl: String,
+        abandonedRun: Boolean = false,
+    ): SyncPreview? {
+        if (!abandonedRun) return turn.withLock { sync.preservedConflict(bookUrl) }
+        if (!turn.tryLock()) return null
+        return try {
+            sync.preservedConflict(bookUrl)
+        } finally {
+            turn.unlock()
+        }
+    }
 
     private suspend fun clearInFlight(result: CompletableDeferred<SyncOutcome>) {
         withContext(NonCancellable) {
@@ -196,4 +252,5 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
             }
         }
     }
+
 }
