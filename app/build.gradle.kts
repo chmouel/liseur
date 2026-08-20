@@ -79,6 +79,15 @@ android {
         }
     }
 
+    dependenciesInfo {
+        // AGP's dependency manifest is encrypted with a Google key, so
+        // nobody but Play can read it and F-Droid cannot reproduce it.
+        // Dropping it keeps the APK byte-identical across rebuilds,
+        // which is what lets F-Droid publish our own signed binary.
+        includeInApk = false
+        includeInBundle = false
+    }
+
     testOptions {
         unitTests {
             // The calibre-web clients log with android.util.Log, which is a
