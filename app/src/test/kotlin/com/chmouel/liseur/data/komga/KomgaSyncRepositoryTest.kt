@@ -9,8 +9,12 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
+import com.chmouel.liseur.data.remote.PositionSyncStatus
+import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -48,6 +52,7 @@ class KomgaSyncRepositoryTest {
 
     private val bookId = "0B7C3D"
     private val bookUrl = "komga:$bookId"
+    private val reporting = SyncReporting()
     private lateinit var account: String
 
     @Before
@@ -111,6 +116,72 @@ class KomgaSyncRepositoryTest {
                 remoteUuid = bookId,
             ),
         )
+    }
+
+    /** The same repository, told this device has no network. */
+    private fun offlineSync(): KomgaSyncRepository {
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        return KomgaSyncRepository(
+            serverDao = db.remoteServerDao(),
+            bookDao = db.bookDao(),
+            progressDao = db.readingProgressDao(),
+            finishedState = FinishedState(
+                bookDao = db.bookDao(),
+                progressDao = db.readingProgressDao(),
+            ),
+            device = DeviceIdentityRepository(context),
+            reporting = reporting,
+            networkAvailability = { false },
+        )
+    }
+
+    @Test
+    fun `an offline run says so without waiting on a connection`() = runTest {
+        connect()
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.Offline), offlineSync().syncBook(bookUrl))
+        assertEquals(0, server.requestCount)
+        // Said out loud, so pressing "sync now" on a plane explains
+        // itself rather than leaving the last-synced line unchanged.
+        assertEquals(
+            PositionSyncStatus.Failed(SyncFailure.Offline),
+            reporting.status.value,
+        )
+    }
+
+    @Test
+    fun `offline, the server's position can still be taken but this one cannot be sent`() = runTest {
+        connect()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(
+            bookUrl = bookUrl,
+            locatorJson = locatorJson("OEBPS/ch2.xhtml", 0.5, 0.2),
+            progression = 0.2,
+            readingSpeed = null,
+            status = "Reading",
+            updatedAt = 1_000,
+        )
+        progress.persistPending(
+            bookUrl,
+            0.6,
+            "Reading",
+            4_000,
+            account,
+            now = 4_000,
+            locatorJson = locatorJson("OEBPS/ch7.xhtml", 0.5, 0.6),
+        )
+        val offline = offlineSync()
+
+        // Sending needs the server, so refusing is the honest answer.
+        assertEquals(
+            ResolveOutcome.Failed(SyncFailure.Offline),
+            offline.keepLocalPosition(bookUrl),
+        )
+        // Taking only applies an answer already on disk.
+        val revision = requireNotNull(progress.get(bookUrl)).localRevision
+        assertEquals(ResolveOutcome.Done, offline.takeRemotePosition(bookUrl, revision))
+        assertEquals(0.6, requireNotNull(progress.get(bookUrl)).totalProgression!!, 1e-9)
+        assertEquals(0, server.requestCount)
     }
 
     /** One book, with the reading progress Komga reports inline. */

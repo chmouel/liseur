@@ -12,6 +12,7 @@ import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import java.io.File
 import java.net.InetAddress
@@ -696,9 +697,39 @@ class LiseurSyncPositionSyncTest {
         assertEquals("w-old", db.workIdentityDao().alias(LOCAL, peer())?.workId)
     }
 
+    @Test
+    fun `an offline run says so without waiting on a connection`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+
+        assertEquals(
+            SyncOutcome.Failure(SyncFailure.Offline),
+            sync(online = false).syncAll(null),
+        )
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `keeping the local position works offline, because nothing is sent`() = runTest {
+        // Unlike the other two servers, this one settles a disagreement
+        // by clearing it and letting the next run push. That is a local
+        // write, and refusing it offline would leave the book asking the
+        // same question on every open for the rest of the flight.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"ops":[${op(seq = 7, progression = 0.8)}]}"""))
+        sync().previewBook(LOCAL)
+        assertNotNull(sync().preservedConflict(LOCAL))
+
+        assertEquals(ResolveOutcome.Done, sync(online = false).keepLocalPosition(LOCAL))
+        assertNull(sync().preservedConflict(LOCAL))
+    }
+
     // -- Scaffolding ------------------------------------------------------
 
-    private fun sync(): LiseurSyncPositionSync {
+    private fun sync(online: Boolean = true): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
             serverDao = db.remoteServerDao(),
@@ -714,6 +745,7 @@ class LiseurSyncPositionSyncTest {
             ),
             deviceKey = { "device-a" },
             finishedState = FinishedState(db.bookDao(), db.readingProgressDao()),
+            networkAvailability = { online },
             now = { NOW },
         )
     }

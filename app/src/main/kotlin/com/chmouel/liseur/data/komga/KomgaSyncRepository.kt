@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.komga
 
 import android.util.Log
+import com.chmouel.liseur.data.NetworkAvailability
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgress
@@ -81,6 +82,7 @@ class KomgaSyncRepository(
     private val finishedState: FinishedState,
     private val device: DeviceIdentityRepository,
     private val reporting: SyncReporting = SyncReporting(),
+    private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
     private val catalog: KomgaCatalogClient = KomgaCatalogClient(),
     private val positions: KomgaProgressionClient = KomgaProgressionClient(),
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
@@ -109,6 +111,7 @@ class KomgaSyncRepository(
         val server = serverDao.get() ?: return PreviewOutcome.NotSynced
         val credentials = server.credentials ?: return PreviewOutcome.NotSynced
         val id = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return PreviewOutcome.NotSynced
+        if (!networkAvailability.isAvailable()) return PreviewOutcome.Failed(SyncFailure.Offline)
 
         val remote = when (val asked = fetchRemote(server, credentials, id)) {
             is RemoteResult.Failed -> return PreviewOutcome.Failed(asked.reason)
@@ -214,6 +217,7 @@ class KomgaSyncRepository(
         // Read afresh, so a page turned while the question was open is
         // what gets sent rather than the position it was asked about.
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
+        if (!networkAvailability.isAvailable()) return ResolveOutcome.Failed(SyncFailure.Offline)
 
         val outcome = apply(
             server = server,
@@ -248,6 +252,10 @@ class KomgaSyncRepository(
         val credentials = server.credentials ?: run {
             reporting.report(PositionSyncStatus.Unavailable)
             return SyncOutcome.NotApplicable
+        }
+        if (!networkAvailability.isAvailable()) {
+            reporting.report(PositionSyncStatus.Failed(SyncFailure.Offline))
+            return SyncOutcome.Failure(SyncFailure.Offline)
         }
 
         reporting.report(PositionSyncStatus.Syncing)

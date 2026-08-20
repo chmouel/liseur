@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.calibre
 
 import android.util.Log
+import com.chmouel.liseur.data.NetworkAvailability
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.RemoteServerDao
@@ -63,6 +64,7 @@ class KoboSyncRepository(
     private val client: KoboClient = KoboClient(),
     private val finishedState: FinishedState,
     private val reporting: SyncReporting = SyncReporting(),
+    private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
 
@@ -103,6 +105,7 @@ class KoboSyncRepository(
         val server = serverDao.get() ?: return PreviewOutcome.NotSynced
         val token = server.koboToken ?: return PreviewOutcome.NotSynced
         val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return PreviewOutcome.NotSynced
+        if (!networkAvailability.isAvailable()) return PreviewOutcome.Failed(SyncFailure.Offline)
         val base = "${server.baseUrl}/kobo/$token"
         val account = server.accountKey
 
@@ -193,6 +196,7 @@ class KoboSyncRepository(
         // Read afresh, so a page turned while the question was open is
         // what gets sent rather than the position it was asked about.
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
+        if (!networkAvailability.isAvailable()) return ResolveOutcome.Failed(SyncFailure.Offline)
 
         val outcome = apply(
             base = "${server.baseUrl}/kobo/$token",
@@ -213,6 +217,10 @@ class KoboSyncRepository(
         val token = server.koboToken ?: run {
             reporting.report(PositionSyncStatus.Unavailable)
             return SyncOutcome.NotApplicable
+        }
+        if (!networkAvailability.isAvailable()) {
+            reporting.report(PositionSyncStatus.Failed(SyncFailure.Offline))
+            return SyncOutcome.Failure(SyncFailure.Offline)
         }
 
         reporting.report(PositionSyncStatus.Syncing)

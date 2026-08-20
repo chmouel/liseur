@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.liseursync
 
 import android.util.Log
+import com.chmouel.liseur.data.NetworkAvailability
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgress
@@ -72,6 +73,7 @@ class LiseurSyncPositionSync(
     private val deviceKey: suspend () -> String,
     private val finishedState: FinishedState,
     private val reporting: SyncReporting = SyncReporting(),
+    private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
     private val now: () -> Long = System::currentTimeMillis,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
@@ -103,6 +105,7 @@ class LiseurSyncPositionSync(
         val account = account() ?: return PreviewOutcome.NotSynced
         val book = bookDao.getByUrl(bookUrl) ?: return PreviewOutcome.NotSynced
         val alias = works.cached(book, account.peerId) ?: return PreviewOutcome.NotSynced
+        if (!networkAvailability.isAvailable()) return PreviewOutcome.Failed(SyncFailure.Offline)
 
         val head = try {
             latestOp(account.baseUrl, account.credentials, alias.workId)
@@ -307,6 +310,10 @@ class LiseurSyncPositionSync(
             // open, and there is nothing to do about it here.
             reporting.report(PositionSyncStatus.Unavailable)
             return SyncOutcome.NotApplicable
+        }
+        if (!networkAvailability.isAvailable()) {
+            reporting.report(PositionSyncStatus.Failed(SyncFailure.Offline))
+            return SyncOutcome.Failure(SyncFailure.Offline)
         }
         val account = Account(
             baseUrl = server.baseUrl,

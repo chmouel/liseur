@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.remote
 
 import android.util.Log
+import com.chmouel.liseur.data.NetworkAvailability
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
@@ -68,6 +69,7 @@ class RemoteCatalogRepository(
      */
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
 ) {
     private val _status = MutableStateFlow<CatalogStatus>(CatalogStatus.Idle)
     val status: StateFlow<CatalogStatus> = _status.asStateFlow()
@@ -121,6 +123,13 @@ class RemoteCatalogRepository(
             }
             val client = router.catalogFor(server.kind) ?: run {
                 _status.value = CatalogStatus.Idle
+                return CatalogRefresh.None
+            }
+            // Said rather than attempted: the pull would end here anyway,
+            // several stalled connections later, and a refresh that
+            // reports nothing looks like a gesture that did not register.
+            if (!networkAvailability.isAvailable()) {
+                _status.value = CatalogStatus.Failed(SyncFailure.Offline)
                 return CatalogRefresh.None
             }
 
@@ -202,6 +211,7 @@ class RemoteCatalogRepository(
     }
 
     suspend fun search(query: String): List<RemoteBook> {
+        if (!networkAvailability.isAvailable()) return emptyList()
         val server = serverDao.get() ?: return emptyList()
         val credentials = server.credentials ?: return emptyList()
         val client = router.catalogFor(server.kind) ?: return emptyList()
@@ -221,6 +231,7 @@ class RemoteCatalogRepository(
             bookDao.discardPendingSeriesClaims()
             return
         }
+        if (!networkAvailability.isAvailable()) return
         val credentials = server.credentials ?: return
         retryPendingSeriesClaims(server, credentials)
     }
