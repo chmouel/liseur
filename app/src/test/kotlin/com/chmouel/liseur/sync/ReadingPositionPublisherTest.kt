@@ -161,6 +161,38 @@ class ReadingPositionPublisherTest {
     }
 
     @Test
+    fun `a barrier runs only after every write queued before it`() = runTest {
+        val events = mutableListOf<String>()
+        val sync = LatestPositionSync(
+            scope = backgroundScope,
+            request = { SyncOutcome.Success },
+            scheduleRetry = {},
+            onError = { _, error -> throw error },
+        )
+        val publisher = ReadingPositionPublisher(
+            scope = backgroundScope,
+            overrideFor = { FinishedOverride.NONE },
+            persist = { update, _ -> events += "write:${update.progression}" },
+            refreshFinished = {},
+            markFinished = {},
+            latestSync = sync,
+            scheduleClose = {},
+            onError = { _, error -> throw error },
+        )
+
+        // The page turned just before the book was closed must be on
+        // disk before the barrier acts: the open-book fence is dropped
+        // through here, and dropping it ahead of that write would let a
+        // background pull slip between the two.
+        assertTrue(publisher.publish(update(0.1)))
+        assertTrue(publisher.afterQueuedWrites { events += "barrier" })
+        assertTrue(publisher.publish(update(0.2)))
+        runCurrent()
+
+        assertEquals(listOf("write:0.1", "barrier", "write:0.2"), events)
+    }
+
+    @Test
     fun `finished refresh failure does not repeat the committed write`() = runTest {
         var writes = 0
         var refreshes = 0

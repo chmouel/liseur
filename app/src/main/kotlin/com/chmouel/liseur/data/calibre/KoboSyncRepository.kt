@@ -485,14 +485,16 @@ class KoboSyncRepository(
 
             is SyncDecision.Pull -> {
                 val progression = decision.state.progression ?: stored?.totalProgression
+                var applied = false
                 if (progression == null) {
                     progressDao.clearPending(bookUrl)
                 } else {
                     // Refused means a page was turned here while this was
-                    // being decided, which makes it a disagreement rather
+                    // being decided, or that the book is open on screen
+                    // right now: either way it is a disagreement rather
                     // than a handover. The remote state stays put for the
                     // next run, and now for someone to be asked about.
-                    progressDao.applyPull(
+                    applied = progressDao.applyUnattendedPull(
                         bookUrl = bookUrl,
                         expectedRevision = stored?.localRevision ?: 0,
                         progression = progression,
@@ -505,7 +507,7 @@ class KoboSyncRepository(
                 // Taking the server's word for it can finish a book, and
                 // the library has to agree with the reader about that.
                 finishedState.refreshFromProgress(bookUrl)
-                BookOutcome(moved = SyncMove.PULLED)
+                BookOutcome(moved = if (applied) SyncMove.PULLED else null)
             }
 
             is SyncDecision.Push -> BookOutcome()

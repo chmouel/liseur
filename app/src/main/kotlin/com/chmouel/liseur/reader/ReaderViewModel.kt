@@ -65,6 +65,7 @@ import com.chmouel.liseur.reader.progress.ReadingPace
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
 import com.chmouel.liseur.reader.progress.StableBookProgress
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -128,6 +129,10 @@ class ReaderViewModel(
 
     private val sessions = sessionManager.recorder(bookId)
     private val timeSpent = sessionManager.observeTotal(bookId)
+
+    /** Whether [open] got far enough to declare this book being read. */
+    @Volatile
+    private var readingDeclared = false
 
     /**
      * What the Define action needs before it opens a card or another app.
@@ -693,6 +698,15 @@ class ReaderViewModel(
             // up on above is not waited for a second time, or the bound
             // over it would mean nothing.
             settlePreservedConflict(publication, abandonedRun = !syncFinished)
+
+            // From here the position about to be read is on screen for
+            // the whole session, and a sync run still going in the
+            // background — the very one just given up on above — must
+            // not move it under the page. Entering after the bounded
+            // sync and the settlement, not before: those two are meant
+            // to move it.
+            progressDao.openBooks.enter(bookId)
+            readingDeclared = true
 
             val stored = progressDao.get(bookId)
             speed = ReadingSpeedEstimator(
@@ -1280,6 +1294,22 @@ class ReaderViewModel(
     override fun onCleared() {
         sessions.close()
         (_state.value as? UiState.Ready)?.publication?.close()
+        if (readingDeclared) {
+            // Through the position queue, not a scope of its own: a page
+            // turned moments ago may still be in line to be written, and
+            // dropping the fence ahead of it would let a background pull
+            // land between that write and this — the very interleaving
+            // the fence exists to prevent. The queue survives this
+            // ViewModel, and the fallback covers a queue already closed.
+            val queued = positionPublisher.afterQueuedWrites {
+                progressDao.openBooks.leave(bookId)
+            }
+            if (!queued) {
+                CoroutineScope(Dispatchers.Default).launch {
+                    progressDao.openBooks.leave(bookId)
+                }
+            }
+        }
     }
 
     /** A place to return to after a jump, and the page it was on. */

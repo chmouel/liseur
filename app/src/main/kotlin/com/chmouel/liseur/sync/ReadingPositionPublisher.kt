@@ -44,6 +44,7 @@ class ReadingPositionPublisher(
         data class Position(val update: PositionUpdate) : Event
         data class Complete(val bookUrl: String) : Event
         data class Close(val bookUrl: String) : Event
+        data class Barrier(val action: suspend () -> Unit) : Event
     }
 
     private val events = Channel<Event>(Channel.UNLIMITED)
@@ -57,6 +58,7 @@ class ReadingPositionPublisher(
                     is Event.Position -> store(event.update)
                     is Event.Complete -> complete(event.bookUrl)
                     is Event.Close -> scheduleClose(event.bookUrl)
+                    is Event.Barrier -> event.action()
                 }
             }
         }
@@ -76,6 +78,18 @@ class ReadingPositionPublisher(
 
     fun closeBook(bookUrl: String): Boolean =
         events.trySend(Event.Close(bookUrl)).isSuccess
+
+    /**
+     * Runs [action] once every write accepted before this call has
+     * committed.
+     *
+     * The queue is the order pages were turned in, so anything that must
+     * not run ahead of a page still in flight — dropping the open-book
+     * fence, for one — takes its place in the same line rather than
+     * racing it from another scope.
+     */
+    fun afterQueuedWrites(action: suspend () -> Unit): Boolean =
+        events.trySend(Event.Barrier(action)).isSuccess
 
     private suspend fun store(update: PositionUpdate) {
         val stored = retry {
