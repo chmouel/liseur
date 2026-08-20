@@ -60,6 +60,32 @@ class ExactLocatorAnchorTest {
     }
 
     @Test
+    fun `agreement compares the passage instead of layout progressions`() {
+        val local = ExactLocatorAnchor.mark(
+            locator(),
+            ViewportTextAnchor("#chapter", "before ", "same word", " after"),
+        )
+        val same = ExactLocatorAnchor.withStableProgression(local, 0.074)
+        val different = ExactLocatorAnchor.mark(
+            locator(),
+            ViewportTextAnchor("#chapter", "before ", "other word", " after"),
+        )
+
+        assertEquals(
+            true,
+            ExactLocatorAnchor.agreement(local.toJSON().toString(), same.toJSON().toString()),
+        )
+        assertEquals(
+            false,
+            ExactLocatorAnchor.agreement(local.toJSON().toString(), different.toJSON().toString()),
+        )
+        assertEquals(
+            null,
+            ExactLocatorAnchor.agreement(local.toJSON().toString(), locator().toJSON().toString()),
+        )
+    }
+
+    @Test
     fun `excerpt is normalized and only comes from an exact anchor`() {
         val exact = ExactLocatorAnchor.mark(
             locator(),

@@ -75,6 +75,46 @@ class ReadingStateMergeTest {
     }
 
     @Test
+    fun `different exact anchors inside percentage tolerance are pulled`() {
+        val decision = reconcileReadingState(
+            local = state(0.071),
+            remote = state(0.074),
+            baseline = baseline(0.071),
+            localDirty = false,
+            exactPositionAgreement = false,
+        )
+
+        assertEquals(0.074, (decision as SyncDecision.Pull).state.progression)
+    }
+
+    @Test
+    fun `different exact anchors preserve two locally changed positions`() {
+        val decision = reconcileReadingState(
+            local = state(0.072),
+            remote = state(0.074),
+            baseline = baseline(0.071),
+            localDirty = true,
+            exactPositionAgreement = false,
+        )
+
+        assertTrue(decision is SyncDecision.Conflict)
+    }
+
+    @Test
+    fun `the same exact anchor agrees despite percentage layout differences`() {
+        assertEquals(
+            SyncDecision.InSync,
+            reconcileReadingState(
+                local = state(0.071),
+                remote = state(0.078),
+                baseline = baseline(0.071),
+                localDirty = false,
+                exactPositionAgreement = true,
+            ),
+        )
+    }
+
+    @Test
     fun `only the server moved, so its position is taken`() {
         val decision = reconcileReadingState(
             local = state(0.3),

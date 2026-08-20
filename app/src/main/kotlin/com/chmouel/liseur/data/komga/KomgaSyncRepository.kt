@@ -114,6 +114,9 @@ class KomgaSyncRepository(
             is RemoteResult.Failed -> return PreviewOutcome.Failed(asked.reason)
             is RemoteResult.Ok -> asked.value
         }
+        val remoteLocatorJson = remote?.locator
+            ?.let(KomgaLocator::toReadium)
+            ?.toString()
         if (remote != null) {
             forAccount(server) {
                 progressDao.persistPending(
@@ -123,29 +126,27 @@ class KomgaSyncRepository(
                     remoteUpdatedAt = remote.state.updatedAt,
                     account = server.accountKey,
                     now = System.currentTimeMillis(),
-                    locatorJson = remote.locator?.let(KomgaLocator::toReadium)?.toString(),
+                    locatorJson = remoteLocatorJson,
                 )
             }
         }
+        val stored = progressDao.get(bookUrl)
+        val exact = remoteLocatorJson?.takeIf(ExactLocatorAnchor::isExactJson)
         return PreviewOutcome.Ready(
             SyncPreview(
-                local = progressDao.get(bookUrl)?.totalProgression,
+                local = stored?.totalProgression,
                 remote = remote?.state?.progression,
                 remoteAt = remote?.state?.updatedAt?.takeIf { it > 0 },
-                excerpt = remote?.locator
-                    ?.let(KomgaLocator::toReadium)
-                    ?.toString()
-                    ?.let(ExactLocatorAnchor::excerpt),
-                confidence = if (
-                    remote?.locator
-                        ?.let(KomgaLocator::toReadium)
-                        ?.toString()
-                        ?.let(ExactLocatorAnchor::isExactJson) == true
-                ) {
+                excerpt = ExactLocatorAnchor.excerpt(exact),
+                confidence = if (exact != null) {
                     ResumeConfidence.EXACT
                 } else {
                     ResumeConfidence.APPROXIMATE
                 },
+                exactPositionAgreement = ExactLocatorAnchor.agreement(
+                    stored?.locatorJson,
+                    exact,
+                ),
             ),
         )
     }
@@ -169,6 +170,10 @@ class KomgaSyncRepository(
             } else {
                 ResumeConfidence.APPROXIMATE
             },
+            exactPositionAgreement = ExactLocatorAnchor.agreement(
+                stored.locatorJson,
+                stored.pendingLocatorJson,
+            ),
         ).takeIf { !it.agrees }
     }
 
@@ -401,12 +406,20 @@ class KomgaSyncRepository(
             return BookOutcome()
         }
 
+        val exactRemote = remote?.locator
+            ?.let(KomgaLocator::toReadium)
+            ?.toString()
+            ?.takeIf(ExactLocatorAnchor::isExactJson)
         val decision = reconcileReadingState(
             local = stored?.asReadingState(),
             remote = remote?.state,
             baseline = stored?.baselineFor(account),
             localDirty = dirty,
             localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
+            exactPositionAgreement = ExactLocatorAnchor.agreement(
+                stored?.locatorJson,
+                exactRemote,
+            ),
         )
         return apply(server, credentials, id, book.url, stored, remote, decision)
     }

@@ -656,11 +656,16 @@ class ReaderViewModel(
             }
             val afterSync = progressDao.get(bookId)
             val pulledAutomatically = afterSync?.takeIf { after ->
+                val exactMoved = ExactLocatorAnchor.agreement(
+                    beforeSync?.locatorJson,
+                    after.locatorJson,
+                ) == false
+                val progressionMoved = beforeSync?.totalProgression?.let {
+                    kotlin.math.abs(it - (after.totalProgression ?: it)) >= EPSILON
+                } != false
                 after.localRevision > (beforeSync?.localRevision ?: 0L) &&
                     after.totalProgression != null &&
-                    beforeSync?.totalProgression?.let {
-                        kotlin.math.abs(it - after.totalProgression) >= EPSILON
-                    } != false
+                    (progressionMoved || exactMoved)
             }?.let { after ->
                 val exact = after.locatorJson.takeIf(ExactLocatorAnchor::isExactJson)
                 SyncPreview(
@@ -854,7 +859,7 @@ class ReaderViewModel(
                 val here = preview.local
                     ?: lastLocator?.locations?.totalProgression
                     ?: 0.0
-                if (there <= here + EPSILON) return@launch
+                if (preview.agrees || there <= here) return@launch
                 // Declining an offer declines that place; only reading
                 // done elsewhere since brings the pill back.
                 if (catchUpDeclined?.let { kotlin.math.abs(it - there) < EPSILON } == true) {

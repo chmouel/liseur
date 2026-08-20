@@ -157,6 +157,7 @@ fun reconcileReadingState(
     baseline: ReadingBaseline?,
     localDirty: Boolean,
     localUnreadOverride: Boolean = false,
+    exactPositionAgreement: Boolean? = null,
 ): SyncDecision {
     if (local == null && remote == null) return SyncDecision.InSync
     if (local == null) return SyncDecision.Pull(checkNotNull(remote))
@@ -164,7 +165,7 @@ fun reconcileReadingState(
         return if (localDirty) SyncDecision.Push(local) else SyncDecision.InSync
     }
 
-    if (sameSpot(local, remote)) return SyncDecision.InSync
+    if (sameSpot(local, remote, exactPositionAgreement)) return SyncDecision.InSync
 
     // A deliberate "not read after all" here beats a leftover flag there.
     if (localUnreadOverride && remote.status == ReadingStatus.FINISHED) {
@@ -180,6 +181,20 @@ fun reconcileReadingState(
             // calling this settled would drop it for good.
             localDirty && local.progression != null -> SyncDecision.Push(local)
             else -> SyncDecision.InSync
+        }
+    }
+
+    // Percentage-only partners need a tolerance for rounding and layout.
+    // An exact same-edition anchor does not: if it differs, silently calling
+    // the two places equal is precisely the position loss exact sync avoids.
+    // A clean local side can take it immediately. If this device also moved,
+    // preserve both sides as a conflict rather than guessing which action was
+    // intentional.
+    if (exactPositionAgreement == false) {
+        return if (localDirty) {
+            SyncDecision.Conflict(local, remote)
+        } else {
+            SyncDecision.Pull(remote)
         }
     }
 
@@ -212,8 +227,13 @@ private fun movedFrom(
     return kotlin.math.abs(agreed - now) >= tolerance
 }
 
-private fun sameSpot(local: ReadingState, remote: ReadingState): Boolean {
+private fun sameSpot(
+    local: ReadingState,
+    remote: ReadingState,
+    exactPositionAgreement: Boolean?,
+): Boolean {
     if (local.status != remote.status) return false
+    if (exactPositionAgreement != null) return exactPositionAgreement
     val here = local.progression ?: return remote.progression == null
     val there = remote.progression ?: return false
     return kotlin.math.abs(here - there) < EPSILON
