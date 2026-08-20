@@ -61,6 +61,8 @@ data class ReadingProgress(
     /** Which account the baseline was agreed with. */
     @ColumnInfo(name = "agreed_account") val agreedAccount: String? = null,
     @ColumnInfo(name = "pending_progression") val pendingProgression: Double? = null,
+    /** Exact locator paired with [pendingProgression], when the peer supplied one. */
+    @ColumnInfo(name = "pending_locator_json") val pendingLocatorJson: String? = null,
     @ColumnInfo(name = "pending_status") val pendingStatus: String? = null,
     @ColumnInfo(name = "pending_updated_at") val pendingUpdatedAt: Long? = null,
     /** Which account reported the pending state. */
@@ -241,12 +243,14 @@ abstract class ReadingProgressDao {
         INSERT INTO reading_progress (
             book_url, locator_json, total_progression, updated_at,
             local_revision, acked_revision,
-            pending_progression, pending_status, pending_updated_at, pending_account
+            pending_progression, pending_locator_json,
+            pending_status, pending_updated_at, pending_account
         )
         VALUES (:bookUrl, '{}', NULL, :now, 0, 0,
-                :progression, :status, :remoteUpdatedAt, :account)
+                :progression, :locatorJson, :status, :remoteUpdatedAt, :account)
         ON CONFLICT(book_url) DO UPDATE SET
             pending_progression = :progression,
+            pending_locator_json = :locatorJson,
             pending_status = :status,
             pending_updated_at = :remoteUpdatedAt,
             pending_account = :account
@@ -259,6 +263,7 @@ abstract class ReadingProgressDao {
         remoteUpdatedAt: Long?,
         account: String,
         now: Long,
+        locatorJson: String? = null,
     )
 
     /** Every row still holding an unsettled state from this account. */
@@ -268,7 +273,7 @@ abstract class ReadingProgressDao {
     @Query(
         """
         UPDATE reading_progress SET
-            pending_progression = NULL, pending_status = NULL,
+            pending_progression = NULL, pending_locator_json = NULL, pending_status = NULL,
             pending_updated_at = NULL, pending_account = NULL
         WHERE book_url = :bookUrl
         """,
@@ -290,9 +295,8 @@ abstract class ReadingProgressDao {
      * [locatorJson] is the exact place the server was left at, for the
      * servers that keep one. A percentage can only reopen a book roughly
      * where it was; a locator reopens it on the right word. Servers that
-     * have nothing so precise to offer pass null, and whatever locator
-     * this device already had is left alone rather than replaced with a
-     * guess.
+     * have nothing so precise to offer pass null, which invalidates the
+     * old locator so it cannot be mistaken for the newly adopted place.
      *
      * The revision goes up, and the acknowledgement goes up with it, so
      * this partner still counts as in step while every *other* partner
@@ -331,7 +335,7 @@ abstract class ReadingProgressDao {
         """
         UPDATE reading_progress SET
             total_progression = :progression,
-            locator_json = COALESCE(:locatorJson, locator_json),
+            locator_json = COALESCE(:locatorJson, '{}'),
             status = :status,
             updated_at = :now,
             synced_at = :now,
@@ -510,6 +514,7 @@ abstract class ReadingProgressDao {
         status: String,
         now: Long,
         locatorJson: String? = null,
+        remoteUpdatedAt: Long? = null,
     ): Boolean {
         // The row is made to exist first, because a book first read on
         // another device has never been opened here and there is nothing
@@ -524,6 +529,7 @@ abstract class ReadingProgressDao {
             status = status,
             now = now,
             locatorJson = locatorJson,
+            remoteUpdatedAt = remoteUpdatedAt,
         ) > 0
     }
 
@@ -542,10 +548,11 @@ abstract class ReadingProgressDao {
         """
         UPDATE reading_progress SET
             total_progression = :progression,
-            locator_json = COALESCE(:locatorJson, locator_json),
+            locator_json = COALESCE(:locatorJson, '{}'),
             status = :status,
             updated_at = :now,
             synced_at = :now,
+            remote_updated_at = :remoteUpdatedAt,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl AND local_revision = :expectedRevision
         """,
@@ -557,6 +564,7 @@ abstract class ReadingProgressDao {
         status: String,
         now: Long,
         locatorJson: String?,
+        remoteUpdatedAt: Long?,
     ): Int
 
     /**
@@ -643,7 +651,7 @@ abstract class ReadingProgressDao {
         """
         UPDATE reading_progress SET
             agreed_progression = NULL, agreed_status = NULL, agreed_account = NULL,
-            pending_progression = NULL, pending_status = NULL,
+            pending_progression = NULL, pending_locator_json = NULL, pending_status = NULL,
             pending_updated_at = NULL, pending_account = NULL,
             synced_at = NULL,
             acked_revision = local_revision

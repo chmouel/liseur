@@ -4,6 +4,7 @@ import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.positionsByReadingOrder
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** A chapter of the book and the range of positions it covers. */
@@ -88,6 +89,18 @@ class BookPositions(
         return (1 + progression.coerceIn(0f, 1f) * (totalPositions - 1))
             .roundToInt()
             .coerceIn(1, totalPositions)
+    }
+
+    /**
+     * A conservative synthetic locator which never starts after [progression].
+     * Used when an exact text quote is unavailable or belongs to another edition.
+     */
+    fun locatorAtOrBeforeProgression(progression: Double): Locator? {
+        if (!isUsable) return null
+        if (totalPositions == 1) return locators.first()
+        val coordinate = 1.0 + progression.coerceIn(0.0, 1.0) * (totalPositions - 1)
+        val position = floor(coordinate).toInt().coerceIn(1, totalPositions)
+        return locatorAt(position)
     }
 
     private fun progressAtCoordinate(coordinate: Double): StableBookProgress {

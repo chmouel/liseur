@@ -24,7 +24,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 37,
+    version = 38,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1006,6 +1006,21 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Keeps each pending progression paired with the locator that supplied it. */
+        val MIGRATION_37_38 = object : Migration(37, 38) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `reading_progress` ADD COLUMN `pending_locator_json` TEXT",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `pending_locator_json` TEXT",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `pending_edition_sha` TEXT",
+                )
+            }
+        }
+
         /**
          * Every migration, in order, as one list so that what the app
          * runs and what the tests replay cannot drift apart.
@@ -1047,6 +1062,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_34_35,
             MIGRATION_35_36,
             MIGRATION_36_37,
+            MIGRATION_37_38,
         )
     }
 }

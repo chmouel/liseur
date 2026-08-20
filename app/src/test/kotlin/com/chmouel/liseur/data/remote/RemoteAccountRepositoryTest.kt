@@ -233,6 +233,26 @@ class RemoteAccountRepositoryTest {
     }
 
     @Test
+    fun `disconnect clears durable locator state for the liseur sync account`() = runTest {
+        val repository = repository(db.remoteServerDao(), RotatingLiseurSync(accountId = "acc-1"))
+        repository.connectLiseurSyncToken(BASE, "token-1")
+        val peer = requireNotNull(db.remoteServerDao().get()).accountKey
+        db.syncPeerStateDao().persistPending(
+            bookUrl = "file:///book.epub",
+            peerId = peer,
+            progression = 0.8,
+            status = "Reading",
+            remoteUpdatedAt = 1_000,
+            locatorJson = """{"href":"chapter","locations":{"liseurAnchor":1}}""",
+            editionSha = "sha",
+        )
+
+        repository.disconnect()
+
+        assertNull(db.syncPeerStateDao().get("file:///book.epub", peer))
+    }
+
+    @Test
     fun `a different account behind the same address still switches`() = runTest {
         val repository = repository(db.remoteServerDao(), RotatingLiseurSync(accountId = "acc-1"))
         repository.connectLiseurSyncToken(BASE, "token-1")
@@ -249,6 +269,8 @@ class RemoteAccountRepositoryTest {
                 db.workIdentityDao(),
             ),
             seriesExtraDao = db.seriesExtraDao(),
+            peerStateDao = db.syncPeerStateDao(),
+            identityDao = db.workIdentityDao(),
             setups = mapOf(ServerKind.LISEUR_SYNC to RotatingLiseurSync(accountId = "acc-2")),
         )
         other.connectLiseurSyncToken(BASE, "token-x")
@@ -272,6 +294,8 @@ class RemoteAccountRepositoryTest {
             db.workIdentityDao(),
         ),
         seriesExtraDao = db.seriesExtraDao(),
+        peerStateDao = db.syncPeerStateDao(),
+        identityDao = db.workIdentityDao(),
         setups = mapOf(ServerKind.LISEUR_SYNC to liseurSyncSetup),
     )
 

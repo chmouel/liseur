@@ -41,6 +41,9 @@ data class SyncPeerState(
     @ColumnInfo(name = "agreed_status") val agreedStatus: String? = null,
     /** Reported by the partner and not yet settled. */
     @ColumnInfo(name = "pending_progression") val pendingProgression: Double? = null,
+    /** Locator and edition from the same op as [pendingProgression]. */
+    @ColumnInfo(name = "pending_locator_json") val pendingLocatorJson: String? = null,
+    @ColumnInfo(name = "pending_edition_sha") val pendingEditionSha: String? = null,
     @ColumnInfo(name = "pending_status") val pendingStatus: String? = null,
     @ColumnInfo(name = "pending_updated_at") val pendingUpdatedAt: Long? = null,
     /** True once a partner has reported something waiting to be settled. */
@@ -85,13 +88,17 @@ abstract class SyncPeerStateDao {
         """
         INSERT INTO sync_peer_state (
             book_url, peer_id, acked_revision,
-            pending_progression, pending_status, pending_updated_at,
+            pending_progression, pending_locator_json, pending_edition_sha,
+            pending_status, pending_updated_at,
             has_pending, remote_updated_at
         )
-        VALUES (:bookUrl, :peerId, 0, :progression, :status, :remoteUpdatedAt, 1,
+        VALUES (:bookUrl, :peerId, 0, :progression, :locatorJson, :editionSha,
+                :status, :remoteUpdatedAt, 1,
                 :remoteUpdatedAt)
         ON CONFLICT(book_url, peer_id) DO UPDATE SET
             pending_progression = :progression,
+            pending_locator_json = :locatorJson,
+            pending_edition_sha = :editionSha,
             pending_status = :status,
             pending_updated_at = :remoteUpdatedAt,
             has_pending = 1,
@@ -104,12 +111,15 @@ abstract class SyncPeerStateDao {
         progression: Double?,
         status: String?,
         remoteUpdatedAt: Long?,
+        locatorJson: String? = null,
+        editionSha: String? = null,
     )
 
     @Query(
         """
         UPDATE sync_peer_state SET
-            pending_progression = NULL, pending_status = NULL,
+            pending_progression = NULL, pending_locator_json = NULL,
+            pending_edition_sha = NULL, pending_status = NULL,
             pending_updated_at = NULL, has_pending = 0
         WHERE book_url = :bookUrl AND peer_id = :peerId
         """,
@@ -136,6 +146,8 @@ abstract class SyncPeerStateDao {
             agreed_progression = :progression,
             agreed_status = :status,
             pending_progression = NULL,
+            pending_locator_json = NULL,
+            pending_edition_sha = NULL,
             pending_status = NULL,
             pending_updated_at = NULL,
             has_pending = 0,

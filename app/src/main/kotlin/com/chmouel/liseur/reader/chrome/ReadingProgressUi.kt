@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.progress.FooterMiddle
@@ -241,6 +242,10 @@ private fun Modifier.chapterTicks(ticks: List<Float>, color: Color): Modifier =
 fun JumpBackPill(
     position: Int?,
     fromSync: Boolean,
+    excerpt: String?,
+    remoteAt: Long?,
+    confidence: ResumeConfidence,
+    resumePosition: Int?,
     theme: ReaderTheme,
     onJumpBack: () -> Unit,
     onDismiss: () -> Unit,
@@ -261,22 +266,42 @@ fun JumpBackPill(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.clickableWithoutRipple(onJumpBack),
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clickableWithoutRipple(onJumpBack),
             ) {
                 Icon(
                     imageVector = if (fromSync) Icons.Outlined.CloudSync else Icons.Outlined.Undo,
                     contentDescription = null,
                 )
-                Text(
-                    text = if (fromSync) {
-                        stringResource(R.string.position_synced_from_device)
-                    } else if (position != null) {
-                        stringResource(R.string.jump_back_to_page, position)
-                    } else {
-                        stringResource(R.string.jump_back)
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                )
+                Column {
+                    Text(
+                        text = if (fromSync) {
+                            resumeHeadline(resumePosition, remoteAt, confidence)
+                        } else if (position != null) {
+                            stringResource(R.string.jump_back_to_page, position)
+                        } else {
+                            stringResource(R.string.jump_back)
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    if (fromSync && !excerpt.isNullOrBlank()) {
+                        Text(
+                            text = excerpt,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (fromSync) {
+                        Text(
+                            text = position?.let {
+                                stringResource(R.string.jump_back_to_page, it)
+                            } ?: stringResource(R.string.jump_back),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
                 if (fromSync) {
                     Icon(
                         imageVector = Icons.Outlined.Undo,
@@ -365,6 +390,9 @@ fun NextInSeriesPill(
 @Composable
 fun CatchUpPill(
     position: Int?,
+    excerpt: String?,
+    remoteAt: Long?,
+    confidence: ResumeConfidence,
     theme: ReaderTheme,
     onCatchUp: () -> Unit,
     onDismiss: () -> Unit,
@@ -388,14 +416,29 @@ fun CatchUpPill(
                 modifier = Modifier.clickableWithoutRipple(onCatchUp),
             ) {
                 Icon(Icons.Outlined.Redo, contentDescription = null)
-                Text(
-                    text = if (position != null) {
-                        stringResource(R.string.catch_up_to_page, position)
-                    } else {
-                        stringResource(R.string.catch_up)
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                )
+                Column {
+                    Text(
+                        text = if (position != null) {
+                            val base = if (confidence == ResumeConfidence.EXACT) {
+                                stringResource(R.string.catch_up_to_page, position)
+                            } else {
+                                stringResource(R.string.catch_up_near_page, position)
+                            }
+                            relativeAge(remoteAt)?.let { "$base · $it" } ?: base
+                        } else {
+                            stringResource(R.string.catch_up)
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    if (!excerpt.isNullOrBlank()) {
+                        Text(
+                            text = excerpt,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
             Icon(
                 Icons.Default.Close,
@@ -405,5 +448,31 @@ fun CatchUpPill(
                     .padding(4.dp),
             )
         }
+    }
+}
+
+@Composable
+private fun resumeHeadline(
+    position: Int?,
+    remoteAt: Long?,
+    confidence: ResumeConfidence,
+): String {
+    val base = if (confidence == ResumeConfidence.APPROXIMATE && position != null) {
+        stringResource(R.string.resumed_near_page, position)
+    } else {
+        stringResource(R.string.resumed_from_device)
+    }
+    return relativeAge(remoteAt)?.let { "$base · $it" } ?: base
+}
+
+@Composable
+private fun relativeAge(timestamp: Long?): String? {
+    timestamp ?: return null
+    val minutes = ((System.currentTimeMillis() - timestamp).coerceAtLeast(0L) / 60_000L).toInt()
+    return when {
+        minutes < 1 -> stringResource(R.string.remote_age_now)
+        minutes < 60 -> stringResource(R.string.remote_age_minutes, minutes)
+        minutes < 1_440 -> stringResource(R.string.remote_age_hours, minutes / 60)
+        else -> stringResource(R.string.remote_age_days, minutes / 1_440)
     }
 }

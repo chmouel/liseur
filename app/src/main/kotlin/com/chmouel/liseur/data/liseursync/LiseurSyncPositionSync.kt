@@ -19,6 +19,7 @@ import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncIdentity
@@ -35,6 +36,7 @@ import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.reconcileReadingState
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import java.io.IOException
 import org.json.JSONArray
 import org.json.JSONObject
@@ -113,11 +115,22 @@ class LiseurSyncPositionSync(
         }
 
         val stored = progressDao.get(bookUrl)
+        val exact = head.locatorJson.takeIf {
+            head.editionSha != null &&
+                head.editionSha == alias.editionSha &&
+                ExactLocatorAnchor.isExactJson(it)
+        }
         return PreviewOutcome.Ready(
             SyncPreview(
                 local = stored?.totalProgression,
                 remote = head.progression,
                 remoteAt = head.clientTs.takeIf { it > 0 },
+                excerpt = ExactLocatorAnchor.excerpt(exact),
+                confidence = if (exact != null) {
+                    ResumeConfidence.EXACT
+                } else {
+                    ResumeConfidence.APPROXIMATE
+                },
             ),
         )
     }
@@ -127,10 +140,18 @@ class LiseurSyncPositionSync(
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return null
         if (!state.hasPending) return null
         val there = state.pendingProgression ?: return null
+        val alias = identityDao.alias(bookUrl, account.peerId)
+        val exact = state.exactLocatorFor(alias)
         return SyncPreview(
             local = progressDao.get(bookUrl)?.totalProgression,
             remote = there,
             remoteAt = state.remoteUpdatedAt?.takeIf { it > 0 },
+            excerpt = ExactLocatorAnchor.excerpt(exact),
+            confidence = if (exact != null) {
+                ResumeConfidence.EXACT
+            } else {
+                ResumeConfidence.APPROXIMATE
+            },
         ).takeIf { !it.agrees }
     }
 
@@ -146,12 +167,9 @@ class LiseurSyncPositionSync(
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
         val progression = state.pendingProgression ?: return ResolveOutcome.Done
 
-        val locator = bookDao.getByUrl(bookUrl)
+        val alias = bookDao.getByUrl(bookUrl)
             ?.let { works.cached(it, account.peerId) }
-            ?.let {
-                runCatching { latestOp(account.baseUrl, account.credentials, it.workId) }
-                    .getOrNull()?.locatorJson
-            }
+        val locator = state.exactLocatorFor(alias)
 
         var applied = false
         val status = ReadingStatus.fromWire(state.pendingStatus)
@@ -163,6 +181,7 @@ class LiseurSyncPositionSync(
                 status = status.wireName,
                 now = now(),
                 locatorJson = locator,
+                remoteUpdatedAt = state.pendingUpdatedAt,
             )
             if (applied) {
                 peerStateDao.settle(
@@ -532,8 +551,11 @@ class LiseurSyncPositionSync(
         val byWork = identityDao.aliasesFor(account.peerId).associateBy { it.workId }
         inTransaction {
             if (serverDao.get()?.accountKey != account.accountKey) return@inTransaction
-            for (op in ops) {
-                if (op.deviceId != null && op.deviceId == account.deviceId) continue
+            val newestByWork = ops
+                .filterNot { it.deviceId != null && it.deviceId == account.deviceId }
+                .groupBy(SyncOp::workId)
+                .mapNotNull { (_, candidates) -> candidates.maxByOrNull(SyncOp::seq) }
+            for (op in newestByWork) {
                 val bookUrl = byWork[op.workId]?.takeIf { it.usable }?.bookUrl ?: continue
                 land(account, bookUrl, op)
             }
@@ -548,8 +570,9 @@ class LiseurSyncPositionSync(
             progression = op.progression,
             status = readingStatusFor(op.progression).wireName,
             remoteUpdatedAt = op.clientTs.takeIf { it > 0 },
+            locatorJson = op.locatorJson,
+            editionSha = op.editionSha,
         )
-        op.locatorJson?.let { pendingLocators[bookUrl] = it }
     }
 
     // -- Settling one book ------------------------------------------------
@@ -628,7 +651,8 @@ class LiseurSyncPositionSync(
                         progression = progression,
                         status = decision.state.status.wireName,
                         now = at,
-                        locatorJson = pendingLocators.remove(book.url),
+                        locatorJson = state?.exactLocatorFor(alias),
+                        remoteUpdatedAt = state?.pendingUpdatedAt,
                     )
                     if (applied) {
                         peerStateDao.settle(
@@ -1160,18 +1184,13 @@ class LiseurSyncPositionSync(
         )
     }
 
-    /**
-     * Locators from ops that have not been acted on yet.
-     *
-     * Held in memory rather than on disk on purpose. A locator is only
-     * ever a nicety — the progression is what the two sides are compared
-     * on, and a book pulled without one simply reopens at roughly the
-     * right place instead of on the exact word. Giving every unsettled
-     * op a column would be a schema change to make a good outcome
-     * slightly better, and losing one costs nothing that a page turn
-     * does not fix.
-     */
-    private val pendingLocators = mutableMapOf<String, String>()
+    /** Exact placement is safe only for byte-identical editions. */
+    private fun SyncPeerState.exactLocatorFor(alias: WorkAlias?): String? =
+        pendingLocatorJson.takeIf {
+            pendingEditionSha != null &&
+                pendingEditionSha == alias?.editionSha &&
+                ExactLocatorAnchor.isExactJson(it)
+        }
 
     private companion object {
         /** Refusals no amount of retrying will turn into an acceptance. */

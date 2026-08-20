@@ -79,6 +79,9 @@ data class SyncPreview(
     val remote: Double?,
     /** The server's own timestamp for its position, for display only. */
     val remoteAt: Long?,
+    /** A short quote around the remote anchor, when one travelled with it. */
+    val excerpt: String? = null,
+    val confidence: ResumeConfidence = ResumeConfidence.APPROXIMATE,
 ) {
     /** True when there is nothing to choose between. */
     val agrees: Boolean
@@ -88,6 +91,8 @@ data class SyncPreview(
             return kotlin.math.abs(here - there) < EPSILON
         }
 }
+
+enum class ResumeConfidence { EXACT, APPROXIMATE }
 
 /** What came of acting on a choice between two positions. */
 sealed interface ResolveOutcome {

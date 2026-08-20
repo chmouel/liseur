@@ -299,6 +299,11 @@ class ReaderActivity : FragmentActivity() {
                                             chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
                                             positionAtProgression = viewModel::positionAtProgression,
                                             locatorAtPosition = viewModel::locatorAtPosition,
+                                            locatorAtOrBeforeProgression =
+                                                viewModel::locatorAtOrBeforeProgression,
+                                            prepareLocator = viewModel::prepareLocator,
+                                            onApproximateResume = viewModel::onApproximateResume,
+                                            currentLocator = { viewModel.lastLocator },
                                         )
                                     },
                                     annotationsFlow = viewModel.annotations,

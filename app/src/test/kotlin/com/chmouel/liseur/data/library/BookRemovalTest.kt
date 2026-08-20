@@ -50,6 +50,24 @@ class BookRemovalTest {
         db.bookDao().upsert(book("kept"))
         db.readingSessionDao().insert(session("gone"))
         db.readingSessionDao().insert(session("kept"))
+        db.syncPeerStateDao().persistPending(
+            "gone",
+            "peer",
+            0.8,
+            "Reading",
+            1_000,
+            locatorJson = """{"href":"gone","locations":{"liseurAnchor":1}}""",
+            editionSha = "sha-gone",
+        )
+        db.syncPeerStateDao().persistPending(
+            "kept",
+            "peer",
+            0.4,
+            "Reading",
+            1_000,
+            locatorJson = """{"href":"kept","locations":{"liseurAnchor":1}}""",
+            editionSha = "sha-kept",
+        )
 
         // Account switching and catalog pruning already hold a transaction;
         // Room must safely fold this removal into that same boundary.
@@ -57,6 +75,8 @@ class BookRemovalTest {
 
         assertNull(db.bookDao().getByUrl("gone"))
         assertNotNull(db.bookDao().getByUrl("kept"))
+        assertNull(db.syncPeerStateDao().get("gone", "peer"))
+        assertEquals("sha-kept", db.syncPeerStateDao().get("kept", "peer")?.pendingEditionSha)
         assertEquals(listOf("kept"), db.readingSessionDao().observeAll().first().map { it.bookUrl })
     }
 
