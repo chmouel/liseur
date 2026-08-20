@@ -1,0 +1,346 @@
+# shellcheck shell=bash
+#
+# Shared plumbing for the end-to-end scenarios in tests/.
+#
+# These run against a real device or emulator over adb, using the app's
+# own database as the oracle: whatever the reader wrote is what the
+# reader did, which is the only thing a black-box test can honestly
+# claim to know.
+#
+# A sourcing script is expected to call parse_common_args "$@" and then
+# require_device. Everything else here is opt-in.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly READER_ACTIVITY="$APP_ID/.reader.ReaderActivity"
+readonly DB_PATH="/data/data/$APP_ID/databases/liseur.db"
+
+serial="${SERIAL:-}"
+_failures=0
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+note() { printf '    %s\n' "$*"; }
+
+ok() { printf '    \033[32mPASS\033[0m %s\n' "$*"; }
+
+bad() {
+  printf '    \033[31mFAIL\033[0m %s\n' "$*"
+  _failures=$((_failures + 1))
+}
+
+# Skips rather than fails: a scenario whose precondition the device does
+# not meet has proved nothing, and pretending otherwise is worse than
+# saying so. Exits SKIP_EXIT so a runner can tell "nothing to test here"
+# from "everything passed" -- reporting an untested device as green is
+# how a broken setup goes unnoticed.
+readonly SKIP_EXIT=3
+skip() {
+  printf '    \033[33mSKIP\033[0m %s\n' "$*"
+  exit $SKIP_EXIT
+}
+
+# Prints the tally and exits with the truth about it, so a runner (or an
+# agent) can branch on the exit code alone.
+report() {
+  if ((_failures > 0)); then
+    printf '\n\033[31m%d check(s) failed\033[0m\n' "$_failures"
+    exit 1
+  fi
+  printf '\n\033[32mall checks passed\033[0m\n'
+}
+
+adb() { command adb ${serial:+-s "$serial"} "$@"; }
+
+# Consumes the flags every scenario understands and leaves the rest in
+# REMAINING_ARGS for the caller.
+parse_common_args() {
+  REMAINING_ARGS=()
+  while (($#)); do
+    case "$1" in
+      -s | --serial)
+        serial="${2:-}"
+        [[ -n "$serial" ]] || die "-s needs a device serial"
+        shift 2
+        ;;
+      -h | --help)
+        # The header comment of the calling script is its help text, so
+        # the documentation cannot drift away from the code.
+        sed -n '2,/^$/s/^# \{0,1\}//p' "$0"
+        exit 0
+        ;;
+      *)
+        REMAINING_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
+}
+
+require_device() {
+  command -v adb >/dev/null || die "adb is not on PATH"
+  local devices
+  devices=$(command adb devices | awk 'NR>1 && $2=="device" {print $1}')
+  [[ -n "$devices" ]] || die "no device is attached; try: make emulator"
+  if [[ -z "$serial" ]]; then
+    if [[ $(wc -l <<<"$devices") -gt 1 ]]; then
+      die "several devices are attached; pick one with -s:"$'\n'"$devices"
+    fi
+    serial="$devices"
+  fi
+  note "device: $serial"
+  adb shell "pm path $APP_ID" >/dev/null 2>&1 ||
+    die "$APP_ID is not installed; try: make install"
+}
+
+# Runs SQL against the app's database. Needs a debuggable build, which
+# is what these scenarios are for.
+#
+# The statement crosses two shells -- the host's and the device's -- so
+# it is single-quoted for the device and the single quotes are escaped
+# for adb. Build any literal with sql_quote rather than pasting a value
+# straight in: a configured server URL is reader-supplied text, and one
+# apostrophe in it would otherwise end the string and run the rest.
+query() {
+  local sql=${1//\'/\'\\\'\'}
+  adb shell "run-as $APP_ID sqlite3 $DB_PATH '$sql'" | tr -d '\r'
+}
+
+# A value as a SQL string literal, with its quotes doubled.
+sql_quote() {
+  local v=${1//\'/\'\'}
+  printf "'%s'" "$v"
+}
+
+# A value as one argument for the device's shell.
+#
+# Everything handed to `adb shell` is a string the device re-parses, so
+# a value taken off the device -- a book's URL, a local file name -- has
+# to be quoted for that second parse or an apostrophe in a title ends
+# the argument and runs whatever follows as the shell user.
+shell_quote() {
+  local v=${1//\'/\'\\\'\'}
+  printf "'%s'" "$v"
+}
+
+# Points the connected server at a URL, with the app stopped.
+#
+# Stopped first because a sync already in flight would otherwise read
+# the old address or race this write, and the whole point of these
+# scenarios is to control which address the reader tries. Checked
+# afterwards rather than announced: leaving a dead address behind
+# quietly breaks the next thing anyone does with the device.
+set_server_url() {
+  local url="$1" seen
+  adb shell "am force-stop $APP_ID" >/dev/null
+  query "update remote_server set base_url = $(sql_quote "$url");" >/dev/null
+  seen=$(query "select base_url from remote_server limit 1;")
+  [[ "$seen" == "$url" ]] || die "could not point the server at $url (it reads $seen)"
+}
+
+# The stored server credentials go wherever the base URL points, so a
+# diversion must never point at a machine that could answer. Blanking
+# them for the diversion sounds safer but is impossible here: the app
+# deletes any account whose secret cannot be decrypted (that is what a
+# database restored without its Keystore looks like), so a blanked
+# credential silently disconnects the server and the scenario measures
+# nothing. Instead, the device itself checks that the diversion address
+# is dark before anything is pointed at it.
+#
+# ICMP is a proxy for "something lives there" -- a host that answers
+# ping is a host that might answer TCP. TEST-NET addresses are dropped
+# by every well-behaved network, so an answer means this network is not
+# one, and the only safe move is to not divert at all.
+#
+# Two ways this check could lie are closed off. A configured HTTP proxy
+# would carry the request (and the credentials on it) somewhere else
+# entirely, ping or no ping — and Android can get one globally, from
+# the network itself, or as a PAC script, so all three are looked for
+# and any sign of one refuses the diversion. And the ping must
+# demonstrably have run and heard nothing: a missing binary, a
+# permission error or an unknown host is not darkness, and fails the
+# same way an answer does.
+assert_address_dark() {
+  local host="$1" proxy links out
+  proxy=$(adb shell settings get global http_proxy 2>/dev/null | tr -d '\r')
+  case "$proxy" in
+    "" | null | :0) ;;
+    *) die "this device routes HTTP through a proxy ($proxy); \
+a diverted request would go there, not to $host" ;;
+  esac
+  # Per-network proxies and PAC scripts never appear in that setting;
+  # they show up on the network's link, which only mentions a proxy
+  # when one is set. An unreadable answer is treated as a proxy.
+  links=$(adb shell dumpsys connectivity 2>/dev/null | tr -d '\r')
+  if [[ -z "$links" ]] || grep -qi 'HttpProxy\|PacFileUrl\|PAC Script' <<<"$links"; then
+    die "cannot show this device's network has no proxy of its own; \
+a diverted request might not go to $host at all"
+  fi
+  out=$(adb shell "ping -c 1 -W 2 $host" 2>&1 | tr -d '\r') || true
+  if ! grep -q '100% packet loss' <<<"$out"; then
+    die "cannot show $host is dark from this device; \
+refusing to point the app (and its credentials) there"
+  fi
+}
+
+# Points the server at a URL after checking, from the device, that
+# nothing answers there.
+divert_server_to() {
+  local url="$1" host
+  host=${url#*://}
+  host=${host%%:*}
+  host=${host%%/*}
+  assert_address_dark "$host"
+  set_server_url "$url"
+}
+
+# The device's own clock in milliseconds. Timings are computed from this
+# rather than the host's, so adb round-trips are not counted as time the
+# reader spent working.
+device_now_ms() { adb shell 'date +%s%3N' | tr -d '\r'; }
+
+# Whether airplane mode is on right now: "on" or "off". Read before
+# changing it, so a scenario puts the device back the way its owner had
+# it rather than the way the scenario assumed.
+#
+# Only the two settings the device actually stores are accepted. An adb
+# that failed, or a device that answered something else, must not read
+# as "off": a scenario would then restore a state it never established
+# and announce it had put things back.
+airplane_mode_state() {
+  local raw
+  raw=$(adb shell settings get global airplane_mode_on 2>/dev/null | tr -d '\r') ||
+    return 1
+  case "$raw" in
+    1) printf 'on\n' ;;
+    0) printf 'off\n' ;;
+    *) return 1 ;;
+  esac
+}
+
+airplane_mode() {
+  local current
+  current=$(airplane_mode_state) || die "could not read the airplane mode setting"
+  [[ "$current" != "$1" ]] || return 0
+  case "$1" in
+    on) adb shell cmd connectivity airplane-mode enable >/dev/null ;;
+    off) adb shell cmd connectivity airplane-mode disable >/dev/null ;;
+    *) die "airplane_mode takes on or off" ;;
+  esac
+  # The radios take a moment to follow the setting.
+  sleep 3
+}
+
+# Puts the device back the way a scenario found it, and says so only if
+# that is true.
+#
+# Both arguments may be empty, meaning there is nothing to put back.
+# Every step is attempted even after an earlier one fails, because a
+# half-restored device is worse than a loud one, and each is read back
+# rather than assumed: a scenario that leaves a device pointed at a
+# blackhole or with its radios off must not be able to report success.
+# Returns non-zero if anything is still wrong.
+restore_device() {
+  local want_url="$1" want_airplane="$2" seen failed=0
+
+  adb shell "am force-stop $APP_ID" >/dev/null 2>&1 || true
+
+  if [[ -n "$want_url" ]]; then
+    query "update remote_server set base_url = $(sql_quote "$want_url");" \
+      >/dev/null 2>&1 || true
+    seen=$(query "select base_url from remote_server limit 1;" 2>/dev/null || true)
+    if [[ "$seen" == "$want_url" ]]; then
+      note "server address restored to $want_url"
+    else
+      printf '    \033[31mcould not restore the server address\033[0m\n' >&2
+      printf '    it is now %s; set it back to %s by hand\n' \
+        "${seen:-unreadable}" "$want_url" >&2
+      failed=1
+    fi
+  fi
+
+  if [[ -n "$want_airplane" ]]; then
+    airplane_mode "$want_airplane" >/dev/null 2>&1 || true
+    seen=$(airplane_mode_state 2>/dev/null || true)
+    if [[ "$seen" == "$want_airplane" ]]; then
+      note "airplane mode back to $want_airplane"
+    else
+      printf '    \033[31mcould not put airplane mode back to %s\033[0m\n' \
+        "$want_airplane" >&2
+      printf '    it is %s; set it by hand\n' "${seen:-unreadable}" >&2
+      failed=1
+    fi
+  fi
+
+  return "$failed"
+}
+
+# Picks a downloaded book to open: the most recently read one, because
+# it is the likeliest to have sync state worth exercising. Sets
+# BOOK_URL and BOOK_LOCAL_URI.
+# shellcheck disable=SC2034 # both are read by the sourcing scenario
+pick_downloaded_book() {
+  local row
+  row=$(query "select url || char(9) || local_uri from books \
+where local_uri is not null and local_uri != '' \
+order by coalesce(last_opened_at, 0) desc limit 1;")
+  [[ -n "$row" ]] || skip "no downloaded book on this device to open"
+  BOOK_URL="${row%%	*}"
+  BOOK_LOCAL_URI="${row#*	}"
+}
+
+# Opens a book and returns how long the reader took to become ready, in
+# milliseconds, or the string "timeout".
+#
+# The marker is books.last_opened_at, which the reader writes one line
+# before it shows the page. It is the last thing that happens on the
+# opening path, so it is the honest end of "the book opened" -- and it
+# lives in the database, so it can be read without instrumenting the
+# app or scraping a screen.
+time_book_open() {
+  local url="$1" local_uri="$2" cap_ms="${3:-60000}"
+  local before t0 elapsed now quoted
+  quoted=$(sql_quote "$url")
+
+  adb shell "am force-stop $APP_ID" >/dev/null
+  before=$(query "select coalesce(last_opened_at, 0) from books where url = $quoted;")
+  t0=$(device_now_ms)
+  adb shell "am start -n $READER_ACTIVITY \
+-e url $(shell_quote "$local_uri") -e id $(shell_quote "$url")" >/dev/null
+
+  while :; do
+    local stamp
+    stamp=$(query "select coalesce(last_opened_at, 0) from books where url = $quoted;")
+    if [[ -n "$stamp" && "$stamp" -gt "$before" ]]; then
+      elapsed=$((stamp - t0))
+      # A clock that ran backwards means the marker was not ours.
+      ((elapsed >= 0)) || elapsed=0
+      printf '%s\n' "$elapsed"
+      return 0
+    fi
+    now=$(device_now_ms)
+    if ((now - t0 > cap_ms)); then
+      printf 'timeout\n'
+      return 0
+    fi
+    sleep 1
+  done
+}
+
+# Asserts an open finished inside a budget, and says by how much it did
+# or did not.
+expect_open_under() {
+  local label="$1" measured="$2" budget_ms="$3"
+  if [[ "$measured" == "timeout" ]]; then
+    bad "$label: the book never opened (over the ${budget_ms}ms budget)"
+  elif ((measured <= budget_ms)); then
+    ok "$label: opened in ${measured}ms (budget ${budget_ms}ms)"
+  else
+    bad "$label: opened in ${measured}ms, over the ${budget_ms}ms budget"
+  fi
+}

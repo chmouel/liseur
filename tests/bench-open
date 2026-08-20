@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+#
+# tests/bench-open -- how long a book takes to open, per network condition.
+#
+# Not a pass/fail scenario: it prints a table. Opening a book waits on
+# the sync layer, and the point of the table is to show what each kind
+# of unreachable server costs, since they behave nothing like each
+# other:
+#
+#   reachable       the configured server as it is set up right now
+#   refused         a closed port, which answers ECONNREFUSED at once
+#   unroutable      an address that drops packets, so every request has
+#                   to wait out its connect timeout -- the expensive one,
+#                   and what a home server looks like from a plane
+#   airplane        no network at all, so connecting fails immediately
+#
+# Usage: tests/bench-open [-s SERIAL] [-n RUNS] [-c CONDITIONS]
+#
+#   -s SERIAL      device to run against (default: the only one attached)
+#   -n RUNS        openings per condition (default: 3)
+#   -c CONDITIONS  comma-separated subset of the four names above
+#
+# The device is left as it was found, on the way out however it leaves.
+
+source "$(dirname "$(readlink -f "$0")")/lib/device.sh"
+
+readonly REFUSED_URL="http://127.0.0.1:1"
+# TEST-NET-1 (RFC 5737), reserved for documentation and routed nowhere.
+# The app keeps its stored credentials while diverted, so before
+# anything is pointed away from the reader's own server the device
+# checks that nothing answers at the address (see divert_server_to).
+readonly BLACKHOLE_URL="http://192.0.2.1:8686"
+
+# Long enough to let an unfixed build show how bad it really is, rather
+# than reporting the cap as if it were the answer.
+readonly CAP_MS=180000
+
+runs=3
+conditions=reachable,refused,unroutable,airplane
+original_url=""
+original_airplane=""
+restored=0
+
+parse_common_args "$@"
+set -- ${REMAINING_ARGS+"${REMAINING_ARGS[@]}"}
+while (($#)); do
+  case "$1" in
+    -n | --runs)
+      runs="${2:-}"
+      [[ "$runs" =~ ^[1-9][0-9]*$ ]] || die "-n needs a positive number"
+      shift 2
+      ;;
+    -c | --conditions)
+      conditions="${2:-}"
+      [[ -n "$conditions" ]] || die "-c needs a comma-separated list"
+      shift 2
+      ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+restore() {
+  ((restored == 0)) || return 0
+  restored=1
+  restore_device "$original_url" "$original_airplane" || exit 1
+}
+trap restore EXIT
+
+step "Checking the device"
+require_device
+original_url=$(query "select base_url from remote_server limit 1;")
+[[ -n "$original_url" ]] ||
+  skip "no server is connected, so there is nothing to be slow about"
+original_airplane=$(airplane_mode_state)
+pick_downloaded_book
+note "server: $original_url"
+note "book:   $BOOK_URL"
+note "runs:   $runs per condition"
+
+# Sets the device up for a named condition, or returns 1 if the name is
+# not one of ours.
+arrange() {
+  case "$1" in
+    reachable)
+      airplane_mode off
+      set_server_url "$original_url"
+      ;;
+    refused)
+      airplane_mode off
+      # The device's own loopback: safe by construction (credentials
+      # cannot leave the device), and it must answer -- that is the
+      # point -- so it is not probed like the blackhole is.
+      set_server_url "$REFUSED_URL"
+      ;;
+    unroutable)
+      airplane_mode off
+      divert_server_to "$BLACKHOLE_URL"
+      ;;
+    airplane)
+      set_server_url "$original_url"
+      airplane_mode on
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+results=()
+IFS=',' read -r -a wanted <<<"$conditions"
+for condition in "${wanted[@]}"; do
+  step "$condition"
+  arrange "$condition" || die "unknown condition: $condition"
+
+  samples=()
+  for ((i = 1; i <= runs; i++)); do
+    measured=$(time_book_open "$BOOK_URL" "$BOOK_LOCAL_URI" "$CAP_MS")
+    samples+=("$measured")
+    if [[ "$measured" == "timeout" ]]; then
+      note "run $i: never opened (gave up after ${CAP_MS}ms)"
+    else
+      note "run $i: ${measured}ms"
+    fi
+  done
+
+  # The median, not the mean: one outlier from a background job on the
+  # device should not decide what the table says.
+  summary=$(printf '%s\n' "${samples[@]}" | sort -n | awk -v n="${#samples[@]}" '
+    /timeout/ { timeouts++; next }
+    { v[++c] = $1 }
+    END {
+      if (timeouts > 0) { printf ">%s", "'"$CAP_MS"'"; exit }
+      printf "%d", v[int((c + 1) / 2)]
+    }')
+  results+=("$condition|$summary|$(
+    IFS=' '
+    echo "${samples[*]}"
+  )")
+done
+
+restore
+
+printf '\n\033[1mTime to open a book (median of %d)\033[0m\n\n' "$runs"
+printf '%-12s %12s   %s\n' "condition" "median" "samples (ms)"
+printf '%-12s %12s   %s\n' "------------" "------------" "------------"
+for row in "${results[@]}"; do
+  IFS='|' read -r name median samples <<<"$row"
+  if [[ "$median" == \>* ]]; then
+    printf '%-12s %12s   %s\n' "$name" "never opened" "$samples"
+  else
+    printf '%-12s %12s   %s\n' "$name" "${median}ms" "$samples"
+  fi
+done
+printf '\n'

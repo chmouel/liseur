@@ -60,3 +60,7 @@ target wrapping them — run `make help` for the short list. See
   to a flat PNG for the F-Droid listing and the README.
 - **`feature-graphic`** — Renders the 1024x500 store feature graphic
   from the app's own emblem.
+
+See also `tests/`, which holds the headless, assertion-shaped end-to-end
+scenarios — the ones that measure behaviour rather than walk the screen.
+The `e2e-*` scripts here drive the UI and need a visible device.

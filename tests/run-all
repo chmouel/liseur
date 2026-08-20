@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# tests/run-all -- runs every scenario in tests/ against one device.
+#
+# Usage: tests/run-all [-s SERIAL]
+#
+# Scenarios are the executable files in tests/ other than this one.
+# Each is run in turn. A scenario that skips itself (exit 3, from the
+# skip helper) is reported as skipped and does not fail the run, but is
+# named at the end, because a device that quietly tested nothing is not
+# the same as one that passed.
+
+set -euo pipefail
+
+here="$(dirname "$(readlink -f "$0")")"
+args=("$@")
+failed=()
+skipped=()
+passed=0
+
+for scenario in "$here"/*; do
+  [[ -f "$scenario" && -x "$scenario" ]] || continue
+  name=$(basename "$scenario")
+  [[ "$name" != "run-all" ]] || continue
+  printf '\n\033[1m### %s\033[0m\n' "$name"
+  status=0
+  "$scenario" ${args+"${args[@]}"} || status=$?
+  case $status in
+    0) passed=$((passed + 1)) ;;
+    3) skipped+=("$name") ;;
+    *) failed+=("$name") ;;
+  esac
+done
+
+printf '\n'
+((${#skipped[@]} == 0)) ||
+  printf '\033[33mskipped: %s\033[0m\n' "${skipped[*]}"
+if ((${#failed[@]} > 0)); then
+  printf '\033[31mfailed: %s\033[0m\n' "${failed[*]}"
+  exit 1
+fi
+printf '\033[32m%d scenario(s) passed\033[0m\n' "$passed"
