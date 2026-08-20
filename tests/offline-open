@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+#
+# tests/offline-open -- a book must open promptly with no usable network.
+#
+# The scenario this comes from: a reader on a plane, in airplane mode,
+# waiting a very long time for a book to appear. The interesting case is
+# not a device with no network at all -- a connection that cannot be
+# made fails at once -- but a device that has a network and a book
+# server it cannot route to, which is what airplane mode with the
+# in-flight Wi-Fi joined actually looks like. There, every request waits
+# out its full connect timeout, and a sync that asks about book after
+# book holds the reader behind all of them.
+#
+# Two openings are timed:
+#
+#   1. airplane mode, so nothing resolves at all
+#   2. the network up, but the configured server pointed at an address
+#      that swallows packets rather than refusing them
+#
+# Both must finish inside the budget. Case 2 is the regression this
+# guards: before the fix it did not finish at all.
+#
+# Usage: tests/offline-open [-s SERIAL] [-t BUDGET_MS]
+#
+#   -s SERIAL     device to run against (default: the only one attached)
+#   -t BUDGET_MS  how long an open may take (default: 8000)
+#
+# The device is left as it was found: the server address is put back and
+# airplane mode turned off, on the way out however the script leaves.
+
+source "$(dirname "$(readlink -f "$0")")/lib/device.sh"
+
+# TEST-NET-1 (RFC 5737), reserved for documentation and routed nowhere:
+# packets sent here are dropped in silence, which is what a home server
+# looks like from a plane. A closed port on a reachable host would be
+# refused instantly and prove nothing.
+#
+# The app keeps its stored credentials while diverted, so before
+# anything is pointed here the device itself checks that nothing
+# answers at this address (see divert_server_to).
+readonly BLACKHOLE_URL="http://192.0.2.1:8686"
+
+budget_ms=8000
+original_url=""
+original_airplane=""
+restored=0
+
+parse_common_args "$@"
+set -- ${REMAINING_ARGS+"${REMAINING_ARGS[@]}"}
+while (($#)); do
+  case "$1" in
+    -t | --budget)
+      budget_ms="${2:-}"
+      [[ "$budget_ms" =~ ^[0-9]+$ ]] || die "-t needs a number of milliseconds"
+      shift 2
+      ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+# Puts back everything this scenario changed, however it leaves. The app
+# is stopped first: it holds the same database, and a write landing under
+# a running sync is both racy and pointless, since the address it already
+# read would stay in use.
+restore() {
+  ((restored == 0)) || return 0
+  restored=1
+  printf '\n'
+  step "Putting the device back"
+  # Both are put back to what was actually found, not to what this
+  # scenario assumed, and a failure to do so ends the run non-zero.
+  restore_device "$original_url" "$original_airplane" || exit 1
+}
+trap restore EXIT
+
+step "Checking the device"
+require_device
+
+original_url=$(query "select base_url from remote_server limit 1;")
+[[ -n "$original_url" ]] ||
+  skip "no server is connected, so there is no sync to be slow"
+note "server: $original_url"
+
+# Read before anything is touched, so the trap restores what the owner of
+# this device had rather than what this scenario assumed.
+original_airplane=$(airplane_mode_state)
+
+pick_downloaded_book
+note "book: $BOOK_URL"
+
+step "Opening in airplane mode"
+note "nothing resolves, so every connection should fail at once"
+airplane_mode on
+measured=$(time_book_open "$BOOK_URL" "$BOOK_LOCAL_URI" $((budget_ms * 4)))
+expect_open_under "airplane mode" "$measured" "$budget_ms"
+airplane_mode off
+
+step "Opening with the network up and the server unroutable"
+note "pointing the server at $BLACKHOLE_URL, which drops what it is sent"
+divert_server_to "$BLACKHOLE_URL"
+measured=$(time_book_open "$BOOK_URL" "$BOOK_LOCAL_URI" $((budget_ms * 4)))
+expect_open_under "unroutable server" "$measured" "$budget_ms"
+
+restore
+report
