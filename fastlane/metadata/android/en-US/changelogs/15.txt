@@ -1,0 +1,1 @@
+Exact cross-device reading resume with precise text anchors for matching editions, safer approximate fallback for legacy or different editions, and more reliable reading preference reflows.
