@@ -469,8 +469,11 @@ class ReaderViewModel(
      * raised over the first page shown: the announcement that the book
      * jumped ahead, and the one tap that undoes it for a reread.
      */
-    private suspend fun settlePreservedConflict(publication: Publication) {
-        val preview = positionSync.preservedConflict(bookId) ?: return
+    private suspend fun settlePreservedConflict(
+        publication: Publication,
+        abandonedRun: Boolean,
+    ) {
+        val preview = positionSync.preservedConflict(bookId, abandonedRun) ?: return
         val there = preview.remote ?: return
         val here = preview.local ?: 0.0
         val takeRemote = there > here
@@ -651,9 +654,9 @@ class ReaderViewModel(
             // where to open it. Bounded, and the answer is optional: a slow
             // or absent server delays the book by a moment at most, never
             // stops it opening.
-            withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
+            val syncFinished = withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
                 runCatching { positionSync.request(SyncScope.Book(bookId)) }
-            }
+            } != null
             val afterSync = progressDao.get(bookId)
             val pulledAutomatically = afterSync?.takeIf { after ->
                 val exactMoved = ExactLocatorAnchor.agreement(
@@ -685,7 +688,11 @@ class ReaderViewModel(
             // devices in the background. Settle it now, while the book is
             // still a loading screen, so it opens at the further position
             // instead of being yanked there after arriving.
-            settlePreservedConflict(publication)
+            //
+            // A sync that finished is waited for; one this already gave
+            // up on above is not waited for a second time, or the bound
+            // over it would mean nothing.
+            settlePreservedConflict(publication, abandonedRun = !syncFinished)
 
             val stored = progressDao.get(bookId)
             speed = ReadingSpeedEstimator(
