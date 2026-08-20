@@ -82,10 +82,13 @@ data class SyncPreview(
     /** A short quote around the remote anchor, when one travelled with it. */
     val excerpt: String? = null,
     val confidence: ResumeConfidence = ResumeConfidence.APPROXIMATE,
+    /** Exact anchor equality, or null when this partner only supplied a percentage. */
+    val exactPositionAgreement: Boolean? = null,
 ) {
     /** True when there is nothing to choose between. */
     val agrees: Boolean
         get() {
+            exactPositionAgreement?.let { return it }
             val here = local ?: return remote == null
             val there = remote ?: return false
             return kotlin.math.abs(here - there) < EPSILON

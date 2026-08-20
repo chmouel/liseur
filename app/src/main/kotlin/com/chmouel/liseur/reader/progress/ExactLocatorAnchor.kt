@@ -80,14 +80,29 @@ object ExactLocatorAnchor {
     }
 
     fun isExactJson(locatorJson: String?): Boolean =
-        locatorJson?.let { json ->
-            runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull()
-        }?.let(::isExact) == true
+        parse(locatorJson)?.let(::isExact) == true
+
+    /**
+     * Whether two stored locators name the same app-owned text anchor.
+     *
+     * A null answer means the remote locator is only approximate, so the
+     * caller must keep using progression tolerance. Once the peer supplies
+     * an exact anchor, a missing or different local anchor is a real
+     * disagreement even when both percentages round to the same number.
+     */
+    fun agreement(localJson: String?, remoteJson: String?): Boolean? {
+        val remote = parse(remoteJson)?.takeIf(::isExact) ?: return null
+        val local = parse(localJson)?.takeIf(::isExact) ?: return false
+        return local.href == remote.href &&
+            local.locations.otherLocations[CSS_SELECTOR] ==
+            remote.locations.otherLocations[CSS_SELECTOR] &&
+            local.text.before == remote.text.before &&
+            local.text.highlight == remote.text.highlight &&
+            local.text.after == remote.text.after
+    }
 
     fun excerpt(locatorJson: String?): String? {
-        val locator = locatorJson?.let { json ->
-            runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull()
-        } ?: return null
+        val locator = parse(locatorJson) ?: return null
         if (!isExact(locator)) return null
         return listOf(locator.text.before, locator.text.highlight, locator.text.after)
             .filterNotNull()
@@ -159,6 +174,9 @@ object ExactLocatorAnchor {
 
     private fun fitsSyncLimit(locator: Locator): Boolean =
         locator.toJSON().toString().toByteArray(StandardCharsets.UTF_8).size < MAX_LOCATOR_BYTES
+
+    private fun parse(json: String?): Locator? =
+        json?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
 
     private fun String.takeCodePoints(count: Int): String {
         if (codePointCount(0, length) <= count) return this

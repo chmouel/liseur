@@ -10,6 +10,7 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PreviewOutcome
+import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.SyncOutcome
 import java.io.File
@@ -374,6 +375,63 @@ class LiseurSyncPositionSyncTest {
         val settled = requireNotNull(db.syncPeerStateDao().get(LOCAL, peer()))
         assertNull(settled.pendingLocatorJson)
         assertNull(settled.pendingEditionSha)
+    }
+
+    @Test
+    fun `different exact passages with the same displayed percent are pulled`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-a")
+        val local = exactLocator("local passage", progression = 0.071)
+        val remote = exactLocator("remote passage", progression = 0.074)
+        db.readingProgressDao().recordLocal(LOCAL, local, 0.071, null, "reading", NOW)
+        db.syncPeerStateDao().settle(LOCAL, peer(), 1, 0.071, "reading", NOW)
+        server.enqueue(
+            json(
+                """{"ops":[${
+                    op(9, 0.074, locatorJson = remote, editionSha = "sha-a")
+                }],"high_water":9}""",
+            ),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val stored = requireNotNull(db.readingProgressDao().get(LOCAL))
+        assertEquals(0.074, stored.totalProgression!!, 0.0)
+        assertEquals(remote, stored.locatorJson)
+        assertEquals(0, db.syncPeerStateDao().countPending(peer()))
+    }
+
+    @Test
+    fun `preview does not call different exact passages in step`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-a")
+        db.readingProgressDao().recordLocal(
+            LOCAL,
+            exactLocator("local passage", progression = 0.071),
+            0.071,
+            null,
+            "reading",
+            NOW,
+        )
+        server.enqueue(
+            json(
+                """{"ops":[${
+                    op(
+                        10,
+                        0.074,
+                        locatorJson = exactLocator("remote passage", progression = 0.074),
+                        editionSha = "sha-a",
+                    )
+                }]}""",
+            ),
+        )
+
+        val preview = (sync().previewBook(LOCAL) as PreviewOutcome.Ready).preview
+
+        assertFalse(preview.agrees)
+        assertEquals(ResumeConfidence.EXACT, preview.confidence)
     }
 
     @Test
@@ -756,14 +814,14 @@ class LiseurSyncPositionSyncTest {
 
     private fun json(body: String) = MockResponse(code = 200, body = body)
 
-    private fun exactLocator(highlight: String): String = JSONObject()
+    private fun exactLocator(highlight: String, progression: Double = 0.8): String = JSONObject()
         .put("href", "/c1.xhtml")
         .put("type", "application/xhtml+xml")
         .put(
             "locations",
             JSONObject()
-                .put("progression", 0.8)
-                .put("totalProgression", 0.8)
+                .put("progression", progression)
+                .put("totalProgression", progression)
                 .put("cssSelector", "#p1")
                 .put("liseurAnchor", 1),
         )

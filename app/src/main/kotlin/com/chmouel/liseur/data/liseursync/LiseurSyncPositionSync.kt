@@ -131,6 +131,10 @@ class LiseurSyncPositionSync(
                 } else {
                     ResumeConfidence.APPROXIMATE
                 },
+                exactPositionAgreement = ExactLocatorAnchor.agreement(
+                    stored?.locatorJson,
+                    exact,
+                ),
             ),
         )
     }
@@ -152,6 +156,10 @@ class LiseurSyncPositionSync(
             } else {
                 ResumeConfidence.APPROXIMATE
             },
+            exactPositionAgreement = ExactLocatorAnchor.agreement(
+                progressDao.get(bookUrl)?.locatorJson,
+                exact,
+            ),
         ).takeIf { !it.agrees }
     }
 
@@ -598,6 +606,7 @@ class LiseurSyncPositionSync(
         val (book, alias) = named
         val stored = progressDao.get(book.url)
         val state = peerStateDao.get(book.url, account.peerId)
+        val exactRemote = state?.exactLocatorFor(alias)
         val dirty = state?.isDirty(stored?.localRevision ?: 0)
             ?: ((stored?.localRevision ?: 0) > 0)
 
@@ -609,8 +618,12 @@ class LiseurSyncPositionSync(
             baseline = state?.baseline(),
             localDirty = dirty,
             localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
+            exactPositionAgreement = ExactLocatorAnchor.agreement(
+                stored?.locatorJson,
+                exactRemote,
+            ),
         )
-        return act(account, book, alias, stored, state, decision)
+        return act(account, book, alias, stored, state, exactRemote, decision)
     }
 
     private suspend fun act(
@@ -619,6 +632,7 @@ class LiseurSyncPositionSync(
         alias: WorkAlias,
         stored: ReadingProgress?,
         state: SyncPeerState?,
+        exactRemote: String?,
         decision: SyncDecision,
     ): Reconciled {
         val at = now()
@@ -651,7 +665,7 @@ class LiseurSyncPositionSync(
                         progression = progression,
                         status = decision.state.status.wireName,
                         now = at,
-                        locatorJson = state?.exactLocatorFor(alias),
+                        locatorJson = exactRemote,
                         remoteUpdatedAt = state?.pendingUpdatedAt,
                     )
                     if (applied) {
