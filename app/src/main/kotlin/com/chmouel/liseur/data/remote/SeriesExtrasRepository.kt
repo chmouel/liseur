@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.remote
 
+import com.chmouel.liseur.data.NetworkAvailability
 import com.chmouel.liseur.data.db.SeriesExtra
 import com.chmouel.liseur.data.db.SeriesExtraDao
 import com.chmouel.liseur.data.komga.KomgaSeriesClient
@@ -22,12 +23,14 @@ class SeriesExtrasRepository(
     private val dao: SeriesExtraDao,
     private val komga: KomgaSeriesClient = KomgaSeriesClient(),
     private val now: () -> Long = System::currentTimeMillis,
+    private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
 ) {
 
     suspend fun extras(seriesId: String?): SeriesExtras? {
         if (seriesId.isNullOrBlank()) return null
         val cached = dao.get(seriesId)
         if (cached != null && now() - cached.fetchedAt < FRESH_FOR_MS) return cached.toExtras()
+        if (!networkAvailability.isAvailable()) return cached?.toExtras()
 
         val server = account.current()
         if (server?.kind != ServerKind.KOMGA) return cached?.toExtras()

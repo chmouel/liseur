@@ -3,8 +3,9 @@ package com.chmouel.liseur
 import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
-import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.AndroidNetworkAvailability
 import com.chmouel.liseur.data.ConnectionsState
+import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogClient
 import com.chmouel.liseur.data.calibre.CalibreFileSource
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
@@ -62,6 +63,8 @@ import kotlinx.coroutines.SupervisorJob
  * dependencies. Reachable from any Context via [container].
  */
 class AppContainer(context: Context) {
+    val networkAvailability = AndroidNetworkAvailability(context.applicationContext)
+
     private val httpClient = DefaultHttpClient()
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -181,6 +184,7 @@ class AppContainer(context: Context) {
         progressDao = database.readingProgressDao(),
         finishedState = finishedState,
         reporting = syncReporting,
+        networkAvailability = networkAvailability,
         // What the server reported and the token that stops it being
         // reported again have to land together or not at all.
         inTransaction = { work -> database.withTransaction { work() } },
@@ -193,6 +197,7 @@ class AppContainer(context: Context) {
         finishedState = finishedState,
         device = deviceIdentity,
         reporting = syncReporting,
+        networkAvailability = networkAvailability,
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -229,6 +234,7 @@ class AppContainer(context: Context) {
         deviceKey = { deviceIdentity.current().id },
         finishedState = finishedState,
         reporting = syncReporting,
+        networkAvailability = networkAvailability,
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -340,11 +346,13 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         bookRemoval = bookRemoval,
         inTransaction = { work -> database.withTransaction { work() } },
+        networkAvailability = networkAvailability,
     )
 
     val seriesExtras = SeriesExtrasRepository(
         account = remoteAccount,
         dao = database.seriesExtraDao(),
+        networkAvailability = networkAvailability,
     )
 }
 
