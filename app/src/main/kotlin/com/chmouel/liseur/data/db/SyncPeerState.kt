@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 
 /**
@@ -79,14 +80,38 @@ abstract class SyncPeerStateDao {
      * Lands something a partner reported, before its cursor is allowed
      * to move past it.
      *
-     * Written as one statement rather than read-modify-write for the
-     * same reason the local position is: whatever else is in the row is
-     * this partner's agreement, and carrying a stale copy of it back
-     * over a fresh one would undo an acknowledgement.
+     * Never read-modified-written for the same reason the local position
+     * is not: whatever else is in the row is this partner's agreement,
+     * and carrying a stale copy of it back over a fresh one would undo an
+     * acknowledgement. The update and the insert behind it share one
+     * transaction, so together they are still indivisible.
      */
     @Query(
         """
-        INSERT INTO sync_peer_state (
+        UPDATE sync_peer_state SET
+            pending_progression = :progression,
+            pending_locator_json = :locatorJson,
+            pending_edition_sha = :editionSha,
+            pending_status = :status,
+            pending_updated_at = :remoteUpdatedAt,
+            has_pending = 1,
+            remote_updated_at = :remoteUpdatedAt
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    abstract suspend fun updatePending(
+        bookUrl: String,
+        peerId: String,
+        progression: Double?,
+        status: String?,
+        remoteUpdatedAt: Long?,
+        locatorJson: String? = null,
+        editionSha: String? = null,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO sync_peer_state (
             book_url, peer_id, acked_revision,
             pending_progression, pending_locator_json, pending_edition_sha,
             pending_status, pending_updated_at,
@@ -95,17 +120,9 @@ abstract class SyncPeerStateDao {
         VALUES (:bookUrl, :peerId, 0, :progression, :locatorJson, :editionSha,
                 :status, :remoteUpdatedAt, 1,
                 :remoteUpdatedAt)
-        ON CONFLICT(book_url, peer_id) DO UPDATE SET
-            pending_progression = :progression,
-            pending_locator_json = :locatorJson,
-            pending_edition_sha = :editionSha,
-            pending_status = :status,
-            pending_updated_at = :remoteUpdatedAt,
-            has_pending = 1,
-            remote_updated_at = :remoteUpdatedAt
         """,
     )
-    abstract suspend fun persistPending(
+    abstract suspend fun insertPending(
         bookUrl: String,
         peerId: String,
         progression: Double?,
@@ -114,6 +131,38 @@ abstract class SyncPeerStateDao {
         locatorJson: String? = null,
         editionSha: String? = null,
     )
+
+    @Transaction
+    open suspend fun persistPending(
+        bookUrl: String,
+        peerId: String,
+        progression: Double?,
+        status: String?,
+        remoteUpdatedAt: Long?,
+        locatorJson: String? = null,
+        editionSha: String? = null,
+    ) {
+        val updated = updatePending(
+            bookUrl = bookUrl,
+            peerId = peerId,
+            progression = progression,
+            status = status,
+            remoteUpdatedAt = remoteUpdatedAt,
+            locatorJson = locatorJson,
+            editionSha = editionSha,
+        )
+        if (updated == 0) {
+            insertPending(
+                bookUrl = bookUrl,
+                peerId = peerId,
+                progression = progression,
+                status = status,
+                remoteUpdatedAt = remoteUpdatedAt,
+                locatorJson = locatorJson,
+                editionSha = editionSha,
+            )
+        }
+    }
 
     @Query(
         """
@@ -136,12 +185,7 @@ abstract class SyncPeerStateDao {
      */
     @Query(
         """
-        INSERT INTO sync_peer_state (
-            book_url, peer_id, acked_revision,
-            agreed_progression, agreed_status, has_pending, synced_at
-        )
-        VALUES (:bookUrl, :peerId, :ackedRevision, :progression, :status, 0, :now)
-        ON CONFLICT(book_url, peer_id) DO UPDATE SET
+        UPDATE sync_peer_state SET
             acked_revision = :ackedRevision,
             agreed_progression = :progression,
             agreed_status = :status,
@@ -152,9 +196,28 @@ abstract class SyncPeerStateDao {
             pending_updated_at = NULL,
             has_pending = 0,
             synced_at = :now
+        WHERE book_url = :bookUrl AND peer_id = :peerId
         """,
     )
-    abstract suspend fun settle(
+    abstract suspend fun updateSettled(
+        bookUrl: String,
+        peerId: String,
+        ackedRevision: Long,
+        progression: Double?,
+        status: String?,
+        now: Long,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO sync_peer_state (
+            book_url, peer_id, acked_revision,
+            agreed_progression, agreed_status, has_pending, synced_at
+        )
+        VALUES (:bookUrl, :peerId, :ackedRevision, :progression, :status, 0, :now)
+        """,
+    )
+    abstract suspend fun insertSettled(
         bookUrl: String,
         peerId: String,
         ackedRevision: Long,
@@ -162,6 +225,35 @@ abstract class SyncPeerStateDao {
         status: String?,
         now: Long,
     )
+
+    @Transaction
+    open suspend fun settle(
+        bookUrl: String,
+        peerId: String,
+        ackedRevision: Long,
+        progression: Double?,
+        status: String?,
+        now: Long,
+    ) {
+        val updated = updateSettled(
+            bookUrl = bookUrl,
+            peerId = peerId,
+            ackedRevision = ackedRevision,
+            progression = progression,
+            status = status,
+            now = now,
+        )
+        if (updated == 0) {
+            insertSettled(
+                bookUrl = bookUrl,
+                peerId = peerId,
+                ackedRevision = ackedRevision,
+                progression = progression,
+                status = status,
+                now = now,
+            )
+        }
+    }
 
     @Query("DELETE FROM sync_peer_state WHERE book_url = :bookUrl")
     abstract suspend fun forget(bookUrl: String)

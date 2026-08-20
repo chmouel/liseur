@@ -161,25 +161,22 @@ abstract class ReadingProgressDao {
      * Records a position read on this device, bumping the revision in the
      * same statement.
      *
-     * Doing it as one statement is the point. Reading the row into Kotlin
-     * and writing it back lets two page turns interleave, and lets a
-     * stale `synced_at` be carried back over a fresh acknowledgement.
-     * Everything to do with the server — the baseline, the pending state,
-     * the acknowledgement — is deliberately left alone here.
+     * Never reading the row into Kotlin is the point. Reading it back and
+     * writing it whole lets two page turns interleave, and lets a stale
+     * `synced_at` be carried back over a fresh acknowledgement. Everything
+     * to do with the server — the baseline, the pending state, the
+     * acknowledgement — is deliberately left alone here.
+     *
+     * It is an update followed, only if the book has never been opened, by
+     * an insert, rather than the single upsert this used to be. Upserts
+     * need SQLite 3.24, which arrived in Android 10; on anything older the
+     * statement failed and every page turn raised "the reading position
+     * could not be saved". The two statements share one transaction, so
+     * they are still indivisible.
      */
     @Query(
         """
-        INSERT INTO reading_progress (
-            book_url, locator_json, total_progression, reading_speed,
-            reading_seconds_per_position, reading_pace_samples,
-            reading_pace_elapsed_ms, reading_pace_evidence,
-            updated_at, status, synced_at, local_revision, acked_revision
-        )
-        VALUES (:bookUrl, :locatorJson, :progression, NULL,
-                :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
-                COALESCE(:readingPaceElapsedMs, 0), COALESCE(:readingPaceEvidence, 0),
-                :updatedAt, :status, NULL, 1, 0)
-        ON CONFLICT(book_url) DO UPDATE SET
+        UPDATE reading_progress SET
             locator_json = :locatorJson,
             total_progression = :progression,
             reading_seconds_per_position =
@@ -192,9 +189,36 @@ abstract class ReadingProgressDao {
             updated_at = :updatedAt,
             status = :status,
             local_revision = local_revision + 1
+        WHERE book_url = :bookUrl
         """,
     )
-    abstract suspend fun recordLocal(
+    abstract suspend fun updateLocal(
+        bookUrl: String,
+        locatorJson: String,
+        progression: Double?,
+        readingSecondsPerPosition: Double?,
+        readingPaceSamples: Int?,
+        readingPaceElapsedMs: Long?,
+        readingPaceEvidence: Double?,
+        status: String?,
+        updatedAt: Long,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO reading_progress (
+            book_url, locator_json, total_progression, reading_speed,
+            reading_seconds_per_position, reading_pace_samples,
+            reading_pace_elapsed_ms, reading_pace_evidence,
+            updated_at, status, synced_at, local_revision, acked_revision
+        )
+        VALUES (:bookUrl, :locatorJson, :progression, NULL,
+                :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
+                COALESCE(:readingPaceElapsedMs, 0), COALESCE(:readingPaceEvidence, 0),
+                :updatedAt, :status, NULL, 1, 0)
+        """,
+    )
+    abstract suspend fun insertLocal(
         bookUrl: String,
         locatorJson: String,
         progression: Double?,
@@ -205,6 +229,44 @@ abstract class ReadingProgressDao {
         status: String?,
         updatedAt: Long,
     )
+
+    @Transaction
+    open suspend fun recordLocal(
+        bookUrl: String,
+        locatorJson: String,
+        progression: Double?,
+        readingSecondsPerPosition: Double?,
+        readingPaceSamples: Int?,
+        readingPaceElapsedMs: Long?,
+        readingPaceEvidence: Double?,
+        status: String?,
+        updatedAt: Long,
+    ) {
+        val updated = updateLocal(
+            bookUrl = bookUrl,
+            locatorJson = locatorJson,
+            progression = progression,
+            readingSecondsPerPosition = readingSecondsPerPosition,
+            readingPaceSamples = readingPaceSamples,
+            readingPaceElapsedMs = readingPaceElapsedMs,
+            readingPaceEvidence = readingPaceEvidence,
+            status = status,
+            updatedAt = updatedAt,
+        )
+        if (updated == 0) {
+            insertLocal(
+                bookUrl = bookUrl,
+                locatorJson = locatorJson,
+                progression = progression,
+                readingSecondsPerPosition = readingSecondsPerPosition,
+                readingPaceSamples = readingPaceSamples,
+                readingPaceElapsedMs = readingPaceElapsedMs,
+                readingPaceEvidence = readingPaceEvidence,
+                status = status,
+                updatedAt = updatedAt,
+            )
+        }
+    }
 
     /**
      * Compatibility overload for callers that do not measure v2 pace.
@@ -240,7 +302,27 @@ abstract class ReadingProgressDao {
      */
     @Query(
         """
-        INSERT INTO reading_progress (
+        UPDATE reading_progress SET
+            pending_progression = :progression,
+            pending_locator_json = :locatorJson,
+            pending_status = :status,
+            pending_updated_at = :remoteUpdatedAt,
+            pending_account = :account
+        WHERE book_url = :bookUrl
+        """,
+    )
+    abstract suspend fun updatePending(
+        bookUrl: String,
+        progression: Double?,
+        status: String?,
+        remoteUpdatedAt: Long?,
+        account: String,
+        locatorJson: String? = null,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO reading_progress (
             book_url, locator_json, total_progression, updated_at,
             local_revision, acked_revision,
             pending_progression, pending_locator_json,
@@ -248,15 +330,9 @@ abstract class ReadingProgressDao {
         )
         VALUES (:bookUrl, '{}', NULL, :now, 0, 0,
                 :progression, :locatorJson, :status, :remoteUpdatedAt, :account)
-        ON CONFLICT(book_url) DO UPDATE SET
-            pending_progression = :progression,
-            pending_locator_json = :locatorJson,
-            pending_status = :status,
-            pending_updated_at = :remoteUpdatedAt,
-            pending_account = :account
         """,
     )
-    abstract suspend fun persistPending(
+    abstract suspend fun insertPending(
         bookUrl: String,
         progression: Double?,
         status: String?,
@@ -265,6 +341,37 @@ abstract class ReadingProgressDao {
         now: Long,
         locatorJson: String? = null,
     )
+
+    @Transaction
+    open suspend fun persistPending(
+        bookUrl: String,
+        progression: Double?,
+        status: String?,
+        remoteUpdatedAt: Long?,
+        account: String,
+        now: Long,
+        locatorJson: String? = null,
+    ) {
+        val updated = updatePending(
+            bookUrl = bookUrl,
+            progression = progression,
+            status = status,
+            remoteUpdatedAt = remoteUpdatedAt,
+            account = account,
+            locatorJson = locatorJson,
+        )
+        if (updated == 0) {
+            insertPending(
+                bookUrl = bookUrl,
+                progression = progression,
+                status = status,
+                remoteUpdatedAt = remoteUpdatedAt,
+                account = account,
+                now = now,
+                locatorJson = locatorJson,
+            )
+        }
+    }
 
     /** Every row still holding an unsettled state from this account. */
     @Query("SELECT * FROM reading_progress WHERE pending_account = :account")
@@ -606,25 +713,62 @@ abstract class ReadingProgressDao {
      */
     @Query(
         """
-        INSERT INTO reading_progress (
-            book_url, locator_json, total_progression, updated_at,
-            status, finished_override, local_revision, acked_revision
-        )
-        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 0)
-        ON CONFLICT(book_url) DO UPDATE SET
+        UPDATE reading_progress SET
             status = :status,
             finished_override = :override,
             updated_at = :now,
             local_revision = local_revision + 1
+        WHERE book_url = :bookUrl
         """,
     )
-    abstract suspend fun setFinishedOverride(
+    abstract suspend fun updateFinishedOverride(
+        bookUrl: String,
+        override: Int,
+        status: String,
+        now: Long,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO reading_progress (
+            book_url, locator_json, total_progression, updated_at,
+            status, finished_override, local_revision, acked_revision
+        )
+        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 0)
+        """,
+    )
+    abstract suspend fun insertFinishedOverride(
         bookUrl: String,
         override: Int,
         status: String,
         progression: Double?,
         now: Long,
     )
+
+    @Transaction
+    open suspend fun setFinishedOverride(
+        bookUrl: String,
+        override: Int,
+        status: String,
+        progression: Double?,
+        now: Long,
+    ) {
+        val updated = updateFinishedOverride(
+            bookUrl = bookUrl,
+            override = override,
+            status = status,
+            now = now,
+        )
+        if (updated == 0) {
+            insertFinishedOverride(
+                bookUrl = bookUrl,
+                override = override,
+                status = status,
+                progression = progression,
+                now = now,
+            )
+        }
+    }
 
     @Query("SELECT finished_override FROM reading_progress WHERE book_url = :bookUrl")
     abstract suspend fun overrideFor(bookUrl: String): Int?
