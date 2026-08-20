@@ -342,10 +342,88 @@ class LiseurSyncPositionSyncTest {
         assertTrue(preview is PreviewOutcome.Ready)
         assertNotNull(sync.preservedConflict(LOCAL))
 
-        // Taking the server's side re-fetches the exact place.
-        server.enqueue(json("""{"ops":[${op(seq = 7, progression = 0.8)}]}"""))
+        // Taking the server's side uses the answer paired on disk.
         assertEquals(ResolveOutcome.Done, sync.takeRemotePosition(LOCAL, 0))
         assertEquals(0.8, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `pending locator survives process death and stays paired with its progression`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-a")
+        db.syncPeerStateDao().settle(LOCAL, peer(), 0, 0.2, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.3, null, "reading", NOW)
+        val exact = exactLocator("remembered word")
+        server.enqueue(
+            json(
+                """{"ops":[${
+                    op(8, 0.8, locatorJson = exact, editionSha = "sha-a")
+                }],"high_water":8}""",
+            ),
+        )
+
+        sync().syncAll(null)
+        val pending = requireNotNull(db.syncPeerStateDao().get(LOCAL, peer()))
+        assertEquals(exact, pending.pendingLocatorJson)
+        assertEquals("sha-a", pending.pendingEditionSha)
+
+        // A new repository instance has no in-memory state and makes no request.
+        assertEquals(ResolveOutcome.Done, sync().takeRemotePosition(LOCAL, 1))
+        assertEquals(exact, db.readingProgressDao().get(LOCAL)?.locatorJson)
+        val settled = requireNotNull(db.syncPeerStateDao().get(LOCAL, peer()))
+        assertNull(settled.pendingLocatorJson)
+        assertNull(settled.pendingEditionSha)
+    }
+
+    @Test
+    fun `different edition and legacy locators fall back to progression`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-local")
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer(),
+            progression = 0.8,
+            status = "reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = exactLocator("other edition"),
+            editionSha = "sha-remote",
+        )
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.2, null, "reading", NOW)
+
+        assertEquals(ResolveOutcome.Done, sync().takeRemotePosition(LOCAL, 1))
+        assertEquals("{}", db.readingProgressDao().get(LOCAL)?.locatorJson)
+
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer(),
+            progression = 0.9,
+            status = "reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = """{"href":"/forward-biased.xhtml","text":{"highlight":"next"}}""",
+            editionSha = "sha-local",
+        )
+        assertEquals(ResolveOutcome.Done, sync().takeRemotePosition(LOCAL, 2))
+        assertEquals("{}", db.readingProgressDao().get(LOCAL)?.locatorJson)
+    }
+
+    @Test
+    fun `snapshot lands only the highest non-local sequence for each work`() = runTest {
+        connect(cursor = 5)
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(MockResponse(code = 410, body = """{"error":"resync_required"}"""))
+        server.enqueue(
+            json(
+                """{"ops":[${op(40, 0.6)},${op(30, 0.9)}],"snapshot_seq":42}""",
+            ),
+        )
+
+        sync().syncAll(null)
+
+        assertEquals(0.6, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0)
+        assertEquals(42L, db.remoteServerDao().get()?.syncCursorSeq)
     }
 
     @Test
@@ -645,6 +723,7 @@ class LiseurSyncPositionSyncTest {
         confidence: String = "high",
         deviceId: String? = null,
         bookUrl: String = LOCAL,
+        editionSha: String? = null,
     ) =
         db.workIdentityDao().upsert(
             com.chmouel.liseur.data.db.WorkAlias(
@@ -654,19 +733,42 @@ class LiseurSyncPositionSyncTest {
                 confidence = confidence,
                 confirmed = true,
                 seeded = seeded,
+                editionSha = editionSha,
                 resolvedAt = NOW,
             ),
         )
 
-    private fun op(seq: Long, progression: Double, deviceId: String? = null): String {
+    private fun op(
+        seq: Long,
+        progression: Double,
+        deviceId: String? = null,
+        locatorJson: String? = null,
+        editionSha: String? = null,
+    ): String {
         val device = deviceId?.let { ""","device_id":"$it"""" } ?: ""
+        val locator = locatorJson?.let { ""","locator":$it""" } ?: ""
+        val edition = editionSha?.let { ""","edition_sha":"$it"""" } ?: ""
         return """{"op_id":"o-$seq","work_id":"w-1","seq":$seq,
             "progression":$progression,
-            "client_ts":"${SyncOps.formatTime(NOW)}"$device}
+            "client_ts":"${SyncOps.formatTime(NOW)}"$device$locator$edition}
         """.trimIndent()
     }
 
     private fun json(body: String) = MockResponse(code = 200, body = body)
+
+    private fun exactLocator(highlight: String): String = JSONObject()
+        .put("href", "/c1.xhtml")
+        .put("type", "application/xhtml+xml")
+        .put(
+            "locations",
+            JSONObject()
+                .put("progression", 0.8)
+                .put("totalProgression", 0.8)
+                .put("cssSelector", "#p1")
+                .put("liseurAnchor", 1),
+        )
+        .put("text", JSONObject().put("highlight", highlight))
+        .toString()
 
     /** Every request the server has seen, including earlier runs'. */
     private fun requests(): List<RecordedRequest> {

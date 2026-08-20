@@ -137,7 +137,13 @@ class KomgaSyncRepositoryTest {
         {
           "href": "$href",
           "type": "application/xhtml+xml",
-          "locations": {"progression": $progression, "totalProgression": $total}
+          "locations": {
+            "progression": $progression,
+            "totalProgression": $total,
+            "cssSelector": "#reading-anchor",
+            "liseurAnchor": 1
+          },
+          "text": {"highlight": "remembered word"}
         }
     """.trimIndent()
 
@@ -331,7 +337,7 @@ class KomgaSyncRepositoryTest {
         // has to happen before the place is sent again.
         val sent = requests()
         val cleared = sent.single { it.method == "DELETE" }
-        assertTrue(cleared.target!!.endsWith("/api/v1/books/$bookId/read-progress"))
+        assertTrue(cleared.target.endsWith("/api/v1/books/$bookId/read-progress"))
         assertTrue(sent.indexOf(cleared) < sent.indexOfFirst { it.method == "PUT" })
         // And it must settle, or the row would stay dirty for ever.
         assertFalse(requireNotNull(db.readingProgressDao().get(bookUrl)).isDirty)
@@ -355,7 +361,7 @@ class KomgaSyncRepositoryTest {
 
         val sent = requests().last()
         assertEquals("PUT", sent.method)
-        assertTrue(sent.target!!.endsWith("/api/v1/books/$bookId/progression"))
+        assertTrue(sent.target.endsWith("/api/v1/books/$bookId/progression"))
         val body = JSONObject(sent.body!!.utf8())
         // Komga refuses an href that starts with a slash, and refuses one
         // with no progression beside it.
@@ -465,7 +471,7 @@ class KomgaSyncRepositoryTest {
     }
 
     @Test
-    fun `taking the server's side restores the exact place, not a percentage`() = runTest {
+    fun `taking the server's side restores the locator paired before process death`() = runTest {
         connect()
         val progress = db.readingProgressDao()
         progress.recordLocal(
@@ -476,14 +482,49 @@ class KomgaSyncRepositoryTest {
             status = "Reading",
             updatedAt = 1_000,
         )
-        progress.persistPending(bookUrl, 0.6, "Reading", 4_000, account, now = 4_000)
-        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch7.xhtml", 0.5, 0.6))))
+        progress.persistPending(
+            bookUrl,
+            0.6,
+            "Reading",
+            4_000,
+            account,
+            now = 4_000,
+            locatorJson = locatorJson("OEBPS/ch7.xhtml", 0.5, 0.6),
+        )
 
         sync.takeRemotePosition(bookUrl, atRevision = requireNotNull(progress.get(bookUrl)).localRevision)
 
         val row = requireNotNull(progress.get(bookUrl))
         assertEquals(0.6, row.totalProgression!!, 1e-9)
         assertEquals("OEBPS/ch7.xhtml", JSONObject(row.locatorJson).getString("href"))
+    }
+
+    @Test
+    fun `legacy unmarked locator is treated as approximate`() = runTest {
+        connect()
+        val progress = db.readingProgressDao()
+        val local = locatorJson("OEBPS/ch2.xhtml", 0.5, 0.2)
+        progress.recordLocal(bookUrl, local, 0.2, null, "Reading", 1_000)
+        progress.persistPending(
+            bookUrl = bookUrl,
+            progression = 0.6,
+            status = "Reading",
+            remoteUpdatedAt = 4_000,
+            account = account,
+            now = 4_000,
+            locatorJson = """{
+                "href":"OEBPS/ch7.xhtml",
+                "type":"application/xhtml+xml",
+                "locations":{"totalProgression":0.6},
+                "text":{"highlight":"the following position"}
+            }""".trimIndent(),
+        )
+
+        sync.takeRemotePosition(bookUrl, requireNotNull(progress.get(bookUrl)).localRevision)
+
+        val row = requireNotNull(progress.get(bookUrl))
+        assertEquals(0.6, row.totalProgression ?: 0.0, 0.0)
+        assertEquals("{}", row.locatorJson)
     }
 
     // -- Being economical --------------------------------------------------

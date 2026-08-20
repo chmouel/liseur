@@ -147,4 +147,16 @@ class BookPositionsTest {
         assertEquals(3, book.positionAtProgression(0.5f))
         assertEquals(5, book.positionAtProgression(1f))
     }
+
+    @Test
+    fun `conservative fallback never starts after the target`() {
+        val resource = (1..5).map { position ->
+            locator("book.xhtml", (position - 1) / 4.0, position)
+        }
+        val book = positions(listOf(resource))
+
+        assertEquals(2, book.locatorAtOrBeforeProgression(0.49)?.locations?.position)
+        assertEquals(3, book.locatorAtOrBeforeProgression(0.50)?.locations?.position)
+        assertEquals(5, book.locatorAtOrBeforeProgression(1.0)?.locations?.position)
+    }
 }

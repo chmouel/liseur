@@ -56,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -114,6 +115,7 @@ import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FootnoteCard
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.search.SearchScreen
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.BusyIndicator
@@ -125,6 +127,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -158,7 +161,7 @@ fun ReaderScreen(
     onContinueNext: () -> Unit,
     onReachedEndpaper: () -> Unit,
     onLeftEndpaper: () -> Unit,
-    onLocatorChanged: (Locator) -> Unit,
+    onLocatorChanged: (Locator, NavigatorPositionEvent) -> Unit,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onPageTurnerChanged: (PageTurner?) -> Unit,
     onChromeVisibleChanged: (Boolean) -> Unit = {},
@@ -235,6 +238,55 @@ fun ReaderScreen(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val effectScope = rememberCoroutineScope()
+    var pendingPositionEvent by remember { mutableStateOf<NavigatorPositionEvent?>(null) }
+
+    suspend fun capture(nav: EpubNavigatorFragment, locator: Locator): Locator =
+        onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
+
+    suspend fun settleLayout() {
+        withFrameNanos { }
+        withFrameNanos { }
+    }
+
+    suspend fun navigate(
+        nav: EpubNavigatorFragment,
+        locator: Locator,
+        event: NavigatorPositionEvent,
+        verify: Boolean = false,
+    ) {
+        pendingPositionEvent = event
+        nav.go(locator, animated = false)
+        if (!verify || !ExactLocatorAnchor.isExact(locator)) return
+        settleLayout()
+        if (ExactLocatorAnchor.verify(nav, locator)) return
+        val progression = locator.locations.totalProgression ?: return
+        val fallback = onProgressAction.locatorAtOrBeforeProgression(progression) ?: return
+        pendingPositionEvent = event
+        nav.go(fallback, animated = false)
+        onProgressAction.onApproximateResume()
+    }
+
+    fun navigateLater(
+        locator: Locator,
+        event: NavigatorPositionEvent,
+        verify: Boolean = false,
+    ) {
+        val nav = navigatorNow ?: return
+        effectScope.launch { navigate(nav, locator, event, verify) }
+    }
+
+    fun beforeReflow(action: () -> Unit) {
+        val nav = navigatorNow
+        if (nav == null) {
+            action()
+            return
+        }
+        effectScope.launch {
+            val anchor = capture(nav, nav.currentLocator.value)
+            onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
+            action()
+        }
+    }
     val eInk = LocalEInk.current
     val eInkNow by rememberUpdatedState(eInk)
     var showingEnd by remember { mutableStateOf(false) }
@@ -286,8 +338,26 @@ fun ReaderScreen(
             // emission is discarded too: merely bringing the reader back
             // must not look like this device turned a page and turn a
             // one-sided remote update into a conflict.
-            nav.currentLocator.drop(1).collect(onLocatorChanged)
+            nav.currentLocator.drop(1).collect { native ->
+                val event = pendingPositionEvent ?: NavigatorPositionEvent.READER_MOVEMENT
+                pendingPositionEvent = null
+                onLocatorChanged(capture(nav, native), event)
+            }
         }
+    }
+
+    LaunchedEffect(navigator) {
+        val nav = navigator ?: return@LaunchedEffect
+        val requested = onProgressAction.currentLocator() ?: return@LaunchedEffect
+        if (!ExactLocatorAnchor.isExact(requested)) return@LaunchedEffect
+        settleLayout()
+        if (ExactLocatorAnchor.verify(nav, requested)) return@LaunchedEffect
+        val progression = requested.locations.totalProgression ?: return@LaunchedEffect
+        val fallback = onProgressAction.locatorAtOrBeforeProgression(progression)
+            ?: return@LaunchedEffect
+        pendingPositionEvent = NavigatorPositionEvent.FRAGMENT_RECREATION
+        nav.go(fallback, animated = false)
+        onProgressAction.onApproximateResume()
     }
 
     // Apply preference changes to the rendered book as they happen.
@@ -309,7 +379,19 @@ fun ReaderScreen(
             p.toEpubPreferences(theme, columnMode, scrollMode)
         }
             .drop(1)
-            .collect { nav.submitPreferences(it) }
+            .collect {
+                val anchor = capture(nav, nav.currentLocator.value)
+                onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                pendingPositionEvent = NavigatorPositionEvent.PREFERENCE_REFLOW
+                nav.submitPreferences(it)
+                settleLayout()
+                navigate(
+                    nav = nav,
+                    locator = anchor,
+                    event = NavigatorPositionEvent.PREFERENCE_REFLOW,
+                    verify = true,
+                )
+            }
     }
 
     // Picking the selection up from the navigator when it tells us the
@@ -520,10 +602,14 @@ fun ReaderScreen(
                     JumpBackPill(
                         position = target.position,
                         fromSync = target.fromSync,
+                        excerpt = target.excerpt,
+                        remoteAt = target.remoteAt,
+                        confidence = target.confidence,
+                        resumePosition = target.resumePosition,
                         theme = readingTheme,
                         onJumpBack = {
                             onProgressAction.dismissJumpBack()
-                            navigator?.go(target.locator, animated = false)
+                            navigateLater(target.locator, NavigatorPositionEvent.LOCAL_JUMP)
                         },
                         onDismiss = onProgressAction.dismissJumpBack,
                     )
@@ -534,6 +620,9 @@ fun ReaderScreen(
                     catchUp?.let { offer ->
                         CatchUpPill(
                             position = offer.position,
+                            excerpt = offer.excerpt,
+                            remoteAt = offer.remoteAt,
+                            confidence = offer.confidence,
                             theme = readingTheme,
                             onCatchUp = onProgressAction.acceptCatchUp,
                             onDismiss = onProgressAction.dismissCatchUp,
@@ -552,7 +641,7 @@ fun ReaderScreen(
                         onSeek = { position ->
                             onProgressAction.locatorAtPosition(position)?.let {
                                 onProgressAction.onJump()
-                                navigator?.go(it, animated = false)
+                                navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
                             }
                         },
                     )
@@ -742,20 +831,24 @@ fun ReaderScreen(
             prefs = prefs,
             readingTheme = readingTheme,
             typographyIsOwn = typographyIsOwn,
-            onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
-            onFontSelected = onPrefsAction.setFont,
-            onFontSizeChanged = onPrefsAction.setFontSize,
-            onThemeSelected = onPrefsAction.setTheme,
-            onLineHeightChanged = onPrefsAction.setLineHeight,
-            onPageMarginsChanged = onPrefsAction.setPageMargins,
+            onTypographyIsOwnChanged = { value ->
+                beforeReflow { onPrefsAction.setTypographyIsOwn(value) }
+            },
+            onFontSelected = { value -> beforeReflow { onPrefsAction.setFont(value) } },
+            onFontSizeChanged = { value -> beforeReflow { onPrefsAction.setFontSize(value) } },
+            onThemeSelected = { value -> beforeReflow { onPrefsAction.setTheme(value) } },
+            onLineHeightChanged = { value -> beforeReflow { onPrefsAction.setLineHeight(value) } },
+            onPageMarginsChanged = { value ->
+                beforeReflow { onPrefsAction.setPageMargins(value) }
+            },
             onBrightnessChanged = onPrefsAction.setBrightness,
             onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
             onFooterModeChanged = onProgressAction.setFooterMode,
-            onColumnModeChanged = onPrefsAction.setColumnMode,
+            onColumnModeChanged = { value -> beforeReflow { onPrefsAction.setColumnMode(value) } },
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             scrollMode = scrollMode,
-            onScrollModeChanged = onScrollModeChanged,
+            onScrollModeChanged = { value -> beforeReflow { onScrollModeChanged(value) } },
             onDismiss = { showTypography = false },
         )
     }
@@ -781,7 +874,7 @@ fun ReaderScreen(
                 searchHit = hit
                 chromeVisible = false
                 onProgressAction.onJump()
-                navigator?.go(hit, animated = false)
+                navigateLater(hit, NavigatorPositionEvent.LOCAL_JUMP)
             },
             onClose = {
                 searchFor = null
@@ -800,7 +893,14 @@ fun ReaderScreen(
             onLeftEndpaper()
             showToc = false
             chromeVisible = false
-            navigatorNow?.go(locator, animated = false)
+            navigatorNow?.let { nav ->
+                navigate(
+                    nav = nav,
+                    locator = locator,
+                    event = NavigatorPositionEvent.REMOTE_ADOPTION,
+                    verify = true,
+                )
+            }
         }
     }
 
@@ -818,7 +918,7 @@ fun ReaderScreen(
                     showToc = false
                     chromeVisible = false
                     onProgressAction.onJump()
-                    navigator?.go(it, animated = false)
+                    navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
                 }
             },
             onAnnotationDeleted = onAnnotationAction.remove,
@@ -835,7 +935,7 @@ fun ReaderScreen(
                 chromeVisible = false
                 publication.locatorFromLink(link)?.let {
                     onProgressAction.onJump()
-                    navigator?.go(it, animated = false)
+                    navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
                 }
             },
         )
@@ -910,6 +1010,10 @@ class ReaderProgressActions(
     val chapterTitleAtPosition: (Int) -> String?,
     val positionAtProgression: (Float) -> Int,
     val locatorAtPosition: (Int) -> Locator?,
+    val locatorAtOrBeforeProgression: (Double) -> Locator?,
+    val prepareLocator: (Locator) -> Locator,
+    val onApproximateResume: () -> Unit,
+    val currentLocator: () -> Locator?,
 )
 
 /** Syncing this one book on purpose, from the Navigate screen. */

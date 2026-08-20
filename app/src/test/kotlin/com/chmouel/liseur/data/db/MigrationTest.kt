@@ -144,6 +144,49 @@ class MigrationTest {
     }
 
     @Test
+    fun `pending sync state survives schema 38 with empty locator fields`() {
+        helper.createDatabase(TEST_DB, 37).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO reading_progress (
+                    book_url, locator_json, total_progression, updated_at,
+                    pending_progression, pending_status, pending_account
+                ) VALUES ('file:///book.epub', '{"href":"chapter"}', 0.2, 1000,
+                          0.7, 'Reading', 'komga-peer')
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO sync_peer_state (
+                    book_url, peer_id, pending_progression, pending_status, has_pending
+                ) VALUES ('file:///book.epub', 'sync-peer', 0.8, 'Reading', 1)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT pending_progression, pending_locator_json " +
+                        "FROM reading_progress WHERE book_url = 'file:///book.epub'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0.7, cursor.getDouble(0), 0.0)
+                    assertTrue(cursor.isNull(1))
+                }
+                db.query(
+                    "SELECT pending_progression, pending_locator_json, pending_edition_sha " +
+                        "FROM sync_peer_state WHERE book_url = 'file:///book.epub'",
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0.8, cursor.getDouble(0), 0.0)
+                    assertTrue(cursor.isNull(1))
+                    assertTrue(cursor.isNull(2))
+                }
+            }
+    }
+
+    @Test
     fun `a book survives every upgrade`() {
         helper.createDatabase(TEST_DB, 1).use { old ->
             old.execSQL(
@@ -720,6 +763,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 37
+        const val LATEST = 38
     }
 }

@@ -135,6 +135,13 @@
     <string name="position_synced_from_device">Synced from another device</string>
     <string name="catch_up">Continue where you left off elsewhere</string>
     <string name="catch_up_to_page">Continue to page %d</string>
+    <string name="catch_up_near_page">Continue near page %d</string>
+    <string name="resumed_from_device">Resumed from another device</string>
+    <string name="resumed_near_page">Resumed near page %d</string>
+    <string name="remote_age_now">just now</string>
+    <string name="remote_age_minutes">%d min ago</string>
+    <string name="remote_age_hours">%d hr ago</string>
+    <string name="remote_age_days">%d d ago</string>
     <string name="back">Back</string>
     <string name="liseur_sync_get_one">Haven\'t got one? Run your own</string>
     <string name="liseur_sync_sign_in_password">Sign in</string>

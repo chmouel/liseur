@@ -244,16 +244,15 @@ class ReadingProgressDaoTest {
     }
 
     @Test
-    fun `a pull with no place to offer leaves the one this device had`() = runTest {
+    fun `a pull with no place invalidates the stale local locator`() = runTest {
         read(0.2)
         dao.persistPending(book, 0.9, "Reading", 4_000, account, now = 4_000)
 
         assertTrue(dao.applyPull(book, 1, 0.9, "Reading", account, 4_000, now = 5_000))
 
-        // Servers that only carry a percentage pass nothing, and
-        // overwriting a real locator with an empty one would lose the
-        // only precise thing on the row.
-        assertEquals("""{"at":0.2}""", row().locatorJson)
+        // The old locator belongs to 0.2 and must not be paired with the
+        // newly adopted 0.9. The reader reconstructs 0.9 conservatively.
+        assertEquals("{}", row().locatorJson)
     }
 
     // -- Durability -------------------------------------------------------
@@ -263,10 +262,19 @@ class ReadingProgressDaoTest {
         // The whole reason persistPending exists: the sync token moves
         // past a change once, so if the process dies between reading the
         // feed and acting on it, this row is the only copy.
-        dao.persistPending(book, 0.7, "Reading", 4_000, account, now = 4_000)
+        dao.persistPending(
+            book,
+            0.7,
+            "Reading",
+            4_000,
+            account,
+            now = 4_000,
+            locatorJson = """{"href":"chapter-7"}""",
+        )
 
         val row = row()
         assertEquals(0.7, row.pendingProgression!!, 1e-9)
+        assertEquals("""{"href":"chapter-7"}""", row.pendingLocatorJson)
         assertEquals(account, row.pendingAccount)
         assertTrue(row.hasPending)
     }
@@ -275,12 +283,21 @@ class ReadingProgressDaoTest {
     fun `a landed state can drive a pull with no feed at all`() = runTest {
         // Crash recovery. The token already moved, so the next feed is
         // empty; the pending row alone has to be enough.
-        dao.persistPending(book, 0.7, "Reading", 4_000, account, now = 4_000)
+        dao.persistPending(
+            book,
+            0.7,
+            "Reading",
+            4_000,
+            account,
+            now = 4_000,
+            locatorJson = """{"href":"chapter-7"}""",
+        )
         val recovered = requireNotNull(dao.pendingFor(account).singleOrNull())
         assertEquals(book, recovered.bookUrl)
 
         assertTrue(dao.applyPull(book, 0, 0.7, "Reading", account, 4_000, now = 5_000))
         assertTrue(dao.pendingFor(account).isEmpty())
+        assertNull(row().pendingLocatorJson)
     }
 
     @Test
@@ -307,7 +324,15 @@ class ReadingProgressDaoTest {
     fun `switching account leaves the reading but drops the baseline`() = runTest {
         read(0.6)
         dao.ackPush(book, 1, 0.6, "Reading", account, now = 5_000)
-        dao.persistPending(book, 0.9, "Reading", 6_000, account, now = 6_000)
+        dao.persistPending(
+            book,
+            0.9,
+            "Reading",
+            6_000,
+            account,
+            now = 6_000,
+            locatorJson = """{"href":"remote"}""",
+        )
 
         dao.retireAccountState()
 
@@ -319,6 +344,7 @@ class ReadingProgressDaoTest {
         assertNull(row.agreedProgression)
         // And their pending state must never be applied under the new one.
         assertFalse(row.hasPending)
+        assertNull(row.pendingLocatorJson)
     }
 
     @Test

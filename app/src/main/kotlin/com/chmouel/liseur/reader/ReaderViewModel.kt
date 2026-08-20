@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.db.AnnotationKind
@@ -57,6 +58,7 @@ import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.markedPassage
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.footnotes.FootnoteResolver
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingPace
@@ -312,7 +314,13 @@ class ReaderViewModel(
     )
 
     /** An offer to continue where another device has read further. */
-    data class CatchUp(val progression: Double, val position: Int?)
+    data class CatchUp(
+        val progression: Double,
+        val position: Int?,
+        val excerpt: String?,
+        val remoteAt: Long?,
+        val confidence: ResumeConfidence,
+    )
 
     private val _catchUp = MutableStateFlow<CatchUp?>(null)
 
@@ -438,10 +446,7 @@ class ReaderViewModel(
 
             ResolveOutcome.Done -> {
                 if (takeRemote) {
-                    // The jump raises the way-back pill through onJump(),
-                    // which is the whole announcement: where you are now,
-                    // and one tap back to where you were.
-                    progressDao.get(bookId)?.totalProgression?.let { goToProgression(it) }
+                    goToRemotePosition(preview)
                     BookSync.Idle
                 } else {
                     BookSync.Note(R.string.reader_sync_book_sent)
@@ -469,6 +474,8 @@ class ReaderViewModel(
         val there = preview.remote ?: return
         val here = preview.local ?: 0.0
         val takeRemote = there > here
+        val localLocator = progressDao.get(bookId)?.locatorJson
+            ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
         val outcome = positionSync.resolve(
             bookId,
             takeRemote,
@@ -478,7 +485,7 @@ class ReaderViewModel(
         // settled on the next open; the book still opens now.
         if (outcome != ResolveOutcome.Done || !takeRemote) return
         if (bookPositions == null) bookPositions = BookPositions.of(publication)
-        offerWayBack(here)
+        offerWayBack(localLocator, here, preview)
     }
 
     /**
@@ -487,11 +494,29 @@ class ReaderViewModel(
      * moved it. [onJump] cannot do this: the book is not open yet, so
      * there is no last locator to remember.
      */
-    private fun offerWayBack(progression: Double) {
+    private fun offerWayBack(
+        exactLocal: Locator?,
+        progression: Double,
+        preview: SyncPreview,
+    ) {
         val positions = bookPositions?.takeIf { it.isUsable } ?: return
-        val position = positions.positionAtProgression(progression.toFloat())
-        val locator = positions.locatorAt(position) ?: return
-        _jumpBack.value = JumpBack(locator = locator, position = position, fromSync = true)
+        val locator = exactLocal?.takeIf(ExactLocatorAnchor::isExact)
+            ?: positions.locatorAtOrBeforeProgression(progression)
+            ?: return
+        val position = positions.resolve(locator)?.position
+        _jumpBack.value = JumpBack(
+            locator = prepareLocator(locator),
+            position = position,
+            fromSync = true,
+            excerpt = preview.excerpt,
+            remoteAt = preview.remoteAt,
+            confidence = preview.confidence,
+            resumePosition = preview.remote?.let {
+                positions.locatorAtOrBeforeProgression(it)
+                    ?.let(positions::resolve)
+                    ?.position
+            },
+        )
         jumpBackTimer?.cancel()
         jumpBackTimer = viewModelScope.launch {
             delay(JUMP_BACK_TIMEOUT_MS)
@@ -499,18 +524,33 @@ class ReaderViewModel(
         }
     }
 
-    private suspend fun goToProgression(progression: Double) {
+    /** Navigates to the exact adopted locator, or conservatively before its percentage. */
+    private suspend fun goToRemotePosition(preview: SyncPreview) {
         val positions = bookPositions ?: BookPositions.of(publication ?: return)
             .also { bookPositions = it }
-        if (!positions.isUsable) return
-        positions.locatorAt(positions.positionAtProgression(progression.toFloat()))?.let {
-            // Remember where we were before the destination overwrites it,
-            // or the way back would point at the page just arrived on.
-            onJump()
-            lastLocator = it
-            _progress.value = progressAt(it)
-            _goTo.emit(it)
-        }
+        val stored = progressDao.get(bookId) ?: return
+        val exact = runCatching { Locator.fromJSON(JSONObject(stored.locatorJson)) }
+            .getOrNull()
+            ?.takeIf(ExactLocatorAnchor::isExact)
+        val target = exact
+            ?: stored.totalProgression?.let(positions::locatorAtOrBeforeProgression)
+            ?: return
+        onJump()
+        _jumpBack.value = _jumpBack.value?.copy(
+            fromSync = true,
+            excerpt = preview.excerpt,
+            remoteAt = preview.remoteAt,
+            confidence = if (exact != null) {
+                preview.confidence
+            } else {
+                ResumeConfidence.APPROXIMATE
+            },
+            resumePosition = positions.resolve(target)?.position,
+        )
+        pendingPositionEvent = NavigatorPositionEvent.REMOTE_ADOPTION
+        lastLocator = prepareLocator(target)
+        _progress.value = progressAt(target)
+        _goTo.emit(lastLocator ?: target)
     }
 
     private var publication: Publication? = null
@@ -520,6 +560,7 @@ class ReaderViewModel(
     private var catchUpChecking = false
     private var catchUpDeclined: Double? = null
     private var readerActive = false
+    private var pendingPositionEvent: NavigatorPositionEvent? = null
 
     private val ownTypography: StateFlow<BookTypography?> = typographyDao.observe(bookId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -605,12 +646,34 @@ class ReaderViewModel(
                     _state.value = UiState.Failure(it.message)
                     return@launch
                 }
+            val beforeSync = progressDao.get(bookId)
             // Ask the server where this book was left before deciding
             // where to open it. Bounded, and the answer is optional: a slow
             // or absent server delays the book by a moment at most, never
             // stops it opening.
             withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
                 runCatching { positionSync.request(SyncScope.Book(bookId)) }
+            }
+            val afterSync = progressDao.get(bookId)
+            val pulledAutomatically = afterSync?.takeIf { after ->
+                after.localRevision > (beforeSync?.localRevision ?: 0L) &&
+                    after.totalProgression != null &&
+                    beforeSync?.totalProgression?.let {
+                        kotlin.math.abs(it - after.totalProgression) >= EPSILON
+                    } != false
+            }?.let { after ->
+                val exact = after.locatorJson.takeIf(ExactLocatorAnchor::isExactJson)
+                SyncPreview(
+                    local = beforeSync?.totalProgression,
+                    remote = after.totalProgression,
+                    remoteAt = after.remoteUpdatedAt,
+                    excerpt = ExactLocatorAnchor.excerpt(exact),
+                    confidence = if (exact != null) {
+                        ResumeConfidence.EXACT
+                    } else {
+                        ResumeConfidence.APPROXIMATE
+                    },
+                )
             }
 
             // Sync preserves a disagreement rather than guessing across
@@ -625,21 +688,28 @@ class ReaderViewModel(
                 bookPace = stored?.readingPace
                     ?: ReadingPace.Unknown,
             )
-            var initialLocator = stored?.locatorJson
-                ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
-
-            // A position that came from another device is only a
-            // percentage, so it no longer matches the locator saved here.
-            // Turning it into a real place means laying the book out
-            // before showing it: a moment's wait, but only on the first
-            // open after syncing.
-            val wanted = stored?.totalProgression
-            if (wanted != null && !initialLocator.isAt(wanted)) {
-                val positions = BookPositions.of(publication)
-                bookPositions = positions
-                positions.locatorAt(positions.positionAtProgression(wanted.toFloat()))
-                    ?.let { initialLocator = it }
+            val positions = BookPositions.of(publication)
+            bookPositions = positions
+            if (pulledAutomatically != null) {
+                val localLocator = beforeSync?.locatorJson
+                    ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+                offerWayBack(
+                    exactLocal = localLocator,
+                    progression = beforeSync?.totalProgression ?: 0.0,
+                    preview = pulledAutomatically,
+                )
             }
+            val savedLocator = stored?.locatorJson
+                ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+            // Unmarked Readium text may describe the following synthetic
+            // position. It is approximate and deliberately resumes at or
+            // before the stable progression instead.
+            val initialLocator = if (ExactLocatorAnchor.isExact(savedLocator)) {
+                savedLocator
+            } else {
+                stored?.totalProgression?.let(positions::locatorAtOrBeforeProgression)
+                    ?: savedLocator
+            }?.let(::prepareLocator)
             lastLocator = initialLocator
             library.markOpened(bookId)
             this@ReaderViewModel.publication = publication
@@ -651,35 +721,42 @@ class ReaderViewModel(
             // onResume arrives before a publication has necessarily
             // opened. Only now can foreground time be reading time.
             sessions.onReaderReady()
-            // Computing positions parses the whole book, so it runs
-            // after the reader is on screen.
-            if (bookPositions == null) bookPositions = BookPositions.of(publication)
             lastLocator?.let { _progress.value = progressAt(it) }
         }
     }
 
-    /** True when this locator already sits at [progression] within a page. */
-    private fun Locator?.isAt(progression: Double): Boolean {
-        val here = this?.locations?.totalProgression ?: return false
-        return kotlin.math.abs(here - progression) < EPSILON
+    /** Adds the layout-independent whole-book progression to a captured locator. */
+    fun prepareLocator(locator: Locator): Locator {
+        val stable = bookPositions?.resolve(locator) ?: return locator
+        return ExactLocatorAnchor.withStableProgression(locator, stable.progression)
     }
 
-    fun onLocatorChanged(locator: Locator) {
+    fun onLocatorChanged(
+        locator: Locator,
+        event: NavigatorPositionEvent = NavigatorPositionEvent.READER_MOVEMENT,
+    ) {
+        val effectiveEvent = if (event == NavigatorPositionEvent.READER_MOVEMENT) {
+            pendingPositionEvent ?: event
+        } else {
+            event
+        }
+        pendingPositionEvent = null
         // Fragment pause/resume and a viewport reflow can publish a new
         // current locator without any reader action. Treating that as a
         // page turn makes this device dirty just as another device's
         // position arrives, manufacturing a sync conflict.
-        if (!readerActive) return
-        val samePosition = lastLocator?.sameReadingPositionAs(locator) == true
-        lastLocator = locator
-        val stable = bookPositions?.resolve(locator)
-        _progress.value = progressAt(locator, stable)
+        if (!readerActive && effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT) return
+        val prepared = prepareLocator(locator)
+        val samePosition = lastLocator?.sameReadingPositionAs(prepared) == true
+        lastLocator = prepared
+        val stable = bookPositions?.resolve(prepared)
+        _progress.value = progressAt(prepared, stable)
         // Readium recalculates totalProgression for a different viewport,
         // even when its stable resource position has not moved. Keep the
         // display current, but do not turn that layout detail into reading.
-        if (samePosition) return
-        val totalProgression = locator.locations.totalProgression
-        if (stable != null) {
+        if (samePosition || !effectiveEvent.persists) return
+        val totalProgression = stable?.progression ?: return
+        if (effectiveEvent.teachesPace) {
             val sample = speed.record(
                 position = stable.coordinate,
                 atMillis = SystemClock.elapsedRealtime(),
@@ -687,15 +764,17 @@ class ReaderViewModel(
             // A page that was really read teaches this reader's pace to
             // every book, not just this one.
             if (sample != null) viewModelScope.launch { readingPace.record(sample) }
+        } else {
+            speed.forgetLastPosition()
         }
         // Capture the page's moment before suspendable position writes,
         // so database latency cannot become reading time.
-        sessions.onPageTurned(totalProgression)
+        if (effectiveEvent.recordsReadingTime) sessions.onPageTurned(totalProgression)
         val accepted = positionPublisher.publish(
             PositionUpdate(
                 bookUrl = bookId,
-                locatorJson = locator.toJSON().toString(),
-                progression = locator.locations.totalProgression,
+                locatorJson = prepared.toJSON().toString(),
+                progression = totalProgression,
                 readingSecondsPerPosition = speed.secondsPerPosition,
                 readingPaceSamples = speed.pace.samples,
                 readingPaceElapsedMs = speed.pace.elapsedMs,
@@ -785,6 +864,9 @@ class ReaderViewModel(
                 _catchUp.value = CatchUp(
                     progression = there,
                     position = positions?.positionAtProgression(there.toFloat()),
+                    excerpt = preview.excerpt,
+                    remoteAt = preview.remoteAt,
+                    confidence = preview.confidence,
                 )
             } finally {
                 catchUpChecking = false
@@ -794,7 +876,7 @@ class ReaderViewModel(
 
     /** Takes the offer: the further position wins, and the page turns. */
     fun acceptCatchUp() {
-        if (_catchUp.value == null) return
+        val offer = _catchUp.value ?: return
         _catchUp.value = null
         viewModelScope.launch {
             val outcome = positionSync.resolve(
@@ -805,7 +887,15 @@ class ReaderViewModel(
             // Anything but a clean adoption leaves the book where it is;
             // the offer will simply be made again if it still stands.
             if (outcome != ResolveOutcome.Done) return@launch
-            progressDao.get(bookId)?.totalProgression?.let { goToProgression(it) }
+            goToRemotePosition(
+                SyncPreview(
+                    local = null,
+                    remote = offer.progression,
+                    remoteAt = offer.remoteAt,
+                    excerpt = offer.excerpt,
+                    confidence = offer.confidence,
+                ),
+            )
         }
     }
 
@@ -822,6 +912,7 @@ class ReaderViewModel(
         // The jump itself is not reading, and neither is finding your
         // way back, so it must not affect the speed estimate.
         speed.forgetLastPosition()
+        pendingPositionEvent = NavigatorPositionEvent.LOCAL_JUMP
         _jumpBack.value = JumpBack(locator = from, position = progress?.position)
         jumpBackTimer?.cancel()
         jumpBackTimer = viewModelScope.launch {
@@ -837,6 +928,13 @@ class ReaderViewModel(
 
     /** The locator for a position on the scrubber, numbered from 1. */
     fun locatorAtPosition(position: Int): Locator? = bookPositions?.locatorAt(position)
+
+    fun locatorAtOrBeforeProgression(progression: Double): Locator? =
+        bookPositions?.locatorAtOrBeforeProgression(progression)
+
+    fun onApproximateResume() {
+        _jumpBack.value = _jumpBack.value?.copy(confidence = ResumeConfidence.APPROXIMATE)
+    }
 
     /** The position matching a whole-book progression between 0 and 1. */
     fun positionAtProgression(progression: Float): Int =
@@ -1177,6 +1275,10 @@ class ReaderViewModel(
         val locator: Locator,
         val position: Int?,
         val fromSync: Boolean = false,
+        val excerpt: String? = null,
+        val remoteAt: Long? = null,
+        val confidence: ResumeConfidence = ResumeConfidence.EXACT,
+        val resumePosition: Int? = null,
     )
 
     companion object {

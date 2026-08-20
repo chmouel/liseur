@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncMove
@@ -24,7 +25,6 @@ import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.remote.remoteCall
-import com.chmouel.liseur.data.remote.valueOrNull
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingBaseline
 import com.chmouel.liseur.domain.ReadingState
@@ -33,6 +33,7 @@ import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.reconcileReadingState
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -122,6 +123,7 @@ class KomgaSyncRepository(
                     remoteUpdatedAt = remote.state.updatedAt,
                     account = server.accountKey,
                     now = System.currentTimeMillis(),
+                    locatorJson = remote.locator?.let(KomgaLocator::toReadium)?.toString(),
                 )
             }
         }
@@ -130,6 +132,20 @@ class KomgaSyncRepository(
                 local = progressDao.get(bookUrl)?.totalProgression,
                 remote = remote?.state?.progression,
                 remoteAt = remote?.state?.updatedAt?.takeIf { it > 0 },
+                excerpt = remote?.locator
+                    ?.let(KomgaLocator::toReadium)
+                    ?.toString()
+                    ?.let(ExactLocatorAnchor::excerpt),
+                confidence = if (
+                    remote?.locator
+                        ?.let(KomgaLocator::toReadium)
+                        ?.toString()
+                        ?.let(ExactLocatorAnchor::isExactJson) == true
+                ) {
+                    ResumeConfidence.EXACT
+                } else {
+                    ResumeConfidence.APPROXIMATE
+                },
             ),
         )
     }
@@ -147,6 +163,12 @@ class KomgaSyncRepository(
             local = stored.totalProgression,
             remote = there,
             remoteAt = stored.remoteUpdatedAt?.takeIf { it > 0 },
+            excerpt = ExactLocatorAnchor.excerpt(stored.pendingLocatorJson),
+            confidence = if (ExactLocatorAnchor.isExactJson(stored.pendingLocatorJson)) {
+                ResumeConfidence.EXACT
+            } else {
+                ResumeConfidence.APPROXIMATE
+            },
         ).takeIf { !it.agrees }
     }
 
@@ -154,22 +176,13 @@ class KomgaSyncRepository(
      * Takes the position the server reported for one book, because
      * someone said to.
      *
-     * The exact place is asked for again rather than remembered, since
-     * the disagreement may have been sitting on disk since a previous
-     * run. Failing to get it is not a reason to refuse: the percentage
-     * that was recorded is still a better answer than staying put, and
-     * it is what calibre-web could offer at best.
+     * The exact place is the one persisted with the pending percentage,
+     * so a restart cannot pair the choice with a later server answer.
      */
     override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
         val progression = stored.pendingProgression ?: return ResolveOutcome.Done
-        val id = bookDao.getByUrl(bookUrl)?.remoteUuid
-
-        val locator = server.credentials?.let { credentials ->
-            id?.let { positions.read(server.baseUrl, credentials, it).valueOrNull() }
-        }
-
         val applied = progressDao.applyPull(
             bookUrl = bookUrl,
             expectedRevision = atRevision,
@@ -178,7 +191,7 @@ class KomgaSyncRepository(
             account = server.accountKey,
             remoteUpdatedAt = stored.pendingUpdatedAt,
             now = System.currentTimeMillis(),
-            locatorJson = locator?.let(KomgaLocator::toReadium)?.toString(),
+            locatorJson = stored.pendingLocatorJson.takeIf(ExactLocatorAnchor::isExactJson),
         )
         if (!applied) return ResolveOutcome.Superseded
         finishedState.refreshFromProgress(bookUrl)
@@ -360,7 +373,14 @@ class KomgaSyncRepository(
         // Something unsettled from an earlier run is still the server's
         // word, and outlives the run that heard it.
         if (remote == null) {
-            remote = stored?.pendingStateFor(account)?.let { RemoteSide(it) }
+            remote = stored?.pendingStateFor(account)?.let {
+                RemoteSide(
+                    state = it,
+                    locator = stored.pendingLocatorJson?.let { json ->
+                        runCatching { JSONObject(json) }.getOrNull()
+                    },
+                )
+            }
         } else {
             forAccount(server) {
                 progressDao.persistPending(
@@ -370,6 +390,7 @@ class KomgaSyncRepository(
                     remoteUpdatedAt = remote.state.updatedAt,
                     account = account,
                     now = System.currentTimeMillis(),
+                    locatorJson = remote.locator?.let(KomgaLocator::toReadium)?.toString(),
                 )
             }
             stored = progressDao.get(book.url)
@@ -418,7 +439,7 @@ class KomgaSyncRepository(
                     ReadingState(
                         progression = stored.agreedProgression,
                         status = statusOf(progress, stored.agreedProgression),
-                        updatedAt = progress.readDate ?: 0L,
+                        updatedAt = progress.readDate,
                     ),
                     unchanged = true,
                 ),
@@ -566,7 +587,9 @@ class KomgaSyncRepository(
                         // cannot: reopen the book exactly where the other
                         // device left it rather than at a percentage.
                         locatorJson = remote?.locator
-                            ?.let(KomgaLocator::toReadium)?.toString(),
+                            ?.let(KomgaLocator::toReadium)
+                            ?.toString()
+                            ?.takeIf(ExactLocatorAnchor::isExactJson),
                     )
                 }
                 finishedState.refreshFromProgress(bookUrl)
