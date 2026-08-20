@@ -275,18 +275,6 @@ fun ReaderScreen(
         effectScope.launch { navigate(nav, locator, event, verify) }
     }
 
-    fun beforeReflow(action: () -> Unit) {
-        val nav = navigatorNow
-        if (nav == null) {
-            action()
-            return
-        }
-        effectScope.launch {
-            val anchor = capture(nav, nav.currentLocator.value)
-            onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
-            action()
-        }
-    }
     val eInk = LocalEInk.current
     val eInkNow by rememberUpdatedState(eInk)
     var showingEnd by remember { mutableStateOf(false) }
@@ -364,7 +352,7 @@ fun ReaderScreen(
     // The column mode is filtered through the window width for the same
     // reason it is in ReaderActivity: a narrow window cannot carry a
     // choice made on a wide one, and the control to undo it is hidden.
-    LaunchedEffect(navigator, columnMode, scrollMode) {
+    LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
         // The factory already built this navigator with the current
         // preferences. Submitting that same value once more reflows the
@@ -375,8 +363,11 @@ fun ReaderScreen(
         // change without the preferences changing at all: a reader on
         // the app's theme who leaves their phone to turn itself dark at
         // dusk has chosen nothing, and the open book should still follow.
-        combine(prefsFlow, snapshotFlow { readingThemeNow }) { p, theme ->
-            p.toEpubPreferences(theme, columnMode, scrollMode)
+        combine(
+            prefsFlow,
+            snapshotFlow { Triple(readingThemeNow, columnMode, scrollMode) },
+        ) { p, (theme, columns, scrolling) ->
+            p.toEpubPreferences(theme, columns, scrolling)
         }
             .drop(1)
             .collect {
@@ -831,24 +822,20 @@ fun ReaderScreen(
             prefs = prefs,
             readingTheme = readingTheme,
             typographyIsOwn = typographyIsOwn,
-            onTypographyIsOwnChanged = { value ->
-                beforeReflow { onPrefsAction.setTypographyIsOwn(value) }
-            },
-            onFontSelected = { value -> beforeReflow { onPrefsAction.setFont(value) } },
-            onFontSizeChanged = { value -> beforeReflow { onPrefsAction.setFontSize(value) } },
-            onThemeSelected = { value -> beforeReflow { onPrefsAction.setTheme(value) } },
-            onLineHeightChanged = { value -> beforeReflow { onPrefsAction.setLineHeight(value) } },
-            onPageMarginsChanged = { value ->
-                beforeReflow { onPrefsAction.setPageMargins(value) }
-            },
+            onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
+            onFontSelected = onPrefsAction.setFont,
+            onFontSizeChanged = onPrefsAction.setFontSize,
+            onThemeSelected = onPrefsAction.setTheme,
+            onLineHeightChanged = onPrefsAction.setLineHeight,
+            onPageMarginsChanged = onPrefsAction.setPageMargins,
             onBrightnessChanged = onPrefsAction.setBrightness,
             onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
             onFooterModeChanged = onProgressAction.setFooterMode,
-            onColumnModeChanged = { value -> beforeReflow { onPrefsAction.setColumnMode(value) } },
+            onColumnModeChanged = onPrefsAction.setColumnMode,
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             scrollMode = scrollMode,
-            onScrollModeChanged = { value -> beforeReflow { onScrollModeChanged(value) } },
+            onScrollModeChanged = onScrollModeChanged,
             onDismiss = { showTypography = false },
         )
     }
