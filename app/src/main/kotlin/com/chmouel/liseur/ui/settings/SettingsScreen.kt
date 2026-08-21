@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +63,7 @@ import androidx.compose.foundation.text.ClickableText
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
@@ -364,10 +366,10 @@ private val DefinitionTarget.label: Int
  * field after a reader misspelled fr.wiktionary.org and got nothing but
  * an HTTP 501 out of it — a name cannot be typo'd. Mirrors still fit
  * through the custom entry, which keeps what is typed and only commits
- * it once it parses, so a half-typed address never becomes the stored
- * one. Every committed choice is then tried against the site once,
- * right here, so a dead address fails under the field and not later in
- * the reader.
+ * it on Done, once it parses — so a half-typed address never becomes
+ * the stored one. Every committed choice is then tried against the site
+ * once, right here, so a dead address fails under the field and not
+ * later in the reader.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -385,6 +387,14 @@ private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
     var probeTarget by remember { mutableStateOf<String?>(null) }
     var probeResult by remember { mutableStateOf<ProbeUi>(ProbeUi.Idle) }
     val client = remember { WiktionaryClient() }
+    LaunchedEffect(baseUrl) {
+        // The stored site moved under us (a restore, another writer):
+        // whatever the probe said, it said it about somewhere else.
+        if (probeTarget != null && probeTarget != baseUrl) {
+            probeTarget = null
+            probeResult = ProbeUi.Idle
+        }
+    }
     LaunchedEffect(probeTarget) {
         val target = probeTarget ?: return@LaunchedEffect
         probeResult = ProbeUi.Checking
@@ -452,10 +462,7 @@ private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
         if (customChosen) {
             OutlinedTextField(
                 value = typed,
-                onValueChange = {
-                    typed = it
-                    DictionaryUrl.normalise(it)?.let(commit)
-                },
+                onValueChange = { typed = it },
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 singleLine = true,
                 isError = invalid,
@@ -465,7 +472,14 @@ private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
                 } else {
                     null
                 },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done,
+                ),
+                // Committed on Done, not per keystroke: a commit stores
+                // the setting and probes the site, and a half-typed host
+                // deserves neither.
+                keyboardActions = KeyboardActions(onDone = { normalised?.let(commit) }),
             )
         }
         when (val probe = probeResult) {

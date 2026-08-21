@@ -106,7 +106,11 @@ class WiktionaryClient(
         languages: List<String>,
         baseUrl: String,
     ): DictionaryState =
-        fetch(DictionaryUrl.definitionApi(baseUrl, term), baseUrl) { body ->
+        fetch(
+            url = DictionaryUrl.definitionApi(baseUrl, term),
+            baseUrl = baseUrl,
+            accept = "application/json",
+        ) { body ->
             parseWiktionaryDefinitions(body, languages)
         }
 
@@ -115,19 +119,24 @@ class WiktionaryClient(
         languages: List<String>,
         baseUrl: String,
     ): DictionaryState =
-        fetch(DictionaryUrl.pageHtmlApi(baseUrl, term), baseUrl) { body ->
+        fetch(
+            url = DictionaryUrl.pageHtmlApi(baseUrl, term),
+            baseUrl = baseUrl,
+            accept = "text/html",
+        ) { body ->
             parseWiktionaryEntryHtml(body, languages)
         }
 
     private fun fetch(
         url: String,
         baseUrl: String,
+        accept: String,
         parse: (String) -> List<DictionarySense>,
     ): DictionaryState {
         val host = DictionaryUrl.hostOf(baseUrl)
         val request = Request.Builder()
             .url(url)
-            .header("Accept", "application/json")
+            .header("Accept", accept)
             // Wikimedia answers 403 to requests without a descriptive
             // agent, so say who we are and where to complain.
             .header("User-Agent", USER_AGENT)
