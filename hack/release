@@ -560,6 +560,30 @@ update_fdroid_submission() (
     [[ -n $(ls -A "$workdir/$signatures_dir" 2>/dev/null) ]] ||
         die "no signature came out of $apk_name for versionCode $version_code"
 
+    # A v2/v3-only APK (ours) has no v1 signature file to read the
+    # developer certificate from, so publishing needs it cached as
+    # signer-certificate.der next to the signing block. fdroid
+    # signatures only writes it on fdroidserver master
+    # (fdroidserver#1065); with an older release, produce it here with
+    # the same function the fix uses, run by the interpreter behind
+    # the fdroid command so the import resolves to the same install.
+    if [[ ! -e "$workdir/$signatures_dir/signer-certificate.der" ]]; then
+        local fdroid_python
+        fdroid_python=$(sed -n '1s/^#!//p' "$(command -v "$fdroid_bin")")
+        [[ -x "$fdroid_python" ]] || fdroid_python=python3
+        (cd "$workdir" && "$fdroid_python" - "$apk_name" "$signatures_dir" <<'PY'
+import sys
+from pathlib import Path
+from fdroidserver import common
+common.config = common.read_config()
+cert = common.get_first_signer_certificate(sys.argv[1])
+if cert is None:
+    sys.exit("no v2/v3 certificate found")
+Path(sys.argv[2], "signer-certificate.der").write_bytes(cert)
+PY
+        ) || die "could not write signer-certificate.der"
+    fi
+
     # The new entry is appended: under dual signing the history stays,
     # because each published version keeps needing its recipe. A resumed
     # run finds its entry already present and only settles the rest.
