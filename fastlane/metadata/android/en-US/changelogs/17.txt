@@ -1,0 +1,1 @@
+Builds are now reproducible, and F-Droid will ship the developer-signed APK after verifying its own rebuild matches. Heads-up for F-Droid users: this changes the signing key once. Updating from an older F-Droid install needs an uninstall and reinstall, which wipes the local library, reading positions and annotations. Fresh installs and installs from GitHub are unaffected.
