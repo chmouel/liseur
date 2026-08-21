@@ -5,7 +5,7 @@ set -euo pipefail
 readonly GH_REPO="chmouel/liseur"
 readonly APP_ID="com.chmouel.liseur"
 readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
-readonly FDROID_BRANCH="$APP_ID"
+readonly FDROID_FORK_PROJECT="chmouel%2Ffdroiddata"
 readonly BUILD_FILE="app/build.gradle.kts"
 readonly RELEASE_WAIT_SECONDS=1800
 readonly RELEASE_POLL_SECONDS=20
@@ -55,9 +55,13 @@ Examples:
   hack/release --fdroid-only 0.2.1
   hack/release --sync-secrets
 
-Until Liseur is in F-Droid there is no metadata to update, so the first
-release wants --no-fdroid. Once the inclusion request is merged, run
-hack/release --fdroid-only VERSION to catch that release up.
+The F-Droid step opens (or updates) a fdroiddata merge request carrying
+the new build entry plus the signature extracted from the released APK:
+F-Droid publishes both its own build and the developer-signed one, and
+their bot cannot automate that yet. It needs fdroidserver installed
+(pipx install fdroidserver, or set FDROID_BIN); when it is missing the
+release still goes out and hack/release --fdroid-only VERSION finishes
+the F-Droid part later.
 
 The signing key lives in pass, under android/liseur.keystore.p12,
 android/liseur.keystore-password and android/liseur.keystore-alias, and the
@@ -457,51 +461,80 @@ report_fdroid_pipeline() {
         "$url"
 }
 
+# F-Droid publishes two APKs of every version: one it signs itself and
+# one carrying the developer signature, grafted onto F-Droid's own
+# rebuild once that rebuild comes out byte-identical (the dual-signing
+# flow of https://f-droid.org/docs/Reproducible_Builds/). Their bot
+# cannot drive that yet, so the metadata says `AutoUpdateMode: None`
+# and every release comes back through here: extract the signature from
+# the APK just published on GitHub, append the build entry, and open
+# (or update) the fdroiddata merge request that carries both.
 update_fdroid_submission() (
     local version=$1
     local version_code=$2
     local commit_sha=$3
     local metadata_path="metadata/$APP_ID.yml"
     local encoded_path="metadata%2F$APP_ID.yml"
-    local upstream_file
+    local apk_name="liseur-v$version.apk"
 
-    if upstream_file=$(gitlab_api_get \
-        "projects/$FDROID_PROJECT/repository/files/$encoded_path?ref=master" 2>/dev/null); then
-        local upstream_metadata
-        upstream_metadata=$(printf '%s' "$upstream_file" | jq -r .content | base64 --decode)
-        grep -q '^AutoUpdateMode: Version$' <<<"$upstream_metadata" ||
-            die "F-Droid metadata exists but auto-update is not enabled"
-        grep -q '^UpdateCheckMode: Tags' <<<"$upstream_metadata" ||
-            die "F-Droid metadata exists but tag updates are not enabled"
-        printf 'F-Droid: metadata is already upstream; tag auto-update will handle %s.\n' "$version"
+    # fdroidserver does the signature extraction, and nothing else can.
+    # Missing is not fatal this late in a release: everything else has
+    # already shipped, and --fdroid-only picks this step back up.
+    local fdroid_bin=${FDROID_BIN:-fdroid}
+    if ! command -v "$fdroid_bin" >/dev/null; then
+        printf 'F-Droid: fdroidserver is not installed; the signature MR was not opened.\n'
+        printf 'Install it (pipx install fdroidserver, or set FDROID_BIN) and run:\n'
+        printf '  hack/release --fdroid-only %s\n' "$version"
         return
     fi
 
-    local merge_requests
-    merge_requests=$(gitlab_api_get \
-        "projects/$FDROID_PROJECT/merge_requests?state=opened&source_branch=$FDROID_BRANCH&per_page=100")
-
+    # The merge request to update, when one is already open (a release
+    # while the previous one is still under review); otherwise a fresh
+    # branch on the fork, from which a new merge request is opened at
+    # the end. The metadata is read from whichever of those is current.
     local merge_request
-    merge_request=$(printf '%s' "$merge_requests" | jq -c \
-        --arg branch "$FDROID_BRANCH" \
-        '.[] | select(.source_branch == $branch) | select(.author.username == "chmouel")' |
-        head -n 1)
-    [[ -n "$merge_request" ]] ||
-        die "no upstream metadata or open Liseur inclusion MR was found"
+    merge_request=$(gitlab_api_get \
+        "projects/$FDROID_PROJECT/merge_requests?state=opened&author_username=chmouel&per_page=100" |
+        jq -c '[.[] | select(.title | test("Liseur"))][0] // empty')
 
-    local source_project_id source_branch merge_request_url encoded_branch file_response
-    source_project_id=$(printf '%s' "$merge_request" | jq -r .source_project_id)
-    source_branch=$(printf '%s' "$merge_request" | jq -r .source_branch)
-    merge_request_url=$(printf '%s' "$merge_request" | jq -r .web_url)
-    encoded_branch=$(jq -rn --arg value "$source_branch" '$value | @uri')
+    local source_project_id source_branch merge_request_url
+    local file_project file_ref start_branch=""
+    if [[ -n "$merge_request" ]]; then
+        source_project_id=$(printf '%s' "$merge_request" | jq -r .source_project_id)
+        source_branch=$(printf '%s' "$merge_request" | jq -r .source_branch)
+        merge_request_url=$(printf '%s' "$merge_request" | jq -r .web_url)
+        file_project=$source_project_id
+        file_ref=$source_branch
+    else
+        source_project_id=$(gitlab_api_get "projects/$FDROID_FORK_PROJECT" | jq -r .id)
+        source_branch="liseur-$version"
+        merge_request_url=''
+        local encoded_branch
+        encoded_branch=$(jq -rn --arg value "$source_branch" '$value | @uri')
+        if gitlab_api_get \
+            "projects/$source_project_id/repository/branches/$encoded_branch" \
+            >/dev/null 2>&1; then
+            # A branch without a merge request is an earlier run that
+            # stopped between the commit and the MR; pick it back up.
+            file_project=$source_project_id
+            file_ref=$source_branch
+        else
+            file_project=$FDROID_PROJECT
+            file_ref=master
+            start_branch=master
+        fi
+    fi
+
+    local file_response
     file_response=$(gitlab_api_get \
-        "projects/$source_project_id/repository/files/$encoded_path?ref=$encoded_branch")
+        "projects/$file_project/repository/files/$encoded_path?ref=$file_ref") ||
+        die "no F-Droid metadata found at $file_ref; has the inclusion MR merged?"
 
-    local last_commit_id metadata_file updated_file
-    last_commit_id=$(printf '%s' "$file_response" | jq -r .last_commit_id)
-    metadata_file=$(mktemp)
-    updated_file=$(mktemp)
-    trap 'rm -f "$metadata_file" "$updated_file"' EXIT
+    local workdir
+    workdir=$(mktemp -d)
+    trap 'rm -rf "$workdir"' EXIT
+
+    local metadata_file="$workdir/base.yml"
     printf '%s' "$file_response" | jq -r .content | base64 --decode > "$metadata_file"
 
     local metadata_current_code
@@ -511,54 +544,82 @@ update_fdroid_submission() (
     (( version_code >= metadata_current_code )) ||
         die "refusing to lower F-Droid from versionCode $metadata_current_code to $version_code"
 
-    # The whole `Builds:` list is replaced rather than appended to. An
-    # inclusion merge request that is still under review carries a single
-    # build entry, the latest: every entry left in it is another ~25
-    # minute `fdroid build` for the reviewer, and an old version failing
-    # holds up the app that is being submitted. Once the merge request
-    # lands, `AutoUpdateMode: Version` appends upstream and history there
-    # is expected.
-    awk -v version="$version" -v code="$version_code" -v commit="$commit_sha" '
-        /^Builds:/ {
-            print "Builds:"
-            print "  - versionName: " version
-            print "    versionCode: " code
-            print "    commit: " commit
-            print "    subdir: app"
-            print "    gradle:"
-            print "      - yes"
-            print ""
-            written = 1
-            dropping = 1
-            next
-        }
-        dropping && /^[^[:space:]]/ {
-            dropping = 0
-        }
-        dropping {
-            next
-        }
-        /^CurrentVersion:/ {
-            print "CurrentVersion: " version
-            next
-        }
-        /^CurrentVersionCode:/ {
-            print "CurrentVersionCode: " code
-            next
-        }
-        { print }
-        END {
-            if (!written) {
-                exit 42
+    # `fdroid` refuses to run outside a repository; an empty config and
+    # a metadata directory are the whole of what it checks for.
+    : > "$workdir/config.yml"
+    mkdir -p "$workdir/metadata"
+
+    printf 'F-Droid: downloading %s to extract its signature.\n' "$apk_name"
+    gh release download "v$version" --repo "$GH_REPO" \
+        --pattern "$apk_name" --dir "$workdir" >/dev/null ||
+        die "could not download $apk_name from the GitHub release"
+
+    (cd "$workdir" && "$fdroid_bin" signatures "$apk_name" >/dev/null 2>&1) ||
+        die "fdroid signatures failed on $apk_name"
+    local signatures_dir="metadata/$APP_ID/signatures/$version_code"
+    [[ -n $(ls -A "$workdir/$signatures_dir" 2>/dev/null) ]] ||
+        die "no signature came out of $apk_name for versionCode $version_code"
+
+    # The new entry is appended: under dual signing the history stays,
+    # because each published version keeps needing its recipe. A resumed
+    # run finds its entry already present and only settles the rest.
+    local skip_entry=0
+    if grep -qE "^    versionCode: $version_code\$" "$metadata_file"; then
+        skip_entry=1
+    fi
+    awk -v version="$version" -v code="$version_code" -v commit="$commit_sha" \
+        -v skip_entry="$skip_entry" '
+        function entry() {
+            if (!skip_entry) {
+                print "  - versionName: " version
+                print "    versionCode: " code
+                print "    commit: " commit
+                print "    subdir: app"
+                print "    gradle:"
+                print "      - yes"
             }
+            print ""
+            inb = 0
         }
-    ' "$metadata_file" > "$updated_file" ||
+        /^Builds:/ { print; inb = 1; next }
+        inb && /^$/ { next }
+        inb && /^[^[:space:]]/ { entry() }
+        /^CurrentVersion:/ { print "CurrentVersion: " version; next }
+        /^CurrentVersionCode:/ { print "CurrentVersionCode: " code; next }
+        { print }
+        END { if (inb) entry() }
+    ' "$metadata_file" > "$workdir/$metadata_path" ||
         die "could not update the F-Droid metadata"
 
-    if cmp -s "$metadata_file" "$updated_file"; then
-        printf 'F-Droid: %s already includes version %s.\n' "$merge_request_url" "$version"
-        return
-    fi
+    # rewritemeta is what their pipeline holds the file against, so run
+    # it here and send its idea of the formatting, not ours. lint is
+    # advisory: it flags things a human put there on purpose.
+    (cd "$workdir" && "$fdroid_bin" rewritemeta "$APP_ID" >/dev/null 2>&1) ||
+        die "fdroid rewritemeta rejected the updated metadata"
+    (cd "$workdir" && "$fdroid_bin" lint "$APP_ID") || true
+
+    local actions
+    actions=$(jq -n --arg path "$metadata_path" \
+        --rawfile content "$workdir/$metadata_path" \
+        '[{action: "update", file_path: $path, content: $content}]')
+
+    local signature_file signature_path signature_action encoded_signature
+    for signature_file in "$workdir/$signatures_dir"/*; do
+        signature_path="$signatures_dir/$(basename "$signature_file")"
+        encoded_signature=$(jq -rn --arg value "$signature_path" '$value | @uri')
+        signature_action=create
+        if gitlab_api_get \
+            "projects/$file_project/repository/files/$encoded_signature?ref=$file_ref" \
+            >/dev/null 2>&1; then
+            signature_action=update
+        fi
+        actions=$(printf '%s' "$actions" | jq \
+            --arg action "$signature_action" \
+            --arg path "$signature_path" \
+            --arg content "$(base64 -w0 "$signature_file")" \
+            '. + [{action: $action, file_path: $path, content: $content,
+                   encoding: "base64"}]')
+    done
 
     local payload
     # --rawfile rather than --arg "$(cat ...)": command substitution
@@ -568,20 +629,11 @@ update_fdroid_submission() (
     # missing final newline is a difference.
     payload=$(jq -n \
         --arg branch "$source_branch" \
-        --arg message "chore: update liseur" \
-        --arg path "$metadata_path" \
-        --rawfile content "$updated_file" \
-        --arg last_commit_id "$last_commit_id" \
-        '{
-            branch: $branch,
-            commit_message: $message,
-            actions: [{
-                action: "update",
-                file_path: $path,
-                content: $content,
-                last_commit_id: $last_commit_id
-            }]
-        }')
+        --arg start_branch "$start_branch" \
+        --arg message "Liseur: add $version ($version_code) with extracted signatures" \
+        --argjson actions "$actions" \
+        '{branch: $branch, commit_message: $message, actions: $actions}
+         + (if $start_branch != "" then {start_branch: $start_branch} else {} end)')
 
     # Checked on the payload rather than on the file, because the file is
     # not what goes over the wire and the bug this guards against was
@@ -596,7 +648,27 @@ update_fdroid_submission() (
     commit_response=$(printf '%s' "$payload" | glab api --hostname gitlab.com --method POST \
         "projects/$source_project_id/repository/commits" --input -)
     new_sha=$(printf '%s' "$commit_response" | jq -r .id)
-    printf 'F-Droid: updated %s for version %s.\n' "$merge_request_url" "$version"
+
+    if [[ -z "$merge_request_url" ]]; then
+        local target_project_id mr_payload mr_response
+        target_project_id=$(gitlab_api_get "projects/$FDROID_PROJECT" | jq -r .id)
+        mr_payload=$(jq -n \
+            --arg source_branch "$source_branch" \
+            --arg title "Liseur: add $version ($version_code) with extracted signatures" \
+            --argjson target_project_id "$target_project_id" \
+            --arg description "Liseur $version (versionCode $version_code), commit https://github.com/chmouel/liseur/commit/$commit_sha.
+
+The build entry plus the signature extracted from the developer-signed release APK (https://github.com/chmouel/liseur/releases/tag/v$version), following the dual-signing flow: F-Droid rebuilds from source and publishes its own build next to the developer-signed one. AutoUpdateMode is None, so each release arrives as one of these merge requests." \
+            '{source_branch: $source_branch, target_branch: "master",
+              target_project_id: $target_project_id, title: $title,
+              description: $description, remove_source_branch: true}')
+        mr_response=$(printf '%s' "$mr_payload" | glab api --hostname gitlab.com --method POST \
+            "projects/$source_project_id/merge_requests" --input -)
+        merge_request_url=$(printf '%s' "$mr_response" | jq -r .web_url)
+        printf 'F-Droid: opened %s for version %s.\n' "$merge_request_url" "$version"
+    else
+        printf 'F-Droid: updated %s for version %s.\n' "$merge_request_url" "$version"
+    fi
     report_fdroid_pipeline "$source_project_id" "$new_sha"
 )
 
@@ -798,9 +870,10 @@ if [[ "$current_version" != "$version" ]]; then
     trap - ERR INT TERM
 
     # F-Droid publishes our own signed APK only after reproducing the
-    # build (Binaries: in the metadata), so a tag that does not
-    # double-build identically is a tag that never ships there. Verify
-    # the release commit itself before it becomes one.
+    # build (the dual-signing flow grafts our signature onto their
+    # rebuild), so a tag that does not double-build identically is a
+    # tag that never ships there. Verify the release commit itself
+    # before it becomes one.
     if ! hack/verify-reproducible; then
         git reset --hard HEAD^
         die "the release build is not reproducible; the release commit was undone"
