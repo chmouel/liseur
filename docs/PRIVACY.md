@@ -59,7 +59,10 @@ to the dictionary site configured in Settings — by default the public
 Wiktionary API — over HTTPS. No identifier, no book title and no account
 accompanies it. You may point this at any Wiktionary edition or mirror,
 or leave the feature off and hand words to an offline dictionary app
-installed on your device instead.
+installed on your device instead. When you pick or type a dictionary
+site in Settings, Liseur checks it once with a fixed word ("book") so a
+dead address fails there and then; no request is made just for opening
+the screen.
 
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the two purposes above and for

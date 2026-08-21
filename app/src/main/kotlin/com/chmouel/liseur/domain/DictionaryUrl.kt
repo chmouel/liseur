@@ -58,6 +58,14 @@ object DictionaryUrl {
     fun definitionApi(baseUrl: String, term: String): String =
         orDefault(baseUrl) + "/api/rest_v1/page/definition/" + encode(term)
 
+    /**
+     * The entry as Parsoid HTML. The tidy [definitionApi] only exists on
+     * the English edition — every other edition answers it with a 501 —
+     * so this is where their definitions are read from.
+     */
+    fun pageHtmlApi(baseUrl: String, term: String): String =
+        orDefault(baseUrl) + "/api/rest_v1/page/html/" + encode(term)
+
     /** The full entry, for reading in a browser. */
     fun entryPage(baseUrl: String, term: String): String =
         orDefault(baseUrl) + "/wiki/" + encode(term)

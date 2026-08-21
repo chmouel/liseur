@@ -25,6 +25,9 @@ import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,6 +36,7 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -42,6 +46,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +74,8 @@ import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
+import com.chmouel.liseur.domain.WiktionaryEditions
+import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.label
 import com.chmouel.liseur.ui.windowWidth
@@ -353,14 +360,45 @@ private val DefinitionTarget.label: Int
  * Where definitions come from.
  *
  * Shown only once online lookups are on, because until then there is no
- * site to pick. The field keeps what is typed and only commits it once it
- * parses, so a half-typed address never becomes the stored one.
+ * site to pick. A dropdown of editions by name replaced the bare URL
+ * field after a reader misspelled fr.wiktionary.org and got nothing but
+ * an HTTP 501 out of it — a name cannot be typo'd. Mirrors still fit
+ * through the custom entry, which keeps what is typed and only commits
+ * it once it parses, so a half-typed address never becomes the stored
+ * one. Every committed choice is then tried against the site once,
+ * right here, so a dead address fails under the field and not later in
+ * the reader.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
-    var typed by remember(baseUrl) { mutableStateOf(baseUrl) }
+    val storedEdition = remember(baseUrl) { WiktionaryEditions.editionOf(baseUrl) }
+    var customChosen by remember(baseUrl) { mutableStateOf(storedEdition == null) }
+    var expanded by remember { mutableStateOf(false) }
+    var typed by remember(baseUrl) { mutableStateOf(if (storedEdition == null) baseUrl else "") }
     val normalised = remember(typed) { DictionaryUrl.normalise(typed) }
     val invalid = typed.isNotBlank() && normalised == null
+
+    // Probed only when the reader commits a choice here — never on
+    // merely opening the screen, because a request nobody asked for
+    // has no place in this app.
+    var probeTarget by remember { mutableStateOf<String?>(null) }
+    var probeResult by remember { mutableStateOf<ProbeUi>(ProbeUi.Idle) }
+    val client = remember { WiktionaryClient() }
+    LaunchedEffect(probeTarget) {
+        val target = probeTarget ?: return@LaunchedEffect
+        probeResult = ProbeUi.Checking
+        val error = client.probe(target)
+        probeResult = if (error == null) {
+            ProbeUi.Ok(DictionaryUrl.hostOf(target))
+        } else {
+            ProbeUi.Unreachable(DictionaryUrl.hostOf(target), error)
+        }
+    }
+    val commit = { url: String ->
+        onBaseUrl(url)
+        probeTarget = url
+    }
 
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
         Text(
@@ -372,34 +410,109 @@ private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedTextField(
-            value = typed,
-            onValueChange = {
-                typed = it
-                DictionaryUrl.normalise(it)?.let(onBaseUrl)
-            },
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            singleLine = true,
-            isError = invalid,
-            placeholder = { Text(stringResource(R.string.settings_dictionary_site_hint)) },
-            supportingText = if (invalid) {
-                { Text(stringResource(R.string.settings_dictionary_site_invalid)) }
-            } else {
-                null
-            },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        )
-        if (normalised != DictionaryUrl.DEFAULT_BASE_URL) {
+        ) {
+            OutlinedTextField(
+                value = if (customChosen) {
+                    stringResource(R.string.settings_dictionary_site_custom)
+                } else {
+                    storedEdition?.nativeName.orEmpty()
+                },
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            )
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                WiktionaryEditions.all.forEach { edition ->
+                    DropdownMenuItem(
+                        text = { Text(edition.nativeName) },
+                        onClick = {
+                            expanded = false
+                            customChosen = false
+                            commit(edition.baseUrl)
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.settings_dictionary_site_custom)) },
+                    onClick = {
+                        expanded = false
+                        customChosen = true
+                    },
+                )
+            }
+        }
+        if (customChosen) {
+            OutlinedTextField(
+                value = typed,
+                onValueChange = {
+                    typed = it
+                    DictionaryUrl.normalise(it)?.let(commit)
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                singleLine = true,
+                isError = invalid,
+                placeholder = { Text(stringResource(R.string.settings_dictionary_site_hint)) },
+                supportingText = if (invalid) {
+                    { Text(stringResource(R.string.settings_dictionary_site_invalid)) }
+                } else {
+                    null
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            )
+        }
+        when (val probe = probeResult) {
+            ProbeUi.Idle -> Unit
+            ProbeUi.Checking -> Text(
+                text = stringResource(R.string.settings_dictionary_site_checking),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            is ProbeUi.Ok -> Text(
+                text = stringResource(R.string.settings_dictionary_site_ok, probe.host),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            is ProbeUi.Unreachable -> Text(
+                text = stringResource(
+                    R.string.settings_dictionary_site_unreachable,
+                    probe.host,
+                    probe.error,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        if (baseUrl != DictionaryUrl.DEFAULT_BASE_URL) {
             TextButton(
                 onClick = {
-                    typed = DictionaryUrl.DEFAULT_BASE_URL
-                    onBaseUrl(DictionaryUrl.DEFAULT_BASE_URL)
+                    typed = ""
+                    customChosen = false
+                    commit(DictionaryUrl.DEFAULT_BASE_URL)
                 },
             ) {
                 Text(stringResource(R.string.settings_dictionary_site_reset))
             }
         }
     }
+}
+
+/** The one-shot check of a committed dictionary site, as the row shows it. */
+private sealed interface ProbeUi {
+    data object Idle : ProbeUi
+    data object Checking : ProbeUi
+    data class Ok(val host: String) : ProbeUi
+    data class Unreachable(val host: String, val error: String) : ProbeUi
 }
 
 /**

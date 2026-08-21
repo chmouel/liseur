@@ -126,9 +126,17 @@ fun DefinitionSheet(
                 )
 
                 is DictionaryState.Failed -> Text(
-                    text = current.message
-                        ?.let { stringResource(R.string.dictionary_failed_reason, it) }
-                        ?: stringResource(R.string.dictionary_failed),
+                    text = when {
+                        current.host != null && current.message != null ->
+                            stringResource(
+                                R.string.dictionary_failed_host,
+                                current.host,
+                                current.message,
+                            )
+                        current.message != null ->
+                            stringResource(R.string.dictionary_failed_reason, current.message)
+                        else -> stringResource(R.string.dictionary_failed)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )

@@ -6,6 +6,7 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -111,7 +112,48 @@ class WiktionaryClientTest {
 
         val state = WiktionaryClient().define("chat", listOf("en"), baseUrl())
 
-        assertEquals(DictionaryState.Failed("HTTP 503"), state)
+        assertEquals(DictionaryState.Failed("HTTP 503", "127.0.0.1:${server.port}"), state)
+    }
+
+    /**
+     * Only en.wiktionary.org implements the definition endpoint; other
+     * wikis and bare mirrors answer it with a 501. The entry page is the
+     * fallback, so those hosts still define words.
+     */
+    @Test
+    fun `falls back to the entry page when the definition endpoint is a 501`() = runBlocking {
+        server.enqueue(MockResponse(code = 501, body = """{"status":501}"""))
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """
+                    <html><body><section><h2>Français</h2>
+                    <section><h3>Nom commun</h3><ol><li>Un félin.</li></ol></section>
+                    </section></body></html>
+                """.trimIndent(),
+            ),
+        )
+
+        val state = WiktionaryClient().define("chat", listOf("fr"), baseUrl())
+
+        assertEquals("/api/rest_v1/page/definition/chat", server.takeRequest().target)
+        assertEquals("/api/rest_v1/page/html/chat", server.takeRequest().target)
+        assertTrue(state is DictionaryState.Found)
+        assertEquals("Un félin.", (state as DictionaryState.Found).senses.single().definitions.single())
+    }
+
+    @Test
+    fun `a probe passes when the site answers, even with nothing found`() = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+
+        assertNull(WiktionaryClient().probe(baseUrl()))
+    }
+
+    @Test
+    fun `a probe fails with the reason when the site does not answer`() = runBlocking {
+        server.enqueue(MockResponse(code = 503))
+
+        assertEquals("HTTP 503", WiktionaryClient().probe(baseUrl()))
     }
 
     @Test
