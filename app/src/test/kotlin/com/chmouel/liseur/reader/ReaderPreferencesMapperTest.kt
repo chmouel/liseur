@@ -114,6 +114,28 @@ class ReaderPreferencesMapperTest {
     }
 
     @Test
+    fun `a font size change leaves publisher styles alone`() {
+        // Readium CSS applies --USER__fontSize whatever the publisher
+        // styles say. Turning them off just because the slider left its
+        // default rewrites every element's size, and the page reflows far
+        // beyond the change asked for.
+        assertNull(ReaderPrefs().toEpubPreferences(theme).publisherStyles)
+        assertNull(ReaderPrefs(fontSize = 1.4).toEpubPreferences(theme).publisherStyles)
+    }
+
+    @Test
+    fun `advanced settings are what turn publisher styles off`() {
+        assertEquals(
+            false,
+            ReaderPrefs(lineHeight = 1.6).toEpubPreferences(theme).publisherStyles,
+        )
+        assertEquals(
+            false,
+            ReaderPrefs(pageMargins = 1.5).toEpubPreferences(theme).publisherStyles,
+        )
+    }
+
+    @Test
     fun `images are left exactly as the book drew them`() {
         // Readium can dim or invert them on a dark page. We deliberately
         // ask for neither: brightness(80%) leaves a white diagram nearly
