@@ -691,8 +691,10 @@ what lets it sync a book that came off an SD card.
 
   If they differ it names the entries responsible, which is usually a
   timestamp baked into a resource or an absolute build path that leaked
-  in. Run it before every release. Move `keystore.properties` aside
-  first if you have one: the check compares the unsigned APK.
+  in. `hack/release` runs it on every release commit and undoes the
+  commit rather than tag a build F-Droid could never publish; run it
+  yourself before anything unusual ships. Move `keystore.properties`
+  aside first if you have one: the check compares the unsigned APK.
 
   Two build-file settings exist purely to keep this true and must not
   be removed: `dependenciesInfo` is switched off (AGP would otherwise
@@ -701,25 +703,36 @@ what lets it sync a book that came off an SD card.
   every `.so` (the only native code arrives prebuilt in AndroidX AARs;
   re-stripping it ties the bytes to the build machine's NDK — this was
   the one thing that made the CI APK differ from a local rebuild).
-- **Publishing our own signature (not yet enabled).** Because the build
-  is reproducible, F-Droid can be asked to publish the developer-signed
-  APK instead of signing with its own key: the recipe gains
+- **Publishing our own signature (submitted, awaiting review).** Because
+  the build is reproducible, F-Droid can be asked to publish the
+  developer-signed APK instead of signing with its own key: the recipe
+  gains
 
   ```yaml
   Binaries: https://github.com/chmouel/liseur/releases/download/v%v/liseur-v%v.apk
   ```
 
-  and per-build `AllowedAPKSigningKeys` with the SHA-256 of our signing
+  and `AllowedAPKSigningKeys` with the SHA-256 of our signing
   certificate (`keytool -list` on the keystore, lowercase without
   colons). F-Droid then rebuilds the tag, strips both signatures,
   compares byte for byte, and ships the GitHub artefact on success —
   giving F-Droid, the GitHub release, and Play the same signature, so a
   reader can switch channels without uninstalling. The switch is
   breaking once: existing F-Droid installs carry F-Droid's signature
-  and must uninstall/reinstall (losing local data) to cross over. It
-  applies per version, so old versions stay as they are.
-- **Submitted.** The metadata merge request is
-  [fdroiddata!44292](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/44292),
-  and `hack/release` keeps it up to date with each version. See *What
-  F-Droid checks* above for what its pipeline runs and how it can fail
-  after a release looks finished.
+  and must uninstall/reinstall (losing local data) to cross over — the
+  v0.9.3 release notes carry that warning. The merge request is
+  [fdroiddata!46390](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/46390);
+  the first verifiable tag is v0.9.3 (versionCode 17), because
+  reproducibility landed after the v0.9.2 tag, so earlier builds are
+  expected to fail verification and be superseded. Note that
+  `AllowedAPKSigningKeys` is app-level in fdroidserver — it cannot be
+  scoped to "17 and later".
+- **Checking where things stand.** `hack/fdroid-status` prints the
+  published versions, the index age, what the last build run did with
+  the app, the upstream metadata, and any open merge request with its
+  pipeline state — one command instead of four tabs.
+- **Submitted.** The inclusion merge request was
+  [fdroiddata!44292](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/44292)
+  (merged), and `hack/release` keeps the metadata up to date with each
+  version. See *What F-Droid checks* above for what its pipeline runs
+  and how it can fail after a release looks finished.
