@@ -796,6 +796,16 @@ if [[ "$current_version" != "$version" ]]; then
 
     rollback=false
     trap - ERR INT TERM
+
+    # F-Droid publishes our own signed APK only after reproducing the
+    # build (Binaries: in the metadata), so a tag that does not
+    # double-build identically is a tag that never ships there. Verify
+    # the release commit itself before it becomes one.
+    if ! hack/verify-reproducible; then
+        git reset --hard HEAD^
+        die "the release build is not reproducible; the release commit was undone"
+    fi
+
     git tag "$tag"
     current_version_code=$new_version_code
     new_release=true

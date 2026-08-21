@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+# Answers "where is Liseur on F-Droid?" in one shot: what is published,
+# how fresh the index is, what the last build run did with the app, what
+# the fdroiddata metadata says, and whether an open merge request is
+# waiting on anyone. Every source here is public, so nothing needs a
+# login.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null || die "missing required command: $1"
+}
+
+api_get() {
+    curl -fsS --max-time 30 "$1"
+}
+
+require_command curl
+require_command jq
+
+printf '== Published (%s) ==\n' "$APP_ID"
+if packages=$(api_get "https://f-droid.org/api/v1/packages/$APP_ID"); then
+    printf '%s' "$packages" | jq -r '
+        "suggested versionCode: \(.suggestedVersionCode)",
+        (.packages[] | "  \(.versionName) (\(.versionCode))")'
+else
+    printf '  not in the package index\n'
+fi
+
+if entry=$(api_get "https://f-droid.org/repo/entry.json"); then
+    printf '%s' "$entry" | jq -r \
+        '"index generated: \(.timestamp / 1000 | strftime("%Y-%m-%d %H:%M UTC"))"'
+fi
+
+printf '\n== Last build run ==\n'
+if run=$(api_get "https://f-droid.org/repo/status/running.json"); then
+    printf '%s' "$run" | jq -r --arg app "$APP_ID" '
+        "started: \(.startTimestamp / 1000 | strftime("%Y-%m-%d %H:%M UTC"))"
+        + (if .endTimestamp then
+            ", finished: \(.endTimestamp / 1000 | strftime("%Y-%m-%d %H:%M UTC"))"
+           else ", still running" end),
+        ([.successfulBuildIds[]? | select(.[0] == $app)] as $ok |
+         [.failedBuilds[]? | select(.[0] == $app)] as $bad |
+         if ($ok | length) + ($bad | length) == 0 then
+            "no \($app) build in this run"
+         else
+            (($ok[] | "  built: versionCode \(.[1])"),
+             ($bad[] | "  FAILED: \(.)")) // empty
+         end)'
+else
+    printf '  status unavailable\n'
+fi
+
+printf '\n== fdroiddata metadata (master) ==\n'
+if metadata=$(api_get "https://gitlab.com/api/v4/projects/$FDROID_PROJECT/repository/files/metadata%2F$APP_ID.yml/raw?ref=master"); then
+    printf '%s\n' "$metadata" |
+        grep -E '^(CurrentVersion|CurrentVersionCode|Binaries|AllowedAPKSigningKeys):' |
+        sed 's/^/  /'
+    printf '  builds:'
+    printf '%s\n' "$metadata" |
+        sed -nE 's/^    versionCode: ([0-9]+)$/ \1/p' | tr -d '\n'
+    printf '\n'
+else
+    printf '  no metadata upstream yet\n'
+fi
+
+printf '\n== Merge requests ==\n'
+merge_requests=$(api_get \
+    "https://gitlab.com/api/v4/projects/$FDROID_PROJECT/merge_requests?search=liseur&in=title&state=opened&per_page=20")
+if [[ $(printf '%s' "$merge_requests" | jq length) -eq 0 ]]; then
+    printf '  none open\n'
+else
+    for iid in $(printf '%s' "$merge_requests" | jq -r '.[].iid'); do
+        api_get "https://gitlab.com/api/v4/projects/$FDROID_PROJECT/merge_requests/$iid" |
+            jq -r '
+                "  !\(.iid) [\(if .draft then "draft" else "open" end)"
+                + (if .head_pipeline then ", pipeline \(.head_pipeline.status)" else "" end)
+                + "] \(.title)\n    \(.web_url)"'
+    done
+fi
