@@ -707,8 +707,8 @@ what lets it sync a book that came off an SD card.
   every `.so` (the only native code arrives prebuilt in AndroidX AARs;
   re-stripping it ties the bytes to the build machine's NDK — this was
   the one thing that made the CI APK differ from a local rebuild).
-- **Publishing our own signature: dual signing (submitted, awaiting
-  review).** Because the build is reproducible, F-Droid can publish the
+- **Publishing our own signature: dual signing (merged 2026-08-21).**
+  Because the build is reproducible, F-Droid can publish the
   developer signature. Replacing their signature outright was declined
   in review — existing F-Droid installs carry F-Droid's key and Android
   would refuse them every further update — so the app uses F-Droid's
@@ -736,9 +736,9 @@ what lets it sync a book that came off an SD card.
     and `hack/release --fdroid-only VERSION` finishes the F-Droid part
     later.
 
-  The merge request that set this up is
-  [fdroiddata!46390](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/46390);
-  the first verifiable tag is v0.9.3 (versionCode 17), because
+  The merge request that set this up was
+  [fdroiddata!46390](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/46390)
+  (merged); the first verifiable tag is v0.9.3 (versionCode 17), because
   reproducibility landed after the v0.9.2 tag, so only 17 and later get
   the developer-signed twin. NewPipe
   ([fdroiddata!46133](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/46133))
