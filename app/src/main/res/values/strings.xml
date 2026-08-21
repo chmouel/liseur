@@ -326,6 +326,7 @@
     <string name="dictionary_not_found">No entry for “%1$s”.</string>
     <string name="dictionary_failed">Could not reach the dictionary.</string>
     <string name="dictionary_failed_reason">Could not reach the dictionary: %1$s</string>
+    <string name="dictionary_failed_host">Could not reach %1$s (%2$s). Check the dictionary site in Settings.</string>
     <string name="dictionary_other_app">Open in app</string>
     <string name="dictionary_open_full_entry">Full entry</string>
     <string name="dictionary_disabled_explanation">Definitions are off. Turning them on lets Liseur send the word you tapped, and nothing else, to %1$s. A dictionary app on your phone works without any of that.</string>
@@ -444,10 +445,14 @@
     <string name="settings_dictionary_lookup">Look up definitions online</string>
     <string name="settings_dictionary_lookup_detail">Off by default. When on, defining a word sends that word to the site below — the only place Liseur talks to besides your own book server.</string>
     <string name="settings_dictionary_site">Dictionary site</string>
-    <string name="settings_dictionary_site_detail">Any Wiktionary edition or mirror. Use your own language\'s edition to get its definitions first.</string>
+    <string name="settings_dictionary_site_detail">Pick your language\'s Wiktionary to get its definitions, in its words.</string>
+    <string name="settings_dictionary_site_custom">Custom site…</string>
     <string name="settings_dictionary_site_hint">https://en.wiktionary.org</string>
     <string name="settings_dictionary_site_invalid">Needs to be an https address, like https://fr.wiktionary.org</string>
     <string name="settings_dictionary_site_reset">Use the default</string>
+    <string name="settings_dictionary_site_checking">Checking…</string>
+    <string name="settings_dictionary_site_ok">%1$s answers.</string>
+    <string name="settings_dictionary_site_unreachable">%1$s did not answer: %2$s</string>
     <string name="settings_library">Library</string>
     <string name="settings_group_series">Group series</string>
     <string name="settings_group_series_detail">Show the books of a series as one pile on the shelf, alongside your other books.</string>

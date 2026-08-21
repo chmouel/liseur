@@ -56,6 +56,10 @@ class DictionaryUrlTest {
             DictionaryUrl.definitionApi("https://fr.wiktionary.org", "chat"),
         )
         assertEquals(
+            "https://fr.wiktionary.org/api/rest_v1/page/html/chat",
+            DictionaryUrl.pageHtmlApi("https://fr.wiktionary.org", "chat"),
+        )
+        assertEquals(
             "https://fr.wiktionary.org/wiki/chat",
             DictionaryUrl.entryPage("https://fr.wiktionary.org", "chat"),
         )
