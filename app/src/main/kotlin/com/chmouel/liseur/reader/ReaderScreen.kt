@@ -143,6 +143,14 @@ import org.readium.r2.shared.publication.Publication
 /** Duration of the gentle chrome show/hide animation. */
 private const val CHROME_ANIM_MS = 300
 
+// A reflow wait is measured in settleLayout() steps of two frames each.
+// The first bound is how long a preference gets to start reflowing the
+// page before it is taken not to reflow at all (a colour change never
+// does); the second is how long a reflow gets to come to rest.
+private const val REFLOW_START_POLLS = 8
+private const val REFLOW_SETTLE_POLLS = 30
+private const val VERIFY_ATTEMPTS = 3
+
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalReadiumApi::class,
@@ -240,12 +248,43 @@ fun ReaderScreen(
     val effectScope = rememberCoroutineScope()
     var pendingPositionEvent by remember { mutableStateOf<NavigatorPositionEvent?>(null) }
 
+    // The place the reader was at when a run of preference changes began.
+    // A restore that lands slightly off must not become the anchor of the
+    // next change, or each nudge of a slider walks the position a little
+    // further from the page being read; the anchor is held until the
+    // reader actually moves, and every reflow restores to the same spot.
+    var reflowAnchor by remember { mutableStateOf<Locator?>(null) }
+
     suspend fun capture(nav: EpubNavigatorFragment, locator: Locator): Locator =
         onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
 
     suspend fun settleLayout() {
         withFrameNanos { }
         withFrameNanos { }
+    }
+
+    // Waits for the WebView to finish reflowing after a preference lands.
+    // Readium applies preferences as CSS inside the WebView on its own
+    // schedule, so counting frames of the Compose clock says nothing
+    // about it: the page keeps changing size while text is still moving.
+    // Wait first for the layout to differ from what it was — bounded,
+    // because a colour-only change never reflows at all — and then for
+    // two consecutive readings to agree.
+    suspend fun awaitReflowSettled(nav: EpubNavigatorFragment, before: String?) {
+        var last = before
+        var changed = before == null
+        repeat(REFLOW_SETTLE_POLLS) { poll ->
+            settleLayout()
+            val now = ExactLocatorAnchor.layoutSignature(nav) ?: return
+            if (!changed && now == last) {
+                if (poll >= REFLOW_START_POLLS) return
+            } else if (changed && now == last) {
+                return
+            } else {
+                changed = true
+                last = now
+            }
+        }
     }
 
     suspend fun navigate(
@@ -257,8 +296,13 @@ fun ReaderScreen(
         pendingPositionEvent = event
         nav.go(locator, animated = false)
         if (!verify || !ExactLocatorAnchor.isExact(locator)) return
-        settleLayout()
-        if (ExactLocatorAnchor.verify(nav, locator)) return
+        // The go above is carried out by a script the WebView runs when
+        // it gets to it; asking too early answers for the page it is
+        // still leaving. Look a few times before declaring it missed.
+        repeat(VERIFY_ATTEMPTS) {
+            settleLayout()
+            if (ExactLocatorAnchor.verify(nav, locator)) return
+        }
         val progression = locator.locations.totalProgression ?: return
         val fallback = onProgressAction.locatorAtOrBeforeProgression(progression) ?: return
         pendingPositionEvent = event
@@ -329,6 +373,9 @@ fun ReaderScreen(
             nav.currentLocator.drop(1).collect { native ->
                 val event = pendingPositionEvent ?: NavigatorPositionEvent.READER_MOVEMENT
                 pendingPositionEvent = null
+                // Anywhere the reader actually goes ends the run of
+                // preference changes the held anchor was covering.
+                if (event != NavigatorPositionEvent.PREFERENCE_REFLOW) reflowAnchor = null
                 onLocatorChanged(capture(nav, native), event)
             }
         }
@@ -371,11 +418,13 @@ fun ReaderScreen(
         }
             .drop(1)
             .collect {
-                val anchor = capture(nav, nav.currentLocator.value)
+                val anchor = reflowAnchor ?: capture(nav, nav.currentLocator.value)
+                reflowAnchor = anchor
                 onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                val before = ExactLocatorAnchor.layoutSignature(nav)
                 pendingPositionEvent = NavigatorPositionEvent.PREFERENCE_REFLOW
                 nav.submitPreferences(it)
-                settleLayout()
+                awaitReflowSettled(nav, before)
                 navigate(
                     nav = nav,
                     locator = anchor,

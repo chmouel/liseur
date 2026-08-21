@@ -66,9 +66,14 @@ fun ReaderPrefs.toEpubPreferences(
             ColumnMode.ONE -> ColumnCount.ONE
             ColumnMode.TWO -> ColumnCount.TWO
         },
-        // Readium CSS only applies font-size and advanced settings (line
-        // height, margins…) when publisher styles are turned off.
-        publisherStyles = if (fontSize != 1.0 || lineHeight != null || pageMargins != null) {
+        // Readium CSS applies the font size whatever the publisher styles
+        // say, but only applies the advanced settings (line height,
+        // margins…) when they are turned off. So they are only turned off
+        // for those: turning them off rewrites the size of every element
+        // on the page, and having that happen because a font-size slider
+        // crossed its default made the page reflow far beyond the change
+        // that was asked for — and the reading position with it.
+        publisherStyles = if (lineHeight != null || pageMargins != null) {
             false
         } else {
             null

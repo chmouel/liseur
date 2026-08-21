@@ -113,6 +113,19 @@ object ExactLocatorAnchor {
             .takeIf(String::isNotEmpty)
     }
 
+    /**
+     * A fingerprint of the page's laid-out size.
+     *
+     * The value itself means nothing; what matters is whether two
+     * readings taken a moment apart agree. While a reflow is moving
+     * text around the document keeps changing size, so agreement is
+     * how the caller knows the layout has come to rest.
+     */
+    @OptIn(ExperimentalReadiumApi::class)
+    suspend fun layoutSignature(navigator: EpubNavigatorFragment): String? =
+        runCatching { navigator.evaluateJavascript(SIGNATURE_SCRIPT) }.getOrNull()
+            ?.takeIf { it.isNotBlank() && it != "null" }
+
     @OptIn(ExperimentalReadiumApi::class)
     suspend fun capture(navigator: EpubNavigatorFragment, native: Locator): Locator {
         val result = runCatching { navigator.evaluateJavascript(CAPTURE_SCRIPT) }.getOrNull()
@@ -188,6 +201,13 @@ object ExactLocatorAnchor {
         if (size <= count) return this
         return substring(offsetByCodePoints(0, size - count))
     }
+
+    private val SIGNATURE_SCRIPT = """
+        (() => {
+          const el = document.scrollingElement || document.documentElement;
+          return el.scrollWidth + "x" + el.scrollHeight;
+        })()
+    """.trimIndent()
 
     private val CAPTURE_SCRIPT = """
         (() => {
