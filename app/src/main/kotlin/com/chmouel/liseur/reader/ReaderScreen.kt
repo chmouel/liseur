@@ -110,7 +110,8 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
-import com.chmouel.liseur.reader.chrome.awaitWebView
+import com.chmouel.liseur.reader.chrome.visibleWebView
+import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
@@ -135,6 +136,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.preferences.ReadingProgression
@@ -396,27 +399,27 @@ fun ReaderScreen(
     // Asking the maker's screen controller to repaint the page the way
     // it repaints text.
     //
-    //
     // Both calls are made against the web view the book is actually
     // drawn in, because Onyx's are per view and the fragment root is not
     // the view that holds the prose. Readium builds a fresh web view for
     // each resource and swaps it in, so this cannot be said once at the
     // start; it is said again whenever the view on screen is not the one
-    // spoken to last. Locator emissions are only the prompt to look —
-    // most of them are the same view a page further on, and cost a
-    // comparison rather than two calls into the firmware.
+    // spoken to last.
+    //
+    // Positions and layout passes are both only prompts to go and look.
+    // Positions alone would miss the page the book opens at, which is
+    // laid out after the position announcing it and may be the only page
+    // a reader visits; layout alone would be at the mercy of a resource
+    // swapped in without one. Neither costs anything it should not: the
+    // common case is finding the same view again and stopping at a
+    // reference comparison.
     LaunchedEffect(navigator, eInkDisplay, vendorRefresh) {
         val nav = navigator ?: return@LaunchedEffect
         if (!vendorRefresh || eInkDisplay.vendor == null) return@LaunchedEffect
+        val root = nav.publicationView
         var spokenTo: WebView? = null
-        nav.currentLocator.collect {
-            // The opening emission can arrive before the first resource
-            // has been laid out, and if the reader then simply reads that
-            // page there is no second emission to try again on. So the
-            // first one waits — for frames, briefly, not forever, since a
-            // book that never produces a web view is a book this has
-            // nothing to say about anyway.
-            val web = awaitWebView(nav.publicationView) ?: return@collect
+        merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
+            val web = visibleWebView(root) ?: return@collect
             if (web === spokenTo) return@collect
             spokenTo = web
             eInkDisplay.readingMode(web)

@@ -1,10 +1,14 @@
 package com.chmouel.liseur.reader.chrome
 
 import android.view.View
-import androidx.compose.runtime.withFrameNanos
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.webkit.WebView
 import android.graphics.Rect
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 
 /**
  * The web view showing the chapter being read.
@@ -39,22 +43,26 @@ private fun collectVisibleWebViews(view: View, into: MutableList<Pair<WebView, R
 }
 
 /**
- * The visible web view, waiting a bounded number of frames for one.
+ * Every time the reader's views are laid out.
  *
- * Readium lays a resource out after it reports having moved there, so
- * asking the instant the position arrives can be a frame or two early —
- * and on the opening page there is no later position to ask again on.
- * Waiting on frames rather than a clock means this costs nothing on a
- * screen that is not drawing, and gives up rather than holding a
- * coroutine open against a book that will never produce one.
+ * Readium reports having moved to a resource before it has laid that
+ * resource out, so anything that needs the web view rather than the
+ * position cannot be driven by positions alone — and on the page a book
+ * opens at there is no second position coming to try again on. Layout is
+ * the signal that actually says a view now exists, and unlike a bounded
+ * wait it cannot run out on a device that took longer than expected.
+ *
+ * It fires often and says nothing about what changed, so it is a prompt
+ * to go and look, not news.
  */
-internal suspend fun awaitWebView(root: View, frames: Int = WEB_VIEW_WAIT_FRAMES): WebView? {
-    repeat(frames) {
-        visibleWebView(root)?.let { return it }
-        withFrameNanos { }
+internal fun layoutPasses(root: View): Flow<Unit> = callbackFlow {
+    val observer = root.viewTreeObserver
+    val listener = ViewTreeObserver.OnGlobalLayoutListener { trySend(Unit) }
+    observer.addOnGlobalLayoutListener(listener)
+    awaitClose {
+        // The observer a view hands out is replaced when it is moved
+        // between windows, and the dead one throws if written to.
+        val current = root.viewTreeObserver
+        if (current.isAlive) current.removeOnGlobalLayoutListener(listener)
     }
-    return visibleWebView(root)
-}
-
-/** About a second of frames on an ordinary screen. */
-private const val WEB_VIEW_WAIT_FRAMES = 60
+}.conflate()

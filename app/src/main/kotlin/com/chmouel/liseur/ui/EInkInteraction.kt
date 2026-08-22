@@ -79,6 +79,28 @@ private class EInkPressNode(
         }
     }
 
+    override fun onDetach() {
+        forget()
+    }
+
+    override fun onReset() {
+        forget()
+    }
+
+    /**
+     * Drops what was being tracked, because it can no longer be finished.
+     *
+     * Detaching cancels the collector, so a gesture that was under way
+     * when it happened will never have its ending delivered here. Left
+     * alone, that control comes back attached — or reused by an entirely
+     * different one — still holding a press nobody is making, and stays
+     * tinted for good.
+     */
+    private fun forget() {
+        active.clear()
+        marked = false
+    }
+
     override fun ContentDrawScope.draw() {
         drawContent()
         if (marked) {
