@@ -214,6 +214,43 @@ hack/release --sync-secrets
 Signing a build on your own machine is a separate matter, covered under
 [Signing a release build](#signing-a-release-build-optional) above.
 
+### Test releases
+
+A test release is the same build, signed with the same release key, put
+where a handful of people can install it from and nowhere else:
+
+```bash
+hack/release --test          # the next patch: v0.9.4-test.1, then .2
+hack/release --test 0.10.0   # a version you are working towards
+```
+
+It publishes a GitHub **prerelease** with the signed APK attached, and
+stops there: no F-Droid merge request, no Play upload, no changelog to
+write, and no local test, lint or reproducibility run. The point of a
+test release is to be quick.
+
+The signature is what makes it worth doing. It is the one F-Droid
+publishes under, through the dual-signing flow, so the APK installs
+straight over a copy that came from F-Droid — no uninstall, no lost
+library — and F-Droid offers the next real release over it afterwards,
+as an ordinary update.
+
+That last part is only true because the test build takes a
+`versionCode` and the next real release lands above it. `hack/release`
+counts the next code from the highest one across `main` **and every
+tag**, so a test release at 18 pushes the following real release to 19,
+and F-Droid sees an upgrade. Nobody who installed a test build is stuck
+— but they are on it until the next release goes out, since F-Droid
+will not offer a lower `versionCode`.
+
+Nothing lands on `main`. The commit that bumps the version is reachable
+only through its tag, so `main` stays a history of real releases and the
+next one still bumps from the last real version. Run it from any branch,
+as long as the tree is clean.
+
+To install one, download the APK from the release page and
+`adb install -r`, or hand it to whoever is testing.
+
 ### Google Play
 
 > **Not live yet.** The app has not been created in the Play Console, so

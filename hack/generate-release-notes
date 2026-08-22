@@ -59,8 +59,10 @@ changelog_for_tag() {
 }
 
 previous_tag() {
+    # Test releases (hack/release --test) are tagged off main and never
+    # in a release's ancestry, but the glob would still match one.
     git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' \
-        "$1^" 2>/dev/null || true
+        --exclude '*-test.*' "$1^" 2>/dev/null || true
 }
 
 pull_requests_for_range() {
@@ -241,7 +243,8 @@ main() {
     done
 
     if [[ -z "$tag" ]]; then
-        tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*') ||
+        tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' \
+            --exclude '*-test.*') ||
             die "no tag to write notes for"
     fi
     git rev-parse --verify --quiet "$tag^{commit}" >/dev/null ||

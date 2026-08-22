@@ -35,6 +35,7 @@ jobs:
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
       - name: Check release version
+        id: version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -44,7 +45,16 @@ jobs:
           grep -Fq "versionName = \"$version\"" app/build.gradle.kts
           version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
             app/build.gradle.kts)
-          test -s "fastlane/metadata/android/en-US/changelogs/$version_code.txt"
+          # A test release (hack/release --test) is built and signed like
+          # any other; what it skips is the two stores. It updates no
+          # listing, so it carries no changelog, and nothing below asks
+          # it for one.
+          if [[ "$version" == *-test.* ]]; then
+            printf 'prerelease=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'prerelease=false\n' >> "$GITHUB_OUTPUT"
+            test -s "fastlane/metadata/android/en-US/changelogs/$version_code.txt"
+          fi
 
       - name: Configure release signing
         env:
@@ -84,17 +94,41 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          hack/generate-release-notes --output "$RUNNER_TEMP/notes.md" \
-            "$RELEASE_TAG"
-          printf 'RELEASE_NOTES=%s\n' "$RUNNER_TEMP/notes.md" >> "$GITHUB_ENV"
-          cat "$RUNNER_TEMP/notes.md"
+          notes="$RUNNER_TEMP/notes.md"
+          # The written notes are drafted from the F-Droid changelog a
+          # test release does not have, and nobody wants a model's prose
+          # about a build made to try one thing out. The commits in it
+          # are the whole story.
+          if [[ "$PRERELEASE" == true ]]; then
+            previous=$(git describe --tags --abbrev=0 \
+              --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-test.*' \
+              "$RELEASE_TAG^" 2>/dev/null || true)
+            range="$RELEASE_TAG"
+            [[ -z "$previous" ]] || range="$previous..$RELEASE_TAG"
+            {
+              printf 'A test build. It carries the release signature, so it\n'
+              printf 'installs over a copy that came from F-Droid, and F-Droid\n'
+              printf 'updates over it once the next real release reaches it.\n\n'
+              printf 'It is not on F-Droid or Google Play, and it is not the\n'
+              printf 'version to install if you are not looking for this one.\n\n'
+              printf '### Commits%s\n\n' "${previous:+ since $previous}"
+              git log --no-decorate --pretty='- %s' \
+                --invert-grep --grep='^chore: test release ' "$range"
+            } > "$notes"
+          else
+            hack/generate-release-notes --output "$notes" "$RELEASE_TAG"
+          fi
+          printf 'RELEASE_NOTES=%s\n' "$notes" >> "$GITHUB_ENV"
+          cat "$notes"
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -102,9 +136,14 @@ jobs:
             printf 'Release %s already exists.\n' "$RELEASE_TAG"
             exit 0
           fi
+          flags=()
+          if [[ "$PRERELEASE" == true ]]; then
+            flags+=(--prerelease)
+          fi
           gh release create "$RELEASE_TAG" --verify-tag \
             --title "Liseur $RELEASE_TAG" \
             --notes-file "$RELEASE_NOTES" \
+            "${flags[@]}" \
             "$RELEASE_APK"
 
       # Everything below is Google Play, and only Google Play. It runs
@@ -119,10 +158,14 @@ jobs:
       - name: Check for the Play credential
         id: play
         env:
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
           SERVICE_ACCOUNT: ${{ secrets.LISEUR_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-          if [[ -n "$SERVICE_ACCOUNT" ]]; then
+          if [[ "$PRERELEASE" == true ]]; then
+            printf 'enabled=false\n' >> "$GITHUB_OUTPUT"
+            printf 'A test release; skipping Google Play.\n'
+          elif [[ -n "$SERVICE_ACCOUNT" ]]; then
             printf 'enabled=true\n' >> "$GITHUB_OUTPUT"
           else
             printf 'enabled=false\n' >> "$GITHUB_OUTPUT"
