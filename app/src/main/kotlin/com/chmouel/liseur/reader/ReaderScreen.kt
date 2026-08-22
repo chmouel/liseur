@@ -151,6 +151,12 @@ private const val REFLOW_START_POLLS = 8
 private const val REFLOW_SETTLE_POLLS = 30
 private const val VERIFY_ATTEMPTS = 3
 
+// How long a run of selection reports has to go quiet before the passage
+// is read back. Long enough to swallow the second report every action
+// mode makes on the way up, and the stream of them a handle drag sends;
+// short enough that the bar still feels like it answers the gesture.
+private const val SELECTION_SETTLE_MS = 90L
+
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalReadiumApi::class,
@@ -178,7 +184,8 @@ fun ReaderScreen(
     annotationsFlow: StateFlow<List<BookAnnotation>>,
     searchFlow: StateFlow<ReaderViewModel.SearchState>,
     bookmarkedFlow: StateFlow<Boolean>,
-    selectionRequests: SharedFlow<Unit>,
+    selectionEvents: SharedFlow<SelectionEvent>,
+    onSelectionDismissed: () -> Unit,
     onAnnotationAction: ReaderAnnotationActions,
     onSearchAction: ReaderSearchActions,
     syncableFlow: StateFlow<Boolean>,
@@ -436,16 +443,31 @@ fun ReaderScreen(
 
     // Picking the selection up from the navigator when it tells us the
     // reader made one, and turning it into a place to put the action bar.
-    LaunchedEffect(navigator) {
-        val nav = navigator ?: return@LaunchedEffect
-        selectionRequests.collect {
-            val current = nav.currentSelection() ?: return@collect
-            selection = ActiveSelection(
-                locator = current.locator,
-                rect = current.rect,
-                existing = onAnnotationAction.annotationAt(current.locator),
-            )
+    //
+    // The web view reports a selection several times per gesture and
+    // reading one back is not cheap, so a run of reports settles before it
+    // is asked; see collectSettledSelection. That saves work the reader was
+    // waiting on, which matters most on electronic paper — it does nothing
+    // about the platform's own magnifier and selection handles, which an
+    // app hosting a web view has no say over at all.
+    LaunchedEffect(navigator, selectionEvents) {
+        val nav = navigator ?: run {
+            selection = null
+            return@LaunchedEffect
         }
+        selectionEvents.collectSettledSelection(
+            settleMs = SELECTION_SETTLE_MS,
+            read = { nav.currentSelection() },
+            onSelection = { current ->
+                selection = current?.let {
+                    ActiveSelection(
+                        locator = it.locator,
+                        rect = it.rect,
+                        existing = onAnnotationAction.annotationAt(it.locator),
+                    )
+                }
+            },
+        )
     }
 
     // Keep the hit you jumped to marked on the page, so the eye lands on
@@ -785,6 +807,20 @@ fun ReaderScreen(
         }
     }
 
+    // Letting a selection go from our own bar rather than from the page.
+    //
+    // clearSelection() only asks the web view; the action mode is destroyed
+    // a beat later, and the CLEARED that its destruction sends arrives
+    // later still. A read started before the tap would land in that gap and
+    // put the bar back up over a passage the reader has already dealt with,
+    // so the same event is raised here first, where it cancels that read
+    // instead of racing it.
+    fun dismissSelection() {
+        onSelectionDismissed()
+        navigator?.clearSelection()
+        selection = null
+    }
+
     selection?.let { active ->
         SelectionPopup(
             offset = active.popupOffset(),
@@ -793,18 +829,15 @@ fun ReaderScreen(
                 SelectionActions(
                     onHighlight = { tint ->
                         onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
-                        navigator?.clearSelection()
-                        selection = null
+                        dismissSelection()
                     },
                     onNote = {
                         noteFor = active
-                        navigator?.clearSelection()
-                        selection = null
+                        dismissSelection()
                     },
                     onSearch = {
                         searchFor = active.text
-                        navigator?.clearSelection()
-                        selection = null
+                        dismissSelection()
                     },
                     onLookUp = {
                         when (dictionary.target) {
@@ -813,23 +846,26 @@ fun ReaderScreen(
                                 context.lookUpExternally(active.text, dictionary.baseUrl)
                             }
                         }
-                        navigator?.clearSelection()
-                        selection = null
+                        dismissSelection()
                     },
                     onShare = {
                         context.shareText(active.text, publication.metadata.title)
-                        selection = null
+                        dismissSelection()
                     },
                     onDelete = active.existing?.let { existing ->
                         {
                             onAnnotationAction.remove(existing)
-                            navigator?.clearSelection()
-                            selection = null
+                            dismissSelection()
                         }
                     },
                 )
             },
-            onDismiss = { selection = null },
+            onDismiss = {
+                // The bar and the selection go together: leaving the page
+                // selected keeps the platform's handles alive and drawing
+                // over words the reader has finished with.
+                dismissSelection()
+            },
         )
     }
 

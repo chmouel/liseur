@@ -68,6 +68,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -337,12 +338,23 @@ class ReaderViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
-     * Raised when the reader selects text in the page. The navigator knows
-     * where the selection is, so the screen picks the details up from there
-     * rather than the view model carrying a reference to it.
+     * What the page has done with its selection, in the order it happened.
+     *
+     * The navigator knows where the selection is, so the screen picks the
+     * details up from there rather than the view model carrying a
+     * reference to it.
+     *
+     * One flow rather than two so that a selection being let go can
+     * overtake and cancel the reading of the selection before it; see
+     * [SelectionEvent]. Dropping the oldest of a burst rather than the
+     * newest is the same argument: only the latest event still describes
+     * the page, and the reader is never waiting on an earlier one.
      */
-    private val _selectionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val selectionRequests: SharedFlow<Unit> = _selectionRequests.asSharedFlow()
+    private val _selectionEvents = MutableSharedFlow<SelectionEvent>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val selectionEvents: SharedFlow<SelectionEvent> = _selectionEvents.asSharedFlow()
 
     /**
      * Where syncing this one book has got to, when someone has asked
@@ -1081,7 +1093,12 @@ class ReaderViewModel(
 
     /** Called by the navigator when the reader has selected some text. */
     fun onTextSelected() {
-        _selectionRequests.tryEmit(Unit)
+        _selectionEvents.tryEmit(SelectionEvent.CHANGED)
+    }
+
+    /** Called by the navigator when the page's selection has gone. */
+    fun onSelectionCleared() {
+        _selectionEvents.tryEmit(SelectionEvent.CLEARED)
     }
 
     /** Marks a passage, or recolours a mark that is already there. */

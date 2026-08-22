@@ -229,6 +229,7 @@ class ReaderActivity : FragmentActivity() {
                                             columnMode = columnMode,
                                             scroll = scrollMode,
                                             onTextSelected = viewModel::onTextSelected,
+                                            onSelectionCleared = viewModel::onSelectionCleared,
                                         ),
                                     ).also { supportFragmentManager.fragmentFactory = it }
                                 }
@@ -309,7 +310,8 @@ class ReaderActivity : FragmentActivity() {
                                     annotationsFlow = viewModel.annotations,
                                     searchFlow = viewModel.search,
                                     bookmarkedFlow = viewModel.bookmarked,
-                                    selectionRequests = viewModel.selectionRequests,
+                                    selectionEvents = viewModel.selectionEvents,
+                                    onSelectionDismissed = viewModel::onSelectionCleared,
                                     onAnnotationAction = remember {
                                         ReaderAnnotationActions(
                                             highlight = viewModel::highlight,

@@ -142,6 +142,9 @@ fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode = when {
  * The system's own selection menu is refused so the app can put its own
  * bar next to the words instead: the platform bar floats where it likes,
  * offers actions a book has no use for, and cannot show highlight colours.
+ * Taking it over means taking on what it did for free, so the callback
+ * reports the selection on every change and its disappearance on the way
+ * out — see the callback itself for why both matter.
  *
  * [scroll] switches off Readium's page turns, which in a scrolled book
  * are a whole chapter at a time: a sideways swipe would throw the reader
@@ -153,6 +156,7 @@ fun epubNavigatorConfiguration(
     columnMode: ColumnMode = ColumnMode.Default,
     scroll: Boolean = false,
     onTextSelected: () -> Unit = {},
+    onSelectionCleared: () -> Unit = {},
 ): EpubNavigatorFragment.Configuration =
     EpubNavigatorFragment.Configuration {
         servedAssets = listOf("fonts/.*")
@@ -176,13 +180,26 @@ fun epubNavigatorConfiguration(
             }
 
             override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+                // Dragging a handle to stretch the selection never starts a
+                // second action mode: the web view invalidates the one it
+                // already has, which arrives here and nowhere else. Asking
+                // again is therefore the only way the passage the reader
+                // actually marked out reaches us — without it every
+                // highlight is the single word the long press landed on,
+                // and the reader is left doing it again.
+                onTextSelected()
                 menu.clear()
                 return true
             }
 
             override fun onActionItemClicked(mode: ActionMode, item: MenuItem) = false
 
-            override fun onDestroyActionMode(mode: ActionMode) = Unit
+            override fun onDestroyActionMode(mode: ActionMode) {
+                // The web view has let the selection go — a tap on the page,
+                // a page turn. Our own bar is the only thing still pointing
+                // at words that are no longer marked.
+                onSelectionCleared()
+            }
         }
 
         addFontFamilyDeclaration(FontFamily(checkNotNull(ReaderFont.LITERATA.cssName))) {

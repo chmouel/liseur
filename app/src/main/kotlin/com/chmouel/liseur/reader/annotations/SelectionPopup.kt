@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader.annotations
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.chmouel.liseur.R
+import com.chmouel.liseur.ui.LocalEInk
 
 /** What the reader can do with a passage they have just selected. */
 class SelectionActions(
@@ -62,10 +64,20 @@ fun SelectionPopup(
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = false),
     ) {
+        // Electronic paper has no way to draw a soft shadow: it arrives as
+        // a band of dithered grey that costs a repaint and reads as dirt.
+        // An outline says the same thing — this floats over the page — in
+        // ink the panel can actually print.
+        val eInk = LocalEInk.current
         Surface(
             shape = RoundedCornerShape(24.dp),
-            tonalElevation = 3.dp,
-            shadowElevation = 8.dp,
+            tonalElevation = if (eInk) 0.dp else 3.dp,
+            shadowElevation = if (eInk) 0.dp else 8.dp,
+            border = if (eInk) {
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            } else {
+                null
+            },
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
         ) {
             Row(
