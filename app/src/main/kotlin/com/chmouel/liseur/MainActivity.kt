@@ -256,6 +256,8 @@ private fun LiseurApp(settings: AppSettings) {
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
                 onEInkMode = { scope.launch { repository.setEInkMode(it) } },
+                onVendorRefresh = { scope.launch { repository.setVendorRefresh(it) } },
+                vendorName = context.container.eInkDisplay.vendor,
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
                 onGroupSeries = { grouped ->

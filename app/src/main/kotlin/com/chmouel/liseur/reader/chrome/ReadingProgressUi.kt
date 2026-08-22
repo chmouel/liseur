@@ -44,6 +44,7 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.progress.FooterMiddle
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.footerMiddle
+import com.chmouel.liseur.ui.LocalEInk
 
 /**
  * The quiet line of text at the bottom of the page, Kindle-style. The
@@ -213,6 +214,35 @@ private fun Modifier.clickableWithoutRipple(onClick: () -> Unit): Modifier =
         onClick = onClick,
     )
 
+/**
+ * The rounded bar the reader chrome speaks from: the page's own ink,
+ * with the page's own paper written on it.
+ *
+ * The lift is drawn two different ways. On a backlit screen a shadow
+ * and a hair of translucency place it above the text. Electronic paper
+ * has neither to give: a shadow is dithered into a halo of grey specks
+ * that then ghosts, and 92% of an ink-coloured bar over a page of text
+ * is that text, faintly, showing through the words on top of it. There
+ * the bar is simply solid, which separates it from the page more
+ * plainly than either.
+ */
+@Composable
+private fun ChromePill(
+    theme: ReaderTheme,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val eInk = LocalEInk.current
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = if (eInk) theme.foreground else theme.foreground.copy(alpha = 0.92f),
+        contentColor = theme.background,
+        shadowElevation = if (eInk) 0.dp else 6.dp,
+        modifier = modifier.padding(16.dp),
+        content = content,
+    )
+}
+
 /** Small marks along the scrubber showing where chapters begin. */
 private fun Modifier.chapterTicks(ticks: List<Float>, color: Color): Modifier =
     drawWithContent {
@@ -251,13 +281,7 @@ fun JumpBackPill(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = theme.foreground.copy(alpha = 0.92f),
-        contentColor = theme.background,
-        shadowElevation = 6.dp,
-        modifier = modifier.padding(16.dp),
-    ) {
+    ChromePill(theme = theme, modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -345,13 +369,7 @@ fun NextInSeriesPill(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = theme.foreground.copy(alpha = 0.92f),
-        contentColor = theme.background,
-        shadowElevation = 6.dp,
-        modifier = modifier.padding(16.dp),
-    ) {
+    ChromePill(theme = theme, modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -398,13 +416,7 @@ fun CatchUpPill(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = theme.foreground.copy(alpha = 0.92f),
-        contentColor = theme.background,
-        shadowElevation = 6.dp,
-        modifier = modifier.padding(16.dp),
-    ) {
+    ChromePill(theme = theme, modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),

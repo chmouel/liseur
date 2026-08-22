@@ -95,6 +95,8 @@ fun SettingsScreen(
     onDynamicColor: (Boolean) -> Unit,
     onVolumeKeys: (Boolean) -> Unit,
     onEInkMode: (EInkMode) -> Unit,
+    onVendorRefresh: (Boolean) -> Unit,
+    vendorName: String?,
     onResumeLastBook: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
     onGroupSeries: (Boolean) -> Unit,
@@ -297,6 +299,20 @@ fun SettingsScreen(
                         selected = settings.eInkMode,
                         label = { stringResource(it.label) },
                         onSelected = onEInkMode,
+                    )
+                    RowDivider()
+                    // The subtitle carries the finding, not just the offer.
+                    // None of this can be checked from a build — the classes
+                    // live on the devices — so the one place it can be
+                    // checked is the device, and this is where it says so.
+                    SwitchRow(
+                        title = stringResource(R.string.settings_vendor_refresh),
+                        subtitle = vendorName?.let {
+                            stringResource(R.string.settings_vendor_refresh_found, it)
+                        } ?: stringResource(R.string.settings_vendor_refresh_absent),
+                        checked = settings.vendorRefresh && vendorName != null,
+                        enabled = vendorName != null,
+                        onCheckedChange = onVendorRefresh,
                     )
                 }
 
@@ -582,11 +598,14 @@ private fun SwitchRow(
     subtitle: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = { Text(subtitle) },
-        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
+        trailingContent = {
+            Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+        },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier
             // One tap target for the whole row, so the switch is not the
@@ -595,6 +614,7 @@ private fun SwitchRow(
             // and a screen reader can say which it is.
             .toggleable(
                 value = checked,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
             ),

@@ -48,6 +48,8 @@ import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.LatestPositionSync
 import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.ReadingPositionPublisher
+import com.chmouel.liseur.ui.eink.EInkDisplay
+import com.chmouel.liseur.ui.eink.OnyxEInkDisplay
 import com.chmouel.liseur.sync.SyncScope
 import android.util.Log
 import org.readium.r2.shared.util.asset.AssetRetriever
@@ -64,6 +66,14 @@ import kotlinx.coroutines.SupervisorJob
  */
 class AppContainer(context: Context) {
     val networkAvailability = AndroidNetworkAvailability(context.applicationContext)
+
+    /**
+     * The maker's screen controller, if this device turns out to have
+     * one. Bound once, lazily, because the answer cannot change while
+     * the process lives and looking is a handful of failed class loads
+     * on every device that is not an e-reader.
+     */
+    val eInkDisplay: EInkDisplay by lazy { OnyxEInkDisplay.bind() }
 
     private val httpClient = DefaultHttpClient()
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

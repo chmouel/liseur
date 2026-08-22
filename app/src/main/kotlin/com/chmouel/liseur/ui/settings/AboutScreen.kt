@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.R
+import com.chmouel.liseur.ui.LocalEInk
 
 private data class LiteraryQuote(val text: String, val author: String)
 
@@ -136,7 +137,13 @@ fun AboutScreen(
                 AnimatedVisibility(
                     visibleState = remember { MutableTransitionState(false) }
                         .apply { targetState = true },
-                    enter = fadeIn(animationSpec = tween(durationMillis = 300)),
+                    // A fade is a run of whole-screen repaints on electronic
+                    // paper, so the quote is simply there when the screen is.
+                    enter = fadeIn(
+                        animationSpec = tween(
+                            durationMillis = if (LocalEInk.current) 0 else 300,
+                        ),
+                    ),
                     modifier = Modifier.padding(top = 48.dp),
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

@@ -109,6 +109,7 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
+import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
@@ -118,6 +119,7 @@ import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.search.SearchScreen
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.eink.EInkDisplay
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.widthClass
@@ -186,6 +188,8 @@ fun ReaderScreen(
     bookmarkedFlow: StateFlow<Boolean>,
     selectionEvents: SharedFlow<SelectionEvent>,
     onSelectionDismissed: () -> Unit,
+    eInkDisplay: EInkDisplay,
+    vendorRefresh: Boolean,
     onAnnotationAction: ReaderAnnotationActions,
     onSearchAction: ReaderSearchActions,
     syncableFlow: StateFlow<Boolean>,
@@ -385,6 +389,25 @@ fun ReaderScreen(
                 if (event != NavigatorPositionEvent.PREFERENCE_REFLOW) reflowAnchor = null
                 onLocatorChanged(capture(nav, native), event)
             }
+        }
+    }
+
+    // Asking the maker's screen controller to repaint the page the way it
+    // repaints text.
+    //
+    // Readium builds a fresh web view for each resource and swaps it in,
+    // so this cannot be said once at the start: it is said again for each
+    // one, keyed on the page on screen. The calls are cheap, and the
+    // controller retires itself for good at the first sign it is not the
+    // one we guessed at, so a device this was wrong about pays for the
+    // guess once.
+    LaunchedEffect(navigator, eInkDisplay, vendorRefresh) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (!vendorRefresh || eInkDisplay.vendor == null) return@LaunchedEffect
+        nav.currentLocator.collect {
+            val root = nav.publicationView
+            eInkDisplay.readingMode(root)
+            visibleWebView(root)?.let(eInkDisplay::optimizeWebView)
         }
     }
 

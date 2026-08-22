@@ -114,6 +114,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -129,6 +130,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
@@ -1215,7 +1218,14 @@ private fun ContinueReadingCard(
                 modifier = Modifier
                     .width(72.dp)
                     .height(108.dp)
-                    .shadow(6.dp, RoundedCornerShape(10.dp)),
+                    // A drop shadow is a soft gradient, and electronic paper
+                    // has no soft: it dithers one into a halo of grey specks
+                    // around the cover, which then ghosts. The cover already
+                    // draws its own outline, which is all the lift it needs.
+                    .then(
+                        if (LocalEInk.current) Modifier
+                        else Modifier.shadow(6.dp, RoundedCornerShape(10.dp)),
+                    ),
             )
             Column(
                 Modifier
@@ -1561,8 +1571,22 @@ fun BookCover(book: Book, modifier: Modifier = Modifier) {
             shape,
         )
     if (artwork != null) {
+        // Covers fade in by default, which on a shelf means every cover on
+        // screen fading at once. Electronic paper draws a fade as a short
+        // run of whole-screen repaints, so the request says so here rather
+        // than the loader saying it for the whole app: the reader can force
+        // e-ink on or off by hand, and the loader is built before anyone
+        // has asked what they chose.
+        val context = LocalContext.current
+        val eInk = LocalEInk.current
+        val request = remember(artwork, eInk, context) {
+            ImageRequest.Builder(context)
+                .data(artwork)
+                .crossfade(!eInk)
+                .build()
+        }
         SubcomposeAsyncImage(
-            model = artwork,
+            model = request,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = borderModifier,
