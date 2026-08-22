@@ -172,6 +172,14 @@
     <string name="server_intro_calibre">Give the address of your calibre-web server and the login you use for it. Liseur works out the rest on its own.</string>
     <string name="server_intro_komga">Give the address of your Komga server and an API key from its account page. Liseur works out the rest on its own.</string>
     <string name="server_intro_liseur_sync">Give the address of your liseur-sync server. It holds your books and keeps your place in them across devices, including books that came from nowhere but this phone.</string>
+    <string name="server_link_calibre">What calibre-web is, and how to run one</string>
+    <string name="server_link_komga">What Komga is, and how to run one</string>
+    <string name="server_open_in_browser">Open your server in a browser</string>
+    <string name="server_tagline_calibre">Your calibre library, served over the web</string>
+    <string name="server_tagline_komga">A server for comics, manga and books</string>
+    <string name="server_tagline_liseur_sync">Your books, and your place in them, on every device</string>
+    <string name="server_section_server">Server</string>
+    <string name="server_section_sync">Reading positions</string>
     <string name="server_api_key">API key</string>
     <string name="server_api_key_help">In Komga, open your account settings and create an API key. Pasting the whole page address is fine — Liseur finds the server from it.</string>
     <string name="server_url">Server address</string>

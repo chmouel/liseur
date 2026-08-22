@@ -9,22 +9,27 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudOff
@@ -58,8 +63,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -377,6 +382,94 @@ private fun BulkDownloadStatus(
     }
 }
 
+/**
+ * What this kind of server is, before the reader is asked for its
+ * address: a face to recognise it by, a line on what it does, and
+ * somewhere to go for the one they have not got yet.
+ */
+@Composable
+private fun KindCard(kind: ServerKind) {
+    val uriHandler = LocalUriHandler.current
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    stringResource(kind.labelRes()),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    stringResource(kind.taglineRes()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                stringResource(kind.introRes()),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(
+                onClick = { runCatching { uriHandler.openUri(kind.homeUrl()) } },
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Text(stringResource(kind.linkRes()))
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One concern of a connected server — what it downloads, what it syncs,
+ * what it accepts — kept in its own card, because the settled screen is
+ * long enough that a flat run of paragraphs gives the reader nothing to
+ * navigate by.
+ */
+@Composable
+private fun ServerSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                content()
+            },
+        )
+    }
+}
+
+/** A line of fact about the server. */
+@Composable
+private fun DetailLine(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 @Composable
 private fun ConnectForm(
     state: ServerAccountUiState,
@@ -406,28 +499,7 @@ private fun ConnectForm(
             }
         }
     }
-    Text(
-        stringResource(
-            when (state.kind) {
-                ServerKind.CALIBRE -> R.string.server_intro_calibre
-                ServerKind.KOMGA -> R.string.server_intro_komga
-                ServerKind.LISEUR_SYNC -> R.string.server_intro_liseur_sync
-            },
-        ),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    // A reader who has not got a liseur-sync server yet cannot connect
-    // to one, and the form otherwise gives them nowhere to go.
-    if (state.kind == ServerKind.LISEUR_SYNC) {
-        val uriHandler = LocalUriHandler.current
-        TextButton(
-            onClick = { runCatching { uriHandler.openUri(LISEUR_SYNC_SERVER_URL) } },
-            contentPadding = PaddingValues(0.dp),
-        ) {
-            Text(stringResource(R.string.liseur_sync_get_one))
-        }
-    }
+    KindCard(state.kind)
     OutlinedTextField(
         value = state.url,
         onValueChange = onUrlChange,
@@ -611,16 +683,44 @@ private fun ConnectedCard(
             Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                // The address is the one thing here the reader may want to
+                // act on rather than read: it is where the library they are
+                // borrowing from actually lives.
+                val uriHandler = LocalUriHandler.current
+                val open = stringResource(R.string.server_open_in_browser)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable(onClickLabel = open) {
+                            runCatching { uriHandler.openUri(server.baseUrl) }
+                        },
+                ) {
+                    Text(
+                        server.baseUrl.substringAfter("://"),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
             Text(
-                server.baseUrl.substringAfter("://"),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                server.username.orEmpty().ifBlank { stringResource(server.kind.labelRes()) },
+                server.username.orEmpty()
+                    .ifBlank { stringResource(server.kind.labelRes()) },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
+            DetailLine(
                 text = if (storage.count == 0) {
                     stringResource(R.string.server_storage_empty)
                 } else {
@@ -631,8 +731,6 @@ private fun ConnectedCard(
                         Formatter.formatShortFileSize(LocalContext.current, storage.bytes),
                     )
                 },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -657,105 +755,106 @@ private fun ConnectedCard(
     // batch at a time: a second run started over the first would share
     // its unique work names and end up counting somebody else's books.
     if (server.canDownload) {
-        Text(
-            text = stringResource(R.string.download_all),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        Text(
-            text = stringResource(R.string.download_all_summary),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (batch != null) {
-            BulkDownloadStatus(
-                batch = batch,
-                onCancel = onCancelDownloadAll,
-                onDismiss = onDismissBatch,
-            )
-        } else if (estimating) {
+        ServerSection(
+            title = stringResource(R.string.download_all),
+        ) {
             Text(
-                text = stringResource(R.string.download_all_working),
+                text = stringResource(R.string.download_all_summary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        } else {
-            TextButton(onClick = onAskDownloadAll, enabled = !busy) {
-                Text(stringResource(R.string.download_all))
+            if (batch != null) {
+                BulkDownloadStatus(
+                    batch = batch,
+                    onCancel = onCancelDownloadAll,
+                    onDismiss = onDismissBatch,
+                )
+            } else if (estimating) {
+                Text(
+                    text = stringResource(R.string.download_all_working),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                TextButton(
+                    onClick = onAskDownloadAll,
+                    enabled = !busy,
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Text(stringResource(R.string.download_all))
+                }
             }
         }
     }
 
-    Notice(
-        text = if (server.canSync) {
-            stringResource(R.string.server_sync_on)
-        } else {
-            stringResource(R.string.server_sync_off)
-        },
-        tone = if (server.canSync) NoticeTone.GOOD else NoticeTone.NEUTRAL,
-    )
-
-    if (server.canSync) {
-        Text(
-            text = syncStatus.describe(server.positionSyncedAt),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+    ServerSection(
+        title = stringResource(R.string.server_section_sync),
+    ) {
+        Notice(
+            text = if (server.canSync) {
+                stringResource(R.string.server_sync_on)
+            } else {
+                stringResource(R.string.server_sync_off)
+            },
+            tone = if (server.canSync) NoticeTone.GOOD else NoticeTone.NEUTRAL,
         )
-        if (identity != null) {
-            Text(
-                text = stringResource(R.string.server_sync_identity, identity.login),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+        if (server.canSync) {
+            DetailLine(
+                text = syncStatus.describe(server.positionSyncedAt),
             )
-        }
-        val moved = describeMovement(syncReport)
-        if (moved != null) {
-            Text(
-                text = moved,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (syncReport.unresolved > 0) {
-            Notice(
-                text = pluralStringResource(
-                    R.plurals.server_sync_unresolved,
-                    syncReport.unresolved,
-                    syncReport.unresolved,
-                ),
-                tone = NoticeTone.NEUTRAL,
-            )
-        }
-        if (identity != null && identity.strandedBooks > 0) {
-            Notice(
-                text = pluralStringResource(
-                    R.plurals.server_sync_stranded,
-                    identity.strandedBooks,
-                    identity.strandedBooks,
-                ),
-                tone = NoticeTone.PROBLEM,
-            )
-        }
-        TextButton(
-            onClick = onSyncNow,
-            enabled = syncStatus != PositionSyncStatus.Syncing,
-        ) {
-            Text(stringResource(R.string.server_sync_now))
+            if (identity != null) {
+                DetailLine(
+                    text = stringResource(R.string.server_sync_identity, identity.login),
+                )
+            }
+            val moved = describeMovement(syncReport)
+            if (moved != null) {
+                DetailLine(moved)
+            }
+            if (syncReport.unresolved > 0) {
+                Notice(
+                    text = pluralStringResource(
+                        R.plurals.server_sync_unresolved,
+                        syncReport.unresolved,
+                        syncReport.unresolved,
+                    ),
+                    tone = NoticeTone.NEUTRAL,
+                )
+            }
+            if (identity != null && identity.strandedBooks > 0) {
+                Notice(
+                    text = pluralStringResource(
+                        R.plurals.server_sync_stranded,
+                        identity.strandedBooks,
+                        identity.strandedBooks,
+                    ),
+                    tone = NoticeTone.PROBLEM,
+                )
+            }
+            TextButton(
+                onClick = onSyncNow,
+                enabled = syncStatus != PositionSyncStatus.Syncing,
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Text(stringResource(R.string.server_sync_now))
+            }
         }
     }
 
     // Only where the account may actually send one: an option that
     // explains a thing the server will refuse is worse than no option.
     if (server.canUpload) {
-        Text(
-            text = stringResource(R.string.upload_policy),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        Text(
-            text = stringResource(R.string.upload_policy_summary),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        UploadPolicyChoice(selected = uploadPolicy, onSelected = onSetUploadPolicy)
+        ServerSection(
+            title = stringResource(R.string.upload_policy),
+        ) {
+            Text(
+                text = stringResource(R.string.upload_policy_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            UploadPolicyChoice(selected = uploadPolicy, onSelected = onSetUploadPolicy)
+        }
     }
 
     // A token minted before the delete scope existed does not carry it,
@@ -1026,6 +1125,34 @@ private fun ServerKind.labelRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_kind_calibre
     ServerKind.KOMGA -> R.string.server_kind_komga
     ServerKind.LISEUR_SYNC -> R.string.server_kind_liseur_sync
+}
+
+private fun ServerKind.introRes(): Int = when (this) {
+    ServerKind.CALIBRE -> R.string.server_intro_calibre
+    ServerKind.KOMGA -> R.string.server_intro_komga
+    ServerKind.LISEUR_SYNC -> R.string.server_intro_liseur_sync
+}
+
+/**
+ * Where a reader who has not got this kind of server yet can read about
+ * it. Every kind gets one: the form otherwise gives them nowhere to go.
+ */
+private fun ServerKind.homeUrl(): String = when (this) {
+    ServerKind.CALIBRE -> "https://github.com/janeczku/calibre-web"
+    ServerKind.KOMGA -> "https://komga.org"
+    ServerKind.LISEUR_SYNC -> LISEUR_SYNC_SERVER_URL
+}
+
+private fun ServerKind.linkRes(): Int = when (this) {
+    ServerKind.CALIBRE -> R.string.server_link_calibre
+    ServerKind.KOMGA -> R.string.server_link_komga
+    ServerKind.LISEUR_SYNC -> R.string.liseur_sync_get_one
+}
+
+private fun ServerKind.taglineRes(): Int = when (this) {
+    ServerKind.CALIBRE -> R.string.server_tagline_calibre
+    ServerKind.KOMGA -> R.string.server_tagline_komga
+    ServerKind.LISEUR_SYNC -> R.string.server_tagline_liseur_sync
 }
 
 private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
