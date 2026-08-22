@@ -76,6 +76,7 @@ import androidx.fragment.compose.AndroidFragment
 import android.graphics.RectF
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.webkit.WebView
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -109,6 +110,8 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
+import com.chmouel.liseur.reader.chrome.visibleWebView
+import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
@@ -118,6 +121,7 @@ import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.search.SearchScreen
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.eink.EInkDisplay
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.widthClass
@@ -132,6 +136,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.preferences.ReadingProgression
@@ -186,6 +192,8 @@ fun ReaderScreen(
     bookmarkedFlow: StateFlow<Boolean>,
     selectionEvents: SharedFlow<SelectionEvent>,
     onSelectionDismissed: () -> Unit,
+    eInkDisplay: EInkDisplay,
+    vendorRefresh: Boolean,
     onAnnotationAction: ReaderAnnotationActions,
     onSearchAction: ReaderSearchActions,
     syncableFlow: StateFlow<Boolean>,
@@ -385,6 +393,37 @@ fun ReaderScreen(
                 if (event != NavigatorPositionEvent.PREFERENCE_REFLOW) reflowAnchor = null
                 onLocatorChanged(capture(nav, native), event)
             }
+        }
+    }
+
+    // Asking the maker's screen controller to repaint the page the way
+    // it repaints text.
+    //
+    // Both calls are made against the web view the book is actually
+    // drawn in, because Onyx's are per view and the fragment root is not
+    // the view that holds the prose. Readium builds a fresh web view for
+    // each resource and swaps it in, so this cannot be said once at the
+    // start; it is said again whenever the view on screen is not the one
+    // spoken to last.
+    //
+    // Positions and layout passes are both only prompts to go and look.
+    // Positions alone would miss the page the book opens at, which is
+    // laid out after the position announcing it and may be the only page
+    // a reader visits; layout alone would be at the mercy of a resource
+    // swapped in without one. Neither costs anything it should not: the
+    // common case is finding the same view again and stopping at a
+    // reference comparison.
+    LaunchedEffect(navigator, eInkDisplay, vendorRefresh) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (!vendorRefresh || eInkDisplay.vendor == null) return@LaunchedEffect
+        val root = nav.publicationView
+        var spokenTo: WebView? = null
+        merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
+            val web = visibleWebView(root) ?: return@collect
+            if (web === spokenTo) return@collect
+            spokenTo = web
+            eInkDisplay.readingMode(web)
+            eInkDisplay.optimizeWebView(web)
         }
     }
 

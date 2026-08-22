@@ -312,6 +312,8 @@ class ReaderActivity : FragmentActivity() {
                                     bookmarkedFlow = viewModel.bookmarked,
                                     selectionEvents = viewModel.selectionEvents,
                                     onSelectionDismissed = viewModel::onSelectionCleared,
+                                    eInkDisplay = container.eInkDisplay,
+                                    vendorRefresh = settings.vendorRefresh,
                                     onAnnotationAction = remember {
                                         ReaderAnnotationActions(
                                             highlight = viewModel::highlight,

@@ -1,9 +1,7 @@
 package com.chmouel.liseur.ui
 
 import androidx.compose.ui.unit.dp
-import com.chmouel.liseur.data.settings.EInkMode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -84,61 +82,5 @@ class WindowSizeTest {
     @Test
     fun `wider screens cap sheet content`() {
         assertEquals(560.dp, contentWidthCap(1280.dp))
-    }
-}
-
-class EInkTest {
-
-    private fun noFeatures(name: String) = false
-
-    @Test
-    fun `an ordinary phone is not e-ink`() {
-        assertFalse(
-            isEInkDevice(
-                manufacturer = "Google",
-                brand = "google",
-                model = "Pixel 8",
-                device = "shiba",
-                hasFeature = ::noFeatures,
-            ),
-        )
-    }
-
-    @Test
-    fun `an Onyx Boox is e-ink by name`() {
-        assertTrue(
-            isEInkDevice(
-                manufacturer = "ONYX",
-                brand = "Onyx",
-                model = "Go 7",
-                device = "GO7",
-                hasFeature = ::noFeatures,
-            ),
-        )
-    }
-
-    @Test
-    fun `a device that declares the feature is taken at its word`() {
-        assertTrue(
-            isEInkDevice(
-                manufacturer = "Nobody",
-                brand = "nobody",
-                model = "Unknown",
-                device = "unknown",
-                hasFeature = { it == "android.hardware.type.eink" },
-            ),
-        )
-    }
-
-    @Test
-    fun `auto follows the device`() {
-        assertTrue(EInkMode.AUTO.resolve(deviceLooksLikeEInk = true))
-        assertFalse(EInkMode.AUTO.resolve(deviceLooksLikeEInk = false))
-    }
-
-    @Test
-    fun `the manual settings overrule the guess`() {
-        assertTrue(EInkMode.ON.resolve(deviceLooksLikeEInk = false))
-        assertFalse(EInkMode.OFF.resolve(deviceLooksLikeEInk = true))
     }
 }

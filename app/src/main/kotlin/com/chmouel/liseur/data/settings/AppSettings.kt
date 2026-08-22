@@ -107,6 +107,11 @@ enum class DefinitionTarget(val id: String) {
  * @param librarySortReversed The library order read back to front.
  * @param libraryFilters What the library grid is narrowed to.
  * @param eInkMode Whether to drop animation for an electronic paper screen.
+ * @param vendorRefresh Whether to drive the panel through the maker's own
+ *   screen controller where the device has one. Off until asked for: it
+ *   is reached by reflection into firmware that differs between devices
+ *   sold under the same name, so it is a thing the reader turns on and
+ *   sees the result of, not a thing done to them.
  * @param definitionTarget Whether Define opens Liseur's definition card or
  *   sends the text to another app.
  * @param dictionaryLookupEnabled Whether Define may ask a dictionary server
@@ -127,6 +132,7 @@ data class AppSettings(
     val librarySortReversed: Boolean = false,
     val libraryFilters: LibraryFilters = LibraryFilters.None,
     val eInkMode: EInkMode = EInkMode.Default,
+    val vendorRefresh: Boolean = false,
     val definitionTarget: DefinitionTarget = DefinitionTarget.Default,
     val dictionaryLookupEnabled: Boolean = false,
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
@@ -173,6 +179,7 @@ class AppSettingsRepository(private val context: Context) {
         val LIBRARY_FILTERS = stringPreferencesKey("library_filters")
         val LIBRARY_GROUP_BY_SERIES = booleanPreferencesKey("library_group_by_series")
         val EINK_MODE = stringPreferencesKey("eink_mode")
+        val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
         val DEFINITION_TARGET = stringPreferencesKey("definition_target")
         val DICTIONARY_ENABLED = booleanPreferencesKey("dictionary_lookup_enabled")
         val DICTIONARY_BASE_URL = stringPreferencesKey("dictionary_base_url")
@@ -210,6 +217,7 @@ class AppSettingsRepository(private val context: Context) {
                 groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: true,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
+            vendorRefresh = p[Keys.VENDOR_REFRESH] ?: false,
             definitionTarget = DefinitionTarget.fromId(p[Keys.DEFINITION_TARGET]),
             dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
             dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
@@ -285,6 +293,10 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setEInkMode(mode: EInkMode) {
         context.appSettingsStore.edit { it[Keys.EINK_MODE] = mode.id }
+    }
+
+    suspend fun setVendorRefresh(enabled: Boolean) {
+        context.appSettingsStore.edit { it[Keys.VENDOR_REFRESH] = enabled }
     }
 
     suspend fun setDefinitionTarget(target: DefinitionTarget) {
