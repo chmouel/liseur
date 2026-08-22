@@ -18,11 +18,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -49,7 +46,6 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Check
@@ -58,7 +54,7 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CreateNewFolder
-import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -473,16 +469,36 @@ fun LibraryScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.open_book)) },
+                                    text = { Text(stringResource(R.string.add_book)) },
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Outlined.FileOpen,
+                                            Icons.Outlined.LibraryAdd,
                                             contentDescription = null,
                                         )
                                     },
                                     onClick = {
                                         addMenuOpen = false
                                         onOpenBook()
+                                    },
+                                )
+                                // Below the line because it is a
+                                // different kind of thing: the two above
+                                // bring books off this device, this one
+                                // hands over a whole catalog.
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(stringResource(R.string.connect_server_short))
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Outlined.CloudQueue,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        addMenuOpen = false
+                                        onConnectServer()
                                     },
                                 )
                             }
@@ -599,7 +615,7 @@ fun LibraryScreen(
                         )
 
                     state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
-                        onOpenBook = onOpenBook,
+                        onAddBook = onOpenBook,
                         onAddFolder = onAddFolder,
                         onConnectServer = onConnectServer,
                         modifier = Modifier.fillMaxSize(),
@@ -1631,134 +1647,6 @@ internal fun OnServerBadge(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun EmptyLibrary(
-    onOpenBook: () -> Unit,
-    onAddFolder: () -> Unit,
-    onConnectServer: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    // Scrollable even though it always fits, so that a pull from the top
-    // still reaches the refresh above it. An empty library is exactly
-    // when someone needs to pull: they have just added a folder or
-    // connected an account and are waiting for books to turn up.
-    BoxWithConstraints(modifier) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .fillMaxWidth()
-                .heightIn(min = maxHeight)
-                .padding(horizontal = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.AutoStories,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = stringResource(R.string.empty_library_title),
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = stringResource(R.string.empty_library_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            Button(onClick = onAddFolder) {
-                Text(stringResource(R.string.add_folder))
-            }
-            OutlinedButton(onClick = onOpenBook) {
-                Text(stringResource(R.string.open_book))
-            }
-            // The text above offers a server; until now nothing here
-            // took anyone to one, and it lives three taps away under
-            // Settings, which is not somewhere a new library looks.
-            OutlinedButton(onClick = onConnectServer) {
-                Text(stringResource(R.string.connect_server))
-            }
-        }
-    }
-}
-
-/**
- * Shown when the shelf has books on it but a search or a filter is
- * hiding every one of them.
- */
-@Composable
-private fun NothingMatched(
-    searching: Boolean,
-    onClear: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(modifier) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .fillMaxWidth()
-                .heightIn(min = maxHeight)
-                .padding(horizontal = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Search,
-                contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = stringResource(
-                    if (searching) R.string.no_books_match else R.string.no_books_in_filter,
-                ),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            TextButton(onClick = onClear) {
-                Text(stringResource(R.string.show_all_books))
-            }
-        }
-    }
-}
-
-/**
- * What the library says once every book on it has been archived.
- *
- * It has to lead somewhere, because the way to those books is an entry
- * in a menu, and a menu is not where anyone looks when the screen in
- * front of them is empty.
- */
-@Composable
-private fun EverythingArchived(
-    onShowArchived: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(modifier) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .fillMaxWidth()
-                .heightIn(min = maxHeight)
-                .padding(horizontal = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        ) {
-            Text(
-                text = stringResource(R.string.everything_archived),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            TextButton(onClick = onShowArchived) {
-                Text(stringResource(R.string.filter_archived))
-            }
-        }
-    }
-}
-
 /** The name of an order, for the button and the menu. */
 @Composable
 private fun LibrarySort.label(): String = stringResource(
@@ -1770,40 +1658,6 @@ private fun LibrarySort.label(): String = stringResource(
         LibrarySort.SERIES -> R.string.sort_series
     },
 )
-
-/**
- * What the library says once every book on it has been read.
- *
- * The shelf is hiding them by a rule of the app's own rather than by
- * anything the reader asked for, so this cannot merely report an empty
- * shelf: it has to hand back the books it took.
- */
-@Composable
-private fun EverythingFinished(
-    onShowFinished: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(modifier) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .fillMaxWidth()
-                .heightIn(min = maxHeight)
-                .padding(horizontal = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        ) {
-            Text(
-                text = stringResource(R.string.everything_finished),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            TextButton(onClick = onShowFinished) {
-                Text(stringResource(R.string.show_finished_books))
-            }
-        }
-    }
-}
 
 /** The name of one way of narrowing the library. */
 @Composable
