@@ -51,9 +51,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -156,6 +158,10 @@ internal fun LibraryActionCard(
     modifier: Modifier = Modifier,
 ) {
     val eInk = LocalEInk.current
+    // Held under a second name because the semantics block below has an
+    // onClick of its own, and inside it the plain name is the wrong one
+    // to reach for.
+    val activate = onClick
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
@@ -169,12 +175,22 @@ internal fun LibraryActionCard(
         // One target, and one thing said about it: read out label by
         // label, the icon and the arrow turn a single choice into three
         // fragments to listen through.
+        //
+        // Clearing takes the card's own click semantics with it, so the
+        // role and a working action have to be put back by hand.
+        // Without them the card still looks like a button and still
+        // answers a finger, but a screen reader is handed a paragraph
+        // it cannot press.
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 76.dp)
             .clearAndSetSemantics {
                 contentDescription = "$title. $hint"
-                onClick(label = title, action = null)
+                role = Role.Button
+                onClick(label = title) {
+                    activate()
+                    true
+                }
             },
     ) {
         Row(
