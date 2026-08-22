@@ -12,9 +12,12 @@
         <item quantity="one">%d book</item>
         <item quantity="other">%d books</item>
     </plurals>
-    <string name="open_book">Open a book</string>
+    <string name="add_book">Add a book</string>
     <string name="add_folder">Add a folder</string>
     <string name="add_books">Add books</string>
+    <string name="add_folder_hint">Point Liseur at a folder of EPUBs and it keeps watching it for new ones.</string>
+    <string name="add_book_hint">Pick a single EPUB from your device or your cloud storage.</string>
+    <string name="connect_server_hint">Browse a calibre-web, Komga or liseur-sync library, and keep your place across devices.</string>
     <string name="search_books">Search books</string>
     <string name="filter_menu">Filter</string>
     <string name="filter_availability">On the device</string>
@@ -96,7 +99,7 @@
     <string name="clear">Clear</string>
     <string name="continue_reading">Continue reading</string>
     <string name="empty_library_title">Your library is empty</string>
-    <string name="empty_library_subtitle">Add EPUB books from your device, or connect a calibre-web or Komga server to browse and download your collection.</string>
+    <string name="empty_library_subtitle">There are three ways to fill it.</string>
 
     <string name="reader_back">Back</string>
     <string name="the_end">The End</string>
@@ -161,6 +164,7 @@
     <string name="server_connected" formatted="true">Connected to %1$s as %2$s</string>
     <string name="server_title">Book server</string>
     <string name="connect_server">Connect a book server</string>
+    <string name="connect_server_short">Connect a server</string>
     <string name="server_kind">Which kind of server?</string>
     <string name="server_kind_calibre">calibre-web</string>
     <string name="server_kind_komga">Komga</string>
