@@ -699,7 +699,7 @@ private fun LibraryRoute(
 
     LibraryScreen(
         state = state,
-        onOpenBook = { openBook.launch(arrayOf("application/epub+zip")) },
+        onAddBook = { openBook.launch(arrayOf("application/epub+zip")) },
         onAddFolder = { addFolder.launch(null) },
         onBookSelected = { book ->
             book.openableUrl?.let {
