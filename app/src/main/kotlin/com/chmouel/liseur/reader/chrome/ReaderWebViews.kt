@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
 import android.view.View
+import androidx.compose.runtime.withFrameNanos
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.graphics.Rect
@@ -36,3 +37,24 @@ private fun collectVisibleWebViews(view: View, into: MutableList<Pair<WebView, R
             for (i in 0 until view.childCount) collectVisibleWebViews(view.getChildAt(i), into)
     }
 }
+
+/**
+ * The visible web view, waiting a bounded number of frames for one.
+ *
+ * Readium lays a resource out after it reports having moved there, so
+ * asking the instant the position arrives can be a frame or two early —
+ * and on the opening page there is no later position to ask again on.
+ * Waiting on frames rather than a clock means this costs nothing on a
+ * screen that is not drawing, and gives up rather than holding a
+ * coroutine open against a book that will never produce one.
+ */
+internal suspend fun awaitWebView(root: View, frames: Int = WEB_VIEW_WAIT_FRAMES): WebView? {
+    repeat(frames) {
+        visibleWebView(root)?.let { return it }
+        withFrameNanos { }
+    }
+    return visibleWebView(root)
+}
+
+/** About a second of frames on an ordinary screen. */
+private const val WEB_VIEW_WAIT_FRAMES = 60

@@ -46,26 +46,31 @@ private class EInkPressNode(
     private val interactionSource: InteractionSource,
 ) : Modifier.Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
 
-    private var presses = 0
-    private var focuses = 0
-    private var hovers = 0
+    private val active = mutableSetOf<Any>()
     private var marked = false
 
     override fun onAttach() {
         coroutineScope.launch {
             interactionSource.interactions.collect { interaction ->
+                // Each ending carries the beginning it ends, and that
+                // object is what is tracked. Counting instead would go
+                // wrong the moment this node attached in the middle of a
+                // gesture and saw a release whose press it never got: the
+                // count would fall below zero and the control would stop
+                // showing anything for the rest of its life.
                 when (interaction) {
-                    is PressInteraction.Press -> presses++
-                    is PressInteraction.Release, is PressInteraction.Cancel -> presses--
-                    is FocusInteraction.Focus -> focuses++
-                    is FocusInteraction.Unfocus -> focuses--
-                    is HoverInteraction.Enter -> hovers++
-                    is HoverInteraction.Exit -> hovers--
+                    is PressInteraction.Press -> active.add(interaction)
+                    is PressInteraction.Release -> active.remove(interaction.press)
+                    is PressInteraction.Cancel -> active.remove(interaction.press)
+                    is FocusInteraction.Focus -> active.add(interaction)
+                    is FocusInteraction.Unfocus -> active.remove(interaction.focus)
+                    is HoverInteraction.Enter -> active.add(interaction)
+                    is HoverInteraction.Exit -> active.remove(interaction.enter)
                 }
                 // Only a change of state is worth a repaint here, which is
                 // the whole point: a press and its release are two frames,
                 // not however many the interaction stream happens to send.
-                val nowMarked = presses > 0 || focuses > 0 || hovers > 0
+                val nowMarked = active.isNotEmpty()
                 if (marked != nowMarked) {
                     marked = nowMarked
                     invalidateDraw()

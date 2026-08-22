@@ -48,23 +48,11 @@ interface EInkDisplay {
      */
     fun optimizeWebView(view: WebView)
 
-    /**
-     * Puts back whatever was changed.
-     *
-     * Called when the reader is no longer in front, and on any failure.
-     * Some of these settings are not the app's to keep: they are applied
-     * per-application by name but take effect on the panel, and one left
-     * switched on is this app's ghosting inflicted on whatever the
-     * reader opens next.
-     */
-    fun release()
-
     /** The controller nobody has, which is nearly everybody. */
     object Absent : EInkDisplay {
         override val vendor: String? = null
         override fun readingMode(view: View) = Unit
         override fun optimizeWebView(view: WebView) = Unit
-        override fun release() = Unit
     }
 }
 
@@ -114,21 +102,3 @@ val ONYX_SHAPES: List<EInkVendorShape> = listOf(
         updateModeClass = "android.onyx.epd.UpdateMode",
     ),
 )
-
-/**
- * The first shape whose classes [isPresent] says are on this device.
- *
- * Kept apart from the reflection that uses it so that the choosing — the
- * part with an order, a fallback and an answer — can be tested, while
- * the part that can only be exercised on the hardware itself stays as
- * small as it can be made.
- *
- * Both classes must be there. A controller without the enum its methods
- * take is a controller nothing can be asked of.
- */
-fun firstAvailableShape(
-    shapes: List<EInkVendorShape>,
-    isPresent: (String) -> Boolean,
-): EInkVendorShape? = shapes.firstOrNull {
-    isPresent(it.controllerClass) && isPresent(it.updateModeClass)
-}

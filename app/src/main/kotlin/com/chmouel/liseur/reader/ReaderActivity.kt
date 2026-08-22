@@ -458,12 +458,6 @@ class ReaderActivity : FragmentActivity() {
         // Leaving the book is the moment the position is worth sending:
         // it is settled, and the reader is likely to pick up elsewhere.
         if (target != null) viewModel.onReaderStopped()
-        // Anything asked of the panel is given back the moment the book
-        // is no longer the thing on screen. Some of these controls are
-        // applied per application but take effect on the hardware, so one
-        // left set is this app's ghosting inflicted on whatever the reader
-        // opens next.
-        container.eInkDisplay.release()
     }
 
     /**
