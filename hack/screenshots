@@ -5,6 +5,7 @@
 #   hack/screenshots --setup      # build a demo shelf first, then capture
 #   hack/screenshots              # capture from a device already set up
 #   hack/screenshots --setup-only # build the shelf and stop, to check it
+#   hack/screenshots --empty      # capture the empty library, and nothing else
 #   hack/screenshots -s SERIAL    # pick a device when several are attached
 #   hack/screenshots --class tablet   # file the captures as a tablet set
 #
@@ -24,6 +25,12 @@
 # folder through the real picker, and leaves the first book part-read
 # with a highlight, a note and a bookmark on it. Everything the notebook
 # and the reader screens need is then really there.
+#
+# --empty is its own mode because it wants the opposite of everything
+# the rest of this script builds: a library with nothing on it. It wipes
+# the app's storage, so it cannot be a step in the tour -- it would take
+# the demo shelf with it. Run it on its own, and run --setup afterwards
+# to get the shelf back.
 #
 # Nothing here writes to a calibre-web server. Sign out of one before
 # running if your server holds books you would not publish a picture of.
@@ -48,6 +55,7 @@ readonly FIRST_CHAPTER="I: Loomings"
 
 setup=0
 setup_only=0
+empty_only=0
 serial=""
 shot_class=""
 while [[ $# -gt 0 ]]; do
@@ -57,6 +65,7 @@ while [[ $# -gt 0 ]]; do
             setup=1
             setup_only=1
             ;;
+        --empty) empty_only=1 ;;
         -s | --serial)
             serial=${2:-}
             shift
@@ -716,6 +725,38 @@ adb shell am broadcast -a com.android.systemui.demo -e command battery \
 # typing meant for the field. Tablet images have one; phones mostly do
 # not, which is why this only ever showed up on the big screens.
 adb shell settings put secure stylus_handwriting_enabled 0 >/dev/null 2>&1 || true
+
+# The empty library, which is the one screen the demo shelf makes
+# impossible. Wiping the app's storage is the only honest way to reach
+# it -- removing the folder would leave the books it had already read
+# behind -- so this ends the run rather than carrying on through a tour
+# whose shelf it has just thrown away.
+if ((empty_only)); then
+    step "The empty library"
+    adb shell pm clear "$APP_ID" >/dev/null
+    open_library
+    # Wallpaper colours are the default on Android 12 and up, and the
+    # rest of the set is captured in Liseur's own palette. A single
+    # picture in the system's would be the odd one out in the README
+    # table.
+    open_settings
+    set_switch "Colours from your wallpaper" off
+    back
+    sleep 2
+    wait_for "Your library is empty" 20 >/dev/null ||
+        die "the empty library never appeared"
+    shot 16-empty-library
+
+    adb shell cmd uimode night yes >/dev/null
+    sleep 3
+    wait_for "Your library is empty" 20 >/dev/null ||
+        die "the empty library never came back in the dark"
+    shot 17-empty-library-dark
+
+    printf '\nDone. The shelf is gone with the storage: run --setup to build\n'
+    printf 'it again before capturing the rest.\n'
+    exit 0
+fi
 
 if ((setup)); then
     step "Fetching the demo shelf"
