@@ -989,11 +989,15 @@ i=1
 # theme is worth more as a line in the description than as one picture
 # in six that does not match the other five.
 for name in 01-library 02-reading 13-series 04-typography 16-empty-library 06-highlights; do
-    # 16-empty-library is the one the tour cannot take, since it needs a
-    # shelf with nothing on it. It comes from --empty and is committed,
-    # so say so rather than fail on a missing file.
-    [[ -f "$OUT_DIR/$name.png" ]] ||
-        die "no $OUT_DIR/$name.png: capture it with hack/screenshots --empty"
+    if [[ ! -f "$OUT_DIR/$name.png" ]]; then
+        # Only 16-empty-library comes from somewhere other than the run
+        # that just finished, so it is the only one where the fix is a
+        # different command rather than a step that went wrong.
+        if [[ $name == 16-empty-library ]]; then
+            die "no $OUT_DIR/$name.png: capture it with hack/screenshots --empty"
+        fi
+        die "no $OUT_DIR/$name.png: the step that takes it did not run"
+    fi
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
     note "$FASTLANE_DIR/$i.png"
     i=$((i + 1))

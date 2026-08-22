@@ -151,7 +151,7 @@ import com.chmouel.liseur.domain.seriesKey
 @Composable
 fun LibraryScreen(
     state: LibraryUiState,
-    onOpenBook: () -> Unit,
+    onAddBook: () -> Unit,
     onAddFolder: () -> Unit,
     onBookSelected: (Book) -> Unit,
     onOpenSettings: () -> Unit,
@@ -478,7 +478,7 @@ fun LibraryScreen(
                                     },
                                     onClick = {
                                         addMenuOpen = false
-                                        onOpenBook()
+                                        onAddBook()
                                     },
                                 )
                                 // Below the line because it is a
@@ -615,7 +615,7 @@ fun LibraryScreen(
                         )
 
                     state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
-                        onAddBook = onOpenBook,
+                        onAddBook = onAddBook,
                         onAddFolder = onAddFolder,
                         onConnectServer = onConnectServer,
                         modifier = Modifier.fillMaxSize(),
