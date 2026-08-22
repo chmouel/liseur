@@ -38,13 +38,13 @@ An open-source ebook reader for Android and a [calibre-web](https://github.com/j
     <td><img src="docs/screenshots/13-series.png" alt="Series"></td>
     <td><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
     <td><img src="docs/screenshots/09-server.png" alt="Server setup"></td>
-    <td><img src="docs/screenshots/17-empty-library-dark.png" alt="An empty library in the dark theme"></td>
+    <td><img src="docs/screenshots/16-empty-library.png" alt="An empty library"></td>
   </tr>
   <tr>
     <td align="center"><sub>Series grouped into compact shelf stacks.</sub></td>
     <td align="center"><sub>Reading order, progress, and missing volumes at a glance.</sub></td>
     <td align="center"><sub>Connect to calibre-web, Komga or liseur-sync in moments.</sub></td>
-    <td align="center"><sub>Three ways to fill a new shelf, in the dark theme.</sub></td>
+    <td align="center"><sub>Three ways to fill a new shelf.</sub></td>
   </tr>
 </table>
 

@@ -407,6 +407,20 @@ it. Each of those is checked against the database afterwards, because a
 highlight that quietly failed looks exactly like one that worked. Run it
 once; later runs can drop `--setup` and take about ten minutes.
 
+`--empty` is its own mode, and short: the empty library is the one screen
+the tour cannot reach, because the tour needs a shelf with books on it.
+It wipes app storage, photographs what a new reader sees, and stops. Run
+it whenever the empty state changes; the rest of the tour would only put
+the demo shelf back.
+
+Everything that gets published is in the light theme. A dark screenshot
+in a store listing reads as the app looking like that, rather than as the
+app being able to; the dark theme earns more as a line in the description
+than as one picture in six that matches none of the others. The script
+still captures `11-reading-dark` and `17-empty-library-dark` — they are
+useful to look at — it just does not file them with fastlane or the
+README.
+
 Sign out of calibre-web first unless your server holds only books you
 would publish a picture of. The script itself never writes to one.
 

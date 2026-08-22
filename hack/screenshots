@@ -984,7 +984,16 @@ reader_chrome_down
 
 step "The F-Droid set"
 i=1
-for name in 01-library 02-reading 13-series 04-typography 11-reading-dark 06-highlights; do
+# All light. A dark screenshot in a store listing is read as the app
+# looking like that, rather than as the app being able to; the dark
+# theme is worth more as a line in the description than as one picture
+# in six that does not match the other five.
+for name in 01-library 02-reading 13-series 04-typography 16-empty-library 06-highlights; do
+    # 16-empty-library is the one the tour cannot take, since it needs a
+    # shelf with nothing on it. It comes from --empty and is committed,
+    # so say so rather than fail on a missing file.
+    [[ -f "$OUT_DIR/$name.png" ]] ||
+        die "no $OUT_DIR/$name.png: capture it with hack/screenshots --empty"
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
     note "$FASTLANE_DIR/$i.png"
     i=$((i + 1))
