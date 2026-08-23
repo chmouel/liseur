@@ -300,20 +300,18 @@ fun SettingsScreen(
                         label = { stringResource(it.label) },
                         onSelected = onEInkMode,
                     )
-                    RowDivider()
-                    // The subtitle carries the finding, not just the offer.
-                    // None of this can be checked from a build — the classes
-                    // live on the devices — so the one place it can be
-                    // checked is the device, and this is where it says so.
-                    SwitchRow(
-                        title = stringResource(R.string.settings_vendor_refresh),
-                        subtitle = vendorName?.let {
-                            stringResource(R.string.settings_vendor_refresh_found, it)
-                        } ?: stringResource(R.string.settings_vendor_refresh_absent),
-                        checked = settings.vendorRefresh && vendorName != null,
-                        enabled = vendorName != null,
-                        onCheckedChange = onVendorRefresh,
-                    )
+                    vendorName?.let { vendor ->
+                        RowDivider()
+                        SwitchRow(
+                            title = stringResource(R.string.settings_vendor_refresh),
+                            subtitle = stringResource(
+                                R.string.settings_vendor_refresh_found,
+                                vendor,
+                            ),
+                            checked = settings.vendorRefresh,
+                            onCheckedChange = onVendorRefresh,
+                        )
+                    }
                 }
 
                 SettingsGroup(stringResource(R.string.settings_dictionary)) {
