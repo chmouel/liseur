@@ -1,0 +1,363 @@
+#!/usr/bin/env bash
+#
+# Checks that content wider than the page is measured and constrained
+# instead of painting over the page after it (issue #67).
+#
+# The fix is a few lines of JavaScript run inside the book's own document,
+# and none of what it has to get right can be seen from the JVM: whether a
+# table really overflows its column, whether an index that merely looks wide
+# is left alone, whether a second run changes anything. So the script is
+# lifted out of WideContentFit.kt — the same text the app ships, never a
+# copy — and run against Readium's own stylesheets in headless Chrome, in a
+# frame the size of a phone.
+#
+# There is no Chrome on the CI runners, so this is a check to run by hand
+# when the script changes, not part of `make check`.
+
+set -euo pipefail
+
+readonly SOURCE="app/src/main/kotlin/com/chmouel/liseur/reader/WideContentFit.kt"
+readonly ASSETS="app/build/intermediates/assets/debug/mergeDebugAssets/readium/readium-css"
+readonly PORT="${PORT:-8791}"
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+cd "$(git rev-parse --show-toplevel)"
+
+browser=""
+for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        browser=$candidate
+        break
+    fi
+done
+[[ -n $browser ]] || die "no chrome or chromium on PATH"
+
+command -v python3 >/dev/null 2>&1 || die "python3 is needed to serve the harness"
+
+# Readium's stylesheets arrive from the navigator AAR and are only unpacked
+# once something has been built.
+[[ -d $ASSETS ]] || die "$ASSETS is missing — run ./gradlew assembleDebug first"
+
+work=$(mktemp -d)
+server=""
+cleanup() {
+    # Under `set -e` a kill that loses the race would abort the trap and
+    # leave the temporary tree behind.
+    if [[ -n $server ]]; then
+        kill "$server" 2>/dev/null || true
+        wait "$server" 2>/dev/null || true
+    fi
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+cp -r "$ASSETS" "$work/readium-css"
+mkdir -p "$work/cases"
+
+python3 - "$SOURCE" "$work/fit.js" <<'PY'
+import re, sys
+src = open(sys.argv[1]).read()
+match = re.search(r'const val SCRIPT: String = """(.*?)"""', src, re.S)
+if not match:
+    sys.exit("could not find SCRIPT in " + sys.argv[1])
+open(sys.argv[2], "w").write(match.group(1))
+PY
+
+# The reporter's table: four columns, comfortable at a default font size and
+# wider than the page well before the largest one.
+cat >"$work/cases/wide-table.xhtml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body>
+<p>Before the table there is a paragraph of ordinary prose.</p>
+<table id="probe" border="1">
+<tr><th>Symbol</th><th>Marks</th><th>Description</th><th>Reference</th></tr>
+<tr><td>ABCDEFG</td><td>1234567</td><td>Something reasonably long</td><td>p. 214</td></tr>
+<tr><td>HIJKLMN</td><td>8901234</td><td>Another descriptive phrase</td><td>p. 388</td></tr>
+</table>
+<p>After the table, more prose follows for several lines so pagination has something to do.</p>
+</body></html>
+EOF
+
+# A long index: narrow, but spread over several pages, so the rectangle that
+# spans all of them is several times the page width. Nothing here needs fixing.
+cat >"$work/cases/narrow-index.xhtml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body>
+<table id="probe"><tbody id="rows"></tbody></table>
+<script>
+var b=document.getElementById("rows");
+for(var i=0;i<60;i++){var r=document.createElement("tr");
+r.innerHTML="<td>Item "+i+"</td><td>"+(i*7)+"</td>";b.appendChild(r);}
+</script>
+</body></html>
+EOF
+
+cat >"$work/cases/long-url.xhtml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body>
+<p id="probe">See https://example.org/a/very/long/path/that/never/breaks/anywhere/at/all/because/it/has/no/hyphens/or/spaces/in/it/whatsoever/ok</p>
+</body></html>
+EOF
+
+cat >"$work/cases/nested-tables.xhtml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head><body>
+<table id="outer" border="1"><tr><td>
+  <table id="probe" border="1">
+  <tr><td>Alphabetical</td><td>Numerical</td><td>Chronological</td><td>Categorical</td></tr>
+  <tr><td>AAAAAAAAAA</td><td>BBBBBBBBBB</td><td>CCCCCCCCCC</td><td>DDDDDDDDDD</td></tr>
+  </table>
+</td><td>Sidebar column with its own text</td></tr></table>
+</body></html>
+EOF
+
+# A publisher who happens to have picked our names for their own markup.
+cat >"$work/cases/publisher-markers.xhtml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title>
+<style id="liseur-fix-css">.publisher-note{color:#333}</style></head><body>
+<table id="probe" class="liseur-wide publisher-note" data-liseur-fit="wide"><tr><td>a</td><td>b</td></tr></table>
+</body></html>
+EOF
+
+cat >"$work/index.html" <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>running</title>
+<style>body{margin:0;font:12px monospace}#f{border:0;width:412px;height:820px}</style>
+</head><body>
+<iframe id="f"></iframe><pre id="out"></pre>
+<script>
+var FIT = null;
+var results = [];
+function log(ok, name, detail) {
+  results.push((ok ? "PASS " : "FAIL ") + name + (detail ? "  [" + detail + "]" : ""));
+}
+function frame(caseName, fontSize, colCount, dir) {
+  return fetch("cases/" + caseName).then(function (r) { return r.text(); }).then(function (src) {
+    var base = dir === "rtl" ? "../readium-css/rtl/" : "../readium-css/";
+    // column-width acts as a minimum, so readium's 45em default would
+    // collapse a two-column request back to one at any tablet width.
+    var vars = "--USER__fontSize:" + fontSize + "%;--RS__colCount:" + colCount + ";" +
+               (colCount > 1 ? "--RS__colWidth:auto;" : "") +
+               "--USER__view:readium-paged-on;";
+    // The overflow rule is readium's own, injected into every resource; it
+    // is why the excess is painted rather than clipped.
+    var head =
+      '<link rel="stylesheet" href="' + base + 'ReadiumCSS-before.css"/>' +
+      '<style>:root,:root > body{overflow:visible !important}html,body{height:100%}</style>';
+    var tail = '<link rel="stylesheet" href="' + base + 'ReadiumCSS-after.css"/>';
+    src = src.replace("</head>", head + tail + "</head>")
+             .replace("<body>", '<body style="' + vars + '">');
+    src = src.replace(/<html([^>]*)>/, '<html$1 style="' + vars + '" dir="' + (dir || "ltr") + '">');
+    var f = document.getElementById("f");
+    f.style.width = (colCount > 1 ? 800 : 412) + "px";
+    return new Promise(function (res) {
+      f.onload = function () { setTimeout(function () { res(f.contentWindow); }, 60); };
+      f.srcdoc = src;
+    });
+  });
+}
+function measure(win, sel) {
+  var el = win.document.querySelector(sel || "#probe");
+  if (!el) return null;
+  var p = el.parentElement, s = win.getComputedStyle(p);
+  var avail = p.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+  var rects = el.getClientRects(), widest = 0;
+  for (var i = 0; i < rects.length; i++) if (rects[i].width > widest) widest = rects[i].width;
+  return { avail: Math.round(avail), widest: Math.round(widest), frags: rects.length,
+           bleed: Math.round(widest - avail),
+           marked: el.hasAttribute("data-liseur-fit"),
+           attr: el.getAttribute("data-liseur-fit"),
+           cls: el.className,
+           scrollW: el.scrollWidth, clientW: el.clientWidth };
+}
+function run(win) { return win.eval(FIT); }
+function dom(win) { return win.document.body.innerHTML; }
+
+var TESTS = [];
+
+[100, 137.5, 150, 175].forEach(function (fs) {
+  TESTS.push(function () {
+    return frame("wide-table.xhtml", fs, 1).then(function (w) {
+      var before = measure(w);
+      run(w);
+      var after = measure(w);
+      log(after.bleed <= 0, "wide table fits at " + fs + "%",
+          "before bleed " + before.bleed + " -> after " + after.bleed);
+    });
+  });
+});
+
+TESTS.push(function () {
+  return frame("narrow-index.xhtml", 100, 1).then(function (w) {
+    var el = w.document.querySelector("#probe");
+    var union = Math.round(el.getBoundingClientRect().width);
+    run(w);
+    var m = measure(w);
+    log(!m.marked, "narrow index left alone",
+        "bounding rect said " + union + ", widest fragment " + m.widest + ", avail " + m.avail + ", marked " + m.marked);
+    log(m.frags > 1, "narrow index still paginates", m.frags + " fragments");
+  });
+});
+
+TESTS.push(function () {
+  return frame("long-url.xhtml", 100, 1).then(function (w) {
+    var before = measure(w);
+    run(w);
+    var after = measure(w);
+    log(after.scrollW <= after.clientW, "long url wraps",
+        "scrollWidth " + before.scrollW + " -> " + after.scrollW +
+        " (client " + after.clientW + ")");
+  });
+});
+
+TESTS.push(function () {
+  return frame("wide-table.xhtml", 200, 2).then(function (w) {
+    var before = measure(w);
+    run(w);
+    var after = measure(w);
+    log(before.bleed > 0, "two-column mode actually bleeds to begin with",
+        "avail " + before.avail + ", bleed " + before.bleed);
+    log(after.bleed <= 0, "wide table fits in two-column mode",
+        "avail " + after.avail + ", before bleed " + before.bleed +
+        " -> after " + after.bleed);
+  });
+});
+
+TESTS.push(function () {
+  return frame("wide-table.xhtml", 150, 1, "rtl").then(function (w) {
+    var before = measure(w);
+    run(w);
+    var after = measure(w);
+    log(before.bleed > 0, "rtl actually bleeds to begin with", "bleed " + before.bleed);
+    log(after.bleed <= 0, "wide table fits in rtl",
+        "before bleed " + before.bleed + " -> after " + after.bleed);
+  });
+});
+
+TESTS.push(function () {
+  return frame("nested-tables.xhtml", 150, 1).then(function (w) {
+    var b1 = measure(w, "#probe"), b2 = measure(w, "#outer");
+    run(w);
+    var inner = measure(w, "#probe"), outer = measure(w, "#outer");
+    log(b1.bleed > 0 || b2.bleed > 0, "nested actually bleeds to begin with",
+        "outer " + b2.bleed + ", inner " + b1.bleed);
+    log(outer.bleed <= 0, "nested: outer fits", b2.bleed + " -> " + outer.bleed);
+    log(inner.bleed <= 0, "nested: inner fits", b1.bleed + " -> " + inner.bleed);
+  });
+});
+
+TESTS.push(function () {
+  return frame("wide-table.xhtml", 175, 1).then(function (w) {
+    var r1 = run(w);
+    var afterRun1 = dom(w);
+    var installed = !!w.__liseurFit && !!w.__liseurFit.styleEl;
+    var r2 = run(w);
+    log(r1 === "changed", "run 1 reports changed", "got " + r1);
+    log(installed, "run 1 installs the stylesheet");
+    log(r2 === "stable", "run 2 reports stable", "got " + r2);
+    log(dom(w) === afterRun1, "run 2 leaves the dom as run 1 left it");
+  });
+});
+
+TESTS.push(function () {
+  return frame("narrow-index.xhtml", 100, 1).then(function (w) {
+    run(w);
+    log(run(w) === "stable", "untouched page settles to stable");
+  });
+});
+
+TESTS.push(function () {
+  return frame("wide-table.xhtml", 100, 1).then(function (w) {
+    run(w);
+    var small = measure(w).marked;
+    w.document.documentElement.style.setProperty("--USER__fontSize", "175%");
+    w.document.body.style.setProperty("--USER__fontSize", "175%");
+    var r = run(w);
+    var big = measure(w);
+    log(!small, "not marked at 100%");
+    log(big.marked && r === "changed", "marked after growing to 175%",
+        "result " + r + ", bleed " + big.bleed);
+  });
+});
+
+TESTS.push(function () {
+  return frame("publisher-markers.xhtml", 100, 1).then(function (w) {
+    var r = run(w);
+    var m = measure(w);
+    log(!!w.__liseurFit.styleEl, "installs despite an author id=liseur-fix-css");
+    log(m.cls.indexOf("liseur-wide") >= 0 && m.cls.indexOf("publisher-note") >= 0,
+        "author classes untouched", m.cls);
+    log(m.attr === "wide", "author's own data-liseur-fit value left alone",
+        "attr " + m.attr + ", result " + r);
+  });
+});
+
+fetch("fit.js").then(function (r) { return r.text(); }).then(function (t) {
+  FIT = t;
+  return TESTS.reduce(function (p, t) { return p.then(t); }, Promise.resolve());
+}).then(function () {
+  var failed = results.filter(function (r) { return r.indexOf("FAIL") === 0; }).length;
+  document.getElementById("out").textContent = results.join("\n");
+  document.title = failed === 0 ? "ALL PASS" : failed + " FAILED";
+}).catch(function (e) {
+  document.getElementById("out").textContent = "harness error: " + (e && e.stack || e);
+  document.title = "HARNESS ERROR";
+});
+</script></body></html>
+EOF
+
+(cd "$work" && exec python3 -m http.server "$PORT" >/dev/null 2>&1) &
+server=$!
+
+# Wait for the server rather than guessing at it, and make it prove the tree
+# it is serving is this one: a stale server left on the port would answer
+# every request with someone else's script, and every assertion below would
+# then be about the wrong thing.
+ready=false
+for _ in $(seq 1 50); do
+    status=0
+    python3 - "$PORT" "$work/fit.js" <<'PY' || status=$?
+import sys, urllib.request
+port, path = sys.argv[1], sys.argv[2]
+try:
+    served = urllib.request.urlopen("http://127.0.0.1:%s/fit.js" % port, timeout=1).read()
+except Exception:
+    sys.exit(1)
+sys.exit(0 if served == open(path, "rb").read() else 2)
+PY
+    case $status in
+        0)
+            ready=true
+            break
+            ;;
+        2)
+            die "port $PORT is serving another tree; try PORT=… "
+            ;;
+    esac
+    kill -0 "$server" 2>/dev/null ||
+        die "could not serve the harness on port $PORT; something else is using it (try PORT=…)"
+    sleep 0.2
+done
+$ready || die "the harness server never came up on port $PORT"
+
+"$browser" --headless=new --disable-gpu --no-sandbox \
+    --virtual-time-budget=20000 \
+    --user-data-dir="$work/chrome" \
+    --dump-dom "http://127.0.0.1:$PORT/index.html" \
+    >"$work/dump.html" 2>/dev/null
+
+python3 - "$work/dump.html" <<'PY'
+import html, re, sys
+page = open(sys.argv[1]).read()
+title = re.search(r"<title>(.*?)</title>", page, re.S)
+out = re.search(r'<pre id="out">(.*?)</pre>', page, re.S)
+title = title.group(1) if title else "?"
+print(html.unescape(out.group(1)) if out else "(the harness produced no output)")
+print()
+print(title)
+sys.exit(0 if title == "ALL PASS" else 1)
+PY

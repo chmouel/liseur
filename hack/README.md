@@ -56,6 +56,16 @@ target wrapping them — run `make help` for the short list. See
 - **`verify-reproducible`** — Builds the release APK twice from two
   independent clean checkouts and diffs them byte for byte, the check
   F-Droid's reproducible-builds requirement demands before submission.
+- **`verify-wide-content`** — Checks that content wider than the page is
+  measured and constrained rather than painted over the page after it
+  (issue #67). The fix is JavaScript that runs inside the book's own
+  document, and none of what it has to get right is visible from the
+  JVM, so the script is lifted straight out of `WideContentFit.kt` —
+  never a copy — and run against Readium's own stylesheets in headless
+  Chrome, in a frame the size of a phone. Needs Chrome or Chromium and a
+  prior `./gradlew assembleDebug` (Readium's CSS is unpacked from the
+  AAR by the build), so it is a check to run by hand when that script
+  changes, not part of `make check`. `PORT=` picks another port.
 - **`icon`** — Renders the adaptive launcher icon (two vector drawables)
   to a flat PNG for the F-Droid listing and the README.
 - **`feature-graphic`** — Renders the 1024x500 store feature graphic
