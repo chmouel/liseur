@@ -190,9 +190,13 @@ fun readingStats(
  * information, and a list that silently skipped them would read as an
  * unbroken run.
  *
- * A session that runs past midnight is counted on the day it began.
- * Splitting it is more truthful and much more code, and nobody reading
- * at one in the morning thinks of it as tomorrow.
+ * A session that runs past midnight is counted whole, on the day it
+ * ended. Splitting it is more truthful and much more code, and picking
+ * the end rather than the beginning is what liseur-sync does for its
+ * summary and its per-book rows — a stretch that began before the span
+ * and finished inside it is the reader's answer either way, and the two
+ * sides disagreeing about which day it landed on would put a headline
+ * over rows that do not add up to it.
  *
  * A range with no beginning starts at the earliest day that has reading
  * on it, because a heatmap of every day since the epoch is mostly a
@@ -282,4 +286,4 @@ private fun progressionPerHour(sessions: List<SessionSpan>): Double? {
 private const val MILLIS_PER_HOUR = 3_600_000.0
 
 private fun SessionSpan.day(zone: ZoneId): LocalDate =
-    Instant.ofEpochMilli(startedAt).atZone(zone).toLocalDate()
+    Instant.ofEpochMilli(lastReadAt).atZone(zone).toLocalDate()
