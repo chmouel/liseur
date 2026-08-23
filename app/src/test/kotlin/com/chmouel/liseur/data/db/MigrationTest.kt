@@ -759,10 +759,40 @@ class MigrationTest {
             }
     }
 
+    /**
+     * A sitting that reached the server before idle time was measured
+     * has to keep the payload it was sent with. Its id is derived from
+     * its contents, so a null that became a number would arrive as the
+     * same id saying something else — refused, and every sitting sharing
+     * its batch refused with it.
+     */
+    @Test
+    fun `sittings from before idle time was measured keep their old spelling`() {
+        helper.createDatabase(TEST_DB, 38).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO reading_sessions
+                    (book_url, started_at, ended_at, last_checkpoint_at, duration_ms,
+                     start_progression, end_progression, uploaded_at)
+                VALUES ('file:book', 1000, 5000, 5000, 3000, 0.1, 0.2, NULL)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT idle_ms FROM reading_sessions WHERE book_url = 'file:book'")
+                    .use { cursor ->
+                        assertTrue(cursor.moveToFirst())
+                        assertTrue(cursor.isNull(0))
+                    }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 38
+        const val LATEST = 39
     }
 }

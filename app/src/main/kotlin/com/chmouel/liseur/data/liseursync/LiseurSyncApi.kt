@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.liseursync
 
 import com.chmouel.liseur.data.remote.RemoteUrl
+import java.time.LocalDate
 
 /** The liseur-sync API, as paths rather than strings scattered about. */
 object LiseurSyncApi {
@@ -147,15 +148,47 @@ object LiseurSyncApi {
     fun bookCover(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/cover")
 
-    fun insightsSummary(baseUrl: String, range: String): String =
-        url(baseUrl, "/v1/insights/summary?range=$range")
+    /**
+     * Insights for one span, named by its first and last day.
+     *
+     * Days rather than a count of them: the server resolves a count
+     * against the moment the request arrives, which reaches back into a
+     * further partial day and would not match what the device counted
+     * for itself. Both bounds are inclusive, and a null [from] asks for
+     * everything on record.
+     */
+    fun insightsSummary(baseUrl: String, from: LocalDate?, to: LocalDate): String =
+        url(baseUrl, "/v1/insights/summary" + span(from, to))
 
     fun insightsCalendar(baseUrl: String, year: Int): String =
         url(baseUrl, "/v1/insights/calendar?year=$year")
 
-    fun workInsights(baseUrl: String): String =
-        url(baseUrl, "/v1/insights/works")
+    /**
+     * A calendar bounded by days rather than by a year.
+     *
+     * A server that predates these parameters ignores them and answers
+     * with the current year instead, which is why the caller checks the
+     * echoed bounds before trusting the span.
+     */
+    fun insightsCalendar(baseUrl: String, from: LocalDate, to: LocalDate): String =
+        url(baseUrl, "/v1/insights/calendar?from=$from&to=$to")
+
+    /** Every work at once, over the same span as the summary. */
+    fun allWorkInsights(baseUrl: String, from: LocalDate?, to: LocalDate): String =
+        url(baseUrl, "/v1/insights/works" + span(from, to))
 
     fun workInsights(baseUrl: String, workId: String): String =
         url(baseUrl, "/v1/insights/works/$workId")
+
+    /**
+     * An insights span as query parameters.
+     *
+     * A span with no beginning is named rather than left out. Omitting
+     * it would leave the summary to fall back on its own default of
+     * thirty days and answer a question nobody asked; `range=all` says
+     * what is meant, and a server too old to know the word says so by
+     * reporting a `range_days` that is not nought.
+     */
+    private fun span(from: LocalDate?, to: LocalDate): String =
+        if (from == null) "?range=all" else "?from=$from&to=$to"
 }

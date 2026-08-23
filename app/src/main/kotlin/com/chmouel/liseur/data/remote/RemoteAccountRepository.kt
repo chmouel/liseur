@@ -6,6 +6,7 @@ import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.SeriesExtraDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
@@ -39,6 +40,12 @@ class RemoteAccountRepository(
      */
     private val peerStateDao: SyncPeerStateDao? = null,
     private val identityDao: WorkIdentityDao? = null,
+    /**
+     * Sittings remember whether they reached a server, and that is only
+     * ever true of the server they were sent to. Null in tests that do
+     * not exercise a liseur-sync account.
+     */
+    private val sessionDao: ReadingSessionDao? = null,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -424,12 +431,20 @@ class RemoteAccountRepository(
      * no longer being talked to — and if the same server is connected
      * again as somebody else, their names are theirs, not the last
      * account's.
+     *
+     * The record of which sittings were uploaded goes with it. It was
+     * only ever true of the account they were sent to, and leaving it
+     * standing would make the next server look as though it already had
+     * a history it has never been told — which is both a dashboard
+     * counting reading twice or not at all, and an account that never
+     * receives the history it should have.
      */
     private suspend fun forgetSyncPeer(server: RemoteServer?) {
         if (server?.kind != ServerKind.LISEUR_SYNC) return
         peerStateDao?.forgetPeer(server.accountKey)
         identityDao?.forgetPeerAliases(server.accountKey)
         identityDao?.forgetPeerAmbiguities(server.accountKey)
+        sessionDao?.forgetUploads()
     }
 
     private companion object {

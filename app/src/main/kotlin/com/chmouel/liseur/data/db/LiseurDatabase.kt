@@ -24,7 +24,7 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
     ],
-    version = 38,
+    version = 39,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1007,6 +1007,27 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /** Keeps each pending progression paired with the locator that supplied it. */
+        /**
+         * Records how much of a sitting was reading rather than the
+         * book being left open.
+         *
+         * Rows already in the table keep a null, which is what makes
+         * this safe rather than merely additive: a session id is derived
+         * from its contents, and a sitting that reached the server
+         * before this column existed must be re-sent byte for byte or
+         * the server sees the same id with a different payload and
+         * refuses the whole batch it arrived in. Null means the old
+         * spelling; only sittings recorded from here on carry the
+         * measurement.
+         */
+        val MIGRATION_38_39 = object : Migration(38, 39) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `reading_sessions` ADD COLUMN `idle_ms` INTEGER",
+                )
+            }
+        }
+
         val MIGRATION_37_38 = object : Migration(37, 38) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1063,6 +1084,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_35_36,
             MIGRATION_36_37,
             MIGRATION_37_38,
+            MIGRATION_38_39,
         )
     }
 }

@@ -26,10 +26,12 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.domain.BookReadingStats
+import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
@@ -46,6 +48,7 @@ fun BookReadingStatsScreen(
     state: BookReadingStatsUiState,
     onBack: () -> Unit,
     serverInsights: WorkInsights? = null,
+    range: StatsRange = StatsRange.ALL_TIME,
 ) {
     Scaffold(
         topBar = {
@@ -85,7 +88,15 @@ fun BookReadingStatsScreen(
             ) {
                 if (state is BookReadingStatsUiState.Empty) {
                     Text(
-                        text = stringResource(R.string.reading_stats_book_empty),
+                        // A book excluded by the span the reader picked
+                        // has not gone unread; it has gone unread lately.
+                        text = stringResource(
+                            if (range == StatsRange.ALL_TIME) {
+                                R.string.reading_stats_book_empty
+                            } else {
+                                R.string.reading_stats_empty_range
+                            },
+                        ),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -100,6 +111,16 @@ fun BookReadingStatsScreen(
                 Text(
                     text = readingDuration(stats.totalMs),
                     style = MaterialTheme.typography.displaySmall,
+                )
+                // The dashboard's span follows the reader here, so this
+                // total must name it. Without the caption the same book
+                // would appear to lose hours whenever the span narrowed.
+                Text(
+                    text = range.days(LocalDate.now())?.let {
+                        stringResource(R.string.reading_stats_in_last_days_local, it)
+                    } ?: stringResource(R.string.reading_stats_in_total),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(20.dp))
                 Text(
@@ -128,6 +149,22 @@ fun BookReadingStatsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // How the time was spent, not just how much of it. A book
+                // read in two long sittings and one read in forty short
+                // ones are different books to have read, and the total
+                // alone cannot tell them apart.
+                if (stats.sessions > 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (stats.sessions == 1) {
+                            stringResource(R.string.reading_stats_book_sessions_one)
+                        } else {
+                            stringResource(R.string.reading_stats_book_sessions, stats.sessions)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 // Only ever shown when the server had one to give. It
                 // knows how fast this reader gets through books on every
                 // device, which this screen cannot work out on its own,

@@ -52,6 +52,21 @@ data class ReadingSession(
      */
     @ColumnInfo(name = "start_progression") val startProgression: Double? = null,
     @ColumnInfo(name = "end_progression") val endProgression: Double? = null,
+    /**
+     * How much of the sitting was not reading, in milliseconds.
+     *
+     * A session is bounded by wall-clock moments but counted off a
+     * monotonic clock that stops when the app leaves the foreground, so
+     * a book left open while the reader answered the door spans more
+     * time than it counted. This is the difference, settled when the
+     * session closes and stored rather than recomputed, because the
+     * upload derives its session id from its contents and a figure that
+     * moved would be a second session under the first one's name.
+     *
+     * Null on sittings recorded before it was measured. Those upload a
+     * nought, as they always did — see the migration to version 39.
+     */
+    @ColumnInfo(name = "idle_ms") val idleMs: Long? = null,
     /** When this session was accepted by the sync server, if ever. */
     @ColumnInfo(name = "uploaded_at") val uploadedAt: Long? = null,
 ) {
@@ -96,7 +111,13 @@ interface ReadingSessionDao {
             last_checkpoint_at = MAX(last_checkpoint_at, :atMillis),
             start_progression = COALESCE(start_progression, :progression),
             end_progression = COALESCE(:progression, end_progression),
-            ended_at = MAX(started_at, last_checkpoint_at, :atMillis)
+            ended_at = MAX(started_at, last_checkpoint_at, :atMillis),
+            idle_ms = MAX(
+                0,
+                MAX(started_at, last_checkpoint_at, :atMillis)
+                    - started_at
+                    - MAX(duration_ms, :totalMs)
+            )
         WHERE id = :id AND ended_at IS NULL
         """,
     )
@@ -116,7 +137,8 @@ interface ReadingSessionDao {
     @Query(
         """
         UPDATE reading_sessions
-        SET ended_at = last_checkpoint_at
+        SET ended_at = last_checkpoint_at,
+            idle_ms = MAX(0, last_checkpoint_at - started_at - duration_ms)
         WHERE ended_at IS NULL
         """,
     )
@@ -160,6 +182,16 @@ interface ReadingSessionDao {
 
     @Query("UPDATE reading_sessions SET uploaded_at = :at WHERE id IN (:ids)")
     suspend fun markUploaded(ids: List<Long>, at: Long)
+
+    /**
+     * Forgets that anything was ever uploaded.
+     *
+     * Called when a sync account is disconnected or replaced: having
+     * been sent to one server says nothing about another, and the next
+     * one is owed this device's history rather than a gap where it was.
+     */
+    @Query("UPDATE reading_sessions SET uploaded_at = NULL")
+    suspend fun forgetUploads()
 
     @Query("DELETE FROM reading_sessions WHERE book_url = :bookUrl")
     suspend fun deleteForBook(bookUrl: String)
