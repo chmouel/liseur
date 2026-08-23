@@ -452,7 +452,6 @@
     <string name="eink_off">Off</string>
     <string name="settings_vendor_refresh">Use the screen controller</string>
     <string name="settings_vendor_refresh_found">Asks %1$s\'s own controller to repaint the page in the mode meant for text. Experimental: it is reached by reflection into firmware that differs between devices sold under the same name.</string>
-    <string name="settings_vendor_refresh_absent">No maker\'s screen controller was found on this device, so this would do nothing.</string>
     <string name="settings_dictionary">Dictionary</string>
     <string name="settings_define_with">Define with</string>
     <string name="definition_target_builtin">Built-in</string>
