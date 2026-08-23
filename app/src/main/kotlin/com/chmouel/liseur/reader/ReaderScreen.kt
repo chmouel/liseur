@@ -142,6 +142,7 @@ import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
@@ -262,6 +263,17 @@ fun ReaderScreen(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val effectScope = rememberCoroutineScope()
     var pendingPositionEvent by remember { mutableStateOf<NavigatorPositionEvent?>(null) }
+
+    // Open for as long as the page is being rebuilt underneath the reader.
+    // See ReflowScope: a locator nobody has claimed while this is open is the
+    // layout moving, not the reader.
+    val reflow = remember { ReflowScope() }
+
+    // A fixed-layout book places everything by absolute coordinates and has no
+    // reflow to speak of; measuring what "fits" there means nothing.
+    val fitWideContent = remember(publication) {
+        publication.metadata.layout != Layout.FIXED
+    }
 
     // The place the reader was at when a run of preference changes began.
     // A restore that lands slightly off must not become the anchor of the
@@ -386,7 +398,12 @@ fun ReaderScreen(
             // must not look like this device turned a page and turn a
             // one-sided remote update into a conflict.
             nav.currentLocator.drop(1).collect { native ->
-                val event = pendingPositionEvent ?: NavigatorPositionEvent.READER_MOVEMENT
+                val event = pendingPositionEvent
+                    ?: if (reflow.active) {
+                        NavigatorPositionEvent.PREFERENCE_REFLOW
+                    } else {
+                        NavigatorPositionEvent.READER_MOVEMENT
+                    }
                 pendingPositionEvent = null
                 // Anywhere the reader actually goes ends the run of
                 // preference changes the held anchor was covering.
@@ -464,20 +481,70 @@ fun ReaderScreen(
         }
             .drop(1)
             .collect {
-                val anchor = reflowAnchor ?: capture(nav, nav.currentLocator.value)
-                reflowAnchor = anchor
-                onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
-                val before = ExactLocatorAnchor.layoutSignature(nav)
-                pendingPositionEvent = NavigatorPositionEvent.PREFERENCE_REFLOW
-                nav.submitPreferences(it)
-                awaitReflowSettled(nav, before)
-                navigate(
-                    nav = nav,
-                    locator = anchor,
-                    event = NavigatorPositionEvent.PREFERENCE_REFLOW,
-                    verify = true,
-                )
+                reflow.within {
+                    val anchor = reflowAnchor ?: capture(nav, nav.currentLocator.value)
+                    reflowAnchor = anchor
+                    onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                    val before = ExactLocatorAnchor.layoutSignature(nav)
+                    nav.submitPreferences(it)
+                    awaitReflowSettled(nav, before)
+                    // A table can be comfortable at 100% and too wide at 175%,
+                    // so what fits has to be asked again once the new size has
+                    // landed — and before the anchor is restored, since fitting
+                    // it moves the text once more.
+                    if (fitWideContent &&
+                        WideContentFit.apply(nav) == WideContentFit.Result.CHANGED
+                    ) {
+                        awaitReflowSettled(nav, before)
+                    }
+                    navigate(
+                        nav = nav,
+                        locator = anchor,
+                        event = NavigatorPositionEvent.PREFERENCE_REFLOW,
+                        verify = true,
+                    )
+                }
             }
+    }
+
+    // Content wider than the page paints over the page after it rather than
+    // being clipped, because in paginated mode the columns Readium sets
+    // `overflow: visible` on are the pages themselves. Measure and constrain
+    // what actually overflows, once per resource that gets laid out.
+    //
+    // Positions and layout passes are both only prompts to go and look, for
+    // the same reasons the e-ink block above gives: a position alone misses
+    // the page the book opens at, a layout pass alone can miss a resource
+    // swapped in without one, and finding the same web view again costs a
+    // reference comparison.
+    LaunchedEffect(navigator, fitWideContent) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (!fitWideContent) return@LaunchedEffect
+        val root = nav.publicationView
+        var fitted: WebView? = null
+        merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
+            val web = visibleWebView(root) ?: return@collect
+            if (web === fitted) return@collect
+            fitted = web
+            reflow.within {
+                // The anchor is captured here rather than taken from
+                // reflowAnchor: that one belongs to a run of preference
+                // changes in the resource being left, and restoring to it
+                // would carry the reader back out of the one they just
+                // turned into.
+                val anchor = capture(nav, nav.currentLocator.value)
+                val before = ExactLocatorAnchor.layoutSignature(nav)
+                if (WideContentFit.apply(nav) == WideContentFit.Result.CHANGED) {
+                    awaitReflowSettled(nav, before)
+                    navigate(
+                        nav = nav,
+                        locator = anchor,
+                        event = NavigatorPositionEvent.PREFERENCE_REFLOW,
+                        verify = true,
+                    )
+                }
+            }
+        }
     }
 
     // Picking the selection up from the navigator when it tells us the
