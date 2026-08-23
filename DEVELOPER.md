@@ -248,6 +248,12 @@ only through its tag, so `main` stays a history of real releases and the
 next one still bumps from the last real version. Run it from any branch,
 as long as the tree is clean.
 
+F-Droid is told nothing about a test release, but it reads the tags:
+`v0.9.4-test.1` was once picked up by their `checkupdates` bot, which
+opened a merge request proposing it as the current version. The
+fdroiddata metadata therefore filters what the bot looks at, with
+`UpdateCheckMode: Tags ^v[0-9.]+$` — a test tag no longer matches.
+
 To install one, download the APK from the release page and
 `adb install -r`, or hand it to whoever is testing.
 

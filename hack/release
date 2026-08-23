@@ -656,7 +656,7 @@ update_fdroid_submission() (
         jq -c '[.[] | select(.title | test("Liseur"))][0] // empty')
 
     local source_project_id source_branch merge_request_url
-    local file_project file_ref start_branch=""
+    local file_project file_ref start_branch="" start_project=""
     if [[ -n "$merge_request" ]]; then
         source_project_id=$(printf '%s' "$merge_request" | jq -r .source_project_id)
         source_branch=$(printf '%s' "$merge_request" | jq -r .source_branch)
@@ -677,9 +677,17 @@ update_fdroid_submission() (
             file_project=$source_project_id
             file_ref=$source_branch
         else
+            # The branch is cut from fdroiddata's master rather than the
+            # fork's, which is a snapshot of whenever the fork was last
+            # synchronised and may well predate Liseur's own metadata
+            # file: a commit starting there updates a file that is not
+            # there yet, and GitLab answers "a file with this name
+            # doesn't exist". The file is read from upstream just below,
+            # so this is also the only ref the edit was ever against.
             file_project=$FDROID_PROJECT
             file_ref=master
             start_branch=master
+            start_project=$(gitlab_api_get "projects/$FDROID_PROJECT" | jq -r .id)
         fi
     fi
 
@@ -812,10 +820,12 @@ PY
     payload=$(jq -n \
         --arg branch "$source_branch" \
         --arg start_branch "$start_branch" \
+        --arg start_project "$start_project" \
         --arg message "Liseur: add $version ($version_code) with extracted signatures" \
         --argjson actions "$actions" \
         '{branch: $branch, commit_message: $message, actions: $actions}
-         + (if $start_branch != "" then {start_branch: $start_branch} else {} end)')
+         + (if $start_branch != "" then {start_branch: $start_branch} else {} end)
+         + (if $start_project != "" then {start_project: $start_project} else {} end)')
 
     # Checked on the payload rather than on the file, because the file is
     # not what goes over the wire and the bug this guards against was
@@ -827,7 +837,10 @@ PY
         die "refusing to send F-Droid metadata that does not end in a newline"
 
     local commit_response new_sha
+    # glab sends --input bodies without a Content-Type, and GitLab
+    # rejects those with 415 on some endpoints, so say what this is.
     commit_response=$(printf '%s' "$payload" | glab api --hostname gitlab.com --method POST \
+        --header "Content-Type: application/json" \
         "projects/$source_project_id/repository/commits" --input -)
     new_sha=$(printf '%s' "$commit_response" | jq -r .id)
 
@@ -845,6 +858,7 @@ The build entry plus the signature extracted from the developer-signed release A
               target_project_id: $target_project_id, title: $title,
               description: $description, remove_source_branch: true}')
         mr_response=$(printf '%s' "$mr_payload" | glab api --hostname gitlab.com --method POST \
+            --header "Content-Type: application/json" \
             "projects/$source_project_id/merge_requests" --input -)
         merge_request_url=$(printf '%s' "$mr_response" | jq -r .web_url)
         printf 'F-Droid: opened %s for version %s.\n' "$merge_request_url" "$version"
