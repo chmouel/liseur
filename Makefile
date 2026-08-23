@@ -12,7 +12,7 @@ PACKAGE := com.chmouel.liseur
 ACTIVITY := $(PACKAGE)/.MainActivity
 DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
 
-.PHONY: help build debug release bundle test lint check e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic
+.PHONY: help build debug release bundle test lint check e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status
 
 help:
 	@printf '%s\n' \
@@ -34,6 +34,7 @@ help:
 		'make screenshots       Capture the UI screenshots' \
 		'make icon              Generate the store icon' \
 		'make feature-graphic   Generate the store feature graphic' \
+		'make store-status      Show what each store is publishing' \
 		'' \
 		'Variables: AVD=liseur_phone_api36 SERIAL=...'
 
@@ -105,3 +106,6 @@ icon:
 
 feature-graphic:
 	./hack/feature-graphic
+
+store-status:
+	./hack/store-status

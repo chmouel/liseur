@@ -53,6 +53,15 @@ target wrapping them — run `make help` for the short list. See
   links each described change back to its PR, and carries over a relevant
   screenshot from the PR body when one is present. It falls back to the
   F-Droid changelog if generation fails.
+- **`store-status`** — Answers "where is Liseur published?" for all
+  three channels at once: the last GitHub releases, what F-Droid has
+  published and how old its index is, what its last build run did with
+  the app, the fdroiddata metadata, any open merge request with its
+  pipeline state, and what sits on each Google Play track. Everything
+  but the Play section reads public sources; Play has no public answer
+  while the app is in internal testing, so that one signs a token with
+  the service account from `pass` and is skipped with a line when it
+  cannot. Backs `make store-status`.
 - **`verify-reproducible`** — Builds the release APK twice from two
   independent clean checkouts and diffs them byte for byte, the check
   F-Droid's reproducible-builds requirement demands before submission.

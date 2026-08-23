@@ -791,10 +791,11 @@ what lets it sync a book that came off an SD card.
   the developer-signed twin. NewPipe
   ([fdroiddata!46133](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/46133))
   is the worked example this follows.
-- **Checking where things stand.** `hack/fdroid-status` prints the
+- **Checking where things stand.** `hack/store-status` prints the
   published versions, the index age, what the last build run did with
   the app, the upstream metadata, and any open merge request with its
-  pipeline state — one command instead of four tabs.
+  pipeline state — alongside the GitHub releases and the Play tracks,
+  so one command answers what each of the three channels is showing.
 - **Submitted.** The inclusion merge request was
   [fdroiddata!44292](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/44292)
   (merged), and `hack/release` opens the per-release signature merge

@@ -1,0 +1,225 @@
+#!/usr/bin/env bash
+
+# Answers "where is Liseur published?" in one shot, across all three
+# channels: the GitHub release, F-Droid (what is published, how fresh the
+# index is, what the last build run did with the app, what the fdroiddata
+# metadata says, and whether an open merge request is waiting on anyone)
+# and Google Play's testing tracks.
+#
+# Everything but the Play section reads public sources and needs no
+# login. Play has no public answer at all for an app that has never left
+# internal testing, so that one asks the Play Developer API with the
+# service account from pass — and when it cannot, it says so in a line
+# and the rest of the report still prints.
+
+set -euo pipefail
+
+readonly APP_ID="com.chmouel.liseur"
+readonly GH_REPO="chmouel/liseur"
+readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
+readonly PASS_PLAY_SERVICE_ACCOUNT="android/google.play.service.serviceaccount"
+readonly PLAY_API="https://androidpublisher.googleapis.com/androidpublisher/v3"
+readonly PLAY_SCOPE="https://www.googleapis.com/auth/androidpublisher"
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null || die "missing required command: $1"
+}
+
+api_get() {
+    curl -fsS --max-time 30 "$1"
+}
+
+base64url() {
+    openssl base64 -A | tr '+/' '-_' | tr -d '='
+}
+
+# A service account speaks OAuth, so the credential has to be turned into
+# a token first: sign a JWT with the account's private key and trade it
+# in. The key is handed to openssl through a process substitution fed by
+# a printf builtin, so it is never a file on disk nor an argument anyone
+# can read out of the process list.
+play_access_token() (
+    local key=$1
+    local email private_key now header claims unsigned signature response
+
+    email=$(jq -r '.client_email // empty' <<<"$key")
+    private_key=$(jq -r '.private_key // empty' <<<"$key")
+    [[ -n "$email" && -n "$private_key" ]] || return 1
+
+    now=$(date +%s)
+    header=$(printf '{"alg":"RS256","typ":"JWT"}' | base64url)
+    claims=$(jq -cn --arg iss "$email" --arg scope "$PLAY_SCOPE" \
+        --argjson iat "$now" --argjson exp "$((now + 3600))" \
+        '{iss: $iss, scope: $scope,
+          aud: "https://oauth2.googleapis.com/token", iat: $iat, exp: $exp}' |
+        base64url)
+    unsigned="$header.$claims"
+    signature=$(printf '%s' "$unsigned" |
+        openssl dgst -sha256 -sign <(printf '%s\n' "$private_key") -binary |
+        base64url) || return 1
+
+    response=$(curl -fsS --max-time 30 -X POST \
+        https://oauth2.googleapis.com/token \
+        --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer' \
+        --data-urlencode "assertion=$unsigned.$signature") || return 1
+    jq -er '.access_token // empty' <<<"$response"
+)
+
+# Reading what is on a track goes through an edit, because the API
+# offers no other way to list them. It is opened, read, and deleted
+# without ever being committed, so the listing is not touched.
+play_tracks() {
+    local token=$1
+    local edit tracks
+
+    edit=$(curl -fsS --max-time 30 -X POST \
+        -H "Authorization: Bearer $token" -H "Content-Length: 0" \
+        "$PLAY_API/applications/$APP_ID/edits" | jq -er '.id // empty') ||
+        return 1
+
+    tracks=$(curl -fsS --max-time 30 -H "Authorization: Bearer $token" \
+        "$PLAY_API/applications/$APP_ID/edits/$edit/tracks") || tracks=''
+
+    curl -fsS --max-time 30 -X DELETE -H "Authorization: Bearer $token" \
+        "$PLAY_API/applications/$APP_ID/edits/$edit" >/dev/null 2>&1 || true
+
+    [[ -n "$tracks" ]] || return 1
+    printf '%s' "$tracks"
+}
+
+# Play is the one section behind a login, and the only one that can be
+# skipped: an unlocked password store is a lot to ask of someone who
+# wanted to know what F-Droid is showing.
+report_play() {
+    local key token tracks
+
+    if ! command -v openssl >/dev/null; then
+        printf '  openssl is needed to sign the token request; skipped\n'
+        return
+    fi
+    if ! command -v pass >/dev/null; then
+        printf '  pass is needed for the service account; skipped\n'
+        return
+    fi
+    if ! key=$(pass show "$PASS_PLAY_SERVICE_ACCOUNT" 2>/dev/null) ||
+        [[ -z "$key" ]]; then
+        printf '  no %s in pass; skipped\n' "$PASS_PLAY_SERVICE_ACCOUNT"
+        return
+    fi
+    if ! token=$(play_access_token "$key") || [[ -z "$token" ]]; then
+        printf '  the service account was refused a token; skipped\n'
+        return
+    fi
+    if ! tracks=$(play_tracks "$token"); then
+        printf '  the Play Developer API did not answer for %s\n' "$APP_ID"
+        return
+    fi
+
+    # Every track the account has is printed, including closed ones
+    # named by hand, so nothing here may assume the four standard names.
+    printf '%s' "$tracks" | jq -r '
+        if ((.tracks // []) | length) == 0 then
+            "  no tracks"
+        else
+            .tracks[]
+            | . as $track
+            | if (($track.releases // []) | length) == 0 then
+                  "  \($track.track): nothing released"
+              else
+                  $track.releases[]
+                  | "  \($track.track): \(.name // "unnamed")"
+                    + " [\(.status // "?")"
+                    + (if .userFraction
+                       then ", \(.userFraction * 100 | floor)% rollout"
+                       else "" end)
+                    + "] versionCode \((.versionCodes // ["none"]) | join(", "))"
+              end
+        end'
+}
+
+require_command curl
+require_command jq
+
+printf '== GitHub releases (%s) ==\n' "$GH_REPO"
+if releases=$(api_get "https://api.github.com/repos/$GH_REPO/releases?per_page=3"); then
+    printf '%s' "$releases" | jq -r '
+        if length == 0 then "  none published"
+        else
+            .[]
+            | "  \(.tag_name)\(if .prerelease then " (prerelease)" else "" end)"
+              + " — \(.published_at[0:10]), "
+              + (if (.assets | length) == 0 then "no asset"
+                 else ([.assets[].name] | join(", ")) end)
+        end'
+else
+    printf '  releases unavailable\n'
+fi
+
+printf '\n== F-Droid: published (%s) ==\n' "$APP_ID"
+if packages=$(api_get "https://f-droid.org/api/v1/packages/$APP_ID"); then
+    printf '%s' "$packages" | jq -r '
+        "suggested versionCode: \(.suggestedVersionCode)",
+        (.packages[] | "  \(.versionName) (\(.versionCode))")'
+else
+    printf '  not in the package index\n'
+fi
+
+if entry=$(api_get "https://f-droid.org/repo/entry.json"); then
+    printf '%s' "$entry" | jq -r \
+        '"index generated: \(.timestamp / 1000 | strftime("%Y-%m-%d %H:%M UTC"))"'
+fi
+
+printf '\n== F-Droid: last build run ==\n'
+if run=$(api_get "https://f-droid.org/repo/status/running.json"); then
+    printf '%s' "$run" | jq -r --arg app "$APP_ID" '
+        "started: \(.startTimestamp / 1000 | strftime("%Y-%m-%d %H:%M UTC"))"
+        + (if .endTimestamp then
+            ", finished: \(.endTimestamp / 1000 | strftime("%Y-%m-%d %H:%M UTC"))"
+           else ", still running" end),
+        ([.successfulBuildIds[]? | select(.[0] == $app)] as $ok |
+         [.failedBuilds[]? | select(.[0] == $app)] as $bad |
+         if ($ok | length) + ($bad | length) == 0 then
+            "no \($app) build in this run"
+         else
+            (($ok[] | "  built: versionCode \(.[1])"),
+             ($bad[] | "  FAILED: \(.)")) // empty
+         end)'
+else
+    printf '  status unavailable\n'
+fi
+
+printf '\n== F-Droid: fdroiddata metadata (master) ==\n'
+if metadata=$(api_get "https://gitlab.com/api/v4/projects/$FDROID_PROJECT/repository/files/metadata%2F$APP_ID.yml/raw?ref=master"); then
+    printf '%s\n' "$metadata" |
+        grep -E '^(CurrentVersion|CurrentVersionCode|Binaries|AllowedAPKSigningKeys):' |
+        sed 's/^/  /'
+    printf '  builds:'
+    printf '%s\n' "$metadata" |
+        sed -nE 's/^    versionCode: ([0-9]+)$/ \1/p' | tr -d '\n'
+    printf '\n'
+else
+    printf '  no metadata upstream yet\n'
+fi
+
+printf '\n== F-Droid: merge requests ==\n'
+merge_requests=$(api_get \
+    "https://gitlab.com/api/v4/projects/$FDROID_PROJECT/merge_requests?search=liseur&in=title&state=opened&per_page=20")
+if [[ $(printf '%s' "$merge_requests" | jq length) -eq 0 ]]; then
+    printf '  none open\n'
+else
+    for iid in $(printf '%s' "$merge_requests" | jq -r '.[].iid'); do
+        api_get "https://gitlab.com/api/v4/projects/$FDROID_PROJECT/merge_requests/$iid" |
+            jq -r '
+                "  !\(.iid) [\(if .draft then "draft" else "open" end)"
+                + (if .head_pipeline then ", pipeline \(.head_pipeline.status)" else "" end)
+                + "] \(.title)\n    \(.web_url)"'
+    done
+fi
+
+printf '\n== Google Play: tracks ==\n'
+report_play
