@@ -166,7 +166,7 @@ class ReadingStatsTest {
     }
 
     @Test
-    fun `a session is counted on the day it began, in the local zone`() {
+    fun `a session is counted in the local zone, not in UTC`() {
         // Half past eleven at night in Paris. In UTC that is still the
         // day before, so grouping in the wrong zone puts this reader's
         // evening on yesterday.
@@ -178,6 +178,49 @@ class ReadingStatsTest {
             today = today,
         )
         assertEquals(60_000, stats.recent.single { it.date == today }.totalMs)
+    }
+
+    /**
+     * liseur-sync places a sitting on the day it ended, for both the
+     * summary and the per-book rows. This device has to agree, or a
+     * stretch that began before a span and finished inside it is in the
+     * server's headline and missing from the rows underneath it.
+     */
+    @Test
+    fun `a session that runs past midnight belongs to the day it ended`() {
+        val yesterday = today.minusDays(1)
+        val startedLastNight = yesterday.atTime(23, 40).atZone(zone).toInstant().toEpochMilli()
+        val endedThisMorning = today.atTime(0, 20).atZone(zone).toInstant().toEpochMilli()
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan("a", startedLastNight, 40 * 60_000, lastReadAt = endedThisMorning),
+            ),
+            books = mapOf("a" to book("a")),
+            zone = zone,
+            today = today,
+        )
+        assertEquals(40 * 60_000L, stats.recent.single { it.date == today }.totalMs)
+        assertEquals(0L, stats.recent.single { it.date == yesterday }.totalMs)
+    }
+
+    @Test
+    fun `a sitting finishing inside the span is inside it, wherever it began`() {
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan(
+                    "a",
+                    noonOn(today.minusDays(8)),
+                    60_000,
+                    lastReadAt = noonOn(today.minusDays(3)),
+                ),
+            ),
+            books = mapOf("a" to book("a")),
+            zone = zone,
+            today = today,
+            range = StatsRange.LAST_7_DAYS,
+        )
+        assertEquals(60_000L, stats.totalMs)
+        assertEquals(1, stats.sessions)
     }
 
     // --- The span the reader chose ------------------------------------

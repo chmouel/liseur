@@ -147,12 +147,17 @@ class ReadingStatsViewModel(
      */
     fun selectRange(range: StatsRange) {
         rangeChosen = true
+        // Persisted even when nothing changed. The menu can be opened
+        // before the store has answered, in which case tapping what is
+        // already shown is still the reader saying they want it — and
+        // `rangeChosen` is about to stop the stored value from being
+        // applied over the top of it.
+        viewModelScope.launch { settings?.setStatsRange(range) }
         if (_range.value == range) return
         _range.value = range
         _acrossDevices.value = null
         _recentAcrossDevices.value = null
         _booksAcrossDevices.value = null
-        viewModelScope.launch { settings?.setStatsRange(range) }
         refreshServerInsights()
     }
 

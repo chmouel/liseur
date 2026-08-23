@@ -378,6 +378,81 @@ class ReadingSessionDaoTest {
         assertEquals(minute, session.endedAt)
     }
 
+    /**
+     * Time the reader was away is measured, not assumed.
+     *
+     * The figure the server turns into active time and pace is
+     * `ended_at - started_at - duration_ms`, and nothing else in the
+     * suite looks at it: every other test closes a segment that counted
+     * every millisecond it spanned, where the difference is nought and a
+     * broken expression would still pass.
+     */
+    @Test
+    fun `closing measures the time the book was open but unread`() = runTest {
+        val id = dao.insert(
+            ReadingSession(bookUrl = book, startedAt = 0, lastCheckpointAt = 0),
+        )
+
+        // Twenty minutes on the clock, of which eight were spent reading.
+        dao.finish(id, totalMs = 8 * minute, atMillis = 20 * minute, progression = 0.4)
+
+        val session = dao.get(id)!!
+        assertEquals(20 * minute, session.endedAt)
+        assertEquals(8 * minute, session.durationMs)
+        assertEquals(12 * minute, session.idleMs)
+    }
+
+    @Test
+    fun `a segment that counted every minute it spanned was never idle`() = runTest {
+        val id = dao.insert(
+            ReadingSession(bookUrl = book, startedAt = 5 * minute, lastCheckpointAt = 5 * minute),
+        )
+
+        dao.finish(id, totalMs = 3 * minute, atMillis = 8 * minute, progression = null)
+
+        assertEquals(0L, dao.get(id)!!.idleMs)
+    }
+
+    /**
+     * A backward clock cannot make idle time negative — the server reads
+     * it as a subtraction from a sitting's length and a negative would
+     * inflate the active time rather than shorten it.
+     */
+    @Test
+    fun `idle time is never negative`() = runTest {
+        val id = dao.insert(
+            ReadingSession(bookUrl = book, startedAt = 0, lastCheckpointAt = 0),
+        )
+
+        // More counted than the wall clock admits, which the monotonic
+        // clock can do when the device's own is corrected backwards.
+        dao.finish(id, totalMs = 30 * minute, atMillis = 10 * minute, progression = null)
+
+        assertEquals(0L, dao.get(id)!!.idleMs)
+    }
+
+    @Test
+    fun `recovering an interrupted segment measures its idle time too`() = runTest {
+        val id = dao.insert(
+            ReadingSession(
+                bookUrl = book,
+                startedAt = 0,
+                lastCheckpointAt = 15 * minute,
+                durationMs = 6 * minute,
+            ),
+        )
+
+        // Whenever the app next starts is not when the reading stopped:
+        // the session settles at its last checkpoint, and the idle time
+        // is measured against that rather than against now.
+        dao.closeInterruptedSessions()
+
+        val session = dao.get(id)!!
+        assertEquals(15 * minute, session.endedAt)
+        assertEquals(6 * minute, session.durationMs)
+        assertEquals(9 * minute, session.idleMs)
+    }
+
     @Test
     fun `a backward wall clock cannot end a segment before it started`() = runTest {
         val id = dao.insert(
