@@ -62,11 +62,12 @@ has finished, because the long `fdroid build` is not waited for. Check
 the pipeline it links before calling a release done. `DEVELOPER.md`
 explains what those checks are.
 
-The app is **not on Google Play yet**: the release workflow's Play
-upload step fails with `Package not found: com.chmouel.liseur` and that
-is expected, not a release blocker. The first upload must be done by
-hand in the Play Console (see the Google Play section of
-`DEVELOPER.md`); do not try to automate around it.
+The release workflow uploads an app bundle to Google Play's **internal
+testing** track, which 0.10.0 was the first release to reach. The step
+is `continue-on-error` and skips itself when the service account
+credential is absent, so Play is never what makes a release fail, and
+`hack/release --no-play` asks for that skip. Promoting a build out of
+internal testing is a manual action in the console.
 
 Toolchain: JDK 17, AGP 9.x (built-in Kotlin support — **do not** add the
 `org.jetbrains.kotlin.android` plugin, only `org.jetbrains.kotlin.plugin.compose`

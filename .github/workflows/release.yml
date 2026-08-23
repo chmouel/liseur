@@ -150,11 +150,6 @@ jobs:
       # after the release above on purpose: the GitHub artefact and the
       # F-Droid submission are the primary channels, so a rejected upload
       # here must never be what makes a release fail.
-      #
-      # The app is not on Play yet: until someone does the first upload
-      # by hand in the Play Console (see DEVELOPER.md, Google Play), the
-      # upload step below fails with "Package not found" and that is
-      # expected. Remove this notice once the app exists on Play.
       - name: Check for the Play credential
         id: play
         env:

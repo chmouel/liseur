@@ -259,15 +259,6 @@ To install one, download the APK from the release page and
 
 ### Google Play
 
-> **Not live yet.** The app has not been created in the Play Console, so
-> every upload — CI or manual — fails with `Package not found:
-> com.chmouel.liseur`. That failure is expected and must not hold up a
-> release; the GitHub release and F-Droid are the channels that count
-> today. The very first upload has to go through the console's release
-> wizard by hand (that is where the upload key gets enrolled, see **The
-> signing key** below), and only a human with console access can do it.
-> Delete this notice once that first upload has happened.
-
 Play is the third channel, after the GitHub release and F-Droid, and it
 is deliberately the least load-bearing of the three. The same tag that
 publishes the release also builds an app bundle and pushes it to the
