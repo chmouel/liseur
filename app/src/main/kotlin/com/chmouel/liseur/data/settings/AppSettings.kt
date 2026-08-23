@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.StatsRange
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -137,6 +138,7 @@ data class AppSettings(
     val dictionaryLookupEnabled: Boolean = false,
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
+    val statsRange: StatsRange = StatsRange.Default,
 )
 
 /**
@@ -185,6 +187,7 @@ class AppSettingsRepository(private val context: Context) {
         val DICTIONARY_BASE_URL = stringPreferencesKey("dictionary_base_url")
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
         val UPLOAD_POLICY = stringPreferencesKey("upload_policy")
+        val STATS_RANGE = stringPreferencesKey("stats_range")
     }
 
     /**
@@ -223,6 +226,7 @@ class AppSettingsRepository(private val context: Context) {
             dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
                 ?: DictionaryUrl.DEFAULT_BASE_URL,
             uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
+            statsRange = StatsRange.fromId(p[Keys.STATS_RANGE]),
         )
     }
 
@@ -230,6 +234,10 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setThemeMode(mode: ThemeMode) {
         context.appSettingsStore.edit { it[Keys.THEME_MODE] = mode.id }
+    }
+
+    suspend fun setStatsRange(range: StatsRange) {
+        context.appSettingsStore.edit { it[Keys.STATS_RANGE] = range.id }
     }
 
     suspend fun setUploadPolicy(policy: UploadPolicy) {

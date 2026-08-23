@@ -47,13 +47,30 @@ object SessionUploads {
             put("ended_at", SyncOps.formatTime(maxOf(ended, started)))
             put("start_progression", start.coerceIn(0.0, 1.0))
             put("end_progression", end.coerceIn(0.0, 1.0))
-            // Always nothing, and honestly so. Reading time is counted
-            // only while the reader is in the foreground, so time spent
-            // elsewhere is already absent from the session rather than
-            // included and then subtracted. What this app cannot tell is
-            // a difficult page from a book left open on the sofa, and
+            // The gap between how long the session lasted and how much
+            // of it was reading.
+            //
+            // Reading time is counted only while the reader is in the
+            // foreground, off a monotonic clock, but a session is
+            // bounded by wall-clock moments — so a book left open while
+            // the reader answered the door spans more time than it
+            // counted. The server works its own active time out as the
+            // span minus this, and without it would credit the doorstep
+            // conversation as reading and report a slower pace than the
+            // device that measured it.
+            //
+            // The figure is read from the row rather than worked out
+            // here. A session id is derived from what it carries, so a
+            // payload that changed between one attempt and the next
+            // would reach the server as the same id saying something
+            // else — refused, and the whole batch with it. A sitting
+            // recorded before the column existed has no figure and
+            // sends the nought it would have sent then.
+            //
+            // What this app still cannot tell is a difficult page from a
+            // book left open on the sofa with the screen on, and
             // guessing at that would be worse than admitting it.
-            put("idle_ms", 0)
+            put("idle_ms", session.idleMs ?: 0L)
         }
     }
 }

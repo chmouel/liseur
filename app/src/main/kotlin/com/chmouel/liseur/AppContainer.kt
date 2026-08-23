@@ -152,6 +152,7 @@ class AppContainer(context: Context) {
         seriesExtraDao = database.seriesExtraDao(),
         peerStateDao = database.syncPeerStateDao(),
         identityDao = database.workIdentityDao(),
+        sessionDao = database.readingSessionDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),

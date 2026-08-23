@@ -215,6 +215,7 @@ private fun LiseurApp(settings: AppSettings) {
                     screen = Screen.BOOK_STATS
                 },
                 onBack = { screen = Screen.LIBRARY },
+                onSelectRange = model::selectRange,
             )
         }
 
@@ -237,11 +238,13 @@ private fun LiseurApp(settings: AppSettings) {
                 val serverInsights by remember(model, target.bookUrl) {
                     model.serverEstimateFor(target.bookUrl)
                 }.collectAsStateWithLifecycle()
+                val statsRange by model.range.collectAsStateWithLifecycle()
                 BookReadingStatsScreen(
                     title = target.title,
                     state = bookStatsState,
                     onBack = back,
                     serverInsights = serverInsights,
+                    range = statsRange,
                 )
             }
         }
