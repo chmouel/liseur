@@ -62,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -109,6 +110,7 @@ import com.chmouel.liseur.reader.chrome.PageTurnOverlay
 import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
+import com.chmouel.liseur.reader.chrome.FooterMetrics
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.reader.chrome.layoutPasses
@@ -668,11 +670,15 @@ fun ReaderScreen(
         //
         // The system bars used to be inset out of the way. They are
         // hidden while reading, so all that space bought was a band of
-        // background at the top and bottom of every page. They are not
-        // inset now, and because the layout no longer depends on where
-        // the bars are, showing and hiding the chrome cannot reflow the
-        // page either, which was the other half of what the insets were
-        // for.
+        // background at the top of every page; the top is not inset
+        // now. The bottom of a paged book keeps clear of the footer
+        // instead of the bars: the navigation-bar inset the footer
+        // floats on — read ignoring visibility, so it is the same
+        // whether the bars are shown — and above it the footer's own
+        // derived height (FooterMetrics), which follows the system
+        // font scale the way the fixed count of dp it replaces could
+        // not. Neither figure moves when the chrome shows or hides, so
+        // toggling the chrome still cannot reflow the page.
         //
         // The camera hole is the one thing still kept clear of a page
         // that is turned, because a line behind it is a line that never
@@ -695,6 +701,19 @@ fun ReaderScreen(
         // swipe turns a page is fixed at construction too, and it has to
         // stop turning them when the pages become one long column.
         key(columnMode, scrollMode) {
+            // Derived, not measured: the reservation must exist before
+            // the page lays out, or the last line is cut in half. The
+            // line height is the very style the footer draws with, and
+            // sp-to-dp is exactly a multiply by the font scale.
+            val footerLineHeight = MaterialTheme.typography.labelSmall.lineHeight
+            val footerReserve = FooterMetrics.reservedHeightDp(
+                lineHeightSp = if (footerLineHeight.isSp) {
+                    footerLineHeight.value
+                } else {
+                    FooterMetrics.FALLBACK_LINE_HEIGHT_SP
+                },
+                fontScale = LocalDensity.current.fontScale,
+            ).dp
             AndroidFragment<EpubNavigatorFragment>(
                 modifier = Modifier
                     .fillMaxSize()
@@ -706,7 +725,11 @@ fun ReaderScreen(
                         } else {
                             Modifier
                                 .windowInsetsPadding(WindowInsets.displayCutout)
-                                .padding(top = 12.dp, bottom = 26.dp)
+                                .windowInsetsPadding(
+                                    WindowInsets.navigationBarsIgnoringVisibility
+                                        .only(WindowInsetsSides.Bottom),
+                                )
+                                .padding(top = 12.dp, bottom = footerReserve)
                         },
                     ),
             ) { fragment ->
