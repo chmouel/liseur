@@ -706,9 +706,11 @@ fun ReaderScreen(
             // the page lays out, or the last line is cut in half. The
             // line height is the very style the footer draws with, and
             // toDp() owns the sp-to-dp conversion so nonlinear font
-            // scaling is honoured. A footer switched off reserves
-            // nothing — the page takes the whole band back, and the
-            // one reflow that costs is the settings change itself.
+            // scaling is honoured. A footer switched off reserves only
+            // the page's own 12dp margin, same as the top edge — the
+            // footer band and the inset under it go back to the text,
+            // and the one reflow that costs is the settings change
+            // itself.
             val footerLineHeight = MaterialTheme.typography.labelSmall.lineHeight
             val footerShowing = prefs.footerMode != FooterMode.NONE
             val footerReserve = FooterMetrics.reservedHeightDp(
