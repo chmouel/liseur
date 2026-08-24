@@ -9,7 +9,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -44,7 +43,9 @@ class ReaderPreferencesRepository(private val context: Context) {
             pageTurnAnimation = p[Keys.PAGE_TURN_ANIMATION] ?: true,
             footerMode = FooterMode.fromId(p[Keys.FOOTER_MODE]),
             columnMode = ColumnMode.fromId(p[Keys.COLUMN_MODE]),
-            autoScrollSpeed = p[Keys.AUTO_SCROLL_SPEED] ?: AutoScrollSpeed.DEFAULT_STEP,
+            autoScrollSpeed = AutoScrollPreference.sanitize(
+                p[Keys.AUTO_SCROLL_SPEED] ?: AutoScrollPreference.DEFAULT_STEP,
+            ),
         )
     }
 
@@ -94,7 +95,7 @@ class ReaderPreferencesRepository(private val context: Context) {
 
     suspend fun setAutoScrollSpeed(step: Float) {
         context.readerPrefsStore.edit {
-            it[Keys.AUTO_SCROLL_SPEED] = AutoScrollSpeed.snap(step)
+            it[Keys.AUTO_SCROLL_SPEED] = AutoScrollPreference.snap(step)
         }
     }
 }

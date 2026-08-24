@@ -1,7 +1,7 @@
 package com.chmouel.liseur.data.settings
 
 import androidx.compose.ui.graphics.Color
-import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
+import kotlin.math.roundToInt
 
 /**
  * Curated reading fonts, all OFL-licensed and bundled in assets/fonts.
@@ -163,6 +163,44 @@ enum class ColumnMode(val id: String, val displayName: String) {
 }
 
 /**
+ * Which notch the auto-scroll slider sits on, as it is stored.
+ *
+ * The bounds live here rather than beside the scrolling loop because
+ * they describe the *setting*: what the slider may show, and what the
+ * preference store may hold. The pace those notches come to is the
+ * reader's business, and is in `reader/chrome/AutoScroll.kt`.
+ *
+ * A step is stored rather than a speed so the slider means the same
+ * thing whatever else changes, and so a reader who comes back to it
+ * finds the notch they left it on.
+ */
+object AutoScrollPreference {
+
+    const val MIN_STEP = 1
+    const val MAX_STEP = 10
+    const val DEFAULT_STEP = 4f
+
+    /**
+     * A step read back from storage, made safe to use.
+     *
+     * Nothing in the app writes a step outside the range, but the store
+     * is a file on a device and this is the only door its contents come
+     * through. A value that is not a number at all falls back to the
+     * default rather than propagating: a NaN pace multiplies out to a
+     * NaN distance, which is a page that silently never moves again.
+     */
+    fun sanitize(step: Float): Float =
+        if (step.isFinite()) {
+            step.coerceIn(MIN_STEP.toFloat(), MAX_STEP.toFloat())
+        } else {
+            DEFAULT_STEP
+        }
+
+    /** The nearest whole notch, for a slider that lands on one. */
+    fun snap(step: Float): Float = sanitize(step).roundToInt().toFloat()
+}
+
+/**
  * User reading preferences.
  *
  * @param fontSize Percentage where 1.0 is the publisher's default size.
@@ -173,9 +211,9 @@ enum class ColumnMode(val id: String, val displayName: String) {
  * @param footerMode What the reading footer shows.
  * @param columnMode How many columns of text a wide page is broken into.
  * @param autoScrollSpeed Which notch the auto-scroll slider sits on, from
- *   [AutoScrollSpeed.MIN_STEP] to [AutoScrollSpeed.MAX_STEP]. Not a speed:
- *   the pace it comes to also depends on [fontSize], because larger text
- *   has further to travel to show the same words.
+ *   [AutoScrollPreference.MIN_STEP] to [AutoScrollPreference.MAX_STEP]. Not a
+ *   speed: the pace it comes to also depends on [fontSize], because larger
+ *   text has further to travel to show the same words.
  */
 data class ReaderPrefs(
     val font: ReaderFont = ReaderFont.Default,
@@ -187,7 +225,7 @@ data class ReaderPrefs(
     val pageTurnAnimation: Boolean = true,
     val footerMode: FooterMode = FooterMode.Default,
     val columnMode: ColumnMode = ColumnMode.Default,
-    val autoScrollSpeed: Float = AutoScrollSpeed.DEFAULT_STEP,
+    val autoScrollSpeed: Float = AutoScrollPreference.DEFAULT_STEP,
 ) {
     companion object {
         const val MIN_FONT_SIZE = 0.6

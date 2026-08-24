@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingSectionLabel
 import com.chmouel.liseur.ui.windowWidth
@@ -153,8 +154,8 @@ private fun AutoScrollSpeedSlider(value: Float, onChanged: (Float) -> Unit) {
                 value = sliderValue,
                 onValueChange = { sliderValue = it },
                 onValueChangeFinished = { onChanged(sliderValue) },
-                valueRange = AutoScrollSpeed.MIN_STEP.toFloat()..AutoScrollSpeed.MAX_STEP.toFloat(),
-                steps = AutoScrollSpeed.MAX_STEP - AutoScrollSpeed.MIN_STEP - 1,
+                valueRange = AutoScrollPreference.MIN_STEP.toFloat()..AutoScrollPreference.MAX_STEP.toFloat(),
+                steps = AutoScrollPreference.MAX_STEP - AutoScrollPreference.MIN_STEP - 1,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 12.dp),

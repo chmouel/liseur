@@ -1,7 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.data.settings.AutoScrollPreference
 import kotlin.math.pow
-import kotlin.math.roundToInt
 
 /**
  * The page carrying itself, for a book read by scrolling.
@@ -60,6 +60,9 @@ class AutoScrollTicker {
         val last = lastNanos
         lastNanos = nowNanos
         if (last == null) return 0
+        // A pace that is not a number would poison the carried fraction
+        // for good, and the page would never move again.
+        if (!pixelsPerSecond.isFinite()) return 0
         val elapsed = nowNanos - last
         // A clock that went backwards is not elapsed time.
         if (elapsed <= 0L) return 0
@@ -84,11 +87,12 @@ class AutoScrollTicker {
 }
 
 /**
- * The reading pace, as a step on a slider and as pixels a second.
+ * The reading pace, as pixels a second.
  *
- * Stored as the step rather than as a speed so the slider means the same
- * thing whatever else changes, and so a reader who comes back to it
- * finds the notch they left it on.
+ * The notch itself belongs to the setting, not to the movement, so its
+ * bounds live in [AutoScrollPreference] and every step that arrives here
+ * is normalised through it — a curve with its own idea of the range
+ * would drift from the slider the moment either changed.
  *
  * The pace is multiplied by the font size because the two are the same
  * question asked twice: text set half again as large has half again as
@@ -99,14 +103,10 @@ class AutoScrollTicker {
  */
 object AutoScrollSpeed {
 
-    const val MIN_STEP = 1
-    const val MAX_STEP = 10
-    const val DEFAULT_STEP = 4f
-
-    /** The pace at [MIN_STEP], in dp a second, before font size. */
+    /** The pace at [AutoScrollPreference.MIN_STEP], in dp a second, before font size. */
     const val SLOWEST_DP_PER_SECOND = 6.0
 
-    /** The pace at [MAX_STEP], in dp a second, before font size. */
+    /** The pace at [AutoScrollPreference.MAX_STEP], in dp a second, before font size. */
     const val FASTEST_DP_PER_SECOND = 90.0
 
     /**
@@ -120,13 +120,10 @@ object AutoScrollSpeed {
      * of the slider on speeds nobody reads at.
      */
     fun dpPerSecond(step: Float, fontSize: Double = 1.0): Double {
-        val clamped = step.toDouble().coerceIn(MIN_STEP.toDouble(), MAX_STEP.toDouble())
-        val across = (clamped - MIN_STEP) / (MAX_STEP - MIN_STEP)
+        val notch = AutoScrollPreference.sanitize(step).toDouble()
+        val span = (AutoScrollPreference.MAX_STEP - AutoScrollPreference.MIN_STEP).toDouble()
+        val across = (notch - AutoScrollPreference.MIN_STEP) / span
         val ratio = FASTEST_DP_PER_SECOND / SLOWEST_DP_PER_SECOND
         return SLOWEST_DP_PER_SECOND * ratio.pow(across) * fontSize
     }
-
-    /** The nearest whole notch, for a slider that lands on one. */
-    fun snap(step: Float): Float =
-        step.roundToInt().coerceIn(MIN_STEP, MAX_STEP).toFloat()
 }

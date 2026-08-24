@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.data.settings.AutoScrollPreference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -88,6 +89,16 @@ class AutoScrollTickerTest {
         ticker.step(millis(1_000), 100.0)
         assertEquals(0, ticker.step(millis(900), 100.0))
     }
+
+    @Test
+    fun `a pace that is not a number does not poison the carried fraction`() {
+        // NaN added to the carried remainder would stay NaN for the life
+        // of the ticker, and the page would never move again.
+        ticker.step(millis(0), 100.0)
+        assertEquals(0, ticker.step(millis(100), Double.NaN))
+        assertEquals(0, ticker.step(millis(200), Double.POSITIVE_INFINITY))
+        assertEquals(10, ticker.step(millis(300), 100.0))
+    }
 }
 
 class AutoScrollSpeedTest {
@@ -96,19 +107,19 @@ class AutoScrollSpeedTest {
     fun `the ends of the slider are the documented paces`() {
         assertEquals(
             AutoScrollSpeed.SLOWEST_DP_PER_SECOND,
-            AutoScrollSpeed.dpPerSecond(AutoScrollSpeed.MIN_STEP.toFloat()),
+            AutoScrollSpeed.dpPerSecond(AutoScrollPreference.MIN_STEP.toFloat()),
             0.001,
         )
         assertEquals(
             AutoScrollSpeed.FASTEST_DP_PER_SECOND,
-            AutoScrollSpeed.dpPerSecond(AutoScrollSpeed.MAX_STEP.toFloat()),
+            AutoScrollSpeed.dpPerSecond(AutoScrollPreference.MAX_STEP.toFloat()),
             0.001,
         )
     }
 
     @Test
     fun `every notch is faster than the one before it`() {
-        val paces = (AutoScrollSpeed.MIN_STEP..AutoScrollSpeed.MAX_STEP)
+        val paces = (AutoScrollPreference.MIN_STEP..AutoScrollPreference.MAX_STEP)
             .map { AutoScrollSpeed.dpPerSecond(it.toFloat()) }
         assertEquals(paces.sorted(), paces)
         assertEquals(paces.distinct().size, paces.size)
@@ -117,12 +128,12 @@ class AutoScrollSpeedTest {
     @Test
     fun `a step off the end of the slider is held at the end`() {
         assertEquals(
-            AutoScrollSpeed.dpPerSecond(AutoScrollSpeed.MIN_STEP.toFloat()),
+            AutoScrollSpeed.dpPerSecond(AutoScrollPreference.MIN_STEP.toFloat()),
             AutoScrollSpeed.dpPerSecond(-4f),
             0.001,
         )
         assertEquals(
-            AutoScrollSpeed.dpPerSecond(AutoScrollSpeed.MAX_STEP.toFloat()),
+            AutoScrollSpeed.dpPerSecond(AutoScrollPreference.MAX_STEP.toFloat()),
             AutoScrollSpeed.dpPerSecond(99f),
             0.001,
         )
@@ -143,15 +154,32 @@ class AutoScrollSpeedTest {
     }
 
     @Test
-    fun `the default is a notch on the slider`() {
-        assertEquals(AutoScrollSpeed.DEFAULT_STEP, AutoScrollSpeed.snap(AutoScrollSpeed.DEFAULT_STEP))
+    fun `a pace that is not a number is never handed to the page`() {
+        // The step comes from a preference file, so the curve is the
+        // last place a NaN can be stopped before it reaches the ticker.
+        assertTrue(AutoScrollSpeed.dpPerSecond(Float.NaN).isFinite())
+        assertTrue(AutoScrollSpeed.dpPerSecond(Float.POSITIVE_INFINITY).isFinite())
+        assertEquals(
+            AutoScrollSpeed.dpPerSecond(AutoScrollPreference.DEFAULT_STEP),
+            AutoScrollSpeed.dpPerSecond(Float.NaN),
+            0.001,
+        )
     }
 
     @Test
-    fun `snapping lands on a whole notch inside the slider`() {
-        assertEquals(3f, AutoScrollSpeed.snap(3.4f))
-        assertEquals(4f, AutoScrollSpeed.snap(3.6f))
-        assertEquals(AutoScrollSpeed.MIN_STEP.toFloat(), AutoScrollSpeed.snap(0f))
-        assertEquals(AutoScrollSpeed.MAX_STEP.toFloat(), AutoScrollSpeed.snap(42f))
+    fun `the curve uses the slider's own bounds`() {
+        // Were the curve to keep its own copy of the range, the two
+        // would drift the moment either moved: a step just off each end
+        // has to come out as that end's documented pace.
+        assertEquals(
+            AutoScrollSpeed.SLOWEST_DP_PER_SECOND,
+            AutoScrollSpeed.dpPerSecond(AutoScrollPreference.MIN_STEP - 1f),
+            0.001,
+        )
+        assertEquals(
+            AutoScrollSpeed.FASTEST_DP_PER_SECOND,
+            AutoScrollSpeed.dpPerSecond(AutoScrollPreference.MAX_STEP + 1f),
+            0.001,
+        )
     }
 }

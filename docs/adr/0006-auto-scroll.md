@@ -31,6 +31,27 @@ views, densities or frames. A `withFrameNanos` loop turns elapsed time
 into whole pixels — carrying the remainder, so a slow pace still moves —
 and calls `scrollBy` on the visible web view.
 
+The notch and the pace are split, and the seam is the direction the
+dependency has to run. `AutoScrollPreference` — the range, the default,
+`snap` and `sanitize` — is in `data/settings/ReaderPrefs.kt` beside
+`ReaderFont`, `FooterMode` and `ColumnMode`, because those bounds
+describe the stored setting: what the slider may show and what the
+preference store may hold. `AutoScrollSpeed` and `AutoScrollTicker` stay
+in the reader, because how fast a page moves is the reader's business.
+The reader then reads the setting, which is the way round every other
+reading preference already goes. Having the DataStore repository import
+the reader instead would have been the layering backwards, and no
+tidier for being pointed at a pure file.
+
+The curve normalises every step through `AutoScrollPreference.sanitize`
+rather than keeping its own copy of the range, so the slider and the
+pace cannot drift apart. `sanitize` is also the only door the stored
+value comes through, and it is where a step that is not a number is
+stopped: `Float.roundToInt` throws on NaN, and a NaN pace otherwise
+multiplies out to a NaN distance, which the ticker would carry forever
+as a page that silently never moves again. The ticker refuses a
+non-finite pace too, so that invariant does not rest on one caller.
+
 **Whether it moves.** Readium's scroll mode scrolls the web view itself,
 which is why `ScrollEdgeTurner` reads `canScrollVertically` off it and
 why `R2BasicWebView` hangs its progression notification on
@@ -111,6 +132,6 @@ session regardless of the toggle.
 The reader gains no new chrome: the page moving is the state, and the
 switch that started it is where it stops.
 
-*Where:* `reader/chrome/AutoScroll.kt`, `reader/ReaderScreen.kt`,
-`reader/chrome/AdvancedSheet.kt`, `reader/chrome/TypographySheet.kt`,
-`reader/chrome/ReaderTapZones.kt`.
+*Where:* `reader/chrome/AutoScroll.kt`, `data/settings/ReaderPrefs.kt`,
+`reader/ReaderScreen.kt`, `reader/chrome/AdvancedSheet.kt`,
+`reader/chrome/TypographySheet.kt`, `reader/chrome/ReaderTapZones.kt`.
