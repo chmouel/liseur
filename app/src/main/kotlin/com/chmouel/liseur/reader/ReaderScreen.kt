@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -704,15 +705,20 @@ fun ReaderScreen(
             // Derived, not measured: the reservation must exist before
             // the page lays out, or the last line is cut in half. The
             // line height is the very style the footer draws with, and
-            // sp-to-dp is exactly a multiply by the font scale.
+            // toDp() owns the sp-to-dp conversion so nonlinear font
+            // scaling is honoured. A footer switched off reserves
+            // nothing — the page takes the whole band back, and the
+            // one reflow that costs is the settings change itself.
             val footerLineHeight = MaterialTheme.typography.labelSmall.lineHeight
+            val footerShowing = prefs.footerMode != FooterMode.NONE
             val footerReserve = FooterMetrics.reservedHeightDp(
-                lineHeightSp = if (footerLineHeight.isSp) {
-                    footerLineHeight.value
-                } else {
-                    FooterMetrics.FALLBACK_LINE_HEIGHT_SP
+                lineHeightDp = with(LocalDensity.current) {
+                    if (footerLineHeight.isSp) {
+                        footerLineHeight.toDp().value
+                    } else {
+                        FooterMetrics.FALLBACK_LINE_HEIGHT_SP.sp.toDp().value
+                    }
                 },
-                fontScale = LocalDensity.current.fontScale,
             ).dp
             AndroidFragment<EpubNavigatorFragment>(
                 modifier = Modifier
@@ -725,11 +731,20 @@ fun ReaderScreen(
                         } else {
                             Modifier
                                 .windowInsetsPadding(WindowInsets.displayCutout)
-                                .windowInsetsPadding(
-                                    WindowInsets.navigationBarsIgnoringVisibility
-                                        .only(WindowInsetsSides.Bottom),
+                                .then(
+                                    if (footerShowing) {
+                                        Modifier.windowInsetsPadding(
+                                            WindowInsets.navigationBarsIgnoringVisibility
+                                                .only(WindowInsetsSides.Bottom),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
                                 )
-                                .padding(top = 12.dp, bottom = footerReserve)
+                                .padding(
+                                    top = 12.dp,
+                                    bottom = if (footerShowing) footerReserve else 12.dp,
+                                )
                         },
                     ),
             ) { fragment ->

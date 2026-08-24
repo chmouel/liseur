@@ -25,13 +25,13 @@ object FooterMetrics {
     /**
      * The height, in dp, a page must keep clear for the footer.
      *
-     * The text is set in sp, which follows the system font-size
-     * setting; dp does not. Converting sp to dp is exactly a multiply
-     * by the font scale, so the reservation grows with the text it is
-     * making room for. Window insets are deliberately not in here —
-     * they are the layout's job, applied as inset padding where
-     * Compose can consume overlaps between them.
+     * The line height arrives already converted to dp — the caller
+     * owns the sp-to-dp conversion, through `Density.toDp()`, which
+     * honours Android's nonlinear font scaling where a bare multiply
+     * by the font scale would not. Window insets are deliberately not
+     * in here either — they are the layout's job, applied as inset
+     * padding where Compose can consume overlaps between them.
      */
-    fun reservedHeightDp(lineHeightSp: Float, fontScale: Float): Float =
-        lineHeightSp * fontScale + VERTICAL_PADDING_DP * 2 + CLEARANCE_DP
+    fun reservedHeightDp(lineHeightDp: Float): Float =
+        lineHeightDp + VERTICAL_PADDING_DP * 2 + CLEARANCE_DP
 }
