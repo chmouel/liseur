@@ -8,11 +8,60 @@
 # the console, because Play holds the declarations (data safety, content
 # rating, target audience) that no file in this repository describes, and
 # an accidental metadata push is a listing change under review.
+#
+# A build goes to two tracks, not one. Internal testing is the fast lane
+# and holds a hundred hand-listed addresses at most; the closed track is
+# where testers are actually recruited — it is the one the opt-in link in
+# issue #62 points at, and the only one whose opted-in testers count
+# towards the twelve Play wants for fourteen days before a personal
+# account may publish. Uploading to internal alone, which this did until
+# 0.10.0, leaves everyone who followed the instructions on whatever build
+# the closed track was last given by hand.
 
 default_platform(:android)
 
+# The track the bundle is uploaded to, and the track that upload is then
+# promoted to. The second name is the closed track's id in the Play API,
+# which is the display name it was created with rather than one of the
+# four standard ids.
+INTERNAL_TRACK = "internal".freeze
+CLOSED_TRACK = "Testing".freeze
+
+# The version code being released, read from the one file that decides
+# it. Promotion has to name a build, and naming it from the source is
+# what keeps the promotion pointed at the bundle just uploaded.
+def liseur_version_code
+  gradle = File.expand_path("../app/build.gradle.kts", __dir__)
+  code = File.read(gradle)[/^\s*versionCode\s*=\s*(\d+)/, 1]
+  UI.user_error!("no versionCode in #{gradle}") if code.nil?
+  code.to_i
+end
+
+# Moving a build already on the internal track across to the closed one.
+# The bundle is not sent again: Play refuses a version code it has seen,
+# so the only way to put one build on two tracks is to promote it.
+def liseur_promote(version_code)
+  upload_to_play_store(
+    track: INTERNAL_TRACK,
+    track_promote_to: CLOSED_TRACK,
+    track_promote_release_status: "completed",
+    version_code: version_code,
+    # Promoting takes the build off the track it came from unless it is
+    # told not to, and a build that leaves internal is a build the fast
+    # lane no longer has. It belongs on both.
+    deactivate_on_promote: false,
+    skip_upload_aab: true,
+    skip_upload_apk: true,
+    skip_upload_metadata: true,
+    skip_upload_images: true,
+    skip_upload_screenshots: true,
+    skip_upload_changelogs: false,
+    validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
+  )
+end
+
 platform :android do
-  desc "Upload the release bundle to the Play internal testing track"
+  desc "Upload the release bundle to the Play internal track, then promote it to the closed track"
   lane :internal do
     # Anchored to this file rather than the working directory: fastlane
     # runs lanes from inside fastlane/, so a bare relative path would
@@ -20,8 +69,10 @@ platform :android do
     bundle = File.expand_path("../app/build/outputs/bundle/release/app-release.aab", __dir__)
     UI.user_error!("no bundle at #{bundle} — run ./gradlew bundleRelease") unless File.exist?(bundle)
 
+    version_code = liseur_version_code
+
     upload_to_play_store(
-      track: "internal",
+      track: INTERNAL_TRACK,
       aab: bundle,
       # A track upload is a release; the APK path belongs to GitHub.
       skip_upload_apk: true,
@@ -35,5 +86,18 @@ platform :android do
       release_status: "completed",
       validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
     )
+
+    liseur_promote(version_code)
+    UI.success("#{version_code} is on #{INTERNAL_TRACK} and #{CLOSED_TRACK}")
+  end
+
+  desc "Promote a build already on the internal track to the closed track, without rebuilding"
+  lane :promote do |options|
+    # For a release whose bundle is already up: the version code can be
+    # named outright (fastlane android promote version_code:19), and
+    # falls back to whatever the source says is current.
+    version_code = (options[:version_code] || ENV["PLAY_VERSION_CODE"] || liseur_version_code).to_i
+    liseur_promote(version_code)
+    UI.success("#{version_code} is on #{CLOSED_TRACK}")
   end
 end

@@ -149,7 +149,9 @@ jobs:
       # Everything below is Google Play, and only Google Play. It runs
       # after the release above on purpose: the GitHub artefact and the
       # F-Droid submission are the primary channels, so a rejected upload
-      # here must never be what makes a release fail.
+      # here must never be what makes a release fail. The lane puts the
+      # build on the internal track and then on the closed one testers
+      # are recruited into; see DEVELOPER.md for why both.
       - name: Check for the Play credential
         id: play
         env:
@@ -177,7 +179,7 @@ jobs:
         with:
           ruby-version: "3.3"
 
-      - name: Upload to the Play internal track
+      - name: Upload to the Play testing tracks
         if: steps.play.outputs.enabled == 'true'
         continue-on-error: true
         env:

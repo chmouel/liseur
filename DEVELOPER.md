@@ -262,11 +262,24 @@ To install one, download the APK from the release page and
 Play is the third channel, after the GitHub release and F-Droid, and it
 is deliberately the least load-bearing of the three. The same tag that
 publishes the release also builds an app bundle and pushes it to the
-**internal testing** track:
+**internal testing** track, then promotes that same build to the
+**closed** track named `Testing`:
 
 ```bash
 make bundle     # ./gradlew bundleRelease, for Play only
 ```
+
+The second track is not decoration. Internal testing holds a hundred
+hand-listed addresses and hands out its own opt-in link; the closed
+track is the one testers are recruited into (issue #62), the one
+`https://play.google.com/apps/testing/com.chmouel.liseur` leads to, and
+the only one whose opted-in testers count towards the twelve Play wants
+for fourteen days before a personal developer account may publish.
+Uploading to internal alone, which is what happened up to 0.10.0, leaves
+everyone who followed the instructions on whichever build the closed
+track was last given by hand — 0.9.3, as it turned out, four releases
+back. `hack/store-status` now says so in a line when the closed track
+falls behind internal, because nothing else did.
 
 Nothing about the APK path changes. F-Droid's recipe builds
 `assembleRelease` and never sees `fastlane/Fastfile`, no Gradle
@@ -285,6 +298,34 @@ The upload runs `fastlane android internal` with
 other apps on the account; it needs *Release to testing tracks* on Liseur
 under Users and permissions.
 
+A build that is already on internal — a release whose Play step was
+skipped, or one that predates the promotion — can be pushed across
+without rebuilding:
+
+```bash
+fastlane android promote version_code:19
+```
+
+The version code defaults to whatever `app/build.gradle.kts` currently
+says, so the argument is only needed for an older build.
+
+**Who can actually install it.** Everything above puts a build on a
+track; none of it lets anyone in. The tester list is console state, and
+these are the things that quietly turn a correct opt-in link into "this
+app isn't available":
+
+- The closed `Testing` track needs an **email list** attached, holding
+  the Google account each tester uses *on their phone*. A Google Group
+  works too, but adds an approval step that nobody sees fail: an
+  unapproved join request and a missing address look identical from the
+  tester's side.
+- Country availability for the track has to include the countries
+  testers are writing from.
+- The track's release must be `completed`, not draft. `hack/store-status`
+  prints the status of each one.
+- Adding an address is not instant. Play takes a few hours to
+  propagate, so a tester told to try again should be told to wait.
+
 Only the changelog is pushed from the repository. The store listing is
 edited in the console, because Play holds declarations that no file here
 describes — data safety, content rating, target audience, app access, ads
@@ -294,9 +335,9 @@ Play links to is `docs/PRIVACY.md`, served by GitHub Pages from `main`
 `/docs`; it is a published legal document, so change it in a commit and
 not in the console.
 
-Promotion out of internal testing is a manual action in the console, on
-purpose. Nothing in this repository can put a build in front of the
-public.
+Promotion out of testing and in front of the public is a manual action
+in the console, on purpose. Nothing in this repository can put a build
+on the production track.
 
 **The signing key.** Play App Signing holds the same key as the GitHub
 release, enrolled from `pass` through Google's PEPK tool rather than
