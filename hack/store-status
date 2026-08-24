@@ -159,8 +159,12 @@ report_play() {
              | .releases[]? | .versionCodes[]? | tonumber] | max // 0;
         (codes("internal")) as $internal
         | (codes($closed)) as $recruiting
-        | if $recruiting == 0 then
+        | if $recruiting == 0 and $internal == 0 then
+              "  warning: nothing on either the \($closed) or internal track"
+          elif $recruiting == 0 then
               "  warning: nothing on the \($closed) track; the opt-in link leads nowhere"
+          elif $internal == 0 then
+              "  \($closed) has versionCode \($recruiting); nothing on internal"
           elif $recruiting < $internal then
               "  warning: \($closed) has versionCode \($recruiting), internal has \($internal);"
               + " testers who used the opt-in link are on the older build"

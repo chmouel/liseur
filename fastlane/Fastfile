@@ -96,7 +96,14 @@ platform :android do
     # For a release whose bundle is already up: the version code can be
     # named outright (fastlane android promote version_code:19), and
     # falls back to whatever the source says is current.
-    version_code = (options[:version_code] || ENV["PLAY_VERSION_CODE"] || liseur_version_code).to_i
+    requested = (options[:version_code] || ENV["PLAY_VERSION_CODE"] || liseur_version_code).to_s
+    # to_i turns anything unparseable into 0, which Play would take as a
+    # promotion of nothing at all: refuse it here instead.
+    unless requested.match?(/\A[1-9][0-9]*\z/)
+      UI.user_error!("version_code must be a positive integer, got #{requested.inspect}")
+    end
+
+    version_code = requested.to_i
     liseur_promote(version_code)
     UI.success("#{version_code} is on #{CLOSED_TRACK}")
   end

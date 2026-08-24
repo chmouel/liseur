@@ -58,7 +58,7 @@ target wrapping them — run `make help` for the short list. See
   published and how old its index is, what its last build run did with
   the app, the fdroiddata metadata, any open merge request with its
   pipeline state, and what sits on each Google Play track. It also says
-  when the closed track testers are recruited into has fallen behind
+  when the closed track that testers are recruited into falls behind
   internal, and prints the opt-in link they are handed. Everything
   but the Play section reads public sources; Play has no public answer
   while the app is in testing, so that one signs a token with
