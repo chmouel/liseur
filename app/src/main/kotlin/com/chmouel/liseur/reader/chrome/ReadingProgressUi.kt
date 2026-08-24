@@ -67,7 +67,7 @@ fun ReadingFooter(
         modifier
             .fillMaxWidth()
             .clickableWithoutRipple(onCycleMode)
-            .padding(horizontal = 20.dp, vertical = 6.dp),
+            .padding(horizontal = 20.dp, vertical = FooterMetrics.VERTICAL_PADDING_DP.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
