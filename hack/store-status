@@ -20,6 +20,12 @@ readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
 readonly PASS_PLAY_SERVICE_ACCOUNT="android/google.play.service.serviceaccount"
 readonly PLAY_API="https://androidpublisher.googleapis.com/androidpublisher/v3"
 readonly PLAY_SCOPE="https://www.googleapis.com/auth/androidpublisher"
+# The closed track testers are actually recruited into, and the link
+# they are handed. Internal testing has its own link and its own
+# hundred-address limit, and none of its testers count towards the
+# twelve Play wants before a personal account may publish.
+readonly PLAY_CLOSED_TRACK="Testing"
+readonly PLAY_OPT_IN_URL="https://play.google.com/apps/testing/$APP_ID"
 
 die() {
     printf 'error: %s\n' "$*" >&2
@@ -140,6 +146,32 @@ report_play() {
                     + "] versionCode \((.versionCodes // ["none"]) | join(", "))"
               end
         end'
+
+    # A build on internal and nowhere else is the state that went
+    # unnoticed for four releases: everyone who followed the opt-in link
+    # is on the closed track, so a closed track left behind is a room
+    # full of testers reading an old build and a fourteen-day clock that
+    # is not running. Said outright rather than left to be spotted in the
+    # version codes above.
+    printf '%s' "$tracks" | jq -r --arg closed "$PLAY_CLOSED_TRACK" '
+        def codes($name):
+            [.tracks[]? | select(.track == $name)
+             | .releases[]? | .versionCodes[]? | tonumber] | max // 0;
+        (codes("internal")) as $internal
+        | (codes($closed)) as $recruiting
+        | if $recruiting == 0 and $internal == 0 then
+              "  warning: nothing on either the \($closed) or internal track"
+          elif $recruiting == 0 then
+              "  warning: nothing on the \($closed) track; the opt-in link leads nowhere"
+          elif $internal == 0 then
+              "  \($closed) has versionCode \($recruiting); nothing on internal"
+          elif $recruiting < $internal then
+              "  warning: \($closed) has versionCode \($recruiting), internal has \($internal);"
+              + " testers who used the opt-in link are on the older build"
+          else
+              "  \($closed) is level with internal at versionCode \($recruiting)"
+          end'
+    printf '  tester opt-in: %s\n' "$PLAY_OPT_IN_URL"
 }
 
 require_command curl
