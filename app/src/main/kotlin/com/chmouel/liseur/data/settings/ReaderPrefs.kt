@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.settings
 
 import androidx.compose.ui.graphics.Color
+import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
 
 /**
  * Curated reading fonts, all OFL-licensed and bundled in assets/fonts.
@@ -171,6 +172,10 @@ enum class ColumnMode(val id: String, val displayName: String) {
  * @param pageTurnAnimation Slide animation when turning pages; instant jump when off.
  * @param footerMode What the reading footer shows.
  * @param columnMode How many columns of text a wide page is broken into.
+ * @param autoScrollSpeed Which notch the auto-scroll slider sits on, from
+ *   [AutoScrollSpeed.MIN_STEP] to [AutoScrollSpeed.MAX_STEP]. Not a speed:
+ *   the pace it comes to also depends on [fontSize], because larger text
+ *   has further to travel to show the same words.
  */
 data class ReaderPrefs(
     val font: ReaderFont = ReaderFont.Default,
@@ -182,6 +187,7 @@ data class ReaderPrefs(
     val pageTurnAnimation: Boolean = true,
     val footerMode: FooterMode = FooterMode.Default,
     val columnMode: ColumnMode = ColumnMode.Default,
+    val autoScrollSpeed: Float = AutoScrollSpeed.DEFAULT_STEP,
 ) {
     companion object {
         const val MIN_FONT_SIZE = 0.6

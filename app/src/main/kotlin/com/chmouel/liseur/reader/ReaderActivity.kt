@@ -273,6 +273,13 @@ class ReaderActivity : FragmentActivity() {
                                     onKeepScreenOnChanged = viewModel::setKeepScreenOn,
                                     scrollModeFlow = viewModel.scrollMode,
                                     onScrollModeChanged = viewModel::setScrollMode,
+                                    // Dialogs of this activity's own,
+                                    // drawn over the reader. The page
+                                    // must not carry on scrolling under
+                                    // a question nobody has answered.
+                                    blockedByDialog = pendingExternalLink != null ||
+                                        pendingOffer != null ||
+                                        bookSync !is ReaderViewModel.BookSync.Idle,
                                     onPageTurnerChanged = { pageTurner = it },
                                     onChromeVisibleChanged = { chromeVisible = it },
                                     onPrefsAction = remember {
@@ -285,6 +292,7 @@ class ReaderActivity : FragmentActivity() {
                                             setBrightness = viewModel::setBrightness,
                                             setPageTurnAnimation = viewModel::setPageTurnAnimation,
                                             setColumnMode = viewModel::setColumnMode,
+                                            setAutoScrollSpeed = viewModel::setAutoScrollSpeed,
                                             setTypographyIsOwn = viewModel::setTypographyIsOwn,
                                         )
                                     },

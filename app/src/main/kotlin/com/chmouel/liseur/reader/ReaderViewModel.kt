@@ -1300,6 +1300,9 @@ class ReaderViewModel(
     fun setColumnMode(mode: ColumnMode) =
         viewModelScope.launch { prefsRepo.setColumnMode(mode) }
 
+    fun setAutoScrollSpeed(step: Float) =
+        viewModelScope.launch { prefsRepo.setAutoScrollSpeed(step) }
+
     fun cycleFooterMode() = viewModelScope.launch {
         prefsRepo.setFooterMode(prefs.value.footerMode.next())
     }

@@ -51,4 +51,11 @@ The Advanced sheet itself is a second bottom sheet reached from the
 first, not a navigation destination: dismissing it lands back on the
 typography sheet, and dismissing that lands back on the page.
 
-*Where:* `reader/chrome/TypographySheet.kt`.
+It exists as of auto-scroll ([ADR 6](0006-auto-scroll.md)), which was
+the first of the five to be built and so brought the sheet with it. It
+holds that one row, and the **Advanced** row that opens it is hidden
+when it would be empty — today, in a book read by turning pages. The
+other four arrive with their own issues.
+
+*Where:* `reader/chrome/TypographySheet.kt`,
+`reader/chrome/AdvancedSheet.kt`.
