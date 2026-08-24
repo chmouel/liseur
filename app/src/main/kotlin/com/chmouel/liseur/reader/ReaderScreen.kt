@@ -105,6 +105,9 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.reader.chrome.CatchUpPill
+import com.chmouel.liseur.reader.chrome.AdvancedSheet
+import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
+import com.chmouel.liseur.reader.chrome.AutoScrollTicker
 import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
@@ -131,14 +134,18 @@ import com.chmouel.liseur.ui.widthClass
 import com.chmouel.liseur.ui.windowWidth
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import org.readium.r2.navigator.Decoration
@@ -166,6 +173,34 @@ private const val VERIFY_ATTEMPTS = 3
 // mode makes on the way up, and the stream of them a handle drag sends;
 // short enough that the bar still feels like it answers the gesture.
 private const val SELECTION_SETTLE_MS = 90L
+
+// How long auto-scroll waits for the next chapter to actually arrive
+// after asking for it. Generous, because a large chapter on a slow
+// device takes a moment, and bounded, because a page that cannot be
+// stopped is worse than a page that stops early.
+private const val CHAPTER_ARRIVAL_MS = 5_000L
+
+// The look the last lines of a chapter get before the page moves on,
+// however fast or slow the reader has it set.
+private const val MIN_CHAPTER_DWELL_MS = 400L
+private const val MAX_CHAPTER_DWELL_MS = 8_000L
+
+// How often a self-scrolling page writes down where it has got to. It
+// is what stands between a reader who backgrounds the app mid-scroll
+// and a place a paragraph or two behind them; short enough that the
+// loss is a line, long enough that a document round trip every so often
+// costs nothing.
+private const val AUTO_SCROLL_SAVE_NANOS = 2_000_000_000L
+
+/**
+ * Which sheet is open over the page, if any.
+ *
+ * One value rather than a flag each, because they are not independent:
+ * Advanced is reached *from* typography and closes back to it, and two
+ * modal sheets composed at once is a state the reader can neither see
+ * nor get out of cleanly.
+ */
+private enum class ReaderSheet { NONE, TYPOGRAPHY, ADVANCED }
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -209,6 +244,11 @@ fun ReaderScreen(
     onKeepScreenOnChanged: (Boolean) -> Unit,
     scrollModeFlow: StateFlow<Boolean>,
     onScrollModeChanged: (Boolean) -> Unit,
+    // The activity draws dialogs of its own over this screen — a link
+    // out of the book, a sync, an offer to send the book up — and a tap
+    // on a link never reaches the tap zones, so the screen would
+    // otherwise carry on scrolling behind one.
+    blockedByDialog: Boolean = false,
     goTo: SharedFlow<Locator>,
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
@@ -220,12 +260,20 @@ fun ReaderScreen(
     var showToc by remember { mutableStateOf(false) }
     var searchFor by remember { mutableStateOf<String?>(null) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
-    var showTypography by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
     val keepScreenOn by keepScreenOnFlow.collectAsStateWithLifecycle()
     val scrollMode by scrollModeFlow.collectAsStateWithLifecycle()
-    val scrollModeNow by rememberUpdatedState(scrollMode)
+    // Readium reads vertical text off the book rather than off the
+    // reader: it cannot paginate lines that run down the page, so such a
+    // book is scrolled whatever the setting says. Everything that asks
+    // "is this book scrolled" has to ask it this way, or a vertical book
+    // gets tap zones that turn pages it has not got.
+    var verticalText by remember { mutableStateOf(false) }
+    val effectiveScrolling = scrollMode || verticalText
+    val effectiveScrollingNow by rememberUpdatedState(effectiveScrolling)
+    var autoScrollArmed by remember { mutableStateOf(false) }
     val columnMode = prefs.columnMode.effectiveFor(widthClass())
 
     // The activity decides what a keyboard's arrows mean, and the
@@ -254,6 +302,7 @@ fun ReaderScreen(
      * and the tap zones seeing exactly what they saw before.
      */
     var lastTouchY by remember { mutableStateOf<Float?>(null) }
+    var fingerDown by remember { mutableStateOf(false) }
     // The tracker below outlives every recomposition, so it cannot read
     // `footnote` directly — it would keep seeing whatever was true when it
     // started. This gives it a window onto the current value.
@@ -366,11 +415,11 @@ fun ReaderScreen(
             // answer as whether its scrolling glides or jumps.
             isAnimated = { prefsFlow.value.pageTurnAnimation && !eInkNow },
             isEffectSuppressed = { chromeVisibleNow },
-            isScrolling = { scrollModeNow },
-            // Readium reads this off the book rather than the reader:
-            // vertical text is always scrolled, because CSS columns
-            // cannot paginate it, so a book can be scrolling here with
-            // the setting switched off.
+            // Vertical text is scrolled whatever the setting says, so
+            // this is the derived answer and not the preference: a
+            // sideways-scrolled book asked to turn a page would be asked
+            // for a page it has not got.
+            isScrolling = { effectiveScrollingNow },
             isVerticalText = { navigatorNow?.settings?.value?.verticalText == true },
             showingEnd = { showingEndNow },
             onReachedEnd = {
@@ -483,6 +532,14 @@ fun ReaderScreen(
             p.toEpubPreferences(theme, columns, scrolling)
         }
             .drop(1)
+            // What the book is rendered with, not what the reader
+            // happens to be holding. Reading preferences carry answers
+            // the page cannot see — the auto-scroll speed is one — and a
+            // slider dragged through its notches would otherwise reflow
+            // the whole book at every notch, each time capturing an
+            // anchor and restoring it, for a setting that changes not one
+            // line of the text.
+            .distinctUntilChanged()
             .collect {
                 reflow.within {
                     val anchor = reflowAnchor ?: capture(nav, nav.currentLocator.value)
@@ -606,6 +663,197 @@ fun ReaderScreen(
         nav.applyDecorations(annotations.toDecorations(), DECORATION_GROUP)
     }
 
+    // Tracked rather than read: the setting arrives with the book, and
+    // asking a nullable navigator for it from the composition would make
+    // the read itself conditional.
+    LaunchedEffect(navigator) {
+        val nav = navigator
+        if (nav == null) {
+            verticalText = false
+            return@LaunchedEffect
+        }
+        nav.settings.collect { verticalText = it.verticalText }
+    }
+
+    /*
+     * The page carrying itself.
+     *
+     * One predicate decides whether it moves, and it is written here in
+     * one place rather than scattered through the screen, because the
+     * pause ADR 6 asks for *is* the predicate: a tap raises the chrome,
+     * the chrome is in the list, the page stops. Touch it again, the
+     * chrome goes, the page carries on. A drag is a finger down, so the
+     * text goes where the reader puts it and picks up from there.
+     *
+     * Nothing else in the reader gains a control for this. An offer the
+     * reader has not answered — a pill, a dialog — holds the page still
+     * too: a decision taken about a page that has moved on is a decision
+     * about nothing.
+     */
+    val canAutoScroll = autoScrollArmed &&
+        effectiveScrolling &&
+        !chromeVisible &&
+        !fingerDown &&
+        !showingEnd &&
+        sheet == ReaderSheet.NONE &&
+        !showToc &&
+        searchFor == null &&
+        footnote == null &&
+        selection == null &&
+        noteFor == null &&
+        defineWord == null &&
+        jumpBack == null &&
+        catchUp == null &&
+        !blockedByDialog
+
+    // Arming is a decision taken in a sheet, and the page it applies to
+    // is behind the sheet. Get out of the way so the reader can see what
+    // they asked for.
+    LaunchedEffect(autoScrollArmed) {
+        if (autoScrollArmed) {
+            sheet = ReaderSheet.NONE
+            chromeVisible = false
+        }
+    }
+
+    // A book that stops being scrolled has nothing to scroll. Switching
+    // to pages while the text was moving would otherwise leave the
+    // switch on with nothing behind it.
+    LaunchedEffect(effectiveScrolling) {
+        if (!effectiveScrolling) autoScrollArmed = false
+    }
+
+    /*
+     * Saving the reader's place while the page never stops.
+     *
+     * Readium notices a scroll through the web view's own
+     * `onScrollChanged` and answers it with a *debounced* location
+     * notification — a hundred milliseconds of stillness. A finger drag
+     * always ends, so that debounce always lands. A page carrying itself
+     * never stops, so it never lands at all, and the reader's place
+     * would stay wherever they last lifted a finger.
+     *
+     * So the loop asks for the location itself, on its own clock, with
+     * the navigator's own `firstVisibleElementLocator` — the same
+     * question the debounce would have asked, just asked on time. It is
+     * asked off the frame loop so the page does not hitch waiting for a
+     * round trip into the document.
+     */
+    var autoScrollLocator by remember { mutableStateOf<Locator?>(null) }
+    val autoScrollRunning by rememberUpdatedState(canAutoScroll)
+
+    LaunchedEffect(navigator, canAutoScroll, prefs.autoScrollSpeed, prefs.fontSize, lifecycle) {
+        if (!canAutoScroll) return@LaunchedEffect
+        val nav = navigator ?: return@LaunchedEffect
+        val density = view.resources.displayMetrics.density
+        val ticker = AutoScrollTicker()
+        // RESUMED and not merely STARTED: a reader looking at something
+        // else on a split screen is not reading this, and the page they
+        // come back to should be the page they left.
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            ticker.reset()
+            var savedAtNanos = 0L
+            var saving = false
+            while (true) {
+                val now = withFrameNanos { it }
+                val web = visibleWebView(nav.publicationView) ?: continue
+                val vertical = nav.settings.value.verticalText
+                val pixelsPerSecond = AutoScrollSpeed.dpPerSecond(
+                    step = prefs.autoScrollSpeed,
+                    fontSize = prefs.fontSize,
+                ) * density
+                val pixels = ticker.step(nowNanos = now, pixelsPerSecond = pixelsPerSecond)
+                if (pixels <= 0) continue
+                if (!saving && now - savedAtNanos >= AUTO_SCROLL_SAVE_NANOS) {
+                    savedAtNanos = now
+                    saving = true
+                    launch {
+                        try {
+                            // A failed round trip must not take the loop
+                            // down with it: this coroutine is the loop's
+                            // child, and an exception here would cancel
+                            // its parent and stop the page for good.
+                            val here = runCatching { nav.firstVisibleElementLocator() }
+                                .getOrNull()
+                            if (here != null) {
+                                val captured = runCatching { capture(nav, here) }
+                                    .getOrDefault(here)
+                                autoScrollLocator = captured
+                                // Auto-scroll is reading, so it teaches
+                                // the pace estimator and counts as time
+                                // spent, which READER_MOVEMENT is what
+                                // carries.
+                                onLocatorChanged(
+                                    captured,
+                                    NavigatorPositionEvent.READER_MOVEMENT,
+                                )
+                            }
+                        } finally {
+                            saving = false
+                        }
+                    }
+                }
+                // Later text lies below in a book set in lines across,
+                // and to the left in one set in lines down — the same
+                // convention ScrollEdgeTurner reads its drags by.
+                val atEnd = if (vertical) {
+                    !web.canScrollHorizontally(-1)
+                } else {
+                    !web.canScrollVertically(1)
+                }
+                if (atEnd) {
+                    // The last lines have only just arrived. Leave them
+                    // on screen for as long as they took to get there.
+                    val viewport = if (vertical) web.width else web.height
+                    val moved = carryIntoNextChapter(
+                        nav = nav,
+                        pageTurner = pageTurner,
+                        dwellMillis = dwellMillis(viewport, pixelsPerSecond),
+                    )
+                    ticker.reset()
+                    savedAtNanos = 0L
+                    autoScrollLocator = null
+                    if (!moved) {
+                        autoScrollArmed = false
+                        return@repeatOnLifecycle
+                    }
+                    continue
+                }
+                if (vertical) web.scrollBy(-pixels, 0) else web.scrollBy(0, pixels)
+            }
+        }
+    }
+
+    /*
+     * The last place before the reader leaves.
+     *
+     * `ReaderViewModel` drops a READER_MOVEMENT locator once the reader
+     * is inactive, and `ReaderActivity.onPause` clears that flag before
+     * `super.onPause()` — so nothing published from an ON_PAUSE observer
+     * can arrive as movement, and Readium's own debounce, landing a
+     * hundred milliseconds later, is dropped as well. What goes in here
+     * is the last position the loop fetched, republished as the jump it
+     * effectively was: LOCAL_JUMP persists, is not dropped by that
+     * guard, and does not count the same reading twice.
+     *
+     * Nothing is asked of the page and nothing is waited for, so this is
+     * an ordinary synchronous call inside `onPause`. `onStop` — and with
+     * it the closing of the position queue — cannot begin until
+     * `onPause` has returned, so the position is always in the queue
+     * before there is any question of the queue being shut.
+     */
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_PAUSE) return@LifecycleEventObserver
+            if (!autoScrollRunning) return@LifecycleEventObserver
+            autoScrollLocator?.let {
+                onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
     DisposableEffect(navigator) {
         val nav = navigator
         pageTurner.navigator = nav
@@ -617,14 +865,14 @@ fun ReaderScreen(
                 ReaderTapZones(
                     navigator = it,
                     isChromeVisible = { chromeVisibleNow },
-                    isScrolling = { scrollModeNow },
+                    isScrolling = { effectiveScrollingNow },
                     onTurnPage = pageTurner::turn,
                     onShowChrome = { chromeVisible = true },
                     onHideChrome = { chromeVisible = false },
                 ),
                 ScrollEdgeTurner(
                     navigator = it,
-                    isScrolling = { scrollModeNow },
+                    isScrolling = { effectiveScrollingNow },
                     isVerticalText = { it.settings.value.verticalText },
                     onStepChapter = { forward -> pageTurner.stepChapter(forward) },
                 ),
@@ -642,7 +890,10 @@ fun ReaderScreen(
 
     ImmersiveMode(hideSystemBars = !chromeVisible)
     ScreenBrightness(brightness = prefs.brightness)
-    KeepScreenOn(enabled = keepScreenOn)
+    // Auto-scroll implies it: a page that carries itself past a screen
+    // timeout is a page nobody is reading. The reader's own switch still
+    // decides everything else, and this adds nothing once the page stops.
+    KeepScreenOn(enabled = keepScreenOn || autoScrollArmed)
 
     Box(
         Modifier
@@ -652,6 +903,11 @@ fun ReaderScreen(
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
+                        // A finger on the page is a finger on the page,
+                        // whatever it is doing there. Auto-scroll waits
+                        // for it to be lifted, so a reader nudging the
+                        // text is not fighting the page for it.
+                        fingerDown = event.changes.any { it.pressed }
                         // The card is drawn inside this box, so without this
                         // guard reading a note would move it: every touch on
                         // the card would become the new anchor and the card
@@ -909,7 +1165,7 @@ fun ReaderScreen(
                     // what it opens instead.
                     val typographyLabel = stringResource(R.string.reader_typography)
                     IconButton(
-                        onClick = { showTypography = true },
+                        onClick = { sheet = ReaderSheet.TYPOGRAPHY },
                         modifier = Modifier.semantics {
                             contentDescription = typographyLabel
                         },
@@ -1048,7 +1304,7 @@ fun ReaderScreen(
         )
     }
 
-    if (showTypography) {
+    if (sheet == ReaderSheet.TYPOGRAPHY) {
         TypographySheet(
             prefs = prefs,
             readingTheme = readingTheme,
@@ -1067,7 +1323,26 @@ fun ReaderScreen(
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             scrollMode = scrollMode,
             onScrollModeChanged = onScrollModeChanged,
-            onDismiss = { showTypography = false },
+            // Nothing lives behind Advanced yet but auto-scroll, and
+            // auto-scroll is only offered to a scrolled book. A paginated
+            // one would open an empty sheet, so it is not offered the way
+            // in either.
+            advancedOffered = effectiveScrolling,
+            onOpenAdvanced = { sheet = ReaderSheet.ADVANCED },
+            onDismiss = { sheet = ReaderSheet.NONE },
+        )
+    }
+
+    if (sheet == ReaderSheet.ADVANCED) {
+        AdvancedSheet(
+            autoScrollOffered = effectiveScrolling,
+            autoScrolling = autoScrollArmed,
+            autoScrollSpeed = prefs.autoScrollSpeed,
+            onAutoScrollChanged = { autoScrollArmed = it },
+            onAutoScrollSpeedChanged = onPrefsAction.setAutoScrollSpeed,
+            // Back to typography, not back to the book: this sheet was
+            // reached from there, and that is where the reader left off.
+            onDismiss = { sheet = ReaderSheet.TYPOGRAPHY },
         )
     }
 
@@ -1203,6 +1478,61 @@ class ReaderAnnotationActions(
     val notebookMarkdown: () -> String,
 )
 
+/**
+ * Opens the next chapter and waits for it to arrive, or says it could
+ * not.
+ *
+ * Reaching the bottom of a chapter is not the moment to leave it: the
+ * last lines have only just come into view, and a reader who has been
+ * carried down to them still has to read them. So the page waits there
+ * for as long as those lines took to arrive — [dwellMillis], one
+ * viewport at the pace the reader chose — before turning.
+ *
+ * `stepChapter` answers false when it did not move: the endpaper, the
+ * end of the book, a reading order it could not place. The page has
+ * nowhere to carry itself to, and says so, rather than sitting against
+ * the edge waiting for a chapter that is not coming.
+ *
+ * The wait afterwards is for the resource to actually change, not for a
+ * fixed delay: too short and the next chapter is stepped through before
+ * it has laid out, taking the reader two chapters on; too long and a
+ * chapter shorter than a screen is read as a stall. It is bounded all
+ * the same, because a wait that can never end is a page that can never
+ * be stopped.
+ */
+private suspend fun carryIntoNextChapter(
+    nav: EpubNavigatorFragment,
+    pageTurner: PageTurner,
+    dwellMillis: Long,
+): Boolean {
+    delay(dwellMillis)
+    val leaving = nav.currentLocator.value.href
+    if (!pageTurner.stepChapter(forward = true)) return false
+    return withTimeoutOrNull(CHAPTER_ARRIVAL_MS) {
+        nav.currentLocator.first { it.href != leaving }
+        // Arriving is not the same as being laid out, and a chapter
+        // scrolled before it has settled scrolls the wrong distance.
+        withFrameNanos { }
+        withFrameNanos { }
+        true
+    } == true
+}
+
+/**
+ * How long to leave the last lines of a chapter on screen: the time it
+ * took the reader to be carried one screen, at the pace they chose, so a
+ * slow reader gets the long look and a skimming one is not held up.
+ *
+ * Bounded at both ends. A viewport the layout has not measured yet would
+ * otherwise be no wait at all, and a very slow pace would hold a reader
+ * against the edge long enough to wonder whether it had broken.
+ */
+private fun dwellMillis(viewportPixels: Int, pixelsPerSecond: Double): Long {
+    if (viewportPixels <= 0 || pixelsPerSecond <= 0.0) return MIN_CHAPTER_DWELL_MS
+    val millis = (viewportPixels / pixelsPerSecond * 1_000L).toLong()
+    return millis.coerceIn(MIN_CHAPTER_DWELL_MS, MAX_CHAPTER_DWELL_MS)
+}
+
 /** Bundle of preference setters passed down to the reader chrome. */
 class ReaderPrefsActions(
     val setFont: (ReaderFont) -> Unit,
@@ -1213,6 +1543,7 @@ class ReaderPrefsActions(
     val setBrightness: (Float?) -> Unit,
     val setPageTurnAnimation: (Boolean) -> Unit,
     val setColumnMode: (ColumnMode) -> Unit,
+    val setAutoScrollSpeed: (Float) -> Unit,
     val setTypographyIsOwn: (Boolean) -> Unit,
 )
 

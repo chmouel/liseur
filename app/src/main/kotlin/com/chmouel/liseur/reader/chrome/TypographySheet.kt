@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
@@ -67,6 +70,8 @@ fun TypographySheet(
     onKeepScreenOnChanged: (Boolean) -> Unit,
     scrollMode: Boolean,
     onScrollModeChanged: (Boolean) -> Unit,
+    advancedOffered: Boolean,
+    onOpenAdvanced: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -123,7 +128,42 @@ fun TypographySheet(
                 enabled = typographyIsOwn,
                 onChanged = onTypographyIsOwnChanged,
             )
+            // Last, and only when there is something behind it. An
+            // Advanced row that opens an empty sheet is worse than no
+            // row at all.
+            if (advancedOffered) {
+                AdvancedRow(onClick = onOpenAdvanced)
+            }
         }
+    }
+}
+
+/**
+ * The way through to the settings a reader changes once, if ever.
+ *
+ * One row, at the bottom, and the only row this sheet gains however many
+ * reading features arrive: that is the whole bargain of
+ * `docs/adr/0001-advanced-reading-menu.md`. What it opens closes back to
+ * here, and here closes back to the book.
+ */
+@Composable
+private fun AdvancedRow(onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Text(
+            text = stringResource(R.string.reader_advanced),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

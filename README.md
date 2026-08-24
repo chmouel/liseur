@@ -60,7 +60,9 @@ themes (Light, Sepia, Dark, and true OLED Black) let you settle into a story at
 2 a.m. without being blinded by your phone. Margins, line spacing, brightness,
 and page turns stay quietly out of your way. Prefer one long scroll to turning
 pages? Switch it on for the whole library, or for the one book that wants it,
-and keep scrolling past the end of a chapter to fall into the next one.
+and keep scrolling past the end of a chapter to fall into the next one. Set it
+scrolling by itself, at a pace you pick, and it carries on across chapters
+until you touch the page — handy over lunch, or with one hand on a strap.
 
 A discreet footer shows the time remaining in the chapter (just enough to
 convince yourself that one more chapter won't hurt), while highlights, margin

@@ -29,6 +29,7 @@ class ReaderPreferencesRepository(private val context: Context) {
         val PAGE_TURN_ANIMATION = booleanPreferencesKey("page_turn_animation")
         val FOOTER_MODE = stringPreferencesKey("footer_mode")
         val COLUMN_MODE = stringPreferencesKey("column_mode")
+        val AUTO_SCROLL_SPEED = floatPreferencesKey("auto_scroll_speed")
     }
 
     val prefs: Flow<ReaderPrefs> = context.readerPrefsStore.data.map { p ->
@@ -42,6 +43,9 @@ class ReaderPreferencesRepository(private val context: Context) {
             pageTurnAnimation = p[Keys.PAGE_TURN_ANIMATION] ?: true,
             footerMode = FooterMode.fromId(p[Keys.FOOTER_MODE]),
             columnMode = ColumnMode.fromId(p[Keys.COLUMN_MODE]),
+            autoScrollSpeed = AutoScrollPreference.sanitize(
+                p[Keys.AUTO_SCROLL_SPEED] ?: AutoScrollPreference.DEFAULT_STEP,
+            ),
         )
     }
 
@@ -87,5 +91,11 @@ class ReaderPreferencesRepository(private val context: Context) {
 
     suspend fun setColumnMode(mode: ColumnMode) {
         context.readerPrefsStore.edit { it[Keys.COLUMN_MODE] = mode.id }
+    }
+
+    suspend fun setAutoScrollSpeed(step: Float) {
+        context.readerPrefsStore.edit {
+            it[Keys.AUTO_SCROLL_SPEED] = AutoScrollPreference.snap(step)
+        }
     }
 }
