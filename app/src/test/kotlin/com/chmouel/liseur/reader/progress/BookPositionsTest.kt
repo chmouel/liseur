@@ -159,4 +159,28 @@ class BookPositionsTest {
         assertEquals(3, book.locatorAtOrBeforeProgression(0.50)?.locations?.position)
         assertEquals(5, book.locatorAtOrBeforeProgression(1.0)?.locations?.position)
     }
+
+    /**
+     * The reason a scrolled book has to measure its own distance before
+     * saving a place. Readium's `findFirstVisibleLocator` names a place
+     * and nothing else, and a place with no distance is the top of its
+     * chapter to everything downstream — the footer, the pace estimator
+     * and the percentage every server syncs.
+     */
+    @Test
+    fun `a locator with no distance resolves to the start of its resource`() {
+        val first = (1..4).map { position ->
+            locator("chapter-1.xhtml", (position - 1) / 3.0, position)
+        }
+        val second = (5..8).map { position ->
+            locator("chapter-2.xhtml", (position - 5) / 3.0, position)
+        }
+        val book = positions(listOf(first, second))
+
+        val placeOnly = book.resolve(locator("chapter-2.xhtml", null, null))!!
+        assertEquals(5.0, placeOnly.coordinate, 0.0)
+
+        val measured = book.resolve(locator("chapter-2.xhtml", 2.0 / 3.0, null))!!
+        assertEquals(7.0, measured.coordinate, 0.0)
+    }
 }

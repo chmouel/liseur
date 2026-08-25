@@ -115,6 +115,7 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.FooterMetrics
+import com.chmouel.liseur.reader.chrome.HeldPlace
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.reader.chrome.visibleWebViewCache
@@ -126,6 +127,7 @@ import com.chmouel.liseur.reader.chrome.FootnoteCard
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.reader.progress.ScrollProgression
 import com.chmouel.liseur.reader.search.SearchScreen
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.eink.EInkDisplay
@@ -138,7 +140,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.SharedFlow
@@ -192,6 +197,13 @@ private const val MAX_CHAPTER_DWELL_MS = 8_000L
 // loss is a line, long enough that a document round trip every so often
 // costs nothing.
 private const val AUTO_SCROLL_SAVE_NANOS = 2_000_000_000L
+
+// How often a book scrolled by hand is looked in on, and so the most a
+// place kept for the pause can be behind the reader. The same interval
+// auto-scroll writes at, for the same reason: it is a line or two of
+// loss against a document round trip, and only a page that moved since
+// the last look is worth one.
+private const val SCROLL_PLACE_POLL_MS = 2_000L
 
 /**
  * Which sheet is open over the page, if any.
@@ -322,9 +334,11 @@ fun ReaderScreen(
     // layout moving, not the reader.
     val reflow = remember { ReflowScope() }
 
-    // A fixed-layout book places everything by absolute coordinates and has no
-    // reflow to speak of; measuring what "fits" there means nothing.
-    val fitWideContent = remember(publication) {
+    // A fixed-layout book places everything by absolute coordinates: nothing
+    // reflows, so measuring what "fits" means nothing, and the document does
+    // not move under the viewport, so a fraction of its length says nothing
+    // about where the reader is either.
+    val reflowableText = remember(publication) {
         publication.metadata.layout != Layout.FIXED
     }
 
@@ -335,8 +349,67 @@ fun ReaderScreen(
     // reader actually moves, and every reflow restores to the same spot.
     var reflowAnchor by remember { mutableStateOf<Locator?>(null) }
 
+    // The place a scrolled book was last measured at, kept for the
+    // moment the reader leaves. Everything that measures one and
+    // everything that supersedes one goes through here; see [HeldPlace].
+    val heldPlace = remember { HeldPlace() }
+
     suspend fun capture(nav: EpubNavigatorFragment, locator: Locator): Locator =
         onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
+
+    /**
+     * Where a scrolled chapter has got to, as a locator worth saving.
+     *
+     * Readium's own answer names a place — a selector and the words at
+     * the top of the screen — but no distance: `findFirstVisibleLocator`
+     * carries neither a progression nor a position, and everything
+     * downstream reads a locator without one as the start of its
+     * resource. So the distance is measured here, in the terms
+     * `ScrollProgression` explains, and a place that cannot be given one
+     * is not saved at all: a tick's delay costs the reader a line, a
+     * number that is wrong costs them the chapter.
+     *
+     * The distance and the anchor are asked for back to back, because
+     * those are the two that have to agree; the answer Readium gives
+     * first is only used for the resource it names, which is the one
+     * actually on screen and may be ahead of the one it has published.
+     * Everything the navigator last published is dropped rather than
+     * carried: its position and its words belong to wherever it last
+     * stopped, and the capture is about to supply the ones true now.
+     *
+     * Every step is a question put to the document, and the reader may
+     * have left the chapter while it was answering. A place dropped
+     * costs a tick and no more; a place kept would file the old
+     * chapter's as the reader's place in the new one. A page being
+     * rebuilt is not a page the reader has moved through at all, so the
+     * question is not put to it while a reflow is open.
+     */
+    suspend fun scrolledPlace(nav: EpubNavigatorFragment): Locator? {
+        if (!reflowableText || reflow.active) return null
+        val asking = nav.currentLocator.value.href
+        val displayed = try {
+            nav.firstVisibleElementLocator()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val progression = ScrollProgression
+            .of(nav, vertical = nav.settings.value.verticalText)
+            ?: return null
+        val measured = displayed.copy(
+            locations = Locator.Locations(progression = progression),
+            text = Locator.Text(),
+        )
+        val captured = capture(nav, measured)
+        if (captured.href != asking || nav.currentLocator.value.href != asking) return null
+        // The capture reaches into the document too, and swallows its
+        // own failures to do it. Cancellation is not a failure to
+        // swallow: a place written down after the loop that asked for it
+        // has gone is a place nobody is standing in.
+        currentCoroutineContext().ensureActive()
+        return captured
+    }
 
     suspend fun settleLayout() {
         withFrameNanos { }
@@ -461,7 +534,25 @@ fun ReaderScreen(
                 // Anywhere the reader actually goes ends the run of
                 // preference changes the held anchor was covering.
                 if (event != NavigatorPositionEvent.PREFERENCE_REFLOW) reflowAnchor = null
-                onLocatorChanged(capture(nav, native), event)
+                // This is fresher than anything a scroll watcher had in
+                // flight, so those answers are refused from here on. The
+                // place already held stands until this one is taken:
+                // the capture below suspends, and a reader who leaves
+                // while it is being answered would otherwise be left
+                // with neither.
+                val since = heldPlace.invalidate()
+                val captured = capture(nav, native)
+                // A reflow locator is the layout moving, not the reader,
+                // and it is not a jump anyone should be sent back to on
+                // the way out. Its arrival still retires what was held,
+                // which was measured against a page that no longer
+                // exists in that shape.
+                if (event == NavigatorPositionEvent.PREFERENCE_REFLOW) {
+                    heldPlace.retire()
+                } else {
+                    heldPlace.hold(captured, since)
+                }
+                onLocatorChanged(captured, event)
             }
         }
     }
@@ -553,7 +644,7 @@ fun ReaderScreen(
                     // so what fits has to be asked again once the new size has
                     // landed — and before the anchor is restored, since fitting
                     // it moves the text once more.
-                    if (fitWideContent &&
+                    if (reflowableText &&
                         WideContentFit.apply(nav) == WideContentFit.Result.CHANGED
                     ) {
                         awaitReflowSettled(nav, before)
@@ -578,9 +669,9 @@ fun ReaderScreen(
     // the page the book opens at, a layout pass alone can miss a resource
     // swapped in without one, and finding the same web view again costs a
     // reference comparison.
-    LaunchedEffect(navigator, fitWideContent) {
+    LaunchedEffect(navigator, reflowableText) {
         val nav = navigator ?: return@LaunchedEffect
-        if (!fitWideContent) return@LaunchedEffect
+        if (!reflowableText) return@LaunchedEffect
         val root = nav.publicationView
         var fitted: WebView? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
@@ -735,12 +826,11 @@ fun ReaderScreen(
      * would stay wherever they last lifted a finger.
      *
      * So the loop asks for the location itself, on its own clock, with
-     * the navigator's own `firstVisibleElementLocator` — the same
-     * question the debounce would have asked, just asked on time. It is
-     * asked off the frame loop so the page does not hitch waiting for a
-     * round trip into the document.
+     * `scrolledPlace` — the same question the debounce would have asked,
+     * just asked on time, and answered with a distance the navigator's
+     * own answer does not carry. It is asked off the frame loop so the
+     * page does not hitch waiting for a round trip into the document.
      */
-    var autoScrollLocator by remember { mutableStateOf<Locator?>(null) }
     val autoScrollRunning by rememberUpdatedState(canAutoScroll)
     val density = LocalDensity.current.density
 
@@ -779,8 +869,8 @@ fun ReaderScreen(
             // starts watching now, and its first value is the state of
             // things rather than news. A locator from a chapter that is
             // no longer open is not the reader's place in this one.
-            if (autoScrollLocator?.href != nav.currentLocator.value.href) {
-                autoScrollLocator = null
+            if (heldPlace.current()?.href != nav.currentLocator.value.href) {
+                heldPlace.retire()
             }
             // Two events, told apart because they are not the same news.
             // Invalidating costs nothing and can be said too often —
@@ -808,7 +898,7 @@ fun ReaderScreen(
                     .collect {
                         ticker.reset()
                         savedAtNanos = 0L
-                        autoScrollLocator = null
+                        heldPlace.retire()
                     }
             }
             while (true) {
@@ -822,37 +912,31 @@ fun ReaderScreen(
                     saving = true
                     launch {
                         try {
+                            val since = heldPlace.mark()
+                            val captured = scrolledPlace(nav)
+                            // One question decides both: a measurement
+                            // the reader has already moved past is not
+                            // worth keeping, and publishing it would
+                            // carry them back to it.
+                            if (captured != null && heldPlace.hold(captured, since)) {
+                                // Auto-scroll is reading, so it teaches
+                                // the pace estimator and counts as time
+                                // spent, which READER_MOVEMENT is what
+                                // carries.
+                                onLocatorChanged(
+                                    captured,
+                                    NavigatorPositionEvent.READER_MOVEMENT,
+                                )
+                            }
+                        } catch (e: CancellationException) {
+                            // The loop is going down anyway, and a
+                            // cancelled measurement is not an answer.
+                            throw e
+                        } catch (_: Exception) {
                             // A failed round trip must not take the loop
                             // down with it: this coroutine is the loop's
                             // child, and an exception here would cancel
                             // its parent and stop the page for good.
-                            val asking = nav.currentLocator.value.href
-                            val here = runCatching { nav.firstVisibleElementLocator() }
-                                .getOrNull()
-                            if (here != null) {
-                                val captured = runCatching { capture(nav, here) }
-                                    .getOrDefault(here)
-                                // Both halves of this are questions put
-                                // to the document, and the reader may
-                                // have left the chapter while it was
-                                // answering. A save dropped costs a tick
-                                // and no more; a save kept would file
-                                // the old chapter's place as the
-                                // reader's place in the new one.
-                                if (captured.href == asking &&
-                                    nav.currentLocator.value.href == asking
-                                ) {
-                                    autoScrollLocator = captured
-                                    // Auto-scroll is reading, so it
-                                    // teaches the pace estimator and
-                                    // counts as time spent, which
-                                    // READER_MOVEMENT is what carries.
-                                    onLocatorChanged(
-                                        captured,
-                                        NavigatorPositionEvent.READER_MOVEMENT,
-                                    )
-                                }
-                            }
                         } finally {
                             saving = false
                         }
@@ -877,7 +961,7 @@ fun ReaderScreen(
                     )
                     ticker.reset()
                     savedAtNanos = 0L
-                    autoScrollLocator = null
+                    heldPlace.retire()
                     webViews.invalidate()
                     if (!moved) {
                         autoScrollArmed = false
@@ -891,6 +975,90 @@ fun ReaderScreen(
     }
 
     /*
+     * The place a manually scrolled book has got to, kept for the pause.
+     *
+     * A page carried by a finger does stop, so Readium's debounce does
+     * land — but `ReaderActivity` marks the reader inactive before the
+     * fragment pauses, and a debounce still in the air when the reader
+     * leaves is then dropped as movement nobody made. The last drag
+     * would go with it.
+     *
+     * So the offset is watched as the reader scrolls and a place is kept
+     * against it, ready to be published on the way out without asking
+     * the document anything. Watching is the view's own scroll offset,
+     * which costs a field read; the document is only asked once that
+     * offset has moved, and no more often than auto-scroll asks it.
+     *
+     * An offset that is the same as it was a moment ago is a page at
+     * rest, and a page at rest has already been answered for. So the
+     * round trip is spent only on a page that moved within the window,
+     * which is the only page whose place can still be in the air.
+     *
+     * It watches for as long as the book is scrolled, whether or not
+     * auto-scroll is armed, because arming is not running: a finger on
+     * the page, the chrome up, a dialog open — all of them stop the
+     * carrying loop and leave the reader free to scroll by hand. One
+     * place is held between the two, so whichever of them last measured
+     * it is the one the pause publishes.
+     */
+    // A place belongs to the navigator that was asked for it and to the
+    // book being scrolled when it was. A fragment recreated underneath
+    // the reader, or a book switched to pages, leaves one behind that
+    // names a document nobody is looking at — and the holder outlives
+    // both, so it has to be told. `onDispose` runs as the keys change,
+    // before anything new can hold against the old generation.
+    DisposableEffect(navigator, effectiveScrolling) {
+        onDispose { heldPlace.retire() }
+    }
+
+    LaunchedEffect(navigator, effectiveScrolling, lifecycle) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (!effectiveScrolling) return@LaunchedEffect
+        val root = nav.publicationView
+        val webViews = visibleWebViewCache(root)
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            launch {
+                merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
+                    webViews.invalidate()
+                }
+            }
+            var lastOffset: Int? = null
+            while (true) {
+                val web = webViews.current()
+                val offset = web?.let {
+                    if (nav.settings.value.verticalText) it.scrollX else it.scrollY
+                }
+                val moved = offset != null && lastOffset != null && offset != lastOffset
+                // The baseline is taken before the first wait, not after
+                // it, or the first window of a chapter is one nobody was
+                // watching — and the window a reader opens a book in is
+                // exactly the one they scroll in.
+                if (offset != null) lastOffset = offset
+                // Auto-scroll keeps the same place on its own clock, and
+                // it is the one moving the page: asking twice would be
+                // two round trips for one answer. The offset is still
+                // read, so that whatever it has reached while the loop
+                // ran is the baseline the moment it stops.
+                if (moved && !autoScrollRunning) {
+                    // A place that cannot be had leaves the last one
+                    // standing: it is behind the reader by a tick, where
+                    // the alternative is nothing at all.
+                    val since = heldPlace.mark()
+                    val captured = try {
+                        scrolledPlace(nav)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (captured != null) heldPlace.hold(captured, since)
+                }
+                delay(SCROLL_PLACE_POLL_MS)
+            }
+        }
+    }
+
+    /*
      * The last place before the reader leaves.
      *
      * `ReaderViewModel` drops a READER_MOVEMENT locator once the reader
@@ -898,7 +1066,8 @@ fun ReaderScreen(
      * `super.onPause()` — so nothing published from an ON_PAUSE observer
      * can arrive as movement, and Readium's own debounce, landing a
      * hundred milliseconds later, is dropped as well. What goes in here
-     * is the last position the loop fetched, republished as the jump it
+     * is the place a scrolled book was last measured at — carried by the
+     * loop or by the reader's own finger — republished as the jump it
      * effectively was: LOCAL_JUMP persists, is not dropped by that
      * guard, and does not count the same reading twice.
      *
@@ -911,8 +1080,7 @@ fun ReaderScreen(
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_PAUSE) return@LifecycleEventObserver
-            if (!autoScrollRunning) return@LifecycleEventObserver
-            autoScrollLocator?.let {
+            heldPlace.current()?.let {
                 onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
             }
         }

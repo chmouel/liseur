@@ -103,6 +103,24 @@ asked, asked on time, and asked off the frame loop so the page does not
 hitch. Those go in as `READER_MOVEMENT`: auto-scroll is reading, so it
 should teach the pace estimator and count as time spent.
 
+**A place is not a distance**, and that was a bug for as long as this
+existed. `firstVisibleElementLocator` answers with a selector and the
+words at the top of the screen and nothing else: no progression, no
+position. `BookPositions.resolve` reads a locator with neither as the
+start of its resource, so every save auto-scroll made filed the reader
+at the top of the chapter they were half way down — and that number is
+the one the footer shows, the one the pace estimator learns from, and
+the one calibre-web syncs outright and Komga and liseur-sync compare
+when they disagree. Only local resume escaped it, because the anchor
+saved beside the number was still exact.
+
+So the distance is measured too, by `ScrollProgression`: the document's
+own scroll offset over its own length. That is not an approximation of
+Readium's convention but the inverse of it — `readium.scrollToPosition`
+restores a fraction by multiplying it back out against the same span. A
+page that cannot give one saves nothing that tick, because a place a
+line behind is worth having and a place a chapter behind is not.
+
 Leaving the book is the one case that needs its own note.
 `ReaderViewModel` drops a `READER_MOVEMENT` locator once the reader is
 inactive, and `ReaderActivity.onPause` clears that flag before
@@ -113,6 +131,70 @@ the loop fetched is therefore republished from an `ON_PAUSE` observer as
 count the same reading twice. It asks the page nothing and waits for
 nothing, so it is a synchronous call that has returned before `onStop`
 can begin to close the position queue.
+
+**A book scrolled by hand keeps a place the same way.** Its debounce
+does land — a finger drag ends — but it lands after the reader was
+marked inactive if they leave the moment they stop scrolling, and it is
+then dropped as movement nobody made. So the same round trip runs for a
+manually scrolled book, driven not by a frame loop but by the web view's
+own scroll offset: a field read every couple of seconds, and the
+document asked only when that offset has moved since the last look. An
+offset that has not moved is a page at rest, and a page at rest has
+already been answered for. The offset is sampled before the first wait
+rather than after it, because the window a reader opens a book in is
+exactly the window they scroll in.
+
+That watcher runs for as long as the book is scrolled, armed or not,
+because arming is not running: a finger on the page, the chrome up, a
+dialog open — every one of those stops the carrying loop while leaving
+the reader free to scroll by hand, and a gap between the two would be a
+pause with nothing held. It only skips the round trip while the loop is
+actually carrying the page, which is measuring the same thing anyway; it
+keeps sampling the offset throughout, so the moment the loop stops there
+is already a baseline to compare against.
+
+One `HeldPlace` is shared between them, and both go through it: the
+question of whether a measurement is still current is the same question
+as whether it is worth publishing, so `hold` answers both and the two
+cannot drift apart. A measurement takes several round trips into a
+document the reader is still moving through, so it is held against a
+mark taken before the asking began, and a mark that has moved on refuses
+it. Without that, a reader who jumps *backwards* within the same chapter
+can be carried forward again on the way out by a round trip that was
+already in the air when they jumped; the href guard alone cannot see
+that, because it is the same chapter.
+
+Keeping a place moves the mark on too, so of two measurements begun in
+the same generation the one that lands first is the one that stands. The
+loser is refused rather than merged: they were asked for at different
+moments and answered out of order, and nothing here can tell which the
+reader is nearer to. A poll behind costs a line, and an older answer
+landing last would walk the reader back.
+
+What supersedes a held place is not the *announcement* of a location but
+the capture of one, which is why the holder distinguishes invalidating
+from retiring, and why that bookkeeping lives in the collector that
+publishes rather than in a second one watching the same flow. A locator
+Readium announces is captured before it is saved, and a capture
+suspends: clear the held place when the announcement arrives and a
+reader who leaves mid-capture has neither the new place — dropped as
+movement by an inactive reader — nor the old one. So the announcement
+only invalidates: measurements in flight are refused, the place already
+held stands, and it is replaced once the new capture has actually been
+taken. A reflow locator is the exception that retires outright, being
+the layout moving rather than the reader, and not a place anyone should
+be sent back to.
+
+A place is retired for real when it stops being anyone's: a chapter the
+reader has left, a navigator replaced underneath them, a book that has
+stopped being scrolled. The holder is remembered across all three, so
+each is told explicitly.
+
+Two things are never asked at all. A fixed-layout book has no scroll
+fraction that means anything — nothing reflows, and the document does
+not move under the viewport — and a page being rebuilt by a preference
+change is not a page the reader moved through, so an open reflow skips
+the tick the way `ReflowScope` gates everything else.
 
 **Speed** is one shared `Float` in the reader DataStore, a step from 1
 to 10 mapped to dp per second and multiplied by the font size, so
@@ -180,6 +262,8 @@ The reader gains no new chrome: the page moving is the state, and the
 switch that started it is where it stops.
 
 *Where:* `reader/chrome/AutoScroll.kt`, `reader/chrome/CachedLookup.kt`,
-`reader/chrome/ReaderWebViews.kt`, `data/settings/ReaderPrefs.kt`,
+`reader/chrome/HeldPlace.kt`,
+`reader/chrome/ReaderWebViews.kt`, `reader/progress/ScrollProgression.kt`,
+`data/settings/ReaderPrefs.kt`,
 `reader/ReaderScreen.kt`, `reader/chrome/AdvancedSheet.kt`,
 `reader/chrome/TypographySheet.kt`, `reader/chrome/ReaderTapZones.kt`.
