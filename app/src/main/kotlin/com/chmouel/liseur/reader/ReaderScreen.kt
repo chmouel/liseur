@@ -542,6 +542,13 @@ fun ReaderScreen(
                 // with neither.
                 val since = heldPlace.invalidate()
                 val captured = capture(nav, native)
+                // The capture reaches into the document and swallows its
+                // own failures, cancellation included, so an answer can
+                // arrive after this collector has been stood down — a
+                // navigator replaced underneath it, or the reader gone.
+                // Neither a place held nor a position saved from that is
+                // anyone's.
+                currentCoroutineContext().ensureActive()
                 // A reflow locator is the layout moving, not the reader,
                 // and it is not a jump anyone should be sent back to on
                 // the way out. Its arrival still retires what was held,
