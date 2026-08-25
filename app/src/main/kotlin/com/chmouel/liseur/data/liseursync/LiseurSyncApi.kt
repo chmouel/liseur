@@ -19,6 +19,9 @@ object LiseurSyncApi {
     const val HEADS = "/v1/heads"
     const val SESSIONS = "/v1/sessions"
 
+    /** Highlights, notes and bookmarks (ADR-0028). */
+    const val ANNOTATIONS = "/v1/annotations"
+
     /** The folders the server watches, which is where a catalog starts. */
     const val FOLDERS = "/v1/folders"
 
@@ -63,6 +66,57 @@ object LiseurSyncApi {
     /** The newest positions recorded for one book, newest first. */
     fun positions(baseUrl: String, workId: String, limit: Int): String =
         url(baseUrl, "/v1/works/$workId/positions?limit=$limit")
+
+    /** One page of the annotation feed, tombstones included (ADR-0028). */
+    fun annotationChanges(baseUrl: String, since: Long, limit: Int): String =
+        url(baseUrl, "$ANNOTATIONS/changes?since=$since&limit=$limit")
+
+    /**
+     * Every annotation still standing on one work.
+     *
+     * The work id goes in as a path segment, so it is escaped as one:
+     * `URLEncoder` writes a space as `+`, which a path reads as a plus
+     * sign rather than a space. Work ids are the server's own and tame
+     * in practice, but a path built by rule does not depend on that
+     * staying true.
+     */
+    fun workAnnotations(baseUrl: String, workId: String): String =
+        url(baseUrl, "/v1/works/${pathSegment(workId)}/annotations")
+
+    /** Retires one annotation, at the rev the caller believes it holds. */
+    fun deleteAnnotation(baseUrl: String, id: String, rev: Long): String =
+        url(baseUrl, "$ANNOTATIONS/${pathSegment(id)}?rev=$rev")
+
+    /**
+     * Escapes one path segment.
+     *
+     * Built through OkHttp, which knows which characters a segment may
+     * keep. What it will not do is let a segment mean nothing but
+     * itself: `.` and `..` are resolved away as navigation, and so is
+     * `%2E%2E`, because a URL parser decodes before it resolves. An
+     * annotation id is opaque, so another client may well hand one of
+     * those out — and no HTTP client anywhere can address it, this one
+     * included. Such an id is carried and pushed like any other, since
+     * the id travels in the body there; it is only a *delete* that
+     * cannot be expressed, and [addressable] is what declines to try.
+     */
+    private fun pathSegment(value: String): String =
+        okhttp3.HttpUrl.Builder()
+            .scheme("https")
+            .host("liseur.invalid")
+            .addPathSegment(value)
+            .build()
+            .encodedPathSegments
+            .first()
+
+    /**
+     * Whether a URL can name this id at all.
+     *
+     * False only for the dot segments, which every parser resolves away
+     * rather than carries. A delete addressed with one would land on the
+     * collection instead of on the mark.
+     */
+    fun addressable(id: String): Boolean = pathSegment(id).isNotEmpty()
 
     /**
      * Where a book is deleted from a folder that accepts one

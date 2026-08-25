@@ -789,10 +789,35 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `annotations gain a change stamp taken from when they were made`() {
+        // The stamp is what liseur-sync sends as `client_ts`, and the
+        // server recognises a repeated write by comparing whole
+        // payloads. A mark restored at zero would claim 1970 and
+        // disagree with every device that already has it, so the
+        // migration has to give the ones already here something true.
+        helper.createDatabase(TEST_DB, 39).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO annotations (id, book_id, kind, locator_json, created_at)
+                VALUES ('mark-1', 'file:book', 'HIGHLIGHT', '{"href":"/c1.xhtml"}', 1700000000000)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT updated_at FROM annotations WHERE id = 'mark-1'").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(1700000000000L * 1000, cursor.getLong(0))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 39
+        const val LATEST = 40
     }
 }

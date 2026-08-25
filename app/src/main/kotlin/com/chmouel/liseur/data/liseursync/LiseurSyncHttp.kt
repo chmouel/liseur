@@ -108,6 +108,28 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
         expected,
     )
 
+    /**
+     * Posts a body exactly as given, without parsing it.
+     *
+     * Annotation pushes need this. The server answers a repeat only when
+     * the payload matches to the byte, and going through [JSONObject]
+     * would not survive that: its keys come out of a hash map, so
+     * reserialising the same request can order them differently. So the
+     * bytes are settled once, stored, and sent from storage — first
+     * attempt and retry alike, since a retry that goes down a different
+     * path is only a retry by intention.
+     */
+    suspend fun postRaw(
+        url: String,
+        credentials: RemoteCredentials?,
+        body: String,
+        expected: Set<Int> = emptySet(),
+    ): JSONObject = send(
+        Request.Builder().url(url).post(body.toRequestBody(JSON)),
+        credentials,
+        expected,
+    )
+
     suspend fun delete(
         url: String,
         credentials: RemoteCredentials?,
@@ -207,6 +229,12 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
 
         /** Identifiers that name two different books. */
         const val CONFLICT = 409
+
+        /** A request bigger than the server was configured to take. */
+        const val TOO_LARGE = 413
+
+        /** An annotation this server has no record of, swept or never made. */
+        const val NOT_FOUND = 404
 
         /** A cursor that fell behind the server's compaction horizon. */
         const val GONE = 410

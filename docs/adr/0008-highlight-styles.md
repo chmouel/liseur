@@ -28,6 +28,10 @@ fill, one Room migration. `HighlightTint` stays what it is; a parallel
 two-value enum carries the style from the popup through the ViewModel
 to the row.
 
+> Amended by [ADR-0011](0011-annotation-sync.md): `HighlightTint` gained
+> `PURPLE` and `ORANGE`. liseur-sync's palette has six colours, and
+> rewriting one that arrived from another device would make it lossy.
+
 Rendering is a second decoration shape in
 `reader/annotations/Annotations.kt`: Readium's decoration API has an
 underline style alongside the highlight style, so the change is a

@@ -1192,8 +1192,19 @@ class ReaderViewModel(
             annotations = annotations.value,
         )
 
+    /**
+     * Writes a mark, stamping when it changed.
+     *
+     * The stamp is set here rather than at each caller because it is not
+     * decoration: liseur-sync carries it as `client_ts` and recognises a
+     * repeated write by comparing the whole payload, so a mark whose
+     * stamp came off the clock at push time would never match itself and
+     * every interrupted send would look like a conflict. Microseconds,
+     * which is the precision the server compares at.
+     */
     private fun save(annotation: BookAnnotation) {
-        viewModelScope.launch { annotationDao.upsert(annotation) }
+        val stamped = annotation.copy(updatedAt = System.currentTimeMillis() * 1000)
+        viewModelScope.launch { annotationDao.upsert(stamped) }
     }
 
     private fun annotation(locator: Locator, kind: AnnotationKind): BookAnnotation {

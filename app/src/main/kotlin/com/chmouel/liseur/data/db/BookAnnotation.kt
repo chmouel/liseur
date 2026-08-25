@@ -44,6 +44,17 @@ data class BookAnnotation(
     @ColumnInfo(name = "position") val position: Int? = null,
     @ColumnInfo(name = "total_progression") val totalProgression: Double? = null,
     @ColumnInfo(name = "created_at") val createdAt: Long,
+    /**
+     * When this mark was last changed, in epoch **microseconds**.
+     *
+     * Sent verbatim as `client_ts` to liseur-sync, which is why it is
+     * stored rather than read off the clock at push time: the server
+     * recognises a repeated write only when the payload is identical to
+     * the byte, so a stamp that moved would turn every interrupted push
+     * into a conflict. Microseconds because that is the precision the
+     * server compares at.
+     */
+    @ColumnInfo(name = "updated_at", defaultValue = "0") val updatedAt: Long = 0,
 )
 
 @Dao
@@ -57,6 +68,14 @@ interface BookAnnotationDao {
     /** Everything marked anywhere, for a backup. */
     @Query("SELECT * FROM annotations ORDER BY book_id, created_at")
     suspend fun all(): List<BookAnnotation>
+
+    /** One mark, or nothing; the sync pass asks about ids it was told. */
+    @Query("SELECT * FROM annotations WHERE id = :id")
+    suspend fun byId(id: String): BookAnnotation?
+
+    /** Everything marked in one book, as a list rather than a stream. */
+    @Query("SELECT * FROM annotations WHERE book_id = :bookId ORDER BY created_at")
+    suspend fun forBook(bookId: String): List<BookAnnotation>
 
     @Upsert
     suspend fun upsert(annotation: BookAnnotation)

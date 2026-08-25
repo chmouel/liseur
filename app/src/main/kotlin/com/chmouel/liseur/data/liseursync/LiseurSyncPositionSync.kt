@@ -77,6 +77,14 @@ class LiseurSyncPositionSync(
     private val reporting: SyncReporting = SyncReporting(),
     private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
+    /**
+     * The annotation pass (ADR-0028), folded into this run rather than
+     * scheduled on its own: a highlight is worth syncing exactly when a
+     * position is, and a second worker would mean a second set of
+     * retries, a second backoff and two runs racing for the same work
+     * names. Null in tests that are only about positions.
+     */
+    private val annotations: LiseurSyncAnnotations? = null,
     private val now: () -> Long = System::currentTimeMillis,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
@@ -396,6 +404,16 @@ class LiseurSyncPositionSync(
             uploadSessions(account, recovered, trouble)
         }
 
+        // Highlights last (ADR-0028). They are the least urgent of the
+        // three — a mark nobody is looking at can wait a run — and they
+        // are the only one that benefits from the names the stages above
+        // have just been fixing.
+        val marked = if (trouble.unreachable == null) {
+            syncAnnotations(account, server.annotationCursorSeq, book, trouble)
+        } else {
+            0
+        }
+
         // A server that went quiet outranks anything it managed to say
         // earlier. The first failure may well be a 404 on one book, which
         // is nobody's fault and not worth retrying; if the connection then
@@ -421,12 +439,55 @@ class LiseurSyncPositionSync(
         } else {
             Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
             reporting.report(PositionSyncStatus.Failed(firstFailure))
-            if (pulled > 0 || pushed > 0) {
+            if (pulled > 0 || pushed > 0 || marked > 0) {
                 SyncOutcome.Partial(firstFailure)
             } else {
                 SyncOutcome.Failure(firstFailure)
             }
         }
+    }
+
+    /**
+     * Runs the annotation pass, if this build wired one.
+     *
+     * Its trouble is folded into the run's, so a server that stops
+     * answering here still cuts the run short and still tells
+     * WorkManager to come back — but a highlight the server refused
+     * never fails a position sync that worked. What it asks for in
+     * return is a re-resolve: an annotation refused for naming a work
+     * the server does not hold is the same stale name the op log
+     * recovers from, and the cure is to forget it and let the next run
+     * ask afresh.
+     */
+    private suspend fun syncAnnotations(
+        account: Account,
+        cursorSeq: Long,
+        book: String?,
+        trouble: Trouble,
+    ): Int {
+        val pass = annotations ?: return 0
+        val outcome = pass.sync(
+            LiseurSyncAnnotations.Peer(
+                baseUrl = account.baseUrl,
+                credentials = account.credentials,
+                peerId = account.peerId,
+                accountKey = account.accountKey,
+                cursorSeq = cursorSeq,
+            ),
+            book = book,
+        )
+        for ((bookUrl, staleWorkId) in outcome.reresolve) {
+            // Against the id it was actually refused under. Reading the
+            // name back here and deleting whatever it says would throw
+            // away a good one, since the pass itself may already have
+            // repaired it.
+            forAccount(account) {
+                identityDao.deleteAliasIfStale(bookUrl, account.peerId, staleWorkId)
+            }
+        }
+        outcome.failure?.let { trouble.refused(it) }
+        outcome.unreachable?.let { trouble.refused(it) }
+        return outcome.pulled + outcome.pushed
     }
 
     /**

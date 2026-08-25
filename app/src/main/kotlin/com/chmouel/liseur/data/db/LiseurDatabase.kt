@@ -23,8 +23,9 @@ import androidx.sqlite.execSQL
         WorkAlias::class,
         WorkAmbiguity::class,
         SeriesExtra::class,
+        AnnotationSync::class,
     ],
-    version = 39,
+    version = 40,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -38,6 +39,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun remoteServerDao(): RemoteServerDao
     abstract fun annotationDao(): BookAnnotationDao
+    abstract fun annotationSyncDao(): AnnotationSyncDao
     abstract fun typographyDao(): BookTypographyDao
     abstract fun bookScreenDao(): BookScreenDao
     abstract fun bookReadingModeDao(): BookReadingModeDao
@@ -1020,6 +1022,64 @@ abstract class LiseurDatabase : RoomDatabase() {
          * spelling; only sittings recorded from here on carry the
          * measurement.
          */
+        /**
+         * Annotation sync (liseur-sync ADR-0028).
+         *
+         * `annotations.updated_at` holds epoch **microseconds**, not
+         * millis: microseconds are the precision the server compares
+         * `client_ts` at, and a stamp the local column cannot hold
+         * exactly would make every synced annotation look edited the
+         * moment it arrived. Existing rows take their creation time,
+         * because a stamp that changes on every push is a stamp that
+         * makes every retry a new payload.
+         */
+        val MIGRATION_39_40 = object : Migration(39, 40) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `annotations` ADD COLUMN `updated_at` INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "UPDATE `annotations` SET `updated_at` = `created_at` * 1000",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `annotation_cursor_seq` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `work_alias` ADD COLUMN `annotations_reconciled_at` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `annotation_sync` (
+                        `id` TEXT NOT NULL,
+                        `peer_id` TEXT NOT NULL,
+                        `book_id` TEXT NOT NULL,
+                        `work_id` TEXT NOT NULL,
+                        `rev` INTEGER NOT NULL DEFAULT 0,
+                        `seq` INTEGER NOT NULL DEFAULT 0,
+                        `acked_fingerprint` TEXT,
+                        `pending_kind` TEXT,
+                        `pending_json` TEXT,
+                        `pending_rev` INTEGER NOT NULL DEFAULT 0,
+                        `pending_fingerprint` TEXT,
+                        `rejected_fingerprint` TEXT,
+                        `retry_not_before` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`, `peer_id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_annotation_sync_book_id` " +
+                        "ON `annotation_sync` (`book_id`)",
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_annotation_sync_work_id` " +
+                        "ON `annotation_sync` (`work_id`)",
+                )
+            }
+        }
+
         val MIGRATION_38_39 = object : Migration(38, 39) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1085,6 +1145,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_36_37,
             MIGRATION_37_38,
             MIGRATION_38_39,
+            MIGRATION_39_40,
         )
     }
 }
