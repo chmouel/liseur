@@ -122,6 +122,53 @@ those to `EpubPreferences` gains a `distinctUntilChanged()` — without
 it, dragging the slider would reflow the whole book once per notch for a
 setting the book cannot see.
 
+**What a frame costs.** A frame here does arithmetic on elapsed time and
+one `scrollBy`, and nothing else, because everything else it used to do
+had the same answer as the frame before. The pace is a curve over the
+speed notch, the font size and the display density; all three are keys
+of the effect that runs the loop, so it is computed on the way in and
+cannot go stale without the loop being rebuilt around it. The web view
+was found by walking the view tree and taking a global visible rect off
+every web view in it, sixty times a second, so it is held between frames
+by a `CachedLookup`.
+
+Holding it is only safe if "current" keeps the meaning `visibleWebView`
+gives it: the view covering the middle of the reader. Attachment will
+not do — Readium keeps the neighbouring chapters attached to its pager,
+so a chapter the reader has left stays attached and, to `isShown`,
+shown. The check is therefore the cheap half of the same question, one
+rect against one point. Mid-transition, when nothing covers the centre,
+the search falls back to the largest visible view, which fails that
+check, so the cache spends those frames looking again — the cost paid on
+every frame before, now paid only while a chapter is arriving.
+
+The held view is also dropped on a new position or a layout pass, the
+pair this screen already watches for exactly this reason: Readium
+reports arriving at a resource before laying it out, and a view that
+does not exist yet cannot be found. Invalidating is free and idempotent,
+so it can be said too often. A chapter *changing* is different news and
+rides its own event — positions arrive as the reader moves within a
+chapter, and the ticker's carried fraction and the place kept for the
+pause may only be thrown away when the page they belong to has actually
+gone.
+
+**Someone else turning the page first.** The dwell at a chapter's end is
+the one window where the loop is alive and waiting rather than moving,
+and `ReaderActivity` sends volume and page keys straight to the turner
+without raising the chrome — so auto-scroll stays armed and the dwell
+stays alive. The dwell therefore notes which chapter it is waiting in
+and does not step if it is somewhere else when the wait ends: the page
+moved, which is what the wait was there to allow.
+
+Two round trips into the document have the same shape of problem. The
+position the loop saves is fetched and captured while the reader may be
+leaving, so it is discarded unless the chapter it was asked of is still
+open — a save dropped costs one tick, a save kept would file the old
+chapter's place as the reader's place in the new one. The place kept for
+the pause outlives the loop, so it is dropped on the way back in unless
+it still points into the open chapter: a book moved elsewhere while the
+reader was away moved with nobody watching.
+
 ## Consequences
 
 The reading-speed estimator will see unusually steady progress; that is
@@ -132,6 +179,7 @@ session regardless of the toggle.
 The reader gains no new chrome: the page moving is the state, and the
 switch that started it is where it stops.
 
-*Where:* `reader/chrome/AutoScroll.kt`, `data/settings/ReaderPrefs.kt`,
+*Where:* `reader/chrome/AutoScroll.kt`, `reader/chrome/CachedLookup.kt`,
+`reader/chrome/ReaderWebViews.kt`, `data/settings/ReaderPrefs.kt`,
 `reader/ReaderScreen.kt`, `reader/chrome/AdvancedSheet.kt`,
 `reader/chrome/TypographySheet.kt`, `reader/chrome/ReaderTapZones.kt`.
