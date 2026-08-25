@@ -264,6 +264,16 @@ class AnnotationWireTest {
     }
 
     @Test
+    fun `a page that says nothing about how far it reaches hands over to high water`() {
+        // `optLong` reads a missing seq as 0. Taken as an answer that
+        // would pin the cursor exactly where a page of unreadable marks
+        // does, and the same page would be fetched until the guard.
+        val array = JSONArray("""[{"id":"a"},{"id":"b","seq":0}]""")
+        assertNull(AnnotationWire.pageReach(array))
+        assertEquals(9L, AnnotationWire.pageReach(JSONArray("""[{"id":"a"},{"id":"b","seq":9}]""")))
+    }
+
+    @Test
     fun `a record with no seq is not a record`() {
         // Freshness is told by seq everywhere in the pass. A missing one
         // reads as 0, which is not "unknown" but "older than

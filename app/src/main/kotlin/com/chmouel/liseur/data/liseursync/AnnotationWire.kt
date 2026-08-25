@@ -306,10 +306,20 @@ object AnnotationWire {
             .mapNotNullTo(mutableSetOf()) { array.optJSONObject(it)?.optString("id") }
     }
 
+    /**
+     * How far a page of the feed reaches, or null if it says nothing.
+     *
+     * Counted over the raw array rather than the records this device
+     * could read, or a page of marks it cannot represent would move the
+     * cursor nowhere and be fetched again for ever. A seq below 1 is not
+     * a reach: `optLong` reads a missing or unparseable one as 0, and
+     * treating that as an answer would pin the cursor just as firmly.
+     * Null hands the page back to `high_water`.
+     */
     fun pageReach(array: JSONArray?): Long? {
         if (array == null || array.length() == 0) return null
         return (0 until array.length())
-            .mapNotNull { array.optJSONObject(it)?.optLong("seq") }
+            .mapNotNull { array.optJSONObject(it)?.optLong("seq")?.takeIf { seq -> seq >= 1 } }
             .maxOrNull()
     }
 
