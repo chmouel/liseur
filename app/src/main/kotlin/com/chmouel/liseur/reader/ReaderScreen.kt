@@ -1565,14 +1565,23 @@ class ReaderAnnotationActions(
  * chapter shorter than a screen is read as a stall. It is bounded all
  * the same, because a wait that can never end is a page that can never
  * be stopped.
+ *
+ * The dwell is the one window in which someone else can turn the page
+ * first. A volume or page key goes straight to the turner without the
+ * chrome coming up, so auto-scroll stays armed and this call stays
+ * alive; stepping again afterwards would carry the reader a chapter
+ * further than they asked for. If the chapter changed while we waited,
+ * the page moved — which is what the wait was there to allow — and the
+ * loop carries on wherever the reader now is.
  */
 private suspend fun carryIntoNextChapter(
     nav: EpubNavigatorFragment,
     pageTurner: PageTurner,
     dwellMillis: Long,
 ): Boolean {
-    delay(dwellMillis)
     val leaving = nav.currentLocator.value.href
+    delay(dwellMillis)
+    if (nav.currentLocator.value.href != leaving) return true
     if (!pageTurner.stepChapter(forward = true)) return false
     return withTimeoutOrNull(CHAPTER_ARRIVAL_MS) {
         nav.currentLocator.first { it.href != leaving }
