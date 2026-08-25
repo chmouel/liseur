@@ -281,16 +281,6 @@ object AnnotationWire {
     }
 
     /**
-     * How far a page reaches, counted before anything is skipped.
-     *
-     * The cursor has to move by what the server sent, not by what this
-     * device could read. A page of standalone notes reads as nothing
-     * here, and taking the account's high water mark for it would step
-     * over every highlight after them — silently, once, for ever. So
-     * the raw array decides, and `high_water` is only for a page that
-     * really was empty.
-     */
-    /**
      * Every id in a live set, filtered by nothing.
      *
      * What a work holds is a question about ids, and the answer must not
@@ -309,12 +299,15 @@ object AnnotationWire {
     /**
      * How far a page of the feed reaches, or null if it says nothing.
      *
-     * Counted over the raw array rather than the records this device
-     * could read, or a page of marks it cannot represent would move the
-     * cursor nowhere and be fetched again for ever. A seq below 1 is not
-     * a reach: `optLong` reads a missing or unparseable one as 0, and
-     * treating that as an answer would pin the cursor just as firmly.
-     * Null hands the page back to `high_water`.
+     * Counted before anything is skipped: the cursor has to move by
+     * what the server sent, not by what this device could read. A page
+     * of standalone notes reads as nothing here, and taking the
+     * account's high water mark for it would step over every highlight
+     * after them, silently, once, for ever. A seq below 1 is not a
+     * reach either — `optLong` reads a missing or unparseable one as 0,
+     * and treating that as an answer would pin the cursor just as
+     * firmly. Null hands the page back to `high_water`, which is only
+     * for a page that really was empty.
      */
     fun pageReach(array: JSONArray?): Long? {
         if (array == null || array.length() == 0) return null
