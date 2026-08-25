@@ -248,11 +248,20 @@ only through its tag, so `main` stays a history of real releases and the
 next one still bumps from the last real version. Run it from any branch,
 as long as the tree is clean.
 
-F-Droid is told nothing about a test release, but it reads the tags:
+F-Droid is told nothing about a test release, but it reads the public tags:
 `v0.9.4-test.1` was once picked up by their `checkupdates` bot, which
 opened a merge request proposing it as the current version. The
 fdroiddata metadata therefore filters what the bot looks at, with
-`UpdateCheckMode: Tags ^v[0-9.]+$` — a test tag no longer matches.
+`UpdateCheckMode: Tags ^v[0-9.]+$` — a test tag no longer matches. Before
+any release tag is pushed or submitted, `hack/release` runs
+`hack/verify-fdroid-tags` against that live metadata. It fails closed if a
+final tag would be missed or a test tag would be discovered, so a future
+metadata or tag-format change cannot silently put a test build on F-Droid.
+
+Run `make verify-fdroid-tags` for the deterministic local regression checks,
+or run `hack/verify-fdroid-tags v0.10.0 v0.10.0-test.1` to check the live
+fdroiddata filter directly. A change to the test-tag format or the
+`UpdateCheckMode` pattern must update and rerun this policy check.
 
 To install one, download the APK from the release page and
 `adb install -r`, or hand it to whoever is testing.

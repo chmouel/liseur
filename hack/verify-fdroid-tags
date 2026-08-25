@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+#
+# hack/verify-fdroid-tags -- check which release tags F-Droid will discover.
+#
+# Usage: hack/verify-fdroid-tags [--metadata FILE] FINAL_TAG [EXCLUDED_TAG...]
+#
+# The live metadata is read from fdroiddata unless --metadata is supplied.
+# FINAL_TAG must be a plain vX.Y.Z tag. Every following tag must be excluded
+# by F-Droid's UpdateCheckMode filter.
+
+set -euo pipefail
+
+readonly FDROID_METADATA_URL="https://gitlab.com/fdroid/fdroiddata/-/raw/master/metadata/com.chmouel.liseur.yml"
+
+metadata_file=""
+final_tag=""
+excluded_tags=()
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+usage() {
+    sed -n '2,/^$/s/^# \{0,1\}//p' "$0"
+}
+
+require_command() {
+    command -v "$1" >/dev/null ||
+        die "missing required command: $1"
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --metadata)
+            [[ $# -ge 2 ]] || die "--metadata needs a file"
+            metadata_file=$2
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            die "unknown option: $1"
+            ;;
+        *)
+            if [[ -z "$final_tag" ]]; then
+                final_tag=$1
+            else
+                excluded_tags+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+
+[[ -n "$final_tag" ]] || {
+    usage >&2
+    exit 2
+}
+[[ "$final_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die "final tag must use vX.Y.Z format: $final_tag"
+
+if [[ ${#excluded_tags[@]} -eq 0 ]]; then
+    excluded_tags+=("$final_tag-test.1")
+fi
+
+if [[ -n "$metadata_file" ]]; then
+    [[ -r "$metadata_file" ]] ||
+        die "cannot read metadata file: $metadata_file"
+    metadata=$(cat "$metadata_file") ||
+        die "could not read metadata file: $metadata_file"
+else
+    require_command curl
+    metadata=$(curl -fsSL --max-time 30 "$FDROID_METADATA_URL") ||
+        die "could not read live F-Droid metadata"
+fi
+
+mode=$(printf '%s\n' "$metadata" |
+    sed -nE 's/^UpdateCheckMode:[[:space:]]+(.+)$/\1/p' | head -n 1)
+[[ -n "$mode" ]] ||
+    die "F-Droid metadata has no usable UpdateCheckMode"
+[[ "$mode" == Tags\ * ]] ||
+    die "F-Droid UpdateCheckMode is not a filtered Tags mode: $mode"
+pattern=${mode#Tags }
+[[ -n "$pattern" ]] ||
+    die "F-Droid Tags mode has no filter"
+
+require_command python3
+python3 - "$pattern" "$final_tag" "${excluded_tags[@]}" <<'PY'
+import re
+import sys
+
+pattern, final_tag, *excluded_tags = sys.argv[1:]
+try:
+    tag_filter = re.compile(pattern)
+except re.error as error:
+    print(f"error: invalid F-Droid tag filter {pattern!r}: {error}", file=sys.stderr)
+    raise SystemExit(1)
+
+if tag_filter.match(final_tag) is None:
+    print(
+        f"error: F-Droid would not discover final release tag {final_tag!r}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+matched_excluded = [
+    tag for tag in excluded_tags if tag_filter.match(tag) is not None
+]
+if matched_excluded:
+    print(
+        "error: F-Droid would discover non-final tag(s): "
+        + ", ".join(repr(tag) for tag in matched_excluded),
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+print(f"F-Droid tag filter accepts final release: {final_tag}")
+for tag in excluded_tags:
+    print(f"F-Droid tag filter excludes non-final release: {tag}")
+PY

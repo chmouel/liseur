@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# hack/test-fdroid-tags -- deterministic tests for the F-Droid tag policy.
+
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+metadata=$(mktemp -t liseur-fdroid-tags.XXXXXX)
+trap 'rm -f "$metadata"' EXIT
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+expect_rejected() {
+    if "$here/verify-fdroid-tags" "$@" >/dev/null 2>&1; then
+        die "policy unexpectedly accepted: $*"
+    fi
+}
+
+cat > "$metadata" <<'EOF'
+UpdateCheckMode: Tags ^v[0-9.]+$
+EOF
+"$here/verify-fdroid-tags" --metadata "$metadata" \
+    v0.10.0 v0.10.0-test.1 v0.10.0-rc.1 >/dev/null
+
+cat > "$metadata" <<'EOF'
+UpdateCheckMode: Tags ^v[0-9.]+(-test\.[0-9]+)?$
+EOF
+expect_rejected --metadata "$metadata" \
+    v0.10.0 v0.10.0-test.1
+
+cat > "$metadata" <<'EOF'
+UpdateCheckMode: Tags
+EOF
+expect_rejected --metadata "$metadata" \
+    v0.10.0 v0.10.0-test.1
+
+printf 'F-Droid tag policy tests passed.\n'

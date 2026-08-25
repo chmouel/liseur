@@ -45,8 +45,15 @@ target wrapping them — run `make help` for the short list. See
 - **`install-release`** — Builds the release APK, signs it with the
   release key from `pass`, and installs it on a device picked via `fzf`.
 - **`release`** — Runs the release process: bumps `versionCode`/
-  `versionName`, tags, builds, publishes the GitHub release, and submits
-  the F-Droid update. See `DEVELOPER.md` for the full workflow and flags.
+  `versionName`, checks that F-Droid will see final tags but not test tags,
+  tags, builds, publishes the GitHub release, and submits the F-Droid
+  update. See `DEVELOPER.md` for the full workflow and flags.
+- **`verify-fdroid-tags`** — Reads the live F-Droid metadata and fails closed
+  unless a plain `vX.Y.Z` tag is discoverable and the supplied non-final tags
+  are not. The release script runs it before pushing or submitting a tag.
+- **`test-fdroid-tags`** — Runs the deterministic fixture-based tests for the
+  tag-policy verifier. It does not contact F-Droid and is part of `make check`
+  and CI.
 - **`generate-release-notes`** — Writes the GitHub release notes for a
   tag by asking Gemini to turn the commits since the previous tag into
   prose. It also reads the pull requests associated with those commits,

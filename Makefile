@@ -12,7 +12,7 @@ PACKAGE := com.chmouel.liseur
 ACTIVITY := $(PACKAGE)/.MainActivity
 DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
 
-.PHONY: help build debug release bundle test lint check e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status
+.PHONY: help build debug release bundle test lint check verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status
 
 help:
 	@printf '%s\n' \
@@ -22,6 +22,7 @@ help:
 		'make test              Run JVM unit tests' \
 		'make lint              Run Android Lint' \
 		'make check             Run tests, lint, and debug build' \
+		'make verify-fdroid-tags Check the F-Droid release-tag policy' \
 		'make e2e               Run the device scenarios in tests/' \
 		'make emulator          Start the configured Android emulator' \
 		'make stop              Stop the configured Android emulator' \
@@ -55,7 +56,10 @@ test:
 lint:
 	$(GRADLE) lintDebug
 
-check: test lint build
+check: test lint build verify-fdroid-tags
+
+verify-fdroid-tags:
+	hack/test-fdroid-tags
 
 # The device scenarios in tests/. Deliberately not part of check: they
 # need a device with a debug build and a seeded library, which a CI

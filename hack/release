@@ -6,6 +6,7 @@ readonly GH_REPO="chmouel/liseur"
 readonly APP_ID="com.chmouel.liseur"
 readonly FDROID_PROJECT="fdroid%2Ffdroiddata"
 readonly FDROID_FORK_PROJECT="chmouel%2Ffdroiddata"
+readonly FDROID_TAG_POLICY_SCRIPT="hack/verify-fdroid-tags"
 readonly BUILD_FILE="app/build.gradle.kts"
 readonly RELEASE_WAIT_SECONDS=1800
 readonly RELEASE_POLL_SECONDS=20
@@ -68,6 +69,8 @@ v0.3.0-test.2. The version bump is committed but never pushed to a
 branch — only the tag that points at it — so main keeps a history of
 real releases. There is no changelog to write and no local test, lint or
 reproducibility run: the point of a test release is to be quick.
+Before pushing the tag, the live F-Droid tag filter is checked and the
+release stops if it would discover this non-final tag.
 
 The F-Droid step opens (or updates) a fdroiddata merge request carrying
 the new build entry plus the signature extracted from the released APK:
@@ -479,6 +482,11 @@ create_test_release() {
     version_code=$((version_code + 1))
     ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null ||
         die "tag $tag already exists"
+
+    # F-Droid scans public tags independently of this script. Fail closed
+    # before asking for confirmation or syncing secrets if its live filter
+    # would discover the test tag.
+    "./$FDROID_TAG_POLICY_SCRIPT" "v$base" "$tag"
 
     last_tag=$(git describe --tags --abbrev=0 \
         --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-test.*' 2>/dev/null || true)
@@ -942,7 +950,7 @@ if [[ "$test_release" == true ]]; then
     [[ $# -le 1 ]] || die "--test takes at most a version"
     skip_play=true
 
-    for command in git gh jq sed awk pass; do
+    for command in git gh jq sed awk pass curl python3; do
         require_command "$command"
     done
 
@@ -975,7 +983,7 @@ else
         die "VERSION must use X.Y.Z format"
 fi
 
-for command in git gh glab jq base64 sed awk pass; do
+for command in git gh glab jq base64 sed awk pass curl python3; do
     require_command "$command"
 done
 
@@ -1018,6 +1026,7 @@ if [[ "$fdroid_only" == true ]]; then
     [[ "$tag_version" == "$version" && -n "$tag_version_code" ]] ||
         die "$tag does not contain app version $version"
 
+    "./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-test.1"
     update_fdroid_submission "$version" "$tag_version_code" "$commit_sha"
     exit
 fi
@@ -1043,6 +1052,10 @@ elif [[ "$local_head" != "$remote_head" ]]; then
     [[ $(git log -1 --format=%s) == "chore: release $tag" ]] ||
         die "the unpushed commit is not the $tag release commit"
 fi
+
+# F-Droid scans public tags independently of the submission step. Check
+# both sides of the policy before changing secrets or pushing a release.
+"./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-test.1"
 
 sync_release_secrets
 
