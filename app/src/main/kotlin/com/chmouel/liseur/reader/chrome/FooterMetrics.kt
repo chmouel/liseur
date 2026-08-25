@@ -17,6 +17,18 @@ object FooterMetrics {
     const val CLEARANCE_DP = 4f
 
     /**
+     * Air kept under the footer, between it and the screen's edge, in dp.
+     *
+     * The footer is only ever drawn while the chrome is hidden, and the
+     * chrome being hidden is what hides the system bars, so there is no
+     * navigation bar down there to sit on — reserving its inset left a
+     * finger-deep band of blank paper on three-button navigation. With
+     * the footer's own [VERTICAL_PADDING_DP] this comes to the same
+     * 12dp margin the page keeps at the top.
+     */
+    const val BOTTOM_MARGIN_DP = 6f
+
+    /**
      * The line height the footer's labelSmall text falls back to when
      * the theme's value is not given in sp (Material's own default).
      */
@@ -29,9 +41,9 @@ object FooterMetrics {
      * owns the sp-to-dp conversion, through `Density.toDp()`, which
      * honours Android's nonlinear font scaling where a bare multiply
      * by the font scale would not. Window insets are deliberately not
-     * in here either — they are the layout's job, applied as inset
-     * padding where Compose can consume overlaps between them.
+     * in here: the footer is drawn with the system bars hidden, so the
+     * only thing under it is the screen's edge and [BOTTOM_MARGIN_DP].
      */
     fun reservedHeightDp(lineHeightDp: Float): Float =
-        lineHeightDp + VERTICAL_PADDING_DP * 2 + CLEARANCE_DP
+        lineHeightDp + VERTICAL_PADDING_DP * 2 + CLEARANCE_DP + BOTTOM_MARGIN_DP
 }
