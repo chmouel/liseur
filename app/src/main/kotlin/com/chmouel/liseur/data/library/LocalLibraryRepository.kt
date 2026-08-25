@@ -10,9 +10,6 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.LibraryFolderDao
-import com.chmouel.liseur.data.db.BookAnnotationDao
-import com.chmouel.liseur.data.db.ReadingProgressDao
-import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.domain.SeriesMetadata
 import com.chmouel.liseur.domain.isSameWork
 import com.chmouel.liseur.domain.workIdOf
@@ -42,9 +39,6 @@ class LocalLibraryRepository(
     private val publicationOpener: PublicationOpener,
     private val bookDao: BookDao,
     private val folderDao: LibraryFolderDao,
-    private val progressDao: ReadingProgressDao,
-    private val annotationDao: BookAnnotationDao,
-    private val sessionDao: ReadingSessionDao,
     private val bookRemoval: BookRemoval,
 ) {
     val books: Flow<List<Book>> = bookDao.observeAll()
@@ -334,11 +328,7 @@ class LocalLibraryRepository(
             )
             if (!isSameWork(previousWorkId, workId)) {
                 Log.i(TAG, "A different book took over a path; starting it fresh")
-                progressDao.forget(url.toString())
-                annotationDao.deleteForBook(url.toString())
-                sessionDao.deleteForBook(url.toString())
-                bookDao.forgetReadingHistory(url.toString())
-                bookDao.clearSeriesForReplacedWork(url.toString())
+                bookRemoval.contentReplaced(url.toString())
             }
         } finally {
             publication.close()

@@ -16,15 +16,20 @@ import org.readium.r2.shared.publication.Locator
 /**
  * The colours a passage can be marked in.
  *
- * Four is what Kindle offers and it is about the limit of what stays
+ * Four of them are what Kindle offers and about the limit of what stays
  * legible over text; they are kept light enough that words read cleanly
- * through them.
+ * through them. Purple and orange joined for liseur-sync, whose palette
+ * is six: a highlight another device made in a colour this one
+ * could not name would otherwise arrive rewritten, and a sync that
+ * quietly changes what it carries is worse than one colour too many.
  */
 enum class HighlightTint(val color: Color, @param:StringRes val label: Int) {
     YELLOW(Color(0xFFFFD54F), R.string.annotation_tint_yellow),
     GREEN(Color(0xFF9CCC65), R.string.annotation_tint_green),
     BLUE(Color(0xFF64B5F6), R.string.annotation_tint_blue),
     PINK(Color(0xFFF06292), R.string.annotation_tint_pink),
+    PURPLE(Color(0xFFB39DDB), R.string.annotation_tint_purple),
+    ORANGE(Color(0xFFFFB74D), R.string.annotation_tint_orange),
     ;
 
     companion object {

@@ -147,7 +147,18 @@ class AnnotationBackupRepository(
         val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
         val incoming = (contents as BackupContents.Readable).books.flatMap { book ->
             val bookId = matchBackedUpBook(book, known)
-            book.annotations.map { it.copy(bookId = bookId) }
+            book.annotations.map { mark ->
+                // The backup format records when a mark was made and
+                // nothing else, so that is what it changed at. It has to
+                // be something: liseur-sync sends this as `client_ts`,
+                // and a restored mark left at zero would claim to have
+                // been written in 1970 and disagree with every device
+                // that already has it.
+                mark.copy(
+                    bookId = bookId,
+                    updatedAt = mark.updatedAt.takeIf { it > 0 } ?: (mark.createdAt * 1000),
+                )
+            }
         }
         if (incoming.isEmpty()) return@withContext BackupResult.Imported(added = 0, alreadyHere = 0)
 

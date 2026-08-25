@@ -77,6 +77,20 @@ data class WorkAlias(
     @ColumnInfo(name = "source_sent", defaultValue = "0") val sourceSent: Boolean = false,
     /** The file this alias was resolved for; null for file-less books. */
     @ColumnInfo(name = "edition_sha") val editionSha: String? = null,
+    /**
+     * When this work's annotations were last reconciled against the
+     * server's live set, as epoch millis; 0 means never.
+     *
+     * A timestamp rather than a flag because reconciling is not a
+     * one-off. The server sweeps a deleted annotation's tombstone after
+     * six months, and a device away longer than that would never hear of
+     * the deletion from the delta feed — the live set is the only thing
+     * that can still tell it. It is also how an annotation made against
+     * a book this device downloaded later arrives at all: everything
+     * said before the book had a name here sits behind the cursor.
+     */
+    @ColumnInfo(name = "annotations_reconciled_at", defaultValue = "0")
+    val annotationsReconciledAt: Long = 0,
     @ColumnInfo(name = "resolved_at") val resolvedAt: Long,
 ) {
     /** Whether reading may be exchanged under this name yet. */
@@ -185,6 +199,22 @@ interface WorkIdentityDao {
 
     @Query("UPDATE work_alias SET seeded = 1 WHERE book_url = :bookUrl AND peer_id = :peerId")
     suspend fun markSeeded(bookUrl: String, peerId: String)
+
+    @Query(
+        """
+        UPDATE work_alias SET annotations_reconciled_at = :at
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    suspend fun markAnnotationsReconciled(bookUrl: String, peerId: String, at: Long)
+
+    /**
+     * Forgets when annotations were reconciled, so the next run asks
+     * again. Used when an account is retired: what one server confirmed
+     * says nothing about the next.
+     */
+    @Query("UPDATE work_alias SET annotations_reconciled_at = 0 WHERE peer_id = :peerId")
+    suspend fun forgetAnnotationReconciliation(peerId: String)
 
     @Upsert
     suspend fun upsert(ambiguity: WorkAmbiguity)

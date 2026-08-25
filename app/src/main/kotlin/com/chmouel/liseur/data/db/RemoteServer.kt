@@ -80,6 +80,17 @@ data class RemoteServer(
      * transaction that writes the page it covers, never before.
      */
     @ColumnInfo(name = "sync_cursor_seq", defaultValue = "0") val syncCursorSeq: Long = 0,
+    /**
+     * How far through the liseur-sync annotation feed this device has
+     * reconciled.
+     *
+     * A second counter, never shared with [syncCursorSeq]: annotations
+     * are a state feed on their own sequence, and mixing the two would
+     * have one skip the other's records. Advanced under the same rule —
+     * in the transaction that writes the page it covers, never before.
+     */
+    @ColumnInfo(name = "annotation_cursor_seq", defaultValue = "0")
+    val annotationCursorSeq: Long = 0,
 ) {
     /** The Kobo sync token in the clear, or null if there is none to read. */
     @get:Ignore
@@ -199,6 +210,10 @@ interface RemoteServerDao {
      */
     @Query("UPDATE remote_server SET sync_cursor_seq = :seq WHERE id = :id")
     suspend fun setSyncCursor(seq: Long, id: Long = RemoteServer.SINGLE_ID)
+
+    /** Moves the annotation cursor, under the same rule as [setSyncCursor]. */
+    @Query("UPDATE remote_server SET annotation_cursor_seq = :seq WHERE id = :id")
+    suspend fun setAnnotationCursor(seq: Long, id: Long = RemoteServer.SINGLE_ID)
 
     @Query("DELETE FROM remote_server WHERE id = :id")
     suspend fun delete(id: Long = RemoteServer.SINGLE_ID)

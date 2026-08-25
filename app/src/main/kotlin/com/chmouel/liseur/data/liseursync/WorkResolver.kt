@@ -250,6 +250,11 @@ class WorkResolver(
             confidence = confidence,
             confirmed = sameWork && existing?.confirmed == true,
             seeded = sameWork && existing?.seeded == true,
+            annotationsReconciledAt = if (sameWork) {
+                existing?.annotationsReconciledAt ?: 0
+            } else {
+                0
+            },
             // A low answer registers nothing server-side, so it still
             // owes the one re-resolve that carries the reader's yes —
             // the same debt the identifier path tracks with this flag.
@@ -325,6 +330,11 @@ class WorkResolver(
             confidence = confidence,
             confirmed = sameWork && existing?.confirmed == true,
             seeded = sameWork && existing?.seeded == true,
+            annotationsReconciledAt = if (sameWork) {
+                existing?.annotationsReconciledAt ?: 0
+            } else {
+                0
+            },
             // The server registers nothing on a fuzzy, unconfirmed hit,
             // so a low answer leaves the catalog id still owed.
             sourceSent = sourceId != null && confidence == WorkAlias.HIGH,

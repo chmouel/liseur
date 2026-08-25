@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.remote
 import com.chmouel.liseur.data.calibre.CalibreParsing
 import com.chmouel.liseur.data.calibre.CalibreSetupClient
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.AnnotationSyncDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.SeriesExtraDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
@@ -46,6 +47,13 @@ class RemoteAccountRepository(
      * not exercise a liseur-sync account.
      */
     private val sessionDao: ReadingSessionDao? = null,
+    /**
+     * What a server confirmed about the reader's highlights (ADR-0028).
+     * A rev is that server's own number; leaving one behind for the next
+     * account would have it refuse edits over a history it has no part
+     * in. Null in tests that do not exercise a liseur-sync account.
+     */
+    private val annotationSyncDao: AnnotationSyncDao? = null,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -338,6 +346,10 @@ class RemoteAccountRepository(
                 // the whole log — and a different account starts at
                 // nothing, because its log is a different world.
                 syncCursorSeq = existing?.syncCursorSeq ?: 0,
+                // The annotation feed has a cursor of its own and the
+                // same reasoning. Leaving it out reset it on every token
+                // rotation, which replayed the whole annotation log.
+                annotationCursorSeq = existing?.annotationCursorSeq ?: 0,
                 liseurAccountId = capabilities.liseurAccountId
                     ?: existing?.liseurAccountId,
             ),
@@ -388,6 +400,11 @@ class RemoteAccountRepository(
     suspend fun forgetUnreadableAccount(): Boolean = changingAccount {
         val server = dao.get() ?: return@changingAccount false
         if (server.credentials != null) return@changingAccount false
+        // Through the same door as a disconnect. This used to drop the
+        // row on its own, which left every scrap of per-account state
+        // behind — work names, sync agreements, a cursor — for whoever
+        // paired next to inherit.
+        forgetSyncPeer(server)
         dao.delete()
         true
     }
@@ -444,6 +461,17 @@ class RemoteAccountRepository(
         peerStateDao?.forgetPeer(server.accountKey)
         identityDao?.forgetPeerAliases(server.accountKey)
         identityDao?.forgetPeerAmbiguities(server.accountKey)
+        identityDao?.forgetAnnotationReconciliation(server.accountKey)
+        // The marks themselves stay — they are the reader's, and were
+        // never the server's to take away. What goes is the record of
+        // what this server had confirmed about them: a rev is a number
+        // only the server that issued it can read, and offering one to
+        // the next account would have it refuse edits over a history it
+        // has no part in. The cursor goes for the same reason, so the
+        // next account is caught up from the beginning rather than from
+        // wherever the last one happened to be.
+        annotationSyncDao?.forgetPeer(server.accountKey)
+        dao.setAnnotationCursor(0)
         sessionDao?.forgetUploads()
     }
 

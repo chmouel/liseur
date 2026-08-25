@@ -157,6 +157,64 @@ emulator.
 - Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
   must stand on its own.
+- Annotations are the exception to that rule, because they are mutable
+  and deletable: an id derived from current content stops being
+  reproducible the moment the reader edits the row. `annotation_sync`
+  holds what the server confirmed *and* the exact bytes of any request
+  in flight, written before the call and replayed verbatim through
+  `postRaw` — first send and retry alike. Do not rebuild an item from
+  `JSONObject` on the way out; `org.json` has no key ordering and the
+  server compares raw bytes. Two fingerprints: the acknowledged one is
+  content only (never `base_rev`, never `edition_sha`), the pending one
+  identifies the request so an answer applies without overwriting an
+  edit made while it was in the air. Every answer is written down
+  against the row re-read inside the transaction, never against the
+  snapshot that was sent. See `docs/adr/0011-annotation-sync.md`.
+- Annotation freshness is ordered by `seq`, never by `rev`. A rev
+  restarts at 1 when the server recreates an id whose tombstone was
+  swept. For the same reason the feed cursor moves by the raw page, not
+  by the records this device could represent: `high_water` is only ever
+  for a page the server sent empty.
+- The annotation pass runs settle → pull → reconcile → push → deletes,
+  and that order is not negotiable. Reconciling a work's live set before
+  pushing is what stops an offline edit to a swept tombstone being sent
+  as a create, which resurrects a highlight the reader deleted
+  elsewhere. Phases 0 and 1 are account-wide even for a book-scoped run:
+  the pending set and the cursor belong to the account, and settling one
+  book's requests would strand the rest. Conflicts are server-wins.
+  `client_ts` decides nothing. A work with an unsettled mark is
+  reconciled every pass, whatever the seven-day interval says: that
+  interval guesses at the server's retention, which may be a day, and
+  guessing wrong about a work with something to push is the
+  resurrection the phase exists to prevent.
+- A mark with a rev is pushed only if the same pass saw it in the
+  server's live set. Agreeing the work is not enough: the push rescans a
+  mutable table. One predicate, `offerable()`, decides both which books
+  are worth reconciling and what the push sends, so they cannot drift.
+- A conflict is settled against the copy that was sent, never against a
+  newer one the reader wrote after the request left. Compare the local
+  content, not the sync row: editing a highlight does not touch it.
+- Every annotation network call checks the account is still the
+  connected one first, not just before storing the answer — the request
+  is the side effect. A record's home alias is likewise re-read inside
+  the transaction that commits it, so a file that took over the path
+  mid-pass cannot have another book's highlight anchored into it.
+- An annotation id is opaque, so `.` and `..` are ids to carry and push
+  like any other. They cannot be *addressed*: a URL parser decodes
+  `%2E%2E` before it resolves dot segments, so no escape survives.
+  `LiseurSyncApi.addressable()` is what makes a delete decline rather
+  than aim at the collection.
+- Removing a book keeps its annotations *and* its `annotation_sync`
+  rows. They are still on the server and on the other phone, and
+  dropping only the agreements would push every mark again as new when
+  the book came back. `BookRemoval.contentReplaced()` is the one path
+  that clears both, in one transaction, because a different file took
+  over the path — a sync row with no annotation behind it reads as a
+  deletion the reader made.
+- Per-account annotation state is cleared inside
+  `RemoteAccountRepository.forgetSyncPeer()`, never at a call site.
+  Disconnecting, switching accounts and `forgetUnreadableAccount()` all
+  go through that one door.
 - A book only on this device can be sent to liseur-sync, where the
   server allows it: `BookUploader`, `ServerCapabilities.canUpload` (read
   from the `library-upload` scope) and `BookUploadWorker`, whose unique

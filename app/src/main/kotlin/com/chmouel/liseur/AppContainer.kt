@@ -27,6 +27,7 @@ import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.BookUploadRepository
 import com.chmouel.liseur.data.remote.UploadPrompts
 import com.chmouel.liseur.data.remote.CompositePositionSync
+import com.chmouel.liseur.data.liseursync.LiseurSyncAnnotations
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
@@ -103,6 +104,9 @@ class AppContainer(context: Context) {
         sessionDao = database.readingSessionDao(),
         peerStateDao = database.syncPeerStateDao(),
         identityDao = database.workIdentityDao(),
+        progressDao = database.readingProgressDao(),
+        annotationDao = database.annotationDao(),
+        annotationSyncDao = database.annotationSyncDao(),
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -112,9 +116,6 @@ class AppContainer(context: Context) {
         publicationOpener = publicationOpener,
         bookDao = database.bookDao(),
         folderDao = database.libraryFolderDao(),
-        progressDao = database.readingProgressDao(),
-        annotationDao = database.annotationDao(),
-        sessionDao = database.readingSessionDao(),
         bookRemoval = bookRemoval,
     )
 
@@ -153,6 +154,7 @@ class AppContainer(context: Context) {
         peerStateDao = database.syncPeerStateDao(),
         identityDao = database.workIdentityDao(),
         sessionDao = database.readingSessionDao(),
+        annotationSyncDao = database.annotationSyncDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
@@ -234,6 +236,15 @@ class AppContainer(context: Context) {
      * liseur-sync's position sync: the append-only op log, bound to the
      * catalog account like the other kinds' syncs are.
      */
+    /** Highlights, notes and bookmarks across devices (ADR-0028). */
+    private val liseurSyncAnnotations = LiseurSyncAnnotations(
+        serverDao = database.remoteServerDao(),
+        annotationDao = database.annotationDao(),
+        syncDao = database.annotationSyncDao(),
+        identityDao = database.workIdentityDao(),
+        inTransaction = { work -> database.withTransaction { work() } },
+    )
+
     val liseurSync = LiseurSyncPositionSync(
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
@@ -246,6 +257,7 @@ class AppContainer(context: Context) {
         finishedState = finishedState,
         reporting = syncReporting,
         networkAvailability = networkAvailability,
+        annotations = liseurSyncAnnotations,
         inTransaction = { work -> database.withTransaction { work() } },
     )
 

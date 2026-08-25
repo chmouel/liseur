@@ -116,6 +116,9 @@ class RemoteCatalogRepositoryTest {
             db.readingSessionDao(),
             db.syncPeerStateDao(),
             db.workIdentityDao(),
+            db.readingProgressDao(),
+            db.annotationDao(),
+            db.annotationSyncDao(),
         ),
     )
 
@@ -157,6 +160,9 @@ class RemoteCatalogRepositoryTest {
             db.readingSessionDao(),
             db.syncPeerStateDao(),
             db.workIdentityDao(),
+            db.readingProgressDao(),
+            db.annotationDao(),
+            db.annotationSyncDao(),
         ),
     )
 
@@ -554,6 +560,9 @@ class RemoteCatalogRepositoryTest {
             db.readingSessionDao(),
             db.syncPeerStateDao(),
             db.workIdentityDao(),
+            db.readingProgressDao(),
+            db.annotationDao(),
+            db.annotationSyncDao(),
         ),
             scope = this,
         )
@@ -680,6 +689,9 @@ class RemoteCatalogRepositoryTest {
                 db.readingSessionDao(),
                 db.syncPeerStateDao(),
                 db.workIdentityDao(),
+                db.readingProgressDao(),
+                db.annotationDao(),
+                db.annotationSyncDao(),
             ),
         )
 

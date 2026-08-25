@@ -313,6 +313,8 @@
     <string name="annotation_tint_green">Highlight in green</string>
     <string name="annotation_tint_blue">Highlight in blue</string>
     <string name="annotation_tint_pink">Highlight in pink</string>
+    <string name="annotation_tint_purple">Highlight in purple</string>
+    <string name="annotation_tint_orange">Highlight in orange</string>
     <string name="annotation_note">Note</string>
     <string name="annotation_note_title">Note</string>
     <string name="annotation_note_hint">What did this make you think?</string>
