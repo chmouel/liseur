@@ -30,6 +30,49 @@ internal fun visibleWebView(root: View): WebView? {
         ?: visible.maxByOrNull { (_, rect) -> rect.width() * rect.height() }?.first
 }
 
+/**
+ * The same web view, held on to between frames.
+ *
+ * A reader carrying itself down the page asks this question sixty times
+ * a second, and [visibleWebView] answers it by walking the whole view
+ * tree. So the answer is kept, and what is asked each frame instead is
+ * the cheap half of the same question: is the view still attached, and
+ * does it still cover the middle of the reader — one rect against one
+ * point, no traversal and no allocation.
+ *
+ * The check has to be that question and not a weaker one. Readium keeps
+ * the neighbouring chapters attached to its pager, so a chapter the
+ * reader has left goes on being attached and, as far as `isShown` is
+ * concerned, shown. Only covering the centre means *current*, because
+ * that is what [visibleWebView] means by it.
+ *
+ * When nothing covers the centre — mid-transition — [visibleWebView]
+ * falls back to the largest visible view, which by construction fails
+ * the check, so the cache spends those frames looking the answer up
+ * again. That is the cost paid on every frame before this existed, and
+ * it stops as soon as the new chapter settles under the centre.
+ *
+ * Not thread-safe, by [CachedLookup]: views belong to the main thread
+ * anyway.
+ */
+internal fun visibleWebViewCache(root: View): CachedLookup<WebView> {
+    val origin = IntArray(2)
+    val bounds = Rect()
+    return CachedLookup(
+        stillGood = { web ->
+            if (!web.isAttachedToWindow) {
+                false
+            } else {
+                root.getLocationOnScreen(origin)
+                val x = origin[0] + root.width / 2
+                val y = origin[1] + root.height / 2
+                web.getGlobalVisibleRect(bounds) && bounds.contains(x, y)
+            }
+        },
+        lookup = { visibleWebView(root) },
+    )
+}
+
 private fun collectVisibleWebViews(view: View, into: MutableList<Pair<WebView, Rect>>) {
     when {
         view is WebView -> {

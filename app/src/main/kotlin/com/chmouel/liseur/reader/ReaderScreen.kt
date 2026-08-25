@@ -117,6 +117,7 @@ import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.FooterMetrics
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.visibleWebView
+import com.chmouel.liseur.reader.chrome.visibleWebViewCache
 import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
@@ -741,12 +742,30 @@ fun ReaderScreen(
      */
     var autoScrollLocator by remember { mutableStateOf<Locator?>(null) }
     val autoScrollRunning by rememberUpdatedState(canAutoScroll)
+    val density = LocalDensity.current.density
 
-    LaunchedEffect(navigator, canAutoScroll, prefs.autoScrollSpeed, prefs.fontSize, lifecycle) {
+    LaunchedEffect(
+        navigator,
+        canAutoScroll,
+        prefs.autoScrollSpeed,
+        prefs.fontSize,
+        density,
+        lifecycle,
+    ) {
         if (!canAutoScroll) return@LaunchedEffect
         val nav = navigator ?: return@LaunchedEffect
-        val density = view.resources.displayMetrics.density
+        val root = nav.publicationView
         val ticker = AutoScrollTicker()
+        val webViews = visibleWebViewCache(root)
+        // The pace cannot change under the loop: every term of it is a
+        // key of this effect, so a reader who moves the slider gets a
+        // new loop rather than a new number in the old one. Working it
+        // out sixty times a second to arrive at the same answer is the
+        // sort of arithmetic a frame should not be spending itself on.
+        val pixelsPerSecond = AutoScrollSpeed.dpPerSecond(
+            step = prefs.autoScrollSpeed,
+            fontSize = prefs.fontSize,
+        ) * density
         // RESUMED and not merely STARTED: a reader looking at something
         // else on a split screen is not reading this, and the page they
         // come back to should be the page they left.
@@ -754,14 +773,48 @@ fun ReaderScreen(
             ticker.reset()
             var savedAtNanos = 0L
             var saving = false
+            // The place kept for the pause outlives this loop, and a
+            // book moved to another chapter while the reader was away
+            // moved without anyone here to see it: the flow below only
+            // starts watching now, and its first value is the state of
+            // things rather than news. A locator from a chapter that is
+            // no longer open is not the reader's place in this one.
+            if (autoScrollLocator?.href != nav.currentLocator.value.href) {
+                autoScrollLocator = null
+            }
+            // Two events, told apart because they are not the same news.
+            // Invalidating costs nothing and can be said too often —
+            // the next frame simply looks the view up again — so it
+            // rides both a new position and a layout pass, the pair
+            // this screen already trusts elsewhere: Readium reports
+            // arriving at a resource before laying it out, and a view
+            // that does not exist yet cannot be found.
+            launch {
+                merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
+                    webViews.invalidate()
+                }
+            }
+            // A chapter change, on the other hand, is rare and means
+            // something: the carried fraction belongs to the page that
+            // has gone, and so does the place kept for the pause.
+            // Hanging that off every position — they arrive as the
+            // reader moves within a chapter — would reset the pace
+            // constantly and throw the pause position away for nothing.
+            launch {
+                nav.currentLocator
+                    .map { it.href }
+                    .distinctUntilChanged()
+                    .drop(1)
+                    .collect {
+                        ticker.reset()
+                        savedAtNanos = 0L
+                        autoScrollLocator = null
+                    }
+            }
             while (true) {
                 val now = withFrameNanos { it }
-                val web = visibleWebView(nav.publicationView) ?: continue
+                val web = webViews.current() ?: continue
                 val vertical = nav.settings.value.verticalText
-                val pixelsPerSecond = AutoScrollSpeed.dpPerSecond(
-                    step = prefs.autoScrollSpeed,
-                    fontSize = prefs.fontSize,
-                ) * density
                 val pixels = ticker.step(nowNanos = now, pixelsPerSecond = pixelsPerSecond)
                 if (pixels <= 0) continue
                 if (!saving && now - savedAtNanos >= AUTO_SCROLL_SAVE_NANOS) {
@@ -773,20 +826,32 @@ fun ReaderScreen(
                             // down with it: this coroutine is the loop's
                             // child, and an exception here would cancel
                             // its parent and stop the page for good.
+                            val asking = nav.currentLocator.value.href
                             val here = runCatching { nav.firstVisibleElementLocator() }
                                 .getOrNull()
                             if (here != null) {
                                 val captured = runCatching { capture(nav, here) }
                                     .getOrDefault(here)
-                                autoScrollLocator = captured
-                                // Auto-scroll is reading, so it teaches
-                                // the pace estimator and counts as time
-                                // spent, which READER_MOVEMENT is what
-                                // carries.
-                                onLocatorChanged(
-                                    captured,
-                                    NavigatorPositionEvent.READER_MOVEMENT,
-                                )
+                                // Both halves of this are questions put
+                                // to the document, and the reader may
+                                // have left the chapter while it was
+                                // answering. A save dropped costs a tick
+                                // and no more; a save kept would file
+                                // the old chapter's place as the
+                                // reader's place in the new one.
+                                if (captured.href == asking &&
+                                    nav.currentLocator.value.href == asking
+                                ) {
+                                    autoScrollLocator = captured
+                                    // Auto-scroll is reading, so it
+                                    // teaches the pace estimator and
+                                    // counts as time spent, which
+                                    // READER_MOVEMENT is what carries.
+                                    onLocatorChanged(
+                                        captured,
+                                        NavigatorPositionEvent.READER_MOVEMENT,
+                                    )
+                                }
                             }
                         } finally {
                             saving = false
@@ -813,6 +878,7 @@ fun ReaderScreen(
                     ticker.reset()
                     savedAtNanos = 0L
                     autoScrollLocator = null
+                    webViews.invalidate()
                     if (!moved) {
                         autoScrollArmed = false
                         return@repeatOnLifecycle
