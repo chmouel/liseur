@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1170,13 +1169,15 @@ fun ReaderScreen(
         // hidden while reading, so all that space bought was a band of
         // background at the top of every page; the top is not inset
         // now. The bottom of a paged book keeps clear of the footer
-        // instead of the bars: the navigation-bar inset the footer
-        // floats on — read ignoring visibility, so it is the same
-        // whether the bars are shown — and above it the footer's own
-        // derived height (FooterMetrics), which follows the system
-        // font scale the way the fixed count of dp it replaces could
-        // not. Neither figure moves when the chrome shows or hides, so
-        // toggling the chrome still cannot reflow the page.
+        // instead of the bars: the footer's own derived height
+        // (FooterMetrics), which follows the system font scale the way
+        // the fixed count of dp it replaces could not. The navigation
+        // bar is not in that figure — the footer is only drawn while
+        // the chrome is hidden, which is the very thing that hides the
+        // bars, so reserving the bar's inset only left a blank band
+        // under the footer, a finger deep on three-button navigation.
+        // The reservation does not move when the chrome shows or hides,
+        // so toggling the chrome still cannot reflow the page.
         //
         // The camera hole is the one thing still kept clear of a page
         // that is turned, because a line behind it is a line that never
@@ -1205,9 +1206,14 @@ fun ReaderScreen(
             // toDp() owns the sp-to-dp conversion so nonlinear font
             // scaling is honoured. A footer switched off reserves only
             // the page's own 12dp margin, same as the top edge — the
-            // footer band and the inset under it go back to the text,
-            // and the one reflow that costs is the settings change
-            // itself.
+            // footer band goes back to the text, and the one reflow
+            // that costs is the settings change itself.
+            //
+            // A vertical-text book draws no footer either, but it keeps
+            // the band: whether the text is vertical is only known once
+            // the navigator has read the publication, and taking the
+            // band back then would reflow the book under the reader on
+            // open. An unused 38dp is the cheaper of the two.
             val footerLineHeight = MaterialTheme.typography.labelSmall.lineHeight
             val footerShowing = prefs.footerMode != FooterMode.NONE
             val footerReserve = FooterMetrics.reservedHeightDp(
@@ -1230,16 +1236,6 @@ fun ReaderScreen(
                         } else {
                             Modifier
                                 .windowInsetsPadding(WindowInsets.displayCutout)
-                                .then(
-                                    if (footerShowing) {
-                                        Modifier.windowInsetsPadding(
-                                            WindowInsets.navigationBarsIgnoringVisibility
-                                                .only(WindowInsetsSides.Bottom),
-                                        )
-                                    } else {
-                                        Modifier
-                                    },
-                                )
                                 .padding(
                                     top = 12.dp,
                                     bottom = if (footerShowing) footerReserve else 12.dp,
@@ -1296,11 +1292,16 @@ fun ReaderScreen(
             )
         }
 
+        // The bars come and go with the chrome, so this corner takes the
+        // live navigation-bar inset: it lifts the scrubber and the pills
+        // clear of a bar that is actually there, and asks for nothing
+        // when there is none. Reading it ignoring visibility parked
+        // everything a bar's height up an empty screen.
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBarsIgnoringVisibility),
+                .navigationBarsPadding(),
         ) {
             if (!showingEnd) {
                 jumpBack?.let { target ->
@@ -1350,18 +1351,44 @@ fun ReaderScreen(
                             }
                         },
                     )
-                } else if (!scrollMode && jumpBack == null && catchUp == null) {
-                    // A scrolled page runs under this corner, so a footer
-                    // left drawn there prints itself over the text. The
-                    // figures are one tap away with the rest of the chrome.
-                    ReadingFooter(
-                        progress = progress,
-                        mode = prefs.footerMode,
-                        theme = readingTheme,
-                        onCycleMode = onProgressAction.cycleFooterMode,
-                    )
                 }
             }
+        }
+
+        // The footer sits outside that column, on the screen's edge and
+        // no inset at all, because it is the one piece of chrome drawn
+        // while the bars are hidden. Riding the inset would have it
+        // slide down as the bars animate away — a slide the page cannot
+        // follow, since the page's reservation is a constant, and one
+        // e-paper repaints as a smear. It never shares the corner: the
+        // pills displace it rather than stack on it.
+        //
+        // Two states put a bar back over it, and both are accepted. A
+        // bar swiped out transiently is drawn over the page without
+        // changing an inset, so nothing could dodge it anyway, and it
+        // takes itself away again. A window that is not allowed to hide
+        // its bars at all — split screen — covers the footer for good;
+        // the figures are lost, which is the graceful half of that
+        // trade, where floating the footer up a bar it cannot predict
+        // would print it through the page's last line instead.
+        //
+        // The guard is effectiveScrolling, not the reader's scrolling
+        // preference: a vertical-text book scrolls whatever the setting
+        // says, and a scrolled page runs under this corner, so a footer
+        // left drawn there prints itself over the text. The figures are
+        // one tap away with the rest of the chrome.
+        if (!showingEnd && !chromeVisible && !effectiveScrolling &&
+            jumpBack == null && catchUp == null
+        ) {
+            ReadingFooter(
+                progress = progress,
+                mode = prefs.footerMode,
+                theme = readingTheme,
+                onCycleMode = onProgressAction.cycleFooterMode,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = FooterMetrics.BOTTOM_MARGIN_DP.dp),
+            )
         }
 
         // Electronic paper cannot slide: it repaints in whole frames and
