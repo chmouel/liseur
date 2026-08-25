@@ -264,6 +264,16 @@ class AnnotationWireTest {
     }
 
     @Test
+    fun `a record with no seq is not a record`() {
+        // Freshness is told by seq everywhere in the pass. A missing one
+        // reads as 0, which is not "unknown" but "older than
+        // everything": the record would land once and then be judged
+        // stale for good.
+        assertNull(AnnotationWire.record(server().apply { put("seq", 0) }))
+        assertNull(AnnotationWire.record(server().apply { remove("seq") }))
+    }
+
+    @Test
     fun `landing a record keeps what the server has no word for`() {
         // Which chapter a passage is in and which page it is on are read
         // out of the locator on the way in, because the wire does not

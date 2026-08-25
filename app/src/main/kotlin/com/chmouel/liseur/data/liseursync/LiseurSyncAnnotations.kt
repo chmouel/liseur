@@ -127,10 +127,10 @@ class LiseurSyncAnnotations(
         if (progress.unreachable != null) return progress.outcome()
 
         val scope = if (book == null) aliases else aliases.filter { it.bookUrl == book }
-        val reconciled = reconcile(peer, scope, aliases, progress)
+        val agreed = reconcile(peer, scope, aliases, progress)
         if (progress.unreachable != null) return progress.outcome()
 
-        push(peer, scope, aliases, reconciled, progress)
+        push(peer, scope, aliases, agreed, progress)
         if (progress.unreachable != null) return progress.outcome()
 
         deletes(peer, scope, aliases, progress)
@@ -225,10 +225,13 @@ class LiseurSyncAnnotations(
         inTransaction {
             if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
             // The feed is state, not history, so a record edited twice
-            // mid-page arrives twice; the newest rev is the one that
-            // counts and the rest are noise.
+            // mid-page arrives twice; the newest is the one that counts
+            // and the rest are noise. Newest by seq, like everywhere
+            // else here: a rev restarts at 1 when the server recreates
+            // an id whose tombstone was swept, so the highest rev in a
+            // page can be the older of the two states.
             val newest = records.groupBy { it.id }
-                .mapNotNull { (_, all) -> all.maxByOrNull { it.rev } }
+                .mapNotNull { (_, all) -> all.maxByOrNull { it.seq } }
             for (record in newest) {
                 if (land(peer, record, aliases)) progress.pulled++
             }
@@ -348,18 +351,20 @@ class LiseurSyncAnnotations(
      * this phase exists to prevent, so those are asked about every time,
      * however recently they were settled.
      *
-     * @return the works that are now agreed, and may be pushed from.
+     * @return what may be pushed from: the works that are agreed, and
+     *   the ids this pass actually saw the server holding.
      */
     private suspend fun reconcile(
         peer: Peer,
         scope: List<WorkAlias>,
         aliases: List<WorkAlias>,
         progress: Progress,
-    ): Set<String> {
+    ): Agreed {
         val agreed = mutableSetOf<String>()
+        val seen = mutableSetOf<String>()
         val at = now()
         var budget = MAX_RECONCILES_PER_RUN
-        val speaking = withSomethingToSay(peer, scope, aliases, at)
+        val speaking = withSomethingToSay(peer, scope, at)
         for (alias in scope) {
             if (alias.bookUrl !in speaking &&
                 alias.annotationsReconciledAt > at - RECONCILE_INTERVAL_MS
@@ -405,36 +410,69 @@ class LiseurSyncAnnotations(
 
             val body = page.optJSONArray("annotations")
             val live = AnnotationWire.records(body)
-            reconcileWork(peer, alias, live, AnnotationWire.ids(body), aliases, asked, at, progress)
+            val present = AnnotationWire.ids(body)
+            reconcileWork(peer, alias, live, present, aliases, asked, at, progress)
             agreed += alias.workId
+            seen += present
         }
-        return agreed
+        return Agreed(works = agreed, seen = seen)
     }
+
+    /**
+     * What reconciling established.
+     *
+     * [works] are the works nothing is outstanding on. [seen] are the
+     * ids the server was observed to be holding just now — the only
+     * evidence that a mark's tombstone has not been swept, and so the
+     * only licence to offer an edit to one.
+     */
+    private data class Agreed(val works: Set<String>, val seen: Set<String>)
 
     /**
      * The books holding a mark this run would offer.
      *
-     * Worked out from the same three tests the push itself uses, so a
-     * book is asked about exactly when asking could change the answer.
+     * The whole point of asking is to find out whether an id the server
+     * once knew is still there, so this has to be the *same* question
+     * the push asks. A mark the push would skip — one already agreed,
+     * one refused for good, one waiting out a deferral, one no request
+     * can even be built from — is not a reason to spend a live-set
+     * fetch, and a handful of permanently stuck books would otherwise
+     * eat the budget every pass and starve every book behind them.
      */
     private suspend fun withSomethingToSay(
         peer: Peer,
         scope: List<WorkAlias>,
-        aliases: List<WorkAlias>,
         at: Long,
     ): Set<String> {
         val rows = syncDao.forPeer(peer.peerId).associateBy { it.id }
         return scope.filterTo(mutableSetOf()) { alias ->
-            annotationDao.forBook(alias.bookUrl).any { local ->
-                val row = rows[local.id]
-                when {
-                    row == null -> true
-                    row.pending -> false
-                    row.retryNotBefore > at -> false
-                    else -> dirty(row, local, aliases)
-                }
-            }
+            annotationDao.forBook(alias.bookUrl).any { offerable(it, rows[it.id], alias, at) != null }
         }.mapTo(mutableSetOf()) { it.bookUrl }
+    }
+
+    /**
+     * The request this mark would make, or null if it would make none.
+     *
+     * One place, so the phase that decides what to ask about and the
+     * phase that decides what to send cannot drift apart.
+     */
+    private fun offerable(
+        local: BookAnnotation,
+        row: AnnotationSync?,
+        alias: WorkAlias,
+        at: Long,
+    ): AnnotationWire.Item? {
+        if (row?.pending == true) return null
+        if (row != null && row.retryNotBefore > at) return null
+        val item = AnnotationWire.item(
+            annotation = local,
+            workId = alias.workId,
+            baseRev = row?.rev ?: 0,
+            editionSha = alias.editionSha,
+        ) ?: return null
+        if (item.fingerprint == row?.ackedFingerprint) return null
+        if (item.fingerprint == row?.rejectedFingerprint) return null
+        return item
     }
 
     private suspend fun reconcileWork(
@@ -489,28 +527,26 @@ class LiseurSyncAnnotations(
         peer: Peer,
         scope: List<WorkAlias>,
         aliases: List<WorkAlias>,
-        reconciled: Set<String>,
+        agreed: Agreed,
         progress: Progress,
     ) {
         val at = now()
+        val seen = agreed.seen
         val rows = syncDao.forPeer(peer.peerId).associateBy { it.id }
         val items = mutableListOf<Pair<AnnotationSync, AnnotationWire.Item>>()
 
         for (alias in scope) {
-            if (alias.workId !in reconciled) continue
+            if (alias.workId !in agreed.works) continue
             for (local in annotationDao.forBook(alias.bookUrl)) {
                 val row = rows[local.id]
-                if (row?.pending == true) continue
-                if (row != null && row.retryNotBefore > at) continue
-
-                val item = AnnotationWire.item(
-                    annotation = local,
-                    workId = alias.workId,
-                    baseRev = row?.rev ?: 0,
-                    editionSha = alias.editionSha,
-                ) ?: continue
-                if (item.fingerprint == row?.ackedFingerprint) continue
-                if (item.fingerprint == row?.rejectedFingerprint) continue
+                val item = offerable(local, row, alias, at) ?: continue
+                // A mark the server once knew is only offered if this
+                // pass saw it there. Anything else is a guess about a
+                // tombstone that may have been swept, and pushing on a
+                // guess is what brings a deleted highlight back. A mark
+                // never acknowledged cannot resurrect anything, so it
+                // goes whether or not it was in the set.
+                if ((row?.rev ?: 0) >= 1 && local.id !in seen) continue
 
                 items += (
                     row ?: AnnotationSync(
@@ -700,13 +736,31 @@ class LiseurSyncAnnotations(
     }
 
     /**
+     * Whether the mark still says what the request said it said.
+     *
+     * The sync row cannot answer this: editing a highlight writes to
+     * `annotations`, not to `annotation_sync`. So an answer that arrives
+     * after the reader has had another turn is an answer about words
+     * nobody holds any more, and letting it overwrite them would lose an
+     * edit that was never even offered.
+     */
+    private suspend fun stillSaying(row: AnnotationSync): Boolean {
+        val local = annotationDao.byId(row.id) ?: return false
+        return AnnotationWire.fingerprint(local, row.workId) == row.pendingFingerprint
+    }
+
+    /**
      * Settles a write the server refused because it holds something
      * else.
      *
-     * The server copy wins. That is a decision, not a shrug: the ADR is
-     * explicit that the server orders and never merges, and a client
-     * that re-pushed instead would give two devices a way to overwrite
-     * each other indefinitely, each certain it was the one being lost.
+     * The server copy wins over the copy that was *sent*. That is a
+     * decision, not a shrug: the ADR is explicit that the server orders
+     * and never merges, and a client that re-pushed instead would give
+     * two devices a way to overwrite each other indefinitely, each
+     * certain it was the one being lost. It does not win over a copy the
+     * reader wrote after the request left, which the server has not been
+     * shown yet and has therefore not ordered against anything: that one
+     * is kept, and offered next pass at the rev this refusal taught.
      */
     private suspend fun conflict(
         peer: Peer,
@@ -726,8 +780,22 @@ class LiseurSyncAnnotations(
         }
 
         if (record.deleted) {
-            annotationDao.deleteById(row.id)
-            syncDao.deleteById(peer.peerId, row.id)
+            if (stillSaying(row)) {
+                annotationDao.deleteById(row.id)
+                syncDao.deleteById(peer.peerId, row.id)
+            } else {
+                // Written again since. Keeping the tombstone's rev lets
+                // the next push offer it as the deliberate revival it
+                // is, rather than as a create at rev 0 the tombstone
+                // would refuse.
+                syncDao.upsert(
+                    row.clearPending().copy(
+                        rev = record.rev,
+                        seq = record.seq,
+                        ackedFingerprint = null,
+                    ),
+                )
+            }
             return
         }
 
@@ -749,13 +817,18 @@ class LiseurSyncAnnotations(
         val workId = record.workId ?: return
         val home = home(peer, record, aliases) ?: return
         val landed = AnnotationWire.toAnnotation(record, home.bookUrl, annotationDao.byId(row.id))
-        annotationDao.upsert(landed)
+        val newer = !stillSaying(row)
+        if (!newer) annotationDao.upsert(landed)
         syncDao.upsert(
             row.clearPending().copy(
                 bookId = home.bookUrl,
                 workId = workId,
                 rev = record.rev,
                 seq = record.seq,
+                // Acked against the server's copy either way. When the
+                // reader has moved on, that is what leaves the row
+                // reading dirty, so the words they actually hold are
+                // offered next pass at the rev just learned.
                 ackedFingerprint = AnnotationWire.fingerprint(landed, workId),
             ),
         )
@@ -827,6 +900,18 @@ class LiseurSyncAnnotations(
                 syncDao.deleteById(peer.peerId, row.id)
                 continue
             }
+            // No URL names a dot segment, so nobody can address this
+            // mark — not this client and not any other. Marking it
+            // pending would be a promise that cannot be kept: a pending
+            // row is skipped by the feed, by reconciliation and by every
+            // future push, so the id would never converge again. Left
+            // alone it stays an ordinary agreement, and the mark comes
+            // back the next time the work is reconciled, which is the
+            // truth: it is still on the server.
+            if (!LiseurSyncApi.addressable(row.id)) {
+                Log.i(TAG, "No URL can name ${row.id}; leaving it to the server")
+                continue
+            }
             val marked = row.copy(
                 pendingKind = AnnotationSync.PENDING_DELETE,
                 pendingJson = null,
@@ -849,14 +934,6 @@ class LiseurSyncAnnotations(
         progress: Progress,
     ) {
         if (!stillOurs(peer)) return
-        // No URL names a dot segment; a delete addressed with one would
-        // land on the collection. The id is another client's to choose
-        // and this one is undeletable over HTTP by anybody, so the row
-        // is left standing rather than a wrong request made.
-        if (!LiseurSyncApi.addressable(row.id)) {
-            Log.i(TAG, "No URL can name ${row.id}; leaving it to the server")
-            return
-        }
         val answer = try {
             http.delete(
                 LiseurSyncApi.deleteAnnotation(peer.baseUrl, row.id, rev),
@@ -927,7 +1004,10 @@ class LiseurSyncAnnotations(
                         return@inTransaction
                     }
                     val landed = AnnotationWire.toAnnotation(record, home.bookUrl, null)
-                    annotationDao.upsert(landed)
+                    // Unless the reader has written it again while the
+                    // delete was in the air, in which case theirs is the
+                    // newer word and the server has not seen it.
+                    if (annotationDao.byId(row.id) == null) annotationDao.upsert(landed)
                     syncDao.upsert(
                         row.clearPending().copy(
                             bookId = home.bookUrl,

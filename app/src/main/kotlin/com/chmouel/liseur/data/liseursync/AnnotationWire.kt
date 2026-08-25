@@ -218,7 +218,12 @@ object AnnotationWire {
         if (!usableId(id)) return null
         val rev = json.optLong("rev")
         if (rev < 1) return null
+        // Every record the server holds has a seq, and it is the clock
+        // this whole pass tells freshness by. A missing one would read
+        // as 0, which is not "unknown" but "older than everything" —
+        // the record would land once and then be judged stale for ever.
         val seq = json.optLong("seq")
+        if (seq < 1) return null
 
         if (json.optBoolean("deleted")) {
             return Record(

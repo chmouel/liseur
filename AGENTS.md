@@ -187,6 +187,13 @@ emulator.
   interval guesses at the server's retention, which may be a day, and
   guessing wrong about a work with something to push is the
   resurrection the phase exists to prevent.
+- A mark with a rev is pushed only if the same pass saw it in the
+  server's live set. Agreeing the work is not enough: the push rescans a
+  mutable table. One predicate, `offerable()`, decides both which books
+  are worth reconciling and what the push sends, so they cannot drift.
+- A conflict is settled against the copy that was sent, never against a
+  newer one the reader wrote after the request left. Compare the local
+  content, not the sync row: editing a highlight does not touch it.
 - Every annotation network call checks the account is still the
   connected one first, not just before storing the answer — the request
   is the side effect. A record's home alias is likewise re-read inside

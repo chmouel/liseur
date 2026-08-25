@@ -634,9 +634,13 @@ class LiseurSyncAnnotationsTest {
         sync()
 
         // Nobody can address it, so no request is made rather than one
-        // made at the collection. The agreement is left standing.
+        // made at the collection. The agreement is left standing, and
+        // left *quiet*: a row stuck pending is skipped by the feed, by
+        // reconciling and by every future push, so the id could never
+        // converge again.
         assertTrue(requests().none { it.method == "DELETE" })
-        assertNotNull(db.annotationSyncDao().get(peer(), ".."))
+        val row = db.annotationSyncDao().get(peer(), "..")!!
+        assertNull(row.pendingKind)
     }
 
     @Test
@@ -967,6 +971,85 @@ class LiseurSyncAnnotationsTest {
     }
 
     // -- Fixtures ----------------------------------------------------------
+
+    @Test
+    fun `a mark edited twice mid-page lands as its newest state`() = runTest {
+        // The server recreates an id whose tombstone was swept at rev 1,
+        // so the higher rev in a page can be the older of the two
+        // states. Seq is the clock that does not restart.
+        connect()
+        alias()
+        reconciled()
+        server.enqueue(
+            json(
+                """{"annotations":[
+                    ${record(rev = 9, seq = 40, body = "before it was swept")},
+                    ${record(rev = 1, seq = 41, body = "after it came back")}
+                ],"high_water":41,"has_more":false}
+                """.trimIndent(),
+            ),
+        )
+
+        sync()
+
+        assertEquals("after it came back", db.annotationDao().byId("mark-1")!!.note)
+        assertEquals(41, db.annotationSyncDao().get(peer(), "mark-1")!!.seq)
+    }
+
+    @Test
+    fun `a mark edited while the live set was on its way is not offered on a guess`() = runTest {
+        // Reconciling agrees a work, but this mark was deliberately not
+        // judged: the reader touched it while the answer was in the air,
+        // so the absence does not describe it. Pushing it anyway would
+        // be a guess about a tombstone that may have been swept, which
+        // is the resurrection the phase exists to prevent.
+        connect()
+        alias()
+        db.annotationDao().upsert(mark())
+        db.annotationSyncDao().upsert(syncRow(rev = 3, acked = "stale"))
+        emptyFeed()
+        liveSet()
+        whileInFlight("/v1/works/$WORK/annotations") {
+            db.annotationDao().upsert(mark(note = "one more thought", updatedAt = MICROS + 20))
+        }
+
+        sync()
+
+        assertEquals("one more thought", db.annotationDao().byId("mark-1")!!.note)
+        assertEquals(0, pushes())
+    }
+
+    @Test
+    fun `a refusal does not overwrite words written after it was asked for`() = runTest {
+        // The sync row cannot see an edit: a highlight is written to
+        // `annotations`. An answer that arrives after the reader has had
+        // another turn is about words nobody holds any more.
+        connect()
+        alias()
+        reconciled()
+        db.annotationDao().upsert(mark(note = "mine"))
+        db.annotationSyncDao().upsert(syncRow(rev = 1, acked = "stale"))
+        emptyFeed()
+        server.enqueue(
+            results(
+                """{"id":"mark-1","status":"conflict",
+                    "server":${record(id = "mark-1", rev = 4, seq = 12, body = "theirs")}}
+                """.trimIndent(),
+            ),
+        )
+        whileInFlight("/v1/annotations") {
+            db.annotationDao().upsert(mark(note = "later still", updatedAt = MICROS + 30))
+        }
+
+        sync()
+
+        assertEquals("later still", db.annotationDao().byId("mark-1")!!.note)
+        // The rev is a fact about the server and is taken; the row reads
+        // dirty, so the words the reader holds go next pass.
+        val row = db.annotationSyncDao().get(peer(), "mark-1")!!
+        assertEquals(4, row.rev)
+        assertNull(row.pendingKind)
+    }
 
     // -- Guards ------------------------------------------------------------
 

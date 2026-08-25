@@ -16,10 +16,10 @@ import org.readium.r2.shared.publication.Locator
 /**
  * The colours a passage can be marked in.
  *
- * Four were what Kindle offers and about the limit of what stays
+ * Four of them are what Kindle offers and about the limit of what stays
  * legible over text; they are kept light enough that words read cleanly
- * through them. Purple and orange joined them for liseur-sync, whose
- * palette is six: a highlight another device made in a colour this one
+ * through them. Purple and orange joined for liseur-sync, whose palette
+ * is six: a highlight another device made in a colour this one
  * could not name would otherwise arrive rewritten, and a sync that
  * quietly changes what it carries is worse than one colour too many.
  */

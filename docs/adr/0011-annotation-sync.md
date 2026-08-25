@@ -138,8 +138,10 @@ client can do is *address* one: a URL parser decodes `%2E%2E` before it
 resolves dot segments, so every escape collapses back to navigation and
 a delete would land on the collection. Refusing such a record on the way
 in would make this device blind to a mark the server is perfectly happy
-to hold, so instead only the delete declines: no request is made, and
-the agreement is left standing for a client that can express it.
+to hold, so instead the delete declines before the row is marked
+pending: no request is made, and the agreement is left standing, and
+quiet. A row stuck pending would be skipped by the feed, by reconciling
+and by every future push, so the id could never converge again.
 
 A work the server answers `404` for was merged into another or split
 away. The alias is stale, not the book, so it is dropped and handed back
@@ -151,6 +153,28 @@ repaired the name, and deleting the good one would undo the repair. The same rea
 took over a path: `BookRemoval.contentReplaced()` clears the
 fingerprints and the alias along with the marks, or the next pass would
 take the new book for the old one.
+
+A mark the server once knew is offered only if this pass saw the server
+holding it. Agreeing a *work* is not enough: the push rescans a mutable
+table, so a mark edited after the live set was read — or during it, and
+therefore deliberately not judged by it — has not been asked about, and
+offering it is a guess about a tombstone that may have been swept. A
+mark never acknowledged cannot resurrect anything and goes either way.
+
+Which books get asked is decided by the same predicate the push uses,
+in one place, so the two cannot drift: a mark already agreed, refused
+for good, waiting out a deferral, or that no request can be built from
+is not a reason to spend a fetch. Otherwise a handful of permanently
+stuck books would eat the budget every pass and starve everything
+behind them.
+
+A refusal settles against the copy that was *sent*. The server wins over
+that one, and not over a copy the reader wrote after the request left:
+the server has never been shown it and has therefore ordered nothing
+against it. Such a mark keeps its words, takes the rev the refusal
+taught, and reads dirty, so it goes next pass. The sync row cannot see
+this on its own — editing a highlight writes to `annotations` — so the
+content is compared directly.
 
 A book with a mark to offer is reconciled every pass, however recently
 it was settled. The seven-day interval is this device's guess at how
