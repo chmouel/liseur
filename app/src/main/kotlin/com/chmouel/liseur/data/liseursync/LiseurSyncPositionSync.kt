@@ -663,11 +663,11 @@ class LiseurSyncPositionSync(
                 return
             }
 
-            val ops = ops(page.optJSONArray("ops"))
+            val items = feed(page.optJSONArray("ops"))
             val highWater = page.optLong("high_water", cursor)
-            val next = ops.maxOfOrNull { it.seq }?.coerceAtLeast(cursor) ?: highWater
+            val next = items.maxOfOrNull { it.seq }?.coerceAtLeast(cursor) ?: highWater
 
-            apply(account, ops, next)
+            apply(account, items.mapNotNull(SyncFeedItem::op), next)
             cursor = next
 
             if (!page.optBoolean("has_more", false)) return
@@ -695,7 +695,11 @@ class LiseurSyncPositionSync(
             trouble.failed(e, reasonFor(e))
             return
         }
-        apply(account, ops(snapshot.optJSONArray("ops")), snapshot.optLong("snapshot_seq"))
+        apply(
+            account,
+            feed(snapshot.optJSONArray("ops")).mapNotNull(SyncFeedItem::op),
+            snapshot.optLong("snapshot_seq"),
+        )
     }
 
     /** Lands a page and moves the cursor, together or not at all. */
@@ -1308,19 +1312,33 @@ class LiseurSyncPositionSync(
 
     // -- Odds and ends ----------------------------------------------------
 
-    /** The newest thing anybody said about one book. */
+    /**
+     * The newest thing anybody said about one book, that this device
+     * could actually read.
+     *
+     * A window rather than the single newest record, because the newest
+     * record is exactly the one a misbehaving client is most likely to
+     * have spoiled: an account has been seen with four unusable ops on
+     * top of a perfectly good one. Answering `null` there would hide a
+     * real position behind the corruption — telling the reader there is
+     * nothing to catch up to, and leaving a newly named book unseeded —
+     * which is the same harm as the phantom zero, only quieter.
+     *
+     * Null means the whole window was unreadable, never that the reader
+     * is at the start of the book.
+     */
     private suspend fun latestOp(
         baseUrl: String,
         credentials: RemoteCredentials,
         workId: String,
-    ): SyncOp? = ops(
-        http.get(LiseurSyncApi.positions(baseUrl, workId, limit = 1), credentials)
+    ): SyncOp? = feed(
+        http.get(LiseurSyncApi.positions(baseUrl, workId, limit = LATEST_WINDOW), credentials)
             .optJSONArray("ops"),
-    ).firstOrNull()
+    ).mapNotNull(SyncFeedItem::op).maxByOrNull(SyncOp::seq)
 
-    private fun ops(array: JSONArray?): List<SyncOp> =
+    private fun feed(array: JSONArray?): List<SyncFeedItem> =
         (0 until (array?.length() ?: 0)).mapNotNull { index ->
-            array?.optJSONObject(index)?.let(SyncOps::fromJson)
+            array?.optJSONObject(index)?.let(SyncOps::feedItemFrom)
         }
 
     /**
@@ -1391,6 +1409,14 @@ class LiseurSyncPositionSync(
         const val TAG = "liseur-sync-positions"
         const val PAGE = 500
         const val MAX_PAGES = 200
+
+        /**
+         * How far back to look for a book's newest readable position.
+         *
+         * Small: this is a defence against a short run of spoiled ops on
+         * top of a good one, not an attempt to reconstruct history.
+         */
+        const val LATEST_WINDOW = 20
         const val MAX_RESOLVES_PER_RUN = 25
         val ACCEPTED = setOf("applied", "duplicate")
     }

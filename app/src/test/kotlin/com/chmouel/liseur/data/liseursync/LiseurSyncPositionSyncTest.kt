@@ -150,9 +150,136 @@ class LiseurSyncPositionSyncTest {
         assertEquals(0.75, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
     }
 
+    // -- Records this device cannot read -----------------------------------
+    //
+    // A server that writes a null progression — as one did, four times
+    // in seventeen seconds — must not be able to move this reader, and
+    // must not be able to derail the cursor either. The two are
+    // separate: the record still has a sequence number even when it has
+    // no meaning.
+
     @Test
-    fun `a cursor the server has compacted past starts again from a snapshot`() = runTest {
+    fun `an unreadable record moves the cursor without moving the reader`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(
+            json(
+                """{"ops":[${op(seq = 9, progression = 0.75)},${spoiled(seq = 10)}],
+                    "has_more":false,"high_water":10}
+                """.trimIndent(),
+            ),
+        )
+
+        sync().syncAll(null)
+
+        // Past the spoiled record, so it is never fetched again...
+        assertEquals(10L, db.remoteServerDao().get()?.syncCursorSeq)
+        // ...and the good position behind it still landed.
+        assertEquals(0.75, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a page of nothing but unreadable records does not leap to high water`() = runTest {
+        // high_water is the account's newest sequence across every book,
+        // not this page's last. Dropping the records and falling back to
+        // it would step over every real position in between.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(
+            json(
+                """{"ops":[${spoiled(seq = 11)},${spoiled(seq = 12)}],
+                    "has_more":false,"high_water":9999}
+                """.trimIndent(),
+            ),
+        )
+
+        sync().syncAll(null)
+
+        assertEquals(12L, db.remoteServerDao().get()?.syncCursorSeq)
+        assertNull(db.readingProgressDao().get(LOCAL))
+    }
+
+    @Test
+    fun `an unreadable record does not replace a position already pending`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        // Agreed at a third of the way, then read on here, so what the
+        // server sends is held as a disagreement rather than adopted.
+        db.syncPeerStateDao().settle(LOCAL, peer(), 0, 0.3, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.5, null, "reading", NOW)
+        server.enqueue(
+            json("""{"ops":[${op(seq = 4, progression = 0.8)}],"has_more":true,"high_water":4}"""),
+        )
+        server.enqueue(
+            json("""{"ops":[${spoiled(seq = 5)}],"has_more":false,"high_water":5}"""),
+        )
+
+        sync().syncAll(null)
+
+        assertEquals(5L, db.remoteServerDao().get()?.syncCursorSeq)
+        assertEquals(1, db.syncPeerStateDao().countPending(peer()))
+        assertEquals(0.5, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a snapshot ignores what it cannot read and lands what it can`() = runTest {
         connect(cursor = 5)
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(MockResponse(code = 410, body = """{"error":"resync_required"}"""))
+        server.enqueue(
+            json(
+                """{"ops":[${spoiled(seq = 41)},${op(seq = 40, progression = 0.6)}],
+                    "snapshot_seq":42}
+                """.trimIndent(),
+            ),
+        )
+
+        sync().syncAll(null)
+
+        assertEquals(42L, db.remoteServerDao().get()?.syncCursorSeq)
+        assertEquals(0.6, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a good position is not hidden behind the spoiled ones on top of it`() = runTest {
+        // Exactly the shape the account was found in: four unreadable
+        // ops sitting on a perfectly good one. Answering "nothing known"
+        // there would leave this book unseeded and tell the reader there
+        // is nothing to catch up to.
+        connect()
+        db.bookDao().upsert(local())
+        resolved()
+        server.enqueue(
+            json(
+                """{"ops":[${spoiled(seq = 2148)},${spoiled(seq = 2147)},
+                    ${op(seq = 2144, progression = 0.33)}]}
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(json("""{"ops":[]}"""))
+
+        sync().syncAll(null)
+
+        assertEquals(0.33, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a book whose every position is unreadable is left alone`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"ops":[${spoiled(seq = 2148)}]}"""))
+
+        assertEquals(PreviewOutcome.NotSynced, sync().previewBook(LOCAL))
+        assertNull(db.readingProgressDao().get(LOCAL))
+    }
+
+    @Test
+    fun `a cursor the server has compacted past starts again from a snapshot`() = runTest {        connect(cursor = 5)
         db.bookDao().upsert(local())
         alias()
         server.enqueue(MockResponse(code = 410, body = """{"error":"resync_required"}"""))
@@ -995,6 +1122,13 @@ class LiseurSyncPositionSyncTest {
     }
 
     private fun json(body: String) = MockResponse(code = 200, body = body)
+
+    /** A record with a sequence number and no position anyone can use. */
+    private fun spoiled(seq: Long): String =
+        """{"op_id":"o-$seq","work_id":"w-1","seq":$seq,
+            "progression":null,
+            "client_ts":"${SyncOps.formatTime(NOW)}"}
+        """.trimIndent()
 
     private fun exactLocator(highlight: String, progression: Double = 0.8): String = JSONObject()
         .put("href", "/c1.xhtml")
