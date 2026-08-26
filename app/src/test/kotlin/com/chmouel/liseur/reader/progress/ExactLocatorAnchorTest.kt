@@ -99,6 +99,25 @@ class ExactLocatorAnchorTest {
         assertEquals(null, ExactLocatorAnchor.excerpt(locator().toJSON().toString()))
     }
 
+    @Test
+    fun `capture script names elements without asking about case`() {
+        val script = ExactLocatorAnchor.CAPTURE_SCRIPT
+
+        // An EPUB resource is XHTML, where tagName keeps the spelling it
+        // was written with rather than upper-casing it the way an HTML
+        // document does. Reading it directly matched neither set, so
+        // every anchor's block fell through to <body> and the quote's
+        // context came from the whole chapter. There is no DOM here to
+        // catch that again, so the invariant is asserted on the script:
+        // element names are read through localName, lower-cased once.
+        assertFalse(script.contains(".tagName"))
+        assertTrue(script.contains("localName"))
+        for (tag in listOf("p", "li", "blockquote", "div", "h1", "script", "style")) {
+            assertTrue(tag, script.contains("\"$tag\""))
+            assertFalse(tag, script.contains("\"${tag.uppercase()}\""))
+        }
+    }
+
     private fun locator(): Locator = requireNotNull(
         Locator.fromJSON(
             JSONObject()
