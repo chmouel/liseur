@@ -209,13 +209,24 @@ object ExactLocatorAnchor {
         })()
     """.trimIndent()
 
-    private val CAPTURE_SCRIPT = """
+    // Visible to the tests, which are the only place the case question
+    // this script settles can be asked without a WebView.
+    internal val CAPTURE_SCRIPT = """
         (() => {
-          const blocked = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"]);
+          const blocked = new Set(["script", "style", "noscript", "template"]);
           const blockTags = new Set([
-            "P", "LI", "BLOCKQUOTE", "PRE", "TD", "TH", "FIGCAPTION",
-            "H1", "H2", "H3", "H4", "H5", "H6", "DIV"
+            "p", "li", "blockquote", "pre", "td", "th", "figcaption",
+            "h1", "h2", "h3", "h4", "h5", "h6", "div"
           ]);
+          // An EPUB resource is served as application/xhtml+xml, and an
+          // XML document reports tagName as it was written rather than
+          // upper-cased the way an HTML one does. Comparing against
+          // either spelling alone matched nothing here, which quietly
+          // sent every anchor's block up to <body>: the quote's context
+          // was then taken across the whole chapter instead of the
+          // paragraph, and Readium searched all of it to find the quote
+          // again. localName is the name without the case question.
+          const tag = element => (element && element.localName || "").toLowerCase();
           const visible = rect => rect.width > 0 && rect.height > 0 &&
             rect.right > 0 && rect.bottom > 0 &&
             rect.left < window.innerWidth && rect.top < window.innerHeight;
@@ -266,7 +277,7 @@ object ExactLocatorAnchor {
           const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
             acceptNode: node => {
               const parent = node.parentElement;
-              if (!parent || blocked.has(parent.tagName) || !node.data.trim()) {
+              if (!parent || blocked.has(tag(parent)) || !node.data.trim()) {
                 return NodeFilter.FILTER_REJECT;
               }
               return NodeFilter.FILTER_ACCEPT;
@@ -280,7 +291,7 @@ object ExactLocatorAnchor {
               range.setEnd(node, word.index + word.text.length);
               if (!Array.from(range.getClientRects()).some(visible)) continue;
               let block = node.parentElement;
-              while (block && block !== document.body && !blockTags.has(block.tagName)) {
+              while (block && block !== document.body && !blockTags.has(tag(block))) {
                 block = block.parentElement;
               }
               block = block || document.body;
