@@ -77,6 +77,7 @@ import androidx.fragment.compose.AndroidFragment
 import android.graphics.RectF
 import android.view.HapticFeedbackConstants
 import android.view.View
+import android.os.SystemClock
 import android.webkit.WebView
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
@@ -126,6 +127,9 @@ import com.chmouel.liseur.reader.chrome.FootnoteCard
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.reader.progress.OpeningRestoration
+import com.chmouel.liseur.reader.progress.OpeningRestorationVerdict
+import com.chmouel.liseur.reader.progress.RestorePoint
 import com.chmouel.liseur.reader.progress.ScrollProgression
 import com.chmouel.liseur.reader.search.SearchScreen
 import com.chmouel.liseur.ui.LocalEInk
@@ -222,6 +226,11 @@ private enum class ReaderSheet { NONE, TYPOGRAPHY, ADVANCED }
 @Composable
 fun ReaderScreen(
     publication: Publication,
+    /**
+     * Where this navigator is being reopened to, snapshotted when it was
+     * built. Null for a book with no saved position.
+     */
+    restoreTarget: Locator?,
     prefsFlow: StateFlow<ReaderPrefs>,
     readingTheme: ReaderTheme,
     typographyIsOwnFlow: StateFlow<Boolean>,
@@ -327,6 +336,25 @@ fun ReaderScreen(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val effectScope = rememberCoroutineScope()
     var pendingPositionEvent by remember { mutableStateOf<NavigatorPositionEvent?>(null) }
+
+    // Closed while the book is still being reopened. One per navigator,
+    // because a column or scroll mode change builds a new one and it
+    // restores again. See OpeningRestoration.
+    val gate = remember(navigator) {
+        OpeningRestoration(
+            target = restoreTarget?.restorePoint(exact = ExactLocatorAnchor.isExact(restoreTarget)),
+            timeoutMs = OpeningRestoration.DEFAULT_TIMEOUT_MS,
+        )
+    }
+    val gateOpenedAt = remember(navigator) { SystemClock.elapsedRealtime() }
+
+    // The deadline runs on a clock rather than on emissions: a navigator
+    // that falls silent while gated would otherwise never be released,
+    // and a reading session would quietly stop being saved.
+    LaunchedEffect(navigator) {
+        delay(OpeningRestoration.DEFAULT_TIMEOUT_MS)
+        gate.onDeadline()
+    }
 
     // Open for as long as the page is being rebuilt underneath the reader.
     // See ReflowScope: a locator nobody has claimed while this is open is the
@@ -445,6 +473,12 @@ fun ReaderScreen(
         event: NavigatorPositionEvent,
         verify: Boolean = false,
     ) {
+        // If the book is still opening, this supersedes the restoration
+        // — but only once the reader is actually there. The go below is
+        // asynchronous and the marker set with it is single use, so an
+        // emission still in flight from the pre-restore position would
+        // otherwise take that marker and be saved as the move.
+        gate.onNavigationIssued(locator.restorePoint())
         pendingPositionEvent = event
         nav.go(locator, animated = false)
         if (!verify || !ExactLocatorAnchor.isExact(locator)) return
@@ -457,9 +491,39 @@ fun ReaderScreen(
         }
         val progression = locator.locations.totalProgression ?: return
         val fallback = onProgressAction.locatorAtOrBeforeProgression(progression) ?: return
+        gate.onNavigationIssued(fallback.restorePoint())
         pendingPositionEvent = event
         nav.go(fallback, animated = false)
         onProgressAction.onApproximateResume()
+    }
+
+    suspend fun openingExactAnchorArrived(nav: EpubNavigatorFragment, locator: Locator): Boolean {
+        val elapsedMs = SystemClock.elapsedRealtime() - gateOpenedAt
+        val budgetMs = OpeningRestoration.exactOpenVerifyBudgetMs(elapsedMs)
+        // A budget already spent still buys one look. Two frames cost
+        // nothing against the gate's remaining second, and degrading the
+        // reader to an approximate page without ever asking whether the
+        // exact one was there would be worse than the single attempt
+        // this replaced.
+        if (budgetMs <= 0L) {
+            settleLayout()
+            return ExactLocatorAnchor.verify(nav, locator)
+        }
+        // This is the same asynchronous WebView race as navigate(), but
+        // a cold open is the slowest layout the reader asks for. Poll
+        // for a bounded stretch before degrading to the approximate
+        // locator. The budget helper keeps this below the opening
+        // gate's fail-open deadline: with the current constants it caps
+        // polling at 3000ms and never past 4000ms from gate creation,
+        // leaving at least 1000ms of the 5000ms gate for the fallback
+        // navigation to be issued while the gate is still closed.
+        return withTimeoutOrNull(budgetMs) {
+            repeat(OpeningRestoration.EXACT_OPEN_VERIFY_ATTEMPTS) {
+                settleLayout()
+                if (ExactLocatorAnchor.verify(nav, locator)) return@withTimeoutOrNull true
+            }
+            false
+        } == true
     }
 
     fun navigateLater(
@@ -523,13 +587,27 @@ fun ReaderScreen(
             // must not look like this device turned a page and turn a
             // one-sided remote update into a conflict.
             nav.currentLocator.drop(1).collect { native ->
-                val event = pendingPositionEvent
-                    ?: if (reflow.active) {
-                        NavigatorPositionEvent.PREFERENCE_REFLOW
-                    } else {
-                        NavigatorPositionEvent.READER_MOVEMENT
-                    }
+                val requested = pendingPositionEvent
                 pendingPositionEvent = null
+                // Only paid for while the gate is closed, which is a
+                // handful of emissions at the start of a session.
+                val suppressed = gate.isGated && gate.onEmission(
+                    here = native.restorePoint(),
+                    anchorVerified = restoreTarget != null &&
+                        ExactLocatorAnchor.isExact(restoreTarget) &&
+                        ExactLocatorAnchor.verify(nav, restoreTarget),
+                    elapsedMs = SystemClock.elapsedRealtime() - gateOpenedAt,
+                ) == OpeningRestorationVerdict.SUPPRESS
+                val event = when {
+                    // The navigator reporting where it was before it
+                    // finished being told where to go. Persisting that
+                    // sends the reader's other devices to the top of the
+                    // chapter.
+                    suppressed -> NavigatorPositionEvent.OPENING_RESTORATION
+                    requested != null -> requested
+                    reflow.active -> NavigatorPositionEvent.PREFERENCE_REFLOW
+                    else -> NavigatorPositionEvent.READER_MOVEMENT
+                }
                 // Anywhere the reader actually goes ends the run of
                 // preference changes the held anchor was covering.
                 if (event != NavigatorPositionEvent.PREFERENCE_REFLOW) reflowAnchor = null
@@ -596,14 +674,23 @@ fun ReaderScreen(
 
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
-        val requested = onProgressAction.currentLocator() ?: return@LaunchedEffect
+        // The snapshot this navigator was built with, not
+        // viewModel.lastLocator: onLocatorChanged assigns that before it
+        // decides whether a position persists, so the navigator's own
+        // opening emissions move it out from under this check.
+        val requested = restoreTarget ?: return@LaunchedEffect
         if (!ExactLocatorAnchor.isExact(requested)) return@LaunchedEffect
-        settleLayout()
-        if (ExactLocatorAnchor.verify(nav, requested)) return@LaunchedEffect
+        if (openingExactAnchorArrived(nav, requested)) return@LaunchedEffect
         val progression = requested.locations.totalProgression ?: return@LaunchedEffect
         val fallback = onProgressAction.locatorAtOrBeforeProgression(progression)
             ?: return@LaunchedEffect
         pendingPositionEvent = NavigatorPositionEvent.FRAGMENT_RECREATION
+        // Retarget rather than release. This navigation is asynchronous
+        // and pendingPositionEvent is single-use, so an emission landing
+        // in between takes the marker and the real arrival is left
+        // looking like a page turn. Telling the gate where the reader is
+        // now being sent keeps it closed until they get there.
+        gate.onNavigationIssued(fallback.restorePoint())
         nav.go(fallback, animated = false)
         onProgressAction.onApproximateResume()
     }
@@ -1869,7 +1956,6 @@ class ReaderProgressActions(
     val locatorAtOrBeforeProgression: (Double) -> Locator?,
     val prepareLocator: (Locator) -> Locator,
     val onApproximateResume: () -> Unit,
-    val currentLocator: () -> Locator?,
 )
 
 /** Syncing this one book on purpose, from the Navigate screen. */
@@ -2043,3 +2129,15 @@ private fun consumeInsetsForReadium(view: View) {
     ViewCompat.setOnApplyWindowInsetsListener(view) { _, _ -> WindowInsetsCompat.CONSUMED }
     ViewCompat.requestApplyInsets(view)
 }
+
+/**
+ * A locator, in the terms the opening gate reasons about.
+ *
+ * Nothing here is Readium-shaped on purpose: the decision the gate makes
+ * is worth testing on its own, without a navigator to ask.
+ */
+private fun Locator.restorePoint(exact: Boolean = false) = RestorePoint(
+    href = href.toString(),
+    progression = locations.totalProgression,
+    exact = exact,
+)

@@ -12,4 +12,10 @@ enum class NavigatorPositionEvent(
     PREFERENCE_REFLOW(persists = false, teachesPace = false, recordsReadingTime = false),
     FRAGMENT_RECREATION(persists = false, teachesPace = false, recordsReadingTime = false),
     LIFECYCLE_REPLAY(persists = false, teachesPace = false, recordsReadingTime = false),
+
+    /**
+     * The navigator reporting itself while a book is still being
+     * reopened, before restoration has landed.
+     */
+    OPENING_RESTORATION(persists = false, teachesPace = false, recordsReadingTime = false),
 }
