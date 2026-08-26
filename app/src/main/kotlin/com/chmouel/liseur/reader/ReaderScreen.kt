@@ -1284,7 +1284,37 @@ fun ReaderScreen(
                 theme = readingTheme,
                 onToggle = {
                     view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    onAnnotationAction.toggleBookmark()
+                    // A scrolled page moves under the reader's thumb
+                    // without Readium saying so: its current locator is
+                    // debounced, and between two of those the view
+                    // model's idea of the place can be a screen or more
+                    // behind what is on the page. A bookmark is taken at
+                    // the moment the ribbon is tapped and has to mean
+                    // that moment, so the document is asked where it is
+                    // now — the same question the reader leaving the
+                    // book already asks — and only then is the mark
+                    // made. It also decides which mark is being toggled,
+                    // so asking first is what stops a tap meant as a new
+                    // bookmark deleting the one behind it.
+                    //
+                    // Only a scrolled page is asked. A book set in pages
+                    // publishes its place on the turn, long before a
+                    // finger can reach the ribbon, and it does not
+                    // scroll: `scrolledPlace` would read an offset of
+                    // nothing over a screenful and file the reader at
+                    // the top of the chapter — the very thing this is
+                    // here to prevent. Every other caller guards on the
+                    // same flag.
+                    effectScope.launch {
+                        if (effectiveScrollingNow) {
+                            navigatorNow?.let { nav ->
+                                scrolledPlace(nav)?.let {
+                                    onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                                }
+                            }
+                        }
+                        onAnnotationAction.toggleBookmark()
+                    }
                 },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
