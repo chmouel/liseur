@@ -321,4 +321,34 @@ class ReadingStateMergeTest {
         assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.forProgression(0.0))
         assertEquals(ReadingStatus.READY_TO_READ, ReadingStatus.forProgression(null))
     }
+
+    @Test
+    fun `a missing remote position is not a remote position of zero`() {
+        // The guarantee the server's null-to-zero coercion was
+        // bypassing: a partner that sends only a status must never send
+        // this reader back to the start of the book.
+        val decision = reconcileReadingState(
+            local = state(0.47),
+            remote = state(null, status = ReadingStatus.READING),
+            baseline = baseline(0.47),
+            localDirty = false,
+        )
+
+        assertEquals(SyncDecision.InSync, decision)
+    }
+
+    @Test
+    fun `an unreadable position must never be handed over as a status`() {
+        // Why a malformed op is dropped rather than landed with a null
+        // progression: forProgression(null) is ReadyToRead, and this is
+        // what the merge would then be asked to do with it.
+        val decision = reconcileReadingState(
+            local = state(0.47, status = ReadingStatus.READING),
+            remote = state(null, status = ReadingStatus.READY_TO_READ),
+            baseline = baseline(0.47),
+            localDirty = false,
+        )
+
+        assertEquals(SyncDecision.AdoptStatus(ReadingStatus.READY_TO_READ), decision)
+    }
 }

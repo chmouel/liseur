@@ -95,6 +95,142 @@ class SyncOpsTest {
         assertNull(SyncOps.fromJson(JSONObject().put("work_id", "w").put("op_id", "o")))
     }
 
+    // -- What a position may not be ---------------------------------------
+    //
+    // A server that writes `"progression": null` — which is what
+    // JSON.stringify does with a NaN — used to arrive here as a position
+    // of exactly zero and send the reader back to page one. None of
+    // these may be read as a number.
+
+    @Test
+    fun `a null progression is not a position of zero`() {
+        assertNull(SyncOps.fromJson(wire().put("progression", JSONObject.NULL)))
+    }
+
+    @Test
+    fun `an absent progression is not a position of zero`() {
+        val json = wire()
+        json.remove("progression")
+
+        assertNull(SyncOps.fromJson(json))
+    }
+
+    @Test
+    fun `a progression that is not a number is not a position of zero`() {
+        assertNull(SyncOps.fromJson(wire().put("progression", "abc")))
+        assertNull(SyncOps.fromJson(wire().put("progression", JSONObject())))
+    }
+
+    @Test
+    fun `a non-finite progression is refused`() {
+        // org.json refuses to parse a bare NaN or Infinity, so this is
+        // the shape one can still arrive in — and the shape the old
+        // optDouble() turned back into a real NaN and stored.
+        assertNull(SyncOps.fromJson(wire().put("progression", "NaN")))
+        assertNull(SyncOps.fromJson(wire().put("progression", "Infinity")))
+        assertNull(SyncOps.fromJson(wire().put("progression", "-Infinity")))
+    }
+
+    @Test
+    fun `a quoted number is still a position`() {
+        // Out of contract, but not ambiguous, and checked either way.
+        assertEquals(0.25, SyncOps.fromJson(wire().put("progression", "0.25"))!!.progression, 0.0)
+    }
+
+    @Test
+    fun `a progression outside the book is refused`() {
+        assertNull(SyncOps.fromJson(wire().put("progression", -0.1)))
+        assertNull(SyncOps.fromJson(wire().put("progression", 1.5)))
+    }
+
+    @Test
+    fun `a locator whose own progression is unusable is refused`() {
+        // Ops 2145 to 2148: the top-level number had already been
+        // coerced to a legitimate-looking zero, but the locator still
+        // said what really happened.
+        val locator = JSONObject()
+            .put("href", "/c1.xhtml")
+            .put("locations", JSONObject().put("totalProgression", JSONObject.NULL))
+
+        assertNull(SyncOps.fromJson(wire().put("progression", 0.0).put("locator", locator)))
+    }
+
+    @Test
+    fun `a locator whose own progression is out of range is refused`() {
+        val locator = JSONObject()
+            .put("locations", JSONObject().put("totalProgression", 4.2))
+
+        assertNull(SyncOps.fromJson(wire().put("locator", locator)))
+    }
+
+    // -- What a position still is -----------------------------------------
+
+    @Test
+    fun `the start of the book is a real position`() {
+        val op = SyncOps.fromJson(wire().put("progression", 0.0))
+
+        assertEquals(0.0, op!!.progression, 0.0)
+    }
+
+    @Test
+    fun `the end of the book is a real position`() {
+        assertEquals(1.0, SyncOps.fromJson(wire().put("progression", 1.0))!!.progression, 0.0)
+    }
+
+    @Test
+    fun `an op with no locator is a real position`() {
+        // A percentage-only partner sends exactly this.
+        assertEquals(0.5, SyncOps.fromJson(wire())!!.progression, 0.0)
+    }
+
+    @Test
+    fun `a locator with no locations is a real position`() {
+        val json = wire().put("locator", JSONObject().put("href", "/c1.xhtml"))
+
+        assertEquals(0.5, SyncOps.fromJson(json)!!.progression, 0.0)
+    }
+
+    @Test
+    fun `a locator with locations but no progression is a real position`() {
+        val locator = JSONObject()
+            .put("href", "/c1.xhtml")
+            .put("locations", JSONObject().put("position", 208))
+
+        assertEquals(0.5, SyncOps.fromJson(json = wire().put("locator", locator))!!.progression, 0.0)
+    }
+
+    // -- Sequencing, which survives the position ---------------------------
+
+    @Test
+    fun `an unreadable record keeps its sequence number`() {
+        val item = SyncOps.feedItemFrom(
+            wire().put("progression", JSONObject.NULL).put("seq", 2145L),
+        )!!
+
+        assertEquals(2145L, item.seq)
+        assertNull(item.op)
+    }
+
+    @Test
+    fun `a readable record carries both`() {
+        val item = SyncOps.feedItemFrom(wire().put("seq", 2144L))!!
+
+        assertEquals(2144L, item.seq)
+        assertEquals(0.5, item.op!!.progression, 0.0)
+    }
+
+    @Test
+    fun `a record with neither a position nor a sequence number is nothing`() {
+        assertNull(SyncOps.feedItemFrom(wire().put("progression", JSONObject.NULL)))
+        assertNull(SyncOps.feedItemFrom(JSONObject().put("seq", 0L)))
+    }
+
+    private fun wire() = JSONObject()
+        .put("op_id", "op-1")
+        .put("work_id", "w-1")
+        .put("client_ts", SyncOps.formatTime(CLIENT_TS))
+        .put("progression", 0.5)
+
     @Test
     fun `timestamps are read whether or not the server kept the fraction`() {
         assertEquals(

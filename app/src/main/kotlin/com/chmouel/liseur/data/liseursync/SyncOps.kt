@@ -22,6 +22,28 @@ data class SyncOp(
 )
 
 /**
+ * One record from the server's feed: a sequence number, and a position
+ * only if the record made sense.
+ *
+ * The two are separate because they are owed to different people. The
+ * cursor is owed the `seq` of every record the server sent, whether or
+ * not this device could read it — dropping one either strands the feed
+ * on a page it re-fetches forever, or hands the cursor to `high_water`,
+ * which is the account's global maximum and would skip every real
+ * position after it.
+ *
+ * Reading state, on the other hand, is owed nothing by a record that
+ * could not be read. A position that arrives unreadable must not be
+ * landed as a position of zero, and must not be landed as no position
+ * either: `readingStatusFor(null)` is `ReadyToRead`, so letting one
+ * through would mark a book the reader is part-way through as unread.
+ */
+data class SyncFeedItem(
+    val seq: Long,
+    val op: SyncOp?,
+)
+
+/**
  * Turning a reading position into an op, and back.
  *
  * The interesting part is [opIdFor]. The server treats `op_id` as an
@@ -87,17 +109,82 @@ object SyncOps {
     fun fromJson(json: JSONObject): SyncOp? {
         val workId = json.optString("work_id").takeIf { it.isNotEmpty() } ?: return null
         val opId = json.optString("op_id").takeIf { it.isNotEmpty() } ?: return null
-        if (!json.has("progression")) return null
+        val progression = (fractionAt(json, "progression") as? Fraction.Present)?.value
+            ?: return null
+        val locator = json.optJSONObject("locator")
+        if (locator != null && !locatorReadable(locator)) return null
         return SyncOp(
             opId = opId,
             workId = workId,
             editionSha = json.optString("edition_sha").takeIf { it.isNotEmpty() },
             clientTs = parseTime(json.optString("client_ts")) ?: 0,
-            progression = json.optDouble("progression", 0.0),
-            locatorJson = json.optJSONObject("locator")?.toString(),
+            progression = progression,
+            locatorJson = locator?.toString(),
             deviceId = json.optString("device_id").takeIf { it.isNotEmpty() },
             seq = json.optLong("seq"),
         )
+    }
+
+    /**
+     * A record from the feed, kept for its sequence number even when its
+     * position is unusable.
+     *
+     * Null only when there is nothing to keep at all: no readable
+     * position *and* no sequence number to advance the cursor with.
+     */
+    fun feedItemFrom(json: JSONObject): SyncFeedItem? {
+        val op = fromJson(json)
+        val seq = op?.seq ?: json.optLong("seq")
+        if (op == null && seq <= 0) return null
+        return SyncFeedItem(seq = seq, op = op)
+    }
+
+    /**
+     * A number that was really there, told apart from one that was not.
+     *
+     * `optDouble(key, 0.0)` is the mistake this exists to avoid: it
+     * turns a null, a string and a missing key alike into a
+     * legitimate-looking start of the book. An unpatched or third-party
+     * server that writes `"progression": null` — which is what
+     * `JSON.stringify` does with a `NaN` — must not be able to send this
+     * reader back to page one.
+     */
+    private fun fractionAt(json: JSONObject, key: String): Fraction {
+        if (!json.has(key)) return Fraction.Absent
+        if (json.isNull(key)) return Fraction.Unusable
+        val fraction = when (val value = json.opt(key)) {
+            is Number -> value.toDouble()
+            // A server that quotes its numbers is out of contract but
+            // not ambiguous, and the value is checked either way. This
+            // is also the one door a non-finite can still come through:
+            // org.json refuses a bare `NaN` while parsing, but "NaN" is
+            // just a string until something asks it for a double.
+            is String -> value.toDoubleOrNull() ?: return Fraction.Unusable
+            else -> return Fraction.Unusable
+        }
+        // Written this way round so a NaN is refused: it answers false
+        // to both comparisons, and so would also answer false to the
+        // `< 0 || > 1` phrasing that reads more naturally.
+        if (!(fraction >= 0.0 && fraction <= 1.0)) return Fraction.Unusable
+        return Fraction.Present(fraction)
+    }
+
+    /**
+     * Whether a locator's own idea of the position is usable.
+     *
+     * Only explicit malformedness is refused. A locator with no
+     * `locations`, or a partner that syncs a percentage and sends no
+     * locator at all, are both legitimate shapes and are left alone.
+     */
+    private fun locatorReadable(locator: JSONObject): Boolean {
+        val locations = locator.optJSONObject("locations") ?: return true
+        return fractionAt(locations, "totalProgression") !is Fraction.Unusable
+    }
+
+    private sealed interface Fraction {
+        data class Present(val value: Double) : Fraction
+        data object Absent : Fraction
+        data object Unusable : Fraction
     }
 
     /**

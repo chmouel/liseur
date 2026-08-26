@@ -204,9 +204,23 @@ class ReaderActivity : FragmentActivity() {
                                 val readingTheme = prefs.themeChoice.resolve(appIsDark)
                                 val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
                                 val columnMode = prefs.columnMode.effectiveFor(widthClass())
+                                // Read once, here, alongside the factory that is
+                                // built from it, and handed to the screen as the
+                                // point this navigator is being restored to.
+                                // Reading it again later would not give the same
+                                // answer: onLocatorChanged assigns lastLocator
+                                // before it decides whether the position persists,
+                                // so the navigator's own opening emissions move it.
+                                val restoreTarget = remember(
+                                    s.navigatorFactory,
+                                    columnMode,
+                                    scrollMode,
+                                ) {
+                                    viewModel.lastLocator ?: s.initialLocator
+                                }
                                 remember(s.navigatorFactory, columnMode, scrollMode) {
                                     s.navigatorFactory.createFragmentFactory(
-                                        initialLocator = viewModel.lastLocator ?: s.initialLocator,
+                                        initialLocator = restoreTarget,
                                         initialPreferences = prefs.toEpubPreferences(
                                             theme = readingTheme,
                                             columnMode = columnMode,
@@ -257,6 +271,7 @@ class ReaderActivity : FragmentActivity() {
                                 }
                                 ReaderScreen(
                                     publication = s.publication,
+                                    restoreTarget = restoreTarget,
                                     prefsFlow = viewModel.prefs,
                                     readingTheme = readingTheme,
                                     typographyIsOwnFlow = viewModel.typographyIsOwn,
@@ -312,7 +327,6 @@ class ReaderActivity : FragmentActivity() {
                                                 viewModel::locatorAtOrBeforeProgression,
                                             prepareLocator = viewModel::prepareLocator,
                                             onApproximateResume = viewModel::onApproximateResume,
-                                            currentLocator = { viewModel.lastLocator },
                                         )
                                     },
                                     annotationsFlow = viewModel.annotations,
