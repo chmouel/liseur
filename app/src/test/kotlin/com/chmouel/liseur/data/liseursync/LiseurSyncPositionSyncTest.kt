@@ -279,7 +279,8 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
-    fun `a cursor the server has compacted past starts again from a snapshot`() = runTest {        connect(cursor = 5)
+    fun `a cursor the server has compacted past starts again from a snapshot`() = runTest {
+        connect(cursor = 5)
         db.bookDao().upsert(local())
         alias()
         server.enqueue(MockResponse(code = 410, body = """{"error":"resync_required"}"""))

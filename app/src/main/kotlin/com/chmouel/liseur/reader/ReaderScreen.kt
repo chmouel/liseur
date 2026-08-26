@@ -588,26 +588,31 @@ fun ReaderScreen(
             // one-sided remote update into a conflict.
             nav.currentLocator.drop(1).collect { native ->
                 val requested = pendingPositionEvent
-                pendingPositionEvent = null
                 // Only paid for while the gate is closed, which is a
                 // handful of emissions at the start of a session.
-                val suppressed = gate.isGated && gate.onEmission(
+                val wasGated = gate.isGated
+                val suppressed = wasGated && gate.onEmission(
                     here = native.restorePoint(),
                     anchorVerified = restoreTarget != null &&
                         ExactLocatorAnchor.isExact(restoreTarget) &&
                         ExactLocatorAnchor.verify(nav, restoreTarget),
                     elapsedMs = SystemClock.elapsedRealtime() - gateOpenedAt,
                 ) == OpeningRestorationVerdict.SUPPRESS
-                val event = when {
-                    // The navigator reporting where it was before it
-                    // finished being told where to go. Persisting that
-                    // sends the reader's other devices to the top of the
-                    // chapter.
-                    suppressed -> NavigatorPositionEvent.OPENING_RESTORATION
-                    requested != null -> requested
-                    reflow.active -> NavigatorPositionEvent.PREFERENCE_REFLOW
-                    else -> NavigatorPositionEvent.READER_MOVEMENT
-                }
+                // Whether this emission is the one that ended the
+                // restoration, rather than more of the opening noise.
+                val landed = wasGated && !gate.isGated
+                val emission = classifyNavigatorEmission(
+                    requested = requested,
+                    suppressed = suppressed,
+                    landed = landed,
+                    reflowActive = reflow.active,
+                )
+                if (!emission.markerSurvives) pendingPositionEvent = null
+                // OPENING_RESTORATION here is the navigator reporting
+                // where it was before it finished being told where to
+                // go. Persisting that sends the reader's other devices
+                // to the top of the chapter.
+                val event = emission.event
                 // Anywhere the reader actually goes ends the run of
                 // preference changes the held anchor was covering.
                 if (event != NavigatorPositionEvent.PREFERENCE_REFLOW) reflowAnchor = null
