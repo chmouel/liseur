@@ -348,6 +348,21 @@ fun ReaderScreen(
     }
     val gateOpenedAt = remember(navigator) { SystemClock.elapsedRealtime() }
 
+    // The Readium locator behind the gate's current target. The gate
+    // speaks in RestorePoints, which carry no text anchor, so confirming
+    // arrival at an exact target needs the locator itself — and once a
+    // navigation has retargeted the gate that is the destination, not
+    // the one the book opened on.
+    var gateAnchor by remember(navigator) { mutableStateOf(restoreTarget) }
+
+    // Point the gate at somewhere the reader is being sent, without
+    // releasing it and without moving its deadline. One function so the
+    // anchor and the gate's target cannot drift apart.
+    fun retargetGate(locator: Locator) {
+        gateAnchor = locator
+        gate.onNavigationIssued(locator.restorePoint(exact = ExactLocatorAnchor.isExact(locator)))
+    }
+
     // The deadline runs on a clock rather than on emissions: a navigator
     // that falls silent while gated would otherwise never be released,
     // and a reading session would quietly stop being saved.
@@ -478,7 +493,7 @@ fun ReaderScreen(
         // asynchronous and the marker set with it is single use, so an
         // emission still in flight from the pre-restore position would
         // otherwise take that marker and be saved as the move.
-        gate.onNavigationIssued(locator.restorePoint())
+        retargetGate(locator)
         pendingPositionEvent = event
         nav.go(locator, animated = false)
         if (!verify || !ExactLocatorAnchor.isExact(locator)) return
@@ -491,7 +506,7 @@ fun ReaderScreen(
         }
         val progression = locator.locations.totalProgression ?: return
         val fallback = onProgressAction.locatorAtOrBeforeProgression(progression) ?: return
-        gate.onNavigationIssued(fallback.restorePoint())
+        retargetGate(fallback)
         pendingPositionEvent = event
         nav.go(fallback, animated = false)
         onProgressAction.onApproximateResume()
@@ -593,9 +608,10 @@ fun ReaderScreen(
                 val wasGated = gate.isGated
                 val suppressed = wasGated && gate.onEmission(
                     here = native.restorePoint(),
-                    anchorVerified = restoreTarget != null &&
-                        ExactLocatorAnchor.isExact(restoreTarget) &&
-                        ExactLocatorAnchor.verify(nav, restoreTarget),
+                    anchorVerified = gateAnchor.let {
+                        it != null && ExactLocatorAnchor.isExact(it) &&
+                            ExactLocatorAnchor.verify(nav, it)
+                    },
                     elapsedMs = SystemClock.elapsedRealtime() - gateOpenedAt,
                 ) == OpeningRestorationVerdict.SUPPRESS
                 // Whether this emission is the one that ended the
@@ -695,7 +711,7 @@ fun ReaderScreen(
         // in between takes the marker and the real arrival is left
         // looking like a page turn. Telling the gate where the reader is
         // now being sent keeps it closed until they get there.
-        gate.onNavigationIssued(fallback.restorePoint())
+        retargetGate(fallback)
         nav.go(fallback, animated = false)
         onProgressAction.onApproximateResume()
     }

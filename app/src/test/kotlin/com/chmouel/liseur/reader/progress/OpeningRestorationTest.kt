@@ -199,6 +199,26 @@ class OpeningRestorationTest {
     }
 
     @Test
+    fun `retargeting to a text anchor still waits for that anchor`() {
+        val gate = OpeningRestoration(at("ch7.xhtml", 0.47, exact = true), timeout)
+
+        // A catch-up offer accepted during opening sends the reader to a
+        // text-anchored position close to where they already are. Losing
+        // its exactness would let the page being left behind pass the
+        // 1% tolerance and read as an arrival.
+        gate.onNavigationIssued(at("ch7.xhtml", 0.46, exact = true))
+
+        assertEquals(OpeningRestorationVerdict.SUPPRESS, gate.emit(at("ch7.xhtml", 0.46)))
+        assertTrue(gate.isGated)
+
+        assertEquals(
+            OpeningRestorationVerdict.SUPPRESS,
+            gate.emit(at("ch7.xhtml", 0.46), anchorVerified = true),
+        )
+        assertFalse(gate.isGated)
+    }
+
+    @Test
     fun `a fallback after release does not close the gate again`() {
         val gate = OpeningRestoration(at("ch7.xhtml", 0.47, exact = true), timeout)
 
