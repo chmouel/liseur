@@ -853,5 +853,3 @@ private fun EmptyStats(modifier: Modifier = Modifier, narrowedByRange: Boolean =
 internal fun lastReadFormat(): DateTimeFormatter = DateTimeFormatter
     .ofLocalizedDate(FormatStyle.MEDIUM)
     .withLocale(LocalLocale.current.platformLocale)
-
-    .withLocale(LocalLocale.current.platformLocale)
