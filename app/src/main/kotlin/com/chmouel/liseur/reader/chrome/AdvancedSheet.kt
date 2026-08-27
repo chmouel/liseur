@@ -54,14 +54,20 @@ import com.chmouel.liseur.ui.windowWidth
  * issue, and the shape of the sheet is the point: five rows, or ten, it
  * is the same sheet and the reader learns it once.
  *
+ * [scrolling] is whether the text runs rather than turns, which is not
+ * only the reader's own choice: vertical text is laid out that way
+ * whatever the setting says. Three rows turn on it, and they are the
+ * same question asked once — a page that scrolls has no columns to
+ * count and no turn to animate, and is the only kind that can be
+ * scrolled along on its own.
+ *
  * See `docs/adr/0001-advanced-reading-menu.md`.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdvancedSheet(
     prefs: ReaderPrefs,
-    scrollMode: Boolean,
-    autoScrollOffered: Boolean,
+    scrolling: Boolean,
     autoScrolling: Boolean,
     autoScrollSpeed: Float,
     typographyIsOwn: Boolean,
@@ -92,7 +98,7 @@ fun AdvancedSheet(
                 // A scrolled chapter is one running column, so the count
                 // has nothing to divide and the control would take a tap
                 // and change nothing.
-                showColumns = !scrollMode,
+                showColumns = !scrolling,
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
                 onColumnModeChanged = onColumnModeChanged,
@@ -103,13 +109,13 @@ fun AdvancedSheet(
             )
             // Nothing lifts off the screen when the text is scrolled, so
             // the animation has no page to describe.
-            if (!scrollMode) {
+            if (!scrolling) {
                 ReadingPageTurnAnimationToggle(
                     enabled = prefs.pageTurnAnimation,
                     onChanged = onPageTurnAnimationChanged,
                 )
             }
-            if (autoScrollOffered) {
+            if (scrolling) {
                 AutoScrollRow(
                     enabled = autoScrolling,
                     speed = autoScrollSpeed,

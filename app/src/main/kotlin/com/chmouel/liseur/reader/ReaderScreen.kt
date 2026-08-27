@@ -1730,8 +1730,9 @@ fun ReaderScreen(
     if (sheet == ReaderSheet.ADVANCED) {
         AdvancedSheet(
             prefs = prefs,
-            scrollMode = scrollMode,
-            autoScrollOffered = effectiveScrolling,
+            // Not the reader's own answer but the page's: vertical text
+            // runs rather than turns whatever the setting says.
+            scrolling = effectiveScrolling,
             autoScrolling = autoScrollArmed,
             autoScrollSpeed = prefs.autoScrollSpeed,
             typographyIsOwn = typographyIsOwn,
