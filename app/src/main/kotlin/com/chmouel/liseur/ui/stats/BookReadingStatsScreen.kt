@@ -1,28 +1,50 @@
 package com.chmouel.liseur.ui.stats
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.HourglassBottom
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.domain.BookReadingStats
@@ -36,10 +58,8 @@ import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
 /**
- * How much of one book has been read, and when it was last opened.
- *
- * Reached from the book's own long-press sheet, so it opens already
- * knowing which book is meant and never has to be searched for.
+ * Detailed reading metrics for an individual book with hero cover artwork
+ * and structured bento metrics.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,7 +74,12 @@ fun BookReadingStatsScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -72,7 +97,7 @@ fun BookReadingStatsScreen(
                 .fillMaxSize()
                 .padding(padding),
             contentAlignment = if (state is BookReadingStatsUiState.Ready) {
-                Alignment.TopStart
+                Alignment.TopCenter
             } else {
                 Alignment.Center
             },
@@ -81,107 +106,289 @@ fun BookReadingStatsScreen(
                 BusyIndicator()
                 return@Box
             }
-            Column(
+            if (state is BookReadingStatsUiState.Empty) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier
+                        .widthIn(max = contentWidthCap(windowWidth()))
+                        .padding(24.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (range == StatsRange.ALL_TIME) {
+                                    R.string.reading_stats_book_empty
+                                } else {
+                                    R.string.reading_stats_empty_range
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+                return@Box
+            }
+            val stats = (state as BookReadingStatsUiState.Ready).stats
+            LazyColumn(
                 modifier = Modifier
                     .widthIn(max = contentWidthCap(windowWidth()))
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (state is BookReadingStatsUiState.Empty) {
-                    Text(
-                        // A book excluded by the span the reader picked
-                        // has not gone unread; it has gone unread lately.
-                        text = stringResource(
-                            if (range == StatsRange.ALL_TIME) {
-                                R.string.reading_stats_book_empty
-                            } else {
-                                R.string.reading_stats_empty_range
-                            },
-                        ),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    return@Column
+                // Book Hero Header with Artwork
+                item {
+                    BookHeroHeader(stats = stats)
                 }
-                val stats = (state as BookReadingStatsUiState.Ready).stats
-                Text(
-                    text = stringResource(R.string.reading_stats_total),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = readingDuration(stats.totalMs),
-                    style = MaterialTheme.typography.displaySmall,
-                )
-                // The dashboard's span follows the reader here, so this
-                // total must name it. Without the caption the same book
-                // would appear to lose hours whenever the span narrowed.
-                Text(
-                    text = range.days(LocalDate.now())?.let {
-                        stringResource(R.string.reading_stats_in_last_days_local, it)
-                    } ?: stringResource(R.string.reading_stats_in_total),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    text = stringResource(
-                        R.string.reading_stats_last_read,
-                        Instant.ofEpochMilli(stats.lastReadAt)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                            .format(lastReadFormat()),
-                    ),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = if (stats.finished) {
-                        stringResource(R.string.state_finished)
-                    } else {
-                        stats.progression?.let {
-                            stringResource(
-                                R.string.reading_stats_progress,
-                                (it * 100).toInt(),
+
+                // Time Spent Feature Card
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Timer,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = stringResource(R.string.reading_stats_total).uppercase(),
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        letterSpacing = 1.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = readingDuration(stats.totalMs),
+                                style = MaterialTheme.typography.displaySmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
-                        }.orEmpty()
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                // How the time was spent, not just how much of it. A book
-                // read in two long sittings and one read in forty short
-                // ones are different books to have read, and the total
-                // alone cannot tell them apart.
-                if (stats.sessions > 0) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = if (stats.sessions == 1) {
-                            stringResource(R.string.reading_stats_book_sessions_one)
-                        } else {
-                            stringResource(R.string.reading_stats_book_sessions, stats.sessions)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                            Spacer(Modifier.height(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ) {
+                                Text(
+                                    text = range.days(LocalDate.now())?.let {
+                                        stringResource(R.string.reading_stats_in_last_days_local, it)
+                                    } ?: stringResource(R.string.reading_stats_in_total),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
+                    }
                 }
-                // Only ever shown when the server had one to give. It
-                // knows how fast this reader gets through books on every
-                // device, which this screen cannot work out on its own,
-                // and it answers null rather than guessing when it has
-                // nothing to divide by. That null is respected here: no
-                // estimate beats an invented one.
-                serverInsights?.etaSeconds?.let { seconds ->
-                    Spacer(Modifier.height(16.dp))
+
+                // 2x2 Bento Metric Tiles
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            val lastDate = Instant.ofEpochMilli(stats.lastReadAt)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                                .format(lastReadFormat())
+                            BookMetricTile(
+                                icon = Icons.Outlined.DateRange,
+                                value = lastDate,
+                                label = stringResource(R.string.reading_stats_last_read_label),
+                                modifier = Modifier.weight(1f),
+                            )
+                            BookMetricTile(
+                                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                                value = if (stats.sessions == 1) {
+                                    stringResource(R.string.reading_stats_book_sessions_one)
+                                } else {
+                                    stringResource(R.string.reading_stats_book_sessions, stats.sessions)
+                                },
+                                label = stringResource(R.string.reading_stats_sessions),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+
+                        serverInsights?.etaSeconds?.let { seconds ->
+                            val etaText = readingDuration(TimeUnit.SECONDS.toMillis(seconds.toLong()))
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.HourglassBottom,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Column {
+                                        Text(
+                                            text = stringResource(R.string.reading_stats_time_left, etaText),
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookHeroHeader(stats: BookReadingStats) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        StatsCoverThumbnail(
+            title = stats.title,
+            coverPath = stats.coverPath,
+            coverUrl = stats.coverUrl,
+            modifier = Modifier
+                .width(100.dp)
+                .height(150.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = stats.title,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontFamily = FontFamily.Serif,
+                fontWeight = FontWeight.Bold,
+            ),
+            textAlign = TextAlign.Center,
+        )
+        stats.author?.let { author ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = author,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        if (stats.finished) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
                     Text(
-                        text = stringResource(
-                            R.string.reading_stats_time_left,
-                            readingDuration(TimeUnit.SECONDS.toMillis(seconds.toLong())),
-                        ),
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = stringResource(R.string.state_finished),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
             }
+        } else if (stats.progression != null) {
+            Column(
+                modifier = Modifier.widthIn(max = 200.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                LinearProgressIndicator(
+                    progress = { stats.progression.toFloat() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    strokeCap = StrokeCap.Round,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.reading_stats_progress, (stats.progression * 100).toInt()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookMetricTile(
+    icon: ImageVector,
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }
