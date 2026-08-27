@@ -825,8 +825,19 @@ fun ReaderScreen(
                     ResourceAddress.shows(web.url, it.href.toString())
                 }
             }
+            // Whether the resource this run is for is still the one on
+            // screen and the one the navigator names. Waiting above and
+            // taking the scope below are both places the reader can
+            // turn a page, and everything after them speaks to the
+            // document in front of them: a capture takes its words from
+            // it, a restore puts the reader back into it. Asked again
+            // rather than assumed, at each point where the answer could
+            // have changed.
+            fun stillFitting(): Boolean =
+                web === visibleWebView(root) &&
+                    ResourceAddress.shows(web.url, nav.currentLocator.value.href.toString())
             reflow.within {
-                val anchor = here?.let { capture(nav, it) }
+                val anchor = here?.takeIf { stillFitting() }?.let { capture(nav, it) }
                 val before = ExactLocatorAnchor.layoutSignature(nav)
                 if (WideContentFit.apply(nav) == WideContentFit.Result.CHANGED) {
                     // Settled before the scope closes whether or not
@@ -835,11 +846,12 @@ fun ReaderScreen(
                     // outside the scope that reads as a page the reader
                     // turned.
                     awaitReflowSettled(nav, before)
-                    // A position that never arrived leaves the fit
-                    // applied without one. Fitting moves the text a
-                    // little; restoring the wrong chapter moves the
-                    // reader out of the chapter they are in.
-                    if (anchor != null) {
+                    // A position that never arrived, or one the reader
+                    // has since left, leaves the fit applied without a
+                    // restore. Fitting moves the text a little;
+                    // restoring the wrong chapter moves the reader out
+                    // of the chapter they are in.
+                    if (anchor != null && stillFitting()) {
                         navigate(
                             nav = nav,
                             locator = anchor,
