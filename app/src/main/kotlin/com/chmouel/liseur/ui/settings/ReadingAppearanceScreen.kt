@@ -172,7 +172,7 @@ private fun AdvancedSection(
     TextButton(onClick = { expanded = !expanded }) {
         Text(
             stringResource(
-                if (expanded) R.string.reading_hide_advanced else R.string.reading_show_advanced,
+                if (expanded) R.string.reader_hide_advanced else R.string.reader_advanced,
             ),
         )
     }

@@ -1,6 +1,5 @@
 package com.chmouel.liseur.reader.chrome
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -140,7 +139,11 @@ private fun JustThisBookToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onChanged(!enabled) },
+            .toggleable(
+                value = enabled,
+                role = Role.Switch,
+                onValueChange = onChanged,
+            ),
     ) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -157,7 +160,7 @@ private fun JustThisBookToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(checked = enabled, onCheckedChange = onChanged)
+        Switch(checked = enabled, onCheckedChange = null)
     }
 }
 
