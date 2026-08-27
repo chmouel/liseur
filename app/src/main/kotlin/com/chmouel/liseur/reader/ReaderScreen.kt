@@ -1714,26 +1714,14 @@ fun ReaderScreen(
         TypographySheet(
             prefs = prefs,
             readingTheme = readingTheme,
-            typographyIsOwn = typographyIsOwn,
-            onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
             onFontSelected = onPrefsAction.setFont,
             onFontSizeChanged = onPrefsAction.setFontSize,
             onThemeSelected = onPrefsAction.setTheme,
-            onLineHeightChanged = onPrefsAction.setLineHeight,
-            onPageMarginsChanged = onPrefsAction.setPageMargins,
             onBrightnessChanged = onPrefsAction.setBrightness,
-            onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
-            onFooterModeChanged = onProgressAction.setFooterMode,
-            onColumnModeChanged = onPrefsAction.setColumnMode,
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             scrollMode = scrollMode,
             onScrollModeChanged = onScrollModeChanged,
-            // Nothing lives behind Advanced yet but auto-scroll, and
-            // auto-scroll is only offered to a scrolled book. A paginated
-            // one would open an empty sheet, so it is not offered the way
-            // in either.
-            advancedOffered = effectiveScrolling,
             onOpenAdvanced = { sheet = ReaderSheet.ADVANCED },
             onDismiss = { sheet = ReaderSheet.NONE },
         )
@@ -1741,11 +1729,21 @@ fun ReaderScreen(
 
     if (sheet == ReaderSheet.ADVANCED) {
         AdvancedSheet(
-            autoScrollOffered = effectiveScrolling,
+            prefs = prefs,
+            // Not the reader's own answer but the page's: vertical text
+            // runs rather than turns whatever the setting says.
+            scrolling = effectiveScrolling,
             autoScrolling = autoScrollArmed,
             autoScrollSpeed = prefs.autoScrollSpeed,
+            typographyIsOwn = typographyIsOwn,
+            onLineHeightChanged = onPrefsAction.setLineHeight,
+            onPageMarginsChanged = onPrefsAction.setPageMargins,
+            onColumnModeChanged = onPrefsAction.setColumnMode,
+            onFooterModeChanged = onProgressAction.setFooterMode,
+            onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
             onAutoScrollChanged = { autoScrollArmed = it },
             onAutoScrollSpeedChanged = onPrefsAction.setAutoScrollSpeed,
+            onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
             // Back to typography, not back to the book: this sheet was
             // reached from there, and that is where the reader left off.
             onDismiss = { sheet = ReaderSheet.TYPOGRAPHY },

@@ -433,6 +433,7 @@
     <string name="reader_typography_own_on">Font, size and layout stay with this book.</string>
     <string name="reader_typography_own_off">Font, size and layout are shared with every book.</string>
     <string name="reader_advanced">Advanced</string>
+    <string name="reader_hide_advanced">Hide advanced</string>
     <string name="reader_auto_scroll">Scroll the page for me</string>
     <string name="reader_auto_scroll_detail">The page carries itself along, and the screen stays awake. Touch it to stop, touch it again to carry on.</string>
     <string name="reader_auto_scroll_speed">Scrolling speed</string>

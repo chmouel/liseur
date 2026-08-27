@@ -230,4 +230,12 @@ emulator.
   `viewModelScope` is reached from the main thread.
 - Reader settings map to Readium `EpubPreferences`; reading themes
   (Light/Sepia/Dark/Black) are decoupled from the app's Material theme.
+- A new reading setting goes in the Advanced sheet
+  (`reader/chrome/AdvancedSheet.kt`), and behind the collapsed Advanced
+  section on Settings → Reading appearance. The typography sheet is the
+  short list a reader changes often — theme, size, brightness, font, and
+  how the book is read — and it only grows for a setting that genuinely
+  belongs there. Make that case in the pull request; the default is
+  Advanced. It grew to eleven controls once, one reasonable row at a
+  time. See `docs/adr/0001-advanced-reading-menu.md`.
 - Bundled fonts must be under open licenses (OFL): Literata et al.

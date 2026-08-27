@@ -52,10 +52,35 @@ first, not a navigation destination: dismissing it lands back on the
 typography sheet, and dismissing that lands back on the page.
 
 It exists as of auto-scroll ([ADR 6](0006-auto-scroll.md)), which was
-the first of the five to be built and so brought the sheet with it. It
-holds that one row, and the **Advanced** row that opens it is hidden
-when it would be empty — today, in a book read by turning pages. The
+the first of the five to be built and so brought the sheet with it. The
 other four arrive with their own issues.
 
+The typography sheet did grow anyway, one reasonable row at a time,
+until it carried eleven controls and the Advanced row held one. Six of
+them have since moved behind Advanced — line height, page margins,
+columns, the footer mode, the page-turn animation and the
+just-this-book toggle — leaving the first sheet the five answers a
+reader changes often: the theme, the size, the light, the face, and
+whether the book is read by scrolling or by turning pages. Keeping the
+screen awake stays there too, being a thing a reader reaches for
+mid-chapter.
+
+The Advanced row is no longer conditional. It was hidden in a paginated
+book while auto-scroll was all that lived behind it, because the way in
+to an empty sheet is worse than no way in; with six more rows there, it
+cannot be empty. The rows that do not apply still hide themselves —
+auto-scroll only in a scrolled book, the page-turn animation only in a
+paginated one, columns only when there is width for two.
+
+Settings → Reading appearance shows the same controls without a book,
+so it carries the same split: the six live behind a collapsed
+**Advanced** section there. A reader who learned where the margins are
+in one place does not have to learn it again in the other.
+
+New reading settings default to Advanced. `AGENTS.md` carries that as a
+convention, so the next reasonable row has to argue its way onto the
+first sheet rather than simply land there.
+
 *Where:* `reader/chrome/TypographySheet.kt`,
-`reader/chrome/AdvancedSheet.kt`.
+`reader/chrome/AdvancedSheet.kt`,
+`ui/settings/ReadingAppearanceScreen.kt`.
