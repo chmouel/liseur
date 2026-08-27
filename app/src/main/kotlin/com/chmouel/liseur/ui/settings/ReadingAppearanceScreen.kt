@@ -153,9 +153,14 @@ fun ReadingAppearanceScreen(
 /**
  * The same split the reader sees, on the screen that has no book.
  *
- * What is behind the "Aa" sheet's Advanced row is behind this too, in
- * the same order: a reader who learned where the margins live in one
- * place should not have to learn it again in the other. See
+ * The shared settings behind the "Aa" sheet's Advanced row are behind
+ * this too, in the same order: a reader who learned where the margins
+ * live in one place should not have to learn it again in the other.
+ *
+ * Only the shared ones. The rest of that sheet has no meaning here —
+ * auto-scroll needs a page that is running, and setting a book apart
+ * needs a book — so this holds the layout controls, the footer mode and
+ * the page-turn animation, and nothing else. See
  * `docs/adr/0001-advanced-reading-menu.md`.
  */
 @Composable

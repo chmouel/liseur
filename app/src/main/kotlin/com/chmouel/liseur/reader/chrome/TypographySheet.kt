@@ -92,8 +92,8 @@ fun TypographySheet(
                 enabled = keepScreenOn,
                 onChanged = onKeepScreenOnChanged,
             )
-            // Last, and always: what is behind it applies to every book,
-            // read either way, so it can no longer open an empty sheet.
+            // Last, and always. The sheet behind it has rows for any
+            // book, read either way, so it can no longer open empty.
             AdvancedRow(onClick = onOpenAdvanced)
         }
     }
