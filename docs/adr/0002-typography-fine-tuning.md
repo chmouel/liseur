@@ -50,4 +50,4 @@ the row does not promise otherwise.
 
 *Where:* `data/settings/ReaderPrefs.kt`,
 `data/settings/ReaderPreferencesRepository.kt`,
-`reader/ReaderPreferencesMapper.kt`, `reader/chrome/TypographySheet.kt`.
+`reader/ReaderPreferencesMapper.kt`, `reader/chrome/AdvancedSheet.kt`.
