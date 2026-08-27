@@ -27,6 +27,8 @@ data class BookReadingStats(
     val sessions: Int = 0,
     /** How many of [sessions] no server has been told about yet. */
     val pendingSessions: Int = 0,
+    val coverPath: String? = null,
+    val coverUrl: String? = null,
 )
 
 /** How much was read on one day. */
@@ -116,6 +118,8 @@ data class StatsBook(
     val author: String?,
     val progression: Double?,
     val finished: Boolean,
+    val coverPath: String? = null,
+    val coverUrl: String? = null,
 )
 
 /** How many days of history the dashboard shows day by day by default. */
@@ -166,6 +170,8 @@ fun readingStats(
             finished = book?.finished == true,
             sessions = spans.size,
             pendingSessions = spans.count { !it.uploaded },
+            coverPath = book?.coverPath,
+            coverUrl = book?.coverUrl,
         )
     }.sortedWith(compareByDescending<BookReadingStats> { it.totalMs }.thenBy { it.title })
 

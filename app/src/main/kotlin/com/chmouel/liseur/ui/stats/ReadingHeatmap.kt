@@ -155,7 +155,7 @@ private fun HeatmapCell(day: ReadingDay?, busiest: Long) {
     Box(
         Modifier
             .size(CELL_SIZE)
-            .clip(RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(3.dp))
             .background(
                 if (read) {
                     MaterialTheme.colorScheme.primary.copy(alpha = shade)
@@ -172,6 +172,6 @@ private fun DayOfWeek.initial(locale: java.util.Locale): String =
     getDisplayName(TextStyle.NARROW, locale).take(1)
 
 private const val DAYS_IN_WEEK = 7
-private val CELL_SIZE = 12.dp
-private val CELL_GAP = 3.dp
+private val CELL_SIZE = 13.dp
+private val CELL_GAP = 3.5.dp
 private val MONTH_ROW_HEIGHT = 16.dp

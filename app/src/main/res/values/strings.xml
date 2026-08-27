@@ -556,6 +556,7 @@
     <string name="reading_stats_book_empty">You have not read any of this one yet.</string>
     <string name="reading_stats_no_reading_day">Nothing read on %1$s</string>
     <string name="reading_stats_last_read">Last read %1$s</string>
+    <string name="reading_stats_last_read_label">Last read</string>
     <string name="reading_stats_progress">%1$d%% through</string>
     <string name="reading_stats_day_read">%1$s on %2$s</string>
     <string name="reading_stats_in_last_days">In the last %1$d days, on every device</string>

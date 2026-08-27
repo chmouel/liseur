@@ -233,6 +233,8 @@ class ReadingStatsViewModel(
                 author = book.displayAuthor,
                 progression = progressionByUrl[book.url],
                 finished = book.finished,
+                coverPath = book.coverPath,
+                coverUrl = book.coverUrl,
             )
         }
         LocalStats(
@@ -427,6 +429,8 @@ class ReadingStatsViewModel(
                             insight.sessions + rows.sumOf { it.pendingSessions },
                         ),
                         pendingSessions = rows.sumOf { it.pendingSessions },
+                        coverPath = metadata.coverPath,
+                        coverUrl = metadata.coverUrl,
                     )
                 }
             val books = mergedBooks.values.sortedWith(
