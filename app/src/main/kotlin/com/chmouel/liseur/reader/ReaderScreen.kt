@@ -83,6 +83,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.reader.annotations.BookmarkRibbon
@@ -337,6 +338,7 @@ fun ReaderScreen(
     val noteShowing by rememberUpdatedState(footnote != null)
     var selection by remember { mutableStateOf<ActiveSelection?>(null) }
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
+    var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
     var defineWord by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
     val context = LocalContext.current
@@ -1761,6 +1763,20 @@ fun ReaderScreen(
         )
     }
 
+    bookNoteEditor?.let { editor ->
+        NoteDialog(
+            passage = null,
+            initialNote = editor.existing?.note.orEmpty(),
+            titleRes = R.string.annotation_book_note_title,
+            hintRes = R.string.annotation_book_note_hint,
+            onSave = { note ->
+                onAnnotationAction.saveBookNote(note, editor.existing?.id)
+                bookNoteEditor = null
+            },
+            onDismiss = { bookNoteEditor = null },
+        )
+    }
+
     if (sheet == ReaderSheet.TYPOGRAPHY) {
         TypographySheet(
             prefs = prefs,
@@ -1862,12 +1878,19 @@ fun ReaderScreen(
             currentHref = here?.value?.href?.toString(),
             annotations = annotations,
             onAnnotationSelected = { annotation ->
-                annotation.locator()?.let {
-                    showToc = false
-                    chromeVisible = false
-                    onProgressAction.onJump()
-                    navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
+                if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+                    bookNoteEditor = BookNoteEditor(annotation)
+                } else {
+                    annotation.locator()?.let {
+                        showToc = false
+                        chromeVisible = false
+                        onProgressAction.onJump()
+                        navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
+                    }
                 }
+            },
+            onBookNoteAdded = {
+                bookNoteEditor = BookNoteEditor(existing = null)
             },
             onAnnotationDeleted = onAnnotationAction.remove,
             onExport = {
@@ -1910,6 +1933,9 @@ private data class ActiveSelection(
     }
 }
 
+/** The book-level note being written; null [existing] means a new one. */
+private data class BookNoteEditor(val existing: BookAnnotation?)
+
 /** Decorations for search hits live apart from the reader's own marks. */
 private const val SEARCH_DECORATION_GROUP = "search"
 private val SEARCH_HIT_TINT = Color(0xFF80CBC4)
@@ -1927,6 +1953,7 @@ class ReaderSearchActions(
 class ReaderAnnotationActions(
     val highlight: (Locator, HighlightTint, String?) -> Unit,
     val addNote: (Locator, String, String?) -> Unit,
+    val saveBookNote: (String, String?) -> Unit,
     val annotationAt: (Locator) -> BookAnnotation?,
     val toggleBookmark: () -> Unit,
     val remove: (BookAnnotation) -> Unit,

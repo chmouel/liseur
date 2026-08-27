@@ -340,6 +340,7 @@ class ReaderActivity : FragmentActivity() {
                                         ReaderAnnotationActions(
                                             highlight = viewModel::highlight,
                                             addNote = viewModel::addNote,
+                                            saveBookNote = viewModel::saveBookNote,
                                             annotationAt = viewModel::annotationAt,
                                             toggleBookmark = viewModel::toggleBookmark,
                                             remove = viewModel::remove,

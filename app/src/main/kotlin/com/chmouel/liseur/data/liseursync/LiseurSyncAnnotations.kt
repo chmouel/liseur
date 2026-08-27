@@ -271,7 +271,7 @@ class LiseurSyncAnnotations(
         }
 
         val workId = record.workId ?: return false
-        val home = home(peer, record, aliases) ?: return false
+        val home = home(peer, record, aliases, row?.bookId ?: local?.bookId) ?: return false
 
         if (row == null && local != null) {
             // Both sides hold this id and nothing here records them ever
@@ -815,7 +815,7 @@ class LiseurSyncAnnotations(
         }
 
         val workId = record.workId ?: return
-        val home = home(peer, record, aliases) ?: return
+        val home = home(peer, record, aliases, row.bookId) ?: return
         val landed = AnnotationWire.toAnnotation(record, home.bookUrl, annotationDao.byId(row.id))
         val newer = !stillSaying(row)
         if (!newer) annotationDao.upsert(landed)
@@ -998,7 +998,7 @@ class LiseurSyncAnnotations(
                 LiseurSyncHttp.CONFLICT -> {
                     val record = refused.body?.optJSONObject("server")
                         ?.let(AnnotationWire::record)
-                    val home = record?.let { home(peer, it, aliases) }
+                    val home = record?.let { home(peer, it, aliases, row.bookId) }
                     if (record == null || record.deleted || home == null) {
                         syncDao.deleteById(peer.peerId, row.id)
                         return@inTransaction
@@ -1065,16 +1065,27 @@ class LiseurSyncAnnotations(
      * Picking the edition it was actually made against is the honest
      * answer; failing that, any consistent rule will do, as long as it
      * is the same one every run.
+     *
+     * A standalone note carries no edition anchor at all, by design, so
+     * for those the first question can never answer. Choosing a copy for
+     * a note arriving here the first time is fair enough, but a note
+     * this device has already filed somewhere has an answer better than
+     * fair: where it already lives. Without it, a conflict, a re-pair or
+     * any second landing would walk the note over to whichever copy
+     * sorts first, and the reader would watch it move between two copies
+     * of one book.
      */
     private suspend fun home(
         peer: Peer,
         record: AnnotationWire.Record,
         aliases: List<WorkAlias>,
+        known: String?,
     ): WorkAlias? {
         val candidates = aliases.filter { it.workId == record.workId }
         if (candidates.isEmpty()) return null
         val chosen = candidates
             .firstOrNull { it.editionSha != null && it.editionSha == record.editionSha }
+            ?: known?.let { where -> candidates.firstOrNull { it.bookUrl == where } }
             ?: candidates.minByOrNull { it.bookUrl }
             ?: return null
         // The list was read before the call. A different file may have

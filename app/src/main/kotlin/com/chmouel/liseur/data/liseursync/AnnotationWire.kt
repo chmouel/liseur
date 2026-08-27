@@ -72,10 +72,11 @@ object AnnotationWire {
      * Builds the request item for a mark, or null when it is not
      * something this server can hold.
      *
-     * A highlight and a bookmark have to anchor to the text, and a
-     * locator that cannot be read back is not an anchor. Refusing here
-     * rather than letting the server refuse keeps a broken row from
-     * being offered on every run for ever.
+     * A highlight and a bookmark have to anchor to the text, while a
+     * book note deliberately has no anchor. A locator that cannot be
+     * read back is not an anchor. Refusing here rather than letting the
+     * server refuse keeps a broken row from being offered on every run
+     * for ever.
      */
     fun item(
         annotation: BookAnnotation,
@@ -84,7 +85,8 @@ object AnnotationWire {
         editionSha: String?,
     ): Item? {
         val kind = wireKind(annotation) ?: return null
-        val locator = canonicalLocator(annotation.locatorJson) ?: return null
+        val locator = if (kind == KIND_NOTE) null else canonicalLocator(annotation.locatorJson)
+            ?: return null
         if (!usableId(annotation.id)) return null
 
         // Sent whole. Truncating here would hash the short version as
@@ -97,6 +99,7 @@ object AnnotationWire {
             KIND_BOOKMARK -> ""
             else -> annotation.note.orEmpty()
         }
+        if (kind == KIND_NOTE && body.isEmpty()) return null
         val color = when (kind) {
             KIND_HIGHLIGHT -> color(annotation.tint)
             else -> ""
@@ -109,15 +112,19 @@ object AnnotationWire {
             add("\"id\":" + quote(annotation.id))
             add("\"base_rev\":$baseRev")
             add("\"work_id\":" + quote(workId))
-            if (editionSha != null) add("\"edition_sha\":" + quote(editionSha))
+            if (editionSha != null && kind != KIND_NOTE) {
+                add("\"edition_sha\":" + quote(editionSha))
+            }
             add("\"kind\":" + quote(kind))
-            add("\"locator\":$locator")
-            annotation.totalProgression
-                ?.takeIf { it in 0.0..1.0 }
-                ?.let { add("\"progression\":${number(it)}") }
-            truncate(annotation.text.orEmpty(), MAX_EXCERPT_BYTES)
-                .takeIf { it.isNotEmpty() }
-                ?.let { add("\"excerpt\":" + quote(it)) }
+            locator?.let { add("\"locator\":$it") }
+            if (kind != KIND_NOTE) {
+                annotation.totalProgression
+                    ?.takeIf { it in 0.0..1.0 }
+                    ?.let { add("\"progression\":${number(it)}") }
+                truncate(annotation.text.orEmpty(), MAX_EXCERPT_BYTES)
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { add("\"excerpt\":" + quote(it)) }
+            }
             if (color.isNotEmpty()) add("\"color\":" + quote(color))
             if (body.isNotEmpty()) add("\"body\":" + quote(body))
             add("\"client_ts\":" + quote(clientTs(annotation.updatedAt)))
@@ -154,12 +161,17 @@ object AnnotationWire {
      */
     fun fingerprint(annotation: BookAnnotation, workId: String): String {
         val kind = wireKind(annotation)
+        val anchored = kind != KIND_NOTE
         val parts = listOf(
             workId,
             kind.orEmpty(),
-            canonicalLocator(annotation.locatorJson).orEmpty(),
-            annotation.totalProgression?.takeIf { it in 0.0..1.0 }?.let(::number).orEmpty(),
-            truncate(annotation.text.orEmpty(), MAX_EXCERPT_BYTES),
+            if (anchored) canonicalLocator(annotation.locatorJson).orEmpty() else "",
+            if (anchored) {
+                annotation.totalProgression?.takeIf { it in 0.0..1.0 }?.let(::number).orEmpty()
+            } else {
+                ""
+            },
+            if (anchored) truncate(annotation.text.orEmpty(), MAX_EXCERPT_BYTES) else "",
             if (kind == KIND_HIGHLIGHT) color(annotation.tint) else "",
             if (kind == KIND_BOOKMARK) "" else annotation.note.orEmpty(),
             clientTs(annotation.updatedAt),
@@ -171,12 +183,12 @@ object AnnotationWire {
      * The kind the server would call this mark, or null if it would call
      * it nothing.
      *
-     * A note here is a passage with something written about it, which is
-     * what the server calls a highlight carrying a body — its own `note`
-     * is a body with no anchor, which this app has no way to make.
+     * A passage note is what the server calls a highlight carrying a body;
+     * a book note maps to its anchorless `note` kind.
      */
     fun wireKind(annotation: BookAnnotation): String? = when (annotation.kind) {
         AnnotationKind.HIGHLIGHT.name, AnnotationKind.NOTE.name -> KIND_HIGHLIGHT
+        AnnotationKind.BOOK_NOTE.name -> KIND_NOTE
         AnnotationKind.BOOKMARK.name -> KIND_BOOKMARK
         else -> null
     }
@@ -209,9 +221,7 @@ object AnnotationWire {
      * can trust or represent.
      *
      * Checked as though it were hostile, because a database is not the
-     * place to find out that a colour was a stylesheet. A standalone
-     * note — a body with no anchor — is skipped: there is nowhere here
-     * to put one.
+     * place to find out that a colour was a stylesheet.
      */
     fun record(json: JSONObject): Record? {
         val id = json.optString("id")
@@ -234,12 +244,15 @@ object AnnotationWire {
         }
 
         val kind = json.optString("kind")
-        if (kind != KIND_HIGHLIGHT && kind != KIND_BOOKMARK) return null
+        if (kind != KIND_HIGHLIGHT && kind != KIND_NOTE && kind != KIND_BOOKMARK) return null
         val workId = json.optString("work_id").takeIf { it.isNotEmpty() } ?: return null
 
-        val locator = json.opt("locator")?.takeIf { it != JSONObject.NULL }?.toString()
-            ?: return null
-        if (canonicalLocator(locator) == null) return null
+        val locator = anchor(json.opt("locator"))
+        if (kind == KIND_NOTE) {
+            if (locator != null) return null
+        } else if (locator == null) {
+            return null
+        }
 
         val progression = if (json.isNull("progression")) null else json.optDouble("progression")
         if (progression != null && (progression.isNaN() || progression !in 0.0..1.0)) return null
@@ -253,6 +266,7 @@ object AnnotationWire {
         if (excerpt.toByteArray().size > MAX_EXCERPT_BYTES) return null
         if (body.toByteArray().size > MAX_BODY_BYTES) return null
         if (body.isNotEmpty() && kind == KIND_BOOKMARK) return null
+        if (body.isEmpty() && kind == KIND_NOTE) return null
 
         return Record(
             id = id,
@@ -300,14 +314,13 @@ object AnnotationWire {
      * How far a page of the feed reaches, or null if it says nothing.
      *
      * Counted before anything is skipped: the cursor has to move by
-     * what the server sent, not by what this device could read. A page
-     * of standalone notes reads as nothing here, and taking the
-     * account's high water mark for it would step over every highlight
-     * after them, silently, once, for ever. A seq below 1 is not a
-     * reach either — `optLong` reads a missing or unparseable one as 0,
-     * and treating that as an answer would pin the cursor just as
-     * firmly. Null hands the page back to `high_water`, which is only
-     * for a page that really was empty.
+     * what the server sent, not by what this device could read. Taking
+     * the account's high water mark for a page of unknown records would
+     * step over every readable mark after them, silently, once, for ever.
+     * A seq below 1 is not a reach either — `optLong` reads a missing or
+     * unparseable one as 0, and treating that as an answer would pin the
+     * cursor just as firmly. Null hands the page back to `high_water`,
+     * which is only for a page that really was empty.
      */
     fun pageReach(array: JSONArray?): Long? {
         if (array == null || array.length() == 0) return null
@@ -355,9 +368,11 @@ object AnnotationWire {
      * out of the locator when there is nothing to inherit.
      */
     fun toAnnotation(record: Record, bookId: String, existing: BookAnnotation?): BookAnnotation {
+        val bookNote = record.kind == KIND_NOTE
         val locator = record.locator?.let { runCatching { JSONObject(it) }.getOrNull() }
         val locations = locator?.optJSONObject("locations")
         val kind = when {
+            bookNote -> AnnotationKind.BOOK_NOTE
             record.kind == KIND_BOOKMARK -> AnnotationKind.BOOKMARK
             record.body.isNotEmpty() -> AnnotationKind.NOTE
             else -> AnnotationKind.HIGHLIGHT
@@ -378,24 +393,47 @@ object AnnotationWire {
             // device's own doing — an excerpt goes out truncated to a
             // kilobyte — so keeping the whole passage is restoring
             // precision, not ignoring an edit.
-            text = record.excerpt.takeIf { it.isNotEmpty() }?.let { excerpt ->
+            text = record.excerpt.takeIf { !bookNote && it.isNotEmpty() }?.let { excerpt ->
                 existing?.text
                     ?.takeIf { truncate(it, MAX_EXCERPT_BYTES) == excerpt }
                     ?: excerpt
             },
             note = record.body.takeIf { it.isNotEmpty() },
-            tint = record.color.takeIf { it.isNotEmpty() }?.uppercase(Locale.ROOT),
-            chapter = existing?.chapter
-                ?: locator?.optString("title")?.takeIf { it.isNotEmpty() },
-            position = existing?.position
-                ?: locations?.optInt("position")?.takeIf { it > 0 },
-            totalProgression = record.progression,
+            tint = record.color.takeIf { !bookNote && it.isNotEmpty() }?.uppercase(Locale.ROOT),
+            chapter = if (bookNote) {
+                null
+            } else {
+                existing?.chapter ?: locator?.optString("title")?.takeIf { it.isNotEmpty() }
+            },
+            position = if (bookNote) {
+                null
+            } else {
+                existing?.position ?: locations?.optInt("position")?.takeIf { it > 0 }
+            },
+            totalProgression = if (bookNote) null else record.progression,
             createdAt = existing?.createdAt ?: (record.clientTsMicros / 1000),
             updatedAt = record.clientTsMicros,
         )
     }
 
     // -- Shapes -----------------------------------------------------------
+
+    /**
+     * The anchor a record actually carries, or null when it carries none.
+     *
+     * A peer with nothing to anchor may say so as an absent key, a JSON
+     * null, an empty string or an empty object, and they all mean the
+     * same thing — `SyncOps.locatorFor` has read them that way all
+     * along. Reading one of those spellings as a locator would refuse a
+     * standalone note for ever, since the record is skipped on every
+     * pull and every reconcile alike, and would let an anchored mark
+     * through with an anchor that points at nothing.
+     */
+    fun anchor(value: Any?): String? {
+        val raw = value?.takeIf { it != JSONObject.NULL }?.toString() ?: return null
+        val canonical = canonicalLocator(raw) ?: return null
+        return raw.takeIf { canonical != "{}" }
+    }
 
     /**
      * A locator written one way and one way only, with its keys in

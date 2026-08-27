@@ -195,9 +195,34 @@ commits it: a different file may have taken over the path since the
 feed was asked, and writing the record against the name the book used to
 have would anchor another book's highlight into text that never held it.
 
-Anchorless server notes (a body with no locator) are skipped on pull.
-Liseur has no such record; giving it one is a separate decision, filed
-as [#77](https://github.com/chmouel/liseur/issues/77).
+Anchorless server notes (a body with no locator) are stored as `BOOK_NOTE`.
+They remain distinct from Liseur's `NOTE`, which is a passage highlight
+carrying a body on the wire. A book note carries only its body and work:
+no locator, progression, excerpt, colour or edition anchor. It appears in
+the notebook rather than on the page and follows the same revision,
+conflict and tombstone rules as every other annotation.
+
+Version 0.11.0 already advanced its cursor over notes it could not store.
+They are recovered when the ordinary seven-day live-set reconciliation next
+checks that work. The cursor and Room schema are deliberately not reset for
+this additive local representation.
+
+"No locator" is read generously on the way in: an absent key, a JSON null,
+an empty string and an empty object all mean the same thing, as they
+already do in `SyncOps.locatorFor`. Reading one of the latter spellings as
+an anchor would refuse a note on every pull *and* every reconcile, so the
+reader would never see it at all. The same normalisation refuses an
+anchored mark whose locator holds nothing, which anchors no text.
+
+Because a book note carries no `edition_sha`, `home()` cannot tell which
+copy of a work it was written against, and two copies of one book share a
+`work_id`. A note landing here for the first time goes to a copy chosen the
+same way every run. A note this device has already filed goes back where it
+already lives: the `annotation_sync` row, or failing that the annotation,
+is consulted before that fallback. Without it a conflict, a re-pair or any
+second landing would walk the note over to whichever copy sorts first, and
+the reader would watch it move between two copies of one book. Sending
+`edition_sha` on a note instead would contradict the wire shape above.
 
 ## Consequences
 

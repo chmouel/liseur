@@ -12,12 +12,12 @@ import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
-/** What the reader marked: a passage, a thought about it, or a place. */
-enum class AnnotationKind { HIGHLIGHT, NOTE, BOOKMARK }
+/** What the reader marked: a passage, a thought about it or the book, or a place. */
+enum class AnnotationKind { HIGHLIGHT, NOTE, BOOK_NOTE, BOOKMARK }
 
 /**
  * Something the reader added to a book: a highlight, a note on a passage,
- * or a bookmark.
+ * a note about the book itself, or a bookmark.
  *
  * Keyed by the book's permanent identity rather than the file it lives in,
  * the same way reading positions are, so annotations survive a calibre-web
@@ -31,6 +31,7 @@ data class BookAnnotation(
     @PrimaryKey val id: String,
     @ColumnInfo(name = "book_id") val bookId: String,
     @ColumnInfo(name = "kind") val kind: String,
+    /** Empty only for an anchorless [AnnotationKind.BOOK_NOTE]. */
     @ColumnInfo(name = "locator_json") val locatorJson: String,
     /** The passage as it reads in the book, for the notebook and export. */
     @ColumnInfo(name = "text") val text: String? = null,
