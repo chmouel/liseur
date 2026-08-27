@@ -189,6 +189,13 @@ private const val SELECTION_SETTLE_MS = 90L
 // stopped is worse than a page that stops early.
 private const val CHAPTER_ARRIVAL_MS = 5_000L
 
+// How long the wide-content fit waits for the navigator to publish a
+// position naming the resource it is about to fit. Readium reports
+// having moved a moment after the page is on screen, so this is
+// normally over in a frame or two; it is bounded because a fit is worth
+// applying even when the position it would restore never arrives.
+private const val ANCHOR_ARRIVAL_MS = 2_000L
+
 // The look the last lines of a chapter get before the page moves on,
 // however fast or slow the reader has it set.
 private const val MIN_CHAPTER_DWELL_MS = 400L
@@ -792,22 +799,66 @@ fun ReaderScreen(
             val web = visibleWebView(root) ?: return@collect
             if (web === fitted) return@collect
             fitted = web
+            // Which position to come back to, decided before the reflow
+            // scope opens: the wait below is not a reflow, and holding
+            // the scope through it would read a page the reader turned
+            // in the meantime as text moving under them.
+            //
+            // The anchor is taken from the navigator rather than from
+            // reflowAnchor: that one belongs to a run of preference
+            // changes in the resource being left, and restoring to it
+            // would carry the reader back out of the one they just
+            // turned into.
+            //
+            // For the same reason it is taken only once the navigator's
+            // position names the resource this web view is showing.
+            // Readium puts a resource on screen before it publishes
+            // having moved to it, so the position on hand can still be
+            // the one the reader left — and restoring to that sends
+            // them back to it, which makes the resource they came from
+            // the newly visible one and starts the whole thing over.
+            // The saved position says nothing about that ping-pong,
+            // because a reflow does not persist, until the next page
+            // turn publishes wherever it came to rest.
+            val here = withTimeoutOrNull(ANCHOR_ARRIVAL_MS) {
+                nav.currentLocator.first {
+                    ResourceAddress.shows(web.url, it.href.toString())
+                }
+            }
+            // Whether the resource this run is for is still the one on
+            // screen and the one the navigator names. Waiting above and
+            // taking the scope below are both places the reader can
+            // turn a page, and everything after them speaks to the
+            // document in front of them: a capture takes its words from
+            // it, a restore puts the reader back into it. Asked again
+            // rather than assumed, at each point where the answer could
+            // have changed.
+            fun stillFitting(): Boolean =
+                web === visibleWebView(root) &&
+                    ResourceAddress.shows(web.url, nav.currentLocator.value.href.toString())
             reflow.within {
-                // The anchor is captured here rather than taken from
-                // reflowAnchor: that one belongs to a run of preference
-                // changes in the resource being left, and restoring to it
-                // would carry the reader back out of the one they just
-                // turned into.
-                val anchor = capture(nav, nav.currentLocator.value)
+                val anchor = here?.takeIf { stillFitting() }?.let { capture(nav, it) }
                 val before = ExactLocatorAnchor.layoutSignature(nav)
                 if (WideContentFit.apply(nav) == WideContentFit.Result.CHANGED) {
+                    // Settled before the scope closes whether or not
+                    // there is an anchor: the text the fit moved
+                    // reports where it came to rest either way, and
+                    // outside the scope that reads as a page the reader
+                    // turned.
                     awaitReflowSettled(nav, before)
-                    navigate(
-                        nav = nav,
-                        locator = anchor,
-                        event = NavigatorPositionEvent.PREFERENCE_REFLOW,
-                        verify = true,
-                    )
+                    // A position that never arrived, or one the reader
+                    // has since left, leaves the fit applied without a
+                    // restore. Fitting moves the text a little;
+                    // restoring the wrong chapter moves the reader out
+                    // of the chapter they are in.
+                    if (anchor != null && stillFitting()) {
+                        navigate(
+                            nav = nav,
+                            locator = anchor,
+                            event = NavigatorPositionEvent.PREFERENCE_REFLOW,
+                            verify = true,
+                        )
+                    }
                 }
             }
         }
