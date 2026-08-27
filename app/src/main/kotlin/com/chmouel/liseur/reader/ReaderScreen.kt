@@ -826,22 +826,27 @@ fun ReaderScreen(
                 }
             }
             reflow.within {
-                // A position that never arrives leaves the fit to be
-                // applied without one. Fitting moves the text a little;
-                // restoring the wrong chapter moves the reader out of
-                // the chapter they are in.
                 val anchor = here?.let { capture(nav, it) }
                 val before = ExactLocatorAnchor.layoutSignature(nav)
-                if (WideContentFit.apply(nav) == WideContentFit.Result.CHANGED &&
-                    anchor != null
-                ) {
+                if (WideContentFit.apply(nav) == WideContentFit.Result.CHANGED) {
+                    // Settled before the scope closes whether or not
+                    // there is an anchor: the text the fit moved
+                    // reports where it came to rest either way, and
+                    // outside the scope that reads as a page the reader
+                    // turned.
                     awaitReflowSettled(nav, before)
-                    navigate(
-                        nav = nav,
-                        locator = anchor,
-                        event = NavigatorPositionEvent.PREFERENCE_REFLOW,
-                        verify = true,
-                    )
+                    // A position that never arrived leaves the fit
+                    // applied without one. Fitting moves the text a
+                    // little; restoring the wrong chapter moves the
+                    // reader out of the chapter they are in.
+                    if (anchor != null) {
+                        navigate(
+                            nav = nav,
+                            locator = anchor,
+                            event = NavigatorPositionEvent.PREFERENCE_REFLOW,
+                            verify = true,
+                        )
+                    }
                 }
             }
         }
