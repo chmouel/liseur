@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-An open-source ebook reader for Android and a [calibre-web](https://github.com/janeczku/calibre-web) / [Komga](https://komga.org) / [liseur-sync](https://github.com/chmouel/liseur-sync) client: EPUBs on your phone, in sync with your own book server, for people whose idea of a great evening is a warm blanket and a 900-page book.
+An open-source ebook reader for Android and a [calibre-web](https://github.com/janeczku/calibre-web) / [Komga](https://komga.org) / [liseur-sync](https://github.com/chmouel/liseur-sync) client: EPUBs on your phone, in sync with your own book server.
 
 <table>
   <tr>
@@ -52,38 +52,35 @@ An open-source ebook reader for Android and a [calibre-web](https://github.com/j
 
 ## About Liseur
 
-[Liseur](#whats-in-a-name) is designed to get out of the way and let you read.
-Pages open cleanly from edge to edge with the Readium engine, set in open
-typefaces like Literata, Vollkorn, Atkinson Hyperlegible, and Inter, or
-whatever quirky typography the publisher insisted on. Four dedicated reading
-themes (Light, Sepia, Dark, and true OLED Black) let you settle into a story at
-2 a.m. without being blinded by your phone. Margins, line spacing, brightness,
-and page turns stay quietly out of your way. Prefer one long scroll to turning
-pages? Switch it on for the whole library, or for the one book that wants it,
-and keep scrolling past the end of a chapter to fall into the next one. Set it
-scrolling by itself, at a pace you pick, and it carries on across chapters
-until you touch the page — handy over lunch, or with one hand on a strap.
+Liseur renders EPUBs with the Readium engine, in open typefaces (Literata,
+Vollkorn, Atkinson Hyperlegible, Inter) or whatever the publisher shipped.
+Four reading themes: Light, Sepia, Dark, OLED Black. Margins, line spacing,
+brightness, and page-turn vs. continuous-scroll are adjustable per book or
+library-wide. Auto-scroll runs at a set pace and continues across chapter
+boundaries.
 
-A discreet footer shows the time remaining in the chapter (just enough to
-convince yourself that one more chapter won't hurt), while highlights, margin
-notes, bookmarks, and instant dictionary lookups remain right under your
-fingers when you stumble upon a word you pretend to know. Footnotes open as a
-small card over the page rather than throwing you to the back of the book, so
-an author's aside costs you nothing more than a tap — and when a note is long
-enough to deserve the full page, "Go to note" takes you there and leaves a way
-back.
+A footer shows time remaining in the chapter. Highlights, margin notes,
+bookmarks, and dictionary lookups are inline. Footnotes open as a card over
+the page instead of jumping to the back of the book; long notes get a "Go to
+note" link with a way back.
 
-Your library gathers onto a single shelf, whether your books live in messy folders on your phone or on a self-hosted [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) or [liseur-sync](https://github.com/chmouel/liseur-sync) server. Books that belong to a series politely group into compact stacks that track your reading order, your progress, and the missing volumes you still need to hunt down. When you reach the final page of a novel, the next volume is already sitting there, gently enabling your binge-reading habits.
+The library is one shelf regardless of source: local folders, [calibre-web](https://github.com/janeczku/calibre-web),
+[Komga](https://komga.org), or [liseur-sync](https://github.com/chmouel/liseur-sync).
+Series are grouped into stacks tracking reading order, progress, and missing
+volumes.
 
-When you switch between devices, you have the choice to have your place travel with you across your devices. Two-way synchronization with [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org) and [liseur-sync](https://github.com/chmouel/liseur-sync) keeps your progress aligned — down to the exact sentence on Komga and liseur-sync, so you never have to play the guessing game of where you were. liseur-sync goes one further: standalone EPUB files that never came from a catalog sync their position too, matched by the file itself. Its books come from folders it watches on the server, so anything you drop there shows up on the shelf.
+Reading position syncs across devices via calibre-web, Komga, and
+liseur-sync, down to the exact sentence on Komga and liseur-sync. liseur-sync
+also syncs position for standalone EPUBs never pulled from a catalog, matched
+by file hash, and serves books from folders it watches on the server.
 
-About to lose your connection? **Download all books** on the server account screen fetches everything in the catalog that isn't already on your device, in one go. Books you already have are left alone, archived ones are skipped, and it tells you how much room it will need before it starts.
+"Download all books" on the account screen fetches everything not already on
+the device, skips what's local or archived, and reports the space needed
+first.
 
-Everything runs privately and without distraction. There are no trackers, no
-analytics, no ads, and no attempts to sell you a monthly subscription for books
-you already own. Liseur only talks to the book servers and dictionary sources
-you choose to add. The [privacy policy](https://chmouel.github.io/liseur/PRIVACY)
-spells out exactly what that means.
+No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
+servers and dictionary sources you configure. See the
+[privacy policy](https://chmouel.github.io/liseur/PRIVACY).
 
 ## Install
 
@@ -104,7 +101,7 @@ why the remaining gaps are or are not fixable is in
 
 ## What's in a name?
 
-**Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified just like the English word *leisure*, which is exactly what you should be doing when you curl up with a good book.
+**Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified, like the English word *leisure*.
 
 Here is a painting of Pierre-August Renoir portraying C.Monet as "Le liseur"
 
