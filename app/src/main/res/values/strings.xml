@@ -305,7 +305,7 @@
     <string name="reader_notes">Notes</string>
     <string name="reader_no_bookmarks">No bookmarks yet. Tap the top-right corner of a page to mark it.</string>
     <string name="reader_no_highlights">No highlights yet. Select a passage to mark it.</string>
-    <string name="reader_no_notes">No notes yet. Select a passage and choose Note.</string>
+    <string name="reader_no_notes">No notes yet. Add one here or select a passage and choose Note.</string>
     <string name="reader_page_short">p.\u00A0%1$d</string>
     <string name="reader_add_bookmark">Bookmark this page</string>
     <string name="reader_remove_bookmark">Remove bookmark</string>
@@ -318,6 +318,9 @@
     <string name="annotation_note">Note</string>
     <string name="annotation_note_title">Note</string>
     <string name="annotation_note_hint">What did this make you think?</string>
+    <string name="annotation_add_book_note">Add a book note</string>
+    <string name="annotation_book_note_title">Book note</string>
+    <string name="annotation_book_note_hint">What do you want to remember about this book?</string>
     <string name="annotation_look_up">Define</string>
     <string name="annotation_search">Search the web</string>
     <string name="annotation_share">Share</string>

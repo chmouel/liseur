@@ -60,7 +60,8 @@ library-wide. Auto-scroll runs at a set pace and continues across chapter
 boundaries.
 
 A footer shows time remaining in the chapter. Highlights, margin notes,
-bookmarks, and dictionary lookups are inline. Footnotes open as a card over
+bookmarks, and dictionary lookups are inline; book-level notes live in the
+notebook. Footnotes open as a card over
 the page instead of jumping to the back of the book; long notes get a "Go to
 note" link with a way back.
 

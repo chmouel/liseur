@@ -47,14 +47,18 @@ const val DECORATION_GROUP = "annotations"
  * Turns stored annotations into what the navigator draws over the page.
  *
  * Bookmarks are deliberately left out: they mark a page, not a passage, and
- * are shown by the corner ribbon instead. A note is drawn like a highlight
- * so the passage it belongs to stays visible — a note with nothing
- * underneath it cannot be found again by eye.
+ * are shown by the corner ribbon instead. Book notes are left out because
+ * they deliberately have no passage. A passage note is drawn like a
+ * highlight so the words it belongs to stay visible.
  */
 @OptIn(ExperimentalReadiumApi::class)
 fun List<BookAnnotation>.toDecorations(): List<Decoration> =
     mapNotNull { annotation ->
-        if (annotation.kind == AnnotationKind.BOOKMARK.name) return@mapNotNull null
+        if (annotation.kind == AnnotationKind.BOOKMARK.name ||
+            annotation.kind == AnnotationKind.BOOK_NOTE.name
+        ) {
+            return@mapNotNull null
+        }
         val locator = annotation.locator() ?: return@mapNotNull null
         Decoration(
             id = annotation.id,

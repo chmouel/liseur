@@ -175,6 +175,20 @@ emulator.
   swept. For the same reason the feed cursor moves by the raw page, not
   by the records this device could represent: `high_water` is only ever
   for a page the server sent empty.
+- Liseur's `NOTE` is a note attached to a passage and maps to a server
+  `highlight` carrying a body. `BOOK_NOTE` is the server's standalone
+  `note`: it has a body and deliberately no locator, progression,
+  excerpt, colour or edition anchor. Keep the two kinds distinct.
+- "No locator" is read generously on the way in: absent, JSON null, an
+  empty string and an empty object all mean the same thing, as they
+  already do in `SyncOps.locatorFor`. Reading one of those as an anchor
+  refuses a standalone note on every pull *and* every reconcile, so the
+  reader never sees it once.
+- Because a book note carries no `edition_sha` and two copies of one
+  book share a `work_id`, `home()` cannot tell which copy it was written
+  against. A note landing the first time gets a copy picked the same way
+  every run; one already filed here goes back where it already lives.
+  Pass the known `bookId` rather than sending `edition_sha` on a note.
 - The annotation pass runs settle → pull → reconcile → push → deletes,
   and that order is not negotiable. Reconciling a work's live set before
   pushing is what stops an offline edit to a swept tombstone being sent

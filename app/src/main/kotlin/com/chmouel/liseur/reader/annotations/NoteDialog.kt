@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader.annotations
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -23,16 +24,18 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 
 /**
- * Writing, or reworking, a note about a passage.
+ * Writing, or reworking, a note about a passage or the book itself.
  *
- * The passage itself is shown above the field and stays selectable, because
- * the note is usually a reaction to particular words and it helps to have
- * them in front of you while you write.
+ * When there is a passage it is shown above the field and stays selectable,
+ * because the note is usually a reaction to particular words and it helps
+ * to have them in front of you while you write.
  */
 @Composable
 fun NoteDialog(
     passage: String?,
     initialNote: String,
+    @StringRes titleRes: Int = R.string.annotation_note_title,
+    @StringRes hintRes: Int = R.string.annotation_note_hint,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -41,7 +44,7 @@ fun NoteDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.annotation_note_title)) },
+        title = { Text(stringResource(titleRes)) },
         text = {
             Column(Modifier.fillMaxWidth()) {
                 passage?.takeIf { it.isNotBlank() }?.let {
@@ -61,7 +64,7 @@ fun NoteDialog(
                     value = note,
                     onValueChange = { note = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text(stringResource(R.string.annotation_note_hint)) },
+                    placeholder = { Text(stringResource(hintRes)) },
                     minLines = 3,
                 )
             }

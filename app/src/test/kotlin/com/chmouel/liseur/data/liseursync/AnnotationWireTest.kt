@@ -33,6 +33,28 @@ class AnnotationWireTest {
     }
 
     @Test
+    fun `a book note carries words without an anchor`() {
+        val item = AnnotationWire.item(
+            mark(
+                kind = AnnotationKind.BOOK_NOTE,
+                locator = "",
+                text = "not an excerpt",
+                note = "worth remembering",
+            ),
+            WORK,
+            0,
+            "edition-sha",
+        )
+        val sent = JSONObject(item!!.json)
+
+        assertEquals("note", sent.getString("kind"))
+        assertEquals("worth remembering", sent.getString("body"))
+        for (anchored in listOf("locator", "edition_sha", "progression", "excerpt", "color")) {
+            assertFalse(anchored, sent.has(anchored))
+        }
+    }
+
+    @Test
     fun `a highlight with a body comes back as a note`() {
         val record = AnnotationWire.record(
             server(kind = "highlight", body = "worth arguing with"),
@@ -105,6 +127,29 @@ class AnnotationWireTest {
         assertNotEquals(base, AnnotationWire.fingerprint(mark(text = "other"), WORK))
         assertNotEquals(base, AnnotationWire.fingerprint(mark(updatedAt = 9), WORK))
         assertNotEquals(base, AnnotationWire.fingerprint(mark(), "other-work"))
+    }
+
+    @Test
+    fun `book note fingerprints ignore fields the server never receives`() {
+        val clean = mark(
+            kind = AnnotationKind.BOOK_NOTE,
+            locator = "",
+            text = null,
+            note = "remember this",
+            tint = null,
+        )
+        val strayAnchors = mark(
+            kind = AnnotationKind.BOOK_NOTE,
+            locator = LOCATOR,
+            text = "not an excerpt",
+            note = "remember this",
+            tint = "PURPLE",
+        )
+
+        assertEquals(
+            AnnotationWire.fingerprint(clean, WORK),
+            AnnotationWire.fingerprint(strayAnchors, WORK),
+        )
     }
 
     @Test
@@ -239,14 +284,61 @@ class AnnotationWireTest {
     }
 
     @Test
-    fun `a standalone note is skipped rather than guessed at`() {
-        // The server's own `note` is a body with no anchor. Liseur has
-        // nowhere to hang one, and inventing an anchor would put the
-        // reader's words at a place they never chose.
+    fun `a standalone note lands without an invented anchor`() {
         val note = JSONObject(
-            """{"id":"n","rev":1,"seq":1,"work_id":"$WORK","kind":"note","body":"standalone"}""",
+            """{"id":"n","rev":1,"seq":1,"work_id":"$WORK","kind":"note","body":"standalone","client_ts":"$STAMP"}""",
         )
-        assertNull(AnnotationWire.record(note))
+        val landed = AnnotationWire.toAnnotation(
+            AnnotationWire.record(note)!!,
+            BOOK,
+            mark(id = "n", note = "old passage note"),
+        )
+
+        assertEquals(AnnotationKind.BOOK_NOTE.name, landed.kind)
+        assertEquals("standalone", landed.note)
+        assertEquals("", landed.locatorJson)
+        assertNull(landed.text)
+        assertNull(landed.tint)
+        assertNull(landed.chapter)
+        assertNull(landed.position)
+        assertNull(landed.totalProgression)
+    }
+
+    @Test
+    fun `a standalone note requires a body and forbids an anchor`() {
+        val bare = JSONObject(
+            """{"id":"n","rev":1,"seq":1,"work_id":"$WORK","kind":"note","client_ts":"$STAMP"}""",
+        )
+        assertNull(AnnotationWire.record(bare))
+        val anchored = JSONObject(bare.toString())
+            .put("body", "words")
+            .put("locator", JSONObject(LOCATOR))
+        assertNull(AnnotationWire.record(anchored))
+    }
+
+    @Test
+    fun `a note anchored to nothing at all is still a note`() {
+        // A peer with no anchor to give may write it as a JSON null, an
+        // empty string or an empty object. Reading any of those as an
+        // anchor would refuse the note on every pull and every reconcile
+        // alike, so the reader would never see it once.
+        val said = JSONObject(
+            """{"id":"n","rev":1,"seq":1,"work_id":"$WORK","kind":"note","body":"standalone","client_ts":"$STAMP"}""",
+        )
+        listOf(JSONObject.NULL, "", "{}", JSONObject()).forEach { spelling ->
+            val record = AnnotationWire.record(JSONObject(said.toString()).put("locator", spelling))
+            assertEquals(AnnotationKind.BOOK_NOTE.name, AnnotationWire.toAnnotation(record!!, BOOK, null).kind)
+            assertNull(record.locator)
+        }
+    }
+
+    @Test
+    fun `an anchored mark whose anchor holds nothing is refused`() {
+        // An empty object is not a place in a book. Landing it would put
+        // a highlight over no text at all.
+        listOf("", "{}").forEach { spelling ->
+            assertNull(AnnotationWire.record(server(locator = spelling)))
+        }
     }
 
     @Test
@@ -360,11 +452,11 @@ class AnnotationWireTest {
     @Test
     fun `how far a page reaches is counted before anything is skipped`() {
         val readable = server(id = "a", seq = 3).toString()
-        val standalone = JSONObject()
+        val unreadable = JSONObject()
             .put("id", "b").put("rev", 1).put("seq", 11)
-            .put("work_id", WORK).put("kind", "note").put("body", "a thought")
+            .put("work_id", WORK).put("kind", "future-kind")
             .put("client_ts", STAMP).toString()
-        val page = JSONArray("[$readable,$standalone]")
+        val page = JSONArray("[$readable,$unreadable]")
 
         assertEquals(1, AnnotationWire.records(page).size)
         assertEquals(11L, AnnotationWire.pageReach(page))

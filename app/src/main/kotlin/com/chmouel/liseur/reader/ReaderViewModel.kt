@@ -333,7 +333,7 @@ class ReaderViewModel(
     /** Raised when another device is further along than this page. */
     val catchUp: StateFlow<CatchUp?> = _catchUp.asStateFlow()
 
-    /** Highlights, notes and bookmarks in this book, in reading order. */
+    /** Book notes first, then the anchored marks in reading order. */
     val annotations: StateFlow<List<BookAnnotation>> = annotationDao.observe(bookId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -1128,6 +1128,21 @@ class ReaderViewModel(
         )
     }
 
+    /** Writes a thought about the book itself, without inventing a place for it. */
+    fun saveBookNote(note: String, existingId: String? = null) {
+        val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
+        save(
+            BookAnnotation(
+                id = existing?.id ?: UUID.randomUUID().toString(),
+                bookId = bookId,
+                kind = AnnotationKind.BOOK_NOTE.name,
+                locatorJson = "",
+                note = note,
+                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+            ),
+        )
+    }
+
     /**
      * The mark covering this locator, if the reader selected one they
      * had already made.
@@ -1140,7 +1155,10 @@ class ReaderViewModel(
     fun annotationAt(locator: Locator): BookAnnotation? {
         val selection = locator.markedPassage()
         return annotations.value
-            .filter { it.kind != AnnotationKind.BOOKMARK.name }
+            .filter {
+                it.kind != AnnotationKind.BOOKMARK.name &&
+                    it.kind != AnnotationKind.BOOK_NOTE.name
+            }
             .firstOrNull { mark ->
                 val other = mark.locator()?.markedPassage() ?: return@firstOrNull false
                 isSamePassage(selection, other)

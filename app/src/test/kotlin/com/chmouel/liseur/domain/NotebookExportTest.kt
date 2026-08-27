@@ -102,6 +102,24 @@ class NotebookExportTest {
     }
 
     @Test
+    fun `book notes lead the notebook in creation order`() {
+        val md = exportNotebookMarkdown(
+            title = "A book",
+            author = null,
+            annotations = listOf(
+                annotation(text = "a passage", chapter = "One", progression = 0.1),
+                annotation(kind = AnnotationKind.BOOK_NOTE, note = "second", createdAt = 2),
+                annotation(kind = AnnotationKind.BOOK_NOTE, note = "first", createdAt = 1),
+            ),
+        )
+
+        assertTrue(md.contains("## Book notes"))
+        assertTrue(md.indexOf("## Book notes") < md.indexOf("## One"))
+        assertTrue(md.indexOf("first") < md.indexOf("second"))
+        assertFalse(md.contains("## Elsewhere"))
+    }
+
+    @Test
     fun `annotations outside any known chapter still get a home`() {
         val md = exportNotebookMarkdown(
             title = "A book",

@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -81,8 +83,8 @@ private enum class ContentsTab(val labelRes: Int) {
  * A book's contents can run to hundreds of lines and is the thing people
  * jump around in, so it gets the full height of the display rather than a
  * sheet that has to be fought to scroll. Bookmarks, highlights and notes
- * sit alongside as tabs, because in practice they are used for the same
- * thing: getting back to a particular place.
+ * sit alongside as tabs: anchored marks get back to a particular place,
+ * while book notes make the notebook useful without inventing one.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,6 +95,7 @@ fun ContentsScreen(
     annotations: List<BookAnnotation>,
     onEntrySelected: (Link) -> Unit,
     onAnnotationSelected: (BookAnnotation) -> Unit,
+    onBookNoteAdded: () -> Unit,
     onAnnotationDeleted: (BookAnnotation) -> Unit,
     onExport: () -> Unit,
     onClose: () -> Unit,
@@ -109,7 +112,13 @@ fun ContentsScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.reader_navigate)) },
+                    title = {
+                        Text(
+                            text = stringResource(R.string.reader_navigate),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = onClose) {
                             Icon(
@@ -125,6 +134,15 @@ fun ContentsScreen(
                                     Icons.Outlined.CloudSync,
                                     contentDescription =
                                     stringResource(R.string.reader_sync_book),
+                                )
+                            }
+                        }
+                        if (tab == ContentsTab.NOTES) {
+                            IconButton(onClick = onBookNoteAdded) {
+                                Icon(
+                                    Icons.Outlined.Add,
+                                    contentDescription =
+                                    stringResource(R.string.annotation_add_book_note),
                                 )
                             }
                         }
@@ -204,7 +222,8 @@ fun ContentsScreen(
 
                     ContentsTab.HIGHLIGHTS -> AnnotationList(
                         annotations = annotations.filter {
-                            it.kind != AnnotationKind.BOOKMARK.name
+                            it.kind != AnnotationKind.BOOKMARK.name &&
+                                it.kind != AnnotationKind.BOOK_NOTE.name
                         },
                         theme = theme,
                         emptyRes = R.string.reader_no_highlights,
@@ -318,7 +337,16 @@ private fun AnnotationRow(
             .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (annotation.kind != AnnotationKind.BOOKMARK.name) {
+        if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+            Icon(
+                Icons.AutoMirrored.Outlined.Notes,
+                contentDescription = null,
+                tint = theme.foreground.copy(alpha = 0.65f),
+                modifier = Modifier
+                    .padding(top = 1.dp)
+                    .size(18.dp),
+            )
+        } else if (annotation.kind != AnnotationKind.BOOKMARK.name) {
             Box(
                 Modifier
                     .padding(top = 4.dp)
@@ -354,10 +382,22 @@ private fun AnnotationRow(
             annotation.note?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = it.trim(),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontStyle = FontStyle.Italic,
-                    color = theme.foreground.copy(alpha = 0.75f),
-                    maxLines = 3,
+                    style = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+                        MaterialTheme.typography.bodyMedium
+                    } else {
+                        MaterialTheme.typography.bodySmall
+                    },
+                    fontStyle = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+                        FontStyle.Normal
+                    } else {
+                        FontStyle.Italic
+                    },
+                    color = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+                        theme.foreground
+                    } else {
+                        theme.foreground.copy(alpha = 0.75f)
+                    },
+                    maxLines = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) 5 else 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 6.dp),
                 )

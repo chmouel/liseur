@@ -20,9 +20,23 @@ fun exportNotebookMarkdown(
     out.append("# ").append(title.ifBlank { "Untitled" }).append('\n')
     if (!author.isNullOrBlank()) out.append('\n').append('*').append(author).append('*').append('\n')
 
-    val ordered = annotations.sortedWith(
-        compareBy({ it.totalProgression ?: Double.MAX_VALUE }, { it.createdAt }),
-    )
+    val bookNotes = annotations
+        .filter { it.kind == AnnotationKind.BOOK_NOTE.name }
+        .sortedBy { it.createdAt }
+    if (bookNotes.isNotEmpty()) {
+        out.append("\n## Book notes\n")
+        for (annotation in bookNotes) {
+            annotation.note?.takeIf { it.isNotBlank() }?.let {
+                out.append('\n').append(it.trim()).append('\n')
+            }
+        }
+    }
+
+    val ordered = annotations
+        .filter { it.kind != AnnotationKind.BOOK_NOTE.name }
+        .sortedWith(
+            compareBy({ it.totalProgression ?: Double.MAX_VALUE }, { it.createdAt }),
+        )
     var chapter: String? = NO_CHAPTER_YET
     for (annotation in ordered) {
         if (annotation.chapter != chapter) {

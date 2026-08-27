@@ -1,5 +1,6 @@
 package com.chmouel.liseur.domain
 
+import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -42,6 +43,15 @@ class AnnotationBackupTest {
         createdAt = 1_700_000_001_000,
     )
 
+    private val bookNote = BookAnnotation(
+        id = "a3",
+        bookId = "calibre:uuid-1",
+        kind = AnnotationKind.BOOK_NOTE.name,
+        locatorJson = "",
+        note = "remember the argument",
+        createdAt = 1_700_000_002_000,
+    )
+
     private fun roundTrip(books: List<BackedUpBook>): List<BackedUpBook> {
         val decoded = decodeAnnotationBackup(encodeAnnotationBackup(books))
         assertTrue("$decoded", decoded is BackupContents.Readable)
@@ -60,6 +70,12 @@ class AnnotationBackupTest {
     fun `a bookmark with nothing written on it comes back empty, not blank`() {
         val back = roundTrip(listOf(BackedUpBook("calibre:uuid-1", null, null, listOf(bare))))
         assertEquals(bare, back.single().annotations.single())
+    }
+
+    @Test
+    fun `a book note comes back without an invented locator`() {
+        val back = roundTrip(listOf(BackedUpBook("calibre:uuid-1", null, null, listOf(bookNote))))
+        assertEquals(bookNote, back.single().annotations.single())
     }
 
     @Test

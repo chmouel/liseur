@@ -104,6 +104,29 @@ class LiseurSyncAnnotationsTest {
     }
 
     @Test
+    fun `a new book note is offered without an anchor`() = runTest {
+        connect()
+        // A real edition hash on the alias, or asserting the note leaves
+        // `edition_sha` off would pass for a highlight too.
+        alias(editionSha = "edition-sha")
+        reconciled()
+        db.annotationDao().upsert(bookNote())
+        emptyFeed()
+        server.enqueue(results("""{"id":"book-note","status":"applied","rev":1,"seq":7}"""))
+
+        sync()
+
+        val sent = JSONObject(pushBody()).getJSONArray("annotations").getJSONObject(0)
+        assertEquals("book-note", sent.getString("id"))
+        assertEquals("note", sent.getString("kind"))
+        assertEquals("remember this", sent.getString("body"))
+        assertNull(sent.opt("locator"))
+        assertNull(sent.opt("progression"))
+        assertNull(sent.opt("edition_sha"))
+        assertEquals(1, db.annotationSyncDao().get(peer(), "book-note")!!.rev)
+    }
+
+    @Test
     fun `an interrupted push is repeated to the byte`() = runTest {
         // The server tells a retry from a fresh write by comparing the
         // whole payload. A replay that rebuilt the request could order
@@ -197,6 +220,41 @@ class LiseurSyncAnnotationsTest {
         assertEquals(11, db.remoteServerDao().get()!!.annotationCursorSeq)
         // The whole point: it arrived, so it is not owed back.
         assertEquals(0, pushes())
+    }
+
+    @Test
+    fun `a book note another device made arrives and can be edited`() = runTest {
+        connect()
+        alias()
+        reconciled()
+        server.enqueue(
+            json(
+                """{"annotations":[${bookNoteRecord(rev = 3, seq = 11)}],
+                    "high_water":11,"has_more":false}
+                """.trimIndent(),
+            ),
+        )
+
+        sync()
+
+        val landed = db.annotationDao().byId("book-note")!!
+        assertEquals(AnnotationKind.BOOK_NOTE.name, landed.kind)
+        assertEquals("remember this", landed.note)
+        assertEquals("", landed.locatorJson)
+        assertEquals(0, pushes())
+
+        db.annotationDao().upsert(landed.copy(note = "remember this instead", updatedAt = MICROS + 1))
+        emptyFeed()
+        liveSet(bookNoteRecord(rev = 3, seq = 11))
+        server.enqueue(results("""{"id":"book-note","status":"applied","rev":4,"seq":12}"""))
+
+        sync()
+
+        val sent = JSONObject(pushBody()).getJSONArray("annotations").getJSONObject(0)
+        assertEquals(3, sent.getLong("base_rev"))
+        assertEquals("note", sent.getString("kind"))
+        assertEquals("remember this instead", sent.getString("body"))
+        assertEquals(4, db.annotationSyncDao().get(peer(), "book-note")!!.rev)
     }
 
     @Test
@@ -295,6 +353,21 @@ class LiseurSyncAnnotationsTest {
         assertNotNull(db.annotationDao().byId("old"))
         assertTrue(requests().any { it.target == "/v1/works/$WORK/annotations" })
         assertTrue(db.workIdentityDao().alias(BOOK, peer())!!.annotationsReconciledAt > 0)
+    }
+
+    @Test
+    fun `reconciliation recovers a book note skipped by an older client`() = runTest {
+        connect()
+        alias()
+        emptyFeed()
+        liveSet(bookNoteRecord(rev = 3, seq = 7))
+
+        sync()
+
+        val landed = db.annotationDao().byId("book-note")!!
+        assertEquals(AnnotationKind.BOOK_NOTE.name, landed.kind)
+        assertEquals("remember this", landed.note)
+        assertEquals(3, db.annotationSyncDao().get(peer(), "book-note")!!.rev)
     }
 
     @Test
@@ -787,22 +860,134 @@ class LiseurSyncAnnotationsTest {
         connect()
         alias()
         reconciled()
-        // Standalone notes: a body with no anchor, which this app has
-        // nowhere to put. The cursor has to move by what the server
-        // sent, not by what could be read, or the account's high water
-        // mark would be taken for a page of nothing and every record
-        // after these would be stepped over — once, silently, for ever.
-        val note = JSONObject()
-            .put("id", "note-1").put("rev", 1).put("seq", 4)
-            .put("work_id", WORK).put("kind", "note")
-            .put("body", "a thought about the book")
+        // A future server kind this version cannot represent. The cursor
+        // still moves by what the server sent, or the account's high water
+        // mark would be taken for a page of nothing and every record after
+        // this would be stepped over — once, silently, for ever.
+        val unknown = JSONObject()
+            .put("id", "unknown-1").put("rev", 1).put("seq", 4)
+            .put("work_id", WORK).put("kind", "future-kind")
             .put("device_id", "other-device").put("client_ts", STAMP)
             .toString()
-        server.enqueue(json("""{"annotations":[$note],"high_water":9000,"has_more":false}"""))
+        server.enqueue(json("""{"annotations":[$unknown],"high_water":9000,"has_more":false}"""))
 
         sync()
 
         assertEquals(4, db.remoteServerDao().get()!!.annotationCursorSeq)
+    }
+
+    @Test
+    fun `a note this device must refuse still moves the cursor past it`() = runTest {
+        connect()
+        alias()
+        reconciled()
+        // The two shapes the accept rule turns away: a standalone note
+        // is meant to have no anchor, and it is meant to say something.
+        // Refusing the record is right; letting it hold the cursor back,
+        // or counting the page as empty, is not.
+        val anchored = JSONObject(bookNoteRecord(id = "anchored-note", seq = 4))
+            .put("locator", JSONObject(LOCATOR))
+            .toString()
+        val silent = bookNoteRecord(id = "silent-note", seq = 5, body = "")
+        server.enqueue(
+            json(
+                """{"annotations":[$anchored,$silent,${record(id = "mark-1", rev = 1, seq = 6)}],
+                    "high_water":9000,"has_more":false}
+                """.trimIndent(),
+            ),
+        )
+
+        sync()
+
+        assertNull(db.annotationDao().byId("anchored-note"))
+        assertNull(db.annotationDao().byId("silent-note"))
+        // The readable record on the same page still lands.
+        assertNotNull(db.annotationDao().byId("mark-1"))
+        assertEquals(6, db.remoteServerDao().get()!!.annotationCursorSeq)
+    }
+
+    @Test
+    fun `a book note keeps the copy it already lives in`() = runTest {
+        connect()
+        alias(bookUrl = BOOK)
+        alias(bookUrl = OTHER_BOOK)
+        reconciled()
+        reconciled(bookUrl = OTHER_BOOK)
+        // A note carries no edition anchor, so nothing in the record
+        // says which copy it belongs to. What this device already wrote
+        // down does, and alphabetical luck must not overrule it.
+        db.annotationDao().upsert(bookNote().copy(bookId = OTHER_BOOK))
+        db.annotationSyncDao().upsert(
+            syncRow(
+                id = "book-note",
+                bookId = OTHER_BOOK,
+                rev = 1,
+                acked = AnnotationWire.fingerprint(bookNote(), WORK),
+            ),
+        )
+        server.enqueue(
+            json(
+                """{"annotations":[${bookNoteRecord(rev = 2, seq = 8, body = "edited elsewhere")}],
+                    "high_water":8,"has_more":false}
+                """.trimIndent(),
+            ),
+        )
+
+        sync()
+
+        val landed = db.annotationDao().byId("book-note")!!
+        assertEquals("edited elsewhere", landed.note)
+        assertEquals(OTHER_BOOK, landed.bookId)
+        assertEquals(OTHER_BOOK, db.annotationSyncDao().get(peer(), "book-note")!!.bookId)
+    }
+
+    @Test
+    fun `a book note edited on both sides gives way to the server`() = runTest {
+        connect()
+        alias()
+        reconciled()
+        db.annotationDao().upsert(bookNote(body = "mine"))
+        db.annotationSyncDao().upsert(syncRow(id = "book-note", rev = 1, acked = "stale"))
+        emptyFeed()
+        server.enqueue(
+            results(
+                """{"id":"book-note","status":"conflict",
+                    "server":${bookNoteRecord(rev = 4, seq = 12, body = "theirs")}}
+                """.trimIndent(),
+            ),
+        )
+
+        sync()
+
+        val landed = db.annotationDao().byId("book-note")!!
+        assertEquals("theirs", landed.note)
+        assertEquals(AnnotationKind.BOOK_NOTE.name, landed.kind)
+        // Still standalone: the server's word must not anchor it.
+        assertEquals("", landed.locatorJson)
+        assertEquals(4, db.annotationSyncDao().get(peer(), "book-note")!!.rev)
+    }
+
+    @Test
+    fun `a tombstone in the feed removes a book note here too`() = runTest {
+        connect()
+        alias()
+        reconciled()
+        db.annotationDao().upsert(bookNote())
+        db.annotationSyncDao().upsert(
+            syncRow(id = "book-note", rev = 1, acked = AnnotationWire.fingerprint(bookNote(), WORK)),
+        )
+        server.enqueue(
+            json(
+                """{"annotations":[{"id":"book-note","rev":2,"seq":9,"deleted":true}],
+                    "high_water":9,"has_more":false}
+                """.trimIndent(),
+            ),
+        )
+
+        sync()
+
+        assertNull(db.annotationDao().byId("book-note"))
+        assertNull(db.annotationSyncDao().get(peer(), "book-note"))
     }
 
     @Test
@@ -1240,11 +1425,15 @@ class LiseurSyncAnnotationsTest {
      * about disagreement says so, with [liveSet] or [liveSetIs].
      */
     private fun agreed(workId: String): MockResponse = runBlocking {
-        val held = db.annotationSyncDao().forWork(peer(), workId)
-            .filter { it.rev >= 1 }
-            .joinToString(",") { row ->
+        val records = mutableListOf<String>()
+        for (row in db.annotationSyncDao().forWork(peer(), workId).filter { it.rev >= 1 }) {
+            records += if (db.annotationDao().byId(row.id)?.kind == AnnotationKind.BOOK_NOTE.name) {
+                bookNoteRecord(id = row.id, rev = row.rev, seq = row.seq, workId = workId)
+            } else {
                 record(id = row.id, rev = row.rev, seq = row.seq, workId = workId)
             }
+        }
+        val held = records.joinToString(",")
         json("""{"annotations":[$held]}""")
     }
 
@@ -1284,6 +1473,23 @@ class LiseurSyncAnnotationsTest {
         .apply { editionSha?.let { put("edition_sha", it) } }
         .toString()
 
+    private fun bookNoteRecord(
+        id: String = "book-note",
+        rev: Long = 1,
+        seq: Long = 1,
+        workId: String = WORK,
+        body: String = "remember this",
+    ): String = JSONObject()
+        .put("id", id)
+        .put("rev", rev)
+        .put("seq", seq)
+        .put("work_id", workId)
+        .put("kind", "note")
+        .put("body", body)
+        .put("device_id", "other-device")
+        .put("client_ts", STAMP)
+        .toString()
+
     private fun mark(
         id: String = "mark-1",
         note: String? = null,
@@ -1299,6 +1505,20 @@ class LiseurSyncAnnotationsTest {
         chapter = "Chapter One",
         position = 12,
         totalProgression = 0.25,
+        createdAt = NOW,
+        updatedAt = updatedAt,
+    )
+
+    private fun bookNote(
+        id: String = "book-note",
+        body: String = "remember this",
+        updatedAt: Long = MICROS,
+    ) = BookAnnotation(
+        id = id,
+        bookId = BOOK,
+        kind = AnnotationKind.BOOK_NOTE.name,
+        locatorJson = "",
+        note = body,
         createdAt = NOW,
         updatedAt = updatedAt,
     )
