@@ -66,7 +66,22 @@ class OpdsScopeTest {
         val two = scope("https://two.example/opds")
 
         assertNotEquals(one.remoteId("1"), two.remoteId("1"))
-        assertTrue(one.remoteId("1").endsWith(":1"))
+        assertEquals(one.remoteId("1"), one.remoteId("1"))
+        assertNotEquals(one.remoteId("1"), one.remoteId("2"))
+    }
+
+    @Test
+    fun `an entry id is never spelled into a filename as the server wrote it`() {
+        // This value becomes `books.remote_uuid`, and
+        // `BookDownloadRepository.fileFor()` writes it straight into a
+        // filename. An OPDS id is an arbitrary string the server picks.
+        val root = scope("https://books.example/opds")
+
+        val hostile = root.remoteId("../../databases/liseur")
+
+        assertFalse(hostile, '/' in hostile)
+        assertFalse(hostile, ".." in hostile)
+        assertNotEquals(hostile, root.remoteId("shelf/1"))
     }
 
     @Test

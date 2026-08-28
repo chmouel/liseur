@@ -104,10 +104,7 @@ class OpdsScope private constructor(val root: HttpUrl) {
         val query = root.encodedQuery?.let { "?$it" } ?: ""
         val canonical =
             "${root.scheme}://${root.host}:${root.port}${root.encodedPath.trimEnd('/')}$query"
-        MessageDigest.getInstance("SHA-256")
-            .digest(canonical.toByteArray())
-            .take(6)
-            .joinToString("") { "%02x".format(it) }
+        digest(canonical, bytes = 6)
     }
 
     /**
@@ -117,11 +114,26 @@ class OpdsScope private constructor(val root: HttpUrl) {
      * Written into `books.url`, so this shape is schema and cannot be
      * changed later without orphaning every reading position and
      * highlight hanging off it.
+     *
+     * The entry id is hashed rather than carried through. An OPDS id is
+     * an arbitrary string the server chooses, and this value becomes
+     * `books.remote_uuid`, which `BookDownloadRepository.fileFor()`
+     * spells straight into a filename: an id of `../../databases/liseur`
+     * would be a write outside the books directory, and one containing
+     * a single `/` would be a download that simply fails. Hashing gives
+     * a fixed-length, filename-safe name that is still the same one
+     * every refresh, which is all the identity has to be.
      */
-    fun remoteId(entryId: String): String = "$fingerprint:$entryId"
+    fun remoteId(entryId: String): String = "$fingerprint:${digest(entryId, bytes = 16)}"
 
     companion object {
         fun of(catalogUrl: String): OpdsScope? =
             catalogUrl.trim().toHttpUrlOrNull()?.let(::OpdsScope)
+
+        private fun digest(text: String, bytes: Int): String =
+            MessageDigest.getInstance("SHA-256")
+                .digest(text.toByteArray())
+                .take(bytes)
+                .joinToString("") { "%02x".format(it) }
     }
 }

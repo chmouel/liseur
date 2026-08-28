@@ -59,10 +59,18 @@ across an account switch, so `custom:{entry-id}` would let a second
 Custom server adopt the first one's rows — the wrong file, the wrong
 metadata, somebody else's reading history behind it.
 
-So the URL is `custom:{fingerprint}:{entry-id}`, the fingerprint being
-six bytes of SHA-256 over the canonical catalog origin and path. This is
-schema: it is written into `books.url`, which every reading position,
-highlight and session hangs off.
+So the URL is `custom:{fingerprint}:{hashed-entry-id}`, the fingerprint
+being six bytes of SHA-256 over the canonical catalog origin and path.
+This is schema: it is written into `books.url`, which every reading
+position, highlight and session hangs off.
+
+The entry id is hashed rather than carried through, because it also
+becomes `books.remote_uuid`, and `BookDownloadRepository.fileFor()`
+writes that straight into a filename. An id is an arbitrary string the
+server picks: one containing `/` is a download that fails, and
+`../../databases/liseur` is a write outside the books directory. A
+sixteen-byte digest is fixed-length, safe as a filename, and the same
+one on every refresh, which is the whole of what the identity has to do.
 
 **The catalog's password goes to the catalog's origin and nowhere
 else.** A feed is a document written by someone else, and every link in
@@ -132,6 +140,12 @@ An address wearing a disguise is read through it. `::ffff:c0a8:0101` and
 prefixes neither looks like anything private, so the literal is expanded
 and an IPv4-mapped or IPv4-compatible one is judged as the IPv4 address
 it holds.
+
+A refused link costs that link and nothing else. Handing one to
+`OpdsHttp` anyway would throw and take the whole refresh with it, so a
+single federated shelf on another host would empty the reader's library.
+The walk skips it and reports itself incomplete, which is what stops the
+books behind it being read as deletions.
 
 The rule is applied where a link is first written down, not only where
 it is used. A cover is handed to the image loader and an acquisition to

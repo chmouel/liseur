@@ -64,9 +64,24 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
             val page = fetch(step.url, scope, credentials)
             onPage(page.books.map { it.toRemote(scope, page.base) })
 
+            // A link the fetch rule refuses is skipped, not followed
+            // and not fatal. Handing it to `OpdsHttp` would throw and
+            // take the whole refresh with it, so one federated shelf on
+            // another host would cost the reader their entire library.
+            // The walk says it is incomplete instead, which is what
+            // stops the books behind that link being read as deleted.
+            fun enqueue(url: HttpUrl, depth: Int) {
+                if (!scope.mayFetch(url)) {
+                    Log.i(TAG, "A feed pointed somewhere this catalog may not send us")
+                    complete = false
+                    return
+                }
+                if (seen.add(url.toString())) queue.addLast(Step(url, depth))
+            }
+
             // Paging stays at the same depth: `next` is more of this
             // feed, not a step further in.
-            page.nextUrl?.let { if (seen.add(it.toString())) queue.addLast(Step(it, step.depth)) }
+            page.nextUrl?.let { enqueue(it, step.depth) }
 
             if (step.depth >= MAX_DEPTH) {
                 if (page.navigation.isNotEmpty()) {
@@ -75,9 +90,7 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
                 }
                 continue
             }
-            page.navigation.forEach { url ->
-                if (seen.add(url.toString())) queue.addLast(Step(url, step.depth + 1))
-            }
+            page.navigation.forEach { enqueue(it, step.depth + 1) }
         }
         CatalogWalk(complete = complete)
     }

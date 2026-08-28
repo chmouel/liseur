@@ -8,6 +8,7 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import okhttp3.Headers
+import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -87,6 +88,29 @@ class OpdsCatalogClientTest {
         return result.complete to found
     }
 
+    /**
+     * The same walk, but from a root that looks like it is on the
+     * internet.
+     *
+     * Every other test here starts at 127.0.0.1, and a catalog already
+     * inside the house is allowed to name its neighbours, so no fetch
+     * rule ever fires. Pointing a public name at the loopback server is
+     * what makes the refusing branch reachable at all.
+     */
+    private fun walkAsPublic(): Pair<Boolean, List<com.chmouel.liseur.data.remote.RemoteBook>> {
+        val client = OkHttpClient.Builder()
+            .dns { listOf(InetAddress.getByName("127.0.0.1")) }
+            .build()
+        val found = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient(OpdsHttp(client)).allBooks(
+                "http://books.example:${server.port}/opds",
+                RemoteCredentials.Anonymous,
+            ) { found += it }
+        }
+        return result.complete to found
+    }
+
     @Test
     fun `books on the root are read without walking anywhere`() {
         pages["/opds"] = feed(book("1") + book("2"))
@@ -100,9 +124,45 @@ class OpdsCatalogClientTest {
     @Test
     fun `a book is named for the catalog it came from`() {
         pages["/opds"] = feed(book("1"))
-        val fingerprint = OpdsScope.of(root())!!.fingerprint
+        val expected = OpdsScope.of(root())!!.remoteId("1")
 
-        assertEquals("$fingerprint:1", walk().second.single().remoteId)
+        assertEquals(expected, walk().second.single().remoteId)
+    }
+
+    @Test
+    fun `an entry id cannot spell its way out of the books directory`() {
+        // The name a catalog gives a book becomes `remote_uuid`, which
+        // `BookDownloadRepository.fileFor()` writes straight into a
+        // filename. An id is an arbitrary string the server chooses.
+        pages["/opds"] = feed(book("../../databases/liseur") + book("shelf/1"))
+
+        val ids = walk().second.map { it.remoteId }
+
+        assertEquals(2, ids.size)
+        assertEquals(2, ids.toSet().size)
+        ids.forEach { id ->
+            assertFalse(id, '/' in id)
+            assertFalse(id, ".." in id)
+        }
+    }
+
+    @Test
+    fun `a shelf the fetch rule refuses costs that shelf, not the library`() {
+        // A public catalog naming a LAN address is refused. Handing it
+        // to OpdsHttp anyway would throw and take the whole refresh
+        // with it, so one bad link would empty the reader's library.
+        pages["/opds"] = feed(
+            navigation("Inside the house", "http://192.168.1.1/shelf") +
+                navigation("Fiction", "/opds/fiction"),
+        )
+        pages["/opds/fiction"] = feed(book("1"))
+
+        val (complete, books) = walkAsPublic()
+
+        assertEquals(listOf("Book 1"), books.map { it.title })
+        // The books behind the refused link were never seen, so the
+        // library must not read their absence as a deletion.
+        assertFalse(complete)
     }
 
     @Test
