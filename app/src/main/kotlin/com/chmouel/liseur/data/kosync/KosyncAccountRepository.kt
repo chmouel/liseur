@@ -19,7 +19,15 @@ sealed interface KosyncSetupOutcome {
 }
 
 /** A pairing the server has already agreed to, not yet written down. */
-class ProvedKosyncPairing internal constructor(internal val peer: KosyncPeer)
+class ProvedKosyncPairing internal constructor(internal val peer: KosyncPeer) {
+    /**
+     * The mount root as it will be stored: scheme filled in, query and
+     * fragment gone. A caller publishing something else beside this
+     * pairing wants this spelling rather than the one that was typed,
+     * or the two rows disagree about which server they are talking to.
+     */
+    val baseUrl: String get() = peer.baseUrl
+}
 
 /** What came of proving a pairing without storing it. */
 sealed interface KosyncProbe {

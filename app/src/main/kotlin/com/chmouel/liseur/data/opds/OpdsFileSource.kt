@@ -29,6 +29,13 @@ class OpdsFileSource(private val http: OpdsHttp = OpdsHttp()) : FileSource {
         // by some earlier or later version that stored a path.
         val url = book.downloadHref?.let { scope.root.resolve(it) ?: it.toHttpUrlOrNull() }
             ?: return null
+        // The signing test is not the whole rule. This request goes to
+        // the generic downloader, which follows its own redirects and
+        // never sees `OpdsScope`, so the transport and reachability
+        // questions are asked here or nowhere: an https catalog naming a
+        // plaintext file, or a public one naming an address inside the
+        // reader's network, is refused rather than downloaded unsigned.
+        if (!scope.mayFetch(url)) return null
         return http.request(url, scope, credentials)
     }
 }

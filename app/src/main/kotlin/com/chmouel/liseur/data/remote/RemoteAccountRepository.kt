@@ -335,13 +335,13 @@ class RemoteAccountRepository(
             ?: return CustomSetupResult(catalog = SetupFailure.WrongServer)
 
         val credentials = customCredentials(username, password)
-        val capabilities = if (wantsCatalog) {
+        val catalog = if (wantsCatalog) {
             when (val probed = setup.connect(catalogUrl, credentials, allowHttp)) {
                 is SetupResult.Failure -> return CustomSetupResult(catalog = probed.reason)
                 is SetupResult.Success -> probed.capabilities
             }
         } else {
-            kosyncOnlyCapabilities(kosyncUrl, kosyncUsername)
+            null
         }
 
         val pairing = if (wantsKosync) {
@@ -352,6 +352,17 @@ class RemoteAccountRepository(
         } else {
             null
         }
+
+        // The sync address is the connection's identity when it is the
+        // only address there is, so it is taken from the proved pairing
+        // rather than from the form. The reader may leave the scheme off
+        // — the field's own placeholder invites it — and storing
+        // `sync.example.com` where the pairing stored
+        // `https://sync.example.com` gives one server two spellings, two
+        // account keys, and a `baseUrl` nothing can parse.
+        val capabilities = catalog
+            ?: pairing?.let { kosyncOnlyCapabilities(it.baseUrl, kosyncUsername) }
+            ?: return CustomSetupResult(catalog = SetupFailure.WrongServer)
 
         publishCustom(capabilities, credentials, pairing)
         return CustomSetupResult()

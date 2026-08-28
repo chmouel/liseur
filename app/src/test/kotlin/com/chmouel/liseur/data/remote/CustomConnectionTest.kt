@@ -237,6 +237,22 @@ class CustomConnectionTest {
         }
     }
 
+    @Test
+    fun `a sync address typed without a scheme is stored with one`() {
+        // The field's placeholder invites it. Stored as typed, the
+        // server row and the pairing row disagree about which server
+        // they are talking to, the account key changes with the
+        // spelling, and nothing can parse the baseUrl.
+        runTest {
+            connect(catalog = "", kosyncUrl = "sync.example.com")
+
+            assertEquals(
+                "https://sync.example.com",
+                db.remoteServerDao().get()?.baseUrl,
+            )
+        }
+    }
+
     private suspend fun connect(
         catalog: String,
         kosyncUrl: String,
@@ -272,7 +288,12 @@ class CustomConnectionTest {
             return KosyncProbe.Proved(
                 ProvedKosyncPairing(
                     KosyncPeer(
-                        baseUrl = url,
+                        // The real one normalises before it proves, and
+                        // its `baseUrl` is documented as the spelling
+                        // that will be stored. A stand-in that echoed
+                        // the form back would let a caller reading the
+                        // form directly look correct.
+                        baseUrl = if ("://" in url) url else "https://$url",
                         username = username,
                         keyCipher = KosyncPeer.seal(KosyncCredentials.keyFor(password)),
                         addedAt = 0L,

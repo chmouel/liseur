@@ -195,7 +195,7 @@
     <string name="server_opds_user_help">This is a Grimmory OPDS user, created under Settings → OPDS. Your ordinary Grimmory login will not work here. The Komga API also has to be switched on in Grimmory\'s settings.</string>
     <string name="server_url">Server address</string>
     <string name="server_url_opds">OPDS catalog address</string>
-    <string name="server_custom_catalog_help">The address of your OPDS catalog — the page that lists your books. Leave it empty to use this connection for reading positions only.</string>
+    <string name="server_custom_catalog_help">The address of your OPDS catalog. The top of it is enough — Liseur follows the shelves down to your books. Leave it empty to use this connection for reading positions only.</string>
     <string name="server_custom_credentials_help">Leave the username and password empty if the catalog is open to everyone.</string>
     <string name="server_custom_kosync_help">A KOReader sync (kosync) server, which keeps your place in a book across devices. Leave it empty if you only want to browse.</string>
     <string name="server_custom_kosync_section">KOReader sync (optional)</string>
