@@ -61,6 +61,7 @@ jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
 mockwebserver = { module = "com.squareup.okhttp3:mockwebserver3-junit4", version.ref = "okhttp" }
+okhttp-tls = { module = "com.squareup.okhttp3:okhttp-tls", version.ref = "okhttp" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

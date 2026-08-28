@@ -11,7 +11,7 @@ side.
 | Catalog browse | Implemented          | Implemented         | Implemented          | Implemented          |
 | Search         | Implemented          | Implemented         | Implemented          | Local only           |
 | File download  | Implemented          | Implemented         | Implemented          | Implemented          |
-| Position sync  | Implemented (full)   | Implemented (%)     | Implemented (full)   | Not possible         |
+| Position sync  | Implemented (full)   | Implemented (%)     | Implemented (full)   | Implemented (%, kosync) |
 | Book upload    | Not possible          | Not feasible        | Implemented          | Not implemented      |
 | Book delete    | Not possible          | Implemented         | Implemented          | Not implemented      |
 | Series claims  | N/A                   | N/A                 | Implemented          | N/A                  |
@@ -105,7 +105,7 @@ which.
 | Catalog browse | `GET /komga/api/v1/books?page=&size=` (paginated) | `GrimmoryCatalogClient` | Komga's `POST /v1/books/list` is explicitly not implemented and answers 501, so the plain paged route is used instead. Filtered client-side on `media.mediaType`, since Grimmory reports MOBI and AZW3 under `mediaProfile: "EPUB"` |
 | Search | None on the compatibility API | Returns nothing | Liseur's library search is local and covers the whole catalog, which is walked into the database anyway. Grimmory's OPDS `catalog?q=` is the way in if remote search is ever wired to the UI |
 | File download | `GET /komga/api/v1/books/{id}/file` | `GrimmoryFileSource` | Serves the book's primary file. Open to any authenticated OPDS user the library is shared with |
-| Position sync | None. `/progression`, `/read-progress` and `/positions` all fall through to a 404, and `readProgress` is never populated on a book | Not implemented | No entry in `AppContainer.positions`, so sync is never offered rather than offered and failed. Grimmory does speak KOReader's kosync at `/api/koreader`, behind a third credential set and matched by file hash — the way in if this is ever wanted |
+| Position sync | None on the compatibility API. `/progression`, `/read-progress` and `/positions` all fall through to a 404, and `readProgress` is never populated on a book | `KosyncPositionSync`, paired separately | Grimmory speaks KOReader's kosync at `/api/koreader`, behind a third credential set (a KOReader user created in its device settings) and matched by file hash. Liseur pairs it from the KOReader sync section on the server screen; percentages only. See [`adr/0014-kosync.md`](adr/0014-kosync.md) |
 | Series metadata | Ids are synthetic (`{libraryId}-{slug}`) and change when a series is renamed | Not implemented | `SeriesExtrasRepository` is gated on Komga and never fires here. The id still arrives on the book and groups the shelf, so a rename regroups rather than corrupts |
 | Book upload / delete | Not exposed by the compatibility API | Not implemented | |
 
@@ -175,7 +175,19 @@ per-server capability detection.
 | Komga | Exact position in chapter | Full Readium locator, with position snapping |
 | calibre-web | Page-level at best | Percentage (`totalProgression`) via the Kobo protocol |
 | liseur-sync | Exact position in chapter | Full Readium locator via the op log |
-| Grimmory | None | No route carries one; position stays on the device |
+| Grimmory | Page-level at best | Percentage via KOReader's kosync, paired alongside the catalog |
+| Any kosync server | Page-level at best | Same partner: it speaks the generic protocol, so a stock kosync server pairs the same way |
 
-The three that sync go through the shared `reconcileReadingState` merge
+Every sync goes through the shared `reconcileReadingState` merge
 logic in `domain/ReadingStateMerge.kt`.
+
+The kosync partner is not a kind of server: it is paired *alongside* a
+connected one, covers that server's downloaded books (matched by
+KOReader's partial MD5 of the file), and has its own lifecycle.
+
+It is offered only where the connected server carries no position of its
+own, which today means Grimmory. calibre-web, Komga and liseur-sync sync
+positions natively, and a second source for the same book is a conflict
+the reader can neither see nor resolve. `ServerKind.hostsKosyncPeer` is
+the single answer to that question, and where a future kind states its
+own. See [`adr/0014-kosync.md`](adr/0014-kosync.md).

@@ -1,5 +1,7 @@
 package com.chmouel.liseur.ui.settings
 
+import android.text.format.DateUtils
+import android.text.format.Formatter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -7,8 +9,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import android.text.format.DateUtils
-import android.text.format.Formatter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,14 +18,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,17 +41,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import com.chmouel.liseur.data.calibre.BulkBatch
-import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
-import com.chmouel.liseur.data.calibre.BulkStopReason
-import com.chmouel.liseur.data.calibre.SpaceVerdict
-import com.chmouel.liseur.ui.BusyIndicator
-import com.chmouel.liseur.ui.LocalEInk
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -59,39 +56,47 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
-import com.chmouel.liseur.data.remote.PositionSyncStatus
+import com.chmouel.liseur.data.calibre.BulkBatch
+import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
+import com.chmouel.liseur.data.calibre.BulkStopReason
+import com.chmouel.liseur.data.calibre.SpaceVerdict
 import com.chmouel.liseur.data.calibre.StorageUse
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.PositionSyncStatus
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
-import com.chmouel.liseur.ui.messageRes
-import com.chmouel.liseur.data.db.RemoteServer
-import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.settings.UploadPolicy
+import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.ui.windowWidth
 
 /**
@@ -121,6 +126,12 @@ fun ServerAccountScreen(
     onDownloadAll: () -> Unit,
     onCancelDownloadAll: () -> Unit,
     onDismissBatch: () -> Unit,
+    onKosyncUrlChange: (String) -> Unit,
+    onKosyncUsernameChange: (String) -> Unit,
+    onKosyncPasswordChange: (String) -> Unit,
+    onKosyncRegisterChange: (Boolean) -> Unit,
+    onKosyncConnect: () -> Unit,
+    onKosyncDisconnect: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -212,6 +223,23 @@ fun ServerAccountScreen(
                             )
                         }
                     }
+                }
+                // The KOReader sync partner belongs to servers that
+                // catalog books without carrying a reading position.
+                // Where the server syncs natively, offering it too would
+                // leave one book with two sources of truth. A pairing
+                // that outlived its server still shows, so it can be
+                // disconnected rather than stranded out of sight.
+                if (server?.kind?.hostsKosyncPeer == true || state.kosync != null) {
+                    KosyncSection(
+                        state = state,
+                        onUrlChange = onKosyncUrlChange,
+                        onUsernameChange = onKosyncUsernameChange,
+                        onPasswordChange = onKosyncPasswordChange,
+                        onRegisterChange = onKosyncRegisterChange,
+                        onConnect = onKosyncConnect,
+                        onDisconnect = onKosyncDisconnect,
+                    )
                 }
                 val secretNote = when (server?.kind ?: state.kind) {
                     ServerKind.CALIBRE, ServerKind.GRIMMORY ->
@@ -870,6 +898,154 @@ private fun ConnectedCard(
     OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.server_disconnect))
     }
+}
+
+/**
+ * The KOReader sync (kosync) partner, paired alongside the catalog
+ * server rather than instead of it.
+ *
+ * This is how Grimmory's positions reach the app: its Komga shim
+ * carries none, while its kosync endpoint does. The section speaks the
+ * generic protocol, so a stock kosync server works the same way.
+ */
+@Composable
+private fun KosyncSection(
+    state: ServerAccountUiState,
+    onUrlChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onRegisterChange: (Boolean) -> Unit,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    ServerSection(title = stringResource(R.string.kosync_section)) {
+        val peer = state.kosync
+        if (peer != null) {
+            val active = state.server?.kind?.hostsKosyncPeer == true
+            Notice(
+                text = stringResource(
+                    if (active) R.string.kosync_connected else R.string.kosync_stranded,
+                    peer.username,
+                    peer.baseUrl.substringAfter("://"),
+                ),
+                tone = if (active) NoticeTone.GOOD else NoticeTone.PROBLEM,
+            )
+            if (active) DetailLine(text = state.kosyncStatus.describe(peer.positionSyncedAt))
+            OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.kosync_disconnect))
+            }
+            return@ServerSection
+        }
+
+        Text(
+            text = stringResource(R.string.kosync_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = state.kosyncUrl,
+            onValueChange = onUrlChange,
+            label = { Text(stringResource(R.string.kosync_url)) },
+            singleLine = true,
+            enabled = !state.kosyncConnecting,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = state.kosyncUsername,
+            onValueChange = onUsernameChange,
+            label = { Text(stringResource(R.string.server_username)) },
+            singleLine = true,
+            enabled = !state.kosyncConnecting,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        var secretShown by rememberSaveable { mutableStateOf(false) }
+        OutlinedTextField(
+            value = state.kosyncPassword,
+            onValueChange = onPasswordChange,
+            label = { Text(stringResource(R.string.server_password)) },
+            singleLine = true,
+            enabled = !state.kosyncConnecting,
+            visualTransformation = if (secretShown) {
+                VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
+            trailingIcon = {
+                IconButton(onClick = { secretShown = !secretShown }) {
+                    Icon(
+                        imageVector = if (secretShown) {
+                            Icons.Outlined.VisibilityOff
+                        } else {
+                            Icons.Outlined.Visibility
+                        },
+                        contentDescription = stringResource(
+                            if (secretShown) R.string.hide_password else R.string.show_password,
+                        ),
+                    )
+                }
+            },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.kosync_register)) },
+            supportingContent = { Text(stringResource(R.string.kosync_register_help)) },
+            trailingContent = {
+                Switch(
+                    checked = state.kosyncRegister,
+                    onCheckedChange = null,
+                    enabled = !state.kosyncConnecting,
+                )
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            modifier = Modifier.toggleable(
+                value = state.kosyncRegister,
+                enabled = !state.kosyncConnecting,
+                role = Role.Switch,
+                onValueChange = onRegisterChange,
+            ),
+        )
+        state.kosyncError?.let { error ->
+            Notice(
+                text = stringResource(error.kosyncMessageRes()),
+                tone = NoticeTone.PROBLEM,
+            )
+        }
+        Button(
+            onClick = onConnect,
+            enabled = !state.kosyncConnecting &&
+                state.kosyncUrl.isNotBlank() &&
+                state.kosyncUsername.isNotBlank() &&
+                state.kosyncPassword.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (state.kosyncConnecting) {
+                BusyIndicator(
+                    Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            } else {
+                Text(stringResource(R.string.kosync_connect))
+            }
+        }
+    }
+}
+
+private fun AccountError.kosyncMessageRes(): Int = when (this) {
+    AccountError.BAD_CREDENTIALS -> R.string.kosync_error_credentials
+    AccountError.WRONG_SERVER -> R.string.kosync_error_not_kosync
+    AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
+    AccountError.RATE_LIMITED -> R.string.server_error_rate_limited
+    else -> R.string.server_error_unreachable
 }
 
 /**
