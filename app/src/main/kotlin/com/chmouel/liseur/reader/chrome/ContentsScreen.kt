@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -43,15 +44,20 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,6 +110,14 @@ fun ContentsScreen(
     modifier: Modifier = Modifier,
 ) {
     var tab by rememberSaveable { mutableStateOf(ContentsTab.CONTENTS) }
+    // Which marks the reader has opened out to read in full. It lives here
+    // rather than in AnnotationList because each tab is a separate branch of
+    // the `when` below: switching tabs disposes the branch, and state saved
+    // inside a subtree that has been removed does not come back.
+    val expandedIds = rememberSaveable(saver = ExpandedIdsSaver) { mutableStateListOf<String>() }
+    val toggleExpanded: (BookAnnotation) -> Unit = { annotation ->
+        if (!expandedIds.remove(annotation.id)) expandedIds.add(annotation.id)
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -216,7 +230,9 @@ fun ContentsScreen(
                         },
                         theme = theme,
                         emptyRes = R.string.reader_no_bookmarks,
+                        expandedIds = expandedIds,
                         onSelected = onAnnotationSelected,
+                        onToggleExpanded = toggleExpanded,
                         onDeleted = onAnnotationDeleted,
                     )
 
@@ -227,7 +243,9 @@ fun ContentsScreen(
                         },
                         theme = theme,
                         emptyRes = R.string.reader_no_highlights,
+                        expandedIds = expandedIds,
                         onSelected = onAnnotationSelected,
+                        onToggleExpanded = toggleExpanded,
                         onDeleted = onAnnotationDeleted,
                     )
 
@@ -235,7 +253,9 @@ fun ContentsScreen(
                         annotations = annotations.filter { !it.note.isNullOrBlank() },
                         theme = theme,
                         emptyRes = R.string.reader_no_notes,
+                        expandedIds = expandedIds,
                         onSelected = onAnnotationSelected,
+                        onToggleExpanded = toggleExpanded,
                         onDeleted = onAnnotationDeleted,
                     )
                 }
@@ -300,7 +320,9 @@ private fun AnnotationList(
     annotations: List<BookAnnotation>,
     theme: ReaderTheme,
     emptyRes: Int,
+    expandedIds: List<String>,
     onSelected: (BookAnnotation) -> Unit,
+    onToggleExpanded: (BookAnnotation) -> Unit,
     onDeleted: (BookAnnotation) -> Unit,
 ) {
     if (annotations.isEmpty()) {
@@ -315,7 +337,9 @@ private fun AnnotationList(
             AnnotationRow(
                 annotation = annotation,
                 theme = theme,
+                expanded = annotation.id in expandedIds,
                 onClick = { onSelected(annotation) },
+                onToggleExpanded = { onToggleExpanded(annotation) },
                 onDelete = { onDeleted(annotation) },
             )
             HorizontalDivider(color = theme.foreground.copy(alpha = 0.08f))
@@ -323,13 +347,34 @@ private fun AnnotationList(
     }
 }
 
+/**
+ * Whether a mark still has more to show.
+ *
+ * Measured overflow is only believed while the row is collapsed: an
+ * expanded row has no line cap, so it always reports that it fits, and
+ * taking that at face value would delete the very control the reader needs
+ * to fold it back up.
+ */
+internal fun latchedOverflow(previous: Boolean, expanded: Boolean, measured: Boolean): Boolean =
+    if (expanded) previous else measured
+
 @Composable
 private fun AnnotationRow(
     annotation: BookAnnotation,
     theme: ReaderTheme,
+    expanded: Boolean,
     onClick: () -> Unit,
+    onToggleExpanded: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val excerpt = annotation.text?.trim()?.takeIf { it.isNotEmpty() }
+    val note = annotation.note?.trim()?.takeIf { it.isNotEmpty() }
+    val bookNote = annotation.kind == AnnotationKind.BOOK_NOTE.name
+    // Keyed on the words themselves: a mark keeps its id when it is edited,
+    // so a note trimmed down to nothing would otherwise leave a "Show more"
+    // behind with nothing left to show.
+    var excerptOverflow by remember(excerpt) { mutableStateOf(false) }
+    var noteOverflow by remember(note) { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -337,7 +382,7 @@ private fun AnnotationRow(
             .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+        if (bookNote) {
             Icon(
                 Icons.AutoMirrored.Outlined.Notes,
                 contentDescription = null,
@@ -369,38 +414,70 @@ private fun AnnotationRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            annotation.text?.takeIf { it.isNotBlank() }?.let {
+            excerpt?.let {
                 Text(
-                    text = it.trim(),
+                    text = it,
                     style = MaterialTheme.typography.bodyMedium,
                     color = theme.foreground,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines = if (expanded) Int.MAX_VALUE else 4,
+                    overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                    onTextLayout = { layout ->
+                        excerptOverflow =
+                            latchedOverflow(excerptOverflow, expanded, layout.hasVisualOverflow)
+                    },
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            annotation.note?.takeIf { it.isNotBlank() }?.let {
+            note?.let {
                 Text(
-                    text = it.trim(),
-                    style = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+                    text = it,
+                    style = if (bookNote) {
                         MaterialTheme.typography.bodyMedium
                     } else {
                         MaterialTheme.typography.bodySmall
                     },
-                    fontStyle = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
-                        FontStyle.Normal
-                    } else {
-                        FontStyle.Italic
-                    },
-                    color = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) {
+                    fontStyle = if (bookNote) FontStyle.Normal else FontStyle.Italic,
+                    color = if (bookNote) {
                         theme.foreground
                     } else {
                         theme.foreground.copy(alpha = 0.75f)
                     },
-                    maxLines = if (annotation.kind == AnnotationKind.BOOK_NOTE.name) 5 else 3,
-                    overflow = TextOverflow.Ellipsis,
+                    maxLines = when {
+                        expanded -> Int.MAX_VALUE
+                        bookNote -> 5
+                        else -> 3
+                    },
+                    overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                    onTextLayout = { layout ->
+                        noteOverflow =
+                            latchedOverflow(noteOverflow, expanded, layout.hasVisualOverflow)
+                    },
                     modifier = Modifier.padding(top = 6.dp),
                 )
+            }
+            if (excerptOverflow || noteOverflow) {
+                // Its own click target, so opening a mark out to read it is
+                // never mistaken for asking to be taken to it.
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(role = Role.Button, onClick = onToggleExpanded)
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 4.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (expanded) {
+                                R.string.annotation_show_less
+                            } else {
+                                R.string.annotation_show_more
+                            },
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = theme.foreground.copy(alpha = 0.75f),
+                    )
+                }
             }
         }
         IconButton(onClick = onDelete) {
@@ -477,3 +554,14 @@ private fun List<Link>.flatten(depth: Int = 0): List<ContentsEntry> =
     flatMap { link ->
         listOf(ContentsEntry(depth, link)) + link.children.flatten(depth + 1)
     }
+
+/**
+ * Keeps the opened-out marks across a rotation.
+ *
+ * A [SnapshotStateList] is not something a Bundle can hold, so it is saved
+ * as the plain list of ids it stands for.
+ */
+private val ExpandedIdsSaver = listSaver<SnapshotStateList<String>, String>(
+    save = { it.toList() },
+    restore = { it.toMutableStateList() },
+)
