@@ -169,6 +169,23 @@ data class Book(
      * about its number both mean the source no longer decides it.
      */
     @ColumnInfo(name = "series_index_override") val indexOverridden: Boolean = false,
+    /**
+     * When a finished catalog walk first failed to find this book, and
+     * null while the catalog is still naming it.
+     *
+     * A book is not removed for being absent once. Every server here is
+     * read a page at a time by offset, so a catalog edited between two
+     * of those requests shifts under the offset and skips a book that is
+     * still on it — with nothing in the envelope to give it away, because
+     * a deletion and an addition leave the count where it was. Losing a
+     * book that way costs its reading position, its sittings and its
+     * history, so absence has to be seen twice running before it is
+     * believed. The mark is what carries that between refreshes.
+     *
+     * A time rather than a flag, so a bug report can say when the book
+     * fell out of sight. Nothing decides anything by its value.
+     */
+    @ColumnInfo(name = "catalog_missing_since") val catalogMissingSince: Long? = null,
 ) {
     val finished: Boolean get() = finishedAt != null
 
@@ -242,6 +259,7 @@ interface BookDao {
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
             "catalog_folder_id = NULL, catalog_series_source = NULL, " +
+            "catalog_missing_since = NULL, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +
@@ -266,6 +284,7 @@ interface BookDao {
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
             "catalog_folder_id = NULL, catalog_series_source = NULL, " +
+            "catalog_missing_since = NULL, " +
             "series_name = CASE WHEN series_override = 1 THEN user_series_name " +
             "ELSE file_series_name END, " +
             "series_index = CASE " +
@@ -279,6 +298,20 @@ interface BookDao {
             "WHERE url IN (:urls)",
     )
     suspend fun unlinkFromRemote(urls: List<String>)
+
+    /**
+     * Notes that a finished walk did not find these books.
+     *
+     * Nothing is removed by this: the mark is the first of the two
+     * sightings of absence that a removal needs. See
+     * [Book.catalogMissingSince].
+     */
+    @Query("UPDATE books SET catalog_missing_since = :at WHERE url IN (:urls)")
+    suspend fun markCatalogMissing(urls: List<String>, at: Long)
+
+    /** Takes that note back, because the catalog has named the book again. */
+    @Query("UPDATE books SET catalog_missing_since = NULL WHERE url IN (:urls)")
+    suspend fun clearCatalogMissing(urls: List<String>)
 
     @Query("SELECT url FROM books WHERE source = :source")
     suspend fun urlsForSource(source: String): List<String>
@@ -600,6 +633,13 @@ interface BookDao {
             catalog_series_index = :catalogSeriesIndex,
             catalog_folder_id = :catalogFolderId,
             catalog_series_source = :catalogSeriesSource,
+            -- Naming a book is the catalog saying it is still there, so
+            -- any note that a walk had lost sight of it is now wrong.
+            -- Here rather than only in the reconciliation at the end,
+            -- because a walk that dies half way still stores its pages:
+            -- a book seen by an unfinished walk must not be one miss
+            -- away from deletion.
+            catalog_missing_since = NULL,
             personal_series_updated_at = CASE
                 WHEN series_claim_pending = 0
                     AND user_series_updated_at IS :expectedUserSeriesUpdatedAt
@@ -732,7 +772,8 @@ interface BookDao {
         UPDATE books
         SET remote_uuid = :remoteUuid, download_href = :downloadHref,
             cover_url = COALESCE(cover_url, :coverUrl),
-            remote_updated_at = :remoteUpdatedAt
+            remote_updated_at = :remoteUpdatedAt,
+            catalog_missing_since = NULL
         WHERE url = :url
         """,
     )

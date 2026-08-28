@@ -25,7 +25,7 @@ import androidx.sqlite.execSQL
         SeriesExtra::class,
         AnnotationSync::class,
     ],
-    version = 40,
+    version = 41,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1033,6 +1033,21 @@ abstract class LiseurDatabase : RoomDatabase() {
          * because a stamp that changes on every push is a stamp that
          * makes every retry a new payload.
          */
+        /**
+         * Where a book that a finished catalog walk did not find is
+         * noted, so that absence can be seen twice before it is
+         * believed. Existing rows start unmarked: nothing has been
+         * missed yet, and pruning on the strength of an assumption is
+         * the very thing this column exists to stop.
+         */
+        val MIGRATION_40_41 = object : Migration(40, 41) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `books` ADD COLUMN `catalog_missing_since` INTEGER",
+                )
+            }
+        }
+
         val MIGRATION_39_40 = object : Migration(39, 40) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1146,6 +1161,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_37_38,
             MIGRATION_38_39,
             MIGRATION_39_40,
+            MIGRATION_40_41,
         )
     }
 }
