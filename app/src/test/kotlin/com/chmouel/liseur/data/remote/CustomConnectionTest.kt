@@ -253,6 +253,25 @@ class CustomConnectionTest {
         }
     }
 
+    @Test
+    fun `a sync-only connection is not named by the catalog fields`() {
+        // There is no catalog to authenticate against. Carried through
+        // anyway, a name left in a field the reader then blanked would
+        // land in the stored account and in its key, making one sync
+        // server two accounts depending on what was typed above it.
+        runTest {
+            connect(catalog = "", kosyncUrl = "sync.example.com", username = "ada", password = "pw")
+            val withText = db.remoteServerDao().get()!!
+
+            connect(catalog = "", kosyncUrl = "sync.example.com")
+            val without = db.remoteServerDao().get()!!
+
+            assertEquals(without.accountKey, withText.accountKey)
+            assertEquals(RemoteCredentials.Anonymous, without.credentials)
+            assertEquals(RemoteCredentials.Anonymous, withText.credentials)
+        }
+    }
+
     private suspend fun connect(
         catalog: String,
         kosyncUrl: String,

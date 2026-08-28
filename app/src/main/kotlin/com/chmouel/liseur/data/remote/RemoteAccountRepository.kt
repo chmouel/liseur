@@ -334,7 +334,17 @@ class RemoteAccountRepository(
         val setup = setups[ServerKind.CUSTOM]
             ?: return CustomSetupResult(catalog = SetupFailure.WrongServer)
 
-        val credentials = customCredentials(username, password)
+        // A connection with no catalog has nothing to authenticate
+        // against, so the catalog fields are not part of it. Carried
+        // through anyway, a name left in a field the reader then blanked
+        // would end up in `remote_server.username` and in the account
+        // key, making one sync server two accounts depending on what was
+        // typed above it.
+        val credentials = if (wantsCatalog) {
+            customCredentials(username, password)
+        } else {
+            RemoteCredentials.Anonymous
+        }
         val catalog = if (wantsCatalog) {
             when (val probed = setup.connect(catalogUrl, credentials, allowHttp)) {
                 is SetupResult.Failure -> return CustomSetupResult(catalog = probed.reason)
