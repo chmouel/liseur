@@ -126,15 +126,19 @@ object OpdsParser {
             }
             i = when {
                 xml.startsWith(COMMENT, open) -> xml.endOf(COMMENT, "-->", open)
+                // CDATA is not legal in a prolog either. It is skipped
+                // rather than refused because its extent is unambiguous,
+                // which keeps its body from being read as markup.
                 xml.startsWith(CDATA, open) -> xml.endOf(CDATA, "]]>", open)
                 xml.startsWith(PI, open) -> xml.endOf(PI, "?>", open)
                 // A prolog holds the XML declaration, other processing
-                // instructions, comments and one DOCTYPE. A markup
-                // declaration that is none of those is malformed
-                // whatever it is, so a stray <!ENTITY out here is a feed
-                // to refuse rather than one to step over carefully.
-                // Refusing it also saves measuring an internal subset,
-                // whose first > can sit inside a quoted entity value.
+                // instructions, comments and one DOCTYPE, and CDATA is
+                // already dealt with above. Anything else opening <! is
+                // malformed whatever it is, so a stray <!ENTITY out here
+                // is a feed to refuse rather than one to step over
+                // carefully. Refusing it also saves measuring an
+                // internal subset, whose first > can sit inside a quoted
+                // entity value.
                 xml.startsWith("<!", open) -> malformed()
                 // Anything else opens the root element, so the prolog is
                 // over and a DOCTYPE can no longer legally appear.
