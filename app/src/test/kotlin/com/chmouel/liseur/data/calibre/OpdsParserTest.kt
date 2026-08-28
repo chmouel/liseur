@@ -5,6 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.xml.sax.SAXException
 
 class OpdsParserTest {
 
@@ -98,21 +99,188 @@ class OpdsParserTest {
      */
     @Test
     fun `a feed that declares entities is refused rather than resolved`() {
-        val hostile = """
+        refusedAsDoctype(
+            """
             <?xml version="1.0"?>
             <!DOCTYPE feed [<!ENTITY secret SYSTEM "file:///etc/hostname">]>
             <feed xmlns="http://www.w3.org/2005/Atom">
               <entry><id>urn:uuid:1</id><title>&secret;</title></entry>
             </feed>
-        """.trimIndent()
+            """.trimIndent(),
+        )
+    }
 
-        try {
-            OpdsParser.parse(hostile)
-            fail("the parser accepted a document that declared an external entity")
-        } catch (e: org.xml.sax.SAXException) {
-            // Refused outright, which upstream turns into "your server
-            // answered with something unexpected".
-        }
+    /**
+     * A comment ends at `-->`, not at the first `>` inside it. A scan
+     * that stops at the latter carries on reading the comment's text as
+     * markup, takes the `<a` in it for the root element, and calls the
+     * prolog finished before the DOCTYPE on the next line. That is how
+     * a feed hides one in plain sight.
+     */
+    @Test
+    fun `a doctype behind a comment carrying a bracket is still refused`() {
+        refusedAsDoctype(
+            """
+            <!-- > <a -->
+            <!DOCTYPE feed [<!ENTITY secret SYSTEM "file:///etc/hostname">]>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:1</id><title>&secret;</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+    }
+
+    /**
+     * The same trick through a processing instruction, whose body may
+     * hold anything but `?>` and so may hold both a `>` and a `<`.
+     */
+    @Test
+    fun `a doctype behind a processing instruction carrying a bracket is still refused`() {
+        refusedAsDoctype(
+            """
+            <?liseur > <a ?>
+            <!DOCTYPE feed [<!ENTITY secret SYSTEM "file:///etc/hostname">]>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:1</id><title>&secret;</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+    }
+
+    /**
+     * CDATA does not belong in a prolog, so this feed is malformed
+     * whatever we do. It is skipped to `]]>` all the same, because
+     * nothing opening `<` gets to end early.
+     */
+    @Test
+    fun `a doctype behind a cdata section carrying a bracket is still refused`() {
+        refusedAsDoctype(
+            """
+            <![CDATA[ > <a ]]>
+            <!DOCTYPE feed [<!ENTITY secret SYSTEM "file:///etc/hostname">]>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:1</id><title>&secret;</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+    }
+
+    /**
+     * A prolog we cannot read to the end is a prolog we cannot vouch
+     * for. Such a feed will not parse either, so refusing it costs
+     * nothing and leaves the scan with no way to accept what it failed
+     * to make sense of.
+     */
+    @Test
+    fun `a comment that never closes is refused`() {
+        refusedAsMalformed(
+            """
+            <!-- <!DOCTYPE feed [<!ENTITY secret SYSTEM "file:///etc/hostname">]>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:1</id><title>x</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+    }
+
+    /**
+     * XML wants whitespace after the name, so this declares nothing. It
+     * is refused for being malformed rather than for declaring a
+     * document type, which is a different thing to tell the user.
+     */
+    @Test
+    fun `a doctype lookalike with no space after the name is refused as malformed`() {
+        refusedAsMalformed(
+            """
+            <!DOCTYPEfoo>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:1</id><title>x</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+    }
+
+    /**
+     * Skipping a comment whole is what keeps the check from firing on a
+     * feed that declares nothing. A server admin's note about
+     * hand-written HTML is prose, and a scan that searched the prolog's
+     * text instead of walking it would refuse this feed outright.
+     */
+    @Test
+    fun `a comment that quotes a doctype is not a feed that declares one`() {
+        val page = OpdsParser.parse(
+            """
+            <!-- the admin's note on writing <!DOCTYPE html> by hand -->
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:abc</id><title>Moby Dick</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("abc"), page.books.map { it.uuid })
+    }
+
+    @Test
+    fun `a processing instruction that quotes a doctype is not a feed that declares one`() {
+        val page = OpdsParser.parse(
+            """
+            <?liseur note="<!DOCTYPE html>" ?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:abc</id><title>Moby Dick</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("abc"), page.books.map { it.uuid })
+    }
+
+    /** The adversarial characters, with nothing adversarial behind them. */
+    @Test
+    fun `a comment carrying a bracket does not stop an honest feed parsing`() {
+        val page = OpdsParser.parse(
+            """
+            <!-- > <a -->
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:abc</id><title>Moby Dick</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("abc"), page.books.map { it.uuid })
+    }
+
+    @Test
+    fun `a processing instruction carrying a bracket does not stop an honest feed parsing`() {
+        val page = OpdsParser.parse(
+            """
+            <?liseur > <a ?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:abc</id><title>Moby Dick</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("abc"), page.books.map { it.uuid })
+    }
+
+    /**
+     * An empty comment and a bodyless instruction pin where the search
+     * for a terminator starts. Begin it one character too early and
+     * `<!---->` closes on its own opening dashes; begin it too late and
+     * neither closes at all.
+     */
+    @Test
+    fun `an empty comment and a bodyless instruction are read to their ends`() {
+        val page = OpdsParser.parse(
+            """
+            <!----><?p?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry><id>urn:uuid:abc</id><title>Moby Dick</title></entry>
+            </feed>
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("abc"), page.books.map { it.uuid })
     }
 
     @Test
@@ -144,6 +312,31 @@ class OpdsParserTest {
         )
 
         assertEquals(listOf("abc"), page.books.map { it.uuid })
+    }
+
+    private fun refusedAsDoctype(feed: String) =
+        refused(feed, "the feed declares a document type, which OPDS never needs")
+
+    private fun refusedAsMalformed(feed: String) =
+        refused(feed, "the feed's prolog is not well-formed XML")
+
+    /**
+     * Asserts the refusal came from the parser's own scan of the prolog.
+     *
+     * A `SAXException` on its own proves nothing. Xerces honours
+     * `disallow-doctype-decl` on the JVM, so even a scan that missed the
+     * DOCTYPE entirely ends in one, thrown by the factory switch this
+     * check exists precisely not to depend on, and on Android possibly
+     * not thrown at all. The message is what tells the two layers apart.
+     */
+    private fun refused(feed: String, message: String) {
+        try {
+            OpdsParser.parse(feed)
+        } catch (e: SAXException) {
+            assertEquals(message, e.message)
+            return
+        }
+        fail("the parser accepted a feed it should have refused")
     }
 
     /**
