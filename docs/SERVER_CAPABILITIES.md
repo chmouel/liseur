@@ -181,7 +181,13 @@ per-server capability detection.
 Every sync goes through the shared `reconcileReadingState` merge
 logic in `domain/ReadingStateMerge.kt`.
 
-The kosync partner is not a kind of server: it is paired *alongside*
-whichever catalog server is connected, covers that server's downloaded
-books (matched by KOReader's partial MD5 of the file), and has its own
-lifecycle. See [`adr/0014-kosync.md`](adr/0014-kosync.md).
+The kosync partner is not a kind of server: it is paired *alongside* a
+connected one, covers that server's downloaded books (matched by
+KOReader's partial MD5 of the file), and has its own lifecycle.
+
+It is offered only where the connected server carries no position of its
+own, which today means Grimmory. calibre-web, Komga and liseur-sync sync
+positions natively, and a second source for the same book is a conflict
+the reader can neither see nor resolve. `ServerKind.hostsKosyncPeer` is
+the single answer to that question, and where a future kind states its
+own. See [`adr/0014-kosync.md`](adr/0014-kosync.md).

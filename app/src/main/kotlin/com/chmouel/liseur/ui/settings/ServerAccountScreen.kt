@@ -1,5 +1,7 @@
 package com.chmouel.liseur.ui.settings
 
+import android.text.format.DateUtils
+import android.text.format.Formatter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -7,8 +9,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import android.text.format.DateUtils
-import android.text.format.Formatter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,14 +18,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,17 +41,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import com.chmouel.liseur.data.calibre.BulkBatch
-import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
-import com.chmouel.liseur.data.calibre.BulkStopReason
-import com.chmouel.liseur.data.calibre.SpaceVerdict
-import com.chmouel.liseur.ui.BusyIndicator
-import com.chmouel.liseur.ui.LocalEInk
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -64,35 +61,42 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
-import com.chmouel.liseur.data.remote.PositionSyncStatus
+import com.chmouel.liseur.data.calibre.BulkBatch
+import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
+import com.chmouel.liseur.data.calibre.BulkStopReason
+import com.chmouel.liseur.data.calibre.SpaceVerdict
 import com.chmouel.liseur.data.calibre.StorageUse
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.PositionSyncStatus
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncReport
-import com.chmouel.liseur.ui.messageRes
-import com.chmouel.liseur.data.db.RemoteServer
-import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.settings.UploadPolicy
+import com.chmouel.liseur.ui.BusyIndicator
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.ui.windowWidth
 
 /**
@@ -917,15 +921,16 @@ private fun KosyncSection(
     ServerSection(title = stringResource(R.string.kosync_section)) {
         val peer = state.kosync
         if (peer != null) {
+            val active = state.server?.kind?.hostsKosyncPeer == true
             Notice(
                 text = stringResource(
-                    R.string.kosync_connected,
+                    if (active) R.string.kosync_connected else R.string.kosync_stranded,
                     peer.username,
                     peer.baseUrl.substringAfter("://"),
                 ),
-                tone = NoticeTone.GOOD,
+                tone = if (active) NoticeTone.GOOD else NoticeTone.PROBLEM,
             )
-            DetailLine(text = state.kosyncStatus.describe(peer.positionSyncedAt))
+            if (active) DetailLine(text = state.kosyncStatus.describe(peer.positionSyncedAt))
             OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.kosync_disconnect))
             }
@@ -990,28 +995,24 @@ private fun KosyncSection(
             ),
             modifier = Modifier.fillMaxWidth(),
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.kosync_register),
-                    style = MaterialTheme.typography.bodyMedium,
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.kosync_register)) },
+            supportingContent = { Text(stringResource(R.string.kosync_register_help)) },
+            trailingContent = {
+                Switch(
+                    checked = state.kosyncRegister,
+                    onCheckedChange = null,
+                    enabled = !state.kosyncConnecting,
                 )
-                Text(
-                    stringResource(R.string.kosync_register_help),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = state.kosyncRegister,
-                onCheckedChange = onRegisterChange,
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            modifier = Modifier.toggleable(
+                value = state.kosyncRegister,
                 enabled = !state.kosyncConnecting,
-            )
-        }
+                role = Role.Switch,
+                onValueChange = onRegisterChange,
+            ),
+        )
         state.kosyncError?.let { error ->
             Notice(
                 text = stringResource(error.kosyncMessageRes()),

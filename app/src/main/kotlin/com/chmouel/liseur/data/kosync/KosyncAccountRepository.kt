@@ -126,22 +126,36 @@ class KosyncAccountRepository(
     }
 
     /**
-     * The mount root as stored: scheme defaulted to https, whitespace
-     * and trailing slashes gone, and the whole thing proven parseable —
-     * OkHttp throws on a malformed URL from outside [KosyncClient]'s
-     * error mapping, so a root nothing could ever address is refused
-     * here rather than thrown later. The reader's own spelling of the
-     * path is kept: mount roots are case-preserving.
+     * The mount root as stored: scheme lowercased and defaulted to
+     * https, whitespace, query, fragment and trailing slashes gone, and
+     * the whole thing proven parseable — OkHttp throws on a malformed
+     * URL from outside [KosyncClient]'s error mapping, so a root nothing
+     * could ever address is refused here rather than thrown later. The
+     * reader's own spelling of the path is kept: mount roots are
+     * case-preserving.
+     *
+     * A query or fragment is dropped rather than refused. Endpoints are
+     * built by appending to this string, so `…/koreader?x=1` would
+     * become `…/koreader?x=1/users/auth`, which addresses nothing. There
+     * is no kosync route that takes one, and a reader who pasted their
+     * address out of a browser bar should not have to notice why.
      */
     private fun normalise(url: String): String? {
         val trimmed = url.trim()
         if (trimmed.isEmpty()) return null
         val withScheme = if ("://" in trimmed) trimmed else "https://$trimmed"
-        if (!withScheme.startsWith("http://") && !withScheme.startsWith("https://")) return null
+        val scheme = withScheme.substringBefore("://").lowercase()
+        if (scheme != "http" && scheme != "https") return null
+        val spelled = scheme + withScheme.substring(scheme.length)
         // Parse before trimming slashes: "https://" must fail as
         // host-less here, not survive as the host "https:".
-        if (withScheme.toHttpUrlOrNull() == null) return null
-        return withScheme.trimEnd('/')
+        val parsed = spelled.toHttpUrlOrNull() ?: return null
+        return parsed.newBuilder()
+            .query(null)
+            .fragment(null)
+            .build()
+            .toString()
+            .trimEnd('/')
     }
 
     private fun setupReason(reason: SyncFailure): SetupFailure = when (reason) {

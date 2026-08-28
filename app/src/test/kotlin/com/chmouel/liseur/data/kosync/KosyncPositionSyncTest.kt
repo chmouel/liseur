@@ -477,6 +477,44 @@ class KosyncPositionSyncTest {
     }
 
     @Test
+    fun `a root pasted with a query is stored without it`() = runTest {
+        // Endpoints are built by appending, so a query left on the root
+        // would produce `…/koreader?x=1/users/auth`, which addresses
+        // nothing.
+        server.enqueue(json("""{"authorized":"OK"}"""))
+
+        repository().connect(
+            url = "http://127.0.0.1:${server.port}/koreader?x=1#top",
+            username = "ada",
+            password = "pw",
+        )
+
+        assertEquals(
+            "http://127.0.0.1:${server.port}/koreader",
+            db.kosyncPeerDao().get()?.baseUrl,
+        )
+        assertTrue(requests().single().target.endsWith("/koreader/users/auth"))
+    }
+
+    @Test
+    fun `an upper case scheme is read as the scheme it is`() = runTest {
+        // Not a bypass today, because normalise refused the whole
+        // address, but "wrong server" is the wrong thing to tell someone
+        // who typed HTTP:// and needs to hear why it will not be used.
+        val outcome = repository().connect(
+            url = "HTTP://sync.example.com",
+            username = "ada",
+            password = "pw",
+            register = true,
+        )
+
+        assertEquals(
+            KosyncSetupOutcome.Failure(SetupFailure.InsecureTransport),
+            outcome,
+        )
+    }
+
+    @Test
     fun `a root nothing could address is refused before networking`() = runTest {
         // Scheme with no host, a host with a space in it, scheme only:
         // OkHttp would throw on each outside the client's error mapping.

@@ -275,9 +275,14 @@ class KosyncPositionSync(
 
         reporting.report(PositionSyncStatus.Syncing, peerId)
         val identity = device()
-        val books = bookDao.allRemote()
-            .filter { book == null || it.url == book }
-            .filter { it.isCandidate }
+        val books = if (book == null) {
+            bookDao.allRemote()
+        } else {
+            // kosync has no list endpoint, so syncing one book has no
+            // reason to read the whole remote shelf and throw all but
+            // one row away.
+            listOfNotNull(bookDao.getByUrl(book))
+        }.filter { it.isCandidate }
 
         var firstFailure: SyncFailure? = null
         var unreachable: SyncFailure? = null

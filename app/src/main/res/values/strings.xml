@@ -296,6 +296,7 @@
     <string name="kosync_register_help">For servers that take new accounts this way. Grimmory does not: its KOReader users are made in its device settings.</string>
     <string name="kosync_connect">Connect KOReader sync</string>
     <string name="kosync_connected">Positions sync as %1$s with %2$s.</string>
+    <string name="kosync_stranded">Paired as %1$s with %2$s, but not in use: this server keeps your place itself. Disconnect the pairing, or connect Grimmory to use it.</string>
     <string name="kosync_disconnect">Disconnect KOReader sync</string>
     <string name="kosync_error_credentials">That username or password was refused by the sync server.</string>
     <string name="kosync_error_not_kosync">No KOReader sync server answered at that address. Check the address, including the path it is served from.</string>
