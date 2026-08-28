@@ -11,44 +11,20 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
 
 <table>
   <tr>
-    <td width="25%"><img src="docs/screenshots/01-library.png" alt="Library"></td>
-    <td width="25%"><img src="docs/screenshots/02-reading.png" alt="Reading"></td>
-    <td width="25%"><img src="docs/screenshots/03-chrome.png" alt="Reading controls"></td>
-    <td width="25%"><img src="docs/screenshots/04-typography.png" alt="Typography"></td>
+    <td width="33%"><img src="docs/screenshots/01-library.png" alt="Library"></td>
+    <td width="33%"><img src="docs/screenshots/02-reading.png" alt="Reading"></td>
+    <td width="33%"><img src="docs/screenshots/04-typography.png" alt="Typography"></td>
   </tr>
   <tr>
     <td align="center"><sub>The shelf, sorted by what you are currently reading.</sub></td>
     <td align="center"><sub>Distraction-free page with notes and bookmarks.</sub></td>
-    <td align="center"><sub>Reading progress, chapter scrubber, and time remaining.</sub></td>
     <td align="center"><sub>Themes, open typefaces, spacing, and brightness.</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/05-contents.png" alt="Contents"></td>
-    <td><img src="docs/screenshots/06-highlights.png" alt="Highlights"></td>
-    <td><img src="docs/screenshots/07-search.png" alt="Search"></td>
-    <td><img src="docs/screenshots/12-dictionary.png" alt="Definition card"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Full-screen table of contents for easy navigation.</sub></td>
-    <td align="center"><sub>A personal notebook of highlights, exportable to Markdown.</sub></td>
-    <td align="center"><sub>In-book search with context snippets.</sub></td>
-    <td align="center"><sub>Instant word definitions without losing your place.</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/13-series.png" alt="Series"></td>
-    <td><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
-    <td><img src="docs/screenshots/09-server.png" alt="Server setup"></td>
-    <td><img src="docs/screenshots/16-empty-library.png" alt="An empty library"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Series grouped into compact shelf stacks.</sub></td>
-    <td align="center"><sub>Reading order, progress, and which volumes are missing.</sub></td>
-    <td align="center"><sub>Connect to calibre-web, Komga, liseur-sync or Grimmory.</sub></td>
-    <td align="center"><sub>Three ways to fill a new shelf.</sub></td>
   </tr>
 </table>
 
-<sub>Screenshots use <a href="https://standardebooks.org">Standard Ebooks</a> editions (public domain).</sub>
+<sub><a href="docs/SCREENSHOTS.md">More screenshots</a> — the notebook, search,
+definitions, series, reading stats, the dark theme and a tablet. Captures use
+<a href="https://standardebooks.org">Standard Ebooks</a> editions (public domain).</sub>
 
 ## About Liseur
 

@@ -4,12 +4,15 @@ Scripts used to build, test, and release Liseur. Most have a `make`
 target wrapping them — run `make help` for the short list. See
 `DEVELOPER.md` for the full release workflow.
 
-- **`screenshots`** — Captures the screenshots used by the README and
-  the F-Droid listing. `--setup` builds a demo shelf first (downloads a
-  set of Standard Ebooks EPUBs, pushes them to the device, grants the
-  library folder, and seeds a highlight/note/bookmark) before capturing;
-  without it, captures from a device already set up. `--setup-only`
-  builds the shelf and stops, to check it. `hack/screenshots --help` for
+- **`screenshots`** — Captures the screenshots used by the README,
+  `docs/SCREENSHOTS.md` and the F-Droid listing. `--setup` builds a demo
+  shelf first (downloads a set of Standard Ebooks EPUBs, pushes them to
+  the device, grants the library folder, seeds a highlight/note/bookmark
+  and writes six weeks of reading sessions for the stats screens) before
+  capturing; without it, captures from a device already set up.
+  `--setup-only` builds the shelf and stops, to check it.
+  `--no-dictionary` skips the definition card, which is the one capture
+  that needs the device to reach a site. `hack/screenshots --help` for
   the rest of the flags.
 - **`reset-books`** — Wipes the app's storage and the device's `Books`
   folder on a connected device/emulator, then reseeds it with the same

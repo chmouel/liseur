@@ -8,6 +8,12 @@
 #   hack/screenshots --empty      # capture the empty library, and nothing else
 #   hack/screenshots -s SERIAL    # pick a device when several are attached
 #   hack/screenshots --class tablet   # file the captures as a tablet set
+#   hack/screenshots --no-dictionary  # skip the definition card
+#
+# The definition card is the one picture that needs the device to reach a
+# site: the run turns the lookup on, asks en.wiktionary.org about a word
+# off the page, and fails if nothing comes back. --no-dictionary is the
+# way to say that was expected, on a machine with no route out.
 #
 # Which set is written is decided by how wide the device is, so a run
 # against a tablet cannot quietly overwrite the phone screenshots the
@@ -53,9 +59,19 @@ readonly SEARCH_TERM="whale"
 # spells it. Moby Dick's again, and its first.
 readonly FIRST_CHAPTER="I: Loomings"
 
+# The Settings switch that lets Define ask a dictionary. It is off until
+# someone turns it on, deliberately, so a run that wants a picture of a
+# definition has to turn it on and put it back.
+readonly DICTIONARY_SWITCH="Look up definitions online"
+
+# A row only the Advanced sheet has, which is how the script tells it
+# from the short sheet it opens out of.
+readonly ADVANCED_MARKER="Use separate settings for this book"
+
 setup=0
 setup_only=0
 empty_only=0
+want_dictionary=1
 serial=""
 shot_class=""
 while [[ $# -gt 0 ]]; do
@@ -74,8 +90,11 @@ while [[ $# -gt 0 ]]; do
             shot_class=${2:-}
             shift
             ;;
+        --no-dictionary) want_dictionary=0 ;;
         -h | --help)
-            sed -n '3,30p' "$0" | sed 's/^# \{0,1\}//'
+            # Everything down to the first line that is not a comment, so
+            # the help never falls behind the header it prints.
+            awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"
             exit 0
             ;;
         *)
@@ -187,13 +206,28 @@ set_switch() {
     note "$label turned $want"
 }
 
+# Bring something below the fold into view, on any screen that scrolls
+# with a swipe. `wait_for` only ever looks at what is already on screen,
+# so a switch further down a long form is a switch it never finds.
+#
+#   scroll_to <needle> [exact|prefix|contains]
+scroll_to() {
+    local needle=$1 mode=${2:-prefix} i
+    for i in 1 2 3 4 5 6 7 8; do
+        dump_ui && find_node "$needle" "$mode" >/dev/null && return 0
+        adb shell input swipe "$(x 0.5)" "$(y 0.75)" "$(x 0.5)" "$(y 0.35)" 400
+        sleep 1
+    done
+    dump_ui && find_node "$needle" "$mode" >/dev/null
+}
+
 # Tap something on the shelf, scrolling down to it if it is below the
 # fold. Only the shelf scrolls this way; a swipe in the reader turns a
 # page instead.
 tap_on_shelf() {
-    local needle=$1 i at
+    local needle=$1 mode=${2:-prefix} i at
     for i in 1 2 3 4 5 6; do
-        if dump_ui && at=$(find_node "$needle"); then
+        if dump_ui && at=$(find_node "$needle" "$mode"); then
             # shellcheck disable=SC2086
             adb shell input tap $at
             sleep 2
@@ -216,12 +250,22 @@ shelf_to_top() {
 }
 
 # The selection popup is a Compose popup, in a window uiautomator does not
-# report, so nothing in it can be found by what it says. Its four
-# highlight colours give it away in a screenshot instead, and the rest of
-# the row sits a fixed distance from the first of them.
-readonly TINTS="FFD54F,9CCC65,64B5F6,F06292"
-readonly POPUP_NOTE_DP=155
-readonly POPUP_DEFINE_DP=216
+# report, so nothing in it can be found by what it says. Its highlight
+# colours give it away in a screenshot instead, and the rest of the row
+# sits a fixed distance from the first of them.
+#
+# Every colour has to be listed, in the order HighlightTint declares
+# them. The offsets below are measured from the first chip, so a colour
+# this file has not heard of puts Note and Define a chip further right
+# than it aims -- which is what a fifth and a sixth did: Define landed on
+# Note, opened the note editor, and the run photographed the old
+# definition card for several releases running.
+readonly TINTS="FFD54F,9CCC65,64B5F6,F06292,B39DDB,FFB74D"
+# 30dp of chip and 6dp of gap: what the colours are spaced at, which is
+# how a row of chips is told from marks that happen to line up.
+readonly POPUP_CHIP_PITCH_DP=36
+readonly POPUP_NOTE_DP=227
+readonly POPUP_DEFINE_DP=291
 
 density=$(adb shell wm density | sed -nE 's/.*density: ([0-9]+).*/\1/p' | tail -n 1)
 [[ -n "$density" ]] || density=420
@@ -328,39 +372,97 @@ PYEOF
 )
 
 # Where the first highlight colour is, as "x y", or nothing if the popup
-# is not up. All four colours have to be there, side by side on one row:
-# a yellow highlight already on the page is otherwise indistinguishable
-# from the yellow chip, and mistaking one for the other means tapping the
-# page when the script believes it is tapping a button.
+# is not up.
+#
+# All four colours have to be there, evenly spaced, side by side on one
+# row. A yellow highlight already on the page is otherwise
+# indistinguishable from the yellow chip, and mistaking one for the other
+# means tapping the page when the script believes it is tapping a button
+# -- or, worse, tapping the button next to the one it meant, because
+# every offset in this file is measured from where the first chip is.
+#
+# Averaging every pixel of a colour was what did that: a paragraph marked
+# in yellow drags the yellow "chip" a long way left of the real one, and
+# the row test still passes because the mark is on the same line as the
+# popup. So the pixels are grouped into blobs first, and the answer is
+# the one set of four blobs that sits in a row at the pitch the chips are
+# laid out at.
+#
+#   find_popup   (reads $TINTS and the chip pitch in pixels)
 find_popup() {
     adb exec-out screencap -p > "$work/screen.png" 2>/dev/null || return 1
     python3 -c "$PNG_DECODER
 $(
         cat <<'PYEOF'
 targets = [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in sys.argv[2].split(",")]
-found = []
+pitch = float(sys.argv[3])
+
+STEP = 3
+# Samples this far apart belong to the same blob. A chip is a disc wider
+# than this; two chips are a gap wider still.
+NEAR = 5 * STEP
+
+blobs = []
 for target in targets:
-    xs, ys = [], []
-    for y in range(0, height, 3):
+    cells = {}
+    for y in range(0, height, STEP):
         row = y * stride
-        for x in range(0, width, 3):
+        for x in range(0, width, STEP):
             i = row + x * channels
             if all(abs(out[i + n] - target[n]) < 12 for n in range(3)):
-                xs.append(x)
-                ys.append(y)
-    # A stray pixel of the right colour is not a chip; a chip is a disc.
-    if len(xs) < 100:
-        sys.exit(1)
-    found.append((sum(xs) // len(xs), sum(ys) // len(ys)))
+                cells.setdefault((x // NEAR, y // NEAR), []).append((x, y))
 
-# Four discs of different colours, all on one line: that is the popup and
-# nothing else on a page of text looks like it.
-rows = [y for _, y in found]
-if max(rows) - min(rows) > 12:
+    # Flood-fill the occupied cells into blobs.
+    seen, groups = set(), []
+    for cell in cells:
+        if cell in seen:
+            continue
+        seen.add(cell)
+        stack, group = [cell], []
+        while stack:
+            cx, cy = stack.pop()
+            group += cells[(cx, cy)]
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    nxt = (cx + dx, cy + dy)
+                    if nxt in cells and nxt not in seen:
+                        seen.add(nxt)
+                        stack.append(nxt)
+        # A stray pixel of the right colour is not a chip; a chip is a disc.
+        if len(group) >= 100:
+            groups.append(
+                (
+                    sum(p[0] for p in group) // len(group),
+                    sum(p[1] for p in group) // len(group),
+                )
+            )
+    if not groups:
+        sys.exit(1)
+    blobs.append(groups)
+
+# Four discs of different colours, evenly spaced along one line: that is
+# the popup, and nothing else on a page of text looks like it.
+best = None
+for first in blobs[0]:
+    row = [first]
+    for others in blobs[1:]:
+        want = row[-1][0] + pitch
+        near = [
+            b for b in others
+            if abs(b[0] - want) <= pitch * 0.4 and abs(b[1] - first[1]) <= 12
+        ]
+        if not near:
+            break
+        row.append(min(near, key=lambda b: abs(b[0] - want)))
+    if len(row) == len(blobs):
+        best = row
+        break
+
+if best is None:
     sys.exit(1)
-print(min(x for x, _ in found), sum(rows) // len(rows))
+print(best[0][0], sum(b[1] for b in best) // len(best))
 PYEOF
-    )" "$work/screen.png" "$TINTS"
+    )" "$work/screen.png" "$TINTS" "$(dp $POPUP_CHIP_PITCH_DP)"
 }
 
 # How much of the lower half of the page is ink, in tenths of a percent.
@@ -400,6 +502,8 @@ page_to_a_full_page() {
 
 x() { printf '%.0f' "$(awk "BEGIN { print $width * $1 }")"; }
 y() { printf '%.0f' "$(awk "BEGIN { print $height * $1 }")"; }
+# A fraction of the way down from another fraction, in pixels.
+down() { y "$(awk "BEGIN { print $1 + $2 }")"; }
 tap() { adb shell input tap "$(x "$1")" "$(y "$2")"; }
 
 # Put a sheet away and make sure it went. A sheet that has been dragged
@@ -448,11 +552,16 @@ select_a_word() {
 # says nothing about the book; a phrase reads like something a person
 # would have marked on purpose.
 #
+# With "long", the drag runs several lines down the page instead of
+# along one. The notebook caps a mark at four lines and offers to open it
+# out; a one-line phrase never reaches that cap, and the picture of a
+# long mark being read in full then has nothing long in it.
+#
 # The press has to register before the finger moves, so this cannot be a
 # swipe: hold the finger down, wait out the long press, and only then
 # drag. The gesture runs in one shell so the wait is the device's own.
 select_a_phrase() {
-    local spot py
+    local span=${1:-short} spot py
     local -a xs ys
     for spot in 0.45 0.55 0.35 0.65; do
         reader_chrome_down
@@ -463,7 +572,24 @@ select_a_phrase() {
         # to mark. Stay inside the left column there, and go down a
         # couple of lines to make up the length the narrower measure
         # costs. A phone has the whole width to itself and keeps it.
-        if [[ $shot_class == phone ]]; then
+        if [[ $span == long ]]; then
+            # Down the page rather than across it: where a line ends is
+            # a property of the type size, and the only measure that
+            # holds at every size is the page itself.
+            if [[ $shot_class == phone ]]; then
+                xs=(0.14 0.70 0.25 0.75 0.30 0.82)
+            else
+                xs=(0.10 0.40 0.14 0.42 0.16 0.44)
+            fi
+            ys=(
+                "$py"
+                "$py"
+                "$(down "$spot" 0.035)"
+                "$(down "$spot" 0.070)"
+                "$(down "$spot" 0.105)"
+                "$(down "$spot" 0.105)"
+            )
+        elif [[ $shot_class == phone ]]; then
             xs=(0.18 0.32 0.46 0.60 0.74 0.86)
             ys=("$py" "$py" "$py" "$py" "$py" "$py")
         else
@@ -473,8 +599,8 @@ select_a_phrase() {
                 "$py"
                 "$py"
                 "$py"
-                "$(y "$(awk "BEGIN { print $spot + 0.017 }")")"
-                "$(y "$(awk "BEGIN { print $spot + 0.017 }")")"
+                "$(down "$spot" 0.017)"
+                "$(down "$spot" 0.017)"
             )
         fi
         adb shell "input motionevent DOWN $(x "${xs[0]}") ${ys[0]}
@@ -492,23 +618,101 @@ select_a_phrase() {
     return 1
 }
 
-# The word the definition card is about. The card puts it above
-# everything else, and it is the only text on that screen standing on its
-# own: the page behind it is paragraphs, and the sense headings come
-# after.
-dictionary_word() {
+# What the definition card is showing, and the word it is about, as
+# "<state> <word>".
+#
+# A card that is up is not a card worth photographing: definitions are
+# off until someone turns them on, the fetch takes a moment, and a word
+# can have no entry or no route to the site it lives on. Each of those
+# reads as a different mistake -- a setting, a wait, another word, a
+# network -- so each gets its own name rather than all of them coming
+# back as an empty string.
+#
+#   found    senses are on the card
+#   disabled the lookup has not been turned on
+#   loading  the fetch is still out
+#   missing  the site has no entry for this word
+#   failed   the site could not be reached
+#   none     no card at all
+dictionary_card() {
     dump_ui || return 1
     python3 - "$work/ui.xml" <<'PY'
 import re
 import sys
 import xml.etree.ElementTree as ET
 
-for node in ET.parse(sys.argv[1]).iter("node"):
-    text = (node.get("text") or "").strip()
-    if text and re.fullmatch(r"[A-Za-z'-]+", text):
-        print(text)
-        break
+try:
+    nodes = list(ET.parse(sys.argv[1]).getroot().iter("node"))
+except ET.ParseError:
+    sys.exit(1)
+
+texts = [(n.get("text") or "").strip() for n in nodes]
+texts = [t for t in texts if t]
+
+
+def any_starting(prefix):
+    return any(t.lower().startswith(prefix) for t in texts)
+
+
+# The card puts the word above everything else, and it is the only text
+# on that screen standing on its own: the page behind it is paragraphs,
+# and the sense headings come after.
+word = next((t for t in texts if re.fullmatch(r"[A-Za-z'-]+", t)), "")
+
+if any_starting("turn on definitions") or any_starting("definitions are off"):
+    state = "disabled"
+elif any_starting("looking it up"):
+    state = "loading"
+elif any_starting("no entry for"):
+    state = "missing"
+elif any_starting("could not reach"):
+    state = "failed"
+# A sense is numbered, which nothing else on the card is: that is what
+# tells a real answer from a card that merely opened.
+elif any(re.match(r"\d+\. \S", t) for t in texts):
+    state = "found"
+else:
+    state = "none"
+
+print(state, word)
 PY
+}
+
+# Wait for the card to stop being busy, then say what it settled on.
+# Wiktionary is quick when it is warm and slow when it is not, and a
+# fixed sleep long enough for the cold case is a sleep spent staring at a
+# finished card in every other.
+dictionary_settled() {
+    local waited=0 blank=0 line state
+    while ((waited < 25)); do
+        line=$(dictionary_card) || line="none "
+        state=${line%% *}
+        case $state in
+            loading) blank=0 ;;
+            # A card that is not there after a few looks is a Define that
+            # never landed, not a slow one: stop waiting on it.
+            none)
+                blank=$((blank + 1))
+                ((blank >= 3)) && break
+                ;;
+            *) break ;;
+        esac
+        sleep 2
+        waited=$((waited + 2))
+    done
+    printf '%s\n' "$line"
+}
+
+# Run SQL against the app's database, on an emulator where run-as is
+# allowed. The statement travels base64'd because it goes through two
+# shells and a book's URL is a percent-encoded content:// URI: quoting it
+# twice by hand is how a seeding step silently writes nothing.
+db_exec() {
+    local encoded
+    encoded=$(printf '%s' "$1" | base64 | tr -d '\n')
+    adb shell "echo $encoded | base64 -d | \
+        run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db" 2>/dev/null |
+        tr -d '\r'
 }
 
 # How many marks the library holds, which is how a seeding step tells
@@ -649,16 +853,20 @@ seed_reading() {
     # A mark on each of three pages, so the notebook has something to
     # list. Each is checked against the database, because a highlight
     # that quietly failed looks exactly like one that worked.
-    local before after
-    for _ in 1 2 3; do
+    #
+    # The first runs down the page rather than along a line: the notebook
+    # only offers to open a mark out once it is longer than four lines,
+    # and a shelf of one-line marks has nothing to photograph that with.
+    local before after span
+    for span in long short short; do
         dismiss_popup
         before=$(annotation_count)
-        if select_a_phrase; then
+        if select_a_phrase "$span"; then
             tap_in_popup highlight
             sleep 2
             after=$(annotation_count)
             if [[ ${after:-0} -gt ${before:-0} ]]; then
-                note "highlighted a passage"
+                note "highlighted a $span passage"
             else
                 note "the highlight did not take"
             fi
@@ -701,6 +909,142 @@ seed_reading() {
     # Back to a page carrying a highlight, because that is the page the
     # reader screenshots open on.
     turn_pages 4 back
+}
+
+# The reading history the stats screens are made of.
+#
+# A shelf seeded an hour ago has none, and the heatmap, the streak and
+# the totals are then a picture of an app nobody has used. Reading it for
+# real would take weeks, so the sittings are written straight into the
+# table the reader would have filled -- which is an emulator thing to do,
+# and one of the reasons this script refuses to guess a device.
+#
+# Everything is measured back from now, so the heatmap is always recent
+# and the streak is always live, and the shape is fixed rather than
+# random: two runs a week apart should differ by a week, not by a
+# different history.
+readonly SESSION_SQL=$(
+    cat <<'PYEOF'
+import random
+import sys
+
+now = int(sys.argv[1])
+# Where the reader really is in the book the reading screens are taken
+# in. The sittings against that book have to add up to it: a card saying
+# twelve hours against three per cent of a novel is a picture of a bug,
+# and it is the one book whose position anybody can check, because every
+# other screenshot in the set shows the page it is open at.
+on_screen_at = float(sys.argv[2])
+urls = [line.strip() for line in sys.stdin if line.strip()]
+if not urls:
+    sys.exit(1)
+
+random.seed(20260828)
+
+DAY = 86_400
+# A percent of a book for every twelve minutes read, which is about right
+# for a novel of the length these are and makes the time-left estimate
+# under the bar read like a real one.
+PER_MINUTE = 1 / 1200
+
+# The bulk of the reading goes into books the tour never opens, which is
+# what gives the "By book" list its depth. Those carry no saved place, so
+# the screen shows their hours without claiming a percentage, and nothing
+# has to be invented to make the two agree.
+on_screen_book = urls[0]
+shelf = urls[1:4] or [on_screen_book]
+weights = [0.45, 0.33, 0.22][:len(shelf)]
+progress = {url: 0.02 for url in shelf}
+
+rows = []
+
+
+def sitting(url, days_ago, minutes, start_at, end_at):
+    hour = random.choice([8, 13, 19, 21, 22])
+    started = (now - days_ago * DAY) * 1000
+    started += (hour * 3600 + random.randint(0, 1800)) * 1000
+    if started > now * 1000:
+        started = (now - random.randint(1800, 7200)) * 1000
+    duration = minutes * 60 * 1000
+    idle = random.randint(0, 4) * 60 * 1000
+    rows.append(
+        "({url},{started},{ended},{ended},{duration},{start_at},{end_at},{idle})".format(
+            url="'" + url.replace("'", "''") + "'",
+            started=started,
+            ended=started + duration + idle,
+            duration=duration,
+            start_at=round(start_at, 4),
+            end_at=round(end_at, 4),
+            idle=idle,
+        )
+    )
+
+
+for days_ago in range(41, -1, -1):
+    # The last few days always count, so the streak on the card is a real
+    # one rather than whatever the dice left behind.
+    if days_ago > 4 and random.random() < 0.35:
+        continue
+    for _ in range(random.choice([1, 1, 1, 2])):
+        url = random.choices(shelf, weights=weights)[0]
+        minutes = random.randint(14, 72)
+        start_at = progress[url]
+        end_at = min(0.99, start_at + minutes * PER_MINUTE)
+        progress[url] = end_at
+        sitting(url, days_ago, minutes, start_at, end_at)
+
+# And the book on screen, in as much reading as the place it is really at
+# is worth: an evening and a bus ride, for an opening chapter.
+budget = max(2, round(on_screen_at / PER_MINUTE))
+at = 0.0
+for days_ago in (3, 1):
+    minutes = max(1, budget // 2)
+    budget -= minutes
+    end_at = at + minutes * PER_MINUTE
+    sitting(on_screen_book, days_ago, minutes, at, end_at)
+    at = end_at
+
+if not rows:
+    sys.exit(1)
+
+print("INSERT INTO reading_sessions")
+print("(book_url, started_at, ended_at, last_checkpoint_at, duration_ms,")
+print(" start_progression, end_progression, idle_ms) VALUES")
+print(",\n".join(rows) + ";")
+PYEOF
+)
+
+seed_sessions() {
+    local days urls at sql count
+    # Opening a book once writes a sitting, so a shelf with reading on it
+    # is not a shelf with a history on it: what the stats screens are
+    # made of is days, and a handful of them is what makes a heatmap.
+    days=$(db_exec 'select count(distinct date(started_at/1000, "unixepoch")) from reading_sessions;')
+    if [[ ${days:-0} -ge 5 ]]; then
+        note "the shelf already carries reading on $days days; leaving it alone"
+        return 0
+    fi
+
+    # The book the reader screens are taken in goes first, so the history
+    # can be written to agree with where it is really open.
+    urls=$(db_exec "select url from books order by (title like 'Moby%') desc, title;")
+    [[ -n $urls ]] || die "no books on the shelf to record reading against"
+    at=$(db_exec "select coalesce(max(total_progression), 0.03) from reading_progress
+        where book_url = '$(printf '%s' "$urls" | head -n 1)';")
+    [[ -n $at ]] || at=0.03
+
+    # Room hears about its own writes and nothing else, so a screen that
+    # is already open would go on showing the empty history it read at
+    # startup. Every step after this opens the app again anyway; stopping
+    # it first is what makes that reopen honest.
+    adb shell am force-stop "$APP_ID"
+
+    sql=$(printf '%s\n' "$urls" | python3 -c "$SESSION_SQL" "$(date +%s)" "$at") ||
+        die "could not work out a reading history"
+    db_exec "$sql" >/dev/null
+    count=$(db_exec 'select count(*) from reading_sessions;')
+    [[ ${count:-0} -gt 0 ]] || die "the reading history did not take"
+    note "recorded $count sittings"
 }
 
 # ------------------------------------------------------------- capture
@@ -766,6 +1110,8 @@ if ((setup)); then
     grant_folder
     step "Making the first book look read"
     seed_reading
+    step "Recording some reading"
+    seed_sessions
 fi
 
 if ((setup_only)); then
@@ -783,6 +1129,20 @@ step "Light"
 open_library
 open_settings
 set_switch "Colours from your wallpaper" off
+
+# The definition card is the one picture that needs a setting turned on:
+# a lookup is off until someone asks for it, and Define otherwise offers
+# to turn it on rather than saying anything about the word. What it was
+# before is remembered and put back at the end, because it is a decision
+# about who the device talks to and not a capture setting.
+dictionary_before=""
+if ((want_dictionary)) && [[ $shot_class == phone ]]; then
+    scroll_to "$DICTIONARY_SWITCH" ||
+        die "no \"$DICTIONARY_SWITCH\" switch in Settings"
+    dictionary_before=$(switch_state "$DICTIONARY_SWITCH") ||
+        die "could not read the \"$DICTIONARY_SWITCH\" switch"
+    set_switch "$DICTIONARY_SWITCH" on
+fi
 back
 
 if [[ $shot_class == tablet ]]; then
@@ -841,7 +1201,18 @@ shot 03-chrome
 tap_on "Aa" exact
 wait_for "Theme" >/dev/null || sleep 2
 shot 04-typography
-dismiss_sheet "Line spacing"
+
+# Everything a reader sets once, if ever, is behind the one row at the
+# bottom of that sheet -- which is the whole bargain of
+# docs/adr/0001-advanced-reading-menu.md, and worth a picture of its own
+# so the short sheet above is not read as all there is.
+scroll_to "Advanced" exact || die "no Advanced row in the typography sheet"
+tap_on "Advanced" exact
+wait_for "$ADVANCED_MARKER" 15 >/dev/null ||
+    die "the Advanced sheet never opened"
+shot 20-advanced
+dismiss_sheet "$ADVANCED_MARKER"
+dismiss_sheet "Advanced"
 
 reader_chrome_up
 tap_on "Contents"
@@ -850,6 +1221,15 @@ shot 05-contents
 tap_on "Highlights"
 sleep 2
 shot 06-highlights
+
+# A mark longer than four lines is listed cut short, with a way to read
+# the rest of it where it is. Seeding makes one of the three that long
+# on purpose; nothing else in the notebook is.
+scroll_to "Show more" exact ||
+    die "no mark long enough to open out; reseed the shelf with --setup"
+tap_on "Show more" exact
+sleep 2
+shot 21-navigate
 back
 sleep 2
 
@@ -892,25 +1272,50 @@ step "A definition"
 # about a word someone might actually look up. Where a press lands on a
 # word worth reading about is luck, and there is more of it to be had on
 # a page laid out in two columns, so there are plenty of places to try.
-defined=0
-for across in 0.60 0.35 0.72 0.50 0.28 0.66 0.42 0.78 0.55 0.31; do
-    select_a_word "$across" || continue
-    tap_in_popup define
-    sleep 7
-    looked_up=$(dictionary_word)
-    note "the card came back with \"${looked_up:-nothing}\""
-    if [[ ${#looked_up} -ge 6 ]]; then
-        note "looked up \"$looked_up\""
-        shot 12-dictionary
-        defined=1
+#
+# What the card says is read back rather than assumed, because every way
+# this goes wrong looks the same from outside: the lookup switched off,
+# the fetch still out, no entry for the word, no route to the site. Only
+# one of those is worth trying another word for, and none of them is
+# worth publishing.
+if ((want_dictionary)); then
+    defined=0
+    for across in 0.60 0.35 0.72 0.50 0.28 0.66 0.42 0.78 0.55 0.31; do
+        select_a_word "$across" || continue
+        tap_in_popup define
+        read -r card_state card_word < <(dictionary_settled)
+        note "the card came back ${card_state} about \"${card_word:-nothing}\""
+        case $card_state in
+            found)
+                # A card about "the" is a card that is working and still
+                # says nothing; keep pressing until the word is one
+                # somebody might really have stopped on.
+                if [[ ${#card_word} -ge 6 ]]; then
+                    shot 12-dictionary
+                    defined=1
+                    back
+                    sleep 2
+                    break
+                fi
+                note "\"$card_word\" is not worth a picture; trying another word"
+                ;;
+            disabled)
+                die "the definition lookup is off: the \"$DICTIONARY_SWITCH\" switch did not take"
+                ;;
+            failed)
+                die "the device could not reach the dictionary; run with --no-dictionary if that is expected"
+                ;;
+            missing) note "no entry for \"$card_word\"; trying another word" ;;
+            loading) note "the lookup never came back; trying another word" ;;
+            none) note "no card came up; trying another word" ;;
+        esac
         back
         sleep 2
-        break
-    fi
-    back
-    sleep 2
-done
-((defined)) || note "no word worth defining; keeping the old 12-dictionary.png"
+    done
+    ((defined)) || die "no word on the page produced a definition worth photographing"
+else
+    note "skipping the definition card"
+fi
 
 step "Series"
 
@@ -919,24 +1324,49 @@ step "Series"
 # the plain shelf twice would publish a picture of a feature that is not
 # in it.
 open_library
-shelf_to_top
 # The filter button carries a summary of what is in force rather than a
-# fixed word, so the way in is whatever it reads now: with nothing
-# ticked, that is the bare "Filter". The menu stays open under a tap --
-# boxes are meant to be ticked several at a time -- so Back is what
-# closes it.
-tap_on "Filter"
-sleep 1
-tap_on "Group by series"
-sleep 1
-back
-sleep 3
-on_screen "Sherlock Holmes" || die "the Series view never showed a series"
+# fixed word, so the way in is whatever it reads now: grouping is a view
+# mode rather than a narrowing, is not counted in that summary, and with
+# nothing ticked it reads the bare "Filter". The menu stays open under a
+# tap -- boxes are meant to be ticked several at a time -- so Back is
+# what closes it.
+toggle_grouping() {
+    shelf_to_top
+    tap_on "Filter"
+    sleep 1
+    tap_on "Group by series"
+    sleep 1
+    back
+    sleep 3
+}
+
+# Nothing on screen says whether the grouping is on, and the menu row is
+# drawn without a checkable box, so `set_switch` cannot read it. What
+# says it is the card: grouped, a series is a pile of covers under the
+# series' own name, "Sherlock Holmes"; ungrouped, that name only ever
+# appears as the "Sherlock Holmes · #5" line under a volume. So the
+# needle has to be exact -- a prefix matches both, which is how a run
+# photographed the plain shelf, tapped a subtitle and opened a book.
+#
+# A run that died mid-tour leaves the grouping on and the first toggle
+# turns it off, so try twice before believing there are no series. The
+# shelf also keeps its sort under grouping, and with Recent in force --
+# which is what seeded reading leaves behind -- a series sits wherever
+# its newest volume was last opened rather than at the top.
+grouped=0
+for attempt in 1 2; do
+    toggle_grouping
+    if scroll_to "Sherlock Holmes" exact; then
+        grouped=1
+        break
+    fi
+done
+((grouped)) || die "the Series view never showed a series"
 shot 13-series
 
 # Into one series: the volumes in order, where you are in it, and the
 # ones missing in between.
-tap_on_shelf "Sherlock Holmes"
+tap_on_shelf "Sherlock Holmes" exact
 sleep 3
 on_screen "The Hound of the Baskervilles" ||
     die "the series screen never opened"
@@ -944,14 +1374,38 @@ shot 14-series-detail
 back
 sleep 2
 # Back to the whole shelf, so the screens after this start where the
-# earlier ones did. The filters are written down now and survive a
+# earlier ones did. The grouping is written down now and survives a
 # restart, so leaving this on would quietly put every later shelf into
-# series view. The summary reads "Group by series" at this point, which
-# is both the way back into the menu and the only thing on screen saying
-# so; Clear inside it puts the shelf back and closes the menu itself.
-tap_on "Group by series"
-sleep 1
-tap_on "Clear filters"
+# series view. It is not a filter, so it is not in the button's summary
+# and "Clear filters" does not reach it: the way back off is the way it
+# went on.
+toggle_grouping
+
+step "Reading stats"
+
+# What the shelf has been read for: the hours, the streak, and the days
+# they landed on. The history behind this is seeded, because a demo
+# device has none and reading forty days of it is not a screenshot step.
+open_library
+tap_on "More" exact
+tap_on "Reading stats"
+wait_for "Time spent reading" 20 >/dev/null ||
+    die "the reading stats screen never opened"
+on_screen "Nothing recorded yet" &&
+    die "the stats screen has no reading on it; reseed the shelf with --setup"
+shot 18-stats
+
+# And the same for one book, which is where the pace and what is left of
+# it are worked out.
+scroll_to "Moby Dick" || die "no book listed under the reading stats"
+tap_on "Moby Dick"
+sleep 3
+wait_for "Last read" 20 >/dev/null ||
+    die "the book's reading stats never opened"
+shot 19-stats-book
+back
+sleep 2
+back
 sleep 2
 
 step "Settings"
@@ -959,9 +1413,21 @@ open_library
 open_settings
 shot 08-settings
 
-tap_on "Book server"
+# Exactly, because the heading above the row now carries an
+# information button described as "Book servers", and a prefix match
+# reaches that first: the tap opens the explainer over the settings form
+# and the picture is of a dialog rather than of a server.
+tap_on "Book server" exact
 sleep 3
 shot 09-server
+
+# Every kind at once: what each server is for, and whether your place in
+# a book will follow you there. The row says only which one is picked, so
+# the sheet under it is the picture worth having.
+tap_on "Which kind of server?"
+wait_for "Grimmory" 15 >/dev/null || die "the server kind sheet never opened"
+shot 22-server-kind
+dismiss_sheet "Grimmory"
 
 step "Dark"
 
@@ -982,22 +1448,32 @@ shot 11-reading-dark
 choose_reading_theme "Light"
 reader_chrome_down
 
+# And the definition lookup, if this run is what turned it on. Whether
+# the device may talk to a dictionary is the reader's answer, not a
+# capture setting, so it goes back to whatever it was.
+if [[ $dictionary_before == off ]]; then
+    open_library
+    open_settings
+    scroll_to "$DICTIONARY_SWITCH" ||
+        die "no \"$DICTIONARY_SWITCH\" switch to put back"
+    set_switch "$DICTIONARY_SWITCH" off
+    back
+fi
+
 step "The F-Droid set"
 i=1
 # All light. A dark screenshot in a store listing is read as the app
 # looking like that, rather than as the app being able to; the dark
 # theme is worth more as a line in the description than as one picture
 # in six that does not match the other five.
-for name in 01-library 02-reading 13-series 04-typography 16-empty-library 06-highlights; do
-    if [[ ! -f "$OUT_DIR/$name.png" ]]; then
-        # Only 16-empty-library comes from somewhere other than the run
-        # that just finished, so it is the only one where the fix is a
-        # different command rather than a step that went wrong.
-        if [[ $name == 16-empty-library ]]; then
-            die "no $OUT_DIR/$name.png: capture it with hack/screenshots --empty"
-        fi
+#
+# All six now come from this one run. An empty shelf used to be among
+# them, which meant the set could only be completed by a second command
+# with a different flag -- and it was the weakest of the six anyway:
+# nothing sells a reader like the hours somebody has already put into it.
+for name in 01-library 02-reading 13-series 04-typography 18-stats 06-highlights; do
+    [[ -f "$OUT_DIR/$name.png" ]] ||
         die "no $OUT_DIR/$name.png: the step that takes it did not run"
-    fi
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
     note "$FASTLANE_DIR/$i.png"
     i=$((i + 1))

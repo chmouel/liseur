@@ -462,6 +462,7 @@ hack/screenshots --setup    # build the demo shelf first, then capture
 hack/screenshots            # capture from a device already set up
 hack/screenshots --setup-only   # build the shelf and stop, to check it
 hack/screenshots --class tablet  # file the captures as a tablet set
+hack/screenshots --no-dictionary # skip the one capture that needs the network
 hack/icon                   # fastlane icon.png, from the vector drawables
 hack/feature-graphic        # fastlane featureGraphic.png, from the brand emblem
 ```
@@ -480,9 +481,10 @@ against a tablet cannot quietly overwrite the phone images. Pass
 `--class` for a device whose shape does not match how its pictures
 should be filed.
 
-The phone set is the full tour, twelve screens. The tablet set is three
-pictures of what a phone cannot show — two columns, the control that
-chooses them, and a shelf with room on it — and lands in
+The phone set is the full tour, seventeen screens, gathered on
+`docs/SCREENSHOTS.md`; the README shows three of them. The tablet set is
+three pictures of what a phone cannot show — two columns, the control
+that chooses them, and a shelf with room on it — and lands in
 `docs/screenshots/tablet`. There is no point photographing the settings
 screen twice, and the search and dictionary steps that make the phone
 run slow are skipped, so a tablet run takes a few minutes.
@@ -493,8 +495,21 @@ run slow are skipped, so a tablet run takes a few minutes.
 them to the device, grants the folder through the real picker, and leaves
 the first book part-read with three highlights, a note and a bookmark on
 it. Each of those is checked against the database afterwards, because a
-highlight that quietly failed looks exactly like one that worked. Run it
-once; later runs can drop `--setup` and take about ten minutes.
+highlight that quietly failed looks exactly like one that worked. One of
+the three marks runs down the page rather than along a line, because the
+notebook only offers to open a mark out once it is longer than four
+lines. `--setup` also writes six weeks of sittings into
+`reading_sessions` with `run-as sqlite3`: the stats screens count from
+the moment a book is first opened, and a shelf seeded an hour ago has
+nothing on them. Run it once; later runs can drop `--setup` and take
+about ten minutes.
+
+The definition card is the one capture that needs the device to reach
+something: the run turns the lookup on in Settings, presses words until
+one comes back with senses on it, and puts the switch back where it found
+it. It used to keep the previous image and carry on when nothing came
+back, which is how a stale picture survived several releases — it now
+fails. `--no-dictionary` is how to say an offline run was expected.
 
 `--empty` is its own mode, and short: the empty library is the one screen
 the tour cannot reach, because the tour needs a shelf with books on it.
