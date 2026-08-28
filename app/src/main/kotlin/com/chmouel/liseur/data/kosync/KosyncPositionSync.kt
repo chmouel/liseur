@@ -369,8 +369,24 @@ class KosyncPositionSync(
 
         val stored = progressDao.get(book.url)
         val state = peerStateDao.get(book.url, account.peerId)
-        val dirty = state?.isDirty(stored?.localRevision ?: 0)
+        val agreed = state?.isDirty(stored?.localRevision ?: 0)
             ?: ((stored?.localRevision ?: 0) > 0)
+
+        // A server that answers with nothing about a book it has already
+        // agreed a position for has lost the record: reset, evicted,
+        // restored from an older backup. Left alone, this device would
+        // sit on a position the server does not have until the reader
+        // happened to turn a page, and every other device would pull
+        // nothing meanwhile.
+        //
+        // That is precisely what dirty means — something here the server
+        // lacks — so it is said that way, and `reconcileReadingState`
+        // pushes for the same reason it pushes anything else.
+        val forgotten = remote == null &&
+            state?.hasPending != true &&
+            state?.baseline() != null &&
+            stored != null
+        val dirty = agreed || forgotten
 
         if (!needsReconciling(remote != null, state?.hasPending == true, dirty)) {
             return BookOutcome()

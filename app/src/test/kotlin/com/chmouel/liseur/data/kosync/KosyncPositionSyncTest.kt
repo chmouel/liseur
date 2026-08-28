@@ -526,6 +526,46 @@ class KosyncPositionSyncTest {
     }
 
     @Test
+    fun `a server that lost the record is sent the position again`() = runTest {
+        // Reset, evicted, restored from an older backup: the server
+        // answers with nothing for a book it had already agreed a
+        // position for. Left alone this device sits on a position the
+        // server does not have until the reader happens to turn a page.
+        pair()
+        db.bookDao().upsert(book())
+        record(progression = 0.4)
+        server.enqueue(json("{}"))
+        server.enqueue(json("{}"))
+        sync().syncAll(null)
+        seen.clear()
+        server.enqueue(json("{}"))
+
+        sync().syncAll(null)
+
+        val put = requests().last()
+        assertEquals("PUT", put.method)
+        assertEquals(0.4, JSONObject(put.body!!.utf8()).getDouble("percentage"), 0.0001)
+    }
+
+    @Test
+    fun `a book the server never knew about is not pushed twice`() = runTest {
+        // The other half of the rule: with no agreement behind it there
+        // is nothing to conclude from silence, so a second run with
+        // nothing read in between says nothing.
+        pair()
+        db.bookDao().upsert(book())
+        server.enqueue(json("{}"))
+
+        sync().syncAll(null)
+        val after = server.requestCount
+
+        server.enqueue(json("{}"))
+        sync().syncAll(null)
+
+        assertEquals(after + 1, server.requestCount)
+    }
+
+    @Test
     fun `disconnecting forgets the agreements along with the partner`() = runTest {
         pair()
         db.bookDao().upsert(book())
