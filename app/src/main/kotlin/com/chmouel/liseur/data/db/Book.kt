@@ -245,6 +245,24 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL")
     suspend fun allRemote(): List<Book>
 
+    /**
+     * Every book whose file this device can open, wherever it came
+     * from.
+     *
+     * For a KOReader pairing that has no catalog beside it: a Custom
+     * connection may be a sync address and nothing else, and then the
+     * books to keep a place in are the ones already on the phone.
+     * [allRemote] cannot answer that — it asks for a `remote_uuid`, and
+     * a sideloaded book has none.
+     */
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE local_uri IS NOT NULL OR download_state = 'DOWNLOADED'
+        """,
+    )
+    suspend fun allOpenable(): List<Book>
+
     /** Remote-only books that will disappear when their account does. */
     @Query("SELECT url FROM books WHERE remote_uuid IS NOT NULL AND local_uri IS NULL")
     suspend fun remoteNotDownloadedUrls(): List<String>

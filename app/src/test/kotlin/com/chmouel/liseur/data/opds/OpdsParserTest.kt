@@ -1,4 +1,4 @@
-package com.chmouel.liseur.data.calibre
+package com.chmouel.liseur.data.opds
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -35,7 +35,7 @@ class OpdsParserTest {
     fun `reads a book out of the feed`() {
         val book = OpdsParser.parse(feed).books.single()
 
-        assertEquals("3121b620-0edc-4178-b435-8ef66e069f9b", book.uuid)
+        assertEquals("3121b620-0edc-4178-b435-8ef66e069f9b", book.entryId)
         assertEquals("Le vieil homme et la mer", book.title)
         assertEquals("Ernest Hemingway", book.author)
         assertEquals(74, book.bookId)
@@ -217,7 +217,7 @@ class OpdsParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(listOf("abc"), page.books.map { it.uuid })
+        assertEquals(listOf("abc"), page.books.map { it.entryId })
     }
 
     @Test
@@ -231,7 +231,7 @@ class OpdsParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(listOf("abc"), page.books.map { it.uuid })
+        assertEquals(listOf("abc"), page.books.map { it.entryId })
     }
 
     /** The adversarial characters, with nothing adversarial behind them. */
@@ -246,7 +246,7 @@ class OpdsParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(listOf("abc"), page.books.map { it.uuid })
+        assertEquals(listOf("abc"), page.books.map { it.entryId })
     }
 
     @Test
@@ -260,7 +260,7 @@ class OpdsParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(listOf("abc"), page.books.map { it.uuid })
+        assertEquals(listOf("abc"), page.books.map { it.entryId })
     }
 
     /**
@@ -280,7 +280,7 @@ class OpdsParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(listOf("abc"), page.books.map { it.uuid })
+        assertEquals(listOf("abc"), page.books.map { it.entryId })
     }
 
     @Test
@@ -293,7 +293,7 @@ class OpdsParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(listOf("abc"), page.books.map { it.uuid })
+        assertEquals(listOf("abc"), page.books.map { it.entryId })
     }
 
     /** Only the prolog is looked at, so a book about XML still shows up. */
@@ -311,7 +311,7 @@ class OpdsParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(listOf("abc"), page.books.map { it.uuid })
+        assertEquals(listOf("abc"), page.books.map { it.entryId })
     }
 
     private fun refusedAsDoctype(feed: String) =

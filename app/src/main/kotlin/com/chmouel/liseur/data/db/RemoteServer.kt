@@ -34,6 +34,19 @@ data class RemoteServer(
     @PrimaryKey val id: Long = SINGLE_ID,
     val kind: ServerKind,
     @ColumnInfo(name = "base_url") val baseUrl: String,
+    /**
+     * Where this connection's catalog is, or null when it has none.
+     *
+     * The only address any catalog path reads. Null is not an error and
+     * not a fallback to [baseUrl]: it means this connection catalogs
+     * nothing, and every catalog path answers "nothing to do" rather
+     * than trying [baseUrl] and parsing whatever comes back. A Custom
+     * connection with a sync address and no OPDS address is the case
+     * that needs saying; for every other kind it equals [baseUrl], and
+     * that redundancy is the point — no caller has to infer catalog
+     * presence from a kind and a flag.
+     */
+    @ColumnInfo(name = "catalog_url") val catalogUrl: String? = baseUrl,
     /** The login for calibre-web, or the account's name for Komga. */
     val username: String?,
     @ColumnInfo(name = "password_cipher") val passwordCipher: String?,
@@ -113,6 +126,21 @@ data class RemoteServer(
 
             ServerKind.LISEUR_SYNC ->
                 liseurTokenCipher?.let(CredentialCipher::decrypt)?.let(RemoteCredentials::Bearer)
+
+            // A Custom catalog is often open to anyone, so "no
+            // credential needed" has to be sayable. It is a stored
+            // username with no stored password that means anonymous,
+            // never a password that failed to decrypt: a null cipher
+            // where one was written is an account that is lost, and
+            // reading it as anonymous would send unsigned requests for
+            // ever instead of asking for the password again.
+            ServerKind.CUSTOM ->
+                if (passwordCipher == null) {
+                    RemoteCredentials.Anonymous
+                } else {
+                    CredentialCipher.decrypt(passwordCipher)
+                        ?.let { RemoteCredentials.Basic(username.orEmpty(), it) }
+                }
         }
 
     /**
@@ -133,7 +161,12 @@ data class RemoteServer(
         get() = when (kind) {
             ServerKind.CALIBRE -> koboTokenCipher != null
             ServerKind.KOMGA, ServerKind.LISEUR_SYNC -> true
-            ServerKind.GRIMMORY -> false
+            // Neither carries a position of its own. Grimmory's shim
+            // answers 404 to every progress route; a Custom connection
+            // is a catalog and nothing more. Both keep a reader's place
+            // through a paired kosync server instead, which is a
+            // different question and asked elsewhere.
+            ServerKind.GRIMMORY, ServerKind.CUSTOM -> false
         }
 
     /**
@@ -166,6 +199,13 @@ data class RemoteServer(
             // it, so a rotated token no longer reads as a new account.
             ServerKind.LISEUR_SYNC ->
                 "liseursync|$baseUrl|${liseurAccountId ?: accountId ?: username}"
+            // The catalog is what a Custom account *is*, so it is what
+            // identifies one. Two logins to one OPDS server are two
+            // shelves; the same login to two servers likewise. A
+            // catalog-less Custom falls back to its base URL, which is
+            // then the sync address, and is the only account it can be.
+            ServerKind.CUSTOM ->
+                "custom|${catalogUrl ?: baseUrl}|${username.orEmpty()}"
         }
 
     companion object {

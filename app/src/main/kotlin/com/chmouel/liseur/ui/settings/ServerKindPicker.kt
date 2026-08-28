@@ -164,6 +164,7 @@ private fun ServerKind.logoRes(): Int = when (this) {
     ServerKind.KOMGA -> R.drawable.ic_server_generic
     ServerKind.GRIMMORY -> R.drawable.ic_server_grimmory
     ServerKind.LISEUR_SYNC -> R.drawable.ic_server_liseur_sync
+    ServerKind.CUSTOM -> R.drawable.ic_server_generic
 }
 
 /** What a kind is for, and whether it keeps your place. */
@@ -187,6 +188,7 @@ private fun KindSupport(kind: ServerKind) {
  */
 private fun ServerKind.syncLineRes(): Int = when (this) {
     ServerKind.GRIMMORY -> R.string.server_sync_grimmory
+    ServerKind.CUSTOM -> R.string.server_sync_custom
     else -> when (syncAbility) {
         SyncAbility.EXACT -> R.string.server_sync_exact
         SyncAbility.PROGRESSION -> R.string.server_sync_progression
@@ -199,6 +201,7 @@ internal fun ServerKind.labelRes(): Int = when (this) {
     ServerKind.KOMGA -> R.string.server_kind_komga
     ServerKind.GRIMMORY -> R.string.server_kind_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_kind_liseur_sync
+    ServerKind.CUSTOM -> R.string.server_kind_custom
 }
 
 internal fun ServerKind.taglineRes(): Int = when (this) {
@@ -206,6 +209,7 @@ internal fun ServerKind.taglineRes(): Int = when (this) {
     ServerKind.KOMGA -> R.string.server_tagline_komga
     ServerKind.GRIMMORY -> R.string.server_tagline_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_tagline_liseur_sync
+    ServerKind.CUSTOM -> R.string.server_tagline_custom
 }
 
 /** Where to get a liseur-sync server, for a reader who has not got one yet. */
@@ -220,6 +224,10 @@ internal fun ServerKind.homeUrl(): String = when (this) {
     ServerKind.KOMGA -> "https://komga.org"
     ServerKind.GRIMMORY -> "https://github.com/grimmory-tools/grimmory"
     ServerKind.LISEUR_SYNC -> LISEUR_SYNC_SERVER_URL
+    // The specification rather than a product: a Custom connection is
+    // not a server anyone can go and get, it is whatever the reader
+    // already runs.
+    ServerKind.CUSTOM -> "https://specs.opds.io/opds-1.2"
 }
 
 internal fun ServerKind.linkRes(): Int = when (this) {
@@ -227,4 +235,5 @@ internal fun ServerKind.linkRes(): Int = when (this) {
     ServerKind.KOMGA -> R.string.server_link_komga
     ServerKind.GRIMMORY -> R.string.server_link_grimmory
     ServerKind.LISEUR_SYNC -> R.string.liseur_sync_get_one
+    ServerKind.CUSTOM -> R.string.server_link_custom
 }

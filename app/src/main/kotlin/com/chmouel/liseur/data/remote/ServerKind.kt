@@ -71,7 +71,48 @@ enum class ServerKind(
      * are Komga's, and that is where the sharing stops.
      */
     GRIMMORY("grimmory"),
+
+    /**
+     * A server the reader describes themselves: an OPDS catalog
+     * address, a KOReader sync address, or one of the two (ADR-0015).
+     *
+     * Its own kind rather than an "OPDS" kind, because the catalog is
+     * only half of what it holds and either half may be left out. What
+     * makes it work at all is that plain OPDS is a standard: there is
+     * no shim to recognise and no capability to probe for beyond
+     * "something here answers with a feed".
+     *
+     * A book from a Custom catalog carries the catalog's fingerprint in
+     * its id as well: OPDS entry ids are opaque and may be as
+     * uninformative as `1`, so two unrelated servers can issue the same
+     * one, and a downloaded book keeps its URL across an account
+     * switch. See `OpdsIdentity`.
+     */
+    CUSTOM("custom"),
     ;
+
+    /**
+     * Whether a link in this server's catalog names an address that can
+     * be used as written.
+     *
+     * False for every server Liseur has a client for, and deliberately
+     * so: a self-hosted calibre-web or Komga behind a reverse proxy
+     * advertises the scheme, host or path prefix it thinks it has,
+     * which is routinely one the phone cannot reach, so its links are
+     * rebuilt onto the address that answered.
+     *
+     * True for a plain OPDS catalog, where the same rebuilding would be
+     * a bug: OPDS is federated, links are resolved against the document
+     * they were found in, and a cover or an open-access file on another
+     * host is an ordinary thing rather than a proxy artefact. Re-rooting
+     * one onto the catalog would point it somewhere that has never
+     * heard of it.
+     */
+    val linksAreAbsolute: Boolean
+        get() = when (this) {
+            CUSTOM -> true
+            CALIBRE, KOMGA, LISEUR_SYNC, GRIMMORY -> false
+        }
 
     /**
      * A remote book's permanent identity. It stays the same whether or
@@ -103,6 +144,11 @@ enum class ServerKind(
     val signsWithStoredPassword: Boolean
         get() = when (this) {
             CALIBRE, GRIMMORY -> true
+            // A Custom catalog's password is signed into every request
+            // too, but only when there is one: an open catalog is
+            // `RemoteCredentials.Anonymous`, and this asks about the
+            // kind rather than about the account.
+            CUSTOM -> true
             KOMGA, LISEUR_SYNC -> false
         }
 
@@ -126,7 +172,7 @@ enum class ServerKind(
      */
     val hostsKosyncPeer: Boolean
         get() = when (this) {
-            GRIMMORY -> true
+            GRIMMORY, CUSTOM -> true
             CALIBRE, KOMGA, LISEUR_SYNC -> false
         }
 
@@ -143,7 +189,11 @@ enum class ServerKind(
         get() = when (this) {
             CALIBRE -> SyncAbility.PROGRESSION
             KOMGA, LISEUR_SYNC -> SyncAbility.EXACT
-            GRIMMORY -> SyncAbility.NONE
+            // Neither has anywhere to put a position: Grimmory's shim
+            // answers 404 to every progress route, and OPDS is a
+            // catalog format with no notion of one. Both say so up
+            // front, and both offer the KOReader pairing instead.
+            GRIMMORY, CUSTOM -> SyncAbility.NONE
         }
 
     companion object {

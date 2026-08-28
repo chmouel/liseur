@@ -16,6 +16,21 @@ sealed interface RemoteCredentials {
     /** Signs [builder], and returns it so calls can be chained. */
     fun signInto(builder: Request.Builder): Request.Builder
 
+    /**
+     * Nothing to prove: the server serves this catalog to anyone.
+     *
+     * Not the same as no credentials at all, and that distinction is
+     * the reason it exists. A null
+     * [com.chmouel.liseur.data.db.RemoteServer.credentials] means the
+     * stored secret could not be decrypted — the account is lost and
+     * the reader has to sign in again. An open OPDS catalog would
+     * otherwise be spelled the same way and be reported as broken for
+     * ever.
+     */
+    data object Anonymous : RemoteCredentials {
+        override fun signInto(builder: Request.Builder): Request.Builder = builder
+    }
+
     /** Username and password, as calibre-web wants them. */
     data class Basic(val username: String, val password: String) : RemoteCredentials {
         val header: String get() = Credentials.basic(username, password)

@@ -139,6 +139,17 @@ data class ServerCapabilities(
     val koboToken: String? = null,
     /** calibre-web's integer user id, kept for the same reason. */
     val calibreUserId: Int? = null,
+    /**
+     * Where this account's catalog is, or null when it has none.
+     *
+     * Defaults to [baseUrl], which is what every kind of server but one
+     * means by it. A Custom connection is the exception in both
+     * directions: its catalog may be a different address, and it may
+     * have no catalog at all — a kosync address on its own is a whole
+     * connection. Null is that answer, and it is why this is not simply
+     * read off [baseUrl] downstream.
+     */
+    val catalogUrl: String? = baseUrl,
 )
 
 /** Why connecting to a server did not work, in terms a user can act on. */
@@ -168,6 +179,25 @@ sealed interface SetupFailure {
 sealed interface SetupResult {
     data class Success(val capabilities: ServerCapabilities) : SetupResult
     data class Failure(val reason: SetupFailure) : SetupResult
+}
+
+/**
+ * What came of connecting a Custom server, address by address.
+ *
+ * Two failures rather than one, because the form has two fields and a
+ * reader who mistyped the sync address should be told about the sync
+ * address. Both null means it worked; a Custom connection is published
+ * only when both halves have answered, so there is no half-success to
+ * report.
+ */
+data class CustomSetupResult(
+    val catalog: SetupFailure? = null,
+    val kosync: SetupFailure? = null,
+) {
+    val connected: Boolean get() = catalog == null && kosync == null
+
+    /** Whichever address failed, for the paths that show one message. */
+    val failure: SetupFailure? get() = catalog ?: kosync
 }
 
 /**

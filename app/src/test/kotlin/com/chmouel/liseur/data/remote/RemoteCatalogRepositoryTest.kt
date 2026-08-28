@@ -59,11 +59,64 @@ class RemoteCatalogRepositoryTest {
         CredentialCipher.keyForTesting = null
     }
 
-    private suspend fun connect(kind: ServerKind = ServerKind.KOMGA) {
+    /**
+     * A Custom connection may be nothing but a KOReader sync address,
+     * and then there is no catalog to walk. That is not a broken
+     * account, and reporting it as one would leave the reader with a
+     * permanent error about a field they deliberately left blank.
+     */
+    @Test
+    fun `a connection with no catalog has nothing to refresh, and says so quietly`() = runTest {
+        connect(ServerKind.CUSTOM, catalogUrl = null)
+        val catalog = CountingCatalog()
+        val repository = repository(catalog)
+
+        val refresh = repository.refresh()
+
+        assertEquals(CatalogRefresh.None, refresh)
+        assertEquals(0, catalog.walks)
+        assertEquals(CatalogStatus.Idle, repository.status.value)
+    }
+
+    @Test
+    fun `a connection with no catalog is not searched`() = runTest {
+        connect(ServerKind.CUSTOM, catalogUrl = null)
+        val catalog = CountingCatalog()
+
+        assertTrue(repository(catalog).search("dune").isEmpty())
+        assertEquals(0, catalog.searches)
+    }
+
+    /** Counts what it was asked, and answers nothing. */
+    private class CountingCatalog : CatalogSource {
+        var walks = 0
+        var searches = 0
+
+        override suspend fun allBooks(
+            baseUrl: String,
+            credentials: RemoteCredentials,
+            onPage: suspend (List<RemoteBook>) -> Unit,
+        ): CatalogWalk {
+            walks++
+            return CatalogWalk(complete = true)
+        }
+
+        override suspend fun search(
+            baseUrl: String,
+            credentials: RemoteCredentials,
+            query: String,
+        ): List<RemoteBook> {
+            searches++
+            return emptyList()
+        }
+    }
+
+    private suspend fun connect(kind: ServerKind = ServerKind.KOMGA, catalogUrl: String? = "https://books.example") {
         db.remoteServerDao().upsert(
             RemoteServer(
                 kind = kind,
                 baseUrl = "https://books.example",
+                catalogUrl = catalogUrl,
                 username = "reader",
                 passwordCipher = null,
                 apiKeyCipher = if (kind == ServerKind.KOMGA) RemoteServer.seal("a-key") else null,
@@ -109,7 +162,11 @@ class RemoteCatalogRepositoryTest {
     private fun repository(catalog: CatalogSource) = RemoteCatalogRepository(
         router = RemoteRouter(
             serverDao = db.remoteServerDao(),
-            catalogs = mapOf(ServerKind.KOMGA to catalog, ServerKind.LISEUR_SYNC to catalog),
+            catalogs = mapOf(
+                ServerKind.KOMGA to catalog,
+                ServerKind.LISEUR_SYNC to catalog,
+                ServerKind.CUSTOM to catalog,
+            ),
             files = emptyMap(),
             positions = emptyMap(),
         ),

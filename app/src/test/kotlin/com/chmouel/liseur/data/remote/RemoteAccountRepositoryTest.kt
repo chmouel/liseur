@@ -257,7 +257,7 @@ class RemoteAccountRepositoryTest {
         ),
         seriesExtraDao = db.seriesExtraDao(),
         peerStateDao = db.syncPeerStateDao(),
-        forgetKosyncPeer = { kosync().disconnect() },
+        kosync = { kosync() },
         setups = mapOf(
             ServerKind.KOMGA to setup,
             ServerKind.GRIMMORY to setup,

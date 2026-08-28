@@ -1,6 +1,10 @@
 package com.chmouel.liseur.data.calibre
 
 import android.util.Log
+import com.chmouel.liseur.data.opds.OpdsBook
+import com.chmouel.liseur.data.opds.OpdsPage
+import com.chmouel.liseur.data.opds.OpdsParser
+import com.chmouel.liseur.data.opds.toRemote
 import com.chmouel.liseur.data.remote.CatalogSource
 import com.chmouel.liseur.data.remote.CatalogWalk
 import com.chmouel.liseur.data.remote.RemoteBook
