@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-An open-source ebook reader for Android and a [calibre-web](https://github.com/janeczku/calibre-web) / [Komga](https://komga.org) / [liseur-sync](https://github.com/chmouel/liseur-sync) client: EPUBs on your phone, in sync with your own book server.
+An open-source ebook reader for Android, and a client for [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org), [liseur-sync](https://github.com/chmouel/liseur-sync) and [Grimmory](https://github.com/grimmory-tools/grimmory): EPUBs on your phone, in sync with your own book server.
 
 <table>
   <tr>
@@ -42,8 +42,8 @@ An open-source ebook reader for Android and a [calibre-web](https://github.com/j
   </tr>
   <tr>
     <td align="center"><sub>Series grouped into compact shelf stacks.</sub></td>
-    <td align="center"><sub>Reading order, progress, and missing volumes at a glance.</sub></td>
-    <td align="center"><sub>Connect to calibre-web, Komga or liseur-sync in moments.</sub></td>
+    <td align="center"><sub>Reading order, progress, and which volumes are missing.</sub></td>
+    <td align="center"><sub>Connect to calibre-web, Komga, liseur-sync or Grimmory.</sub></td>
     <td align="center"><sub>Three ways to fill a new shelf.</sub></td>
   </tr>
 </table>
@@ -61,23 +61,19 @@ boundaries.
 
 A footer shows time remaining in the chapter. Highlights, margin notes,
 bookmarks, and dictionary lookups are inline; book-level notes live in the
-notebook. Footnotes open as a card over
-the page instead of jumping to the back of the book; long notes get a "Go to
-note" link with a way back.
+notebook. Footnotes open as a card over the page rather than sending you to
+the back of the book.
 
-The library is one shelf regardless of source: local folders, [calibre-web](https://github.com/janeczku/calibre-web),
-[Komga](https://komga.org), or [liseur-sync](https://github.com/chmouel/liseur-sync).
-Series are grouped into stacks tracking reading order, progress, and missing
-volumes.
+The library is one shelf whatever the source: local folders, calibre-web,
+Komga, liseur-sync, or Grimmory. Series are grouped into stacks tracking
+reading order, progress, and missing volumes. "Download all books" fills the
+shelf from a connected server in one go.
 
-Reading position syncs across devices via calibre-web, Komga, and
-liseur-sync, down to the exact sentence on Komga and liseur-sync. liseur-sync
-also syncs position for standalone EPUBs never pulled from a catalog, matched
-by file hash, and serves books from folders it watches on the server.
-
-"Download all books" on the account screen fetches everything not already on
-the device, skips what's local or archived, and reports the space needed
-first.
+Reading position syncs across devices through calibre-web, Komga and
+liseur-sync, down to the exact sentence on the last two. liseur-sync also
+syncs standalone EPUBs that never came from a catalog. Grimmory browses and
+downloads only; what each server can and cannot do is in
+[`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
 No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
 servers and dictionary sources you configure. See the
@@ -91,14 +87,14 @@ servers and dictionary sources you configure. See the
 ## Related Projects
 
 - [liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur
-- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server — watched folders, browse, download, positions and reading stats
+- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats
+- [Grimmory](https://github.com/grimmory-tools/grimmory): Self-hosted library manager. Liseur browses and downloads from it
 
 ## Development
 
-See [DEVELOPER.md](DEVELOPER.md) for build instructions and architecture notes.
-What each supported server exposes, what is implemented against it, and
-why the remaining gaps are or are not fixable is in
-[`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
+See [DEVELOPER.md](DEVELOPER.md) for build instructions and architecture notes,
+and [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md) for what each
+server exposes, what Liseur implements against it, and why the gaps remain.
 
 ## What's in a name?
 

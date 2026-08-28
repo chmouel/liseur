@@ -1,0 +1,66 @@
+# A throwaway Grimmory to develop and test Liseur's Grimmory client
+# against. Driven by hack/grimmory-dev, never by Gradle, CI or the
+# release path -- see hack/README.md.
+#
+# Adapted from upstream deploy/compose/docker-compose.yml. The image tag
+# is pinned deliberately: a compatibility shim is exactly the thing that
+# moves under you, and a floating `latest` would make a red test
+# impossible to attribute. Bump it on purpose, and record the new tag in
+# docs/adr/0012-grimmory-komga-shim.md.
+#
+# The passwords here are throwaway by design. This stack binds to
+# localhost, holds nothing but generated public-domain books, and is
+# wiped by `hack/grimmory-dev --down`.
+
+services:
+  grimmory:
+    image: ghcr.io/grimmory-tools/grimmory:v3.3.3
+    container_name: liseur-grimmory
+    environment:
+      - USER_ID=${GRIMMORY_UID:-1000}
+      - GROUP_ID=${GRIMMORY_GID:-1000}
+      - TZ=Etc/UTC
+      - DATABASE_URL=jdbc:mariadb://mariadb:3306/grimmory
+      - DATABASE_USERNAME=grimmory
+      - DATABASE_PASSWORD=grimmory-dev
+      - SWAGGER_ENABLED=false
+      - FORCE_DISABLE_OIDC=true
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      # Loopback only, on purpose: the credentials below are
+      # committed, and 10.0.2.2 from the emulator is the host's
+      # loopback, so nothing here needs a public interface.
+      - "127.0.0.1:${GRIMMORY_PORT:-6060}:6060"
+    volumes:
+      - ${GRIMMORY_STATE:?set GRIMMORY_STATE}/data:/app/data
+      - ${GRIMMORY_STATE:?set GRIMMORY_STATE}/books:/books
+      - ${GRIMMORY_STATE:?set GRIMMORY_STATE}/bookdrop:/bookdrop
+    healthcheck:
+      test: wget -q --spider http://localhost:6060/api/v1/healthcheck
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
+    restart: "no"
+
+  mariadb:
+    image: lscr.io/linuxserver/mariadb:11.4.8
+    container_name: liseur-grimmory-db
+    environment:
+      - PUID=${GRIMMORY_UID:-1000}
+      - PGID=${GRIMMORY_GID:-1000}
+      - TZ=Etc/UTC
+      - MYSQL_ROOT_PASSWORD=grimmory-dev-root
+      - MYSQL_DATABASE=grimmory
+      - MYSQL_USER=grimmory
+      - MYSQL_PASSWORD=grimmory-dev
+    volumes:
+      - ${GRIMMORY_STATE:?set GRIMMORY_STATE}/config:/config
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 30

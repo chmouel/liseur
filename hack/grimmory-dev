@@ -1,0 +1,328 @@
+#!/usr/bin/env bash
+#
+# Bring up a throwaway Grimmory server for Liseur to develop and test
+# its Grimmory client against, seeded and ready to connect to.
+#
+#   hack/grimmory-dev --up        start it and seed it (the default)
+#   hack/grimmory-dev --down      stop it and delete everything it held
+#   hack/grimmory-dev --reset     --down then --up, for a clean slate
+#   hack/grimmory-dev --status    say whether it is up, and how to reach it
+#   hack/grimmory-dev --info      reprint the credentials for a running one
+#
+#   -p, --port PORT   host port to publish on (default 6060)
+#   -n, --books N     how many EPUBs to seed (default 210, minimum 201)
+#       --no-seed     start the server but do not create anything in it,
+#                     to look at a genuinely empty install
+#
+# Grimmory hides its Komga compatibility shim behind an admin setting and
+# behind a *separate* set of credentials -- an "OPDS user", not the login
+# you would use in a browser. Both are set up here, because both are easy
+# to get wrong by hand and neither failure says what it is.
+#
+# Everything lives under the repository's gitignored tmp/, so --down
+# really is a clean slate and two runs cannot contaminate each other.
+#
+# This is developer tooling. Nothing in Gradle, CI or the release path
+# may depend on it: the F-Droid build must stay reproducible from the
+# source tree alone.
+
+set -euo pipefail
+
+readonly ADMIN_USER="liseur"
+readonly ADMIN_PASSWORD="liseur-dev-password"
+readonly ADMIN_EMAIL="liseur@example.invalid"
+readonly OPDS_USER="liseur-opds"
+readonly OPDS_PASSWORD="liseur-opds-password"
+readonly LIBRARY_NAME="Liseur test library"
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+readonly root
+readonly state="$root/tmp/grimmory"
+readonly compose_file="$root/hack/grimmory/docker-compose.yml"
+
+die() {
+    printf '\033[31merror:\033[0m %s\n' "$*" >&2
+    exit 1
+}
+
+say() { printf '\033[34m==>\033[0m %s\n' "$*"; }
+
+action=up port=6060 books=210 seed=yes
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --up) action=up ;;
+        --down) action=down ;;
+        --reset) action=reset ;;
+        --status) action=status ;;
+        --info) action=info ;;
+        --no-seed) seed=no ;;
+        -p | --port) port=${2:-}; shift ;;
+        -n | --books) books=${2:-}; shift ;;
+        -h | --help)
+            sed -n '3,27p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) die "unknown argument $1" ;;
+    esac
+    shift
+done
+
+command -v curl >/dev/null || die "curl is not installed"
+command -v python3 >/dev/null || die "python3 is not installed"
+
+# Docker and Podman both answer to `compose`, and this stack needs
+# nothing either one lacks.
+if docker compose version >/dev/null 2>&1; then
+    compose() { docker compose -f "$compose_file" -p liseur-grimmory "$@"; }
+elif podman compose version >/dev/null 2>&1; then
+    compose() { podman compose -f "$compose_file" -p liseur-grimmory "$@"; }
+else
+    die "need either 'docker compose' or 'podman compose'"
+fi
+
+export GRIMMORY_STATE="$state"
+export GRIMMORY_PORT="$port"
+GRIMMORY_UID=$(id -u) && export GRIMMORY_UID
+GRIMMORY_GID=$(id -g) && export GRIMMORY_GID
+
+readonly api="http://127.0.0.1:$port"
+
+# --- talking to Grimmory ----------------------------------------------
+
+# Reads one field out of a JSON body on stdin. Absent is empty, so a
+# caller can test for it, and malformed JSON is fatal rather than silently
+# empty -- an unexpected shape here would otherwise surface much later as
+# a confusing seeding failure.
+json_field() {
+    python3 -c '
+import json, sys
+try:
+    body = json.load(sys.stdin)
+except ValueError:
+    sys.exit("response was not JSON")
+for key in sys.argv[1].split("."):
+    if not isinstance(body, dict) or key not in body:
+        sys.exit(0)
+    body = body[key]
+print("" if body is None else body)
+' "$1"
+}
+
+# curl with the bits every call here wants: fail loudly, stay quiet
+# otherwise, and never hang forever on a server that is still booting.
+api_call() {
+    local method=$1 path=$2 token=${3:-} body=${4:-}
+    local args=(--silent --show-error --fail-with-body --max-time 120
+        -X "$method" "$api$path")
+    [[ -n "$token" ]] && args+=(-H "Authorization: Bearer $token")
+    [[ -n "$body" ]] && args+=(-H "Content-Type: application/json" -d "$body")
+    curl "${args[@]}"
+}
+
+wait_for_health() {
+    say "waiting for Grimmory to come up on port $port"
+    local waited=0
+    until curl --silent --fail --max-time 5 "$api/api/v1/healthcheck" >/dev/null 2>&1; do
+        waited=$((waited + 3))
+        if [[ $waited -ge 300 ]]; then
+            compose logs --tail 40 grimmory >&2 || true
+            die "Grimmory did not answer within 300s; logs above"
+        fi
+        sleep 3
+    done
+    say "up after ${waited}s"
+}
+
+# --- seeding ----------------------------------------------------------
+
+create_admin() {
+    local done_already
+    done_already=$(api_call GET /api/v1/setup/status | json_field data)
+    if [[ "$done_already" == "True" || "$done_already" == "true" ]]; then
+        say "admin already exists, leaving it alone"
+        return
+    fi
+    say "creating the admin user"
+    api_call POST /api/v1/setup "" "$(printf '{"username":"%s","email":"%s","name":"%s","password":"%s"}' \
+        "$ADMIN_USER" "$ADMIN_EMAIL" "Liseur Dev" "$ADMIN_PASSWORD")" >/dev/null
+}
+
+login() {
+    api_call POST /api/v1/auth/login "" \
+        "$(printf '{"username":"%s","password":"%s"}' "$ADMIN_USER" "$ADMIN_PASSWORD")" |
+        json_field accessToken
+}
+
+enable_komga_shim() {
+    say "switching the Komga compatibility API on"
+    # The shim is off by default, and a request to it while it is off
+    # comes back 403 -- which a client reasonably, and wrongly, reads as
+    # a bad password. This is the setting behind that.
+    api_call PUT /api/v1/settings "$1" \
+        '[{"name":"KOMGA_API_ENABLED","value":"true"}]' >/dev/null
+}
+
+create_library() {
+    local token=$1 existing
+    existing=$(api_call GET /api/v1/libraries "$token" |
+        python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+    if [[ "$existing" -gt 0 ]]; then
+        say "a library already exists, leaving it alone"
+        return
+    fi
+    say "creating the library over /books"
+    # Grimmory schedules the scan itself once this commits; there is no
+    # separate ingest call to make. (POST /libraries/scan only counts
+    # what *would* be processed -- it imports nothing.)
+    api_call POST /api/v1/libraries "$token" "$(printf \
+        '{"name":"%s","paths":[{"path":"/books"}],"watch":false}' "$LIBRARY_NAME")" >/dev/null
+}
+
+library_id() {
+    api_call GET /api/v1/libraries "$1" |
+        python3 -c 'import json,sys; libs=json.load(sys.stdin); print(libs[0]["id"] if libs else "")'
+}
+
+book_count() {
+    local token=$1 id=$2
+    api_call GET "/api/v1/libraries/$id/book" "$token" |
+        python3 -c 'import json,sys; print(len(json.load(sys.stdin)))'
+}
+
+wait_for_scan() {
+    local token=$1 expected=$2 id
+    id=$(library_id "$token")
+    [[ -n "$id" ]] || die "the library was created but does not list"
+
+    say "waiting for the scan to take $expected books"
+    local waited=0 count=0
+    while [[ $waited -lt 900 ]]; do
+        count=$(book_count "$token" "$id") || count=0
+        if [[ "$count" -ge "$expected" ]]; then
+            say "scanned $count books"
+            return
+        fi
+        sleep 5
+        waited=$((waited + 5))
+        [[ $((waited % 60)) -eq 0 ]] && say "  ... $count/$expected after ${waited}s"
+    done
+    die "only $count of $expected books were scanned within 900s"
+}
+
+create_opds_user() {
+    say "creating the OPDS user Liseur signs in as"
+    # This is deliberately not the admin login. Grimmory's Komga shim
+    # authenticates against OPDS users only, which is the single most
+    # confusing thing about connecting to it.
+    api_call POST /api/v2/opds-users "$1" \
+        "$(printf '{"username":"%s","password":"%s","sortOrder":"RECENT"}' \
+            "$OPDS_USER" "$OPDS_PASSWORD")" >/dev/null ||
+        say "OPDS user already exists, leaving it alone"
+}
+
+verify_shim() {
+    say "checking the shim answers the way Liseur expects"
+    local roles
+    roles=$(curl --silent --fail --max-time 30 -u "$OPDS_USER:$OPDS_PASSWORD" \
+        "$api/komga/api/v2/users/me" | json_field id) ||
+        die "the Komga shim did not accept the OPDS user"
+    [[ -n "$roles" ]] || die "the shim answered /v2/users/me without an id"
+}
+
+print_info() {
+    local host_addr
+    host_addr=$(printf '%s' "$api")
+    cat <<EOF
+
+  Grimmory is up.
+
+    Browser        $host_addr
+    Admin          $ADMIN_USER / $ADMIN_PASSWORD
+
+  Point Liseur at it with these -- the OPDS user, not the admin:
+
+    Server         $host_addr          (from this machine)
+                   http://10.0.2.2:$port   (from an Android emulator)
+    Username       $OPDS_USER
+    Password       $OPDS_PASSWORD
+
+  It is plain HTTP, so Liseur will ask you to allow an insecure
+  connection before it will connect. That is the intended path, and
+  worth exercising.
+
+  Wipe it with: hack/grimmory-dev --down
+
+EOF
+}
+
+# --- actions ----------------------------------------------------------
+
+is_running() {
+    curl --silent --fail --max-time 5 "$api/api/v1/healthcheck" >/dev/null 2>&1
+}
+
+do_up() {
+    [[ "$books" -ge 201 ]] ||
+        die "--books must be at least 201: the catalog client asks for 200 at a time, and a shelf that fits in one page proves nothing about paging"
+
+    mkdir -p "$state"/{data,books,bookdrop,config}
+
+    if [[ "$seed" == yes ]]; then
+        say "generating $books EPUBs and one CBZ"
+        python3 "$root/hack/grimmory/seed-books.py" -n "$books" "$state/books"
+    fi
+
+    say "starting the containers"
+    compose up -d
+    wait_for_health
+
+    if [[ "$seed" == no ]]; then
+        say "--no-seed: leaving the server empty"
+        printf '\n  Grimmory is up, unconfigured, at %s\n\n' "$api"
+        return
+    fi
+
+    create_admin
+    local token
+    token=$(login)
+    [[ -n "$token" ]] || die "could not log in as $ADMIN_USER"
+
+    enable_komga_shim "$token"
+    create_library "$token"
+    wait_for_scan "$token" $((books + 1))
+    create_opds_user "$token"
+    verify_shim
+    print_info
+}
+
+do_down() {
+    say "stopping the containers"
+    compose down --volumes --remove-orphans 2>/dev/null || true
+    if [[ -d "$state" ]]; then
+        say "deleting $state"
+        # The container writes as the invoking user (USER_ID/GROUP_ID),
+        # so this needs no privilege.
+        rm -rf "$state"
+    fi
+}
+
+case $action in
+    up) do_up ;;
+    down) do_down ;;
+    reset)
+        do_down
+        do_up
+        ;;
+    status)
+        if is_running; then
+            printf 'Grimmory is up at %s\n' "$api"
+        else
+            printf 'Grimmory is not answering at %s\n' "$api"
+            exit 1
+        fi
+        ;;
+    info)
+        is_running || die "Grimmory is not answering at $api; start it with --up"
+        print_info
+        ;;
+esac

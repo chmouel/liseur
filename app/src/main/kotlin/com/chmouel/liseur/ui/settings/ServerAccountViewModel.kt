@@ -260,6 +260,12 @@ class ServerAccountViewModel(
                     apiKey = current.apiKey.trim(),
                     allowHttp = allowHttp,
                 )
+                ServerKind.GRIMMORY -> repository.connectGrimmory(
+                    url = current.url,
+                    username = current.username.trim(),
+                    password = current.password,
+                    allowHttp = allowHttp,
+                )
                 ServerKind.LISEUR_SYNC -> when (current.liseurSyncSignIn) {
                     LiseurSyncSignIn.PASSWORD -> repository.connectLiseurSync(
                         url = current.url,
@@ -331,7 +337,8 @@ class ServerAccountViewModel(
 
     /** Whether enough of the form is filled in to be worth trying. */
     private fun ServerAccountUiState.credentialsSupplied(): Boolean = when (kind) {
-        ServerKind.CALIBRE -> username.isNotBlank() && password.isNotBlank()
+        ServerKind.CALIBRE, ServerKind.GRIMMORY ->
+            username.isNotBlank() && password.isNotBlank()
         ServerKind.KOMGA -> apiKey.isNotBlank()
         ServerKind.LISEUR_SYNC -> when (liseurSyncSignIn) {
             LiseurSyncSignIn.PASSWORD -> username.isNotBlank() && password.isNotBlank()

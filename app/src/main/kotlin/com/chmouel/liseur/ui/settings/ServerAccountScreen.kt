@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +57,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -214,7 +216,8 @@ fun ServerAccountScreen(
                     }
                 }
                 val secretNote = when (server?.kind ?: state.kind) {
-                    ServerKind.CALIBRE -> R.string.server_password_storage_note
+                    ServerKind.CALIBRE, ServerKind.GRIMMORY ->
+                        R.string.server_password_storage_note
                     ServerKind.KOMGA -> R.string.server_api_key_storage_note
                     ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
                 }
@@ -487,16 +490,25 @@ private fun ConnectForm(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        ServerKind.entries.forEachIndexed { index, kind ->
-            SegmentedButton(
+    // Chips that wrap, rather than a segmented control that cannot.
+    // With four kinds -- "calibre-web", "Komga", "Grimmory",
+    // "liseur-sync" -- the labels no longer fit one row on a narrow
+    // phone, and a segmented control's answer to that is to squeeze
+    // them until they are unreadable.
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ServerKind.entries.forEach { kind ->
+            FilterChip(
                 selected = state.kind == kind,
                 onClick = { onKindChange(kind) },
                 enabled = !state.connecting,
-                shape = SegmentedButtonDefaults.itemShape(index, ServerKind.entries.size),
-            ) {
-                Text(stringResource(kind.labelRes()))
-            }
+                label = { Text(stringResource(kind.labelRes())) },
+            )
         }
     }
     KindCard(state.kind)
@@ -534,7 +546,7 @@ private fun ConnectForm(
         PasswordVisualTransformation()
     }
     when (state.kind) {
-        ServerKind.CALIBRE -> {
+        ServerKind.CALIBRE, ServerKind.GRIMMORY -> {
             OutlinedTextField(
                 value = state.username,
                 onValueChange = onUsernameChange,
@@ -558,6 +570,17 @@ private fun ConnectForm(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (state.kind == ServerKind.GRIMMORY) {
+                // The one thing worth saying next to the fields
+                // themselves. Grimmory's browser login is right there
+                // and does not work here, and nothing about the refusal
+                // says why.
+                Text(
+                    stringResource(R.string.server_opds_user_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         ServerKind.KOMGA -> {
             OutlinedTextField(
@@ -631,7 +654,8 @@ private fun ConnectForm(
     Button(
         onClick = { onConnect(false) },
         enabled = !state.connecting && state.url.isNotBlank() && when (state.kind) {
-            ServerKind.CALIBRE -> state.username.isNotBlank() && state.password.isNotBlank()
+            ServerKind.CALIBRE, ServerKind.GRIMMORY ->
+                state.username.isNotBlank() && state.password.isNotBlank()
             ServerKind.KOMGA -> state.apiKey.isNotBlank()
             ServerKind.LISEUR_SYNC -> when (state.liseurSyncSignIn) {
                 LiseurSyncSignIn.PASSWORD ->
@@ -742,6 +766,10 @@ private fun ConnectedCard(
                     ServerKind.CALIBRE -> R.string.server_no_download_right
                     ServerKind.KOMGA -> R.string.server_no_download_right_komga
                     ServerKind.LISEUR_SYNC -> R.string.server_no_download_right_liseur_sync
+                    // Unreachable in practice: Grimmory's shim always
+                    // reports downloads as available, because it has no
+                    // role to withhold them with.
+                    ServerKind.GRIMMORY -> R.string.server_no_download_right
                 },
             ),
             tone = NoticeTone.PROBLEM,
@@ -791,10 +819,16 @@ private fun ConnectedCard(
         title = stringResource(R.string.server_section_sync),
     ) {
         Notice(
-            text = if (server.canSync) {
-                stringResource(R.string.server_sync_on)
-            } else {
-                stringResource(R.string.server_sync_off)
+            // "Switched off" invites a reader to go and switch it on. On
+            // Grimmory there is nothing to find: the shim carries no
+            // reading position at all, and saying so is the whole
+            // difference between a limitation and a fault.
+            text = when {
+                server.canSync -> stringResource(R.string.server_sync_on)
+                server.kind == ServerKind.GRIMMORY ->
+                    stringResource(R.string.server_sync_unsupported)
+
+                else -> stringResource(R.string.server_sync_off)
             },
             tone = if (server.canSync) NoticeTone.GOOD else NoticeTone.NEUTRAL,
         )
@@ -1124,12 +1158,14 @@ internal fun Notice(text: String, tone: NoticeTone) {
 private fun ServerKind.labelRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_kind_calibre
     ServerKind.KOMGA -> R.string.server_kind_komga
+    ServerKind.GRIMMORY -> R.string.server_kind_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_kind_liseur_sync
 }
 
 private fun ServerKind.introRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_intro_calibre
     ServerKind.KOMGA -> R.string.server_intro_komga
+    ServerKind.GRIMMORY -> R.string.server_intro_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_intro_liseur_sync
 }
 
@@ -1140,18 +1176,21 @@ private fun ServerKind.introRes(): Int = when (this) {
 private fun ServerKind.homeUrl(): String = when (this) {
     ServerKind.CALIBRE -> "https://github.com/janeczku/calibre-web"
     ServerKind.KOMGA -> "https://komga.org"
+    ServerKind.GRIMMORY -> "https://github.com/grimmory-tools/grimmory"
     ServerKind.LISEUR_SYNC -> LISEUR_SYNC_SERVER_URL
 }
 
 private fun ServerKind.linkRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_link_calibre
     ServerKind.KOMGA -> R.string.server_link_komga
+    ServerKind.GRIMMORY -> R.string.server_link_grimmory
     ServerKind.LISEUR_SYNC -> R.string.liseur_sync_get_one
 }
 
 private fun ServerKind.taglineRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_tagline_calibre
     ServerKind.KOMGA -> R.string.server_tagline_komga
+    ServerKind.GRIMMORY -> R.string.server_tagline_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_tagline_liseur_sync
 }
 
@@ -1159,11 +1198,17 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.BAD_CREDENTIALS -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_credentials
         ServerKind.KOMGA -> R.string.server_error_credentials_komga
+        // Names the admin setting as well as the password: Grimmory
+        // refuses a request to a switched-off Komga API with the same
+        // 403 it uses for a bad one, and nothing on the wire tells them
+        // apart.
+        ServerKind.GRIMMORY -> R.string.server_error_credentials_grimmory
         ServerKind.LISEUR_SYNC -> R.string.server_error_credentials_liseur_sync
     }
     AccountError.WRONG_SERVER -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_not_calibre
         ServerKind.KOMGA -> R.string.server_error_not_komga
+        ServerKind.GRIMMORY -> R.string.server_error_not_grimmory
         ServerKind.LISEUR_SYNC -> R.string.server_error_not_liseur_sync
     }
     AccountError.UNREACHABLE -> R.string.server_error_unreachable

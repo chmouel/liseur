@@ -10,6 +10,9 @@ import com.chmouel.liseur.data.calibre.CalibreCatalogClient
 import com.chmouel.liseur.data.calibre.CalibreFileSource
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.calibre.BulkDownloadStore
+import com.chmouel.liseur.data.grimmory.GrimmoryCatalogClient
+import com.chmouel.liseur.data.grimmory.GrimmoryFileSource
+import com.chmouel.liseur.data.grimmory.GrimmorySetupClient
 import com.chmouel.liseur.data.komga.KomgaCatalogClient
 import com.chmouel.liseur.data.komga.KomgaFileSource
 import com.chmouel.liseur.data.komga.KomgaSyncRepository
@@ -158,6 +161,7 @@ class AppContainer(context: Context) {
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
+            ServerKind.GRIMMORY to GrimmorySetupClient(),
             // The device token is minted in the device's own name, since
             // the server shows it in its device list.
             ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
@@ -271,13 +275,21 @@ class AppContainer(context: Context) {
         catalogs = mapOf(
             ServerKind.CALIBRE to CalibreCatalogClient(),
             ServerKind.KOMGA to KomgaCatalogClient(),
+            ServerKind.GRIMMORY to GrimmoryCatalogClient(),
             ServerKind.LISEUR_SYNC to LiseurSyncCatalogClient(),
         ),
         files = mapOf(
             ServerKind.CALIBRE to CalibreFileSource(),
             ServerKind.KOMGA to KomgaFileSource(),
+            ServerKind.GRIMMORY to GrimmoryFileSource(),
             ServerKind.LISEUR_SYNC to LiseurSyncFileSource(),
         ),
+        // Grimmory has no entry, and unlike the others this is not a
+        // matter of the app having nothing to say yet: its Komga shim
+        // answers 404 to every progress route and never fills in a
+        // book's read progress, so there is nothing to sync with. No
+        // entry means `RoutedPositionSync` answers `NotApplicable` and
+        // the app stays quiet, rather than offering a sync that fails.
         positions = mapOf(
             ServerKind.CALIBRE to koboSync,
             ServerKind.KOMGA to komgaSync,

@@ -31,6 +31,19 @@ enum class ServerKind(
      * append-only op log to sync.
      */
     LISEUR_SYNC("liseur-sync"),
+
+    /**
+     * Grimmory, reached through the Komga-compatible REST shim it
+     * serves under `/komga/api`.
+     *
+     * Its own kind rather than a flavour of [KOMGA] because almost
+     * nothing about connecting to it is the same: it signs in with a
+     * username and password rather than an API key, lives under a path
+     * prefix, lists its catalog through a different route, and cannot
+     * carry a reading position at all. The DTO shapes it answers with
+     * are Komga's, and that is where the sharing stops.
+     */
+    GRIMMORY("grimmory"),
     ;
 
     /**
@@ -43,6 +56,28 @@ enum class ServerKind(
     /** The id back out of [remoteUrl], or null if the book is not ours. */
     fun remoteId(bookUrl: String): String? =
         bookUrl.removePrefix("$urlPrefix:").takeIf { it != bookUrl }
+
+    /**
+     * Whether this kind signs every request with the password the reader
+     * typed, so that password has to be kept.
+     *
+     * Asked as a question about the *kind* rather than about the
+     * credential, because holding a `Basic` does not settle it:
+     * liseur-sync signs in with one and then deliberately throws it
+     * away, having traded it for a device token.
+     *
+     * Keeping the distinction here means the next kind that needs a
+     * stored password has one place to declare it, rather than a
+     * `takeIf` buried in the repository to remember to widen — which is
+     * exactly the bug this replaces, where a Grimmory account would
+     * connect happily and then report lost credentials on its first
+     * refresh.
+     */
+    val signsWithStoredPassword: Boolean
+        get() = when (this) {
+            CALIBRE, GRIMMORY -> true
+            KOMGA, LISEUR_SYNC -> false
+        }
 
     companion object {
         /**

@@ -6,15 +6,15 @@ side.
 
 ## Summary
 
-| Capability     | Komga               | calibre-web        | liseur-sync         |
-|----------------|----------------------|---------------------|----------------------|
-| Catalog browse | Implemented          | Implemented         | Implemented          |
-| Search         | Implemented          | Implemented         | Implemented          |
-| File download  | Implemented          | Implemented         | Implemented          |
-| Position sync  | Implemented (full)   | Implemented (%)     | Implemented (full)   |
-| Book upload    | Not possible          | Not feasible        | Implemented          |
-| Book delete    | Not possible          | Implemented         | Implemented          |
-| Series claims  | N/A                   | N/A                 | Implemented          |
+| Capability     | Komga               | calibre-web        | liseur-sync         | Grimmory            |
+|----------------|----------------------|---------------------|----------------------|----------------------|
+| Catalog browse | Implemented          | Implemented         | Implemented          | Implemented          |
+| Search         | Implemented          | Implemented         | Implemented          | Local only           |
+| File download  | Implemented          | Implemented         | Implemented          | Implemented          |
+| Position sync  | Implemented (full)   | Implemented (%)     | Implemented (full)   | Not possible         |
+| Book upload    | Not possible          | Not feasible        | Implemented          | Not implemented      |
+| Book delete    | Not possible          | Implemented         | Implemented          | Not implemented      |
+| Series claims  | N/A                   | N/A                 | Implemented          | N/A                  |
 
 ## Komga
 
@@ -72,6 +72,59 @@ password). Scopes control what the token can do.
 `GET /v1/token` for scopes. `canUpload` is true when `library-upload` or
 admin is among them; `canDelete` is scoped the same way.
 
+## Grimmory
+
+Reached through the Komga-compatibility API Grimmory ships, mounted at
+`/komga/api` rather than `/api`. It is a subset: enough to browse and
+download, and no more. Verified against **v3.3.3**; see
+[`adr/0012-grimmory-komga-shim.md`](adr/0012-grimmory-komga-shim.md) for
+why it is its own `ServerKind` rather than a flavour of Komga.
+
+**Auth:** Basic, with a dedicated OPDS user rather than the account you sign
+into Grimmory with.
+
+### Connecting to one
+
+Two things have to be set up in Grimmory first, both as an administrator:
+
+1. **Settings → OPDS**: create an OPDS user and share the libraries you want
+   on your phone with it. This is the login Liseur uses; an ordinary
+   Grimmory account will not work.
+2. **Settings**: switch the Komga API on. It is off by default.
+
+Then in Liseur, **Settings → Book server → Grimmory**: the address of your
+Grimmory server (the same one you open in a browser, with the `/komga` path
+added for you) and the OPDS user's name and password.
+
+A refused sign-in is one of those two things, the wrong kind of user or the
+API still switched off. Grimmory answers 403 to both, so Liseur cannot say
+which.
+
+| Feature | Server API | Liseur | Notes |
+|---------|-----------|--------|-------|
+| Catalog browse | `GET /komga/api/v1/books?page=&size=` (paginated) | `GrimmoryCatalogClient` | Komga's `POST /v1/books/list` is explicitly not implemented and answers 501, so the plain paged route is used instead. Filtered client-side on `media.mediaType`, since Grimmory reports MOBI and AZW3 under `mediaProfile: "EPUB"` |
+| Search | None on the compatibility API | Returns nothing | Liseur's library search is local and covers the whole catalog, which is walked into the database anyway. Grimmory's OPDS `catalog?q=` is the way in if remote search is ever wired to the UI |
+| File download | `GET /komga/api/v1/books/{id}/file` | `GrimmoryFileSource` | Serves the book's primary file. Open to any authenticated OPDS user the library is shared with |
+| Position sync | None. `/progression`, `/read-progress` and `/positions` all fall through to a 404, and `readProgress` is never populated on a book | Not implemented | No entry in `AppContainer.positions`, so sync is never offered rather than offered and failed. Grimmory does speak KOReader's kosync at `/api/koreader`, behind a third credential set and matched by file hash — the way in if this is ever wanted |
+| Series metadata | Ids are synthetic (`{libraryId}-{slug}`) and change when a series is renamed | Not implemented | `SeriesExtrasRepository` is gated on Komga and never fires here. The id still arrives on the book and groups the shelf, so a rename regroups rather than corrupts |
+| Book upload / delete | Not exposed by the compatibility API | Not implemented | |
+
+**Capability detection:** `GrimmorySetupClient` probes
+`GET /komga/api/v2/users/me` and requires a `roles` array, as the Komga
+probe does. `canDownload` is unconditionally true: Grimmory hardcodes
+`roles: ["USER"]` and has no `FILE_DOWNLOAD` to report, so gating on it as
+the Komga client does would refuse every download.
+
+**A walk that is not understood does not prune.** `dropVanished()` deletes
+every catalogued book a completed walk did not see, taking its reading
+progress with it. So `GrimmoryCatalogClient` reports `complete = false` for
+anything it cannot account for — a page that does not describe itself, one
+shorter than the count it declared, a catalog whose size changed between
+pages, the same book counted twice, a `content` field that is not an array,
+an unparseable id, a media type this build has never heard of, or a whole
+catalog that filtered down to nothing — rather than letting a changed
+response read as an emptied library.
+
 ## Upload infrastructure
 
 The upload plumbing in `data/remote/` is generic and server-agnostic.
@@ -113,6 +166,7 @@ per-server capability detection.
 | Komga | No | Admin-only, intentionally hidden |
 | calibre-web | Yes (`CalibreBookDeleter`) | Web UI form POST via `CalibreWebSession` |
 | liseur-sync | Yes (`LiseurSyncDeleteClient`) | REST API, per-folder permission |
+| Grimmory | No | Not exposed by the compatibility API |
 
 ## Position sync quality
 
@@ -121,6 +175,7 @@ per-server capability detection.
 | Komga | Exact position in chapter | Full Readium locator, with position snapping |
 | calibre-web | Page-level at best | Percentage (`totalProgression`) via the Kobo protocol |
 | liseur-sync | Exact position in chapter | Full Readium locator via the op log |
+| Grimmory | None | No route carries one; position stays on the device |
 
-All three go through the shared `reconcileReadingState` merge logic in
-`domain/ReadingStateMerge.kt`.
+The three that sync go through the shared `reconcileReadingState` merge
+logic in `domain/ReadingStateMerge.kt`.

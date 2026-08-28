@@ -1,0 +1,407 @@
+#!/usr/bin/env bash
+#
+# tests/grimmory-connect -- Liseur must reach a Grimmory server through
+# its Komga-compatibility shim.
+#
+# Grimmory is not Komga. It speaks Komga's dialect under a different
+# path, signs in with a different kind of credential, and does not
+# implement the one route Liseur's Komga client lists a catalog with.
+# Every one of those was found by reading Grimmory's source, and none of
+# them is something a unit test against a fixture can be wrong about in
+# a useful way: a fixture only ever says what its author believed.
+#
+# So this runs against a real Grimmory. hack/grimmory-dev brings one up:
+#
+#   hack/grimmory-dev --up          # a pinned Grimmory, seeded
+#   tests/grimmory-connect          # this
+#
+# What it proves, in order:
+#
+#   1. an OPDS user signs in, over plain HTTP, through the app's own
+#      screens -- the credentials are keystore-sealed, so a scenario
+#      that wrote the row itself would be testing a state no reader can
+#      reach;
+#   2. the catalog arrives, and holds only the books Liseur can open --
+#      the seeded comic must not be on the shelf;
+#   3. it spans more than one HTTP page. The client asks for 200 books
+#      at a time and the library holds more, so a shelf this size cannot
+#      have come from one request;
+#   4. nothing from the first page was deleted by the walk that followed
+#      it -- the pruning path, on a real server;
+#   5. a cover loads. The download path has a client of its own and
+#      fails loudly; a wrong cover URL is a silent grey square;
+#   6. a book downloads and opens;
+#   7. and no part of the app offers to keep the reader's place, because
+#      the shim cannot.
+#
+# Usage: tests/grimmory-connect [-s SERIAL] [-u URL] [-U USER] [-P PASS]
+#
+#   -u URL   where Grimmory is, as the *device* can reach it
+#            (default: http://10.0.2.2:6060, the host from an emulator)
+#   -U USER  the OPDS user (default: liseur-opds)
+#   -P PASS  its password (default: liseur-opds-password)
+#
+# A device with some *other* server connected is left alone: this
+# scenario would have to sign that account out to do its work, and an
+# account it did not create is not its to throw away. It skips instead.
+# The Grimmory account it does create is left connected, so a failure
+# can be looked at afterwards.
+
+source "$(dirname "$(readlink -f "$0")")/lib/device.sh"
+
+grimmory_url="http://10.0.2.2:6060"
+opds_user="liseur-opds"
+opds_password="liseur-opds-password"
+
+# What the client asks for in one request. A shelf larger than this
+# cannot have arrived in a single page, which is the only way a script
+# on the outside can tell paging happened at all.
+readonly PAGE_SIZE=200
+
+original_airplane=""
+restored=0
+
+parse_common_args "$@"
+set -- ${REMAINING_ARGS+"${REMAINING_ARGS[@]}"}
+while (($#)); do
+  case "$1" in
+    -u | --url)
+      grimmory_url="${2:-}"
+      [[ -n "$grimmory_url" ]] || die "-u needs a URL"
+      shift 2
+      ;;
+    -U | --user)
+      opds_user="${2:-}"
+      [[ -n "$opds_user" ]] || die "-U needs a username"
+      shift 2
+      ;;
+    -P | --password)
+      opds_password="${2:-}"
+      [[ -n "$opds_password" ]] || die "-P needs a password"
+      shift 2
+      ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+restore() {
+  ((restored == 0)) || return 0
+  restored=1
+  printf '\n'
+  step "Putting the device back"
+  restore_device "" "$original_airplane" || exit 1
+  [[ "$(query "select kind from remote_server limit 1;" 2>/dev/null || true)" != "GRIMMORY" ]] ||
+    note "the Grimmory account is left connected; disconnect it in Settings"
+}
+trap restore EXIT
+
+step "Checking the device"
+require_device
+original_airplane=$(airplane_mode_state)
+
+# The app is started first because its database is created on first
+# run: a device it has never run on has nothing to read.
+adb shell "am start -n $APP_ID/.MainActivity" >/dev/null
+sleep 8
+connected=$(query "select kind from remote_server limit 1;" 2>/dev/null || true)
+case "$connected" in
+  "" | GRIMMORY) ;;
+  *) skip "this device is signed into a $connected server; \
+disconnect it in Settings first -- signing out an account this scenario \
+did not create is not its to do" ;;
+esac
+
+step "Checking there is a Grimmory to connect to"
+# Probed from here rather than from the device, which ships no HTTP
+# client at all. 10.0.2.2 is the emulator's fixed alias for this
+# machine, so the two addresses are the same server seen from either
+# side; anything else is asked for exactly as given.
+probe_url="${grimmory_url/10.0.2.2/127.0.0.1}"
+# What actually gets typed into the app, and whether the plain-HTTP
+# consent has to appear as a result.
+if [[ "$grimmory_url" == http://* ]]; then
+  typed_url="${grimmory_url#http://}"
+  expect_prompt="yes"
+else
+  typed_url="$grimmory_url"
+  expect_prompt=""
+fi
+probe=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+  "$probe_url/komga/api/v2/users/me" 2>/dev/null || true)
+# A 401 is the *right* answer to an unauthenticated probe: it proves
+# both that Grimmory is there and that its Komga shim is switched on. A
+# 403 is the shim being off, which is worth naming rather than lumping
+# in with "nothing answered".
+case "$probe" in
+  401) note "the shim is up at $grimmory_url and asking for credentials" ;;
+  403) skip "Grimmory answered at $probe_url but its Komga API is switched off" ;;
+  *) skip "no Grimmory shim answered at $probe_url (got '${probe:-nothing}'); \
+try: hack/grimmory-dev --up" ;;
+esac
+
+step "Signing in as the OPDS user"
+ui_await "Liseur|Library|Your books|Settings" 60 >/dev/null ||
+  die "the app did not start"
+
+# Through the app's own menus, the way a reader gets there. A shelf
+# with nothing on it offers the server directly; otherwise it is where
+# it always is, under Settings.
+if ui_await "Connect a book server" 5 >/dev/null; then
+  ui_tap "Connect a book server" "the empty shelf's server offer" || exit 1
+else
+  ui_tap "^More$" "the overflow menu" || exit 1
+  ui_tap "^Settings$" "the settings entry" || exit 1
+  ui_tap "^Book server$" "the book-server row" || exit 1
+fi
+
+# A Grimmory row already here is one an earlier run left behind. Signing
+# it out is what makes the sign-in below a real one rather than a
+# no-op against an account that was already connected.
+if [[ "$connected" == "GRIMMORY" ]]; then
+  note "an earlier run left an account connected; signing it out first"
+  ui_tap "^Disconnect$|^Sign out$" "the disconnect button" || exit 1
+  ui_tap "^Disconnect$|^Sign out$|^Remove$" "the disconnect confirmation" 10 || true
+  sleep 2
+fi
+
+ui_tap "^Grimmory$" "the Grimmory option" || exit 1
+
+# Only the first field is aimed at. The rest are reached with Tab,
+# because the keyboard covers the ones below it while leaving them in
+# the accessibility tree at their ordinary places -- so a tap meant for
+# the username lands on a letter key instead, and the text goes on
+# filling the field that already had it.
+ui_tap "^Server address$" "the address field" || exit 1
+# Typed without its scheme, the way a reader pastes an address. That is
+# what makes the plain-HTTP consent below a real branch rather than one
+# skipped by an explicit http:// -- and consent is the only route to a
+# server like this one.
+ui_type "$typed_url"
+ui_tab
+ui_type "$opds_user"
+ui_tab
+ui_type "$opds_password"
+# The keyboard would otherwise cover the button below, and a tap into it
+# would type into the password instead of pressing anything.
+ui_done
+
+# Below the fold on a phone.
+ui_tap_below "^Connect$" "the connect button" || exit 1
+
+# Two taps, not one: the offer below the form only opens a dialog
+# spelling out what plain HTTP costs, and the connection is not attempted
+# until that dialog is answered. A scenario that stops at the first tap
+# waits for a shelf that was never asked for.
+allow_plain_http() {
+  note "allowing the insecure connection, as a reader would have to"
+  ui_tap "Connect without encryption" "the plain-HTTP offer" || return 1
+  ui_tap "^Connect anyway$" "the plain-HTTP confirmation" || return 1
+}
+
+# HTTPS is always tried first, and plain HTTP only after the reader has
+# said they are willing. For a schemeless plain-HTTP address that prompt
+# is the only way through, so its absence is a failure rather than a
+# branch not taken. An address given with an explicit scheme skips it.
+if [[ -n "$expect_prompt" ]]; then
+  if ! ui_await "Connect without encryption" 40 >/dev/null; then
+    bad "no offer to connect without encryption; a plain-HTTP server \
+cannot be reached without one"
+    report
+  fi
+  allow_plain_http || exit 1
+  ok "plain HTTP was asked about rather than assumed"
+elif ui_await "Connect without encryption" 20 >/dev/null; then
+  allow_plain_http || exit 1
+fi
+
+connected=""
+for _ in $(seq 1 60); do
+  connected=$(query "select kind from remote_server limit 1;")
+  [[ -z "$connected" ]] || break
+  sleep 2
+done
+
+if [[ "$connected" == "GRIMMORY" ]]; then
+  ok "signed in as $opds_user over plain HTTP"
+else
+  bad "no Grimmory account was stored (kind: '${connected:-none}')"
+  report
+fi
+
+step "Reading the catalog"
+shelved=0
+for _ in $(seq 1 90); do
+  shelved=$(query "select count(*) from books where url like 'grimmory:%';")
+  [[ "${shelved:-0}" -gt "$PAGE_SIZE" ]] && break
+  sleep 2
+done
+note "$shelved books on the shelf"
+
+if ((shelved > PAGE_SIZE)); then
+  # The client asks for PAGE_SIZE at a time, so this many books is
+  # itself the proof that a second request was made and understood.
+  ok "the catalog spans more than one HTTP page ($shelved > $PAGE_SIZE)"
+else
+  bad "only $shelved books arrived; a catalog of one page proves no paging"
+fi
+
+# The seeded library holds one comic, named so it is unmistakable.
+# Grimmory reports MOBI and AZW3 with a mediaProfile of "EPUB" as well,
+# so a client trusting that field would shelve books that only fail once
+# they have been downloaded and opened.
+comics=$(query "select count(*) from books where url like 'grimmory:%' \
+and (title like '%not-a-book%' or title like '%.cbz');")
+if [[ "${comics:-0}" == "0" ]]; then
+  ok "the comic in the library was not shelved"
+else
+  bad "$comics book(s) Liseur cannot open reached the shelf"
+fi
+
+step "Refreshing again, to be sure nothing is pruned that should not be"
+# The pruning path, on a real server: a second walk that sees the same
+# library must leave every book from the first page alone. Getting the
+# page boundary wrong here reads as "the library was emptied" and takes
+# every reading position with it.
+first_page_book=$(query "select url from books where url like 'grimmory:%' \
+order by url limit 1;")
+note "watching: $first_page_book"
+
+adb shell "am force-stop $APP_ID" >/dev/null
+adb shell "am start -n $APP_ID/.MainActivity" >/dev/null
+sleep 30
+
+after=$(query "select count(*) from books where url like 'grimmory:%';")
+survivor=$(query "select count(*) from books where url = $(sql_quote "$first_page_book");")
+if [[ "${survivor:-0}" == "1" && "${after:-0}" -ge "$shelved" ]]; then
+  ok "the second walk kept all $after books, including the first page's"
+else
+  bad "the shelf went from $shelved to ${after:-0} books; the first one survived: ${survivor:-0}"
+fi
+
+# The other half of that, and the one a full shelf cannot show: this
+# client refuses to call a walk complete on a page it cannot account
+# for, and a rule too strict for a real Grimmory would leave the shelf
+# looking perfect while quietly never pruning anything again. The
+# timestamp is written only where the pruning is.
+synced=$(query "select catalog_synced_at from remote_server limit 1;")
+if [[ "${synced:-0}" -gt 0 ]]; then
+  ok "the walk was understood end to end, so pruning is still live"
+else
+  bad "no walk has ever completed; this server's pages are being refused"
+fi
+
+step "Checking a cover was actually fetched"
+# The bug a download test cannot find. Covers are fetched by the image
+# loader from a URL the catalog client built, and Grimmory serves them
+# under a path Komga's own spelling does not reach. Get it wrong and
+# every book is a grey square, with no error anywhere.
+misprefixed=$(query "select count(*) from books where url like 'grimmory:%' \
+and cover_url not like '%/komga/api/v1/books/%/thumbnail';")
+if [[ "${misprefixed:-0}" == "0" ]]; then
+  ok "every cover URL is addressed through the shim"
+else
+  bad "$misprefixed cover URL(s) do not go through the shim's own path"
+fi
+
+# A right-looking URL still proves nothing about what came back, so the
+# loader's own cache is the oracle: an entry lands there only once an
+# image has actually been fetched and decoded.
+cached=0
+for _ in $(seq 1 30); do
+  cached=$(adb shell "run-as $APP_ID ls cache/covers 2>/dev/null" |
+    tr -d '\r' | grep -c '^[0-9a-f]\{16\}' || true)
+  [[ "${cached:-0}" -gt 0 ]] && break
+  sleep 2
+done
+if ((cached > 0)); then
+  ok "$cached cover(s) were fetched and cached"
+else
+  bad "no cover was ever fetched; the thumbnail route is probably refusing them"
+fi
+
+step "Downloading a book and opening it"
+# Driven through the shelf rather than by starting the reader with a
+# book id. Opening a book that is not on the device yet is what asks for
+# the download, and that offer lives on the shelf: a reader activity
+# handed a remote book simply finds no file.
+adb shell "am force-stop $APP_ID" >/dev/null
+adb shell "am start -n $APP_ID/.MainActivity" >/dev/null
+sleep 5
+
+# Series are piled up on the shelf by default, so the book may be one
+# tap further in.
+if ! ui_await "^Start " 5 >/dev/null; then
+  ui_tap "^Unknown Series$|books$" "a book on the shelf" || true
+  sleep 2
+fi
+
+if ui_tap "^Start " "the button that begins a book"; then
+  downloaded=""
+  for _ in $(seq 1 60); do
+    downloaded=$(query "select local_uri from books where url like 'grimmory:%' \
+and local_uri is not null and local_uri != '' limit 1;")
+    [[ -n "$downloaded" ]] && break
+    sleep 2
+  done
+
+  if [[ -n "$downloaded" ]]; then
+    ok "a book downloaded to $downloaded"
+  else
+    bad "the book never downloaded; /file is probably being refused"
+  fi
+
+  # The reader writes this one line before it shows the page, so it is
+  # the honest end of "the book opened" rather than a guess from a
+  # screenshot.
+  opened=0
+  for _ in $(seq 1 30); do
+    opened=$(query "select count(*) from books where url like 'grimmory:%' \
+and last_opened_at is not null;")
+    [[ "${opened:-0}" -gt 0 ]] && break
+    sleep 2
+  done
+  if [[ "${opened:-0}" -gt 0 ]]; then
+    ok "the reader opened it"
+  else
+    bad "the file arrived but the reader never showed a page"
+  fi
+fi
+
+step "Checking nothing offers to keep the reader's place"
+# Grimmory's shim has no progression route at all. What this guards
+# against is not a crash but a promise: an offer to sync that cannot be
+# kept, or a spinner waiting on a route that answers 404.
+synced=$(query "select count(*) from remote_server where position_synced_at is not null;")
+if [[ "${synced:-0}" == "0" ]]; then
+  ok "no position sync was recorded against a server that has no such route"
+else
+  bad "something recorded a position sync, which the shim cannot have answered"
+fi
+
+# And the account screen has to say so in a way that does not send the
+# reader looking for a setting. "Switched off" would.
+#
+# The check above left the app inside a book, and it reopens that book
+# on launch, so an `am start` lands back on the page rather than the
+# shelf. Back is what leaves a book, and it is unambiguous here: there
+# is no keyboard in the reader for it to close instead.
+for _ in 1 2 3; do
+  [[ -z "$(ui_find "^More$")" ]] || break
+  adb shell input keyevent 4 >/dev/null
+  sleep 3
+done
+if ui_await "Connect a book server" 5 >/dev/null; then
+  bad "the account is gone from the shelf's own offer"
+else
+  ui_tap "^More$" "the overflow menu" || true
+  ui_tap "^Settings$" "the settings entry" || true
+  ui_tap "^Book server$" "the book-server row" || true
+  if ui_await "Reading positions stay on this device" 15 >/dev/null; then
+    ok "the account says positions stay here, rather than blaming a setting"
+  else
+    bad "the account does not explain that positions cannot sync"
+  fi
+fi
+
+restore
+report

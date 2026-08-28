@@ -134,14 +134,14 @@ class KomgaBooksTest {
                    {"name":"James Joyce","role":"writer"}]}}
                 """.trimIndent(),
             ),
-        ).book
+        )!!.book
 
         assertEquals("James Joyce", book.author)
     }
 
     @Test
     fun `a book with no metadata title falls back to its file name`() {
-        val book = KomgaBooks.parseBook(JSONObject("""{"id":"b1","name":"file.epub"}""")).book
+        val book = KomgaBooks.parseBook(JSONObject("""{"id":"b1","name":"file.epub"}"""))!!.book
 
         assertEquals("file.epub", book.title)
         assertNull(book.author)
