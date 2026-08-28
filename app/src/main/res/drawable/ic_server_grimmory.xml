@@ -1,0 +1,51 @@
+<!--
+    Grimmory's icon, from github.com/grimmory-tools/grimmory
+    (frontend/public/icons/icon.svg), AGPL-3.0. Converted to a VectorDrawable;
+    the artwork is unchanged.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="126">
+    <path
+        android:fillColor="#FF2126"
+        android:pathData="M25.81 106.61V113.08 119.54 126L32.26 119.54 38.71 126V119.54 113.08 106.61H25.81Z"/>
+    <path
+        android:pathData="M38.71 29.08H96.77C98.55 29.08 100 27.63 100 25.85V3.23C100 1.45 98.55 0 96.77 0H12.9C10.55 0 8.35 0.63 6.45 1.73 4.49 2.87 2.86 4.5 1.73 6.46 0.63 8.36 0 10.57 0 12.92V106.61C0 113.75 5.78 119.54 12.9 119.54H21.15V113.08H12.9C9.34 113.08 6.45 110.18 6.45 106.61 6.45 103.04 9.34 100.15 12.9 100.15H93.55C97.11 100.15 100 97.26 100 93.69V42C100 38.43 97.11 35.54 93.55 35.54H38.71C36.93 35.54 35.48 36.98 35.48 38.77V61.38C35.48 63.17 36.93 64.61 38.71 64.61H67.74C69.52 64.61 70.97 66.06 70.97 67.84 70.97 69.63 69.52 71.07 67.74 71.07H38.71C33.36 71.07 29.03 66.73 29.03 61.38V38.76C29.03 33.41 33.36 29.07 38.71 29.07V29.08Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="50"
+                android:startY="0"
+                android:endX="50"
+                android:endY="119.54">
+                <item
+                    android:color="#FFFBB042"
+                    android:offset="0"/>
+                <item
+                    android:color="#FFF16422"
+                    android:offset="1"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:pathData="M96.77 113.08H43.55V119.54H96.77C98.55 119.54 100 118.09 100 116.31 100 114.52 98.55 113.08 96.77 113.08Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="50"
+                android:startY="0"
+                android:endX="50"
+                android:endY="119.54">
+                <item
+                    android:color="#FFFBB042"
+                    android:offset="0"/>
+                <item
+                    android:color="#FFF16422"
+                    android:offset="1"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

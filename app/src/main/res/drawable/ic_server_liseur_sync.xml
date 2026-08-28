@@ -1,0 +1,31 @@
+<!--
+    liseur-sync's mark: a bookmark inside a sync ring. Drawn for this project.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#7A4A2B"
+        android:pathData="M116,0H396A116,116 0,0 1,512 116V396A116,116 0,0 1,396 512H116A116,116 0,0 1,0 396V116A116,116 0,0 1,116 0Z" />
+    <path
+        android:pathData="M88.6,226.5A170,170 0,0 1,423.4 226.5"
+        android:strokeColor="#F6F1EA"
+        android:strokeWidth="38"
+        android:strokeLineCap="butt" />
+    <path
+        android:pathData="M423.4,285.5A170,170 0,0 1,88.6 285.5"
+        android:strokeColor="#F6F1EA"
+        android:strokeWidth="38"
+        android:strokeLineCap="butt" />
+    <path
+        android:fillColor="#F6F1EA"
+        android:pathData="M433.5,283.6L460.8,219.9 386,233.1Z" />
+    <path
+        android:fillColor="#F6F1EA"
+        android:pathData="M78.5,228.4L51.2,292.1 126,278.9Z" />
+    <path
+        android:fillColor="#F6F1EA"
+        android:pathData="M206,178H306V334L256,288 206,334Z" />
+</vector>

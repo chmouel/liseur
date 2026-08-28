@@ -1,0 +1,13 @@
+<!--
+    calibre-web's icon, from github.com/janeczku/calibre-web (cps/static/icon.svg),
+    GPL-3.0-or-later. Converted to a VectorDrawable; the artwork is unchanged.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="140"
+    android:viewportHeight="140">
+    <path
+        android:fillColor="#45B29D"
+        android:pathData="M70.5 5.5C87.77 3.13 97.44 10.46 99.5 27.5 95.64 46.7 84.3 59.2 65.5 65 60.91 66.39 56.24 66.73 51.5 66 50.07 65.53 48.9 64.7 48 63.5 47.33 60.5 47.33 57.5 48 54.5 62.25 56.05 73.58 50.72 82 38.5 85.03 33.89 86.03 28.89 85 23.5 83.05 19.29 79.72 17.29 75 17.5 65.53 19.08 57.86 23.74 52 31.5 38.31 51.64 33.97 73.64 39 97.5 44.56 116.53 56.73 122.7 75.5 116 80.6 113.39 85.27 110.22 89.5 106.5 95.19 108.89 96.69 112.89 94 118.5 78.42 132.15 61.25 134.65 42.5 126 31.52 117.21 25.35 105.71 24 91.5 21 65.85 27.33 42.85 43 22.5 50.62 14.12 59.78 8.45 70.5 5.5Z" />
+</vector>

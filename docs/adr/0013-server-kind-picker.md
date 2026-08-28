@@ -117,3 +117,28 @@ four names ever were.
 `ServerAccountScreen.kt` was 1300 lines. The picker leaving for
 `ServerKindPicker.kt` takes the per-kind label, tagline, home URL and
 link lookups with it, which is where the next kind will be added.
+
+## Logos, and the one we cannot ship
+
+Rows carry each kind's own mark, which is what makes a list of four
+scannable rather than four paragraphs to read. Three are ours to ship:
+calibre-web's is GPL-3.0 and Grimmory's AGPL-3.0, both with the rest of
+their source and with no carve-out for the artwork, and liseur-sync's
+was drawn here. The two upstream marks are unmodified, converted to
+VectorDrawables, with their notices and licence texts added to the
+Licences screen.
+
+Komga's is not. Its repository is MIT, but the icon is, by Komga's own
+README, "based on an icon made by Freepik from flaticon.com", and
+Flaticon's licence is neither transferable nor sublicensable — so
+Komga's MIT cannot reach it, and F-Droid's inclusion policy requires
+every bundled asset to be redistributable. Komga therefore gets a
+neutral book-server glyph, tinted with the theme rather than left in
+colours of its own, so it reads as a placeholder and not as a mark
+somebody chose. Drawing something Komga-shaped instead would have been
+worse than either shipping theirs or shipping none: it puts invented
+artwork under their name.
+
+This is a licensing fact about one upstream project, not a rule about
+the picker. If Komga relicenses the icon, `ServerKindLogo` gains a
+branch and loses one.

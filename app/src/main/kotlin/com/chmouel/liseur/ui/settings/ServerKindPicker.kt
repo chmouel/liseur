@@ -1,10 +1,12 @@
 package com.chmouel.liseur.ui.settings
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -23,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -62,6 +65,7 @@ internal fun ServerKindRow(
             overlineContent = { Text(stringResource(R.string.server_kind)) },
             headlineContent = { Text(stringResource(kind.labelRes())) },
             supportingContent = { KindSupport(kind) },
+            leadingContent = { ServerKindLogo(kind) },
             trailingContent = {
                 Icon(
                     imageVector = Icons.Outlined.ExpandMore,
@@ -108,6 +112,7 @@ internal fun ServerKindSheet(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text(stringResource(kind.labelRes())) },
                     supportingContent = { KindSupport(kind) },
+                    leadingContent = { ServerKindLogo(kind) },
                     trailingContent = {
                         // Null, not a second handler: the row already
                         // carries the click, and giving the button one
@@ -120,10 +125,50 @@ internal fun ServerKindSheet(
     }
 }
 
+/**
+ * A kind's own logo, where we are allowed to ship it.
+ *
+ * Komga's is not: its repository is MIT, but the icon is, by their own
+ * README, "based on an icon made by Freepik from flaticon.com", whose
+ * licence is neither transferable nor sublicensable — so Komga cannot
+ * pass it on to us and F-Droid, which requires every bundled asset to
+ * be redistributable, would not take it. Drawing a lookalike would be
+ * worse than either shipping theirs or shipping none, since it puts an
+ * invented mark under their name. So Komga gets the neutral glyph, and
+ * it is tinted rather than left in its own colours to read as a
+ * placeholder rather than as a brand.
+ *
+ * If Komga ever relicenses the icon, this is a one-line change.
+ */
+@Composable
+private fun ServerKindLogo(kind: ServerKind) {
+    val size = Modifier.size(32.dp)
+    when (kind) {
+        ServerKind.KOMGA -> Icon(
+            painter = painterResource(R.drawable.ic_server_generic),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = size,
+        )
+
+        else -> Image(
+            painter = painterResource(kind.logoRes()),
+            contentDescription = null,
+            modifier = size,
+        )
+    }
+}
+
+private fun ServerKind.logoRes(): Int = when (this) {
+    ServerKind.CALIBRE -> R.drawable.ic_server_calibre_web
+    ServerKind.KOMGA -> R.drawable.ic_server_generic
+    ServerKind.GRIMMORY -> R.drawable.ic_server_grimmory
+    ServerKind.LISEUR_SYNC -> R.drawable.ic_server_liseur_sync
+}
+
 /** What a kind is for, and whether it keeps your place. */
 @Composable
-private fun KindSupport(kind: ServerKind) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun KindSupport(kind: ServerKind) {    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(stringResource(kind.taglineRes()))
         Text(
             stringResource(kind.syncAbility.lineRes()),

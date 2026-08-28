@@ -57,6 +57,9 @@ private data class Component(
  * small, deliberately all free software, and being able to read it without
  * building the app is the point. The fonts include the ones Readium brings
  * with it, because they ship inside the app whether or not we chose them.
+ * The last entries are artwork rather than code: the server logos are
+ * copyleft, and the licence asks for the notice and the text to travel
+ * with them.
  */
 private val Components = listOf(
     Component("Readium Kotlin Toolkit", "BSD 3-Clause"),
@@ -111,6 +114,20 @@ private val Components = listOf(
         licence = "SIL Open Font License 1.1",
         notice = "Copyright (c) 2017 IBM Corp.",
         licenceAsset = "licences/ia-writer-duospace.txt",
+    ),
+    Component(
+        name = "calibre-web logo",
+        licence = "GPL-3.0-or-later",
+        notice = "Copyright (c) The calibre-web contributors\n" +
+            "github.com/janeczku/calibre-web",
+        licenceAsset = "licences/gpl-3.0.txt",
+    ),
+    Component(
+        name = "Grimmory logo",
+        licence = "AGPL-3.0-or-later",
+        notice = "Copyright (c) The Grimmory contributors\n" +
+            "github.com/grimmory-tools/grimmory",
+        licenceAsset = "licences/agpl-3.0.txt",
     ),
 )
 
