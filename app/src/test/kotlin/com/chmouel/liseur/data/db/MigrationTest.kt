@@ -842,10 +842,44 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `an account already on a phone keeps its catalog across the custom-server upgrade`() {
+        // `catalog_url` is what every catalog path reads after 43. Left
+        // null on an existing row, that row would say it catalogs
+        // nothing, and every calibre-web, Komga, Grimmory and
+        // liseur-sync library already on a phone would quietly stop
+        // refreshing the moment the reader updated.
+        helper.createDatabase(TEST_DB, 42).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO remote_server (
+                    id, kind, base_url, username, password_cipher, api_key_cipher,
+                    account_id, user_id, kobo_token, can_download, can_manage_library,
+                    can_upload, can_delete, can_admin, added_at, catalog_synced_at,
+                    position_synced_at, sync_token, liseur_token_cipher, liseur_account_id
+                ) VALUES (
+                    1, 'KOMGA', 'https://books.example', 'reader', NULL, NULL,
+                    'u1', NULL, NULL, 1, 0, 0, 0, 0, 1000, NULL, NULL, NULL, NULL, NULL
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT catalog_url, base_url FROM remote_server WHERE id = 1")
+                    .use { cursor ->
+                        assertTrue(cursor.moveToFirst())
+                        assertEquals("https://books.example", cursor.getString(0))
+                        assertEquals("https://books.example", cursor.getString(1))
+                    }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 42
+        const val LATEST = 43
     }
 }

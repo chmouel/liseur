@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.KosyncPeerDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.remote.PeerPositionSync
+import com.chmouel.liseur.data.remote.PrivateAddress
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SetupFailure
 import com.chmouel.liseur.data.remote.SyncFailure
@@ -15,6 +16,55 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 sealed interface KosyncSetupOutcome {
     data object Success : KosyncSetupOutcome
     data class Failure(val reason: SetupFailure) : KosyncSetupOutcome
+}
+
+/** A pairing the server has already agreed to, not yet written down. */
+class ProvedKosyncPairing internal constructor(internal val peer: KosyncPeer) {
+    /**
+     * The mount root as it will be stored: scheme filled in, query and
+     * fragment gone. A caller publishing something else beside this
+     * pairing wants this spelling rather than the one that was typed,
+     * or the two rows disagree about which server they are talking to.
+     */
+    val baseUrl: String get() = peer.baseUrl
+}
+
+/** What came of proving a pairing without storing it. */
+sealed interface KosyncProbe {
+    data class Proved(val pairing: ProvedKosyncPairing) : KosyncProbe
+    data class Failure(val reason: SetupFailure) : KosyncProbe
+}
+
+/**
+ * Pairing with a kosync server in two halves, for a caller that has
+ * something else to publish at the same time.
+ *
+ * A Custom connection has an OPDS address and a kosync address, and
+ * either one may be refused by its server. Proving both before writing
+ * either down is what stops a reader being left connected to half of
+ * what they typed — and being told so by a form that has already
+ * cleared itself.
+ */
+interface KosyncPairing {
+
+    /** Asks the server, and keeps nothing. */
+    suspend fun verify(url: String, username: String, password: String): KosyncProbe
+
+    /** Writes down a pairing [verify] already proved. */
+    suspend fun adopt(pairing: ProvedKosyncPairing)
+
+    /** Puts the pairing down, agreements and reported status with it. */
+    suspend fun forget()
+
+    /** For tests, and for a build with no pairing wired up. */
+    object None : KosyncPairing {
+        override suspend fun verify(url: String, username: String, password: String) =
+            KosyncProbe.Failure(SetupFailure.WrongServer)
+
+        override suspend fun adopt(pairing: ProvedKosyncPairing) = Unit
+
+        override suspend fun forget() = Unit
+    }
 }
 
 /**
@@ -31,7 +81,7 @@ class KosyncAccountRepository(
     private val reporting: SyncReporting = SyncReporting(),
     private val client: KosyncClient = KosyncClient(),
     private val now: () -> Long = System::currentTimeMillis,
-) {
+) : KosyncPairing {
 
     val peer: Flow<KosyncPeer?> = dao.observe()
 
@@ -72,19 +122,66 @@ class KosyncAccountRepository(
                 is RemoteResult.Failed -> return KosyncSetupOutcome.Failure(setupReason(created.reason))
             }
         }
+        return when (val probe = prove(root, login, password)) {
+            is KosyncProbe.Failure -> KosyncSetupOutcome.Failure(probe.reason)
+            is KosyncProbe.Proved -> {
+                adopt(probe.pairing)
+                KosyncSetupOutcome.Success
+            }
+        }
+    }
+    /**
+     * Proves a pairing and keeps nothing, so a caller with a second
+     * address to prove can find out about both before writing down
+     * either.
+     */
+    override suspend fun verify(url: String, username: String, password: String): KosyncProbe {
+        val root = normalise(url) ?: return KosyncProbe.Failure(SetupFailure.WrongServer)
+        val login = username.trim()
+        if (login.isEmpty() || password.isEmpty()) {
+            return KosyncProbe.Failure(SetupFailure.BadCredentials)
+        }
+        return prove(root, login, password)
+    }
 
+    private suspend fun prove(root: String, login: String, password: String): KosyncProbe {
+        // Every kosync call carries `x-auth-key`, and that key is the
+        // password in every sense that matters: the server compares it
+        // as given, so anyone who reads one off the wire can replay it
+        // for good. Registering already refused cleartext; authorising
+        // with the derived key is no safer, and it happens far more
+        // often.
+        //
+        // Refused only towards a public host. A sync server on the
+        // reader's own network, over plain HTTP, is a considered choice
+        // about a network they control and is how most of these are
+        // actually run; that stays working.
+        if (root.startsWith("http://") && !PrivateAddress.matches(root)) {
+            return KosyncProbe.Failure(SetupFailure.InsecureTransport)
+        }
+        return proveAuthorised(root, login, password)
+    }
+
+    private suspend fun proveAuthorised(root: String, login: String, password: String): KosyncProbe {
         val credentials = KosyncCredentials(login, KosyncCredentials.keyFor(password))
         when (val asked = client.authorize(root, credentials)) {
             is RemoteResult.Ok -> Unit
-            is RemoteResult.Failed -> return KosyncSetupOutcome.Failure(setupReason(asked.reason))
+            is RemoteResult.Failed -> return KosyncProbe.Failure(setupReason(asked.reason))
         }
-
-        val fresh = KosyncPeer(
-            baseUrl = root,
-            username = login,
-            keyCipher = KosyncPeer.seal(credentials.key),
-            addedAt = now(),
+        return KosyncProbe.Proved(
+            ProvedKosyncPairing(
+                KosyncPeer(
+                    baseUrl = root,
+                    username = login,
+                    keyCipher = KosyncPeer.seal(credentials.key),
+                    addedAt = now(),
+                ),
+            ),
         )
+    }
+
+    override suspend fun adopt(pairing: ProvedKosyncPairing) {
+        val fresh = pairing.peer
         // A different account's agreements are somebody else's: signing
         // in as a new user strands them rather than adopting them, the
         // same rule every other kind of server follows.
@@ -93,8 +190,9 @@ class KosyncAccountRepository(
             forget(old)
         }
         dao.upsert(fresh)
-        return KosyncSetupOutcome.Success
     }
+
+    override suspend fun forget() = disconnect()
 
     /**
      * Forgets the partner. The reading itself stays — it is this

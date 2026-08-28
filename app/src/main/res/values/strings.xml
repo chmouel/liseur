@@ -17,7 +17,7 @@
     <string name="add_books">Add books</string>
     <string name="add_folder_hint">Point Liseur at a folder of EPUBs and it keeps watching it for new ones.</string>
     <string name="add_book_hint">Pick a single EPUB from your device or your cloud storage.</string>
-    <string name="connect_server_hint">Browse a calibre-web, Komga, liseur-sync or Grimmory library, and keep your place across devices — Grimmory through a paired KOReader sync server.</string>
+    <string name="connect_server_hint">Browse a calibre-web, Komga, liseur-sync or Grimmory library, or any OPDS catalog, and keep your place across devices — Grimmory and OPDS through a paired KOReader sync server.</string>
     <string name="search_books">Search books</string>
     <string name="filter_menu">Filter</string>
     <string name="filter_availability">On the device</string>
@@ -162,6 +162,7 @@
     </plurals>
     <string name="server_account">Book server</string>
     <string name="server_connected" formatted="true">Connected to %1$s as %2$s</string>
+    <string name="server_connected_anon" formatted="true">Connected to %1$s</string>
     <string name="server_title">Book server</string>
     <string name="connect_server">Connect a book server</string>
     <string name="connect_server_short">Connect a server</string>
@@ -170,25 +171,35 @@
     <string name="server_kind_komga">Komga</string>
     <string name="server_kind_grimmory">Grimmory</string>
     <string name="server_kind_liseur_sync">liseur-sync</string>
+    <string name="server_kind_custom">Custom</string>
     <string name="server_kind_change">Change the kind of server</string>
     <string name="server_sync_exact">Keeps your exact place in a book across devices</string>
     <string name="server_sync_progression">Keeps how far through a book you are across devices</string>
     <string name="server_sync_none">Browsing and downloads only — it cannot keep your place</string>
     <string name="server_sync_grimmory">Keeps your place through a paired KOReader sync server</string>
+    <string name="server_sync_custom">Keeps your place if you add a KOReader sync address</string>
     <string name="server_link_calibre">What calibre-web is, and how to run one</string>
     <string name="server_link_komga">What Komga is, and how to run one</string>
     <string name="server_link_grimmory">What Grimmory is, and how to run one</string>
+    <string name="server_link_custom">What OPDS is</string>
     <string name="server_open_in_browser">Open your server in a browser</string>
     <string name="server_tagline_calibre">Your calibre library, served over the web</string>
     <string name="server_tagline_komga">A server for comics, manga and books</string>
     <string name="server_tagline_grimmory">A self-hosted library for your ebooks</string>
     <string name="server_tagline_liseur_sync">Your books on every device — even books only on this phone</string>
+    <string name="server_tagline_custom">Any OPDS catalog, any KOReader sync server, or both</string>
     <string name="server_section_server">Server</string>
     <string name="server_section_sync">Reading positions</string>
     <string name="server_api_key">API key</string>
     <string name="server_api_key_help">In Komga, open your account settings and create an API key. Pasting the whole page address is fine — Liseur finds the server from it.</string>
     <string name="server_opds_user_help">This is a Grimmory OPDS user, created under Settings → OPDS. Your ordinary Grimmory login will not work here. The Komga API also has to be switched on in Grimmory\'s settings.</string>
     <string name="server_url">Server address</string>
+    <string name="server_url_opds">OPDS catalog address</string>
+    <string name="server_custom_catalog_help">The address of your OPDS catalog. The top of it is enough — Liseur follows the shelves down to your books. Leave it empty to use this connection for reading positions only.</string>
+    <string name="server_custom_credentials_help">Leave the username and password empty if the catalog is open to everyone.</string>
+    <string name="server_custom_kosync_help">A KOReader sync (kosync) server, which keeps your place in a book across devices. Leave it empty if you only want to browse.</string>
+    <string name="server_custom_kosync_section">KOReader sync (optional)</string>
+    <string name="server_custom_catalog_section">Catalog (optional)</string>
     <string name="server_username">Username</string>
     <string name="server_password">Password</string>
     <string name="server_connect">Connect</string>
@@ -206,16 +217,22 @@
     <string name="server_error_not_grimmory">No Grimmory server answered at that address. Check the address, including any folder it is served from.</string>
     <string name="server_error_credentials_liseur_sync">The server did not accept that sign-in or token.</string>
     <string name="server_error_not_liseur_sync">That address answered, but not like a liseur-sync server.</string>
+    <string name="server_error_not_custom">That address answered, but not with an OPDS catalog. Check the address, including any folder it is served from.</string>
+    <string name="server_error_credentials_custom">That username or password was refused by the catalog. Leave both empty if the catalog is open to everyone.</string>
     <string name="server_error_scopes_liseur_sync">That token works but may not sync reading positions. Make one with at least the “sync” scope — the full set is sync, read-insights and library-read.</string>
     <string name="server_error_rate_limited">Too many attempts. Wait a moment and try again.</string>
     <string name="server_error_unreachable">The server did not answer. Check the address and that you are online.</string>
     <string name="server_error_https">The server did not answer over a secure connection.</string>
     <string name="server_no_download_right">This account is not allowed to download books. Ask whoever runs the server to tick \"Allow Downloads\" for your user in calibre-web, then check again.</string>
     <string name="server_no_download_right_komga">This API key is not allowed to download books. Ask whoever runs the server to give your account the file download role, then check again.</string>
+    <string name="server_no_download_right_custom">This catalog is not offering any books to download.</string>
     <string name="server_no_download_right_liseur_sync">This token is not allowed to read the library — tokens from before liseur-sync served books cannot browse it. Mint a fresh one with the library-read scope, or disconnect and sign in again, then check again.</string>
     <string name="server_token_storage_note">Your device token is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it. Revoke it on the server if you lose the phone.</string>
     <string name="server_sync_on">Your reading position will follow you between devices.</string>
     <string name="server_sync_off">Reading positions are not synced. The server may have Kobo sync switched off.</string>
+    <string name="server_sync_unsupported_custom">OPDS has no way to carry reading positions. Add a KOReader sync address in the section below and your place will follow you between devices.</string>
+    <string name="server_sync_none_custom">This connection carries no reading positions on its own. Add a KOReader sync address in the section below and your place will follow you between devices.</string>
+    <string name="server_sync_kosync_paired">Your place is kept by the KOReader sync server set up below.</string>
     <string name="server_sync_unsupported">Grimmory\'s Komga interface has no way to carry reading positions. Grimmory can still sync them over KOReader sync: create a KOReader user in Grimmory\'s device settings, then connect it in the section below.</string>
     <string name="calibre_show_advanced">Advanced</string>
     <string name="calibre_hide_advanced">Hide advanced</string>
@@ -223,6 +240,8 @@
     <string name="calibre_save_token">Save token</string>
     <string name="calibre_token_help">Liseur normally picks this up for you. If reading positions are not syncing, paste the Kobo sync URL from your calibre-web profile page here.</string>
     <string name="server_password_storage_note">Your password is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it, as this kind of server requires.</string>
+    <string name="server_custom_storage_note">Anything you type here is kept on this device only, encrypted. The catalog password is sent to your catalog each time Liseur talks to it; the KOReader sync password never leaves this phone — only a value derived from it is sent.</string>
+    <string name="server_custom_kosync_storage_note">Anything you type here is kept on this device only, encrypted. The KOReader sync password never leaves this phone — only a value derived from it is sent.</string>
     <string name="server_api_key_storage_note">Your API key is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it. Revoke it in Komga if you lose the phone.</string>
     <string name="book_on_server">On the server</string>
     <string name="book_not_downloaded">This book is still on the server.</string>
@@ -508,7 +527,7 @@
     <string name="settings_export_import">Export and import</string>
     <string name="settings_library_help_title">Book servers</string>
     <string name="settings_library_help_body" formatted="true">A book server — calibre-web, Komga, liseur-sync or Grimmory — holds your library: Liseur browses it and downloads from it, and keeps your place in step with it. Grimmory is the exception: it is reached through its Komga-compatible interface, which cannot carry a reading position itself — pair a KOReader sync server alongside it and your place follows anyway. One server is connected at a time.\n\nliseur-sync is the one that also keeps books that came from nowhere but this phone in step: a file off an SD card syncs its position too. Run your own from %1$s.</string>
-    <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync or Grimmory server, and keep your place in step — Grimmory through a paired KOReader sync server.</string>
+    <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync, Grimmory or OPDS server, and keep your place in step — Grimmory and OPDS through a paired KOReader sync server.</string>
     <string name="settings_about">About</string>
     <string name="about_title">About</string>
     <string name="about_open">About Liseur</string>

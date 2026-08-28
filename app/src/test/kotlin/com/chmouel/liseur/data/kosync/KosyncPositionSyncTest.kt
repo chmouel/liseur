@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.KosyncPeer
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState
@@ -118,6 +119,42 @@ class KosyncPositionSyncTest {
         assertEquals(false, komga.canSync(BOOK))
         assertEquals(PreviewOutcome.NotSynced, komga.previewBook(BOOK))
         assertNull(komga.identity())
+        assertEquals(0, server.requestCount)
+    }
+
+    // -- Which books a pairing speaks about ---------------------------------
+
+    /**
+     * A Custom connection may have a sync address and no catalog, and
+     * then there is nothing for `remote_uuid` to point at. Changing the
+     * predicate alone could not fix that: the run starts from
+     * `allRemote()`, whose query is `WHERE remote_uuid IS NOT NULL`, so
+     * a sideloaded book is gone before any predicate sees it.
+     */
+    @Test
+    fun `a pairing with no catalog behind it speaks about the books on the device`() = runTest {
+        pair()
+        db.bookDao().upsert(
+            book(url = "file:///shelf/dune.epub", remoteUuid = null),
+        )
+        server.enqueue(MockResponse(code = 200, body = """{"document":"d","progress":"0.5","percentage":0.5,"device":"other","timestamp":9}"""))
+
+        val outcome = sync(connectedKind = ServerKind.CUSTOM, catalogUrl = null)
+            .syncAll(null)
+
+        assertTrue("a sideloaded book was never asked about: $outcome", server.requestCount > 0)
+    }
+
+    @Test
+    fun `a pairing with a catalog leaves a sideloaded book alone`() = runTest {
+        // The bounded set is the point: a phone may hold thousands of
+        // local books, and a catalog connection has a smaller, precise
+        // answer to give.
+        pair()
+        db.bookDao().upsert(book(url = "file:///shelf/dune.epub", remoteUuid = null))
+
+        sync(connectedKind = ServerKind.GRIMMORY).syncAll(null)
+
         assertEquals(0, server.requestCount)
     }
 
@@ -523,20 +560,52 @@ class KosyncPositionSyncTest {
 
     @Test
     fun `an upper case scheme is read as the scheme it is`() = runTest {
-        // Not a bypass today, because normalise refused the whole
-        // address, but "wrong server" is the wrong thing to tell someone
-        // who typed HTTP:// and needs to hear why it will not be used.
+        // "Wrong server" is the wrong thing to tell someone who typed
+        // HTTP:// and needs to hear why it will not be used.
         val outcome = repository().connect(
             url = "HTTP://sync.example.com",
             username = "ada",
             password = "pw",
-            register = true,
         )
 
         assertEquals(
             KosyncSetupOutcome.Failure(SetupFailure.InsecureTransport),
             outcome,
         )
+    }
+
+    @Test
+    fun `plain http to a server on the internet is refused`() = runTest {
+        // `x-auth-key` is compared as given, so anyone who reads one off
+        // the wire can replay it for good. It is the password in every
+        // sense that matters, and it goes out on every call rather than
+        // only at registration.
+        val outcome = repository().connect(
+            url = "http://sync.example.com",
+            username = "ada",
+            password = "pw",
+        )
+
+        assertEquals(
+            KosyncSetupOutcome.Failure(SetupFailure.InsecureTransport),
+            outcome,
+        )
+    }
+
+    @Test
+    fun `plain http to a server in the house still works`() = runTest {
+        // Self-hosting is the ordinary case. Plain HTTP across a network
+        // the reader controls is their call to make, and refusing it
+        // would break most of the sync servers actually in use.
+        server.enqueue(json("""{"authorized":"OK"}"""))
+
+        val outcome = repository().connect(
+            url = "http://127.0.0.1:${server.port}",
+            username = "ada",
+            password = "pw",
+        )
+
+        assertEquals(KosyncSetupOutcome.Success, outcome)
     }
 
     @Test
@@ -641,6 +710,7 @@ class KosyncPositionSyncTest {
     private fun sync(
         online: Boolean = true,
         connectedKind: ServerKind? = ServerKind.GRIMMORY,
+        catalogUrl: String? = "https://books.example",
     ): KosyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return KosyncPositionSync(
@@ -651,7 +721,26 @@ class KosyncPositionSyncTest {
             fingerprints = BookFingerprintStore(context, db.workIdentityDao()) { NOW },
             device = { DeviceIdentity(id = "dev-1", name = "Test Phone") },
             finishedState = FinishedState(db.bookDao(), db.readingProgressDao()),
-            connectedKind = { connectedKind },
+            connectedServer = {
+                connectedKind?.let {
+                    RemoteServer(
+                        kind = it,
+                        baseUrl = "https://books.example",
+                        catalogUrl = catalogUrl,
+                        username = "reader",
+                        passwordCipher = null,
+                        apiKeyCipher = null,
+                        accountId = null,
+                        userId = null,
+                        koboTokenCipher = null,
+                        canDownload = true,
+                        addedAt = NOW,
+                        catalogSyncedAt = null,
+                        positionSyncedAt = null,
+                        syncToken = null,
+                    )
+                }
+            },
             networkAvailability = { online },
             now = { NOW },
         )

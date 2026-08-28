@@ -185,6 +185,9 @@ fun ServerAccountScreen(
                         onApiKeyChange = onApiKeyChange,
                         onLiseurSyncSignInChange = onLiseurSyncSignInChange,
                         onDeviceTokenChange = onDeviceTokenChange,
+                        onKosyncUrlChange = onKosyncUrlChange,
+                        onKosyncUsernameChange = onKosyncUsernameChange,
+                        onKosyncPasswordChange = onKosyncPasswordChange,
                         onConnect = onConnect,
                     )
                 } else {
@@ -194,6 +197,7 @@ fun ServerAccountScreen(
                         syncStatus = state.syncStatus,
                         syncReport = state.syncReport,
                         identity = state.identity,
+                        paired = state.kosync != null,
                         onSyncNow = onSyncNow,
                         busy = state.connecting,
                         onRetryCapabilities = onRetryCapabilities,
@@ -246,6 +250,14 @@ fun ServerAccountScreen(
                         R.string.server_password_storage_note
                     ServerKind.KOMGA -> R.string.server_api_key_storage_note
                     ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
+                    // With no catalog connected there is no catalog
+                    // password to account for, and the form is not on
+                    // screen to offer one either.
+                    ServerKind.CUSTOM -> if (server != null && server.catalogUrl == null) {
+                        R.string.server_custom_kosync_storage_note
+                    } else {
+                        R.string.server_custom_storage_note
+                    }
                 }
                 Text(
                     stringResource(secretNote),
@@ -444,6 +456,32 @@ private fun ServerSection(
     }
 }
 
+/** The quiet line under a field that says what to put in it. */
+@Composable
+private fun FieldHelp(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * The heading over one half of the Custom form.
+ *
+ * The only form here with two halves, and without a heading each the
+ * second address and its username and password read as more fields for
+ * the first.
+ */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
 /** A line of fact about the server. */
 @Composable
 private fun DetailLine(text: String) {
@@ -464,6 +502,14 @@ private fun ConnectForm(
     onApiKeyChange: (String) -> Unit,
     onLiseurSyncSignInChange: (LiseurSyncSignIn) -> Unit,
     onDeviceTokenChange: (String) -> Unit,
+    /**
+     * A Custom connection's sync half is filled in here rather than in
+     * the pairing section further down, because the two addresses are
+     * published together: half a connection is not one.
+     */
+    onKosyncUrlChange: (String) -> Unit,
+    onKosyncUsernameChange: (String) -> Unit,
+    onKosyncPasswordChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
 ) {
     var picking by rememberSaveable { mutableStateOf(false) }
@@ -500,11 +546,17 @@ private fun ConnectForm(
             onDismiss = { picking = false },
         )
     }
+    val custom = state.kind == ServerKind.CUSTOM
+    if (custom) {
+        SectionLabel(stringResource(R.string.server_custom_catalog_section))
+    }
     OutlinedTextField(
         value = state.url,
         onValueChange = onUrlChange,
-        label = { Text(stringResource(R.string.server_url)) },
-        placeholder = { Text("books.example.com") },
+        label = {
+            Text(stringResource(if (custom) R.string.server_url_opds else R.string.server_url))
+        },
+        placeholder = { Text(if (custom) "books.example.com/opds" else "books.example.com") },
         singleLine = true,
         enabled = !state.connecting,
         keyboardOptions = KeyboardOptions(
@@ -513,6 +565,7 @@ private fun ConnectForm(
         ),
         modifier = Modifier.fillMaxWidth(),
     )
+    if (custom) FieldHelp(stringResource(R.string.server_custom_catalog_help))
     var secretShown by rememberSaveable { mutableStateOf(false) }
     val secretToggle: @Composable () -> Unit = {
         IconButton(onClick = { secretShown = !secretShown }) {
@@ -570,6 +623,81 @@ private fun ConnectForm(
                 )
             }
         }
+        ServerKind.CUSTOM -> {
+            OutlinedTextField(
+                value = state.username,
+                onValueChange = onUsernameChange,
+                label = { Text(stringResource(R.string.server_username)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.password,
+                onValueChange = onPasswordChange,
+                label = { Text(stringResource(R.string.server_password)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                visualTransformation = secretMask,
+                trailingIcon = secretToggle,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Next,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            FieldHelp(stringResource(R.string.server_custom_credentials_help))
+            // A two-address form needs each failure next to the address
+            // that caused it. Left at the foot of the form, a catalog
+            // refusal reads as a complaint about the sync server.
+            ConnectError(state = state, onConnect = onConnect)
+
+            SectionLabel(stringResource(R.string.server_custom_kosync_section))
+            OutlinedTextField(
+                value = state.kosyncUrl,
+                onValueChange = onKosyncUrlChange,
+                label = { Text(stringResource(R.string.kosync_url)) },
+                placeholder = { Text("sync.example.com") },
+                singleLine = true,
+                enabled = !state.connecting,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Next,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.kosyncUsername,
+                onValueChange = onKosyncUsernameChange,
+                label = { Text(stringResource(R.string.server_username)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = state.kosyncPassword,
+                onValueChange = onKosyncPasswordChange,
+                label = { Text(stringResource(R.string.server_password)) },
+                singleLine = true,
+                enabled = !state.connecting,
+                visualTransformation = secretMask,
+                trailingIcon = secretToggle,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            FieldHelp(stringResource(R.string.server_custom_kosync_help))
+            state.kosyncError?.let {
+                Notice(
+                    text = stringResource(it.kosyncMessageRes()),
+                    tone = NoticeTone.PROBLEM,
+                )
+            }
+        }
         ServerKind.KOMGA -> {
             OutlinedTextField(
                 value = state.apiKey,
@@ -604,51 +732,34 @@ private fun ConnectForm(
         }
     }
 
-    state.error?.let { error ->
-        Notice(
-            text = stringResource(error.messageRes(state.kind)),
-            tone = NoticeTone.PROBLEM,
-        )
-        if (error == AccountError.UNREACHABLE_TRY_HTTP) {
-            var confirmingHttp by rememberSaveable { mutableStateOf(false) }
-            TextButton(onClick = { confirmingHttp = true }) {
-                Text(stringResource(R.string.server_try_http))
-            }
-            if (confirmingHttp) {
-                AlertDialog(
-                    onDismissRequest = { confirmingHttp = false },
-                    title = { Text(stringResource(R.string.server_http_title)) },
-                    text = { Text(stringResource(R.string.server_http_warning)) },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                confirmingHttp = false
-                                onConnect(true)
-                            },
-                        ) {
-                            Text(stringResource(R.string.server_http_confirm))
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { confirmingHttp = false }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    },
-                )
-            }
-        }
+    if (state.kind != ServerKind.CUSTOM) {
+        ConnectError(state = state, onConnect = onConnect)
     }
 
     Button(
         onClick = { onConnect(false) },
-        enabled = !state.connecting && state.url.isNotBlank() && when (state.kind) {
+        enabled = !state.connecting && when (state.kind) {
             ServerKind.CALIBRE, ServerKind.GRIMMORY ->
-                state.username.isNotBlank() && state.password.isNotBlank()
-            ServerKind.KOMGA -> state.apiKey.isNotBlank()
-            ServerKind.LISEUR_SYNC -> when (state.liseurSyncSignIn) {
+                state.url.isNotBlank() &&
+                    state.username.isNotBlank() && state.password.isNotBlank()
+            ServerKind.KOMGA -> state.url.isNotBlank() && state.apiKey.isNotBlank()
+            ServerKind.LISEUR_SYNC -> state.url.isNotBlank() && when (state.liseurSyncSignIn) {
                 LiseurSyncSignIn.PASSWORD ->
                     state.username.isNotBlank() && state.password.isNotBlank()
                 LiseurSyncSignIn.TOKEN -> state.deviceToken.isNotBlank()
+            }
+            // Either address on its own is a connection, so the one
+            // required field is "at least one of them". Each address's
+            // credentials are its own: a catalog may be open to anyone,
+            // a sync server never is, and a half-filled pair is a typo
+            // rather than a choice.
+            ServerKind.CUSTOM -> {
+                val catalogReady = state.url.isBlank() ||
+                    state.username.isBlank() == state.password.isBlank()
+                val kosyncReady = state.kosyncUrl.isBlank() ||
+                    (state.kosyncUsername.isNotBlank() && state.kosyncPassword.isNotBlank())
+                (state.url.isNotBlank() || state.kosyncUrl.isNotBlank()) &&
+                    catalogReady && kosyncReady
             }
         },
         modifier = Modifier.fillMaxWidth(),
@@ -665,6 +776,47 @@ private fun ConnectForm(
     }
 }
 
+/**
+ * What went wrong with the last attempt, and the one offer worth making
+ * about it: retrying an unreachable https address over http.
+ */
+@Composable
+private fun ConnectError(state: ServerAccountUiState, onConnect: (Boolean) -> Unit) {
+    val error = state.error ?: return
+    Notice(
+        text = stringResource(error.messageRes(state.kind)),
+        tone = NoticeTone.PROBLEM,
+    )
+    if (error == AccountError.UNREACHABLE_TRY_HTTP) {
+        var confirmingHttp by rememberSaveable { mutableStateOf(false) }
+        TextButton(onClick = { confirmingHttp = true }) {
+            Text(stringResource(R.string.server_try_http))
+        }
+        if (confirmingHttp) {
+            AlertDialog(
+                onDismissRequest = { confirmingHttp = false },
+                title = { Text(stringResource(R.string.server_http_title)) },
+                text = { Text(stringResource(R.string.server_http_warning)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmingHttp = false
+                            onConnect(true)
+                        },
+                    ) {
+                        Text(stringResource(R.string.server_http_confirm))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmingHttp = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
+        }
+    }
+}
+
 @Composable
 private fun ConnectedCard(
     server: RemoteServer,
@@ -672,6 +824,7 @@ private fun ConnectedCard(
     syncStatus: PositionSyncStatus,
     syncReport: SyncReport,
     identity: SyncIdentity?,
+    paired: Boolean,
     busy: Boolean,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
@@ -747,13 +900,17 @@ private fun ConnectedCard(
         }
     }
 
-    if (!server.canDownload) {
+    // A connection with no catalog has no downloads to be missing, and
+    // nothing for "check again" to check.
+    val hasCatalog = server.catalogUrl != null
+    if (hasCatalog && !server.canDownload) {
         Notice(
             text = stringResource(
                 when (server.kind) {
                     ServerKind.CALIBRE -> R.string.server_no_download_right
                     ServerKind.KOMGA -> R.string.server_no_download_right_komga
                     ServerKind.LISEUR_SYNC -> R.string.server_no_download_right_liseur_sync
+                    ServerKind.CUSTOM -> R.string.server_no_download_right_custom
                     // Unreachable in practice: Grimmory's shim always
                     // reports downloads as available, because it has no
                     // role to withhold them with.
@@ -813,12 +970,35 @@ private fun ConnectedCard(
             // difference between a limitation and a fault.
             text = when {
                 server.canSync -> stringResource(R.string.server_sync_on)
+
+                // A pairing is already carrying the position, so telling
+                // the reader to go and set one up sends them looking for
+                // work they have done.
+                paired && server.kind.hostsKosyncPeer ->
+                    stringResource(R.string.server_sync_kosync_paired)
+
                 server.kind == ServerKind.GRIMMORY ->
                     stringResource(R.string.server_sync_unsupported)
 
+                // Neither is OPDS a thing to switch on: the format
+                // carries no reading state at all, and the pairing
+                // below is the whole answer. With no catalog either,
+                // there is no OPDS to blame.
+                server.kind == ServerKind.CUSTOM -> stringResource(
+                    if (hasCatalog) {
+                        R.string.server_sync_unsupported_custom
+                    } else {
+                        R.string.server_sync_none_custom
+                    },
+                )
+
                 else -> stringResource(R.string.server_sync_off)
             },
-            tone = if (server.canSync) NoticeTone.GOOD else NoticeTone.NEUTRAL,
+            tone = when {
+                server.canSync -> NoticeTone.GOOD
+                paired && server.kind.hostsKosyncPeer -> NoticeTone.GOOD
+                else -> NoticeTone.NEUTRAL
+            },
         )
 
         if (server.canSync) {
@@ -1298,12 +1478,14 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
         // apart.
         ServerKind.GRIMMORY -> R.string.server_error_credentials_grimmory
         ServerKind.LISEUR_SYNC -> R.string.server_error_credentials_liseur_sync
+        ServerKind.CUSTOM -> R.string.server_error_credentials_custom
     }
     AccountError.WRONG_SERVER -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_not_calibre
         ServerKind.KOMGA -> R.string.server_error_not_komga
         ServerKind.GRIMMORY -> R.string.server_error_not_grimmory
         ServerKind.LISEUR_SYNC -> R.string.server_error_not_liseur_sync
+        ServerKind.CUSTOM -> R.string.server_error_not_custom
     }
     AccountError.UNREACHABLE -> R.string.server_error_unreachable
     AccountError.UNREACHABLE_TRY_HTTP -> R.string.server_error_https

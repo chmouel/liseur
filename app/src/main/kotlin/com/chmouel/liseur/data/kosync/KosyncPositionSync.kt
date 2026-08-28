@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.KosyncPeerDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.SyncPeerState
 import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.library.BookFingerprintStore
@@ -83,14 +84,19 @@ class KosyncPositionSync(
     private val device: suspend () -> DeviceIdentity,
     private val finishedState: FinishedState,
     /**
-     * The kind of server the library is connected to right now, or null
-     * when nothing is connected.
+     * The server the library is connected to right now, or null when
+     * nothing is connected.
      *
      * Read on every run rather than captured once: an account switch
      * does not rebuild this object, and a peer that outlived the server
      * it was paired with must go quiet the moment the switch lands.
+     *
+     * Two things are asked of it, and both have to be asked at the same
+     * moment: whether that kind of server may host a pairing at all,
+     * and whether it lists books — which decides what the pairing is
+     * responsible for.
      */
-    private val connectedKind: suspend () -> ServerKind?,
+    private val connectedServer: suspend () -> RemoteServer?,
     private val client: KosyncClient = KosyncClient(),
     private val reporting: SyncReporting = SyncReporting(),
     private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
@@ -259,7 +265,10 @@ class KosyncPositionSync(
      * behalf of a library it knows nothing about.
      */
     private suspend fun eligible(): Boolean =
-        connectedKind()?.hostsKosyncPeer == true
+        connectedServer()?.kind?.hostsKosyncPeer == true
+
+    /** Whether the connected server also lists books. See [candidates]. */
+    private suspend fun hasCatalog(): Boolean = connectedServer()?.catalogUrl != null
 
     // -- The run ----------------------------------------------------------
 
@@ -292,14 +301,7 @@ class KosyncPositionSync(
 
         reporting.report(PositionSyncStatus.Syncing, peerId)
         val identity = device()
-        val books = if (book == null) {
-            bookDao.allRemote()
-        } else {
-            // kosync has no list endpoint, so syncing one book has no
-            // reason to read the whole remote shelf and throw all but
-            // one row away.
-            listOfNotNull(bookDao.getByUrl(book))
-        }.filter { it.isCandidate }
+        val books = candidates(book)
 
         var firstFailure: SyncFailure? = null
         var unreachable: SyncFailure? = null
@@ -553,6 +555,36 @@ class KosyncPositionSync(
             if (kosyncDao.get()?.accountKey == account.peerId) work()
         }
     }
+
+    /**
+     * Which books this pairing is responsible for.
+     *
+     * One function, because the two questions it answers used to be
+     * asked in two places — a DAO query that fetched the possibilities
+     * and a predicate that narrowed them — and a query asking for a
+     * `remote_uuid` had already thrown away every sideloaded book
+     * before any predicate could speak for it.
+     *
+     * With a catalog beside it, the pairing covers that catalog's
+     * books: what was downloaded from the connected server. With no
+     * catalog at all — a Custom connection that is only a sync address
+     * — it covers what is on the phone, which is the only library there
+     * is.
+     *
+     * Named [book] narrows to that one row rather than filtering the
+     * whole set down to it. kosync has no list endpoint, so syncing a
+     * single book never had a reason to read the shelf.
+     */
+    private suspend fun candidates(book: String?): List<Book> {
+        val catalogued = hasCatalog()
+        val found = if (book == null) {
+            if (catalogued) bookDao.allRemote() else bookDao.allOpenable()
+        } else {
+            listOfNotNull(bookDao.getByUrl(book)).filter { it.openableUrl != null }
+        }
+        return if (catalogued) found.filter { it.isCandidate } else found
+    }
+
 
     /**
      * Whether kosync can speak about this book at all: it came from the

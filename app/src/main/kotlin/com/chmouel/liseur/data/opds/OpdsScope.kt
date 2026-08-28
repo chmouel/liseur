@@ -1,0 +1,139 @@
+package com.chmouel.liseur.data.opds
+
+import com.chmouel.liseur.data.remote.PrivateAddress
+import java.security.MessageDigest
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+
+/**
+ * The one catalog a Custom connection speaks to, and the rule about
+ * where its password may go.
+ *
+ * A feed is a document written by somebody else. Every link in it —
+ * the next page, a shelf, a cover, the book itself — is an address
+ * chosen by the server, and OPDS is a federated format where pointing
+ * at another server is not an attack but a feature. `RemoteHttp` signs
+ * whatever URL it is handed, so following those links as written would
+ * post the reader's catalog password to whatever host the feed named.
+ *
+ * So the credential is scoped to the origin the reader typed. Anything
+ * elsewhere is still fetched — an open-access link to another archive
+ * is a real and useful thing — but it is fetched as a stranger.
+ *
+ * Scoped by origin rather than by path prefix, which was the first
+ * design: catalogs routinely serve their files from a path beside the
+ * feed rather than beneath it, so a prefix rule breaks the ordinary
+ * case to defend against another document on the reader's own server.
+ * A browser scopes a Basic credential the same way.
+ */
+class OpdsScope private constructor(val root: HttpUrl) {
+
+    /** Whether a request to [url] may carry the catalog's credential. */
+    fun signs(url: HttpUrl): Boolean = sameOrigin(url)
+
+    private fun sameOrigin(url: HttpUrl): Boolean =
+        url.scheme == root.scheme && url.host == root.host && url.port == root.port
+
+    /**
+     * Whether [url] may be fetched at all.
+     *
+     * Two rules, both about addresses the *feed* chose rather than the
+     * reader:
+     *
+     * A secure catalog stays secure everywhere, not merely across a
+     * redirect. An https feed that names an absolute `http://` cover or
+     * download is asking for the same plaintext request a downgrade
+     * redirect would have asked for, and arrives by a route the redirect
+     * check never sees, because that link starts a fresh call.
+     *
+     * And a link from a catalog on the open internet to somewhere on the
+     * reader's own network is refused. This is deliberately *not* a ban
+     * on private addresses: a self-hosted library is the ordinary case
+     * here and lives at `192.168.…` or a `.local` name. Nor does it
+     * apply between private addresses — a catalog already inside the
+     * house naming its neighbour gains nothing it did not already have.
+     * What is refused is the pivot: a public server naming the reader's
+     * router, printer or metadata endpoint and having the phone go and
+     * fetch it, a reachability probe from outside that the reader never
+     * asked for and cannot see.
+     *
+     * Judged from the address as written. A public name that resolves to
+     * a private address is not caught, and closing that needs the
+     * resolved socket rather than the URL.
+     */
+    fun mayFetch(url: HttpUrl): Boolean = when {
+        sameOrigin(url) -> true
+        root.isHttps && !url.isHttps -> false
+        PrivateAddress.matches(root) -> true
+        else -> !PrivateAddress.matches(url)
+    }
+
+    /**
+     * A link the fetch policy allows, as a string, or null.
+     *
+     * The check belongs where an address is first written down, not
+     * only where it is used. A cover goes to the image loader and an
+     * acquisition to the download worker, and neither consults an
+     * [OpdsScope]; a refused link stored today is a request made
+     * tomorrow. [OpdsFileSource] checks again on the way out, because a
+     * row written before this rule existed is still in the database.
+     */
+    fun fetchable(url: HttpUrl?): String? = url?.takeIf(::mayFetch)?.toString()
+
+    /**
+     * A short, stable name for this catalog, for telling two of them
+     * apart.
+     *
+     * OPDS entry ids are opaque and only unique within the catalog that
+     * issued them: `1` is a perfectly legal id, and two unrelated
+     * servers can both use it. A downloaded book keeps its URL when the
+     * account changes, so without a namespace the second Custom server
+     * connected would adopt the first one's rows — the wrong file, the
+     * wrong metadata, and somebody else's reading history behind it.
+     *
+     * Hashed rather than spelled out because it goes into `books.url`,
+     * where a raw address would be unreadable and fragile. Derived from
+     * scheme, host, port, path **and query**, so the same catalog
+     * reached the same way is always the same name — and two different
+     * ones are not. A query is how OPDS servers commonly pick a shelf,
+     * a library or a user, so `?shelf=a` and `?shelf=b` at one path are
+     * two catalogs, and leaving the query out would have handed them one
+     * namespace and let each adopt the other's books.
+     */
+    val fingerprint: String by lazy {
+        val query = root.encodedQuery?.let { "?$it" } ?: ""
+        val canonical =
+            "${root.scheme}://${root.host}:${root.port}${root.encodedPath.trimEnd('/')}$query"
+        digest(canonical, bytes = 6)
+    }
+
+    /**
+     * A book's identity in the library: the catalog it came from, then
+     * the id that catalog gave it.
+     *
+     * Written into `books.url`, so this shape is schema and cannot be
+     * changed later without orphaning every reading position and
+     * highlight hanging off it.
+     *
+     * The entry id is hashed rather than carried through. An OPDS id is
+     * an arbitrary string the server chooses, and this value becomes
+     * `books.remote_uuid`, which `BookDownloadRepository.fileFor()`
+     * spells straight into a filename: an id of `../../databases/liseur`
+     * would be a write outside the books directory, and one containing
+     * a single `/` would be a download that simply fails. Hashing gives
+     * a fixed-length, filename-safe name that is still the same one
+     * every refresh, which is all the identity has to be.
+     */
+    fun remoteId(entryId: String): String = "$fingerprint:${digest(entryId, bytes = 16)}"
+
+    companion object {
+        fun of(catalogUrl: String): OpdsScope? =
+            catalogUrl.trim().toHttpUrlOrNull()?.let(::OpdsScope)
+
+        private fun digest(text: String, bytes: Int): String =
+            MessageDigest.getInstance("SHA-256")
+                .digest(text.toByteArray())
+                .take(bytes)
+                .joinToString("") { "%02x".format(it) }
+    }
+}

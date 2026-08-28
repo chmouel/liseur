@@ -125,6 +125,15 @@ class RemoteCatalogRepository(
                 _status.value = CatalogStatus.Idle
                 return CatalogRefresh.None
             }
+            // A connection with no catalog is not a broken one. A
+            // Custom server may be nothing but a KOReader sync address,
+            // and there is simply nothing here to pull; saying so
+            // quietly is the difference between that and a failure the
+            // reader is asked to do something about.
+            val catalogUrl = server.catalogUrl ?: run {
+                _status.value = CatalogStatus.Idle
+                return CatalogRefresh.None
+            }
             // Said rather than attempted: the pull would end here anyway,
             // several stalled connections later, and a refresh that
             // reports nothing looks like a gesture that did not register.
@@ -144,10 +153,10 @@ class RemoteCatalogRepository(
                 // a query each against an unindexed column, so the cost of
                 // folding a catalog in grew with the square of the shelf.
                 val known = KnownBooks(bookDao.allOnce())
-                val walk = client.allBooks(server.baseUrl, credentials) { page ->
+                val walk = client.allBooks(catalogUrl, credentials) { page ->
                     page.forEach { seen += it.remoteId }
                     forAccount(server) {
-                        store(known, server.kind, server.baseUrl, page)
+                        store(known, server.kind, catalogUrl, page)
                     }
                 }
                 if (!walk.complete) {
@@ -215,8 +224,10 @@ class RemoteCatalogRepository(
         val server = serverDao.get() ?: return emptyList()
         val credentials = server.credentials ?: return emptyList()
         val client = router.catalogFor(server.kind) ?: return emptyList()
+        // Nothing to search when there is no catalog. See `refresh`.
+        val catalogUrl = server.catalogUrl ?: return emptyList()
         return try {
-            client.search(server.baseUrl, credentials, query)
+            client.search(catalogUrl, credentials, query)
         } catch (e: IOException) {
             Log.i(TAG, "Could not search the catalog", e)
             emptyList()
@@ -625,7 +636,16 @@ internal fun mergeCatalogEntry(
         author = remote.author,
         remoteUuid = remote.remoteId,
         remoteBookId = remote.calibreBookId,
-        coverUrl = remote.coverHref?.let { RemoteUrl.resolve(baseUrl, it) },
+        // A link out of a catalog Liseur has a client for is rebuilt
+        // onto the address that answered, because a self-hosted server
+        // behind a proxy advertises a host the phone cannot reach. A
+        // plain OPDS catalog gets the opposite treatment: its links
+        // were made absolute against the document they came out of, and
+        // re-rooting one would point a cover on another host at this
+        // one. See `ServerKind.linksAreAbsolute`.
+        coverUrl = remote.coverHref?.let {
+            if (kind.linksAreAbsolute) it else RemoteUrl.resolve(baseUrl, it)
+        },
         downloadHref = remote.downloadHref,
         remoteUpdatedAt = remote.updatedAt,
         remotePageCount = remote.pageCount,

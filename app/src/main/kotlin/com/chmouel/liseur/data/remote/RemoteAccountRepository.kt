@@ -14,6 +14,10 @@ import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.komga.KomgaSetupClient
+import com.chmouel.liseur.data.kosync.KosyncPairing
+import com.chmouel.liseur.data.kosync.KosyncProbe
+import com.chmouel.liseur.data.kosync.ProvedKosyncPairing
+import com.chmouel.liseur.data.opds.OpdsSetupClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
@@ -55,19 +59,22 @@ class RemoteAccountRepository(
      */
     private val annotationSyncDao: AnnotationSyncDao? = null,
     /**
-     * Drops a KOReader pairing that the newly connected server cannot
-     * host ([ServerKind.hostsKosyncPeer]).
+     * The KOReader pairing, which a connection may drop, replace or
+     * leave alone.
      *
-     * A lambda onto `KosyncAccountRepository.disconnect` rather than the
-     * tables, so a pairing is put down through one door however it goes:
-     * clearing its agreements and its reported status is that
-     * repository's job and it should not be spelled out twice.
+     * Reached through `KosyncAccountRepository` rather than through the
+     * tables, so a pairing is put down through one door however it
+     * goes: clearing its agreements and its reported status is that
+     * repository's job and should not be spelled out twice. A provider
+     * rather than the repository itself, because the two are built at
+     * opposite ends of the composition root.
      */
-    private val forgetKosyncPeer: suspend () -> Unit = {},
+    private val kosync: () -> KosyncPairing = { KosyncPairing.None },
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
         ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(),
+        ServerKind.CUSTOM to OpdsSetupClient(),
     ),
     /**
      * Connecting and disconnecting each touch several tables, and a sync
@@ -172,7 +179,18 @@ class RemoteAccountRepository(
 
     private fun snapshotOf(server: RemoteServer?): Snapshot {
         val credentials = server?.credentials ?: return Snapshot.None
-        val origin = RemoteOrigin.of(server.baseUrl) ?: return Snapshot.None
+        // A path prefix is the right boundary for a server Liseur knows
+        // the shape of, where everything it serves hangs off one root.
+        // An arbitrary OPDS catalog does not work that way: the feed
+        // lives at /opds and the covers at /get, so a prefix rule leaves
+        // every cover on an authenticated catalog unsigned, and a shelf
+        // of blank covers is what the reader sees. Origin is the rule
+        // the catalog itself is fetched under, and ADR-0015 says why.
+        val origin = if (server.kind.linksAreAbsolute) {
+            RemoteOrigin.ofOrigin(server.baseUrl)
+        } else {
+            RemoteOrigin.of(server.baseUrl)
+        } ?: return Snapshot.None
         return Snapshot.Account(origin, credentials)
     }
 
@@ -280,6 +298,155 @@ class RemoteAccountRepository(
         allowHttp = allowHttp,
     )
 
+    /**
+     * Connects a Custom server: an OPDS catalog, a KOReader sync
+     * server, or one of the two.
+     *
+     * Both halves are asked before either is written down. A network
+     * call cannot join a transaction, but publication can wait for it,
+     * and waiting is what stops a reader being left connected to the
+     * half that answered while the form that reported the other half's
+     * error has already been cleared.
+     *
+     * The form is authoritative. Whatever was paired before — a
+     * Grimmory pairing, an earlier Custom one — a filled sync address
+     * replaces it and an empty one removes it. Otherwise choosing
+     * catalog-only Custom would quietly leave the last server's pairing
+     * running against a field the reader deliberately left blank.
+     */
+    suspend fun connectCustom(
+        catalogUrl: String,
+        username: String,
+        password: String,
+        kosyncUrl: String,
+        kosyncUsername: String,
+        kosyncPassword: String,
+        allowHttp: Boolean = false,
+    ): CustomSetupResult {
+        val wantsCatalog = catalogUrl.isNotBlank()
+        val wantsKosync = kosyncUrl.isNotBlank()
+        // Nothing typed is not a connection. Refused here as well as in
+        // the form, because "connected to no server at all" is a row
+        // every catalog and sync path would then have to think about.
+        if (!wantsCatalog && !wantsKosync) {
+            return CustomSetupResult(catalog = SetupFailure.WrongServer)
+        }
+        val setup = setups[ServerKind.CUSTOM]
+            ?: return CustomSetupResult(catalog = SetupFailure.WrongServer)
+
+        // A connection with no catalog has nothing to authenticate
+        // against, so the catalog fields are not part of it. Carried
+        // through anyway, a name left in a field the reader then blanked
+        // would end up in `remote_server.username` and in the account
+        // key, making one sync server two accounts depending on what was
+        // typed above it.
+        val credentials = if (wantsCatalog) {
+            customCredentials(username, password)
+        } else {
+            RemoteCredentials.Anonymous
+        }
+        val catalog = if (wantsCatalog) {
+            when (val probed = setup.connect(catalogUrl, credentials, allowHttp)) {
+                is SetupResult.Failure -> return CustomSetupResult(catalog = probed.reason)
+                is SetupResult.Success -> probed.capabilities
+            }
+        } else {
+            null
+        }
+
+        val pairing = if (wantsKosync) {
+            when (val probe = kosync().verify(kosyncUrl, kosyncUsername, kosyncPassword)) {
+                is KosyncProbe.Failure -> return CustomSetupResult(kosync = probe.reason)
+                is KosyncProbe.Proved -> probe.pairing
+            }
+        } else {
+            null
+        }
+
+        // The sync address is the connection's identity when it is the
+        // only address there is, so it is taken from the proved pairing
+        // rather than from the form. The reader may leave the scheme off
+        // — the field's own placeholder invites it — and storing
+        // `sync.example.com` where the pairing stored
+        // `https://sync.example.com` gives one server two spellings, two
+        // account keys, and a `baseUrl` nothing can parse.
+        val capabilities = catalog
+            ?: pairing?.let { kosyncOnlyCapabilities(it.baseUrl, kosyncUsername) }
+            ?: return CustomSetupResult(catalog = SetupFailure.WrongServer)
+
+        // With no catalog there is no catalog login, but there is still
+        // a person: the kosync one. Left out, `remote_server.username`
+        // is null, two kosync users on one sync server share an
+        // `accountKey`, a switch between them reads as the same account
+        // coming back, and Settings cannot say who is connected.
+        val syncOnlyUser = if (catalog == null) {
+            kosyncUsername.trim().takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+        publishCustom(capabilities, credentials, pairing, syncOnlyUser)
+        return CustomSetupResult()
+    }
+
+    /**
+     * A blank username and password mean the catalog is open to
+     * everyone, which is the common case for OPDS and has to be
+     * sayable: a null credential already means "the stored secret
+     * cannot be read", and an open catalog spelled that way would be
+     * reported as a broken account for ever.
+     */
+    private fun customCredentials(username: String, password: String): RemoteCredentials =
+        if (username.isBlank() && password.isBlank()) {
+            RemoteCredentials.Anonymous
+        } else {
+            RemoteCredentials.Basic(username.trim(), password)
+        }
+
+    /**
+     * What a Custom connection with only a sync address amounts to.
+     *
+     * Its base URL is the sync server, because that is the only address
+     * there is and a connection has to be shown somewhere. Its catalog
+     * URL is null, which is the whole point: every catalog path reads
+     * that and finds nothing to do, rather than trying the base URL and
+     * parsing a kosync endpoint as a feed.
+     */
+    private fun kosyncOnlyCapabilities(kosyncUrl: String, kosyncUsername: String) =
+        ServerCapabilities(
+            baseUrl = kosyncUrl.trim().trimEnd('/'),
+            canDownload = false,
+            accountId = null,
+            displayName = kosyncUsername.trim(),
+            catalogUrl = null,
+        )
+
+    /**
+     * Writes the server and the pairing together, or writes neither.
+     *
+     * Waiting for both probes still leaves a gap the size of a process
+     * death between storing the server and storing the pairing, and
+     * either side of that gap is a connection the reader did not ask
+     * for: a catalog with last week's pairing still attached, or a
+     * pairing with no account behind it.
+     */
+    private suspend fun publishCustom(
+        capabilities: ServerCapabilities,
+        credentials: RemoteCredentials,
+        pairing: ProvedKosyncPairing?,
+        syncOnlyUser: String?,
+    ) = changingAccount {
+        inTransaction {
+            storeLocked(
+                ServerKind.CUSTOM,
+                credentials,
+                capabilities,
+                keepsPairing = true,
+                signedInAs = syncOnlyUser,
+            )
+            if (pairing != null) kosync().adopt(pairing) else kosync().forget()
+        }
+    }
+
     private suspend fun connect(
         kind: ServerKind,
         url: String,
@@ -317,14 +484,37 @@ class RemoteAccountRepository(
         kind: ServerKind,
         credentials: RemoteCredentials,
         capabilities: ServerCapabilities,
+        /**
+         * Whether the caller is already deciding what happens to the
+         * KOReader pairing. Only a Custom connection does, because its
+         * form holds the sync address: it must be able to publish a
+         * pairing here, and clearing one first would undo the write it
+         * is in the middle of making.
+         */
+        keepsPairing: Boolean = false,
+        /**
+         * Who is connected, when the credential cannot say.
+         *
+         * Only a sync-only Custom connection needs this: its catalog
+         * credential is [RemoteCredentials.Anonymous] because there is
+         * no catalog, yet the reader did sign in — to the KOReader sync
+         * server. That name is the account here.
+         */
+        signedInAs: String? = null,
     ) {
-        val username = when (credentials) {
+        val username = signedInAs ?: when (credentials) {
             is RemoteCredentials.Basic -> credentials.username
             is RemoteCredentials.ApiKey -> capabilities.displayName
             // A pasted liseur-sync token does not say whose it is; the
             // token's own name is the honest answer.
             is RemoteCredentials.Bearer ->
                 capabilities.displayName.takeIf { it.isNotBlank() }
+            // An open catalog has no user to name. Null rather than
+            // the catalog's own title, because this column also tells
+            // two logins to one server apart, and a name nobody signed
+            // in as would make two anonymous connections to different
+            // catalogs look like the same account.
+            RemoteCredentials.Anonymous -> null
         }
         val stored = dao.get()
         // Once both sides carry the stable account id, it alone decides:
@@ -353,12 +543,13 @@ class RemoteAccountRepository(
         // working Grimmory pairing with it. This is tidiness: what keeps
         // a stray peer from syncing is that the peer and the foreground
         // policy both ask `hostsKosyncPeer` on every run.
-        if (!kind.hostsKosyncPeer) forgetKosyncPeer()
+        if (!kind.hostsKosyncPeer && !keepsPairing) kosync().forget()
 
         dao.upsert(
             RemoteServer(
                 kind = kind,
                 baseUrl = capabilities.baseUrl,
+                catalogUrl = capabilities.catalogUrl,
                 username = username,
                 passwordCipher = (credentials as? RemoteCredentials.Basic)
                     ?.takeIf { kind.signsWithStoredPassword }

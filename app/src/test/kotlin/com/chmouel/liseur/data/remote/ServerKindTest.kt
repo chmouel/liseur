@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.remote
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,8 +23,9 @@ class ServerKindTest {
         assertEquals("komga", ServerKind.KOMGA.urlPrefix)
         assertEquals("liseur-sync", ServerKind.LISEUR_SYNC.urlPrefix)
         assertEquals("grimmory", ServerKind.GRIMMORY.urlPrefix)
+        assertEquals("custom", ServerKind.CUSTOM.urlPrefix)
         assertEquals(
-            listOf("CALIBRE", "KOMGA", "LISEUR_SYNC", "GRIMMORY"),
+            listOf("CALIBRE", "KOMGA", "LISEUR_SYNC", "GRIMMORY", "CUSTOM"),
             ServerKind.entries.map { it.name },
         )
     }
@@ -108,9 +110,32 @@ class ServerKindTest {
             }
         }
         assertEquals(true, ServerKind.GRIMMORY.hostsKosyncPeer)
+        assertEquals(true, ServerKind.CUSTOM.hostsKosyncPeer)
         listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC).forEach {
             assertEquals("${it.name} must not host a kosync pairing", false, it.hostsKosyncPeer)
         }
+    }
+
+    /**
+     * `RemoteUrl.resolve` throws an absolute href's host away and
+     * rewrites it onto the configured base, which is right for a
+     * reverse-proxied calibre-web and catastrophic for a catalog written
+     * by somebody else: it would silently retarget a link at whatever
+     * host the reader happens to be connected to.
+     */
+    @Test
+    fun `a link an arbitrary catalog wrote is left where it points`() {
+        assertEquals(true, ServerKind.CUSTOM.linksAreAbsolute)
+        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.GRIMMORY).forEach {
+            assertEquals("${it.name} re-roots its links", false, it.linksAreAbsolute)
+        }
+    }
+
+    @Test
+    fun `a custom book's URL round-trips like any other`() {
+        assertEquals("custom:ab12cd:1", ServerKind.CUSTOM.remoteUrl("ab12cd:1"))
+        assertEquals("ab12cd:1", ServerKind.CUSTOM.remoteId("custom:ab12cd:1"))
+        assertNull(ServerKind.CUSTOM.remoteId("komga:b-1"))
     }
 
     /** An account of [kind] that has finished every setup step it has. */

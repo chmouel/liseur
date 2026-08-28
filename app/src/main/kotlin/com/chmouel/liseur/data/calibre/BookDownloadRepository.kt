@@ -23,6 +23,7 @@ import com.chmouel.liseur.data.remote.BookDeleter
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.ServerDeleteResult
 import java.io.File
+import java.net.URI
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
@@ -91,7 +92,13 @@ class BookDownloadRepository(
     val storage: Flow<StorageUse> = downloaded.map { books ->
         val dir = booksDir()
         val bytes = books.sumOf { book ->
-            book.remoteUuid?.let { File(dir, "$it.epub").length() } ?: 0L
+            // The file the reader actually has is the one they can open.
+            // Naming it from the remote id instead reports zero for a
+            // book that outlived the account it came from, which is the
+            // ordinary state of a book on a connection with no catalog.
+            book.localUri?.let { runCatching { File(URI(it)).length() }.getOrNull() }
+                ?: book.remoteUuid?.let { File(dir, "$it.epub").length() }
+                ?: 0L
         }
         StorageUse(count = books.size, bytes = bytes)
     }

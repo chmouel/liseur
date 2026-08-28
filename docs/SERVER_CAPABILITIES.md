@@ -6,15 +6,15 @@ side.
 
 ## Summary
 
-| Capability     | Komga               | calibre-web        | liseur-sync         | Grimmory            |
-|----------------|----------------------|---------------------|----------------------|----------------------|
-| Catalog browse | Implemented          | Implemented         | Implemented          | Implemented          |
-| Search         | Implemented          | Implemented         | Implemented          | Local only           |
-| File download  | Implemented          | Implemented         | Implemented          | Implemented          |
-| Position sync  | Implemented (full)   | Implemented (%)     | Implemented (full)   | Implemented (%, kosync) |
-| Book upload    | Not possible          | Not feasible        | Implemented          | Not implemented      |
-| Book delete    | Not possible          | Implemented         | Implemented          | Not implemented      |
-| Series claims  | N/A                   | N/A                 | Implemented          | N/A                  |
+| Capability     | Komga               | calibre-web        | liseur-sync         | Grimmory            | Custom (OPDS)       |
+|----------------|----------------------|---------------------|----------------------|----------------------|----------------------|
+| Catalog browse | Implemented          | Implemented         | Implemented          | Implemented          | Implemented          |
+| Search         | Implemented          | Implemented         | Implemented          | Local only           | Local only           |
+| File download  | Implemented          | Implemented         | Implemented          | Implemented          | Implemented          |
+| Position sync  | Implemented (full)   | Implemented (%)     | Implemented (full)   | Implemented (%, kosync) | Implemented (%, kosync) |
+| Book upload    | Not possible          | Not feasible        | Implemented          | Not implemented      | Not possible         |
+| Book delete    | Not possible          | Implemented         | Implemented          | Not implemented      | Not possible         |
+| Series claims  | N/A                   | N/A                 | Implemented          | N/A                  | N/A                  |
 
 ## Komga
 
@@ -124,6 +124,68 @@ pages, the same book counted twice, a `content` field that is not an array,
 an unparseable id, a media type this build has never heard of, or a whole
 catalog that filtered down to nothing — rather than letting a changed
 response read as an emptied library.
+
+## Custom (OPDS, KOReader sync, or one of the two)
+
+Not a product but a standard, and a way in for the servers nobody has
+written a client for: Calibre's own content server, COPS, Kavita, a
+static feed on a NAS. See
+[`adr/0015-custom-server.md`](adr/0015-custom-server.md).
+
+A Custom connection holds two addresses and either may be left blank:
+an OPDS catalog root, and a KOReader sync (kosync) server. Filling in
+both is the ordinary case; a catalog with no sync and a sync server with
+no catalog are both real.
+
+**Auth:** Basic, or none at all — plain OPDS is often open, and a blank
+username and password are stored as an anonymous credential rather than
+as a missing one. The kosync half keeps its own login and stores a
+derived key, never a password.
+
+### Connecting to one
+
+In Liseur, **Settings → Book server → Custom**:
+
+1. **OPDS catalog address** — the server *root*, not a books path.
+   Liseur walks the navigation feeds from there to find the shelves.
+2. **Username and password**, if the catalog asks for them. Both blank
+   means an open catalog.
+3. **KOReader sync address**, with its own username and password, if you
+   have one.
+
+Both addresses are checked before anything is saved, and the failing one
+is reported on its own field. Whatever is in the form when the connection
+succeeds is what you get: an empty sync address removes a pairing left by
+a previous server.
+
+| Feature | Server API | Liseur | Notes |
+|---------|-----------|--------|-------|
+| Catalog browse | Any Atom/OPDS 1.x feed | `OpdsCatalogClient` | Starts at the root and walks navigation entries breadth-first, following each `next` chain. Bounded by a visited set, a depth limit of 4 and a budget of 400 requests; a walk stopped by a bound reports `complete = false` and prunes nothing |
+| Search | OpenSearch description document, advertised per server | Returns nothing | The description is not at a path that can be guessed and every server fills it in differently. Liseur's library search is local and covers the whole catalog, which is walked into the database anyway |
+| File download | The entry's acquisition link | `OpdsFileSource` | Only DRM-free EPUB (`application/epub+zip`, `application/x-kobo-epub+zip`, or a link that states no type). `buy`, `borrow`, `sample` and `subscribe` are not downloads. An entry with no usable format is listed without a download rather than dropped |
+| Position sync | None — OPDS carries no reading state | `KosyncPositionSync`, paired on the same screen | Percentages only, matched by file hash. With no OPDS address, the pairing covers the books already on the device instead of a catalog's |
+| Series metadata | calibre-style `SERIES: Name [n]` in the entry's content block, where a server writes it | Parsed opportunistically | No standard field exists |
+| Book upload / delete | Not part of OPDS 1.x | Not implemented | |
+
+**Capability detection:** `OpdsSetupClient` fetches the root and requires
+it to parse as an Atom `<feed>` — a sign-in page answering 200 with HTML
+is well-formed XML and would otherwise be accepted as a catalog. What is
+stored is the URL that *answered*, so a root that redirects is not
+redirected again on every refresh. `canDownload` is true even for a root
+that lists only shelves: the books are a walk away.
+
+**The catalog's password goes to the catalog's origin and nowhere else.**
+A feed is written by someone else and may point anywhere — OPDS is
+federated, so pointing at another host is a feature. Links outside the
+configured origin are still followed, unsigned. Redirects are walked by
+hand so the decision is made before each hop rather than after, and an
+https catalog is never followed down to http.
+
+**A book carries the catalog that issued it.** Entry ids are opaque and
+unique only within their own feed, so `books.url` is
+`custom:{fingerprint}:{entry-id}`, the fingerprint derived from the
+catalog's origin and path. Two Custom servers both issuing `1` stay
+separate.
 
 ## Upload infrastructure
 

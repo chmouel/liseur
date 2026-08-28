@@ -244,11 +244,15 @@ fun SettingsScreen(
                         // would do. A row that always reads as an invitation
                         // makes a connected server look unconnected.
                         subtitle = catalog?.let {
-                            stringResource(
-                                R.string.server_connected,
-                                it.baseUrl,
-                                it.username ?: "",
-                            )
+                            val user = it.username?.takeIf { name -> name.isNotBlank() }
+                            if (user == null) {
+                                // An open catalog, or a connection that
+                                // only carries positions, has no name to
+                                // be signed in under.
+                                stringResource(R.string.server_connected_anon, it.baseUrl)
+                            } else {
+                                stringResource(R.string.server_connected, it.baseUrl, user)
+                            }
                         } ?: stringResource(R.string.settings_account_detail),
                         onClick = onOpenAccount,
                     )

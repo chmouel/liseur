@@ -26,7 +26,7 @@ import androidx.sqlite.execSQL
         AnnotationSync::class,
         KosyncPeer::class,
     ],
-    version = 42,
+    version = 43,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1069,6 +1069,26 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Gives a connection a catalog address of its own, so that
+         * having no catalog can be said rather than inferred (ADR-0015).
+         *
+         * Backfilled from `base_url` rather than left null. Every
+         * account already on a phone catalogs from its base URL, and a
+         * null would tell each of them it has no catalog at all — their
+         * libraries would simply stop refreshing on upgrade.
+         */
+        val MIGRATION_42_43 = object : Migration(42, 43) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `catalog_url` TEXT",
+                )
+                connection.execSQL(
+                    "UPDATE `remote_server` SET `catalog_url` = `base_url`",
+                )
+            }
+        }
+
         val MIGRATION_39_40 = object : Migration(39, 40) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1184,6 +1204,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_39_40,
             MIGRATION_40_41,
             MIGRATION_41_42,
+            MIGRATION_42_43,
         )
     }
 }

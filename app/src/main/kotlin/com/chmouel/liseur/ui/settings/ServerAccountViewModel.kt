@@ -325,11 +325,15 @@ class ServerAccountViewModel(
 
     fun connect(allowHttp: Boolean = false) {
         val current = _state.value
-        if (current.connecting || current.url.isBlank()) return
-        if (!current.credentialsSupplied()) return
+        if (current.connecting) return
+        if (!current.readyToConnect()) return
         _state.update { it.copy(connecting = true, error = null) }
 
         viewModelScope.launch {
+            if (current.kind == ServerKind.CUSTOM) {
+                connectCustom(current, allowHttp)
+                return@launch
+            }
             val result = when (current.kind) {
                 ServerKind.CALIBRE -> repository.connectCalibre(
                     url = current.url,
@@ -417,6 +421,55 @@ class ServerAccountViewModel(
         viewModelScope.launch { repository.setKoboToken(value.ifBlank { null }) }
     }
 
+    /**
+     * Connects a Custom server, whose form holds two addresses.
+     *
+     * Its own path because it is the only kind whose connection is not
+     * one probe: the catalog and the sync server are asked separately
+     * and reported separately, so the reader is told which of the two
+     * they mistyped rather than that "the server" said no.
+     */
+    private suspend fun connectCustom(current: ServerAccountUiState, allowHttp: Boolean) {
+        val result = repository.connectCustom(
+            catalogUrl = current.url.trim(),
+            username = current.username.trim(),
+            password = current.password,
+            kosyncUrl = current.kosyncUrl.trim(),
+            kosyncUsername = current.kosyncUsername.trim(),
+            kosyncPassword = current.kosyncPassword,
+            allowHttp = allowHttp,
+        )
+        if (result.connected) {
+            _state.update {
+                it.copy(
+                    connecting = false,
+                    password = "",
+                    kosyncPassword = "",
+                    error = null,
+                    kosyncError = null,
+                )
+            }
+            // With no catalog there is no walk to wait for, and waiting
+            // for one would mean the first sync never ran: the ordinary
+            // path starts the position sync only once a refresh has
+            // *completed*, and a connection with nothing to refresh
+            // never completes one.
+            if (current.url.isBlank()) {
+                positionSync.request(SyncScope.Full, System.currentTimeMillis())
+            } else {
+                fetchCatalogAndPositions()
+            }
+            return
+        }
+        _state.update {
+            it.copy(
+                connecting = false,
+                error = result.catalog?.toUiError(),
+                kosyncError = result.kosync?.toUiError(),
+            )
+        }
+    }
+
     /** Whether enough of the form is filled in to be worth trying. */
     private fun ServerAccountUiState.credentialsSupplied(): Boolean = when (kind) {
         ServerKind.CALIBRE, ServerKind.GRIMMORY ->
@@ -426,7 +479,24 @@ class ServerAccountViewModel(
             LiseurSyncSignIn.PASSWORD -> username.isNotBlank() && password.isNotBlank()
             LiseurSyncSignIn.TOKEN -> deviceToken.isNotBlank()
         }
+        // Either address is a connection on its own, and each one's
+        // credentials are its own business: an OPDS catalog is often
+        // open to anyone, while a kosync server always wants a name and
+        // a password. Half a pair is refused rather than guessed at —
+        // a name with no password would otherwise quietly become an
+        // anonymous connection that works, which is not what was typed.
+        ServerKind.CUSTOM -> {
+            val catalogReady = url.isBlank() ||
+                username.isBlank() == password.isBlank()
+            val kosyncReady = kosyncUrl.isBlank() ||
+                (kosyncUsername.isNotBlank() && kosyncPassword.isNotBlank())
+            (url.isNotBlank() || kosyncUrl.isNotBlank()) && catalogReady && kosyncReady
+        }
     }
+
+    /** The same test the Connect button is enabled by. */
+    internal fun ServerAccountUiState.readyToConnect(): Boolean =
+        credentialsSupplied() && (kind == ServerKind.CUSTOM || url.isNotBlank())
 
     /**
      * Works out what fetching everything would cost, and shows it.

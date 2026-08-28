@@ -1,4 +1,4 @@
-package com.chmouel.liseur.data.calibre
+package com.chmouel.liseur.data.opds
 
 import com.chmouel.liseur.data.remote.RemoteBook
 import java.io.ByteArrayInputStream
@@ -7,9 +7,25 @@ import org.w3c.dom.Element
 import org.w3c.dom.Node
 import org.xml.sax.SAXException
 
-/** A book as the calibre-web catalog describes it. */
+/** A book as an OPDS catalog describes it. */
 data class OpdsBook(
-    val uuid: String,
+    /**
+     * The entry's `<id>`, with calibre-web's `urn:uuid:` prefix taken
+     * off when it is there.
+     *
+     * Opaque, and only unique within the catalog that issued it: OPDS
+     * asks for an IRI and servers oblige with anything from a UUID to
+     * `1`. Two unrelated catalogs can hand out the same one, which is
+     * why a Custom connection namespaces it before it becomes a book's
+     * identity (`OpdsIdentity`).
+     *
+     * The prefix is stripped rather than kept because calibre-web books
+     * are already stored under the bare UUID, and `books.url` is
+     * schema: keeping the whole IRI would orphan the reading position
+     * of every calibre book on every phone.
+     */
+    val entryId: String,
+    /** calibre's integer id, when the links carry one. */
     val bookId: Int?,
     val title: String,
     val author: String?,
@@ -19,7 +35,18 @@ data class OpdsBook(
     val updatedAt: Long?,
     val seriesName: String? = null,
     val seriesIndex: Double? = null,
+    /**
+     * The entry's own `xml:base`, if it declared one.
+     *
+     * Kept unresolved. Which absolute URL these hrefs mean depends on
+     * where the document was fetched from, and the parser is given a
+     * string with no idea of that.
+     */
+    val xmlBase: String? = null,
 )
+
+/** A link out of a feed: a sub-feed to walk, or the next page. */
+data class OpdsLink(val href: String, val title: String? = null)
 
 /**
  * The same book, said in the way the rest of the app speaks.
@@ -28,7 +55,7 @@ data class OpdsBook(
  * real feeds; only this one function knows how the two line up.
  */
 fun OpdsBook.toRemote(): RemoteBook = RemoteBook(
-    remoteId = uuid,
+    remoteId = entryId,
     title = title,
     author = author,
     coverHref = coverHref,
@@ -40,24 +67,110 @@ fun OpdsBook.toRemote(): RemoteBook = RemoteBook(
     seriesIndex = seriesIndex,
 )
 
-/** One page of a catalog feed, and where the next one is. */
+/** One page of a catalog feed: what is in it, and where to go next. */
 data class OpdsPage(
+    /** What the feed calls itself, which is what the catalog is called. */
+    val title: String? = null,
     val books: List<OpdsBook>,
-    val nextHref: String?,
+    /**
+     * Entries that are shelves rather than books — "Authors", "By
+     * series", a folder — for a walker to descend into.
+     *
+     * calibre-web never needs these, because it knows the one URL its
+     * books are listed at. A catalog nobody has written a client for
+     * has to be walked from its root, and this is the road.
+     */
+    val navigation: List<OpdsLink> = emptyList(),
+    val nextHref: String? = null,
+    /** The feed element's `xml:base`, unresolved. See [OpdsBook.xmlBase]. */
+    val xmlBase: String? = null,
 )
 
 /**
- * Reads calibre-web's OPDS feeds.
+ * Reads OPDS feeds: calibre-web's, and any other server's.
  *
  * Written against the DOM rather than Readium's OPDS parser so it can be
  * unit-tested on the JVM, and so the calibre-web specifics — the UUID in
  * the entry id, the integer id in link paths — stay in one place.
+ *
+ * It reads a feed and nothing else: no fetching, no link resolution, no
+ * idea which URL the document came from. That is deliberate. Resolving
+ * a link needs the response's own URL and a policy about which origins
+ * may be signed, and neither belongs in a function whose only input is
+ * a string of XML.
  */
 object OpdsParser {
 
     private const val ACQUISITION_REL = "http://opds-spec.org/acquisition"
     private const val IMAGE_REL = "http://opds-spec.org/image"
     private const val THUMBNAIL_REL = "http://opds-spec.org/image/thumbnail"
+
+    /**
+     * The acquisition relations that mean "this file, now".
+     *
+     * The family has more members than these — `buy`, `borrow`,
+     * `subscribe`, `sample` — and every one of them is left out on
+     * purpose. Following a `buy` link fetches a payment page, and a
+     * `sample` is a few pages of the book dressed as the book. A
+     * download offered in the library has to be the whole thing, or the
+     * reader finds out only after the download, in the reader, at the
+     * end of chapter one.
+     */
+    private val DOWNLOAD_RELS = setOf(
+        ACQUISITION_REL,
+        "$ACQUISITION_REL/open-access",
+    )
+
+    /**
+     * What a link has to say it is before Liseur offers it as a
+     * download.
+     *
+     * Readium opens EPUB, and that is the whole list. A generic OPDS
+     * entry cheerfully advertises the same book as EPUB, PDF, CBZ, an
+     * audiobook and a Kindle file at once, and taking whichever came
+     * first would put a file in the library that cannot be opened —
+     * discovered after the download rather than before it.
+     */
+    private val EPUB_TYPES = setOf(
+        "application/epub+zip",
+        // Kobo's flavour of EPUB. calibre-web offers it beside the
+        // plain one when kepubify is set up; it is still a ZIP of XHTML
+        // and Readium reads it.
+        "application/x-kobo-epub+zip",
+    )
+
+    /**
+     * A type parameter that means the file is locked.
+     *
+     * An LCP-protected EPUB is served as `application/epub+zip` with a
+     * marker in the parameters, so type alone would offer it. Liseur
+     * cannot open one — `readium-lcp` depends on a proprietary library
+     * and will never be a dependency — so it is better not listed than
+     * downloaded and refused.
+     */
+    private val DRM_HINTS = listOf("lcp", "adept", "drm")
+
+    /**
+     * Relations that mean an entry is a shelf rather than a book.
+     *
+     * OPDS has no attribute saying which an entry is: the answer is in
+     * what it links to. An entry pointing at another feed is a way
+     * further in; anything else is a publication, including one whose
+     * only links are its cover, which is a book the server has no file
+     * for rather than a shelf.
+     */
+    private val NAVIGATION_RELS = setOf(
+        "subsection",
+        "collection",
+        "http://opds-spec.org/sort/new",
+        "http://opds-spec.org/sort/popular",
+        "http://opds-spec.org/featured",
+        "http://opds-spec.org/recommended",
+        "http://opds-spec.org/crawlable",
+        "http://opds-spec.org/facet",
+    )
+
+    private const val ATOM_TYPE = "application/atom+xml"
 
     private const val COMMENT = "<!--"
     private const val CDATA = "<![CDATA["
@@ -194,49 +307,136 @@ object OpdsParser {
             .parse(ByteArrayInputStream(xml.toByteArray()))
 
         val root = document.documentElement
-        val books = root.children("entry").mapNotNull(::parseEntry)
+        // Well-formed is not the same as a feed. An HTML sign-in page is
+        // usually valid XML, so parsing alone would let a Custom
+        // connection be made against a login form and then report the
+        // library as empty rather than as wrong.
+        if (root.localName?.lowercase() != "feed" && root.tagName.lowercase() != "feed") {
+            throw SAXException("the document is not an Atom feed but a <${root.tagName}>")
+        }
+        val entries = root.children("entry")
+        val books = entries.mapNotNull(::parseEntry)
+        val navigation = entries.filter(::isNavigation).mapNotNull(::navigationLink)
         val next = root.children("link")
-            .firstOrNull { it.getAttribute("rel") == "next" }
-            ?.getAttribute("href")
-            ?.takeIf { it.isNotEmpty() }
+            .firstOrNull { it.rels().contains("next") }
+            ?.href()
 
-        return OpdsPage(books, next)
+        return OpdsPage(
+            title = root.childText("title")?.trim(),
+            books = books,
+            navigation = navigation,
+            nextHref = next,
+            xmlBase = root.xmlBase(),
+        )
+    }
+
+    /**
+     * Whether this entry is a shelf to walk into rather than a book.
+     *
+     * An entry offering a download is a book whatever else it links to:
+     * some servers give a publication a `collection` link to its series
+     * as well, and reading that as a shelf would lose the book and send
+     * the walk round in a circle.
+     */
+    private fun isNavigation(entry: Element): Boolean {
+        val links = entry.children("link")
+        if (links.any { it.rels().any { rel -> rel in DOWNLOAD_RELS } }) return false
+        return links.any(::pointsAtAFeed)
+    }
+
+    private fun pointsAtAFeed(link: Element): Boolean =
+        link.rels().any { it in NAVIGATION_RELS } ||
+            link.getAttribute("type").startsWith(ATOM_TYPE, ignoreCase = true)
+
+    private fun navigationLink(entry: Element): OpdsLink? {
+        val href = entry.children("link").firstOrNull(::pointsAtAFeed)?.href() ?: return null
+        return OpdsLink(href, entry.childText("title")?.trim())
     }
 
     private fun parseEntry(entry: Element): OpdsBook? {
+        if (isNavigation(entry)) return null
         val id = entry.childText("id") ?: return null
-        val uuid = id.substringAfter("urn:uuid:", "").takeIf { it.isNotEmpty() } ?: return null
+        // calibre-web's books are stored under the bare UUID and
+        // `books.url` is schema, so the prefix keeps coming off. An id
+        // of any other shape is kept whole: it is opaque, and a server
+        // that says `1` means `1`.
+        val entryId = id.trim().removePrefix("urn:uuid:").takeIf { it.isNotEmpty() } ?: return null
         val title = entry.childText("title") ?: return null
 
         val links = entry.children("link")
-        val download = links
-            .filter { it.getAttribute("rel") == ACQUISITION_REL }
-            // Both an EPUB and a KEPUB are offered once calibre-web has
-            // kepubify set up; the plain EPUB is the smaller download.
-            .sortedBy { if (it.getAttribute("title").equals("EPUB", true)) 0 else 1 }
-            .firstOrNull()
-        val cover = links.firstOrNull { it.getAttribute("rel") == IMAGE_REL }
-            ?: links.firstOrNull { it.getAttribute("rel") == THUMBNAIL_REL }
+        val download = links.filter { it.rels().any { rel -> rel in DOWNLOAD_RELS } }
+            .let(::pickDownload)
+        val cover = links.firstOrNull { it.rels().contains(IMAGE_REL) }
+            ?: links.firstOrNull { it.rels().contains(THUMBNAIL_REL) }
 
-        val href = download?.getAttribute("href")?.takeIf { it.isNotEmpty() }
+        val href = download?.href()
         val series = parseSeries(entry)
 
         return OpdsBook(
-            uuid = uuid,
+            entryId = entryId,
             bookId = href?.let(::bookIdFromHref) ?: cover?.getAttribute("href")?.let(::bookIdFromHref),
             title = title.trim(),
             author = entry.children("author")
                 .firstNotNullOfOrNull { it.childText("name") }
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() },
-            coverHref = cover?.getAttribute("href")?.takeIf { it.isNotEmpty() },
+            coverHref = cover?.href(),
             downloadHref = href,
             sizeBytes = download?.getAttribute("length")?.toLongOrNull(),
             updatedAt = entry.childText("updated")?.let(::parseTimestamp),
             seriesName = series?.name,
             seriesIndex = series?.index,
+            xmlBase = entry.xmlBase(),
         )
     }
+
+    /**
+     * Which of an entry's acquisition links to offer, if any.
+     *
+     * A link that says nothing about its type is taken at its word,
+     * because plenty of servers say nothing and refusing them all would
+     * empty those libraries. A link that says what it is has to say
+     * EPUB: one that announces a PDF has been given its chance to be
+     * useful and was not.
+     */
+    private fun pickDownload(acquisitions: List<Element>): Element? {
+        val usable = acquisitions.filter { link ->
+            val type = link.getAttribute("type").trim()
+            type.isEmpty() || isReadableEpub(type)
+        }
+        return usable
+            // Both an EPUB and a KEPUB are offered once calibre-web has
+            // kepubify set up; the plain EPUB is the smaller download.
+            .sortedBy { if (it.getAttribute("title").equals("EPUB", true)) 0 else 1 }
+            .firstOrNull { it.href() != null }
+    }
+
+    private fun isReadableEpub(type: String): Boolean {
+        val media = type.substringBefore(';').trim().lowercase()
+        if (media !in EPUB_TYPES) return false
+        val parameters = type.substringAfter(';', "").lowercase()
+        return DRM_HINTS.none { it in parameters }
+    }
+
+    /** A link's `rel` values: the attribute may hold several. */
+    private fun Element.rels(): List<String> =
+        getAttribute("rel").split(' ', '\t', '\n').filter { it.isNotEmpty() }
+
+    private fun Element.href(): String? = getAttribute("href").takeIf { it.isNotEmpty() }
+
+    /**
+     * The element's own `xml:base`, if it set one.
+     *
+     * Read by local name as well as by namespace: `xml:` is bound
+     * implicitly, and a document builder that was handed a feed without
+     * the declaration still reports the attribute under its qualified
+     * name.
+     */
+    private fun Element.xmlBase(): String? =
+        (
+            getAttributeNS(javax.xml.XMLConstants.XML_NS_URI, "base").takeIf { it.isNotEmpty() }
+                ?: getAttribute("xml:base").takeIf { it.isNotEmpty() }
+            )?.trim()
 
     /** A series line as calibre-web writes it, once it has been read. */
     private class OpdsSeries(val name: String, val index: Double?)

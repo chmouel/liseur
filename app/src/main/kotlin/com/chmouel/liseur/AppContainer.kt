@@ -161,9 +161,9 @@ class AppContainer(context: Context) {
         sessionDao = database.readingSessionDao(),
         annotationSyncDao = database.annotationSyncDao(),
         // Declared later in this file, so it is reached through the
-        // lambda rather than held: the pairing is only ever put down
+        // lambda rather than held: the pairing is only ever touched
         // after a connection has landed, never while one is being built.
-        forgetKosyncPeer = { kosyncAccount.disconnect() },
+        kosync = { kosyncAccount },
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
@@ -173,6 +173,7 @@ class AppContainer(context: Context) {
             ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
                 deviceName = { deviceIdentity.current().name },
             ),
+            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsSetupClient(),
         ),
         inTransaction = { work -> database.withTransaction { work() } },
     )
@@ -261,7 +262,7 @@ class AppContainer(context: Context) {
         fingerprints = bookFingerprints,
         device = { deviceIdentity.current() },
         finishedState = finishedState,
-        connectedKind = { database.remoteServerDao().get()?.kind },
+        connectedServer = { database.remoteServerDao().get() },
         reporting = syncReporting,
         networkAvailability = networkAvailability,
         inTransaction = { work -> database.withTransaction { work() } },
@@ -308,19 +309,26 @@ class AppContainer(context: Context) {
             ServerKind.KOMGA to KomgaCatalogClient(),
             ServerKind.GRIMMORY to GrimmoryCatalogClient(),
             ServerKind.LISEUR_SYNC to LiseurSyncCatalogClient(),
+            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsCatalogClient(),
         ),
         files = mapOf(
             ServerKind.CALIBRE to CalibreFileSource(),
             ServerKind.KOMGA to KomgaFileSource(),
             ServerKind.GRIMMORY to GrimmoryFileSource(),
             ServerKind.LISEUR_SYNC to LiseurSyncFileSource(),
+            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsFileSource(),
         ),
-        // Grimmory has no entry, and unlike the others this is not a
+        // Neither Grimmory nor Custom has an entry, and unlike the
+        // others this is not a
         // matter of the app having nothing to say yet: its Komga shim
         // answers 404 to every progress route and never fills in a
         // book's read progress, so there is nothing to sync with. No
         // entry means `RoutedPositionSync` answers `NotApplicable` and
         // the app stays quiet, rather than offering a sync that fails.
+        // A Custom server is an OPDS catalog, and OPDS has no notion
+        // of a reading position at all. Both keep a place through the
+        // KOReader pairing instead, which is not routed here: it is a
+        // peer of its own, alongside whatever is connected.
         positions = mapOf(
             ServerKind.CALIBRE to koboSync,
             ServerKind.KOMGA to komgaSync,
