@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.opds
 
+import com.chmouel.liseur.data.remote.PrivateAddress
 import java.security.MessageDigest
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -28,8 +29,44 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 class OpdsScope private constructor(val root: HttpUrl) {
 
     /** Whether a request to [url] may carry the catalog's credential. */
-    fun signs(url: HttpUrl): Boolean =
+    fun signs(url: HttpUrl): Boolean = sameOrigin(url)
+
+    private fun sameOrigin(url: HttpUrl): Boolean =
         url.scheme == root.scheme && url.host == root.host && url.port == root.port
+
+    /**
+     * Whether [url] may be fetched at all.
+     *
+     * Two rules, both about addresses the *feed* chose rather than the
+     * reader:
+     *
+     * A secure catalog stays secure everywhere, not merely across a
+     * redirect. An https feed that names an absolute `http://` cover or
+     * download is asking for the same plaintext request a downgrade
+     * redirect would have asked for, and arrives by a route the redirect
+     * check never sees, because that link starts a fresh call.
+     *
+     * And a link from a catalog on the open internet to somewhere on the
+     * reader's own network is refused. This is deliberately *not* a ban
+     * on private addresses: a self-hosted library is the ordinary case
+     * here and lives at `192.168.…` or a `.local` name. Nor does it
+     * apply between private addresses — a catalog already inside the
+     * house naming its neighbour gains nothing it did not already have.
+     * What is refused is the pivot: a public server naming the reader's
+     * router, printer or metadata endpoint and having the phone go and
+     * fetch it, a reachability probe from outside that the reader never
+     * asked for and cannot see.
+     *
+     * Judged from the address as written. A public name that resolves to
+     * a private address is not caught, and closing that needs the
+     * resolved socket rather than the URL.
+     */
+    fun mayFetch(url: HttpUrl): Boolean = when {
+        sameOrigin(url) -> true
+        root.isHttps && !url.isHttps -> false
+        PrivateAddress.matches(root) -> true
+        else -> !PrivateAddress.matches(url)
+    }
 
     /**
      * A short, stable name for this catalog, for telling two of them
@@ -44,11 +81,17 @@ class OpdsScope private constructor(val root: HttpUrl) {
      *
      * Hashed rather than spelled out because it goes into `books.url`,
      * where a raw address would be unreadable and fragile. Derived from
-     * scheme, host, port and path, so the same catalog reached the same
-     * way is always the same name.
+     * scheme, host, port, path **and query**, so the same catalog
+     * reached the same way is always the same name — and two different
+     * ones are not. A query is how OPDS servers commonly pick a shelf,
+     * a library or a user, so `?shelf=a` and `?shelf=b` at one path are
+     * two catalogs, and leaving the query out would have handed them one
+     * namespace and let each adopt the other's books.
      */
     val fingerprint: String by lazy {
-        val canonical = "${root.scheme}://${root.host}:${root.port}${root.encodedPath.trimEnd('/')}"
+        val query = root.encodedQuery?.let { "?$it" } ?: ""
+        val canonical =
+            "${root.scheme}://${root.host}:${root.port}${root.encodedPath.trimEnd('/')}$query"
         MessageDigest.getInstance("SHA-256")
             .digest(canonical.toByteArray())
             .take(6)

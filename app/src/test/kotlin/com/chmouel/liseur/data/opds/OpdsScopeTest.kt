@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.opds
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -90,5 +91,54 @@ class OpdsScopeTest {
     fun `something that is not an address is not a catalog`() {
         assertNull(OpdsScope.of("not a url"))
         assertNull(OpdsScope.of("ftp://books.example/opds"))
+    }
+
+    @Test
+    fun `two shelves at one path are two catalogs`() {
+        // A query is how catalogs commonly pick a shelf, a library or a
+        // user. Dropped from the fingerprint, both shelves share one
+        // namespace and each adopts the other's books.
+        assertNotEquals(
+            scope("https://books.example/opds?shelf=a").fingerprint,
+            scope("https://books.example/opds?shelf=b").fingerprint,
+        )
+    }
+
+    @Test
+    fun `a secure catalog does not name a plaintext file`() {
+        // Not a redirect: an absolute `http://` link in an https feed
+        // starts a fresh call, so the per-call downgrade check never
+        // sees it.
+        val root = scope("https://books.example/opds")
+
+        assertFalse(root.mayFetch("http://files.example/1.epub".toHttpUrl()))
+        assertTrue(root.mayFetch("https://files.example/1.epub".toHttpUrl()))
+    }
+
+    @Test
+    fun `a catalog on the internet does not reach into the house`() {
+        val root = scope("https://books.example/opds")
+
+        assertFalse(root.mayFetch("https://192.168.1.1/admin".toHttpUrl()))
+        assertFalse(root.mayFetch("https://localhost:8080/".toHttpUrl()))
+        assertFalse(root.mayFetch("https://nas.local/x".toHttpUrl()))
+        assertTrue(root.mayFetch("https://archive.example/1.epub".toHttpUrl()))
+    }
+
+    @Test
+    fun `a catalog in the house may name its neighbours`() {
+        // Self-hosting is the ordinary case here, and a server already
+        // on the reader's network gains nothing by naming another one.
+        val root = scope("http://192.168.1.5:8080/opds")
+
+        assertTrue(root.mayFetch("http://192.168.1.9/covers/1.jpg".toHttpUrl()))
+        assertTrue(root.mayFetch("http://nas.local/1.epub".toHttpUrl()))
+    }
+
+    @Test
+    fun `the catalog's own address is always reachable`() {
+        val root = scope("http://192.168.1.5:8080/opds")
+
+        assertTrue(root.mayFetch("http://192.168.1.5:8080/get/1.epub".toHttpUrl()))
     }
 }

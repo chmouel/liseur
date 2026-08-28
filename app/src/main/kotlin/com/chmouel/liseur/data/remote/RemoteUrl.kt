@@ -15,10 +15,22 @@ object RemoteUrl {
      * was given, drops a trailing slash, and keeps any path prefix,
      * because a self-hosted server is often reverse-proxied under one.
      *
+     * A query is dropped by default, because for the servers Liseur
+     * knows the shape of the base is an address to build paths onto and
+     * a query on it is a paste accident. Set [keepQuery] where the query
+     * is part of which catalog is meant: an OPDS root commonly selects
+     * a shelf, a library or a user that way, and two of those at one
+     * path are two different catalogs.
+     *
      * Returns null when the input cannot be a URL at all.
      */
-    fun normaliseBase(input: String, defaultScheme: String = "https"): String? {
-        val trimmed = input.trim().substringBefore('?').substringBefore('#')
+    fun normaliseBase(
+        input: String,
+        defaultScheme: String = "https",
+        keepQuery: Boolean = false,
+    ): String? {
+        val whole = input.trim().substringBefore('#')
+        val trimmed = if (keepQuery) whole else whole.substringBefore('?')
         if (trimmed.isEmpty()) return null
 
         val withScheme = when {
@@ -32,7 +44,11 @@ object RemoteUrl {
         val host = withScheme.substring(schemeEnd).substringBefore('/')
         if (host.isEmpty() || host.startsWith(":")) return null
 
-        return withScheme.trimEnd('/')
+        // A trailing slash is noise on a path and meaningful nowhere,
+        // but it is not the last character when a query follows it.
+        val query = withScheme.substringAfter('?', "")
+        if (query.isEmpty()) return withScheme.trimEnd('/')
+        return withScheme.substringBefore('?').trimEnd('/') + "?" + query
     }
 
     /** Swaps `https` for `http`, used only after the user asks for it. */

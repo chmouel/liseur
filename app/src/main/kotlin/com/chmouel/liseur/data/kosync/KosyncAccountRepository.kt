@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.KosyncPeerDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.remote.PeerPositionSync
+import com.chmouel.liseur.data.remote.PrivateAddress
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SetupFailure
 import com.chmouel.liseur.data.remote.SyncFailure
@@ -113,7 +114,6 @@ class KosyncAccountRepository(
                 is RemoteResult.Failed -> return KosyncSetupOutcome.Failure(setupReason(created.reason))
             }
         }
-
         return when (val probe = prove(root, login, password)) {
             is KosyncProbe.Failure -> KosyncSetupOutcome.Failure(probe.reason)
             is KosyncProbe.Proved -> {
@@ -122,7 +122,6 @@ class KosyncAccountRepository(
             }
         }
     }
-
     /**
      * Proves a pairing and keeps nothing, so a caller with a second
      * address to prove can find out about both before writing down
@@ -138,6 +137,24 @@ class KosyncAccountRepository(
     }
 
     private suspend fun prove(root: String, login: String, password: String): KosyncProbe {
+        // Every kosync call carries `x-auth-key`, and that key is the
+        // password in every sense that matters: the server compares it
+        // as given, so anyone who reads one off the wire can replay it
+        // for good. Registering already refused cleartext; authorising
+        // with the derived key is no safer, and it happens far more
+        // often.
+        //
+        // Refused only towards a public host. A sync server on the
+        // reader's own network, over plain HTTP, is a considered choice
+        // about a network they control and is how most of these are
+        // actually run; that stays working.
+        if (root.startsWith("http://") && !PrivateAddress.matches(root)) {
+            return KosyncProbe.Failure(SetupFailure.InsecureTransport)
+        }
+        return proveAuthorised(root, login, password)
+    }
+
+    private suspend fun proveAuthorised(root: String, login: String, password: String): KosyncProbe {
         val credentials = KosyncCredentials(login, KosyncCredentials.keyFor(password))
         when (val asked = client.authorize(root, credentials)) {
             is RemoteResult.Ok -> Unit

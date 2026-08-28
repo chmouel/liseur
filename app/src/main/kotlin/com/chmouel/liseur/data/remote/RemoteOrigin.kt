@@ -49,6 +49,21 @@ class RemoteOrigin private constructor(
         }
 
         /**
+         * The same boundary without the path, for a server whose own
+         * links are absolute and routinely sit beside the address the
+         * reader gave rather than beneath it.
+         */
+        fun ofOrigin(baseUrl: String): RemoteOrigin? {
+            val url = baseUrl.toHttpUrlOrNull() ?: return null
+            return RemoteOrigin(
+                scheme = url.scheme,
+                host = url.host,
+                port = url.port,
+                segments = emptyList(),
+            )
+        }
+
+        /**
          * A trailing slash is not a path segment. OkHttp reports one as a
          * trailing empty string, so `/api` and `/api/` would otherwise be
          * different origins.

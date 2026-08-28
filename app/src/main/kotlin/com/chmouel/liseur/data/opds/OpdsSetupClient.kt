@@ -36,7 +36,7 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
         credentials: RemoteCredentials,
         allowHttp: Boolean,
     ): SetupResult = withContext(Dispatchers.IO) {
-        val base = RemoteUrl.normaliseBase(rawUrl)
+        val base = RemoteUrl.normaliseBase(rawUrl, keepQuery = true)
             ?: return@withContext SetupResult.Failure(SetupFailure.WrongServer)
 
         when (val probed = probe(base, credentials)) {
@@ -71,6 +71,21 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
         val scope = OpdsScope.of(base) ?: return Probe.Failed(SetupFailure.WrongServer)
         return try {
             val fetched = http.get(scope.root, scope, credentials)
+            // Storing where the redirect landed is right for a path
+            // correction and wrong across origins: the stored address
+            // becomes the credential origin on every later refresh, so a
+            // catalog that answers setup with a redirect elsewhere would
+            // be choosing where the reader's password goes from then on.
+            // The first request was safe — the scope refused to sign a
+            // stranger — but the second would not be.
+            //
+            // Nothing is lost by refusing. The reader is one address away
+            // from the same connection, typed themselves, and being told
+            // so is better than being moved silently.
+            if (credentials !is RemoteCredentials.Anonymous && !scope.signs(fetched.url)) {
+                fetched.response.close()
+                return Probe.Failed(SetupFailure.WrongServer)
+            }
             val page = fetched.response.use { response ->
                 when {
                     response.code == 401 || response.code == 403 ->

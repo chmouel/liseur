@@ -179,7 +179,18 @@ class RemoteAccountRepository(
 
     private fun snapshotOf(server: RemoteServer?): Snapshot {
         val credentials = server?.credentials ?: return Snapshot.None
-        val origin = RemoteOrigin.of(server.baseUrl) ?: return Snapshot.None
+        // A path prefix is the right boundary for a server Liseur knows
+        // the shape of, where everything it serves hangs off one root.
+        // An arbitrary OPDS catalog does not work that way: the feed
+        // lives at /opds and the covers at /get, so a prefix rule leaves
+        // every cover on an authenticated catalog unsigned, and a shelf
+        // of blank covers is what the reader sees. Origin is the rule
+        // the catalog itself is fetched under, and ADR-0015 says why.
+        val origin = if (server.kind.linksAreAbsolute) {
+            RemoteOrigin.ofOrigin(server.baseUrl)
+        } else {
+            RemoteOrigin.of(server.baseUrl)
+        } ?: return Snapshot.None
         return Snapshot.Account(origin, credentials)
     }
 

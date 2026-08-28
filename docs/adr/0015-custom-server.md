@@ -79,6 +79,19 @@ beneath it (`/opds` and `/get`), so a prefix rule breaks the ordinary
 case in order to defend against another document on the reader's own
 server. A browser scopes a Basic credential the same way.
 
+That same origin rule decides which covers are signed. Cover URLs go
+through `RemoteOrigin`, which matches by path prefix, and a path prefix
+would have left every cover on an authenticated `/opds` catalog
+unsigned. `RemoteOrigin.ofOrigin()` drops the path for the kinds whose
+links are absolute, so the rule the catalog is fetched under is the rule
+its covers are fetched under.
+
+**The fingerprint includes the query.** `?shelf=…` and `?library=…` are
+how catalogs commonly pick which books to show, so two shelves of one
+server are two catalogs. Trimmed off, they would share one namespace and
+each could adopt the other's books. `RemoteUrl.normaliseBase` drops a
+query for every other kind, where it is noise; OPDS setup opts in.
+
 **Redirects are walked by hand.** Checking where a redirect landed is
 too late: OkHttp re-sends the `Authorization` header on a same-host hop
 and has already delivered the password by the time anything can object.
@@ -86,6 +99,40 @@ and has already delivered the password by the time anything can object.
 one is sent. An https catalog is never followed down to http, whatever
 the server says — a redirect is not the reader agreeing to send their
 password in the clear.
+
+The downgrade rule is asked of the *scope*, not of the current call. An
+https feed naming an absolute `http://` cover starts a fresh request
+whose own start is http, so a per-call check never fires. Asking
+`OpdsScope.mayFetch` covers both routes with one predicate, and it is
+asked of the first URL as well as of every hop.
+
+Setup is where a redirect costs the most. Storing where one landed is
+right for a path correction and wrong across origins: the stored address
+becomes the credential origin on every later refresh, so a catalog that
+answers setup with a redirect elsewhere would be choosing where the
+password goes from then on. The first request is safe, because the scope
+refuses to sign a stranger; the second would not be. An authenticated
+setup redirect that leaves the origin is refused, and the reader is one
+retyped address away from the same connection. An anonymous one is
+followed, because nothing is being handed out.
+
+**A catalog on the internet does not reach into the house.** A feed can
+name `192.168.1.1`, `169.254.169.254` or `printer.local` and have the
+phone go and fetch it, which is a reachability probe from outside that
+the reader never asked for and cannot see. Refused — but only from a
+public catalog. Self-hosting is the ordinary case here and lives at
+`192.168.…`, and a catalog already inside the house gains nothing by
+naming its neighbour, so a private root may fetch privately. Judged from
+the address as written, so a public name resolving to a private address
+is not caught; closing that needs the resolved socket rather than the
+URL.
+
+The same reasoning governs the sync half. `x-auth-key` is compared as
+given, so anyone who reads one off the wire can replay it for good: it
+is the password in every sense that matters, and unlike registration it
+goes out on every call. Plain HTTP to a public sync server is refused;
+plain HTTP across a network the reader controls is their call to make,
+and refusing it would break most of the sync servers actually in use.
 
 **Links are resolved against the document they were written in.**
 `RemoteUrl.resolve()` throws an absolute href's host away and rewrites

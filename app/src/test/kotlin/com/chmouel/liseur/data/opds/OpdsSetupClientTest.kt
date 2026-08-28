@@ -137,4 +137,81 @@ class OpdsSetupClientTest {
 
         assertEquals(SetupFailure.WrongServer, (result as SetupResult.Failure).reason)
     }
+
+    @Test
+    fun `a catalog that answers setup by pointing elsewhere is refused`() {
+        // The redirect destination would be stored as the catalog, and
+        // therefore as the origin the password is signed to on every
+        // later refresh. The first request was safe; the second would
+        // not be.
+        val elsewhere = MockWebServer()
+        elsewhere.start(InetAddress.getByName("127.0.0.1"), 0)
+        try {
+            server.enqueue(
+                MockResponse(
+                    code = 302,
+                    headers = Headers.headersOf(
+                        "Location",
+                        "http://127.0.0.1:${elsewhere.port}/opds",
+                    ),
+                ),
+            )
+            elsewhere.enqueue(feed())
+
+            val result = runBlocking {
+                OpdsSetupClient().connect(
+                    url(),
+                    RemoteCredentials.Basic("reader", "secret"),
+                    allowHttp = true,
+                )
+            }
+
+            assertEquals(SetupFailure.WrongServer, (result as SetupResult.Failure).reason)
+        } finally {
+            elsewhere.close()
+        }
+    }
+
+    @Test
+    fun `an anonymous catalog may still be moved`() {
+        // Nothing is being handed out, so following the redirect costs
+        // the reader nothing and spares them retyping the address.
+        val elsewhere = MockWebServer()
+        elsewhere.start(InetAddress.getByName("127.0.0.1"), 0)
+        try {
+            server.enqueue(
+                MockResponse(
+                    code = 302,
+                    headers = Headers.headersOf(
+                        "Location",
+                        "http://127.0.0.1:${elsewhere.port}/opds",
+                    ),
+                ),
+            )
+            elsewhere.enqueue(feed("Moved"))
+
+            val result = connect() as SetupResult.Success
+
+            assertEquals("Moved", result.capabilities.displayName)
+        } finally {
+            elsewhere.close()
+        }
+    }
+
+    @Test
+    fun `two shelves of one catalog stay two addresses`() {
+        // `?shelf=…` is how catalogs commonly pick a shelf. Trimmed off
+        // here, both would be stored as one connection.
+        server.enqueue(feed())
+
+        val result = runBlocking {
+            OpdsSetupClient().connect(
+                "${url()}?shelf=a",
+                RemoteCredentials.Anonymous,
+                allowHttp = true,
+            )
+        } as SetupResult.Success
+
+        assertTrue(result.capabilities.baseUrl.endsWith("?shelf=a"))
+    }
 }

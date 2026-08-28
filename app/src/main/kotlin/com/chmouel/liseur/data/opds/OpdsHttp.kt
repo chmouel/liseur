@@ -41,6 +41,10 @@ class OpdsHttp(private val client: OkHttpClient = default()) {
     ): OpdsFetch {
         var url = start
         var hops = 0
+        // The transport and stranger-address rules belong to the
+        // connection, not to this call: a link that starts a fresh
+        // request would otherwise be its own root and answer to nothing.
+        if (!scope.mayFetch(url)) throw RemoteHttpFailure(SyncFailure.InsecureTransport)
         while (true) {
             val response = client.newCall(build(url, scope, credentials, range)).execute()
             val location = if (response.isRedirect) response.header("Location") else null
@@ -51,7 +55,7 @@ class OpdsHttp(private val client: OkHttpClient = default()) {
             val next = url.resolve(location) ?: throw RemoteHttpFailure(SyncFailure.Malformed)
             // A secure catalog stays secure. Nothing the server can say
             // in a header is the reader agreeing to plain HTTP.
-            if (start.isHttps && !next.isHttps) {
+            if (!scope.mayFetch(next)) {
                 throw RemoteHttpFailure(SyncFailure.InsecureTransport)
             }
             url = next

@@ -209,6 +209,34 @@ class CustomConnectionTest {
         assertTrue(first != db.remoteServerDao().get()!!.accountKey)
     }
 
+    @Test
+    fun `a cover beside the feed is signed`() {
+        // Catalogs routinely serve their files from a path beside the
+        // feed rather than beneath it: the feed at /opds, the covers and
+        // downloads at /get. A path-prefix rule leaves every one of them
+        // unsigned, and a shelf of blank covers is what the reader sees.
+        runTest {
+            connect(catalog = CATALOG, kosyncUrl = "", username = "ada", password = "pw")
+
+            assertEquals(
+                RemoteCredentials.Basic("ada", "pw"),
+                account.credentialsForUrl("https://books.example/get/EPUB/1"),
+            )
+        }
+    }
+
+    @Test
+    fun `a cover the feed points at another server is not`() {
+        runTest {
+            connect(catalog = CATALOG, kosyncUrl = "", username = "ada", password = "pw")
+
+            assertNull(account.credentialsForUrl("https://covers.example/1.jpg"))
+            assertNull(account.credentialsForUrl("http://books.example/get/1"))
+            assertNull(account.credentialsForUrl("https://books.example:8443/get/1"))
+            assertNull(account.credentialsForUrl("https://books.example.evil.test/get/1"))
+        }
+    }
+
     private suspend fun connect(
         catalog: String,
         kosyncUrl: String,

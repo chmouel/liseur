@@ -560,20 +560,52 @@ class KosyncPositionSyncTest {
 
     @Test
     fun `an upper case scheme is read as the scheme it is`() = runTest {
-        // Not a bypass today, because normalise refused the whole
-        // address, but "wrong server" is the wrong thing to tell someone
-        // who typed HTTP:// and needs to hear why it will not be used.
+        // "Wrong server" is the wrong thing to tell someone who typed
+        // HTTP:// and needs to hear why it will not be used.
         val outcome = repository().connect(
             url = "HTTP://sync.example.com",
             username = "ada",
             password = "pw",
-            register = true,
         )
 
         assertEquals(
             KosyncSetupOutcome.Failure(SetupFailure.InsecureTransport),
             outcome,
         )
+    }
+
+    @Test
+    fun `plain http to a server on the internet is refused`() = runTest {
+        // `x-auth-key` is compared as given, so anyone who reads one off
+        // the wire can replay it for good. It is the password in every
+        // sense that matters, and it goes out on every call rather than
+        // only at registration.
+        val outcome = repository().connect(
+            url = "http://sync.example.com",
+            username = "ada",
+            password = "pw",
+        )
+
+        assertEquals(
+            KosyncSetupOutcome.Failure(SetupFailure.InsecureTransport),
+            outcome,
+        )
+    }
+
+    @Test
+    fun `plain http to a server in the house still works`() = runTest {
+        // Self-hosting is the ordinary case. Plain HTTP across a network
+        // the reader controls is their call to make, and refusing it
+        // would break most of the sync servers actually in use.
+        server.enqueue(json("""{"authorized":"OK"}"""))
+
+        val outcome = repository().connect(
+            url = "http://127.0.0.1:${server.port}",
+            username = "ada",
+            password = "pw",
+        )
+
+        assertEquals(KosyncSetupOutcome.Success, outcome)
     }
 
     @Test
