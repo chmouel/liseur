@@ -54,6 +54,16 @@ class RemoteAccountRepository(
      * in. Null in tests that do not exercise a liseur-sync account.
      */
     private val annotationSyncDao: AnnotationSyncDao? = null,
+    /**
+     * Drops a KOReader pairing that the newly connected server cannot
+     * host ([ServerKind.hostsKosyncPeer]).
+     *
+     * A lambda onto `KosyncAccountRepository.disconnect` rather than the
+     * tables, so a pairing is put down through one door however it goes:
+     * clearing its agreements and its reported status is that
+     * repository's job and it should not be spelled out twice.
+     */
+    private val forgetKosyncPeer: suspend () -> Unit = {},
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -336,6 +346,14 @@ class RemoteAccountRepository(
         val existing = stored?.takeIf { sameAccount }
 
         if (stored != null && !sameAccount) retireForAccountSwitch()
+        // A pairing the new server cannot host goes with the switch,
+        // rather than sitting there invisibly. Here rather than when the
+        // reader starts connecting, because an attempt that fails leaves
+        // the old server standing and would otherwise have taken a
+        // working Grimmory pairing with it. This is tidiness: what keeps
+        // a stray peer from syncing is that the peer and the foreground
+        // policy both ask `hostsKosyncPeer` on every run.
+        if (!kind.hostsKosyncPeer) forgetKosyncPeer()
 
         dao.upsert(
             RemoteServer(

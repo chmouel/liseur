@@ -290,7 +290,7 @@
     <string name="server_lost_to_restore">Your server account was signed out. Passwords and API keys are encrypted with a key that never leaves the phone it was made on, so one restored from a backup or moved to a new device can\'t be read. Sign in again to get it back.</string>
     <string name="server_sync_identity">Positions sync as %1$s. Reading done under another login stays on this device.</string>
     <string name="kosync_section">KOReader sync</string>
-    <string name="kosync_summary">Follow your reading position through a KOReader sync (kosync) server, alongside this catalog. It covers the books downloaded from the connected server.</string>
+    <string name="kosync_summary">Grimmory keeps your books but not your place in them. Pair a KOReader sync (kosync) server and your reading position follows you across devices, for the books you have downloaded from Grimmory.</string>
     <string name="kosync_url">Sync server address</string>
     <string name="kosync_register">Create the account on the server</string>
     <string name="kosync_register_help">For servers that take new accounts this way. Grimmory does not: its KOReader users are made in its device settings.</string>

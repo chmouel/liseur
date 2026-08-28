@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SetupFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
@@ -69,6 +70,54 @@ class KosyncPositionSyncTest {
         db.close()
         file.delete()
         CredentialCipher.keyForTesting = null
+    }
+
+    // -- Whose server it is ------------------------------------------------
+
+    /**
+     * A saved pairing is not permission to sync. An account switch
+     * interrupted halfway, a crash, or a database restored onto a phone
+     * that never made the pairing all leave a row behind, and a server
+     * that carries positions itself must not have a second, invisible
+     * source disagreeing with it.
+     */
+    @Test
+    fun `a pairing stays quiet under a server that carries positions itself`() = runTest {
+        for (kind in listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC)) {
+            pair()
+            db.bookDao().upsert(book())
+
+            val outcome = sync(connectedKind = kind).syncAll(null)
+
+            assertEquals(SyncOutcome.NotApplicable, outcome)
+            assertEquals("$kind must not be spoken to", 0, server.requestCount)
+        }
+    }
+
+    @Test
+    fun `a pairing with nothing connected stays quiet`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+
+        assertEquals(SyncOutcome.NotApplicable, sync(connectedKind = null).syncAll(null))
+        assertEquals(0, server.requestCount)
+    }
+
+    /**
+     * Not just the run: the answers the reader is shown come from the
+     * same test, so an ineligible pairing reports no position rather
+     * than one it has no business fetching.
+     */
+    @Test
+    fun `an ineligible pairing offers no preview and syncs no book`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        val komga = sync(connectedKind = ServerKind.KOMGA)
+
+        assertEquals(false, komga.canSync(BOOK))
+        assertEquals(PreviewOutcome.NotSynced, komga.previewBook(BOOK))
+        assertNull(komga.identity())
+        assertEquals(0, server.requestCount)
     }
 
     // -- The credential ----------------------------------------------------
@@ -486,7 +535,10 @@ class KosyncPositionSyncTest {
 
     private suspend fun peerKey(): String = db.kosyncPeerDao().get()!!.accountKey
 
-    private fun sync(online: Boolean = true): KosyncPositionSync {
+    private fun sync(
+        online: Boolean = true,
+        connectedKind: ServerKind? = ServerKind.GRIMMORY,
+    ): KosyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return KosyncPositionSync(
             kosyncDao = db.kosyncPeerDao(),
@@ -496,6 +548,7 @@ class KosyncPositionSyncTest {
             fingerprints = BookFingerprintStore(context, db.workIdentityDao()) { NOW },
             device = { DeviceIdentity(id = "dev-1", name = "Test Phone") },
             finishedState = FinishedState(db.bookDao(), db.readingProgressDao()),
+            connectedKind = { connectedKind },
             networkAvailability = { online },
             now = { NOW },
         )

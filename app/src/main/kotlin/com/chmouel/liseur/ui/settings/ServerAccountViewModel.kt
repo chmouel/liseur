@@ -520,9 +520,12 @@ class ServerAccountViewModel(
 /**
  * Grimmory's own kosync mount, offered once.
  *
- * Only while the URL field is untouched and nothing is paired, so a
- * reader's typing is never overwritten and an existing pairing is never
- * disturbed; null means "leave the field as it is".
+ * Grimmory alone, and not because it is the only kind that may pair:
+ * `/api/koreader` is Grimmory's spelling of the route, so there is
+ * nothing to guess for anything else. Only while the URL field is
+ * untouched and nothing is paired, so a reader's typing is never
+ * overwritten and an existing pairing is never disturbed; null means
+ * "leave the field as it is".
  */
 internal fun kosyncPrefillUrl(
     server: RemoteServer?,

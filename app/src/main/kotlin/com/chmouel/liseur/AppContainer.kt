@@ -160,6 +160,10 @@ class AppContainer(context: Context) {
         identityDao = database.workIdentityDao(),
         sessionDao = database.readingSessionDao(),
         annotationSyncDao = database.annotationSyncDao(),
+        // Declared later in this file, so it is reached through the
+        // lambda rather than held: the pairing is only ever put down
+        // after a connection has landed, never while one is being built.
+        forgetKosyncPeer = { kosyncAccount.disconnect() },
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
@@ -257,6 +261,7 @@ class AppContainer(context: Context) {
         fingerprints = bookFingerprints,
         device = { deviceIdentity.current() },
         finishedState = finishedState,
+        connectedKind = { database.remoteServerDao().get()?.kind },
         reporting = syncReporting,
         networkAvailability = networkAvailability,
         inTransaction = { work -> database.withTransaction { work() } },

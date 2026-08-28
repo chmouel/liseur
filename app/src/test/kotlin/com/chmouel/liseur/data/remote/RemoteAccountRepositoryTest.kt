@@ -3,9 +3,12 @@ package com.chmouel.liseur.data.remote
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.kosync.KosyncAccountRepository
+import com.chmouel.liseur.data.kosync.KosyncCredentials
 import com.chmouel.liseur.data.library.BookRemoval
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -253,11 +256,81 @@ class RemoteAccountRepositoryTest {
             db.annotationSyncDao(),
         ),
         seriesExtraDao = db.seriesExtraDao(),
+        peerStateDao = db.syncPeerStateDao(),
+        forgetKosyncPeer = { kosync().disconnect() },
         setups = mapOf(
             ServerKind.KOMGA to setup,
             ServerKind.GRIMMORY to setup,
         ),
     )
+
+    private fun kosync() = KosyncAccountRepository(
+        dao = db.kosyncPeerDao(),
+        peerStateDao = db.syncPeerStateDao(),
+    )
+
+    private suspend fun pairKosync() {
+        db.kosyncPeerDao().upsert(
+            KosyncPeer(
+                baseUrl = "https://books.example/api/koreader",
+                username = "ada",
+                keyCipher = KosyncPeer.seal(KosyncCredentials.keyFor("pw")),
+                addedAt = 0L,
+            ),
+        )
+    }
+
+    /**
+     * The pairing belongs to the server it was made next to. Connecting
+     * one that carries positions itself would otherwise leave it running
+     * out of sight, against a library it knows nothing about.
+     */
+    @Test
+    fun `connecting a server that cannot host the pairing puts it down`() = runTest {
+        account.connectGrimmory(BASE, "ada", "pw")
+        pairKosync()
+
+        connectKomga()
+
+        assertNull(db.kosyncPeerDao().get())
+    }
+
+    /**
+     * Only once a connection has landed. An attempt that fails leaves
+     * the old server standing, and taking the pairing with it would
+     * strand a working Grimmory setup on a typo.
+     */
+    @Test
+    fun `a failed connection leaves the pairing alone`() = runTest {
+        account.connectGrimmory(BASE, "ada", "pw")
+        pairKosync()
+
+        val refusing = repositoryUsing(db.remoteServerDao(), NeverConnects)
+        val result = refusing.connectKomga(BASE, KEY)
+
+        assertTrue(result is SetupResult.Failure)
+        assertEquals("ada", db.kosyncPeerDao().get()?.username)
+        assertEquals(ServerKind.GRIMMORY, db.remoteServerDao().get()?.kind)
+    }
+
+    @Test
+    fun `reconnecting grimmory keeps the pairing`() = runTest {
+        account.connectGrimmory(BASE, "ada", "pw")
+        pairKosync()
+
+        account.connectGrimmory(BASE, "ada", "pw")
+
+        assertEquals("ada", db.kosyncPeerDao().get()?.username)
+    }
+
+    /** A server that refuses, so a connection can be seen not to land. */
+    private object NeverConnects : ServerSetup {
+        override suspend fun connect(
+            rawUrl: String,
+            credentials: RemoteCredentials,
+            allowHttp: Boolean,
+        ): SetupResult = SetupResult.Failure(SetupFailure.BadCredentials)
+    }
 
     /** A server that is always there, so the tests are about the account. */
     private object AlwaysConnects : ServerSetup {

@@ -107,6 +107,30 @@ enum class ServerKind(
         }
 
     /**
+     * Whether a KOReader sync (kosync) partner may be paired alongside
+     * this kind of server.
+     *
+     * The pairing exists for servers that catalog books but carry no
+     * reading position, which today is Grimmory alone. Offering it
+     * where the server already syncs natively would leave one book with
+     * two sources of truth and a conflict the reader can neither see nor
+     * resolve, so the answer is no for calibre-web, Komga and
+     * liseur-sync.
+     *
+     * Asked of the kind rather than read off the interface, because the
+     * peer runs from `CompositePositionSync` and the foreground policy
+     * whether or not the section is on screen. Both consult this, so a
+     * peer left behind by an account switch, a crash or a restored
+     * database stays quiet rather than syncing against a server nobody
+     * paired it with.
+     */
+    val hostsKosyncPeer: Boolean
+        get() = when (this) {
+            GRIMMORY -> true
+            CALIBRE, KOMGA, LISEUR_SYNC -> false
+        }
+
+    /**
      * How much of a reading position this kind can carry, as something
      * to say before an account exists.
      *

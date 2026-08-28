@@ -52,6 +52,12 @@ private data class BookOutcome(
  * while its kosync endpoint does — so the two are configured separately
  * and this peer runs after the catalog's in `CompositePositionSync`.
  *
+ * It runs only where [ServerKind.hostsKosyncPeer] says the pairing
+ * belongs. Where a server carries positions itself, a second source for
+ * the same book is a conflict the reader can neither see nor resolve,
+ * so a peer that outlived the server it was paired with stays quiet
+ * rather than syncing on its own authority.
+ *
  * kosync names a book by KOReader's partial MD5 of the file, so only a
  * book whose bytes are on this device can be spoken about, and the same
  * book downloaded from somewhere else is a different document. Positions
@@ -76,6 +82,15 @@ class KosyncPositionSync(
     private val fingerprints: BookFingerprintStore,
     private val device: suspend () -> DeviceIdentity,
     private val finishedState: FinishedState,
+    /**
+     * The kind of server the library is connected to right now, or null
+     * when nothing is connected.
+     *
+     * Read on every run rather than captured once: an account switch
+     * does not rebuild this object, and a peer that outlived the server
+     * it was paired with must go quiet the moment the switch lands.
+     */
+    private val connectedKind: suspend () -> ServerKind?,
     private val client: KosyncClient = KosyncClient(),
     private val reporting: SyncReporting = SyncReporting(),
     private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
@@ -205,6 +220,7 @@ class KosyncPositionSync(
     )
 
     private suspend fun account(): Account? {
+        if (!eligible()) return null
         val peer = kosyncDao.get() ?: return null
         val credentials = peer.credentials ?: return null
         return Account(
@@ -215,9 +231,26 @@ class KosyncPositionSync(
         )
     }
 
+    /**
+     * Whether the connected server is one the pairing belongs to.
+     *
+     * A saved peer is not permission to sync. Nothing guarantees the
+     * peer is removed before another server is connected — an account
+     * switch that fails halfway, a crash, or a database restored onto a
+     * phone that never made the pairing all leave one behind — and this
+     * is the test that keeps such a peer from talking to a server on
+     * behalf of a library it knows nothing about.
+     */
+    private suspend fun eligible(): Boolean =
+        connectedKind()?.hostsKosyncPeer == true
+
     // -- The run ----------------------------------------------------------
 
     private suspend fun run(book: String?): SyncOutcome {
+        if (!eligible()) {
+            reporting.report(PositionSyncStatus.Idle, peerId)
+            return SyncOutcome.NotApplicable
+        }
         val peer = kosyncDao.get() ?: run {
             reporting.report(PositionSyncStatus.Idle, peerId)
             return SyncOutcome.NotApplicable

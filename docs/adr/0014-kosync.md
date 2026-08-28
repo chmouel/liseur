@@ -27,6 +27,31 @@ resolution needed it first. Auth is two headers: `x-auth-user` and
 
 ## Decision
 
+**The pairing is offered where a server has no positions of its own,
+which today means Grimmory.** calibre-web, Komga and liseur-sync all
+carry a reading position themselves, and pairing kosync next to one of
+them would leave a single book with two sources of truth, silently
+disagreeing on a device the reader is not looking at. That is a conflict
+they can neither see nor resolve, so it is not offered.
+
+`ServerKind.hostsKosyncPeer` is the one place that answers, and it is
+asked in three: the settings section, so it is not shown; the sync
+itself, so it stays quiet; and the foreground policy, so nothing wakes
+it. The last two are what make the rule true rather than merely
+presented. A saved pairing is not permission to sync — an account switch
+interrupted halfway, a crash, or a database restored onto a phone that
+never made the pairing all leave a `kosync_peer` row behind a server
+that knows nothing about it — so the peer asks what is connected on
+every run instead of trusting the row's existence.
+
+A pairing the newly connected server cannot host is dropped, in the
+transaction that stores the new server rather than when the reader
+starts connecting: an attempt that fails leaves the old server standing,
+and putting the pairing down on the attempt would take a working
+Grimmory setup with it. It goes through
+`KosyncAccountRepository.disconnect`, the same door a reader's own
+disconnect uses.
+
 **A kosync server is a second sync partner, not a fifth kind of
 server.** It is paired *alongside* whatever catalog server is connected,
 from a section on the same settings screen, and lives in its own

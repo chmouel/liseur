@@ -89,6 +89,30 @@ class ServerKindTest {
         }
     }
 
+    /**
+     * The pairing exists for a server that catalogs books without
+     * carrying a place in them. Where the server syncs natively, a
+     * second source for the same book is a disagreement the reader can
+     * neither see nor resolve — so the two answers are pinned against
+     * each other here rather than drifting apart in a `when` somewhere.
+     */
+    @Test
+    fun `only a kind that cannot sync natively may host a kosync pairing`() {
+        ServerKind.entries.forEach { kind ->
+            if (kind.hostsKosyncPeer) {
+                assertEquals(
+                    "${kind.name} hosts a kosync pairing yet syncs natively",
+                    SyncAbility.NONE,
+                    kind.syncAbility,
+                )
+            }
+        }
+        assertEquals(true, ServerKind.GRIMMORY.hostsKosyncPeer)
+        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC).forEach {
+            assertEquals("${it.name} must not host a kosync pairing", false, it.hostsKosyncPeer)
+        }
+    }
+
     /** An account of [kind] that has finished every setup step it has. */
     private fun fullyCredentialed(kind: ServerKind) = RemoteServer(
         kind = kind,

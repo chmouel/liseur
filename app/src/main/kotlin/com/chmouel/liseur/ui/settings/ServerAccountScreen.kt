@@ -220,11 +220,13 @@ fun ServerAccountScreen(
                         }
                     }
                 }
-                // The KOReader sync partner lives alongside whichever
-                // catalog server is connected; with none connected there
-                // is nothing for it to cover, so the section only stays
-                // to let a leftover pairing be disconnected.
-                if (server != null || state.kosync != null) {
+                // The KOReader sync partner belongs to servers that
+                // catalog books without carrying a reading position.
+                // Where the server syncs natively, offering it too would
+                // leave one book with two sources of truth. A pairing
+                // that outlived its server still shows, so it can be
+                // disconnected rather than stranded out of sight.
+                if (server?.kind?.hostsKosyncPeer == true || state.kosync != null) {
                     KosyncSection(
                         state = state,
                         onUrlChange = onKosyncUrlChange,

@@ -131,18 +131,47 @@ class ForegroundSyncPolicyTest {
 
     @Test
     fun `a kosync partner that synced minutes ago is left alone`() {
+        val grimmory = server(kind = ServerKind.GRIMMORY, syncedAt = null)
         assertEquals(
             false,
-            shouldSyncOnForeground(null, now, kosync = kosync(syncedAt = now - 5 * 60 * 1000)),
+            shouldSyncOnForeground(grimmory, now, kosync = kosync(syncedAt = now - 5 * 60 * 1000)),
         )
     }
 
     @Test
     fun `either partner being stale is enough to ask`() {
-        val fresh = server(syncedAt = now - 5 * 60 * 1000)
+        val fresh = server(kind = ServerKind.GRIMMORY, syncedAt = now - 5 * 60 * 1000)
         assertEquals(
             true,
             shouldSyncOnForeground(fresh, now, kosync = kosync(syncedAt = now - 2 * 60 * 60 * 1000)),
+        )
+    }
+
+    /**
+     * A pairing outlives the server it was made for: an account switch
+     * interrupted halfway, a crash, a database restored onto another
+     * phone. Waking a sync for it would have it talk to a server on
+     * behalf of a library nobody paired it with.
+     */
+    @Test
+    fun `a pairing left behind by a server that cannot host one is not woken`() {
+        val stale = kosync(syncedAt = now - 2 * 60 * 60 * 1000)
+        for (kind in listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC)) {
+            val fresh = server(kind = kind, syncedAt = now - 5 * 60 * 1000)
+            assertEquals(
+                "$kind must not wake a kosync pairing",
+                false,
+                shouldSyncOnForeground(fresh, now, kosync = stale),
+            )
+        }
+    }
+
+    /** With nothing connected there is no library for a pairing to cover. */
+    @Test
+    fun `a pairing with no server connected is not woken`() {
+        assertEquals(
+            false,
+            shouldSyncOnForeground(null, now, kosync = kosync(syncedAt = null)),
         )
     }
 }
