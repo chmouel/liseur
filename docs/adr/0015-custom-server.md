@@ -127,6 +127,18 @@ the address as written, so a public name resolving to a private address
 is not caught; closing that needs the resolved socket rather than the
 URL.
 
+An address wearing a disguise is read through it. `::ffff:c0a8:0101` and
+`::ffff:192.168.1.1` are both 192.168.1.1, and matched against IPv6
+prefixes neither looks like anything private, so the literal is expanded
+and an IPv4-mapped or IPv4-compatible one is judged as the IPv4 address
+it holds.
+
+The rule is applied where a link is first written down, not only where
+it is used. A cover is handed to the image loader and an acquisition to
+the download worker, and neither of those consults an `OpdsScope`, so a
+refused link stored today is a request made tomorrow. `OpdsFileSource`
+asks again on the way out, for the rows written before the rule existed.
+
 The same reasoning governs the sync half. `x-auth-key` is compared as
 given, so anyone who reads one off the wire can replay it for good: it
 is the password in every sense that matters, and unlike registration it
