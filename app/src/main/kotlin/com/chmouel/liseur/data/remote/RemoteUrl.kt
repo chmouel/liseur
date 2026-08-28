@@ -41,7 +41,12 @@ object RemoteUrl {
         }
 
         val schemeEnd = withScheme.indexOf("://") + 3
-        val host = withScheme.substring(schemeEnd).substringBefore('/')
+        // A query ends the host as surely as a slash does. Without that,
+        // an address that is nothing but a query — which `keepQuery` no
+        // longer strips — reads as its own hostname.
+        val host = withScheme.substring(schemeEnd)
+            .substringBefore('/')
+            .substringBefore('?')
         if (host.isEmpty() || host.startsWith(":")) return null
 
         // A trailing slash is noise on a path and meaningful nowhere,
