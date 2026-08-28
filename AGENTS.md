@@ -46,17 +46,43 @@ make SERIAL=emulator-5556 run         # use a specific emulator with SERIAL=...
 CI (`.github/workflows/build.yml`) runs `testDebugUnitTest`, `lintDebug`, and
 `assembleDebug` on every push/PR to `main`.
 
+## Emulators and phones
+
+An emulator is scratch space. Boot one, install over whatever is on it,
+wipe its storage, reseed the demo shelf, write straight into the app's
+database with `adb shell run-as`, rotate it, drive it with
+`adb shell input` — no permission needed for any of it, and no need to
+ask before starting. Everything on an emulator can be rebuilt in a
+minute by `make reset`, so there is nothing there worth protecting.
+`make shutdown` when you are done, or say you left it running.
+
+A physical phone is somebody's library. **Never install, replace, or
+uninstall the app, clear its storage, or write to its database on a
+real device without asking first.** A reading position, a highlight and
+a half-finished note are not reproducible, and an unlucky
+`adb install -r` takes them.
+
+When several devices are attached, always pass `-s` / `SERIAL=` rather
+than letting `adb` choose. `adb devices` reports emulators as
+`emulator-NNNN`; treat anything else as a phone.
+
+`hack/screenshots --setup-only` builds a demo shelf on an emulator from
+scratch: it downloads a handful of Standard Ebooks editions, grants the
+folder through the real picker, and leaves the first book part-read with
+highlights, a note and a bookmark on it. It is the fastest way to get a
+device that has something to photograph.
+
 ## Pull requests
 
-When creating a pull request for a UI change, if an emulator is available and
-the user has authorized deployment, build and install the debug APK, navigate
-to the affected screen, capture a relevant screenshot, and attach it to the
-pull request description through GitHub's user-attachments API. If a screenshot
-is not possible, state why in the pull request.
+When creating a pull request for a UI change, if an emulator is
+available or one can be booted, build and install the debug APK,
+navigate to the affected screen, capture a relevant screenshot, and
+attach it to the pull request description through GitHub's
+user-attachments API. If a screenshot is not possible, state why in the
+pull request.
 
-Releases go out with `hack/release`. **Never cut a release, create a
-tag, or install/replace an app on a device without asking the user
-first.** The script also updates the F-Droid
+Releases go out with `hack/release`. **Never cut a release or create a
+tag without asking the user first.** The script also updates the F-Droid
 submission, whose pipeline runs on GitLab and can fail after the script
 has finished, because the long `fdroid build` is not waited for. Check
 the pipeline it links before calling a release done. `DEVELOPER.md`
