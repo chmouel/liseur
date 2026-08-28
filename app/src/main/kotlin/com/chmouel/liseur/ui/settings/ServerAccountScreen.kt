@@ -941,9 +941,6 @@ private fun AdvancedSection(server: RemoteServer, onKoboToken: (String) -> Unit)
     }
 }
 
-/** Where to get a liseur-sync server, for a reader who has not got one yet. */
-internal const val LISEUR_SYNC_SERVER_URL = "https://github.com/chmouel/liseur-sync"
-
 /**
  * The liseur-sync way in: sign in and let the app mint a device token,
  * or paste a token minted on the server.

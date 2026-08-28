@@ -168,7 +168,8 @@ private fun ServerKind.logoRes(): Int = when (this) {
 
 /** What a kind is for, and whether it keeps your place. */
 @Composable
-private fun KindSupport(kind: ServerKind) {    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun KindSupport(kind: ServerKind) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(stringResource(kind.taglineRes()))
         Text(
             stringResource(kind.syncAbility.lineRes()),
@@ -197,6 +198,9 @@ internal fun ServerKind.taglineRes(): Int = when (this) {
     ServerKind.GRIMMORY -> R.string.server_tagline_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_tagline_liseur_sync
 }
+
+/** Where to get a liseur-sync server, for a reader who has not got one yet. */
+private const val LISEUR_SYNC_SERVER_URL = "https://github.com/chmouel/liseur-sync"
 
 /**
  * Where a reader who has not got this kind of server yet can read about
