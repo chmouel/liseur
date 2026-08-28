@@ -314,6 +314,54 @@ class GrimmoryCatalogClientTest {
     }
 
     @Test
+    fun `a malformed entry on an early page does not hide the later ones`() {
+        // Same reasoning as an unknown media type: the row costs the
+        // pruning, not the rest of the library. Stopping on page 0 would
+        // leave the shelf short by every book behind it, with nothing on
+        // screen to say why.
+        server.enqueue(
+            page(
+                number = 0,
+                totalPages = 2,
+                content = "[${entry("1")},42]",
+                size = 2,
+                totalElements = 4,
+                numberOfElements = 2,
+            ),
+        )
+        server.enqueue(
+            page(
+                entry("3"),
+                entry("4"),
+                number = 1,
+                totalPages = 2,
+                size = 2,
+                totalElements = 4,
+            ),
+        )
+
+        val (complete, seen) = walk()
+
+        assertEquals(listOf("1", "3", "4"), seen)
+        assertFalse(complete)
+    }
+
+    @Test
+    fun `a page that is not a list of books stops the walk`() {
+        // The one shape that does stop it: nothing to stream, and no
+        // reason to believe the paging fields wrapped around it either.
+        server.enqueue(
+            page(number = 0, totalPages = 2, content = """{"1":"a book"}""", totalElements = 4),
+        )
+
+        val (complete, seen) = walk()
+
+        assertTrue(seen.isEmpty())
+        assertFalse(complete)
+        assertEquals("only the first page was asked for", 1, server.requestCount)
+    }
+
+    @Test
     fun `a page shorter than the server said it sent is not believed`() {
         // Internally consistent and still wrong: one row was lost in
         // transit, and it would be pruned as a book that had vanished.

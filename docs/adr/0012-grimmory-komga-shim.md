@@ -157,10 +157,15 @@ it cannot account for:
   counted unsent and therefore prunable.
 - **`content` has to be an array.** Absent, JSON null and some other
   type all parse to no books, which is exactly what a library someone
-  emptied looks like.
+  emptied looks like. This is the one shape that ends the walk rather
+  than merely forfeiting completion: there is nothing to stream, and no
+  reason to trust the paging fields wrapped around it either.
 - **Every entry has to be readable.** An entry that is not an object or
   carrying an unparseable id forfeits completion while its well-formed
-  neighbours still stream through.
+  neighbours still stream through — on that page and on every page
+  after it. Entries that never became books are counted back into the
+  duplicate check, or one malformed row would read as the same book
+  twice and stop the walk by the back door.
 - **A media type has to be one of two known lists.** EPUB is readable;
   the six other formats `KomgaMapper.getMediaType()` can return are
   known and skipped; anything else is unknown. The tempting rule — "not

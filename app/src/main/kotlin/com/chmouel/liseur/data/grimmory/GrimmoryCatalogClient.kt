@@ -55,7 +55,7 @@ class GrimmoryCatalogClient(private val http: KomgaHttp = KomgaHttp()) : Catalog
             // this client does not understand, not a book that went
             // away. Streaming what did parse is useful; calling the walk
             // complete after it is how a library gets deleted.
-            val understood = answer.contentWasArray && answer.books.size == answer.entriesOnPage
+            val unreadable = answer.entriesOnPage - answer.books.size
             val readable = answer.books.filter { classify(it.mediaType) == Media.READABLE }
             val unknown = answer.books.map { classify(it.mediaType) }.count { it == Media.UNKNOWN }
 
@@ -64,13 +64,27 @@ class GrimmoryCatalogClient(private val http: KomgaHttp = KomgaHttp()) : Catalog
             walk.readableSeen += readable.size
             answer.books.forEach { walk.ids += it.book.remoteId }
 
-            if (!understood) {
+            if (!answer.contentWasArray) {
+                // Not a page at all. There is nothing to stream and no
+                // reason to believe the paging fields around it, so
+                // unlike the two cases below this one does stop.
+                Log.w(TAG, "Page $page did not carry a list of books")
+                return@withContext CatalogWalk(complete = false)
+            }
+
+            if (unreadable > 0) {
+                // An entry that is not an object, or carrying an id
+                // this client will not address. Its well-formed
+                // neighbours have already streamed, and so will the
+                // pages after it: stopping here would hide the rest of
+                // the library behind one malformed row, which is the
+                // same mistake as stopping on an unknown media type.
+                walk.unreadableSeen += unreadable
                 Log.w(
                     TAG,
-                    "Page $page had entries this client could not read; " +
+                    "Page $page held $unreadable entr(ies) this client could not read; " +
                         "not treating the catalog as complete",
                 )
-                return@withContext CatalogWalk(complete = false)
             }
 
             if (unknown > 0) {
@@ -97,13 +111,26 @@ class GrimmoryCatalogClient(private val http: KomgaHttp = KomgaHttp()) : Catalog
             // The same book twice fills a page the server counted two
             // entries for, so the counts all agree while a book that
             // was never sent is pruned as gone.
-            if (walk.ids.size.toLong() != walk.entriesSeen) {
+            //
+            // Entries that never became books are counted back in, or
+            // one malformed row would read as a duplicate and stop the
+            // walk by the back door -- pruning is already forfeited
+            // above, and there is nothing more to give up here.
+            if (walk.ids.size + walk.unreadableSeen != walk.entriesSeen) {
                 Log.w(TAG, "The catalog listed the same book more than once")
                 return@withContext CatalogWalk(complete = false)
             }
 
             when (pagingVerdict(body, answer, page, walk)) {
                 Paging.LAST -> {
+                    if (walk.unreadableSeen > 0) {
+                        Log.w(
+                            TAG,
+                            "The catalog held ${walk.unreadableSeen} entr(ies) this client " +
+                                "could not read; not treating it as fully understood",
+                        )
+                        return@withContext CatalogWalk(complete = false)
+                    }
                     if (walk.unknownSeen > 0) {
                         Log.w(
                             TAG,
@@ -166,6 +193,15 @@ class GrimmoryCatalogClient(private val http: KomgaHttp = KomgaHttp()) : Catalog
          * else.
          */
         var unknownSeen = 0L
+
+        /**
+         * Entries the parser could make no book of at all.
+         *
+         * Counted for the same reason as [unknownSeen]: what a
+         * malformed row costs is the right to prune, not the rest of
+         * the pages.
+         */
+        var unreadableSeen = 0L
 
         /**
          * Every id the walk has parsed, to catch the same book twice.
