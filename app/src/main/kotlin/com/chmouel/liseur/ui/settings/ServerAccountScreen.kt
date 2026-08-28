@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -57,7 +56,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -390,51 +388,6 @@ private fun BulkDownloadStatus(
  * address: a face to recognise it by, a line on what it does, and
  * somewhere to go for the one they have not got yet.
  */
-@Composable
-private fun KindCard(kind: ServerKind) {
-    val uriHandler = LocalUriHandler.current
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    stringResource(kind.labelRes()),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    stringResource(kind.taglineRes()),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                stringResource(kind.introRes()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(
-                onClick = { runCatching { uriHandler.openUri(kind.homeUrl()) } },
-                contentPadding = PaddingValues(0.dp),
-            ) {
-                Text(stringResource(kind.linkRes()))
-                Spacer(Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
-}
-
 /**
  * One concern of a connected server — what it downloads, what it syncs,
  * what it accepts — kept in its own card, because the settled screen is
@@ -485,33 +438,40 @@ private fun ConnectForm(
     onDeviceTokenChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
 ) {
-    Text(
-        stringResource(R.string.server_kind),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    // Chips that wrap, rather than a segmented control that cannot.
-    // With four kinds -- "calibre-web", "Komga", "Grimmory",
-    // "liseur-sync" -- the labels no longer fit one row on a narrow
-    // phone, and a segmented control's answer to that is to squeeze
-    // them until they are unreadable.
-    FlowRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        ServerKind.entries.forEach { kind ->
-            FilterChip(
-                selected = state.kind == kind,
-                onClick = { onKindChange(kind) },
-                enabled = !state.connecting,
-                label = { Text(stringResource(kind.labelRes())) },
+    var picking by rememberSaveable { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
+    // The row and its link are one thing, so they share a gap rather
+    // than each spending one of the column's: the whole point of the
+    // redesign is the height at the top of this form.
+    Column {
+        ServerKindRow(
+            kind = state.kind,
+            enabled = !state.connecting,
+            onClick = { picking = true },
+        )
+        TextButton(
+            onClick = { runCatching { uriHandler.openUri(state.kind.homeUrl()) } },
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Text(stringResource(state.kind.linkRes()))
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
             )
         }
     }
-    KindCard(state.kind)
+    if (picking) {
+        ServerKindSheet(
+            selected = state.kind,
+            onPick = {
+                onKindChange(it)
+                picking = false
+            },
+            onDismiss = { picking = false },
+        )
+    }
     OutlinedTextField(
         value = state.url,
         onValueChange = onUrlChange,
@@ -981,9 +941,6 @@ private fun AdvancedSection(server: RemoteServer, onKoboToken: (String) -> Unit)
     }
 }
 
-/** Where to get a liseur-sync server, for a reader who has not got one yet. */
-private const val LISEUR_SYNC_SERVER_URL = "https://github.com/chmouel/liseur-sync"
-
 /**
  * The liseur-sync way in: sign in and let the app mint a device token,
  * or paste a token minted on the server.
@@ -1153,45 +1110,6 @@ internal fun Notice(text: String, tone: NoticeTone) {
         )
         Text(text, style = MaterialTheme.typography.bodyMedium, color = color)
     }
-}
-
-private fun ServerKind.labelRes(): Int = when (this) {
-    ServerKind.CALIBRE -> R.string.server_kind_calibre
-    ServerKind.KOMGA -> R.string.server_kind_komga
-    ServerKind.GRIMMORY -> R.string.server_kind_grimmory
-    ServerKind.LISEUR_SYNC -> R.string.server_kind_liseur_sync
-}
-
-private fun ServerKind.introRes(): Int = when (this) {
-    ServerKind.CALIBRE -> R.string.server_intro_calibre
-    ServerKind.KOMGA -> R.string.server_intro_komga
-    ServerKind.GRIMMORY -> R.string.server_intro_grimmory
-    ServerKind.LISEUR_SYNC -> R.string.server_intro_liseur_sync
-}
-
-/**
- * Where a reader who has not got this kind of server yet can read about
- * it. Every kind gets one: the form otherwise gives them nowhere to go.
- */
-private fun ServerKind.homeUrl(): String = when (this) {
-    ServerKind.CALIBRE -> "https://github.com/janeczku/calibre-web"
-    ServerKind.KOMGA -> "https://komga.org"
-    ServerKind.GRIMMORY -> "https://github.com/grimmory-tools/grimmory"
-    ServerKind.LISEUR_SYNC -> LISEUR_SYNC_SERVER_URL
-}
-
-private fun ServerKind.linkRes(): Int = when (this) {
-    ServerKind.CALIBRE -> R.string.server_link_calibre
-    ServerKind.KOMGA -> R.string.server_link_komga
-    ServerKind.GRIMMORY -> R.string.server_link_grimmory
-    ServerKind.LISEUR_SYNC -> R.string.liseur_sync_get_one
-}
-
-private fun ServerKind.taglineRes(): Int = when (this) {
-    ServerKind.CALIBRE -> R.string.server_tagline_calibre
-    ServerKind.KOMGA -> R.string.server_tagline_komga
-    ServerKind.GRIMMORY -> R.string.server_tagline_grimmory
-    ServerKind.LISEUR_SYNC -> R.string.server_tagline_liseur_sync
 }
 
 private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {

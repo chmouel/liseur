@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.chmouel.liseur.data.db.RemoteServer
 
 /**
  * The spellings written into the database.
@@ -60,4 +61,49 @@ class ServerKindTest {
         assertEquals(ServerKind.CALIBRE, ServerKind.fromStored("SOMETHING_FROM_THE_FUTURE"))
         assertEquals(ServerKind.LISEUR_SYNC, ServerKind.fromStored("LISEUR_SYNC"))
     }
+
+    @Test
+    fun `every kind says what it can do with a reading position`() {
+        // What the server picker shows before an account exists, so a
+        // reader learns Grimmory cannot keep their place while they can
+        // still choose otherwise.
+        assertEquals(SyncAbility.PROGRESSION, ServerKind.CALIBRE.syncAbility)
+        assertEquals(SyncAbility.EXACT, ServerKind.KOMGA.syncAbility)
+        assertEquals(SyncAbility.EXACT, ServerKind.LISEUR_SYNC.syncAbility)
+        assertEquals(SyncAbility.NONE, ServerKind.GRIMMORY.syncAbility)
+    }
+
+    @Test
+    fun `the picker's claim matches what a settled account can actually sync`() {
+        // The invariant a fifth kind has to satisfy: promising a sync in
+        // the picker and refusing one on the connected screen is the
+        // same bug twice, and only this pins them together. Asked of an
+        // account holding every secret, because the calibre-web Kobo
+        // token is a question about the account, not about the kind.
+        ServerKind.entries.forEach { kind ->
+            assertEquals(
+                "${kind.name} promises ${kind.syncAbility} but canSync disagrees",
+                kind.syncAbility != SyncAbility.NONE,
+                fullyCredentialed(kind).canSync,
+            )
+        }
+    }
+
+    /** An account of [kind] that has finished every setup step it has. */
+    private fun fullyCredentialed(kind: ServerKind) = RemoteServer(
+        kind = kind,
+        baseUrl = "https://books.example.com",
+        username = "reader",
+        passwordCipher = "cipher",
+        apiKeyCipher = "cipher",
+        accountId = "1",
+        userId = 1,
+        koboTokenCipher = "cipher",
+        canDownload = true,
+        addedAt = 0L,
+        catalogSyncedAt = null,
+        positionSyncedAt = null,
+        syncToken = null,
+        liseurTokenCipher = "cipher",
+    )
 }

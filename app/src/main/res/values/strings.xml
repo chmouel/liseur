@@ -170,10 +170,10 @@
     <string name="server_kind_komga">Komga</string>
     <string name="server_kind_grimmory">Grimmory</string>
     <string name="server_kind_liseur_sync">liseur-sync</string>
-    <string name="server_intro_calibre">Give the address of your calibre-web server and the login you use for it. Liseur works out the rest on its own.</string>
-    <string name="server_intro_komga">Give the address of your Komga server and an API key from its account page. Liseur works out the rest on its own.</string>
-    <string name="server_intro_grimmory">Give the address of your Grimmory server and the username and password of an OPDS user — not the login you sign into Grimmory with in a browser. Liseur browses and downloads; it cannot keep your place in a book here.</string>
-    <string name="server_intro_liseur_sync">Give the address of your liseur-sync server. It holds your books and keeps your place in them across devices, including books that came from nowhere but this phone.</string>
+    <string name="server_kind_change">Change the kind of server</string>
+    <string name="server_sync_exact">Keeps your exact place in a book across devices</string>
+    <string name="server_sync_progression">Keeps how far through a book you are across devices</string>
+    <string name="server_sync_none">Browsing and downloads only — it cannot keep your place</string>
     <string name="server_link_calibre">What calibre-web is, and how to run one</string>
     <string name="server_link_komga">What Komga is, and how to run one</string>
     <string name="server_link_grimmory">What Grimmory is, and how to run one</string>
@@ -181,7 +181,7 @@
     <string name="server_tagline_calibre">Your calibre library, served over the web</string>
     <string name="server_tagline_komga">A server for comics, manga and books</string>
     <string name="server_tagline_grimmory">A self-hosted library for your ebooks</string>
-    <string name="server_tagline_liseur_sync">Your books, and your place in them, on every device</string>
+    <string name="server_tagline_liseur_sync">Your books on every device — even books only on this phone</string>
     <string name="server_section_server">Server</string>
     <string name="server_section_sync">Reading positions</string>
     <string name="server_api_key">API key</string>
