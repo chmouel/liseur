@@ -40,8 +40,8 @@ usage() {
     cat <<'EOF'
 Usage:
   hack/release [--no-fdroid] [--no-play]
-  hack/release [--yes] [--no-fdroid] [--no-play] VERSION RELEASE NOTES...
-  hack/release --test [VERSION]
+  hack/release [-n] [--no-fdroid] [--no-play] VERSION RELEASE NOTES...
+  hack/release [-n] --test [VERSION]
   hack/release --fdroid-only VERSION
   hack/release [--no-play] --sync-secrets
 
@@ -51,13 +51,20 @@ drafted from the commits.
 
 Examples:
   hack/release 0.2.0 "Add in-book search and a Wiktionary lookup card."
-  hack/release --yes 0.2.1 "Fix page fitting on tall screens."
+  hack/release -n 0.2.1 "Fix page fitting on tall screens."
   hack/release --no-fdroid 0.1.0 "The first release."
   hack/release --no-play 0.2.2 "Leave Google Play out of this one."
   hack/release --test
-  hack/release --test 0.3.0
+  hack/release -n --test 0.3.0
   hack/release --fdroid-only 0.2.1
   hack/release --sync-secrets
+
+-n (--non-interactive, --yes) answers every confirmation prompt with
+yes, for a release run from a script or a CI job with nothing on the
+other end of stdin. Without it the run stops at "Continue?" and, reading
+end-of-file as no, exits having done nothing. It does not conjure up an
+answer that has no default: picking a version and writing a changelog
+still need a terminal, so a run with no VERSION refuses either way.
 
 --test builds the same signed APK and publishes it as a GitHub
 prerelease, without telling F-Droid or Google Play about it. Because it
@@ -253,6 +260,9 @@ pick_one() {
 }
 
 confirm_prompt() {
+    if [[ "$assume_yes" == true ]]; then
+        return
+    fi
     if command -v gum >/dev/null; then
         gum confirm "$1"
         return
@@ -884,7 +894,7 @@ test_release=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --yes)
+        -n|--non-interactive|--yes)
             assume_yes=true
             shift
             ;;

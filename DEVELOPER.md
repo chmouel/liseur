@@ -170,10 +170,15 @@ The version can also be given outright, which is what CI and scripts
 want:
 
 ```bash
-hack/release --yes 0.2.1 "Fix page fitting on tall screens."
+hack/release -n 0.2.1 "Fix page fitting on tall screens."
 hack/release --fdroid-only 0.2.1     # re-run just the F-Droid step
 hack/release --no-play 0.2.1 "..."   # leave Google Play out of this one
 ```
+
+`-n` (`--non-interactive`, `--yes`) answers the confirmation prompts,
+and any run with nothing on stdin needs it: the prompt reads
+end-of-file as no and the release stops without having done anything.
+That applies to `--test` too.
 
 It refuses to run on a dirty tree, off `main`, out of sync with the
 remote, on a version that is not newer, or with release notes over the
