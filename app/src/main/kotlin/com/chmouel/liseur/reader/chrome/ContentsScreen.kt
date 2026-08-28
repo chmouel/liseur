@@ -352,11 +352,26 @@ private fun AnnotationList(
  *
  * Measured overflow is only believed while the row is collapsed: an
  * expanded row has no line cap, so it always reports that it fits, and
- * taking that at face value would delete the very control the reader needs
- * to fold it back up.
+ * taking that at face value would make the control flicker away on the
+ * frame the row folds back up.
  */
 internal fun latchedOverflow(previous: Boolean, expanded: Boolean, measured: Boolean): Boolean =
     if (expanded) previous else measured
+
+/**
+ * Whether the row shows its open/close control.
+ *
+ * An open row always shows it, whatever the last measurement said. Rows
+ * are torn down as they scroll out of a lazy list and their measurements
+ * go with them, and an open row that comes back has no line cap to
+ * overflow: deciding this on the measurement alone would leave a mark
+ * opened out with no way to fold it again.
+ */
+internal fun showsExpandToggle(
+    expanded: Boolean,
+    excerptOverflow: Boolean,
+    noteOverflow: Boolean,
+): Boolean = expanded || excerptOverflow || noteOverflow
 
 @Composable
 private fun AnnotationRow(
@@ -455,7 +470,7 @@ private fun AnnotationRow(
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
-            if (excerptOverflow || noteOverflow) {
+            if (showsExpandToggle(expanded, excerptOverflow, noteOverflow)) {
                 // Its own click target, so opening a mark out to read it is
                 // never mistaken for asking to be taken to it.
                 Box(

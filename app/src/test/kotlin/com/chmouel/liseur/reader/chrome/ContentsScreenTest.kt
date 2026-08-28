@@ -22,4 +22,19 @@ class ContentsScreenTest {
     fun `expanding never invents something to show`() {
         assertFalse(latchedOverflow(previous = false, expanded = true, measured = true))
     }
+
+    @Test
+    fun `a collapsed row offers the control only when something is hidden`() {
+        assertFalse(showsExpandToggle(false, excerptOverflow = false, noteOverflow = false))
+        assertTrue(showsExpandToggle(false, excerptOverflow = true, noteOverflow = false))
+        assertTrue(showsExpandToggle(false, excerptOverflow = false, noteOverflow = true))
+    }
+
+    @Test
+    fun `an open row can always be closed again`() {
+        // A row torn down by the lazy list loses its measurements, and an
+        // open one has no cap left to overflow. Without this the mark comes
+        // back opened out and stuck that way.
+        assertTrue(showsExpandToggle(true, excerptOverflow = false, noteOverflow = false))
+    }
 }
