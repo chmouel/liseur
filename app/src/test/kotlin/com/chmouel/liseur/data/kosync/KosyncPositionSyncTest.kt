@@ -29,6 +29,7 @@ import okhttp3.tls.HeldCertificate
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -331,6 +332,30 @@ class KosyncPositionSyncTest {
         server.enqueue(json("{}"))
         sync().syncAll(null)
         assertTrue(requests().any { it.method == "PUT" })
+    }
+
+    @Test
+    fun `keeping the local side is not asked again by a server that has not moved`() = runTest {
+        // kosync has no feed, so the next run asks outright and gets the
+        // same answer back. With the old agreement still standing both
+        // sides read as moved, and the reader is asked the same question
+        // on every sync until they happen to turn a page.
+        pair()
+        db.bookDao().upsert(book())
+        record(progression = 0.4)
+        server.enqueue(progress(0.9))
+        sync().syncAll(null)
+        sync().keepLocalPosition(BOOK)
+        seen.clear()
+
+        server.enqueue(progress(0.9))
+        server.enqueue(json("{}"))
+        sync().syncAll(null)
+
+        val put = requests().singleOrNull { it.method == "PUT" }
+        assertNotNull(put)
+        assertEquals(0.4, JSONObject(put!!.body!!.utf8()).getDouble("percentage"), 0.0001)
+        assertEquals(0, db.syncPeerStateDao().countPending(peerKey()))
     }
 
     // -- Who is spoken about -------------------------------------------------

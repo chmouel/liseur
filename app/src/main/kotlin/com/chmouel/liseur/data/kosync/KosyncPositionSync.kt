@@ -185,14 +185,31 @@ class KosyncPositionSync(
     }
 
     /**
-     * Keeps what is here and stops the server's answer being offered
-     * again. Nothing is sent from here: clearing the disagreement leaves
-     * the book dirty, so the next run pushes whatever page is actually
-     * open by then.
+     * Keeps what is here, and makes the server agree.
+     *
+     * Clearing the disagreement is not enough on its own. kosync has no
+     * feed, so every run asks the server outright and gets the same
+     * answer back; with the old agreement still standing, both sides
+     * still read as having moved and the reader is asked the same
+     * question on every sync until they happen to turn a page.
+     *
+     * So the answer that was just rejected is written down as the place
+     * the two sides last agreed on. The revision is deliberately left
+     * where it was: this device has not sent anything, so the book is
+     * still owed to the server. Next run the server looks still and this
+     * side looks moved, which is the ordinary shape of a push.
      */
     override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
-        peerStateDao.clearPending(bookUrl, account.peerId)
+        val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
+        peerStateDao.settle(
+            bookUrl = bookUrl,
+            peerId = account.peerId,
+            ackedRevision = state.ackedRevision,
+            progression = state.pendingProgression ?: state.agreedProgression,
+            status = state.pendingStatus ?: state.agreedStatus,
+            now = now(),
+        )
         return ResolveOutcome.Done
     }
 
