@@ -374,7 +374,17 @@ class RemoteAccountRepository(
             ?: pairing?.let { kosyncOnlyCapabilities(it.baseUrl, kosyncUsername) }
             ?: return CustomSetupResult(catalog = SetupFailure.WrongServer)
 
-        publishCustom(capabilities, credentials, pairing)
+        // With no catalog there is no catalog login, but there is still
+        // a person: the kosync one. Left out, `remote_server.username`
+        // is null, two kosync users on one sync server share an
+        // `accountKey`, a switch between them reads as the same account
+        // coming back, and Settings cannot say who is connected.
+        val syncOnlyUser = if (catalog == null) {
+            kosyncUsername.trim().takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+        publishCustom(capabilities, credentials, pairing, syncOnlyUser)
         return CustomSetupResult()
     }
 
@@ -423,9 +433,16 @@ class RemoteAccountRepository(
         capabilities: ServerCapabilities,
         credentials: RemoteCredentials,
         pairing: ProvedKosyncPairing?,
+        syncOnlyUser: String?,
     ) = changingAccount {
         inTransaction {
-            storeLocked(ServerKind.CUSTOM, credentials, capabilities, keepsPairing = true)
+            storeLocked(
+                ServerKind.CUSTOM,
+                credentials,
+                capabilities,
+                keepsPairing = true,
+                signedInAs = syncOnlyUser,
+            )
             if (pairing != null) kosync().adopt(pairing) else kosync().forget()
         }
     }
@@ -475,8 +492,17 @@ class RemoteAccountRepository(
          * is in the middle of making.
          */
         keepsPairing: Boolean = false,
+        /**
+         * Who is connected, when the credential cannot say.
+         *
+         * Only a sync-only Custom connection needs this: its catalog
+         * credential is [RemoteCredentials.Anonymous] because there is
+         * no catalog, yet the reader did sign in — to the KOReader sync
+         * server. That name is the account here.
+         */
+        signedInAs: String? = null,
     ) {
-        val username = when (credentials) {
+        val username = signedInAs ?: when (credentials) {
             is RemoteCredentials.Basic -> credentials.username
             is RemoteCredentials.ApiKey -> capabilities.displayName
             // A pasted liseur-sync token does not say whose it is; the

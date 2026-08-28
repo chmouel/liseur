@@ -199,6 +199,14 @@ dropping the pairing — happens in one transaction. Half a connection is
 not what the reader filled in, and a process death between the two
 writes would leave a catalog with last week's pairing attached.
 
+**A connection with no catalog is still signed in as somebody.** Its
+catalog credential is `Anonymous`, because there is no catalog, but the
+reader typed a name into the sync fields and that name is the account.
+Left out of `remote_server.username`, two kosync users on one sync
+server would share an `accountKey`, a switch between them would read as
+the same account coming back and keep the other person's sync state, and
+Settings could not say who is connected.
+
 **The form is authoritative on every successful Custom connection.** A
 filled sync address replaces any existing pairing; an empty one removes
 it. Without that, choosing a catalog-only Custom after Grimmory would

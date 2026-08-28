@@ -200,6 +200,30 @@ class CustomConnectionTest {
     }
 
     @Test
+    fun `two kosync users on one sync server are two accounts`() = runTest {
+        // With no catalog there is no catalog login, but the reader did
+        // sign in — to the sync server. Left out of `username`, both
+        // logins share an `accountKey`, so a switch reads as the same
+        // account coming back and keeps the other person's sync state.
+        connect(catalog = "", kosyncUrl = SYNC, kosyncUsername = "ada")
+        val first = db.remoteServerDao().get()!!
+
+        connect(catalog = "", kosyncUrl = SYNC, kosyncUsername = "grace")
+        val second = db.remoteServerDao().get()!!
+
+        assertEquals("ada", first.username)
+        assertEquals("grace", second.username)
+        assertTrue(first.accountKey != second.accountKey)
+    }
+
+    @Test
+    fun `a catalog login is still what names a connection that has one`() = runTest {
+        connect(catalog = CATALOG, kosyncUrl = SYNC, username = "ada", password = "secret", kosyncUsername = "grace")
+
+        assertEquals("ada", db.remoteServerDao().get()!!.username)
+    }
+
+    @Test
     fun `two custom catalogs are two accounts`() = runTest {
         connect(catalog = CATALOG, kosyncUrl = "")
         val first = db.remoteServerDao().get()!!.accountKey
