@@ -59,6 +59,12 @@ object OpdsParser {
     private const val IMAGE_REL = "http://opds-spec.org/image"
     private const val THUMBNAIL_REL = "http://opds-spec.org/image/thumbnail"
 
+    private const val COMMENT = "<!--"
+    private const val CDATA = "<![CDATA["
+    private const val PI = "<?"
+    private const val DOCTYPE = "<!DOCTYPE"
+    private const val XML_SPACE = " \t\r\n"
+
     /**
      * A parser that will not go and fetch things on the feed's behalf.
      *
@@ -103,35 +109,83 @@ object OpdsParser {
      * cannot be talked out of by anything later in the document. A feed
      * that trips it is refused as malformed, which is what it is: OPDS
      * has no document type to declare.
+     *
+     * The scan walks the prolog construct by construct rather than
+     * cutting it out and searching the text for the word. Stepping over
+     * a comment without reading a character of it is what stops a
+     * DOCTYPE hiding inside one, and what stops a comment that merely
+     * writes the word being taken for a feed that declares one.
      */
     private fun rejectsDoctype(xml: String) {
-        if (prologOf(xml).contains("<!DOCTYPE")) {
-            throw SAXException("the feed declares a document type, which OPDS never needs")
+        var i = 0
+        while (i < xml.length) {
+            val open = xml.indexOf('<', i)
+            if (open < 0) return
+            if (xml.startsWithDoctype(open)) {
+                throw SAXException("the feed declares a document type, which OPDS never needs")
+            }
+            i = when {
+                xml.startsWith(COMMENT, open) -> xml.endOf(COMMENT, "-->", open)
+                // CDATA is not legal in a prolog either. It is skipped
+                // rather than refused because its extent is unambiguous,
+                // which keeps its body from being read as markup.
+                xml.startsWith(CDATA, open) -> xml.endOf(CDATA, "]]>", open)
+                xml.startsWith(PI, open) -> xml.endOf(PI, "?>", open)
+                // A prolog holds the XML declaration, other processing
+                // instructions, comments and one DOCTYPE, and CDATA is
+                // already dealt with above. Anything else opening <! is
+                // malformed whatever it is, so a stray <!ENTITY out here
+                // is a feed to refuse rather than one to step over
+                // carefully. Refusing it also saves measuring an
+                // internal subset, whose first > can sit inside a quoted
+                // entity value.
+                xml.startsWith("<!", open) -> malformed()
+                // Anything else opens the root element, so the prolog is
+                // over and a DOCTYPE can no longer legally appear.
+                else -> return
+            }
         }
     }
 
     /**
-     * Everything before the root element opens.
+     * Where the markup opening at [at] ends, one past its terminator.
      *
-     * A DOCTYPE is only ever legal here, so this is the only place worth
-     * looking -- and looking only here means a document that merely
-     * quotes the word, in a title or a CDATA block, is not mistaken for
-     * one that declares it.
+     * Not the next `>`. A comment ends at `-->`, CDATA at `]]>` and a
+     * processing instruction at `?>`, and XML lets all three carry a
+     * bare `>` in the body. Stopping at that one leaves the walk
+     * standing inside the construct, reading its text as markup: the
+     * first `<` it meets there is taken for the root element, the
+     * prolog ends early, and every declaration after it falls out of
+     * sight.
+     *
+     * The search starts past [opener] so that an empty construct,
+     * `<!---->` or `<?p?>`, cannot terminate on its own opening
+     * characters.
      */
-    private fun prologOf(xml: String): String {
-        var i = 0
-        while (i < xml.length) {
-            val open = xml.indexOf('<', i)
-            if (open < 0) return xml
-            // Anything that is not <? or <! is the root element.
-            val next = xml.getOrNull(open + 1)
-            if (next != '?' && next != '!') return xml.take(open)
-            val close = xml.indexOf('>', open)
-            if (close < 0) return xml
-            i = close + 1
-        }
-        return xml
+    private fun String.endOf(opener: String, terminator: String, at: Int): Int {
+        val end = indexOf(terminator, at + opener.length)
+        // A construct that never closes is not a prolog whose shape can
+        // be trusted, and the document will not parse either way.
+        if (end < 0) malformed()
+        return end + terminator.length
     }
+
+    /**
+     * Whether a document type is declared at [at].
+     *
+     * XML wants whitespace after the name, so `<!DOCTYPEfoo` declares
+     * nothing. The walk still refuses it, as it refuses anything
+     * opening `<!` it does not recognise, but as malformed rather than
+     * as a document type.
+     */
+    private fun String.startsWithDoctype(at: Int): Boolean {
+        if (!startsWith(DOCTYPE, at)) return false
+        val after = getOrNull(at + DOCTYPE.length) ?: return false
+        return after in XML_SPACE
+    }
+
+    private fun malformed(): Nothing =
+        throw SAXException("the feed's prolog is not well-formed XML")
 
     fun parse(xml: String): OpdsPage {
         rejectsDoctype(xml)
