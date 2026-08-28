@@ -214,6 +214,28 @@ class RemoteAccountRepository(
     )
 
     /**
+     * Probes a Grimmory server and, if it answers, saves it as the
+     * account.
+     *
+     * The username and password are the ones belonging to a Grimmory
+     * *OPDS user*, not the login used in a browser: the Komga shim
+     * authenticates against those and only those. Unlike liseur-sync,
+     * the password is kept, because every later request is signed with
+     * it — there is nothing to trade it for.
+     */
+    suspend fun connectGrimmory(
+        url: String,
+        username: String,
+        password: String,
+        allowHttp: Boolean = false,
+    ): SetupResult = connect(
+        kind = ServerKind.GRIMMORY,
+        url = url,
+        credentials = RemoteCredentials.Basic(username, password),
+        allowHttp = allowHttp,
+    )
+
+    /**
      * Signs into a liseur-sync server and keeps the minted device token.
      *
      * The password goes no further than the setup call: it buys an
@@ -321,7 +343,7 @@ class RemoteAccountRepository(
                 baseUrl = capabilities.baseUrl,
                 username = username,
                 passwordCipher = (credentials as? RemoteCredentials.Basic)
-                    ?.takeIf { kind == ServerKind.CALIBRE }
+                    ?.takeIf { kind.signsWithStoredPassword }
                     ?.let { CredentialCipher.encrypt(it.password) },
                 apiKeyCipher = (credentials as? RemoteCredentials.ApiKey)
                     ?.let { CredentialCipher.encrypt(it.key) },
@@ -385,7 +407,13 @@ class RemoteAccountRepository(
     suspend fun refreshCapabilities(): SetupResult? {
         val server = dao.get() ?: return null
         val credentials = server.credentials ?: return null
-        return connect(server.kind, server.baseUrl, credentials, allowHttp = true)
+        // Only an account that is *already* on plain HTTP may be probed
+        // over it. A stored URL has been through setup, so its scheme is
+        // the one the reader agreed to; passing `true` unconditionally
+        // would let a briefly unreachable https server be retried in the
+        // clear, sending the password there without anyone deciding to.
+        val allowHttp = server.baseUrl.startsWith("http://", ignoreCase = true)
+        return connect(server.kind, server.baseUrl, credentials, allowHttp = allowHttp)
     }
 
     /**

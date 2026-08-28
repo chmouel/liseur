@@ -25,6 +25,7 @@ as a device that passed.
 | --- | --- |
 | `offline-open` | A book opens promptly with no network, and — the case that regressed — with a network whose server is unroutable. |
 | `bench-open` | Not pass/fail: prints how long a book takes to open under each network condition. |
+| `grimmory-connect` | Liseur reaches a [Grimmory](https://github.com/grimmory-tools/grimmory) server through its Komga-compatibility API: an OPDS user signs in, the shelf fills from more than one HTTP page, comics stay off it, a second walk prunes nothing, covers load, a book downloads and opens, and nothing offers to keep the reader's place. Needs a server — `hack/grimmory-dev --up` — and skips itself without one. |
 
 ## Preconditions
 
@@ -35,6 +36,9 @@ as a device that passed.
 - For anything touching sync, a connected server row in `remote_server`.
   A scenario with no server to work with skips itself rather than
   failing.
+- `grimmory-connect` needs a Grimmory to talk to: `hack/grimmory-dev --up`
+  brings a throwaway one up on port 6060, which an emulator reaches at
+  `http://10.0.2.2:6060`.
 
 `make emulator` boots the default AVD; `make run-bg` installs and
 launches without `scrcpy`.

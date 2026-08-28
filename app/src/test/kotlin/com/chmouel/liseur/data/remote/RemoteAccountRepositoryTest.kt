@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -156,7 +157,89 @@ class RemoteAccountRepositoryTest {
         assertTrue("expected the fake setup to succeed, got $result", result is SetupResult.Success)
     }
 
-    private fun repository(dao: RemoteServerDao) = RemoteAccountRepository(
+    @Test
+    fun `a grimmory password survives being written down and read back`() = runTest {
+        // The regression for an account that connects happily and is
+        // unusable from the next refresh on. Grimmory signs every
+        // request with this password -- there is no token to fall back
+        // to -- so a row that comes back without it is an account that
+        // has to be set up again from nothing.
+        account.connectGrimmory(BASE, "liseur-opds", "opds-secret")
+
+        // Read through a repository of its own, so the answer cannot
+        // come from a cache warmed while connecting.
+        val reloaded = repository(db.remoteServerDao())
+
+        assertEquals(
+            RemoteCredentials.Basic("liseur-opds", "opds-secret"),
+            reloaded.credentialsForUrl("$BASE/komga/api/v1/books/1/thumbnail"),
+        )
+        assertEquals(ServerKind.GRIMMORY, reloaded.current()?.kind)
+    }
+
+    @Test
+    fun `grimmory never offers to keep a reader's place`() = runTest {
+        // The shim has no progression route at all. Saying so on the row
+        // is what keeps sync from being offered and then failing.
+        account.connectGrimmory(BASE, "liseur-opds", "opds-secret")
+
+        assertFalse(db.remoteServerDao().get()!!.canSync)
+    }
+
+    @Test
+    fun `refreshing an https account does not authorise a plain http retry`() = runTest {
+        // A refresh runs unattended, so it cannot be the thing that
+        // decides to send the password in the clear. Every kind here
+        // signs its requests with a stored secret and every setup client
+        // will fall back to http when told it may, so an https server
+        // that is merely down for the afternoon would leak it.
+        val watching = RecordsAllowHttp()
+        val repository = repositoryUsing(db.remoteServerDao(), watching)
+        repository.connectGrimmory(BASE, "liseur-opds", "opds-secret")
+
+        repository.refreshCapabilities()
+
+        assertEquals(listOf(false, false), watching.allowed)
+    }
+
+    @Test
+    fun `refreshing an http account still allows plain http`() = runTest {
+        // The other half: an account stored as http:// has already been
+        // agreed to, and refusing it here would break every refresh on a
+        // home server that has no certificate.
+        val watching = RecordsAllowHttp()
+        val repository = repositoryUsing(db.remoteServerDao(), watching)
+        repository.connectGrimmory("http://books.example", "liseur-opds", "opds-secret", allowHttp = true)
+
+        repository.refreshCapabilities()
+
+        assertEquals(listOf(true, true), watching.allowed)
+    }
+
+    /** Remembers what each connect was allowed to do. */
+    private class RecordsAllowHttp : ServerSetup {
+        val allowed = mutableListOf<Boolean>()
+
+        override suspend fun connect(
+            rawUrl: String,
+            credentials: RemoteCredentials,
+            allowHttp: Boolean,
+        ): SetupResult {
+            allowed += allowHttp
+            return SetupResult.Success(
+                ServerCapabilities(
+                    baseUrl = rawUrl,
+                    canDownload = true,
+                    accountId = "user-1",
+                    displayName = "reader",
+                ),
+            )
+        }
+    }
+
+    private fun repository(dao: RemoteServerDao) = repositoryUsing(dao, AlwaysConnects)
+
+    private fun repositoryUsing(dao: RemoteServerDao, setup: ServerSetup) = RemoteAccountRepository(
         dao = dao,
         bookDao = db.bookDao(),
         progressDao = db.readingProgressDao(),
@@ -170,7 +253,10 @@ class RemoteAccountRepositoryTest {
             db.annotationSyncDao(),
         ),
         seriesExtraDao = db.seriesExtraDao(),
-        setups = mapOf(ServerKind.KOMGA to AlwaysConnects),
+        setups = mapOf(
+            ServerKind.KOMGA to setup,
+            ServerKind.GRIMMORY to setup,
+        ),
     )
 
     /** A server that is always there, so the tests are about the account. */

@@ -7,6 +7,8 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.ReadingProgress
+import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.library.BookRemoval
 import java.io.IOException
@@ -16,7 +18,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -254,6 +258,90 @@ class RemoteCatalogRepositoryTest {
         val kept = db.bookDao().getByUrl(mine)
         assertEquals("the uploaded book was deleted", mine, kept?.url)
         assertEquals("uploaded", kept?.remoteUuid)
+    }
+
+    @Test
+    fun `a walk that admits it did not finish deletes nothing`() = runTest {
+        // The regression that matters most on a compatibility shim. If a
+        // client cannot make out a page and says so, the books it never
+        // saw are not books that vanished from the server: they are
+        // books nobody asked about. Deleting them takes a reader's place
+        // in each of them, on a server where nothing can put it back.
+        connect(ServerKind.KOMGA)
+        shelve("b1", progressedTo = 0.4)
+        shelve("b2", progressedTo = 0.9)
+
+        val refresh = repository(
+            FakeCatalog(complete = false) { onPage -> onPage(listOf(book("b1"))) },
+        ).refresh()
+
+        assertEquals(CatalogRefresh.None, refresh)
+        val unseen = db.bookDao().getByUrl("komga:b2")
+        assertNotNull("the unseen book was deleted", unseen)
+        assertEquals(0.9, db.readingProgressDao().get("komga:b2")?.totalProgression)
+        assertEquals(
+            listOf("komga:b1", "komga:b2"),
+            db.readingSessionDao().observeAll().first().map { it.bookUrl }.sorted(),
+        )
+        // Nor may anything be told this is what the server now holds.
+        assertEquals(null, db.remoteServerDao().get()?.catalogSyncedAt)
+    }
+
+    @Test
+    fun `a walk that did finish is still allowed to prune`() = runTest {
+        // The other half of the rule, so the test above cannot be
+        // satisfied by never pruning at all.
+        connect(ServerKind.KOMGA)
+        shelve("b1", progressedTo = 0.4)
+        shelve("b2", progressedTo = 0.9)
+
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
+
+        assertEquals(null, db.bookDao().getByUrl("komga:b2"))
+        assertNotNull(db.bookDao().getByUrl("komga:b1"))
+    }
+
+    /** A book already on the shelf, read partway, with an hour behind it. */
+    private suspend fun shelve(id: String, progressedTo: Double) {
+        val url = "komga:$id"
+        db.bookDao().upsertAll(
+            listOf(
+                Book(
+                    url = url,
+                    title = id,
+                    author = null,
+                    coverPath = null,
+                    source = null,
+                    addedAt = 0,
+                    lastOpenedAt = null,
+                    localUri = null,
+                ),
+            ),
+        )
+        db.bookDao().linkToRemote(
+            url = url,
+            remoteUuid = id,
+            downloadHref = "/api/v1/books/$id/file",
+            coverUrl = null,
+            remoteUpdatedAt = 1L,
+        )
+        db.readingProgressDao().upsert(
+            ReadingProgress(
+                bookUrl = url,
+                locatorJson = "{}",
+                totalProgression = progressedTo,
+                updatedAt = 1L,
+            ),
+        )
+        db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = url,
+                startedAt = 1L,
+                endedAt = 2L,
+                lastCheckpointAt = 2L,
+                durationMs = 3_600_000,
+            ),
+        )
     }
 
     @Test

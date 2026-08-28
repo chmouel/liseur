@@ -121,5 +121,36 @@ internal fun JSONObject.objects(name: String): List<JSONObject> {
 internal fun JSONObject.stringOrNull(name: String): String? =
     if (isNull(name)) null else optString(name).takeIf { it.isNotEmpty() }
 
+/**
+ * A whole-number field, or null when it is absent, null, or not one.
+ *
+ * Deliberately narrower than [JSONObject.optLong], which answers 0 for
+ * all three. A caller checking a count against what arrived needs a
+ * missing count to read as missing, not as zero.
+ */
+internal fun JSONObject.longOrNull(name: String): Long? = when (val value = opt(name)) {
+    is Int -> value.toLong()
+    is Long -> value
+    is String -> value.toLongOrNull()
+    else -> null
+}
+
+/** As [longOrNull], for a field that has to fit an `Int`. */
+internal fun JSONObject.intOrNull(name: String): Int? =
+    longOrNull(name)?.takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt()
+
+/**
+ * A boolean field, or null when it is absent, null, or something else.
+ *
+ * The strings are accepted because that is what [JSONObject.optBoolean]
+ * does and a server spelling `"true"` means it; anything further from a
+ * boolean is treated as not having answered at all.
+ */
+internal fun JSONObject.booleanOrNull(name: String): Boolean? = when (val value = opt(name)) {
+    is Boolean -> value
+    is String -> value.lowercase().let { if (it == "true") true else if (it == "false") false else null }
+    else -> null
+}
+
 internal fun jsonArrayOf(vararg values: JSONObject): JSONArray =
     JSONArray().apply { values.forEach { put(it) } }

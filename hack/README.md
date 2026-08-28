@@ -38,6 +38,26 @@ target wrapping them — run `make help` for the short list. See
 - **`lib/demo-books.sh`** — Library sourced by `screenshots`,
   `reset-books` and the `e2e-*` scripts: the demo book list, the uiautomator-driven UI helpers,
   and the fetch/push/grant-folder logic. Not meant to be run directly.
+- **`grimmory-dev`** — Brings up a throwaway
+  [Grimmory](https://github.com/grimmory-tools/grimmory) server
+  in containers, seeded and ready for Liseur to connect to, so the
+  Grimmory client is developed against the real thing rather than a
+  reading of its source. `--up` starts and seeds it, `--down` deletes it
+  and everything it held, `--reset` does both, `--info` reprints the
+  credentials. Grimmory hides its Komga compatibility shim behind an
+  admin setting *and* behind a separate set of credentials — an "OPDS
+  user", not the browser login — and the script sets up both, because
+  either one missed fails in a way that does not say so. The image tag in
+  `hack/grimmory/docker-compose.yml` is pinned deliberately: a
+  compatibility shim is exactly the thing that moves under you. The
+  seeded shelf is larger than one catalog page on purpose, and holds one
+  CBZ, so paging and the EPUB-only filter both have something real to
+  work on. Everything lives under `tmp/`. Developer tooling only —
+  nothing in Gradle, CI or the release path may depend on it.
+- **`grimmory/seed-books.py`** — Generates the books `grimmory-dev`
+  seeds: filler EPUBs, each with a cover, plus one CBZ. Everything is
+  generated, so no downloads and nothing copyrighted. Not meant to be run
+  directly.
 - **`install`** — Builds a release-signed APK (key fetched from `pass`)
   and installs it in place over the device's existing release install,
   keeping its data. A debug build can't do this: Android refuses an

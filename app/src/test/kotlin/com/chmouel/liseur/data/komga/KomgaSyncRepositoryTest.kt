@@ -286,7 +286,7 @@ class KomgaSyncRepositoryTest {
     fun `a sync offered the refresh's own listing does not ask for it again`() = runTest {
         connect()
         val snapshot = KomgaCatalogSnapshot(
-            listOf(KomgaBooks.parseBook(JSONObject(bookJson(40, false, "2024-06-01T10:00:00Z")))),
+            listOfNotNull(KomgaBooks.parseBook(JSONObject(bookJson(40, false, "2024-06-01T10:00:00Z")))),
         )
         server.enqueue(json(progressionJson(locatorJson("OEBPS/ch3.xhtml", 0.5, 0.31))))
 
@@ -307,7 +307,7 @@ class KomgaSyncRepositoryTest {
         connect()
         anotherBook()
         val snapshot = KomgaCatalogSnapshot(
-            listOf(KomgaBooks.parseBook(JSONObject(bookJson(40, false, "2024-06-01T10:00:00Z")))),
+            listOfNotNull(KomgaBooks.parseBook(JSONObject(bookJson(40, false, "2024-06-01T10:00:00Z")))),
         )
         server.enqueue(json("""{"content":[],"last":true}"""))
 

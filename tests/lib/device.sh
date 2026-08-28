@@ -344,3 +344,198 @@ expect_open_under() {
     bad "$label: opened in ${measured}ms, over the ${budget_ms}ms budget"
   fi
 }
+
+# --- driving the app's own screens -------------------------------------
+#
+# Everything above reads the database. These few drive the interface,
+# for the one thing the database cannot be asked: whether a reader can
+# actually get there. Signing into a server is that -- the credentials
+# are sealed by the Android keystore, so a row cannot be written from
+# here, and a scenario that skipped the sign-in would be testing a state
+# no reader can reach.
+#
+# Compose publishes no resource ids, so elements are found by the text
+# on them. That is the same handle a person uses, which makes these
+# brittle in exactly the way the interface is: if the label moved, the
+# reader is lost too and the scenario should say so.
+
+readonly UI_DUMP="/sdcard/liseur-ui.xml"
+
+# The accessibility tree of whatever is on screen, as XML on stdout.
+ui_dump() {
+  adb shell "uiautomator dump $UI_DUMP >/dev/null 2>&1" >/dev/null || return 1
+  adb shell "cat $UI_DUMP" | tr -d '\r'
+}
+
+# The centre of the first node whose text or description matches an
+# extended regular expression, as "X Y". Empty if nothing matched.
+#
+# The dump is one long line, so nodes are split apart before matching --
+# otherwise a pattern would match one node's text and take another
+# node's bounds.
+#
+# awk reads to the end rather than stopping at the first match, and the
+# first line is taken here instead. Quitting early closes the pipe on
+# whatever is still writing into it, and under `set -o pipefail` that
+# SIGPIPE fails the whole pipeline -- which, with `set -e`, ends the
+# scenario at its first successful lookup.
+ui_find() {
+  local pattern="$1" found
+  found=$(ui_dump | tr '<' '\n' | awk -v pat="$pattern" '
+    /^node / {
+      text = ""; desc = ""; bounds = ""
+      if (match($0, /text="[^"]*"/))
+        text = substr($0, RSTART + 6, RLENGTH - 7)
+      if (match($0, /content-desc="[^"]*"/))
+        desc = substr($0, RSTART + 14, RLENGTH - 15)
+      if (match($0, /bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"/))
+        bounds = substr($0, RSTART + 8, RLENGTH - 9)
+      if (bounds == "") next
+      if (text !~ pat && desc !~ pat) next
+      split(bounds, p, /[^0-9]+/)
+      # p[1] is empty: the split leading the string. Corners are 2..5.
+      printf "%d %d\n", (p[2] + p[4]) / 2, (p[3] + p[5]) / 2
+    }')
+  printf '%s\n' "${found%%$'\n'*}"
+}
+
+# Waits for something matching a pattern to appear, printing where it is.
+ui_await() {
+  local pattern="$1" timeout_s="${2:-20}" waited=0 at
+  while ((waited < timeout_s)); do
+    at=$(ui_find "$pattern")
+    if [[ -n "$at" ]]; then
+      printf '%s\n' "$at"
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+
+# Taps whatever matches, once it is there. Fails the scenario if it
+# never arrives, since every later step assumed it would.
+ui_tap() {
+  local pattern="$1" label="${2:-$1}" at
+  at=$(ui_await "$pattern" "${3:-20}") || {
+    bad "could not find $label on screen"
+    return 1
+  }
+  # shellcheck disable=SC2086 # two words on purpose: x and y
+  adb shell input tap $at >/dev/null
+  sleep 1
+}
+
+# Types into the field that currently has focus.
+#
+# `input text` takes a single argument and reads %s as a space, so
+# anything reader-supplied is quoted for the device's shell first.
+ui_type() {
+  adb shell "input text $(shell_quote "${1// /%s}")" >/dev/null
+  sleep 1
+}
+
+# Puts the keyboard away by telling the field being typed into that it
+# is finished.
+#
+# It has to go. An open keyboard covers the bottom of the screen while
+# leaving every element it hides in the accessibility tree at its
+# ordinary place, so a tap aimed at the button below the fold lands on a
+# letter key instead and types a character into whichever field still
+# has focus -- corrupting the very password the scenario is about to
+# submit, and then reporting that the server rejected it.
+#
+# Enter is the way to do it. Every last field in these forms carries
+# ImeAction.Done, so this is the same "done" the reader presses, and it
+# closes the keyboard without submitting anything. Back would also close
+# it, but the same key pops the screen when the keyboard is already
+# gone, and the input method reports itself as showing for a moment
+# after it has left -- so a press decided on that reading is a coin toss
+# whose losing side walks out of the form and then out of the app.
+#
+# Switching the input methods off with `ime disable` is not the answer
+# either: Android will not be left with none, and quietly brings one
+# back.
+ui_done() {
+  adb shell input keyevent 66 >/dev/null
+  sleep 1
+}
+
+# Scrolls the screen up by one swipe, inside whatever is scrollable.
+#
+# The swipe has to begin *within* the scrolling container: a form's
+# fields commonly reach further down the screen than the container
+# does, and a drag starting below it moves nothing at all -- silently,
+# which is the whole difficulty in noticing it.
+ui_scroll_up() {
+  local box from to
+  box=$(ui_dump | tr '<' '\n' | awk '
+    /scrollable="true"/ {
+      if (match($0, /bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"/))
+        print substr($0, RSTART + 8, RLENGTH - 9)
+    }' | head -1)
+  [[ -n "$box" ]] || return 1
+  local p
+  # shellcheck disable=SC2206 # deliberate split on the bounds' punctuation
+  p=(${box//[^0-9]/ })
+  from=$((p[1] + (p[3] - p[1]) * 4 / 5))
+  to=$((p[1] + (p[3] - p[1]) / 5))
+  adb shell input swipe $(((p[0] + p[2]) / 2)) "$from" $(((p[0] + p[2]) / 2)) "$to" 400 >/dev/null
+  sleep 1
+}
+
+# The bottom of whatever is scrolling, or the bottom of the screen.
+#
+# A node reported outside it is not on screen, whatever bounds it
+# claims, and tapping where it says it is hits whatever is really drawn
+# there instead.
+ui_scroll_bottom() {
+  local box p
+  box=$(ui_dump | tr '<' '\n' | awk '
+    /scrollable="true"/ {
+      if (match($0, /bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"/))
+        print substr($0, RSTART + 8, RLENGTH - 9)
+    }' | head -1)
+  if [[ -z "$box" ]]; then
+    printf '%s\n' 999999
+    return 0
+  fi
+  # shellcheck disable=SC2206 # deliberate split on the bounds' punctuation
+  p=(${box//[^0-9]/ })
+  printf '%s\n' "${p[3]}"
+}
+
+# Scrolls until something matching a pattern is really on screen, then
+# taps it.
+#
+# A form long enough to need this is the ordinary case on a phone: the
+# button that submits it sits below the fold. A match outside the
+# scrolling area is not taken -- it is off screen, and tapping where it
+# claims to be hits whatever is actually drawn there.
+ui_tap_below() {
+  local pattern="$1" label="${2:-$1}" tries="${3:-8}" at i floor
+  for ((i = 0; i < tries; i++)); do
+    at=$(ui_find "$pattern")
+    floor=$(ui_scroll_bottom)
+    if [[ -n "$at" ]] && ((${at##* } < floor)); then
+      # shellcheck disable=SC2086 # two words on purpose: x and y
+      adb shell input tap $at >/dev/null
+      sleep 1
+      return 0
+    fi
+    ui_scroll_up || break
+  done
+  bad "could not reach $label, even after scrolling"
+  return 1
+}
+
+# Moves focus to the next field.
+#
+# Cheaper and steadier than aiming at each field in turn: one tap
+# establishes where focus is, and Tab walks the rest in the order the
+# form declares them.
+ui_tab() {
+  adb shell input keyevent 61 >/dev/null
+  sleep 1
+}

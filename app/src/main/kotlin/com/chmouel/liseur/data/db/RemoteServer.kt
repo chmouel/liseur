@@ -104,7 +104,7 @@ data class RemoteServer(
     @get:Ignore
     val credentials: RemoteCredentials?
         get() = when (kind) {
-            ServerKind.CALIBRE ->
+            ServerKind.CALIBRE, ServerKind.GRIMMORY ->
                 passwordCipher?.let(CredentialCipher::decrypt)
                     ?.let { RemoteCredentials.Basic(username.orEmpty(), it) }
 
@@ -122,12 +122,18 @@ data class RemoteServer(
      * without the account being any less usable for reading. Komga and
      * liseur-sync sync over the same API they do everything else with,
      * so there is nothing extra to obtain.
+     *
+     * Grimmory is a flat no, and not for want of a token: its Komga
+     * shim answers 404 to every progress route and never fills in a read
+     * progress on a book, so there is nothing to exchange. Saying so
+     * here is what keeps the app from offering a sync it cannot do.
      */
     @get:Ignore
     val canSync: Boolean
         get() = when (kind) {
             ServerKind.CALIBRE -> koboTokenCipher != null
             ServerKind.KOMGA, ServerKind.LISEUR_SYNC -> true
+            ServerKind.GRIMMORY -> false
         }
 
     /**
@@ -147,6 +153,11 @@ data class RemoteServer(
         get() = when (kind) {
             ServerKind.CALIBRE -> "$baseUrl|$username|${userId ?: -1}"
             ServerKind.KOMGA -> "$baseUrl|$username|${accountId ?: "-1"}"
+            // Grimmory's shim reports an id for the OPDS user, which is
+            // the identity that actually owns what is read here — the
+            // browser login it hangs off is a different account with a
+            // different shelf.
+            ServerKind.GRIMMORY -> "grimmory|$baseUrl|$username|${accountId ?: "-1"}"
             // The liseur-sync spelling is the one the old sync-only
             // account already wrote into `sync_peer_state` and
             // `work_alias`, and the migration carries it across: the

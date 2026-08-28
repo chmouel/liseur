@@ -75,9 +75,12 @@ class KomgaCatalogClient(private val http: KomgaHttp = KomgaHttp()) : CatalogSou
         credentials: RemoteCredentials,
         bookId: String,
     ): KomgaBook = withContext(Dispatchers.IO) {
-        KomgaBooks.parseBook(
-            http.getObject(KomgaUrl.api(baseUrl, "/api/v1/books/$bookId"), credentials),
-        )
+        val json = http.getObject(KomgaUrl.api(baseUrl, "/api/v1/books/$bookId"), credentials)
+        // Komga accepts any id it issued, so this only fails on a body
+        // that is not a book at all. Saying so beats a null the caller
+        // would have to invent a meaning for.
+        KomgaBooks.parseBook(json)
+            ?: throw IllegalStateException("Komga answered /books/$bookId without a book")
     }
 
     override suspend fun search(
