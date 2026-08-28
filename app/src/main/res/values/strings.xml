@@ -17,7 +17,7 @@
     <string name="add_books">Add books</string>
     <string name="add_folder_hint">Point Liseur at a folder of EPUBs and it keeps watching it for new ones.</string>
     <string name="add_book_hint">Pick a single EPUB from your device or your cloud storage.</string>
-    <string name="connect_server_hint">Browse a calibre-web, Komga, liseur-sync or Grimmory library, and keep your place across devices — Grimmory through a paired KOReader sync server.</string>
+    <string name="connect_server_hint">Browse a calibre-web, Komga, liseur-sync or Grimmory library, or any OPDS catalog, and keep your place across devices — Grimmory and OPDS through a paired KOReader sync server.</string>
     <string name="search_books">Search books</string>
     <string name="filter_menu">Filter</string>
     <string name="filter_availability">On the device</string>
@@ -162,6 +162,7 @@
     </plurals>
     <string name="server_account">Book server</string>
     <string name="server_connected" formatted="true">Connected to %1$s as %2$s</string>
+    <string name="server_connected_anon" formatted="true">Connected to %1$s</string>
     <string name="server_title">Book server</string>
     <string name="connect_server">Connect a book server</string>
     <string name="connect_server_short">Connect a server</string>
@@ -229,6 +230,9 @@
     <string name="server_token_storage_note">Your device token is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it. Revoke it on the server if you lose the phone.</string>
     <string name="server_sync_on">Your reading position will follow you between devices.</string>
     <string name="server_sync_off">Reading positions are not synced. The server may have Kobo sync switched off.</string>
+    <string name="server_sync_unsupported_custom">OPDS has no way to carry reading positions. Add a KOReader sync address in the section below and your place will follow you between devices.</string>
+    <string name="server_sync_none_custom">This connection carries no reading positions on its own. Add a KOReader sync address in the section below and your place will follow you between devices.</string>
+    <string name="server_sync_kosync_paired">Your place is kept by the KOReader sync server set up below.</string>
     <string name="server_sync_unsupported">Grimmory\'s Komga interface has no way to carry reading positions. Grimmory can still sync them over KOReader sync: create a KOReader user in Grimmory\'s device settings, then connect it in the section below.</string>
     <string name="calibre_show_advanced">Advanced</string>
     <string name="calibre_hide_advanced">Hide advanced</string>
@@ -237,6 +241,7 @@
     <string name="calibre_token_help">Liseur normally picks this up for you. If reading positions are not syncing, paste the Kobo sync URL from your calibre-web profile page here.</string>
     <string name="server_password_storage_note">Your password is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it, as this kind of server requires.</string>
     <string name="server_custom_storage_note">Anything you type here is kept on this device only, encrypted. The catalog password is sent to your catalog each time Liseur talks to it; the KOReader sync password never leaves this phone — only a value derived from it is sent.</string>
+    <string name="server_custom_kosync_storage_note">Anything you type here is kept on this device only, encrypted. The KOReader sync password never leaves this phone — only a value derived from it is sent.</string>
     <string name="server_api_key_storage_note">Your API key is kept on this device only, encrypted. It is sent to your server each time Liseur talks to it. Revoke it in Komga if you lose the phone.</string>
     <string name="book_on_server">On the server</string>
     <string name="book_not_downloaded">This book is still on the server.</string>

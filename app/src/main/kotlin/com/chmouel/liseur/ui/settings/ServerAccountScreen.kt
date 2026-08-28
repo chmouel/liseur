@@ -197,6 +197,7 @@ fun ServerAccountScreen(
                         syncStatus = state.syncStatus,
                         syncReport = state.syncReport,
                         identity = state.identity,
+                        paired = state.kosync != null,
                         onSyncNow = onSyncNow,
                         busy = state.connecting,
                         onRetryCapabilities = onRetryCapabilities,
@@ -249,7 +250,14 @@ fun ServerAccountScreen(
                         R.string.server_password_storage_note
                     ServerKind.KOMGA -> R.string.server_api_key_storage_note
                     ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
-                    ServerKind.CUSTOM -> R.string.server_custom_storage_note
+                    // With no catalog connected there is no catalog
+                    // password to account for, and the form is not on
+                    // screen to offer one either.
+                    ServerKind.CUSTOM -> if (server != null && server.catalogUrl == null) {
+                        R.string.server_custom_kosync_storage_note
+                    } else {
+                        R.string.server_custom_storage_note
+                    }
                 }
                 Text(
                     stringResource(secretNote),
@@ -802,6 +810,7 @@ private fun ConnectedCard(
     syncStatus: PositionSyncStatus,
     syncReport: SyncReport,
     identity: SyncIdentity?,
+    paired: Boolean,
     busy: Boolean,
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
@@ -877,7 +886,10 @@ private fun ConnectedCard(
         }
     }
 
-    if (!server.canDownload) {
+    // A connection with no catalog has no downloads to be missing, and
+    // nothing for "check again" to check.
+    val hasCatalog = server.catalogUrl != null
+    if (hasCatalog && !server.canDownload) {
         Notice(
             text = stringResource(
                 when (server.kind) {
@@ -944,12 +956,35 @@ private fun ConnectedCard(
             // difference between a limitation and a fault.
             text = when {
                 server.canSync -> stringResource(R.string.server_sync_on)
+
+                // A pairing is already carrying the position, so telling
+                // the reader to go and set one up sends them looking for
+                // work they have done.
+                paired && server.kind.hostsKosyncPeer ->
+                    stringResource(R.string.server_sync_kosync_paired)
+
                 server.kind == ServerKind.GRIMMORY ->
                     stringResource(R.string.server_sync_unsupported)
 
+                // Neither is OPDS a thing to switch on: the format
+                // carries no reading state at all, and the pairing
+                // below is the whole answer. With no catalog either,
+                // there is no OPDS to blame.
+                server.kind == ServerKind.CUSTOM -> stringResource(
+                    if (hasCatalog) {
+                        R.string.server_sync_unsupported_custom
+                    } else {
+                        R.string.server_sync_none_custom
+                    },
+                )
+
                 else -> stringResource(R.string.server_sync_off)
             },
-            tone = if (server.canSync) NoticeTone.GOOD else NoticeTone.NEUTRAL,
+            tone = when {
+                server.canSync -> NoticeTone.GOOD
+                paired && server.kind.hostsKosyncPeer -> NoticeTone.GOOD
+                else -> NoticeTone.NEUTRAL
+            },
         )
 
         if (server.canSync) {
