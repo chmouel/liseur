@@ -1,6 +1,33 @@
 package com.chmouel.liseur.data.remote
 
 /**
+ * How much of a reading position a kind of server can carry.
+ *
+ * A claim about the *kind*, answerable before anything has been typed,
+ * which is what makes it the thing the server picker can show: choosing
+ * where your library lives is partly choosing whether your place in a
+ * book follows you, and finding that out after connecting is finding it
+ * out too late.
+ *
+ * Deliberately not [com.chmouel.liseur.data.db.RemoteServer.canSync],
+ * which asks a different question — whether *this* account is ready to
+ * sync right now, and for calibre-web that waits on a Kobo token. The
+ * two must not be folded together: a picker that read `canSync` would
+ * have to invent an account to ask, and a repository that read this
+ * would offer calibre-web a sync it has no token for.
+ */
+enum class SyncAbility {
+    /** The exact spot in the book, restored on every device. */
+    EXACT,
+
+    /** How far through the book, but not the exact spot. */
+    PROGRESSION,
+
+    /** Nothing: the server has nowhere to put a reading position. */
+    NONE,
+}
+
+/**
  * Which kind of server the library is connected to.
  *
  * One server is connected at a time, and its kind is what decides which
@@ -77,6 +104,22 @@ enum class ServerKind(
         get() = when (this) {
             CALIBRE, GRIMMORY -> true
             KOMGA, LISEUR_SYNC -> false
+        }
+
+    /**
+     * How much of a reading position this kind can carry, as something
+     * to say before an account exists.
+     *
+     * calibre-web is [SyncAbility.PROGRESSION] because the Kobo
+     * protocol exchanges a percentage and nothing else, so the page
+     * comes back approximately. Komga and liseur-sync exchange a whole
+     * locator. Grimmory's shim answers 404 to every progress route.
+     */
+    val syncAbility: SyncAbility
+        get() = when (this) {
+            CALIBRE -> SyncAbility.PROGRESSION
+            KOMGA, LISEUR_SYNC -> SyncAbility.EXACT
+            GRIMMORY -> SyncAbility.NONE
         }
 
     companion object {
