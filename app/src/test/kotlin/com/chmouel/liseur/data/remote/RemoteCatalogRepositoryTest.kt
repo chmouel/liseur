@@ -290,15 +290,140 @@ class RemoteCatalogRepositoryTest {
     @Test
     fun `a walk that did finish is still allowed to prune`() = runTest {
         // The other half of the rule, so the test above cannot be
-        // satisfied by never pruning at all.
+        // satisfied by never pruning at all. Twice, because one absence
+        // is only a suspicion now.
+        connect(ServerKind.KOMGA)
+        shelve("b1", progressedTo = 0.4)
+        shelve("b2", progressedTo = 0.9)
+
+        val catalog = FakeCatalog { onPage -> onPage(listOf(book("b1"))) }
+        repository(catalog).refresh()
+        repository(catalog).refresh()
+
+        assertEquals(null, db.bookDao().getByUrl("komga:b2"))
+        assertNotNull(db.bookDao().getByUrl("komga:b1"))
+    }
+
+    /**
+     * The bug this rule exists for.
+     *
+     * Every catalog here is paged by offset. Delete a book from page one
+     * and add another while the walk is between requests, and page two
+     * starts past a book nobody has been shown -- with the declared
+     * count unmoved, the ids distinct and the arithmetic exact, so
+     * nothing in the answer looks wrong. The book is still on the server.
+     */
+    @Test
+    fun `a book skipped by pages shifting under the walk is not pruned`() = runTest {
+        connect(ServerKind.KOMGA)
+        listOf("b1", "b2", "b3", "b4").forEach { shelve(it, progressedTo = 0.5) }
+
+        // Page 0 of [1,2,3,4] gives 1,2. Then 1 goes and 5 arrives, so
+        // page 1 -- offset 2 of [2,3,4,5] -- gives 4,5. Book 3 was never
+        // sent, and the walk finished perfectly happily.
+        val shifted = FakeCatalog { onPage ->
+            onPage(listOf(book("b1"), book("b2")))
+            onPage(listOf(book("b4"), book("b5")))
+        }
+        assertEquals(true, repository(shifted).refresh().completed)
+
+        val survivor = db.bookDao().getByUrl("komga:b3")
+        assertNotNull("a book still on the server was pruned", survivor)
+        assertEquals(0.5, db.readingProgressDao().get("komga:b3")?.totalProgression)
+        assertTrue(
+            "the sittings went with it",
+            db.readingSessionDao().observeAll().first().any { it.bookUrl == "komga:b3" },
+        )
+    }
+
+    @Test
+    fun `a book missing from one finished walk is only suspected`() = runTest {
         connect(ServerKind.KOMGA)
         shelve("b1", progressedTo = 0.4)
         shelve("b2", progressedTo = 0.9)
 
         repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
 
-        assertEquals(null, db.bookDao().getByUrl("komga:b2"))
-        assertNotNull(db.bookDao().getByUrl("komga:b1"))
+        val suspected = db.bookDao().getByUrl("komga:b2")
+        assertNotNull("one absence was treated as proof", suspected)
+        assertNotNull("nothing was noted, so the next walk starts over", suspected?.catalogMissingSince)
+        assertEquals(0.9, db.readingProgressDao().get("komga:b2")?.totalProgression)
+    }
+
+    @Test
+    fun `a book named again is no longer suspected`() = runTest {
+        connect(ServerKind.KOMGA)
+        shelve("b1", progressedTo = 0.4)
+        shelve("b2", progressedTo = 0.9)
+
+        val partial = FakeCatalog { onPage -> onPage(listOf(book("b1"))) }
+        val whole = FakeCatalog { onPage -> onPage(listOf(book("b1"), book("b2"))) }
+        repository(partial).refresh()
+        repository(whole).refresh()
+        assertEquals(null, db.bookDao().getByUrl("komga:b2")?.catalogMissingSince)
+
+        // And the count really did start again: one more absence is
+        // still only the first.
+        repository(partial).refresh()
+
+        assertNotNull("a single absence pruned it", db.bookDao().getByUrl("komga:b2"))
+    }
+
+    /**
+     * A walk that gave up half way still stored the pages it did read,
+     * and a book on one of them has plainly not gone anywhere.
+     *
+     * Clearing the suspicion only at the end of a finished walk would
+     * leave that book marked, and the next walk to miss it once -- for
+     * the paging reason this whole rule is about -- would delete it on
+     * the strength of an absence recorded before it was last seen.
+     */
+    @Test
+    fun `a book seen by a walk that did not finish is no longer suspected`() = runTest {
+        connect(ServerKind.KOMGA)
+        shelve("b1", progressedTo = 0.4)
+        shelve("b2", progressedTo = 0.9)
+
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
+        repository(
+            FakeCatalog(complete = false) { onPage -> onPage(listOf(book("b1"), book("b2"))) },
+        ).refresh()
+        assertEquals(null, db.bookDao().getByUrl("komga:b2")?.catalogMissingSince)
+
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
+
+        assertNotNull("an unfinished sighting did not count", db.bookDao().getByUrl("komga:b2"))
+    }
+
+    @Test
+    fun `a walk that did not finish suspects nothing`() = runTest {
+        connect(ServerKind.KOMGA)
+        shelve("b1", progressedTo = 0.4)
+        shelve("b2", progressedTo = 0.9)
+
+        repository(FakeCatalog(complete = false) { onPage -> onPage(listOf(book("b1"))) }).refresh()
+
+        assertEquals(null, db.bookDao().getByUrl("komga:b2")?.catalogMissingSince)
+    }
+
+    /**
+     * A library can go all at once -- a share withdrawn, an address
+     * pointed at the wrong server -- and `IN (:urls)` binds a variable
+     * per book, which SQLite refuses past 999 of before API 31.
+     */
+    @Test
+    fun `a whole library vanishing at once is more books than one statement holds`() = runTest {
+        connect(ServerKind.KOMGA)
+        val shelved = (1..1200).map { "b$it" }
+        shelved.forEach { shelve(it, progressedTo = 0.1) }
+
+        val empty = FakeCatalog { }
+        repository(empty).refresh()
+        assertEquals(shelved.size, db.bookDao().allOnce().size)
+
+        assertEquals(true, repository(empty).refresh().completed)
+
+        assertEquals(0, db.bookDao().allOnce().size)
     }
 
     /** A book already on the shelf, read partway, with an hour behind it. */
@@ -677,7 +802,11 @@ class RemoteCatalogRepositoryTest {
             state = com.chmouel.liseur.data.db.DownloadState.DOWNLOADED,
             localUri = "content://downloads/b1.epub",
         )
-        repository(FakeCatalog { }).refresh()
+        // Twice: the first absence only raises the suspicion.
+        val gone = FakeCatalog { }
+        repository(gone).refresh()
+        assertEquals("b1", db.bookDao().allOnce().single().remoteUuid)
+        repository(gone).refresh()
         assertEquals(null, db.bookDao().allOnce().single().remoteUuid)
 
         assertEquals(true, repository(full).refresh().completed)
@@ -686,6 +815,27 @@ class RemoteCatalogRepositoryTest {
         assertEquals(1, books.size)
         assertEquals("b1", books.single().remoteUuid)
         assertEquals("content://downloads/b1.epub", books.single().localUri)
+    }
+
+    /** Unlinking clears the suspicion too, or the row would come back marked. */
+    @Test
+    fun `a downloaded book cut loose from the catalog keeps its file`() = runTest {
+        connect()
+        val full = FakeCatalog { onPage -> onPage(listOf(book("b1"))) }
+        repository(full).refresh()
+        db.bookDao().setDownloadState(
+            url = db.bookDao().allRemote().single().url,
+            state = com.chmouel.liseur.data.db.DownloadState.DOWNLOADED,
+            localUri = "content://downloads/b1.epub",
+        )
+        val gone = FakeCatalog { }
+        repository(gone).refresh()
+        repository(gone).refresh()
+
+        val cut = db.bookDao().allOnce().single()
+        assertEquals(null, cut.remoteUuid)
+        assertEquals("content://downloads/b1.epub", cut.localUri)
+        assertEquals(null, cut.catalogMissingSince)
     }
 
     /** A claim route that records what the retry actually asked for. */

@@ -163,7 +163,7 @@ class RemoteCatalogRepository(
                 // new account's books, or bring the old account back from
                 // the dead, so the whole answer is dropped instead.
                 forAccount(server) {
-                    dropVanished(seen)
+                    reconcileVanished(seen)
                     serverDao.setCatalogSyncedAt(System.currentTimeMillis())
                 }
                 _status.value = CatalogStatus.Idle
@@ -376,11 +376,29 @@ class RemoteCatalogRepository(
     }
 
     /**
-     * Forgets books that are no longer in the catalog, unless they are on
-     * the device: a book the user has downloaded stays readable even if
-     * it is removed from the server.
+     * Decides what a finished walk means for the books it did not name.
+     *
+     * Not by removing them: a book absent from one walk is only
+     * suspected of having gone. Every catalog here is read a page at a
+     * time by offset, and a catalog edited between two of those requests
+     * shifts under the offset, so a book still on the server is never
+     * sent — while every check on the envelope passes, because a
+     * deletion and an addition together leave the declared count exactly
+     * where it was. Believing a single absence is how the reader loses a
+     * book, and with it their place, their sittings and their history.
+     *
+     * So absence must be seen by two finished walks running. The first
+     * marks; the second acts, and does what this always did — a book
+     * with no file goes, one on the device keeps its file and loses its
+     * link. Being named again at any point clears the mark, including by
+     * a walk that never finished, which is done as the page is stored.
+     *
+     * The cost is that a book genuinely deleted on the server lingers
+     * until the refresh after next. That is the right way round: an
+     * extra refresh showing a book that has gone is a moment's
+     * confusion, and the alternative is unrecoverable.
      */
-    private suspend fun dropVanished(seenUuids: Set<String>) {
+    private suspend fun reconcileVanished(seenUuids: Set<String>) {
         // Only rows the catalog itself introduced are the catalog's to
         // forget. A book of the reader's own that was uploaded and
         // linked is not one: its file is its URL rather than a
@@ -388,17 +406,30 @@ class RemoteCatalogRepository(
         // to open, and a walk that began before the upload cannot have
         // seen its id. Between them they would delete the book and
         // every page ever read of it.
-        val gone = bookDao.allRemote()
+        val remote = bookDao.allRemote()
+        val gone = remote
             .filter { it.remoteUuid !in seenUuids && ServerKind.isRemoteUrl(it.url) }
+        val (confirmed, suspected) = gone.partition { it.catalogMissingSince != null }
         // Only a book with a file of its own is worth keeping. One that
         // was queued or failed has nothing to read, so it goes with the
         // rest rather than staying as a row that can never be opened.
-        val (onDevice, noFile) = gone.partition { it.localUri != null }
-        if (noFile.isNotEmpty()) bookRemoval.deleteByUrls(noFile.map { it.url })
+        val (onDevice, noFile) = confirmed.partition { it.localUri != null }
+        noFile.map { it.url }.chunkedForSql { bookRemoval.deleteByUrls(it) }
         // A book that is here but no longer there keeps its file and loses
         // its link: syncing it would keep asking the server about an id it
         // has forgotten, and be told no every time.
-        if (onDevice.isNotEmpty()) bookDao.unlinkFromRemote(onDevice.map { it.url })
+        onDevice.map { it.url }.chunkedForSql { bookDao.unlinkFromRemote(it) }
+        val now = System.currentTimeMillis()
+        suspected.map { it.url }.chunkedForSql { bookDao.markCatalogMissing(it, now) }
+        // Storing a page already clears the mark on everything it names,
+        // so this ought to find nothing. It stays because the invariant
+        // it keeps -- named means unmarked -- is what stops a single
+        // absence being fatal, and it should not depend on one write in
+        // another file continuing to be unconditional.
+        remote
+            .filter { it.remoteUuid in seenUuids && it.catalogMissingSince != null }
+            .map { it.url }
+            .chunkedForSql { bookDao.clearCatalogMissing(it) }
     }
 
     /**
@@ -424,6 +455,22 @@ class RemoteCatalogRepository(
     private companion object {
         const val TAG = "RemoteCatalog"
     }
+}
+
+/**
+ * How many URLs to name in one statement.
+ *
+ * `IN (:urls)` binds a variable per book and SQLite refuses more than
+ * 999 of them before API 31. A whole library can vanish from a catalog
+ * at once — a misconfigured server, a library unshared — and the throw
+ * would land in the middle of the reconciliation.
+ */
+private const val URL_CHUNK = 500
+
+/** Runs [write] over the URLs in batches SQLite will accept, and not at all for none. */
+private suspend fun List<String>.chunkedForSql(write: suspend (List<String>) -> Unit) {
+    if (isEmpty()) return
+    chunked(URL_CHUNK).forEach { write(it) }
 }
 
 /**
@@ -614,5 +661,13 @@ internal fun mergeCatalogEntry(
         } else {
             book.personalSeriesUpdatedAt
         },
+        // The catalog is naming this book, so whatever an earlier walk
+        // failed to find, it was not this. Clearing it here rather than
+        // only at the end of a walk is deliberate: an unfinished walk
+        // still stores its pages, and a book it saw must not be left one
+        // absence away from deletion. It also makes a row that differs
+        // by nothing else fail the "unchanged, skip it" test in `store`,
+        // which is what carries the clear as far as the database.
+        catalogMissingSince = null,
     )
 }

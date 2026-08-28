@@ -814,10 +814,38 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `a book already on the shelf is not suspected of having gone`() {
+        // The column decides whether a book absent from a catalog walk
+        // is deleted or merely watched. A row restored with anything but
+        // null would be one walk away from deletion the moment the app
+        // is upgraded, which is the opposite of what it is for.
+        helper.createDatabase(TEST_DB, 40).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books (url, title, author, cover_path, source, added_at,
+                                   last_opened_at, download_state, series_checked,
+                                   series_override, series_index_override,
+                                   series_claim_pending, series_claim_reset)
+                VALUES ('komga:b1', 'A Book', NULL, NULL, NULL, 0, NULL, 'REMOTE', 0, 0, 0, 0, 0)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT catalog_missing_since FROM books WHERE url = 'komga:b1'")
+                    .use { cursor ->
+                        assertTrue(cursor.moveToFirst())
+                        assertTrue(cursor.isNull(0))
+                    }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 40
+        const val LATEST = 41
     }
 }
