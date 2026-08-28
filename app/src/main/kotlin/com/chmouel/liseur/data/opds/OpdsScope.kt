@@ -69,6 +69,18 @@ class OpdsScope private constructor(val root: HttpUrl) {
     }
 
     /**
+     * A link the fetch policy allows, as a string, or null.
+     *
+     * The check belongs where an address is first written down, not
+     * only where it is used. A cover goes to the image loader and an
+     * acquisition to the download worker, and neither consults an
+     * [OpdsScope]; a refused link stored today is a request made
+     * tomorrow. [OpdsFileSource] checks again on the way out, because a
+     * row written before this rule existed is still in the database.
+     */
+    fun fetchable(url: HttpUrl?): String? = url?.takeIf(::mayFetch)?.toString()
+
+    /**
      * A short, stable name for this catalog, for telling two of them
      * apart.
      *

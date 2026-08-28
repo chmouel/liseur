@@ -141,4 +141,49 @@ class OpdsScopeTest {
 
         assertTrue(root.mayFetch("http://192.168.1.5:8080/get/1.epub".toHttpUrl()))
     }
+
+    @Test
+    fun `an address dressed as IPv6 is still the address it is`() {
+        // `::ffff:192.168.1.1` and `::ffff:c0a8:0101` are both
+        // 192.168.1.1. Read as an IPv6 prefix, neither matches
+        // anything private, and the LAN is open again.
+        val root = scope("https://books.example/opds")
+
+        assertFalse(root.mayFetch("https://[::ffff:192.168.1.1]/x".toHttpUrl()))
+        assertFalse(root.mayFetch("https://[::ffff:c0a8:0101]/x".toHttpUrl()))
+        assertFalse(root.mayFetch("https://[::ffff:127.0.0.1]/x".toHttpUrl()))
+        assertFalse(root.mayFetch("https://[0:0:0:0:0:ffff:169.254.169.254]/x".toHttpUrl()))
+        assertFalse(root.mayFetch("https://[::192.168.1.1]/x".toHttpUrl()))
+    }
+
+    @Test
+    fun `a real IPv6 address is read as one`() {
+        val root = scope("https://books.example/opds")
+
+        assertFalse(root.mayFetch("https://[fd00::1]/x".toHttpUrl()))
+        assertFalse(root.mayFetch("https://[fe80::1]/x".toHttpUrl()))
+        assertFalse(root.mayFetch("https://[::1]/x".toHttpUrl()))
+        assertTrue(root.mayFetch("https://[2001:db8::1]/x".toHttpUrl()))
+        assertTrue(root.mayFetch("https://[::ffff:93.184.216.34]/x".toHttpUrl()))
+    }
+
+    @Test
+    fun `a link is refused before it is written down, not after`() {
+        // A cover goes to the image loader and an acquisition to the
+        // download worker. Neither asks this class anything, so a
+        // refused link stored now is a request made later.
+        val root = scope("https://books.example/opds")
+
+        assertNull(root.fetchable("http://books.example/get/1.epub".toHttpUrl()))
+        assertNull(root.fetchable("https://192.168.1.1/covers/1.jpg".toHttpUrl()))
+        assertNull(root.fetchable(null))
+        assertEquals(
+            "https://books.example/covers/1.jpg",
+            root.fetchable("https://books.example/covers/1.jpg".toHttpUrl()),
+        )
+        assertEquals(
+            "https://cdn.example/1.epub",
+            root.fetchable("https://cdn.example/1.epub".toHttpUrl()),
+        )
+    }
 }
