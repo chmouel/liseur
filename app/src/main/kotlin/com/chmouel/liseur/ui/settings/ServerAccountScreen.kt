@@ -59,6 +59,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -121,6 +122,12 @@ fun ServerAccountScreen(
     onDownloadAll: () -> Unit,
     onCancelDownloadAll: () -> Unit,
     onDismissBatch: () -> Unit,
+    onKosyncUrlChange: (String) -> Unit,
+    onKosyncUsernameChange: (String) -> Unit,
+    onKosyncPasswordChange: (String) -> Unit,
+    onKosyncRegisterChange: (Boolean) -> Unit,
+    onKosyncConnect: () -> Unit,
+    onKosyncDisconnect: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -212,6 +219,21 @@ fun ServerAccountScreen(
                             )
                         }
                     }
+                }
+                // The KOReader sync partner lives alongside whichever
+                // catalog server is connected; with none connected there
+                // is nothing for it to cover, so the section only stays
+                // to let a leftover pairing be disconnected.
+                if (server != null || state.kosync != null) {
+                    KosyncSection(
+                        state = state,
+                        onUrlChange = onKosyncUrlChange,
+                        onUsernameChange = onKosyncUsernameChange,
+                        onPasswordChange = onKosyncPasswordChange,
+                        onRegisterChange = onKosyncRegisterChange,
+                        onConnect = onKosyncConnect,
+                        onDisconnect = onKosyncDisconnect,
+                    )
                 }
                 val secretNote = when (server?.kind ?: state.kind) {
                     ServerKind.CALIBRE, ServerKind.GRIMMORY ->
@@ -870,6 +892,157 @@ private fun ConnectedCard(
     OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.server_disconnect))
     }
+}
+
+/**
+ * The KOReader sync (kosync) partner, paired alongside the catalog
+ * server rather than instead of it.
+ *
+ * This is how Grimmory's positions reach the app: its Komga shim
+ * carries none, while its kosync endpoint does. The section speaks the
+ * generic protocol, so a stock kosync server works the same way.
+ */
+@Composable
+private fun KosyncSection(
+    state: ServerAccountUiState,
+    onUrlChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onRegisterChange: (Boolean) -> Unit,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    ServerSection(title = stringResource(R.string.kosync_section)) {
+        val peer = state.kosync
+        if (peer != null) {
+            Notice(
+                text = stringResource(
+                    R.string.kosync_connected,
+                    peer.username,
+                    peer.baseUrl.substringAfter("://"),
+                ),
+                tone = NoticeTone.GOOD,
+            )
+            DetailLine(text = state.kosyncStatus.describe(peer.positionSyncedAt))
+            OutlinedButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.kosync_disconnect))
+            }
+            return@ServerSection
+        }
+
+        Text(
+            text = stringResource(R.string.kosync_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = state.kosyncUrl,
+            onValueChange = onUrlChange,
+            label = { Text(stringResource(R.string.kosync_url)) },
+            singleLine = true,
+            enabled = !state.kosyncConnecting,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = state.kosyncUsername,
+            onValueChange = onUsernameChange,
+            label = { Text(stringResource(R.string.server_username)) },
+            singleLine = true,
+            enabled = !state.kosyncConnecting,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        var secretShown by rememberSaveable { mutableStateOf(false) }
+        OutlinedTextField(
+            value = state.kosyncPassword,
+            onValueChange = onPasswordChange,
+            label = { Text(stringResource(R.string.server_password)) },
+            singleLine = true,
+            enabled = !state.kosyncConnecting,
+            visualTransformation = if (secretShown) {
+                VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
+            trailingIcon = {
+                IconButton(onClick = { secretShown = !secretShown }) {
+                    Icon(
+                        imageVector = if (secretShown) {
+                            Icons.Outlined.VisibilityOff
+                        } else {
+                            Icons.Outlined.Visibility
+                        },
+                        contentDescription = stringResource(
+                            if (secretShown) R.string.hide_password else R.string.show_password,
+                        ),
+                    )
+                }
+            },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.kosync_register),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    stringResource(R.string.kosync_register_help),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = state.kosyncRegister,
+                onCheckedChange = onRegisterChange,
+                enabled = !state.kosyncConnecting,
+            )
+        }
+        state.kosyncError?.let { error ->
+            Notice(
+                text = stringResource(error.kosyncMessageRes()),
+                tone = NoticeTone.PROBLEM,
+            )
+        }
+        Button(
+            onClick = onConnect,
+            enabled = !state.kosyncConnecting &&
+                state.kosyncUrl.isNotBlank() &&
+                state.kosyncUsername.isNotBlank() &&
+                state.kosyncPassword.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (state.kosyncConnecting) {
+                BusyIndicator(
+                    Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            } else {
+                Text(stringResource(R.string.kosync_connect))
+            }
+        }
+    }
+}
+
+private fun AccountError.kosyncMessageRes(): Int = when (this) {
+    AccountError.BAD_CREDENTIALS -> R.string.kosync_error_credentials
+    AccountError.WRONG_SERVER -> R.string.kosync_error_not_kosync
+    AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
+    AccountError.RATE_LIMITED -> R.string.server_error_rate_limited
+    else -> R.string.server_error_unreachable
 }
 
 /**

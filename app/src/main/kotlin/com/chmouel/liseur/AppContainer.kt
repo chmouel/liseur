@@ -40,6 +40,8 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import com.chmouel.liseur.data.liseursync.LiseurSyncSeriesClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncUploadClient
 import com.chmouel.liseur.data.liseursync.WorkResolver
+import com.chmouel.liseur.data.kosync.KosyncAccountRepository
+import com.chmouel.liseur.data.kosync.KosyncPositionSync
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
@@ -237,6 +239,30 @@ class AppContainer(context: Context) {
     )
 
     /**
+     * The KOReader kosync partner (issue #95): position sync alongside
+     * the catalog server, for servers — Grimmory above all — that hold
+     * positions behind kosync rather than their catalog API.
+     */
+    val kosyncAccount = KosyncAccountRepository(
+        dao = database.kosyncPeerDao(),
+        peerStateDao = database.syncPeerStateDao(),
+        reporting = syncReporting,
+    )
+
+    val kosyncSync = KosyncPositionSync(
+        kosyncDao = database.kosyncPeerDao(),
+        bookDao = database.bookDao(),
+        progressDao = database.readingProgressDao(),
+        peerStateDao = database.syncPeerStateDao(),
+        fingerprints = bookFingerprints,
+        device = { deviceIdentity.current() },
+        finishedState = finishedState,
+        reporting = syncReporting,
+        networkAvailability = networkAvailability,
+        inTransaction = { work -> database.withTransaction { work() } },
+    )
+
+    /**
      * liseur-sync's position sync: the append-only op log, bound to the
      * catalog account like the other kinds' syncs are.
      */
@@ -321,14 +347,14 @@ class AppContainer(context: Context) {
     /**
      * Every partner reading positions are kept in step with.
      *
-     * Today that is the one connected server, whichever kind it is; the
-     * composite stays because the coordinator's ordering rules are
-     * written against it, and a partner added later — a dedicated sync
-     * server again, say — is one list entry away.
+     * The catalog server first — it is the one whose own interface shows
+     * the position too — and the kosync partner after it. The composite
+     * runs them in turn, so the coordinator's ordering rules hold across
+     * both without being written twice.
      */
     val positionSync = PositionSyncCoordinator(
         CompositePositionSync(
-            listOf(RoutedPositionSync(remoteRouter)),
+            listOf(RoutedPositionSync(remoteRouter), kosyncSync),
         ),
     )
 

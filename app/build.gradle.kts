@@ -186,6 +186,7 @@ dependencies {
     // Lets the calibre-web clients be tested against a real socket, which is
     // the only way to cover redirects, failed logins and refused deletes.
     testImplementation(libs.mockwebserver)
+    testImplementation(libs.okhttp.tls)
     // Gives the sync coordinator's tests a clock they control, which is
     // the only way to pin down what happens when two requests overlap.
     testImplementation(libs.coroutines.test)

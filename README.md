@@ -47,8 +47,10 @@ shelf from a connected server in one go.
 
 Reading position syncs across devices through calibre-web, Komga and
 liseur-sync, down to the exact sentence on the last two. liseur-sync also
-syncs standalone EPUBs that never came from a catalog. Grimmory browses and
-downloads only; what each server can and cannot do is in
+syncs standalone EPUBs that never came from a catalog. A KOReader sync
+(kosync) server can be paired alongside any catalog — it is how Grimmory
+syncs positions, and it works with any kosync-compatible server. What
+each server can and cannot do is in
 [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
 No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the

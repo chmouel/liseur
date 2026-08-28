@@ -21,6 +21,9 @@ interface PeerPositionSync : PositionSync {
     companion object {
         /** The server the library browses and downloads from. */
         const val CATALOG = "catalog"
+
+        /** The KOReader kosync partner, configured alongside it. */
+        const val KOSYNC = "kosync"
     }
 }
 

@@ -24,8 +24,9 @@ import androidx.sqlite.execSQL
         WorkAmbiguity::class,
         SeriesExtra::class,
         AnnotationSync::class,
+        KosyncPeer::class,
     ],
-    version = 41,
+    version = 42,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -38,6 +39,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun seriesOrderDao(): SeriesOrderDao
     abstract fun libraryFolderDao(): LibraryFolderDao
     abstract fun remoteServerDao(): RemoteServerDao
+    abstract fun kosyncPeerDao(): KosyncPeerDao
     abstract fun annotationDao(): BookAnnotationDao
     abstract fun annotationSyncDao(): AnnotationSyncDao
     abstract fun typographyDao(): BookTypographyDao
@@ -1048,6 +1050,25 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the kosync partner (ADR-0014). */
+        val MIGRATION_41_42 = object : Migration(41, 42) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `kosync_peer` (
+                        `id` INTEGER NOT NULL,
+                        `base_url` TEXT NOT NULL,
+                        `username` TEXT NOT NULL,
+                        `key_cipher` TEXT NOT NULL,
+                        `added_at` INTEGER NOT NULL,
+                        `position_synced_at` INTEGER,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATION_39_40 = object : Migration(39, 40) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1162,6 +1183,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_38_39,
             MIGRATION_39_40,
             MIGRATION_40_41,
+            MIGRATION_41_42,
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.chmouel.liseur.domain
 
+import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.RemoteServer
 
 /** How long a completed full sync stands for before the app asks again. */
@@ -15,6 +16,10 @@ const val FOREGROUND_SYNC_FRESH_FOR_MS = 60L * 60L * 1000L
  * difference and a shelf full of books is not re-reconciled every time
  * the system decides to reclaim some memory.
  *
+ * The kosync partner is asked about on its own terms: it lives alongside
+ * the catalog server, and a Grimmory account that cannot sync positions
+ * itself is exactly the account a kosync partner is paired next to.
+ *
  * The gesture that means "look again", and the hourly worker, do not ask
  * this. They are asking on purpose.
  */
@@ -22,9 +27,12 @@ fun shouldSyncOnForeground(
     server: RemoteServer?,
     now: Long,
     freshForMs: Long = FOREGROUND_SYNC_FRESH_FOR_MS,
+    kosync: KosyncPeer? = null,
 ): Boolean {
-    return server != null && server.canSync &&
+    val catalogDue = server != null && server.canSync &&
         due(server.positionSyncedAt, now, freshForMs)
+    val kosyncDue = kosync != null && due(kosync.positionSyncedAt, now, freshForMs)
+    return catalogDue || kosyncDue
 }
 
 private fun due(syncedAt: Long?, now: Long, freshForMs: Long): Boolean {

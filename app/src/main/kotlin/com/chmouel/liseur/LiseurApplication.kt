@@ -71,6 +71,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                         val due = shouldSyncOnForeground(
                             container.remoteAccount.current(),
                             now,
+                            kosync = container.kosyncAccount.current(),
                         )
                         if (!due) return@launch
                         runCatching { container.positionSync.request(SyncScope.Full, now) }

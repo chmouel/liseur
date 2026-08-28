@@ -9,7 +9,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.WorkIdentityDao
+import com.chmouel.liseur.data.kosync.KosyncAccountRepository
+import com.chmouel.liseur.data.kosync.KosyncSetupOutcome
+import com.chmouel.liseur.data.remote.PeerPositionSync
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.BulkBatch
@@ -105,6 +109,17 @@ data class ServerAccountUiState(
     val bulkEstimate: BulkDownloadEstimate? = null,
     /** True while the estimate is being worked out. */
     val estimating: Boolean = false,
+    /** The KOReader sync partner paired alongside the catalog server. */
+    val kosync: KosyncPeer? = null,
+    val kosyncUrl: String = "",
+    val kosyncUsername: String = "",
+    val kosyncPassword: String = "",
+    /** Whether connecting should create the account on the server first. */
+    val kosyncRegister: Boolean = false,
+    val kosyncConnecting: Boolean = false,
+    val kosyncError: AccountError? = null,
+    /** How the kosync partner's own last run went, apart from the summary. */
+    val kosyncStatus: PositionSyncStatus = PositionSyncStatus.Idle,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -117,6 +132,7 @@ class ServerAccountViewModel(
     private val appSettings: AppSettingsRepository,
     private val identityDao: WorkIdentityDao,
     private val bookDao: BookDao,
+    private val kosyncAccount: KosyncAccountRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ServerAccountUiState())
@@ -124,8 +140,21 @@ class ServerAccountViewModel(
 
     init {
         viewModelScope.launch {
-            repository.server.collect { server ->
-                _state.update { it.copy(server = server) }
+            // Server and kosync peer arrive together: the Grimmory
+            // prefill below must know whether a peer exists, and two
+            // independent collectors would let it fire before the
+            // peer's first emission.
+            combine(repository.server, kosyncAccount.peer) { server, peer ->
+                server to peer
+            }.collect { (server, peer) ->
+                _state.update { state ->
+                    state.copy(
+                        server = server,
+                        kosync = peer,
+                        kosyncUrl = kosyncPrefillUrl(server, peer, state.kosyncUrl)
+                            ?: state.kosyncUrl,
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -135,7 +164,12 @@ class ServerAccountViewModel(
         }
         viewModelScope.launch {
             reporting.status.collect { status ->
-                _state.update { it.copy(syncStatus = status) }
+                _state.update {
+                    it.copy(
+                        syncStatus = status,
+                        kosyncStatus = reporting.statusOf(PeerPositionSync.KOSYNC),
+                    )
+                }
                 // Every settled run can change who owns what and what is
                 // left over, so the answer is re-read rather than cached.
                 refreshDiagnostics()
@@ -218,6 +252,54 @@ class ServerAccountViewModel(
 
     fun setDeviceToken(value: String) =
         _state.update { it.copy(deviceToken = value.trim(), error = null) }
+
+    fun setKosyncUrl(value: String) =
+        _state.update { it.copy(kosyncUrl = value, kosyncError = null) }
+
+    fun setKosyncUsername(value: String) =
+        _state.update { it.copy(kosyncUsername = value, kosyncError = null) }
+
+    fun setKosyncPassword(value: String) =
+        _state.update { it.copy(kosyncPassword = value, kosyncError = null) }
+
+    fun setKosyncRegister(value: Boolean) =
+        _state.update { it.copy(kosyncRegister = value, kosyncError = null) }
+
+    /** Pairs the KOReader sync partner, then asks it where everything is. */
+    fun connectKosync() {
+        val current = _state.value
+        if (current.kosyncConnecting) return
+        if (current.kosyncUrl.isBlank() ||
+            current.kosyncUsername.isBlank() ||
+            current.kosyncPassword.isBlank()
+        ) {
+            return
+        }
+        _state.update { it.copy(kosyncConnecting = true, kosyncError = null) }
+        viewModelScope.launch {
+            val outcome = kosyncAccount.connect(
+                url = current.kosyncUrl,
+                username = current.kosyncUsername,
+                password = current.kosyncPassword,
+                register = current.kosyncRegister,
+            )
+            _state.update {
+                when (outcome) {
+                    KosyncSetupOutcome.Success ->
+                        it.copy(kosyncConnecting = false, kosyncPassword = "")
+                    is KosyncSetupOutcome.Failure ->
+                        it.copy(kosyncConnecting = false, kosyncError = outcome.reason.toUiError())
+                }
+            }
+            if (outcome == KosyncSetupOutcome.Success) {
+                positionSync.request(SyncScope.Full)
+            }
+        }
+    }
+
+    fun disconnectKosync() {
+        viewModelScope.launch { kosyncAccount.disconnect() }
+    }
 
     /**
      * Answers the "is this the same book?" question.
@@ -392,7 +474,14 @@ class ServerAccountViewModel(
             // books it left mid-flight would sit queued forever.
             downloads.cancelAll(BulkStopReason.ACCOUNT_CHANGED)
             repository.disconnect()
-            _state.value = ServerAccountUiState()
+            // The kosync partner stands on its own: its lifecycle is
+            // deliberately not the catalog's, and its Room flow has
+            // nothing new to re-emit after this reset.
+            val kept = _state.value
+            _state.value = ServerAccountUiState(
+                kosync = kept.kosync,
+                kosyncStatus = kept.kosyncStatus,
+            )
         }
     }
 
@@ -421,8 +510,26 @@ class ServerAccountViewModel(
                     appSettings = container.appSettings,
                     identityDao = container.database.workIdentityDao(),
                     bookDao = container.database.bookDao(),
+                    kosyncAccount = container.kosyncAccount,
                 )
             }
         }
     }
+}
+
+/**
+ * Grimmory's own kosync mount, offered once.
+ *
+ * Only while the URL field is untouched and nothing is paired, so a
+ * reader's typing is never overwritten and an existing pairing is never
+ * disturbed; null means "leave the field as it is".
+ */
+internal fun kosyncPrefillUrl(
+    server: RemoteServer?,
+    peer: KosyncPeer?,
+    currentUrl: String,
+): String? {
+    if (server?.kind != ServerKind.GRIMMORY) return null
+    if (peer != null || currentUrl.isNotBlank()) return null
+    return server.baseUrl.trimEnd('/') + "/api/koreader"
 }

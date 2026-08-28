@@ -172,17 +172,26 @@ private fun KindSupport(kind: ServerKind) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(stringResource(kind.taglineRes()))
         Text(
-            stringResource(kind.syncAbility.lineRes()),
+            stringResource(kind.syncLineRes()),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
-private fun SyncAbility.lineRes(): Int = when (this) {
-    SyncAbility.EXACT -> R.string.server_sync_exact
-    SyncAbility.PROGRESSION -> R.string.server_sync_progression
-    SyncAbility.NONE -> R.string.server_sync_none
+/**
+ * What the picker says about keeping your place. Grimmory gets its own
+ * line rather than [SyncAbility.NONE]'s: the kind itself cannot carry a
+ * position, but a KOReader sync server paired alongside it can, and
+ * "cannot keep your place" would be false the moment one is.
+ */
+private fun ServerKind.syncLineRes(): Int = when (this) {
+    ServerKind.GRIMMORY -> R.string.server_sync_grimmory
+    else -> when (syncAbility) {
+        SyncAbility.EXACT -> R.string.server_sync_exact
+        SyncAbility.PROGRESSION -> R.string.server_sync_progression
+        SyncAbility.NONE -> R.string.server_sync_none
+    }
 }
 
 internal fun ServerKind.labelRes(): Int = when (this) {

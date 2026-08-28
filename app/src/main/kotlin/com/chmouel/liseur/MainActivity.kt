@@ -465,6 +465,12 @@ private fun ServerAccountRoute(
         onDownloadAll = viewModel::downloadAll,
         onCancelDownloadAll = viewModel::cancelDownloadAll,
         onDismissBatch = viewModel::dismissBatch,
+        onKosyncUrlChange = viewModel::setKosyncUrl,
+        onKosyncUsernameChange = viewModel::setKosyncUsername,
+        onKosyncPasswordChange = viewModel::setKosyncPassword,
+        onKosyncRegisterChange = viewModel::setKosyncRegister,
+        onKosyncConnect = viewModel::connectKosync,
+        onKosyncDisconnect = viewModel::disconnectKosync,
         onBack = onBack,
     )
 }
