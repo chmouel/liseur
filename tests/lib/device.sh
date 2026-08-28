@@ -470,11 +470,16 @@ ui_done() {
 # which is the whole difficulty in noticing it.
 ui_scroll_up() {
   local box from to
+  # Every match, then the first line in bash: `head -1` would close the
+  # pipe on awk mid-write, and under `pipefail` that SIGPIPE fails the
+  # assignment and takes the scenario with it. Only on a screen with a
+  # second scrollable node, which is why it would wait for a bad day.
   box=$(ui_dump | tr '<' '\n' | awk '
     /scrollable="true"/ {
       if (match($0, /bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"/))
         print substr($0, RSTART + 8, RLENGTH - 9)
-    }' | head -1)
+    }')
+  box=${box%%$'\n'*}
   [[ -n "$box" ]] || return 1
   local p
   # shellcheck disable=SC2206 # deliberate split on the bounds' punctuation
@@ -492,11 +497,13 @@ ui_scroll_up() {
 # there instead.
 ui_scroll_bottom() {
   local box p
+  # First line in bash rather than `head -1`, as in `ui_scroll_up`.
   box=$(ui_dump | tr '<' '\n' | awk '
     /scrollable="true"/ {
       if (match($0, /bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"/))
         print substr($0, RSTART + 8, RLENGTH - 9)
-    }' | head -1)
+    }')
+  box=${box%%$'\n'*}
   if [[ -z "$box" ]]; then
     printf '%s\n' 999999
     return 0
