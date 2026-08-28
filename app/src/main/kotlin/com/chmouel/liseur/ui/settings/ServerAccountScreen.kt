@@ -648,6 +648,10 @@ private fun ConnectForm(
                 modifier = Modifier.fillMaxWidth(),
             )
             FieldHelp(stringResource(R.string.server_custom_credentials_help))
+            // A two-address form needs each failure next to the address
+            // that caused it. Left at the foot of the form, a catalog
+            // refusal reads as a complaint about the sync server.
+            ConnectError(state = state, onConnect = onConnect)
 
             SectionLabel(stringResource(R.string.server_custom_kosync_section))
             OutlinedTextField(
@@ -728,39 +732,8 @@ private fun ConnectForm(
         }
     }
 
-    state.error?.let { error ->
-        Notice(
-            text = stringResource(error.messageRes(state.kind)),
-            tone = NoticeTone.PROBLEM,
-        )
-        if (error == AccountError.UNREACHABLE_TRY_HTTP) {
-            var confirmingHttp by rememberSaveable { mutableStateOf(false) }
-            TextButton(onClick = { confirmingHttp = true }) {
-                Text(stringResource(R.string.server_try_http))
-            }
-            if (confirmingHttp) {
-                AlertDialog(
-                    onDismissRequest = { confirmingHttp = false },
-                    title = { Text(stringResource(R.string.server_http_title)) },
-                    text = { Text(stringResource(R.string.server_http_warning)) },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                confirmingHttp = false
-                                onConnect(true)
-                            },
-                        ) {
-                            Text(stringResource(R.string.server_http_confirm))
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { confirmingHttp = false }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    },
-                )
-            }
-        }
+    if (state.kind != ServerKind.CUSTOM) {
+        ConnectError(state = state, onConnect = onConnect)
     }
 
     Button(
@@ -799,6 +772,47 @@ private fun ConnectForm(
             )
         } else {
             Text(stringResource(R.string.server_connect))
+        }
+    }
+}
+
+/**
+ * What went wrong with the last attempt, and the one offer worth making
+ * about it: retrying an unreachable https address over http.
+ */
+@Composable
+private fun ConnectError(state: ServerAccountUiState, onConnect: (Boolean) -> Unit) {
+    val error = state.error ?: return
+    Notice(
+        text = stringResource(error.messageRes(state.kind)),
+        tone = NoticeTone.PROBLEM,
+    )
+    if (error == AccountError.UNREACHABLE_TRY_HTTP) {
+        var confirmingHttp by rememberSaveable { mutableStateOf(false) }
+        TextButton(onClick = { confirmingHttp = true }) {
+            Text(stringResource(R.string.server_try_http))
+        }
+        if (confirmingHttp) {
+            AlertDialog(
+                onDismissRequest = { confirmingHttp = false },
+                title = { Text(stringResource(R.string.server_http_title)) },
+                text = { Text(stringResource(R.string.server_http_warning)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmingHttp = false
+                            onConnect(true)
+                        },
+                    ) {
+                        Text(stringResource(R.string.server_http_confirm))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmingHttp = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
         }
     }
 }

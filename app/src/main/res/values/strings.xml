@@ -527,7 +527,7 @@
     <string name="settings_export_import">Export and import</string>
     <string name="settings_library_help_title">Book servers</string>
     <string name="settings_library_help_body" formatted="true">A book server — calibre-web, Komga, liseur-sync or Grimmory — holds your library: Liseur browses it and downloads from it, and keeps your place in step with it. Grimmory is the exception: it is reached through its Komga-compatible interface, which cannot carry a reading position itself — pair a KOReader sync server alongside it and your place follows anyway. One server is connected at a time.\n\nliseur-sync is the one that also keeps books that came from nowhere but this phone in step: a file off an SD card syncs its position too. Run your own from %1$s.</string>
-    <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync or Grimmory server, and keep your place in step — Grimmory through a paired KOReader sync server.</string>
+    <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync, Grimmory or OPDS server, and keep your place in step — Grimmory and OPDS through a paired KOReader sync server.</string>
     <string name="settings_about">About</string>
     <string name="about_title">About</string>
     <string name="about_open">About Liseur</string>
