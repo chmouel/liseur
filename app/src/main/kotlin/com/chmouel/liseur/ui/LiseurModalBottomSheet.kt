@@ -61,6 +61,11 @@ fun LiseurModalBottomSheet(
     // a sheet that raises the IME already lifts itself with imePadding(), and
     // a resized window would take that space a second time and squeeze the
     // sheet's body away.
+    //
+    // An unclipped window is not laid out around a display cutout either, so
+    // the insets a ModalBottomSheet gets for free are applied here by hand:
+    // the top, or a full-height sheet runs under the status bar, and the
+    // sides, or a landscape cutout sits over the controls.
     Popup(
         alignment = Alignment.BottomCenter,
         onDismissRequest = onDismissRequest,
@@ -74,7 +79,10 @@ fun LiseurModalBottomSheet(
             shadowElevation = 0.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             modifier = modifier
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing
+                        .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                )
                 .widthIn(max = BottomSheetDefaults.SheetMaxWidth)
                 .fillMaxWidth(),
         ) {
