@@ -239,6 +239,13 @@ fun ReaderScreen(
      * built. Null for a book with no saved position.
      */
     restoreTarget: Locator?,
+    /**
+     * The moves the reader is sent on, counted as they are asked for.
+     * Owned above this screen because a link tapped in the book is
+     * followed by the activity's own navigator listener. See
+     * [IssuedMoves].
+     */
+    moves: IssuedMoves,
     prefsFlow: StateFlow<ReaderPrefs>,
     readingTheme: ReaderTheme,
     typographyIsOwnFlow: StateFlow<Boolean>,
@@ -504,7 +511,12 @@ fun ReaderScreen(
         // otherwise take that marker and be saved as the move.
         retargetGate(locator)
         pendingPositionEvent = event
-        nav.go(locator, animated = false)
+        val token = moves.issue(
+            from = nav.currentLocator.value.restorePoint(),
+            to = locator.destination(),
+            nowMs = SystemClock.elapsedRealtime(),
+        )
+        if (!nav.go(locator, animated = false)) moves.cancel(token)
         if (!verify || !ExactLocatorAnchor.isExact(locator)) return
         // The go above is carried out by a script the WebView runs when
         // it gets to it; asking too early answers for the page it is
@@ -517,7 +529,12 @@ fun ReaderScreen(
         val fallback = onProgressAction.locatorAtOrBeforeProgression(progression) ?: return
         retargetGate(fallback)
         pendingPositionEvent = event
-        nav.go(fallback, animated = false)
+        val fallbackToken = moves.issue(
+            from = nav.currentLocator.value.restorePoint(),
+            to = fallback.destination(),
+            nowMs = SystemClock.elapsedRealtime(),
+        )
+        if (!nav.go(fallback, animated = false)) moves.cancel(fallbackToken)
         onProgressAction.onApproximateResume()
     }
 
@@ -594,6 +611,14 @@ fun ReaderScreen(
                 showingEnd = false
                 onLeftEndpaper()
             },
+            onMoveIssued = { from, to ->
+                moves.issue(
+                    from = from?.restorePoint(),
+                    to = to?.destination(),
+                    nowMs = SystemClock.elapsedRealtime(),
+                )
+            },
+            onMoveDropped = moves::cancel,
         )
     }
 
@@ -671,6 +696,20 @@ fun ReaderScreen(
         }
     }
 
+    // Where the navigator says it is, told to the record of moves so a
+    // move can be seen to have landed.
+    //
+    // Its own subscription rather than a line in the collector above:
+    // that one drops its first emission and is torn down with every
+    // pause, and the emission a restore is waiting on is exactly the
+    // one it would drop.
+    LaunchedEffect(navigator) {
+        val nav = navigator ?: return@LaunchedEffect
+        nav.currentLocator.collect {
+            moves.onPosition(it.restorePoint(), SystemClock.elapsedRealtime())
+        }
+    }
+
     // Asking the maker's screen controller to repaint the page the way
     // it repaints text.
     //
@@ -721,7 +760,12 @@ fun ReaderScreen(
         // looking like a page turn. Telling the gate where the reader is
         // now being sent keeps it closed until they get there.
         retargetGate(fallback)
-        nav.go(fallback, animated = false)
+        val fallbackToken = moves.issue(
+            from = nav.currentLocator.value.restorePoint(),
+            to = fallback.destination(),
+            nowMs = SystemClock.elapsedRealtime(),
+        )
+        if (!nav.go(fallback, animated = false)) moves.cancel(fallbackToken)
         onProgressAction.onApproximateResume()
     }
 
@@ -757,9 +801,25 @@ fun ReaderScreen(
             .distinctUntilChanged()
             .collect {
                 reflow.within {
+                    // Taken before the anchor rather than with the
+                    // restore. The capture below reads the document,
+                    // and a move still in the air has not reached it
+                    // either, so an anchor taken then names a page the
+                    // reader is already leaving — restoring it later is
+                    // only the second half of the same mistake.
+                    //
+                    // A held anchor is dropped along with it. It was
+                    // measured against a page a move has since been
+                    // asked for, and keeping it would hand the next
+                    // change in the run the very position this one
+                    // refused.
+                    val since = moves.mark(SystemClock.elapsedRealtime())
+                    if (since == IssuedMoves.NONE) reflowAnchor = null
                     val anchor = reflowAnchor ?: capture(nav, nav.currentLocator.value)
-                    reflowAnchor = anchor
-                    onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                    if (since != IssuedMoves.NONE) {
+                        reflowAnchor = anchor
+                        onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                    }
                     val before = ExactLocatorAnchor.layoutSignature(nav)
                     nav.submitPreferences(it)
                     awaitReflowSettled(nav, before)
@@ -772,12 +832,20 @@ fun ReaderScreen(
                     ) {
                         awaitReflowSettled(nav, before)
                     }
-                    navigate(
-                        nav = nav,
-                        locator = anchor,
-                        event = NavigatorPositionEvent.PREFERENCE_REFLOW,
-                        verify = true,
-                    )
+                    // A reader who tapped a contents entry while the
+                    // text was still moving has chosen a page; putting
+                    // the settings back over it would take it away
+                    // again. The preferences are still submitted — they
+                    // are what the reader asked for — and only the
+                    // reader's place is left where they put it.
+                    if (moves.unchangedSince(since)) {
+                        navigate(
+                            nav = nav,
+                            locator = anchor,
+                            event = NavigatorPositionEvent.PREFERENCE_REFLOW,
+                            verify = true,
+                        )
+                    }
                 }
             }
     }
@@ -827,17 +895,33 @@ fun ReaderScreen(
                     ResourceAddress.shows(web.url, it.href.toString())
                 }
             }
+            // Taken here rather than at the top of the run, because
+            // the wait above is itself the arrival of whatever move
+            // brought this resource in: marking before it would refuse
+            // the restore after every chapter turn, which is most of
+            // the times a resource is laid out at all.
+            //
+            // It is still [IssuedMoves.NONE] when the reader is being
+            // sent somewhere within this resource — a contents entry
+            // pointing at a fragment of it — because the position the
+            // wait settled for is the one published as the resource
+            // loaded, not the one they asked for.
+            val since = moves.mark(SystemClock.elapsedRealtime())
             // Whether the resource this run is for is still the one on
-            // screen and the one the navigator names. Waiting above and
-            // taking the scope below are both places the reader can
+            // screen, the one the navigator names, and the one the
+            // reader has not since been sent away from. Waiting above
+            // and taking the scope below are both places the reader can
             // turn a page, and everything after them speaks to the
             // document in front of them: a capture takes its words from
             // it, a restore puts the reader back into it. Asked again
             // rather than assumed, at each point where the answer could
-            // have changed.
+            // have changed — and asked of the moves issued as well,
+            // because a jump the reader has just made shows in neither
+            // the position nor the views for a moment yet.
             fun stillFitting(): Boolean =
                 web === visibleWebView(root) &&
-                    ResourceAddress.shows(web.url, nav.currentLocator.value.href.toString())
+                    ResourceAddress.shows(web.url, nav.currentLocator.value.href.toString()) &&
+                    moves.unchangedSince(since)
             reflow.within {
                 val anchor = here?.takeIf { stillFitting() }?.let { capture(nav, it) }
                 val before = ExactLocatorAnchor.layoutSignature(nav)
@@ -1207,6 +1291,13 @@ fun ReaderScreen(
                 // read, so that whatever it has reached while the loop
                 // ran is the baseline the moment it stops.
                 if (moved && !autoScrollRunning) {
+                    // A finger on a scrolled page moves the reader
+                    // without a `go` for anything to count, so the one
+                    // place that notices says so. Held open for as long
+                    // as the dragging lasts and let go of a moment
+                    // after it stops: a layout fit settling over a page
+                    // being dragged pulls it back under the finger.
+                    moves.scrolled(SystemClock.elapsedRealtime())
                     // A place that cannot be had leaves the last one
                     // standing: it is behind the reader by a tick, where
                     // the alternative is nothing at all.
@@ -1661,7 +1752,14 @@ fun ReaderScreen(
                 onGoToNote = {
                     onDismissFootnote()
                     onProgressAction.onJump()
-                    navigator?.go(note.link, animated = false)
+                    navigator?.let { nav ->
+                        val noteToken = moves.issue(
+                            from = nav.currentLocator.value.restorePoint(),
+                            to = publication.locatorFromLink(note.link)?.destination(),
+                            nowMs = SystemClock.elapsedRealtime(),
+                        )
+                        if (!nav.go(note.link, animated = false)) moves.cancel(noteToken)
+                    }
                 },
                 onDismiss = onDismissFootnote,
             )
@@ -2233,7 +2331,19 @@ private fun consumeInsetsForReadium(view: View) {
  * Nothing here is Readium-shaped on purpose: the decision the gate makes
  * is worth testing on its own, without a navigator to ask.
  */
-private fun Locator.restorePoint(exact: Boolean = false) = RestorePoint(
+/**
+ * Where a move is going, in the terms [IssuedMoves] can check against
+ * what the navigator later reports. The fragment is carried because a
+ * contents entry pointing inside a resource is the one destination
+ * nothing else tells apart from the resource merely having loaded.
+ */
+internal fun Locator.destination() = IssuedMoves.Destination(
+    href = href.toString(),
+    progression = locations.totalProgression,
+    fragment = locations.fragments.firstOrNull(),
+)
+
+internal fun Locator.restorePoint(exact: Boolean = false) = RestorePoint(
     href = href.toString(),
     progression = locations.totalProgression,
     exact = exact,
