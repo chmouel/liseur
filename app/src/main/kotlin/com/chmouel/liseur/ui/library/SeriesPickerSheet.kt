@@ -412,7 +412,11 @@ private fun SeriesOptionRow(ranked: RankedSeries, selected: Boolean, onClick: ()
     val option = ranked.option
     val eInk = LocalEInk.current
     val background = if (eInk) {
-        Color.Transparent
+        // The wash is drawn, not animated: the tick alone is a thin mark
+        // to find on a grey panel. surfaceVariant rather than
+        // secondaryContainer because monochrome flattens the latter to
+        // very nearly the surface it sits on.
+        if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent
     } else {
         animateColorAsState(
             targetValue = if (selected) {
