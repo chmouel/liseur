@@ -108,15 +108,19 @@ fun isEInkDevice(packageManager: PackageManager): Boolean = isEInkDevice(
 fun ProvideEInk(mode: EInkMode, content: @Composable () -> Unit) {
     val context = LocalContext.current
     val detected = remember(context) { isEInkDevice(context.packageManager) }
-    if (!mode.resolve(detected)) {
-        CompositionLocalProvider(LocalEInk provides false, content = content)
-        return
-    }
+    val active = mode.resolve(detected)
+    // Read the ordinary values before providing anything. Keeping one
+    // provider tree for both answers matters: changing Auto/Off to On from
+    // Settings must update how that screen is drawn, not dispose the whole
+    // app below this point and recreate it back at the library.
+    val indication = LocalIndication.current
+    val ripple = LocalRippleConfiguration.current
+    val overscroll = LocalOverscrollFactory.current
     CompositionLocalProvider(
-        LocalEInk provides true,
-        LocalIndication provides EInkPressIndication,
-        LocalRippleConfiguration provides null,
-        LocalOverscrollFactory provides null,
+        LocalEInk provides active,
+        LocalIndication provides if (active) EInkPressIndication else indication,
+        LocalRippleConfiguration provides if (active) null else ripple,
+        LocalOverscrollFactory provides if (active) null else overscroll,
         content = content,
     )
 }

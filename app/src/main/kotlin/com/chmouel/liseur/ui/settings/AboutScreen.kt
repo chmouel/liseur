@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -139,11 +140,11 @@ fun AboutScreen(
                         .apply { targetState = true },
                     // A fade is a run of whole-screen repaints on electronic
                     // paper, so the quote is simply there when the screen is.
-                    enter = fadeIn(
-                        animationSpec = tween(
-                            durationMillis = if (LocalEInk.current) 0 else 300,
-                        ),
-                    ),
+                    enter = if (LocalEInk.current) {
+                        EnterTransition.None
+                    } else {
+                        fadeIn(animationSpec = tween(durationMillis = 300))
+                    },
                     modifier = Modifier.padding(top = 48.dp),
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

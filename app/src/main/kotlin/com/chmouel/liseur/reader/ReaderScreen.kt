@@ -4,6 +4,8 @@ import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -39,7 +41,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -1711,11 +1712,22 @@ fun ReaderScreen(
         // leaves the last one behind, so a 300ms slide arrives as a stack
         // of smeared bars. Snapping it into place is the same gesture,
         // drawn once.
-        val chromeAnim = if (LocalEInk.current) 0 else CHROME_ANIM_MS
+        val chromeEnter = if (eInk) {
+            EnterTransition.None
+        } else {
+            slideInVertically(tween(CHROME_ANIM_MS)) { -it } +
+                fadeIn(tween(CHROME_ANIM_MS))
+        }
+        val chromeExit = if (eInk) {
+            ExitTransition.None
+        } else {
+            slideOutVertically(tween(CHROME_ANIM_MS)) { -it } +
+                fadeOut(tween(CHROME_ANIM_MS))
+        }
         AnimatedVisibility(
             visible = chromeVisible && !showingEnd,
-            enter = slideInVertically(tween(chromeAnim)) { -it } + fadeIn(tween(chromeAnim)),
-            exit = slideOutVertically(tween(chromeAnim)) { -it } + fadeOut(tween(chromeAnim)),
+            enter = chromeEnter,
+            exit = chromeExit,
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             TopAppBar(
@@ -2288,6 +2300,7 @@ fun SendingNote(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val eInk = LocalEInk.current
     LaunchedEffect(title) {
         if (title != null) {
             delay(SENDING_NOTE_MS)
@@ -2296,8 +2309,8 @@ fun SendingNote(
     }
     AnimatedVisibility(
         visible = title != null,
-        enter = fadeIn(),
-        exit = fadeOut(),
+        enter = if (eInk) EnterTransition.None else fadeIn(),
+        exit = if (eInk) ExitTransition.None else fadeOut(),
         modifier = modifier,
     ) {
         Snackbar(

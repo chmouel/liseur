@@ -1,7 +1,6 @@
 package com.chmouel.liseur.reader.annotations
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.chmouel.liseur.ui.LocalEInk
@@ -53,15 +51,16 @@ fun BookmarkRibbon(
     // The spring is a flourish on a screen that can draw it. On
     // electronic paper it is a dozen full refreshes of the corner of the
     // page, so the ribbon simply appears.
-    val extended by animateFloatAsState(
-        targetValue = if (bookmarked) 1f else 0f,
-        animationSpec = if (LocalEInk.current) {
-            snap()
-        } else {
-            spring(dampingRatio = 0.55f, stiffness = 420f)
-        },
-        label = "bookmarkRibbon",
-    )
+    val target = if (bookmarked) 1f else 0f
+    val extended = if (LocalEInk.current) {
+        target
+    } else {
+        animateFloatAsState(
+            targetValue = target,
+            animationSpec = spring(dampingRatio = 0.55f, stiffness = 420f),
+            label = "bookmarkRibbon",
+        ).value
+    }
     val label = stringResource(
         if (bookmarked) R.string.reader_remove_bookmark else R.string.reader_add_bookmark,
     )
