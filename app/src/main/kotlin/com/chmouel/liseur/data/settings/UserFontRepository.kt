@@ -23,6 +23,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.Locale
 import java.util.UUID
 
 /** What became of an attempt to bring a font in. */
@@ -139,7 +140,18 @@ class UserFontRepository(
             }
         }
 
-        val metadata = SfntFont.parse(temp.readBytes())
+        // The staged file was written a moment ago, but the storage it went
+        // to can still fail underneath us, and a throw here would escape the
+        // import as a crash rather than a message.
+        val bytes = try {
+            temp.readBytes()
+        } catch (e: IOException) {
+            Log.w(TAG, "could not read back the staged font", e)
+            temp.delete()
+            return ImportResult.Unreadable
+        }
+
+        val metadata = SfntFont.parse(bytes)
         if (metadata == null || !loadCheck(temp)) {
             // Plausible sfnt tables are not the same thing as a font this
             // device can actually render, and one that fails to load would
@@ -272,7 +284,7 @@ class UserFontRepository(
             }
 
             val digest = file.nameWithoutExtension
-            val extension = file.extension.lowercase()
+            val extension = file.extension.lowercase(Locale.ROOT)
             if (UserFont.fileNameFor(digest, extension) != file.name) continue
 
             // A font that has become unreadable — storage detached, a
@@ -304,7 +316,10 @@ class UserFontRepository(
             )
         }
 
-        _fonts.value = found.sortedBy { it.displayName.lowercase() }
+        // Locale.ROOT, not the device's: a Turkish reader's dotted and
+        // dotless i would otherwise order their shelf differently from
+        // everyone else's, and this fold exists only to sort.
+        _fonts.value = found.sortedBy { it.displayName.lowercase(Locale.ROOT) }
     }
 
     // -- the index ----------------------------------------------------------
