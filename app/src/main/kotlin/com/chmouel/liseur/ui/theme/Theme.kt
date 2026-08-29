@@ -172,6 +172,20 @@ private val MonoDarkColors = darkColorScheme(
     onErrorContainer = Color.White,
 )
 
+/** Which palette policy the resolved e-ink setting asks the app to use. */
+internal enum class EInkPalette {
+    NONE,
+    MONOCHROME,
+    COLOR,
+}
+
+/** A saved colour preference has no effect while the central mode is off. */
+internal fun eInkPalette(eInk: Boolean, colorEInk: Boolean): EInkPalette = when {
+    !eInk -> EInkPalette.NONE
+    colorEInk -> EInkPalette.COLOR
+    else -> EInkPalette.MONOCHROME
+}
+
 /** Whether this device can take its colours from the wallpaper. */
 val dynamicColorAvailable: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -192,20 +206,25 @@ fun LiseurTheme(
     // Wallpaper colours where the system offers them; the palette above
     // is the fallback, and what you get back by turning this off.
     dynamicColor: Boolean = dynamicColorAvailable,
-    // Greyscale hardware: drop hue entirely and spend the range on
-    // contrast. Wins over dynamicColor, which is meaningless here.
-    monochrome: Boolean = false,
+    // Electronic paper never uses wallpaper-derived colours: its useful
+    // palette must be stable and small. A colour panel keeps Liseur's own
+    // restrained accents; a monochrome one spends the full range on contrast.
+    eInk: Boolean = false,
+    colorEInk: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colorScheme = when {
-        monochrome -> if (darkTheme) MonoDarkColors else MonoLightColors
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+    val colorScheme = when (eInkPalette(eInk, colorEInk)) {
+        EInkPalette.MONOCHROME -> if (darkTheme) MonoDarkColors else MonoLightColors
+        EInkPalette.COLOR -> if (darkTheme) DarkColors else LightColors
+        EInkPalette.NONE -> if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (darkTheme) dynamicDarkColorScheme(context)
             else dynamicLightColorScheme(context)
+        } else if (darkTheme) {
+            DarkColors
+        } else {
+            LightColors
         }
-        darkTheme -> DarkColors
-        else -> LightColors
     }
 
     val typography = remember { liseurTypography(literataFamily(context.assets)) }

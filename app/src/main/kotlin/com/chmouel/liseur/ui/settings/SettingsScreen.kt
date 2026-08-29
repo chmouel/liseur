@@ -78,6 +78,7 @@ import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.WiktionaryEditions
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.label
 import com.chmouel.liseur.ui.windowWidth
@@ -95,6 +96,7 @@ fun SettingsScreen(
     onDynamicColor: (Boolean) -> Unit,
     onVolumeKeys: (Boolean) -> Unit,
     onEInkMode: (EInkMode) -> Unit,
+    onColorEInk: (Boolean) -> Unit,
     onVendorRefresh: (Boolean) -> Unit,
     vendorName: String?,
     onResumeLastBook: (Boolean) -> Unit,
@@ -304,6 +306,15 @@ fun SettingsScreen(
                         label = { stringResource(it.label) },
                         onSelected = onEInkMode,
                     )
+                    if (LocalEInk.current) {
+                        RowDivider()
+                        SwitchRow(
+                            title = stringResource(R.string.settings_color_eink),
+                            subtitle = stringResource(R.string.settings_color_eink_detail),
+                            checked = settings.colorEInk,
+                            onCheckedChange = onColorEInk,
+                        )
+                    }
                     vendorName?.let { vendor ->
                         RowDivider()
                         SwitchRow(

@@ -92,12 +92,12 @@ class MainActivity : ComponentActivity() {
             ProvideEInk(settings.eInkMode) {
                 LiseurTheme(
                     darkTheme = settings.themeMode.isDark(),
-                    // A palette lifted from a wallpaper is chosen for how
-                    // its colours sit together, which is exactly what a
-                    // greyscale screen throws away — hence the monochrome
-                    // override below, which takes precedence.
+                    // E-paper needs stable colours rather than a palette
+                    // lifted from the wallpaper. The central e-ink policy
+                    // below therefore takes precedence over dynamic colour.
                     dynamicColor = settings.dynamicColor,
-                    monochrome = LocalEInk.current,
+                    eInk = LocalEInk.current,
+                    colorEInk = settings.colorEInk,
                 ) {
                     LiseurApp(settings)
                 }
@@ -259,6 +259,7 @@ private fun LiseurApp(settings: AppSettings) {
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
                 onEInkMode = { scope.launch { repository.setEInkMode(it) } },
+                onColorEInk = { scope.launch { repository.setColorEInk(it) } },
                 onVendorRefresh = { scope.launch { repository.setVendorRefresh(it) } },
                 vendorName = context.container.eInkDisplay.vendor,
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
