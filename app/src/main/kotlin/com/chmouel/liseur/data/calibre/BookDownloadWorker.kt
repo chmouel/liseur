@@ -7,6 +7,7 @@ import androidx.work.Data
 import androidx.work.WorkerParameters
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.remote.RemoteHttp
 import org.readium.r2.shared.util.AbsoluteUrl
 
 /**
@@ -66,18 +67,30 @@ class BookDownloadWorker(
         setProgress(progressData(bookUrl, null))
 
         val downloads = container.bookDownloads
-        val outcome = BookDownloader(
+        val downloader = BookDownloader(
+            http = RemoteHttp(RemoteHttp.forDownloads()),
             // Bulk work is the only thing that can fill a device on its
             // own, so it is the only thing asked to leave room behind. A
             // single download the reader asked for by name keeps the
             // behaviour it has always had.
             freeSpace = if (batchId != null) downloads::freeBytes else null,
-        ).download(
-            request = request,
-            target = downloads.fileFor(uuid),
-        ) { downloaded, total ->
-            val fraction = total?.takeIf { it > 0 }?.let { downloaded.toFloat() / it }
-            setProgress(progressData(bookUrl, fraction))
+        )
+        val runDownload = suspend {
+            downloader.download(
+                request = request,
+                target = downloads.fileFor(uuid),
+            ) { downloaded, total ->
+                val fraction = total?.takeIf { it > 0 }?.let { downloaded.toFloat() / it }
+                setProgress(progressData(bookUrl, fraction))
+            }
+        }
+        // Only a batch shares a server with siblings worth pacing
+        // against; a download the reader asked for by name runs at
+        // once, same as it always has.
+        val outcome = if (batchId != null) {
+            downloads.withBulkTransferSlot(runDownload)
+        } else {
+            runDownload()
         }
 
         return when (outcome) {
