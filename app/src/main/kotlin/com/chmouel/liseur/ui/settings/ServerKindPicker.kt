@@ -18,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -32,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncAbility
+import com.chmouel.liseur.ui.LiseurModalBottomSheet
 
 /**
  * Choosing which kind of server the library lives on.
@@ -90,7 +90,7 @@ internal fun ServerKindSheet(
     onPick: (ServerKind) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    LiseurModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
                 .verticalScroll(rememberScrollState())

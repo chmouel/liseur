@@ -82,7 +82,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -139,6 +138,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.UploadBookOfferDialog
 import com.chmouel.liseur.ui.BRAND_TILE_ASPECT
 import com.chmouel.liseur.ui.BusyIndicator
@@ -989,7 +989,7 @@ internal fun BookActionsSheet(
     onDeleteFromServer: () -> Unit,
     onUploadToServer: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    LiseurModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
                 .align(Alignment.CenterHorizontally)

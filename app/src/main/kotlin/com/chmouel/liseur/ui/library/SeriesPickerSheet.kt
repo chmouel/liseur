@@ -36,7 +36,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -84,6 +83,7 @@ import com.chmouel.liseur.domain.sortKey
 import com.chmouel.liseur.domain.suggestedSeries
 import com.chmouel.liseur.domain.suggestedVolume
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
@@ -136,6 +136,7 @@ internal fun SeriesPickerSheet(
     val ranked = remember(typed, options) { rankSeriesOptions(typed, options) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val eInk = LocalEInk.current
 
     // A narrowed list read from wherever the reader had scrolled to is a
     // list of results they cannot see. Every keystroke puts the best
@@ -161,7 +162,7 @@ internal fun SeriesPickerSheet(
         }
     }
 
-    ModalBottomSheet(
+    LiseurModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
@@ -204,7 +205,12 @@ internal fun SeriesPickerSheet(
                 onRemove = { chosen = null },
                 onReset = onReset,
                 onResetShared = onResetShared,
-                onJump = { index -> scope.launch { listState.animateScrollToItem(index) } },
+                onJump = { index ->
+                    scope.launch {
+                        if (eInk) listState.scrollToItem(index)
+                        else listState.animateScrollToItem(index)
+                    }
+                },
                 modifier = Modifier.weight(1f),
             )
             HorizontalDivider()
@@ -405,14 +411,18 @@ private fun SectionHeader(label: String) {
 private fun SeriesOptionRow(ranked: RankedSeries, selected: Boolean, onClick: () -> Unit) {
     val option = ranked.option
     val eInk = LocalEInk.current
-    val background by animateColorAsState(
-        targetValue = when {
-            !selected -> Color.Transparent
-            eInk -> MaterialTheme.colorScheme.surfaceVariant
-            else -> MaterialTheme.colorScheme.secondaryContainer
-        },
-        label = "seriesRowBackground",
-    )
+    val background = if (eInk) {
+        Color.Transparent
+    } else {
+        animateColorAsState(
+            targetValue = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                Color.Transparent
+            },
+            label = "seriesRowBackground",
+        ).value
+    }
     val count = pluralStringResource(
         R.plurals.series_book_count,
         option.volumeCount,
@@ -427,7 +437,7 @@ private fun SeriesOptionRow(ranked: RankedSeries, selected: Boolean, onClick: ()
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (eInk) Color.Transparent else background)
+            .background(background)
             // Selectable rather than clickable: a screen reader should
             // say this is one of a set and which one is chosen, not that
             // there is a button here called The Expanse.
@@ -511,10 +521,15 @@ private fun ActionRow(
 @Composable
 private fun SelectedTick(selected: Boolean) {
     val eInk = LocalEInk.current
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        label = "seriesRowTick",
-    )
+    val target = if (selected) 1f else 0f
+    val scale = if (eInk) {
+        target
+    } else {
+        animateFloatAsState(
+            targetValue = target,
+            label = "seriesRowTick",
+        ).value
+    }
     Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
         if (selected || (!eInk && scale > 0f)) {
             Icon(
