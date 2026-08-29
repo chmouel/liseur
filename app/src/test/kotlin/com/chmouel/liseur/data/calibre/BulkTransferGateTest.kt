@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.calibre
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -28,6 +29,7 @@ class BulkTransferGateTest {
         val gate = BulkTransferGate(maxConcurrent = 2)
         val concurrent = AtomicInteger(0)
         val peak = AtomicInteger(0)
+        val entered = Channel<Unit>(capacity = Channel.UNLIMITED)
         val release = CompletableDeferred<Unit>()
 
         // Five callers all ask for a slot at once; only two should ever
@@ -38,23 +40,30 @@ class BulkTransferGateTest {
                 gate.withSlot {
                     val now = concurrent.incrementAndGet()
                     peak.updateAndGet { prev -> maxOf(prev, now) }
+                    entered.trySend(Unit)
                     release.await()
                     concurrent.decrementAndGet()
                 }
             }
         }
 
-        // Wait for the actual condition -- two callers inside the gated
-        // section -- rather than a fixed number of yields, which proves
-        // nothing about how many coroutines the scheduler chose to run.
+        // Wait, through a real suspension rather than a busy loop, for
+        // exactly as many callers as the gate should ever admit. A busy
+        // `while (condition) yield()` spins the test's virtual clock in
+        // place: if the gate were ever broken and never let two through,
+        // that loop would never idle long enough for `withTimeout`'s
+        // virtual-time deadline to fire, hanging the test instead of
+        // failing it. Receiving from a channel suspends for real, so a
+        // broken gate times out here instead.
         withTimeout(5_000) {
-            while (concurrent.get() < 2) yield()
+            entered.receive()
+            entered.receive()
         }
         assertEquals(2, concurrent.get())
 
         // Give the remaining three every chance to sneak past the cap
         // while the first two are still held open.
-        repeat(50) { yield() }
+        yield()
         assertEquals("a third caller got in while two were still running", 2, concurrent.get())
         assertEquals(2, peak.get())
 
@@ -92,4 +101,5 @@ class BulkTransferGateTest {
         throw AssertionError("Expected ${expected.simpleName} but nothing was thrown")
     }
 }
+
 
