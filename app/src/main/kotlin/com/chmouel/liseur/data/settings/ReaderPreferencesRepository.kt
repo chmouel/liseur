@@ -34,7 +34,7 @@ class ReaderPreferencesRepository(private val context: Context) {
 
     val prefs: Flow<ReaderPrefs> = context.readerPrefsStore.data.map { p ->
         ReaderPrefs(
-            font = ReaderFont.fromId(p[Keys.FONT]),
+            font = ReadingFont.fromId(p[Keys.FONT]),
             fontSize = p[Keys.FONT_SIZE] ?: 1.0,
             themeChoice = ReaderThemeChoice.fromId(p[Keys.THEME]),
             lineHeight = p[Keys.LINE_HEIGHT],
@@ -49,7 +49,7 @@ class ReaderPreferencesRepository(private val context: Context) {
         )
     }
 
-    suspend fun setFont(font: ReaderFont) {
+    suspend fun setFont(font: ReadingFont) {
         context.readerPrefsStore.edit { it[Keys.FONT] = font.id }
     }
 

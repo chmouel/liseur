@@ -26,6 +26,7 @@ import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
+import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.BookUploadRepository
 import com.chmouel.liseur.data.remote.UploadPrompts
@@ -139,6 +140,8 @@ class AppContainer(context: Context) {
     )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
+
+    val userFonts = UserFontRepository(context.applicationContext, applicationScope)
 
     /** What the app has learned about how fast this reader reads. */
     val readingPace = ReadingPaceRepository(context.applicationContext)

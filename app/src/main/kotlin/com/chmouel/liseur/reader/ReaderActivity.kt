@@ -205,6 +205,16 @@ class ReaderActivity : FragmentActivity() {
                                 val readingTheme = prefs.themeChoice.resolve(appIsDark)
                                 val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
                                 val columnMode = prefs.columnMode.effectiveFor(widthClass())
+                                // A third key, for the same reason as the
+                                // other two: a font family is declared when
+                                // the navigator is configured, so a font
+                                // imported while the book is open only
+                                // reaches the page if the fragment is built
+                                // again. The ids in order are the whole of
+                                // what the declarations depend on.
+                                val importedFonts by viewModel.importedFonts
+                                    .collectAsStateWithLifecycle()
+                                val fontKey = importedFonts.joinToString(",") { it.id }
                                 // Read once, here, alongside the factory that is
                                 // built from it, and handed to the screen as the
                                 // point this navigator is being restored to.
@@ -216,6 +226,7 @@ class ReaderActivity : FragmentActivity() {
                                     s.navigatorFactory,
                                     columnMode,
                                     scrollMode,
+                                    fontKey,
                                 ) {
                                     viewModel.lastLocator ?: s.initialLocator
                                 }
@@ -226,14 +237,27 @@ class ReaderActivity : FragmentActivity() {
                                 // over it takes the reader back off the page
                                 // they asked for. See IssuedMoves.
                                 val moves = remember { IssuedMoves() }
-                                remember(s.navigatorFactory, columnMode, scrollMode) {
+                                // Kept as a value rather than computed
+                                // inline, because ReaderScreen has to know
+                                // exactly what this navigator was built
+                                // with to tell an already-rendered
+                                // preference from one still to submit.
+                                val initialPreferences = remember(
+                                    s.navigatorFactory,
+                                    columnMode,
+                                    scrollMode,
+                                    fontKey,
+                                ) {
+                                    prefs.toEpubPreferences(
+                                        theme = readingTheme,
+                                        columnMode = columnMode,
+                                        scroll = scrollMode,
+                                    )
+                                }
+                                remember(s.navigatorFactory, columnMode, scrollMode, fontKey) {
                                     s.navigatorFactory.createFragmentFactory(
                                         initialLocator = restoreTarget,
-                                        initialPreferences = prefs.toEpubPreferences(
-                                            theme = readingTheme,
-                                            columnMode = columnMode,
-                                            scroll = scrollMode,
-                                        ),
+                                        initialPreferences = initialPreferences,
                                         // Without a listener the navigator answers
                                         // every link the same way — go there — and
                                         // a footnote costs the reader their page.
@@ -262,6 +286,7 @@ class ReaderActivity : FragmentActivity() {
                                         configuration = epubNavigatorConfiguration(
                                             columnMode = columnMode,
                                             scroll = scrollMode,
+                                            userFonts = importedFonts,
                                             onTextSelected = viewModel::onTextSelected,
                                             onSelectionCleared = viewModel::onSelectionCleared,
                                         ),
@@ -292,6 +317,8 @@ class ReaderActivity : FragmentActivity() {
                                 ReaderScreen(
                                     publication = s.publication,
                                     restoreTarget = restoreTarget,
+                                    fontKey = fontKey,
+                                    initialPreferences = initialPreferences,
                                     moves = moves,
                                     prefsFlow = viewModel.prefs,
                                     readingTheme = readingTheme,

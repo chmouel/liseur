@@ -47,14 +47,17 @@ import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.FooterMode
-import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingBrightnessSlider
 import com.chmouel.liseur.ui.reading.ReadingFontDropdown
+import com.chmouel.liseur.ui.reading.readingFamily
+import com.chmouel.liseur.ui.reading.rememberFontLibrary
 import com.chmouel.liseur.ui.reading.ReadingFontSizeSlider
 import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
@@ -82,7 +85,7 @@ fun ReadingAppearanceScreen(
     prefs: ReaderPrefs,
     appIsDark: Boolean,
     onTheme: (ReaderThemeChoice) -> Unit,
-    onFont: (ReaderFont) -> Unit,
+    onFont: (ReadingFont) -> Unit,
     onFontSize: (Double) -> Unit,
     onLineHeight: (Double?) -> Unit,
     onPageMargins: (Double?) -> Unit,
@@ -123,7 +126,12 @@ fun ReadingAppearanceScreen(
                     .padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                ReadingPreview(prefs = prefs, theme = resolved)
+                val fontLibrary = rememberFontLibrary(onSelected = onFont)
+                ReadingPreview(
+                    prefs = prefs,
+                    theme = resolved,
+                    imported = fontLibrary.fonts,
+                )
                 ReadingThemeRow(
                     selected = prefs.themeChoice,
                     resolved = resolved,
@@ -131,7 +139,13 @@ fun ReadingAppearanceScreen(
                 )
                 ReadingFontSizeSlider(value = prefs.fontSize, onChanged = onFontSize)
                 ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightness)
-                ReadingFontDropdown(selected = prefs.font, onSelected = onFont)
+                ReadingFontDropdown(
+                    selected = prefs.font,
+                    imported = fontLibrary.fonts,
+                    onSelected = onFont,
+                    onImport = fontLibrary.pick,
+                    onRemove = fontLibrary.remove,
+                )
                 AdvancedSection(
                     prefs = prefs,
                     onLineHeight = onLineHeight,
@@ -225,9 +239,12 @@ private fun AdvancedSection(
  * screen's and not the page's.
  */
 @Composable
-private fun ReadingPreview(prefs: ReaderPrefs, theme: ReaderTheme) {
-    val context = LocalContext.current
-    val family = remember(prefs.font) { prefs.font.composeFamily(context.assets) }
+private fun ReadingPreview(
+    prefs: ReaderPrefs,
+    theme: ReaderTheme,
+    imported: List<UserFont>,
+) {
+    val family = prefs.font.readingFamily(imported)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_preview_title))
         Box(

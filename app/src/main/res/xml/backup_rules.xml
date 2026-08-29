@@ -8,6 +8,14 @@
   or useless. Downloaded books (files/books) would blow through the 25 MB
   backup quota and can be fetched again; covers (files/covers) are built
   from the books themselves.
+
+  Imported fonts (files/fonts) do not travel here either. They are
+  user-supplied binaries, up to 32 of them, against the same 25 MB
+  quota. A restore therefore arrives with font choices whose files are
+  absent; that is a case the app already handles, falling back to the
+  default and keeping the choice, so importing the same file again puts
+  every book back where it was. They do travel on a device transfer,
+  which has no quota — see data_extraction_rules.xml.
 -->
 <full-backup-content>
     <!-- Room: library, reading positions, highlights and notes. -->

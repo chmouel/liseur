@@ -7,6 +7,11 @@
   arrive unreadable however they travel. The app notices that on first
   run and asks for the account again rather than pretending to be
   connected.
+
+  The one difference between the two lists is imported fonts. A device
+  transfer is the "everything is as it was" promise and is not
+  quota-limited, so the font files go with it. Cloud backup is capped at
+  25 MB and shared with the library, so they do not.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -18,5 +23,7 @@
         <include domain="database" path="liseur.db" />
         <include domain="file" path="datastore" />
         <include domain="sharedpref" path="." />
+        <!-- Fonts the reader imported; nothing else can supply them. -->
+        <include domain="file" path="fonts" />
     </device-transfer>
 </data-extraction-rules>

@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.ui.WidthClass
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
@@ -155,6 +156,7 @@ fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode = when {
 fun epubNavigatorConfiguration(
     columnMode: ColumnMode = ColumnMode.Default,
     scroll: Boolean = false,
+    userFonts: List<UserFont> = emptyList(),
     onTextSelected: () -> Unit = {},
     onSelectionCleared: () -> Unit = {},
 ): EpubNavigatorFragment.Configuration =
@@ -256,6 +258,26 @@ fun epubNavigatorConfiguration(
                 addSource("fonts/Inter-Italic.ttf")
                 setFontStyle(FontStyle.ITALIC)
                 setFontWeight(100..900)
+            }
+        }
+
+        // Every imported font is declared, not just the chosen one, so
+        // switching between them is the instant change it already is for
+        // the four above — the web view only fetches the family a page
+        // actually asks for. Each is one face: a single file cannot carry
+        // a real italic or bold, and the page synthesises them.
+        //
+        // The weight range arrives already clamped to 1..1000, because
+        // setFontWeight() asserts that and a malformed `fvar` would
+        // otherwise bring the reader down while it was being configured.
+        userFonts.forEach { font ->
+            addFontFamilyDeclaration(FontFamily(font.cssName)) {
+                addFontFace {
+                    addSource(UserFontResources.url(font))
+                    setFontStyle(if (font.italic) FontStyle.ITALIC else FontStyle.NORMAL)
+                    val weight = font.weightRange ?: font.staticWeight..font.staticWeight
+                    setFontWeight(weight)
+                }
             }
         }
     }

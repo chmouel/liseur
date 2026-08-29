@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.settings
 
 import androidx.compose.ui.graphics.Color
+import com.chmouel.liseur.data.settings.fonts.UserFont
 import kotlin.math.roundToInt
 
 /**
@@ -20,6 +21,79 @@ enum class ReaderFont(val id: String, val displayName: String, val cssName: Stri
         val Default = LITERATA
 
         fun fromId(id: String?): ReaderFont = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/**
+ * The font a book is read in: one Liseur ships, or one the reader brought.
+ *
+ * [ReaderFont] stays the closed list of bundled families it always was.
+ * This is the wider question the rest of the app now asks, and the two
+ * are deliberately separate — an imported font has no `displayName` worth
+ * hard-coding and no asset path, and folding it into the enum would mean
+ * every `when` over the bundled four grew a branch that cannot be
+ * exhaustive.
+ *
+ * [cssName] is derivable from the id alone, without consulting the
+ * registry of imported fonts, so mapping a preference to Readium's
+ * [org.readium.r2.navigator.preferences.FontFamily] needs no lookup and
+ * cannot fail.
+ */
+sealed interface ReadingFont {
+    val id: String
+
+    /** The declared family, or null for the publisher's own font. */
+    val cssName: String?
+
+    data class Bundled(val font: ReaderFont) : ReadingFont {
+        override val id: String get() = font.id
+        override val cssName: String? get() = font.cssName
+    }
+
+    /**
+     * A font the reader imported, named by the SHA-256 of its file.
+     *
+     * [cssName] is namespaced rather than the family's own name: an
+     * imported font is perfectly entitled to call itself Literata, and
+     * unprefixed it would silently take over the bundled declaration or
+     * a publisher's embedded face.
+     */
+    data class Imported(val digest: String) : ReadingFont {
+        override val id: String get() = UserFont.ID_PREFIX + digest
+        override val cssName: String get() = "LiseurUser-$digest"
+    }
+
+    /**
+     * This font if its file is still there, otherwise the default.
+     *
+     * The distinction between the *raw* choice and the *effective* one is
+     * the whole reason a deleted font is not a lost setting. DataStore and
+     * `book_typography` keep the raw value untouched; only this resolved
+     * one reaches the navigator, the preview and the rendered selection.
+     * Re-import the same file and the digest, the id and every book's
+     * choice come back.
+     */
+    fun effective(registry: Set<String>): ReadingFont =
+        if (this is Imported && id !in registry) Default else this
+
+    companion object {
+        val Default: ReadingFont = Bundled(ReaderFont.Default)
+
+        /**
+         * The font a stored id names, or the default.
+         *
+         * Bundled ids are matched first, then the reserved `user:`
+         * namespace, and **only** in its canonical shape. Anything else —
+         * null, blank, corrupt, or an id from a version that has not been
+         * written yet — falls back, exactly as [ReaderFont.fromId] already
+         * did. An unknown id is never guessed to be an import, so a
+         * bundled font added later cannot be mistaken for one.
+         */
+        fun fromId(id: String?): ReadingFont {
+            if (id == null) return Default
+            ReaderFont.entries.firstOrNull { it.id == id }?.let { return Bundled(it) }
+            return UserFont.digestOf(id)?.let(::Imported) ?: Default
+        }
     }
 }
 
@@ -216,7 +290,7 @@ object AutoScrollPreference {
  *   text has further to travel to show the same words.
  */
 data class ReaderPrefs(
-    val font: ReaderFont = ReaderFont.Default,
+    val font: ReadingFont = ReadingFont.Default,
     val fontSize: Double = 1.0,
     val themeChoice: ReaderThemeChoice = ReaderThemeChoice.Default,
     val lineHeight: Double? = null,

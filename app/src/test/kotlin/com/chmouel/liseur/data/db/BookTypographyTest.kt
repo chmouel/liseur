@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.db
 
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import org.junit.Assert.assertEquals
@@ -17,7 +18,7 @@ import org.junit.Test
 class BookTypographyTest {
 
     private val shared = ReaderPrefs(
-        font = ReaderFont.LITERATA,
+        font = ReadingFont.Bundled(ReaderFont.LITERATA),
         fontSize = 1.0,
         themeChoice = ReaderThemeChoice.DARK,
         lineHeight = 1.4,
@@ -43,7 +44,7 @@ class BookTypographyTest {
     @Test
     fun `a book set apart is set in what it asked for`() {
         val effective = shared.withTypographyOf(own)
-        assertEquals(ReaderFont.ATKINSON, effective.font)
+        assertEquals(ReadingFont.Bundled(ReaderFont.ATKINSON), effective.font)
         assertEquals(1.6, effective.fontSize, 0.0)
         assertEquals(2.0, effective.lineHeight!!, 0.0)
         assertEquals(1.8, effective.pageMargins!!, 0.0)
@@ -77,6 +78,24 @@ class BookTypographyTest {
     @Test
     fun `a font that is no longer bundled falls back rather than failing`() {
         val effective = shared.withTypographyOf(own.copy(font = "a-font-we-removed"))
-        assertEquals(ReaderFont.Default, effective.font)
+        assertEquals(ReadingFont.Default, effective.font)
+    }
+
+    @Test
+    fun `a book set apart in an imported font keeps the import`() {
+        val digest = "a".repeat(64)
+        val effective = shared.withTypographyOf(own.copy(font = "user:" + digest))
+        assertEquals(ReadingFont.Imported(digest), effective.font)
+    }
+
+    @Test
+    fun `setting a book apart records the raw font, not the fallback`() {
+        // The point of the raw/effective split. If a book set apart while
+        // its imported font happened to be missing recorded the fallback,
+        // re-importing the very same file would no longer bring the
+        // choice back — and the reader would never learn why.
+        val digest = "b".repeat(64)
+        val missing = shared.copy(font = ReadingFont.Imported(digest))
+        assertEquals("user:" + digest, BookTypography.from("book", missing).font)
     }
 }
