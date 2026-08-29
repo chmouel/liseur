@@ -119,11 +119,16 @@ fun Endpaper(
             revealNext = true
         }
     }
-    val nextReveal by animateFloatAsState(
-        targetValue = if (revealNext) 1f else 0f,
-        animationSpec = tween(if (eInk) 0 else NEXT_REVEAL_ANIM_MS),
-        label = "endpaper next volume",
-    )
+    val revealTarget = if (revealNext) 1f else 0f
+    val nextReveal = if (eInk) {
+        revealTarget
+    } else {
+        animateFloatAsState(
+            targetValue = revealTarget,
+            animationSpec = tween(NEXT_REVEAL_ANIM_MS),
+            label = "endpaper next volume",
+        ).value
+    }
     val missingLabel = seriesIndexLabel(missingIndex)
     val showSeriesWindow = finishedVolume != null &&
         (missingLabel != null || next?.volume != null)
