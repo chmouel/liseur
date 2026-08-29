@@ -25,13 +25,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
-import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingBrightnessSlider
 import com.chmouel.liseur.ui.reading.ReadingFontDropdown
+import com.chmouel.liseur.ui.reading.rememberFontLibrary
 import com.chmouel.liseur.ui.reading.ReadingFontSizeSlider
 import com.chmouel.liseur.ui.reading.ReadingThemeRow
 import com.chmouel.liseur.ui.windowWidth
@@ -55,7 +56,7 @@ import com.chmouel.liseur.ui.windowWidth
 fun TypographySheet(
     prefs: ReaderPrefs,
     readingTheme: ReaderTheme,
-    onFontSelected: (ReaderFont) -> Unit,
+    onFontSelected: (ReadingFont) -> Unit,
     onFontSizeChanged: (Double) -> Unit,
     onThemeSelected: (ReaderThemeChoice) -> Unit,
     onBrightnessChanged: (Float?) -> Unit,
@@ -83,7 +84,14 @@ fun TypographySheet(
             )
             ReadingFontSizeSlider(value = prefs.fontSize, onChanged = onFontSizeChanged)
             ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightnessChanged)
-            ReadingFontDropdown(selected = prefs.font, onSelected = onFontSelected)
+            val fontLibrary = rememberFontLibrary(onSelected = onFontSelected)
+            ReadingFontDropdown(
+                selected = prefs.font,
+                imported = fontLibrary.fonts,
+                onSelected = onFontSelected,
+                onImport = fontLibrary.pick,
+                onRemove = fontLibrary.remove,
+            )
             ScrollModeToggle(
                 enabled = scrollMode,
                 onChanged = onScrollModeChanged,

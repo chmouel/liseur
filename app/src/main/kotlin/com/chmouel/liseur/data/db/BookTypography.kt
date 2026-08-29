@@ -6,7 +6,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Upsert
-import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import kotlinx.coroutines.flow.Flow
 
@@ -33,7 +33,15 @@ data class BookTypography(
     @ColumnInfo(name = "page_margins") val pageMargins: Double?,
 ) {
     companion object {
-        /** Sets a book apart starting from how it reads right now. */
+        /**
+         * Sets a book apart starting from how it reads right now.
+         *
+         * Records the *raw* font id, which for an imported font may name
+         * one whose file is currently missing. Writing the fallback here
+         * instead would quietly destroy the choice: set a book apart while
+         * its font happens to be gone, and re-importing the file would no
+         * longer bring it back.
+         */
         fun from(bookUrl: String, prefs: ReaderPrefs) = BookTypography(
             bookUrl = bookUrl,
             font = prefs.font.id,
@@ -53,7 +61,7 @@ fun ReaderPrefs.withTypographyOf(own: BookTypography?): ReaderPrefs =
         this
     } else {
         copy(
-            font = ReaderFont.fromId(own.font),
+            font = ReadingFont.fromId(own.font),
             fontSize = own.fontSize,
             lineHeight = own.lineHeight,
             pageMargins = own.pageMargins,

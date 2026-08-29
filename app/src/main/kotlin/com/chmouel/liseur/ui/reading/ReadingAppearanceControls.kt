@@ -17,6 +17,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.BrightnessHigh
 import androidx.compose.material.icons.outlined.BrightnessLow
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -33,6 +36,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,6 +61,8 @@ import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.data.settings.ReadingFont
+import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.ui.widthClass
 
 /*
@@ -155,9 +161,17 @@ fun ReadingThemeRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReadingFontDropdown(selected: ReaderFont, onSelected: (ReaderFont) -> Unit) {
+fun ReadingFontDropdown(
+    selected: ReadingFont,
+    imported: List<UserFont>,
+    onSelected: (ReadingFont) -> Unit,
+    onImport: () -> Unit,
+    onRemove: (UserFont) -> Unit,
+) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
+    var pendingRemoval by remember { mutableStateOf<UserFont?>(null) }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_font))
         ExposedDropdownMenuBox(
@@ -165,12 +179,12 @@ fun ReadingFontDropdown(selected: ReaderFont, onSelected: (ReaderFont) -> Unit) 
             onExpandedChange = { expanded = it },
         ) {
             OutlinedTextField(
-                value = stringResource(selected.label),
+                value = selected.displayName(imported),
                 onValueChange = {},
                 readOnly = true,
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(
-                    fontFamily = remember(selected) { selected.composeFamily(context.assets) },
+                    fontFamily = selected.readingFamily(imported),
                     fontSize = 18.sp,
                 ),
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -183,6 +197,7 @@ fun ReadingFontDropdown(selected: ReaderFont, onSelected: (ReaderFont) -> Unit) 
                 onDismissRequest = { expanded = false },
             ) {
                 ReaderFont.entries.forEach { font ->
+                    val choice = ReadingFont.Bundled(font)
                     val family = remember(font) { font.composeFamily(context.assets) }
                     DropdownMenuItem(
                         text = {
@@ -192,23 +207,131 @@ fun ReadingFontDropdown(selected: ReaderFont, onSelected: (ReaderFont) -> Unit) 
                                 fontSize = 18.sp,
                             )
                         },
-                        trailingIcon = {
-                            if (font == selected) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
+                        trailingIcon = { SelectedMark(choice.id == selected.id) },
                         onClick = {
-                            onSelected(font)
+                            onSelected(choice)
                             expanded = false
                         },
                     )
                 }
+
+                imported.forEach { font ->
+                    val choice = ReadingFont.Imported(font.digest)
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = font.displayName,
+                                fontFamily = rememberImportedFamily(font),
+                                fontSize = 18.sp,
+                            )
+                        },
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                SelectedMark(choice.id == selected.id)
+                                IconButton(onClick = { pendingRemoval = font }) {
+                                    Icon(
+                                        Icons.Outlined.Delete,
+                                        contentDescription = stringResource(
+                                            R.string.reader_font_remove,
+                                            font.displayName,
+                                        ),
+                                    )
+                                }
+                            }
+                        },
+                        onClick = {
+                            onSelected(choice)
+                            expanded = false
+                        },
+                    )
+                }
+
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.reader_font_add)) },
+                    leadingIcon = { Icon(Icons.Outlined.Add, contentDescription = null) },
+                    onClick = {
+                        expanded = false
+                        onImport()
+                    },
+                )
             }
         }
+    }
+
+    pendingRemoval?.let { font ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoval = null },
+            title = { Text(stringResource(R.string.reader_font_remove_title, font.displayName)) },
+            // Says plainly what happens, because neither half is
+            // guessable: books reading in it fall back rather than break,
+            // and the choice is dormant rather than gone, so importing the
+            // same file again puts every one of them back.
+            text = { Text(stringResource(R.string.reader_font_remove_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemove(font)
+                    pendingRemoval = null
+                }) { Text(stringResource(R.string.reader_font_remove_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoval = null }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SelectedMark(selected: Boolean) {
+    if (!selected) return
+    Icon(
+        Icons.Default.Check,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/**
+ * A preview face for an imported font, or the default if it will not load.
+ *
+ * The import path already refuses a file the platform cannot make a
+ * [android.graphics.Typeface] of, so this should never fire. It is here
+ * because the alternative is throwing inside composition — the settings
+ * screen would not fail to draw one row, it would fail to draw at all,
+ * and the reader would have no way back to the font that did it.
+ */
+@Composable
+private fun rememberImportedFamily(font: UserFont): FontFamily? = remember(font.id) {
+    runCatching { FontFamily(Font(font.file)) }.getOrNull()
+}
+
+/**
+ * The name to show for a font, resolving one that is no longer installed.
+ *
+ * An imported font whose file has gone is shown as the default, because
+ * the default is what the page is actually rendering in. The stored id is
+ * not drawn as a ghost row and, crucially, is not written over — only the
+ * reader picking something replaces it.
+ */
+@Composable
+private fun ReadingFont.displayName(imported: List<UserFont>): String =
+    when (val resolved = effective(imported.mapTo(HashSet()) { it.id })) {
+        is ReadingFont.Bundled -> stringResource(resolved.font.label)
+        is ReadingFont.Imported ->
+            imported.first { it.id == resolved.id }.displayName
+    }
+
+/** The face to preview a font in, resolving one that is no longer installed. */
+@Composable
+internal fun ReadingFont.readingFamily(imported: List<UserFont>): FontFamily? {
+    val context = LocalContext.current
+    return when (val resolved = effective(imported.mapTo(HashSet()) { it.id })) {
+        is ReadingFont.Bundled -> remember(resolved.font) {
+            resolved.font.composeFamily(context.assets)
+        }
+        is ReadingFont.Imported ->
+            rememberImportedFamily(imported.first { it.id == resolved.id })
     }
 }
 

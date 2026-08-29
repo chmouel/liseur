@@ -101,7 +101,7 @@ import com.chmouel.liseur.reader.dictionary.DefinitionSheet
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ColumnMode
-import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
@@ -155,11 +155,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Layout
@@ -239,6 +241,25 @@ fun ReaderScreen(
      * built. Null for a book with no saved position.
      */
     restoreTarget: Locator?,
+    /**
+     * The imported fonts, as an ordered list of ids.
+     *
+     * Only ever a key. The activity builds the declarations; this is how
+     * the fragment holding the old ones gets torn down.
+     */
+    fontKey: String,
+    /**
+     * The preferences the navigator in hand was actually built with.
+     *
+     * Not the same thing as "the current preferences": the factory
+     * captures them when it is rebuilt, and a font import changes the
+     * declarations and the selected font as two separate updates. Land
+     * the rebuild between them and the fragment is built with the font
+     * the reader has just replaced. This is what tells the collector
+     * below which value is already on the page and which one still has
+     * to be submitted.
+     */
+    initialPreferences: EpubPreferences,
     /**
      * The moves the reader is sent on, counted as they are asked for.
      * Owned above this screen because a link tapped in the book is
@@ -775,10 +796,18 @@ fun ReaderScreen(
     // choice made on a wide one, and the control to undo it is hidden.
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
-        // The factory already built this navigator with the current
-        // preferences. Submitting that same value once more reflows the
-        // freshly opened book and emits a second restoration locator,
-        // which must not be recorded as a page the reader turned.
+        // The factory already built this navigator with some value, and
+        // submitting that same value once more reflows the freshly
+        // opened book and emits a second restoration locator, which must
+        // not be recorded as a page the reader turned.
+        //
+        // Which value, though, is not "whichever arrives first". A font
+        // import publishes the new declarations and writes the new
+        // selection as two updates, and a rebuild landing between them
+        // builds the fragment with the font the reader has just left. So
+        // the leading emission is dropped for *being* the one already
+        // rendered, not for being first — otherwise the newly imported
+        // font is skipped and the page keeps the old one.
         //
         // The theme is combined in rather than read once because it can
         // change without the preferences changing at all: a reader on
@@ -790,7 +819,6 @@ fun ReaderScreen(
         ) { p, (theme, columns, scrolling) ->
             p.toEpubPreferences(theme, columns, scrolling)
         }
-            .drop(1)
             // What the book is rendered with, not what the reader
             // happens to be holding. Reading preferences carry answers
             // the page cannot see — the auto-scroll speed is one — and a
@@ -799,6 +827,7 @@ fun ReaderScreen(
             // anchor and restoring it, for a setting that changes not one
             // line of the text.
             .distinctUntilChanged()
+            .dropWhile { it == initialPreferences }
             .collect {
                 reflow.within {
                     // Taken before the anchor rather than with the
@@ -1454,7 +1483,9 @@ fun ReaderScreen(
         // Scrolling is keyed for the same reason: whether a sideways
         // swipe turns a page is fixed at construction too, and it has to
         // stop turning them when the pages become one long column.
-        key(columnMode, scrollMode) {
+        // And on the imported fonts, third of the three, because a
+        // font family is declared at construction as well.
+        key(columnMode, scrollMode, fontKey) {
             // Derived, not measured: the reservation must exist before
             // the page lays out, or the last line is cut in half. The
             // line height is the very style the footer draws with, and
@@ -2127,7 +2158,7 @@ private fun dwellMillis(viewportPixels: Int, pixelsPerSecond: Double): Long {
 
 /** Bundle of preference setters passed down to the reader chrome. */
 class ReaderPrefsActions(
-    val setFont: (ReaderFont) -> Unit,
+    val setFont: (ReadingFont) -> Unit,
     val setFontSize: (Double) -> Unit,
     val setTheme: (ReaderThemeChoice) -> Unit,
     val setLineHeight: (Double?) -> Unit,

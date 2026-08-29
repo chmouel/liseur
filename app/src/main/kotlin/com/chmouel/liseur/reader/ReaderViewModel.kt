@@ -37,9 +37,11 @@ import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.FooterMode
-import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
+import com.chmouel.liseur.data.settings.UserFontRepository
+import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import com.chmouel.liseur.sync.PositionUpdate
@@ -95,6 +97,7 @@ import org.readium.r2.shared.publication.indexOfFirstWithHref
 import org.readium.r2.shared.publication.services.search.search
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
+import org.readium.r2.shared.util.data.CompositeContainer
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.use
 import org.readium.r2.streamer.PublicationOpener
@@ -125,8 +128,19 @@ class ReaderViewModel(
     private val downloads: BookDownloadRepository,
     private val seriesExtras: SeriesExtrasRepository,
     private val remoteAccount: RemoteAccountRepository,
+    private val userFonts: UserFontRepository,
     sessionManager: ReadingSessionManager,
 ) : ViewModel() {
+
+    /**
+     * The fonts the reader has imported, for the navigator to declare.
+     *
+     * All of them, not just the selected one — declaring the lot up front
+     * is what makes switching between them as instant as it already is
+     * for the bundled four. The web view only fetches the family the page
+     * actually uses.
+     */
+    val importedFonts: StateFlow<List<UserFont>> = userFonts.fonts
 
     private val sessions = sessionManager.recorder(bookId)
     private val timeSpent = sessionManager.observeTotal(bookId)
@@ -590,8 +604,24 @@ class ReaderViewModel(
         .map { it != null }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    val prefs: StateFlow<ReaderPrefs> = prefsRepo.prefs
+    /**
+     * How this book reads, exactly as it is stored.
+     *
+     * The font here may name an import whose file is no longer on the
+     * device. That is deliberate and it is what [prefs] resolves; this is
+     * the value that gets written back, so that deleting a font is a
+     * font going missing and never a setting being lost.
+     */
+    private val rawPrefs: StateFlow<ReaderPrefs> = prefsRepo.prefs
         .combine(ownTypography) { shared, own -> shared.withTypographyOf(own) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
+
+    /** How this book reads, with a missing imported font resolved away. */
+    val prefs: StateFlow<ReaderPrefs> = rawPrefs
+        .combine(userFonts.fonts) { stored, available ->
+            val registry = available.mapTo(HashSet()) { it.id }
+            stored.copy(font = stored.font.effective(registry))
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
 
     /**
@@ -656,11 +686,32 @@ class ReaderViewModel(
             // Make sure saved preferences are loaded before the navigator is
             // created, so the book opens directly with the user's settings.
             prefsRepo.prefs.first()
+            // And before the first font snapshot is taken. A book already
+            // set to an imported font would otherwise open in the default
+            // and rebuild its navigator the moment the scan landed — a
+            // reflow nobody asked for, on the page they were reading.
+            userFonts.awaitReady()
             val asset = assetRetriever.retrieve(bookUrl).getOrElse {
                 _state.value = UiState.Failure(it.message)
                 return@launch
             }
-            val publication = publicationOpener.open(asset, allowUserInteraction = false)
+            val publication = publicationOpener.open(
+                asset,
+                allowUserInteraction = false,
+                onCreatePublication = {
+                    // Imported fonts are served as publication resources:
+                    // Readium's asset host only ever reads the APK, so a
+                    // font in private storage has to arrive this way. Ours
+                    // goes first because it is registry-strict — it can
+                    // only answer for a digest it holds, so it cannot
+                    // shadow anything the book carries, whereas the book
+                    // could otherwise shadow a font.
+                    container = CompositeContainer(
+                        UserFontsContainer { userFonts.fonts.value },
+                        container,
+                    )
+                },
+            )
                 .getOrElse {
                     asset.close()
                     _state.value = UiState.Failure(it.message)
@@ -1266,13 +1317,13 @@ class ReaderViewModel(
      */
     fun setTypographyIsOwn(own: Boolean) = viewModelScope.launch {
         if (own) {
-            typographyDao.upsert(BookTypography.from(bookId, prefs.value))
+            typographyDao.upsert(BookTypography.from(bookId, rawPrefs.value))
         } else {
             typographyDao.clear(bookId)
         }
     }
 
-    fun setFont(font: ReaderFont) = typography(
+    fun setFont(font: ReadingFont) = typography(
         shared = { prefsRepo.setFont(font) },
         own = { it.copy(font = font.id) },
     )
@@ -1413,6 +1464,7 @@ class ReaderViewModel(
                     downloads = container.bookDownloads,
                     seriesExtras = container.seriesExtras,
                     remoteAccount = container.remoteAccount,
+                    userFonts = container.userFonts,
                     sessionManager = container.readingSessions,
                 )
             }

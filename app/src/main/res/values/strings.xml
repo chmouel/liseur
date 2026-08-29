@@ -473,6 +473,19 @@
     <string name="reader_font_atkinson" translatable="false">Atkinson Hyperlegible</string>
     <string name="reader_font_inter" translatable="false">Inter</string>
     <string name="reader_font_publisher">Publisher font</string>
+    <string name="reader_font_add">Add a font…</string>
+    <string name="reader_font_remove">Remove %1$s</string>
+    <string name="reader_font_remove_title">Remove %1$s?</string>
+    <string name="reader_font_remove_body">The font file is deleted from Liseur. Books reading in it fall back to the default for now — add the same file again and they go back to it.</string>
+    <string name="reader_font_remove_confirm">Remove</string>
+    <string name="reader_font_imported">%1$s added</string>
+    <string name="reader_font_already_present">%1$s is already in your fonts</string>
+    <string name="reader_font_error_not_a_font">That file is not a TrueType or OpenType font</string>
+    <string name="reader_font_error_too_large">That file is too large to be a font</string>
+    <string name="reader_font_error_too_many">You already have the most fonts Liseur will hold</string>
+    <string name="reader_font_error_unreadable">That file could not be read</string>
+    <string name="reader_font_error_storage">The font could not be saved</string>
+    <string name="reader_font_error_remove">The font could not be removed</string>
     <string name="reader_typography_own">Use separate settings for this book</string>
     <string name="reader_typography_own_on">Font, size and layout stay with this book.</string>
     <string name="reader_typography_own_off">Font, size and layout are shared with every book.</string>
