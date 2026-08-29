@@ -814,11 +814,14 @@ fun ReaderScreen(
                     // change in the run the very position this one
                     // refused.
                     val since = moves.mark(SystemClock.elapsedRealtime())
-                    if (since == IssuedMoves.NONE) reflowAnchor = null
-                    val anchor = reflowAnchor ?: capture(nav, nav.currentLocator.value)
-                    if (since != IssuedMoves.NONE) {
-                        reflowAnchor = anchor
-                        onLocatorChanged(anchor, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                    val anchor = if (since == IssuedMoves.NONE) {
+                        reflowAnchor = null
+                        null
+                    } else {
+                        (reflowAnchor ?: capture(nav, nav.currentLocator.value)).also {
+                            reflowAnchor = it
+                            onLocatorChanged(it, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                        }
                     }
                     val before = ExactLocatorAnchor.layoutSignature(nav)
                     nav.submitPreferences(it)
@@ -838,7 +841,7 @@ fun ReaderScreen(
                     // again. The preferences are still submitted — they
                     // are what the reader asked for — and only the
                     // reader's place is left where they put it.
-                    if (moves.unchangedSince(since)) {
+                    if (anchor != null && moves.unchangedSince(since)) {
                         navigate(
                             nav = nav,
                             locator = anchor,
