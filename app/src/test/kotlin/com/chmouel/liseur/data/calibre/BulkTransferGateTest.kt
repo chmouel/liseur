@@ -4,9 +4,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -30,8 +30,9 @@ class BulkTransferGateTest {
         val peak = AtomicInteger(0)
         val release = CompletableDeferred<Unit>()
 
-        // Five callers all ask for a slot at once; only two should be
-        // inside the block together, the rest waiting on the semaphore.
+        // Five callers all ask for a slot at once; only two should ever
+        // be inside the block together, the rest waiting on the
+        // semaphore.
         val jobs = (1..5).map {
             async {
                 gate.withSlot {
@@ -42,9 +43,20 @@ class BulkTransferGateTest {
                 }
             }
         }
-        // Let every job reach the semaphore before checking the peak.
-        repeat(5) { yield() }
-        assertTrue("no more than 2 should run at once, was ${peak.get()}", peak.get() <= 2)
+
+        // Wait for the actual condition -- two callers inside the gated
+        // section -- rather than a fixed number of yields, which proves
+        // nothing about how many coroutines the scheduler chose to run.
+        withTimeout(5_000) {
+            while (concurrent.get() < 2) yield()
+        }
+        assertEquals(2, concurrent.get())
+
+        // Give the remaining three every chance to sneak past the cap
+        // while the first two are still held open.
+        repeat(50) { yield() }
+        assertEquals("a third caller got in while two were still running", 2, concurrent.get())
+        assertEquals(2, peak.get())
 
         release.complete(Unit)
         jobs.forEach { it.await() }
@@ -63,4 +75,21 @@ class BulkTransferGateTest {
 
         assertEquals(4, completed.get())
     }
+
+    @Test
+    fun `refuses a gate that could never let anything through`() {
+        assertThrows(IllegalArgumentException::class.java) { BulkTransferGate(maxConcurrent = 0) }
+        assertThrows(IllegalArgumentException::class.java) { BulkTransferGate(maxConcurrent = -1) }
+    }
+
+    private fun assertThrows(expected: Class<out Throwable>, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Throwable) {
+            if (expected.isInstance(e)) return
+            throw e
+        }
+        throw AssertionError("Expected ${expected.simpleName} but nothing was thrown")
+    }
 }
+
