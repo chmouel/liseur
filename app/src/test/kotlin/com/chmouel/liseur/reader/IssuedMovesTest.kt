@@ -258,8 +258,12 @@ class IssuedMovesTest {
         val moves = IssuedMoves(settleTimeoutMs = 3_000L)
         moves.issue(from = cover, to = section, nowMs = 0L)
         val since = moves.mark(nowMs = 0L)
+        // The deadline lets go of the move, so a restore beginning
+        // after it has bearings again. The one that began without them
+        // does not acquire them.
+        val afterwards = moves.mark(nowMs = 3_000L)
         assertFalse(moves.unchangedSince(since))
-        assertFalse(moves.unchangedSince(since))
+        assertTrue(moves.unchangedSince(afterwards))
     }
 
     @Test

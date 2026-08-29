@@ -330,7 +330,14 @@ class PageTurner(
         )
         web.evaluateJavascript(script) { result ->
             if (generation != probeGeneration || navigator !== nav) return@evaluateJavascript
-            if (result?.contains(AT_END) == true) stepChapter(forward)
+            if (result?.contains(AT_END) != true) return@evaluateJavascript
+            // The page was already against its edge, so the screenful
+            // this turn announced never moved. Dropped before stepping,
+            // because the step announces the move that does happen and
+            // leaving both open holds every restore for the wait of the
+            // one that did not.
+            onMoveDropped(token)
+            stepChapter(forward)
         }
     }
 
