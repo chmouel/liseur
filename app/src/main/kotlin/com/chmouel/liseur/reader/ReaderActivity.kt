@@ -3,6 +3,7 @@ package com.chmouel.liseur.reader
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -218,6 +219,13 @@ class ReaderActivity : FragmentActivity() {
                                 ) {
                                     viewModel.lastLocator ?: s.initialLocator
                                 }
+                                // Every move the reader is sent on, counted
+                                // where both the screen and the link listener
+                                // below can say so. A tapped link is a jump
+                                // like any other, and a layout change settling
+                                // over it takes the reader back off the page
+                                // they asked for. See IssuedMoves.
+                                val moves = remember { IssuedMoves() }
                                 remember(s.navigatorFactory, columnMode, scrollMode) {
                                     s.navigatorFactory.createFragmentFactory(
                                         initialLocator = restoreTarget,
@@ -235,7 +243,19 @@ class ReaderActivity : FragmentActivity() {
                                             onFootnote = viewModel::showFootnote,
                                             onFollow = { link ->
                                                 viewModel.onJump()
-                                                navigator?.go(link, animated = false)
+                                                navigator?.let { nav ->
+                                                    val token = moves.issue(
+                                                        from = nav.currentLocator.value
+                                                            .restorePoint(),
+                                                        to = s.publication
+                                                            .locatorFromLink(link)
+                                                            ?.destination(),
+                                                        nowMs = SystemClock.elapsedRealtime(),
+                                                    )
+                                                    if (!nav.go(link, animated = false)) {
+                                                        moves.cancel(token)
+                                                    }
+                                                }
                                             },
                                             onExternal = { pendingExternalLink = it },
                                         ),
@@ -272,6 +292,7 @@ class ReaderActivity : FragmentActivity() {
                                 ReaderScreen(
                                     publication = s.publication,
                                     restoreTarget = restoreTarget,
+                                    moves = moves,
                                     prefsFlow = viewModel.prefs,
                                     readingTheme = readingTheme,
                                     typographyIsOwnFlow = viewModel.typographyIsOwn,

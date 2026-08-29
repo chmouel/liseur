@@ -105,6 +105,24 @@ class PageTurner(
     private val showingEnd: () -> Boolean = { false },
     private val onReachedEnd: () -> Unit = {},
     private val onLeaveEnd: () -> Unit = {},
+    /**
+     * Said as a turn is asked for, before the page has moved and long
+     * before Readium says it has, carrying the position being left so
+     * the arrival can be told from Readium republishing it. What is
+     * listening is the screen's record of the moves the reader has been
+     * sent on, which is what stops a layout change settling over the
+     * page they turned to.
+     */
+    private val onMoveIssued: (from: Locator?, to: Locator?) -> Int = { _, _ -> 0 },
+    /**
+     * Said when a turn that was announced turns out to move nothing —
+     * the navigator declining a `go`, the last page turning out to be
+     * the last. Without it the screen would go on waiting for an
+     * arrival that was never on its way, and refuse restores until it
+     * gave up. Given the token the announcement answered with, so that
+     * a probe coming back late cannot end a wait opened since.
+     */
+    private val onMoveDropped: (token: Int) -> Unit = {},
 ) {
     var navigator: OverflowableNavigator? = null
     var window: Window? = null
@@ -132,24 +150,33 @@ class PageTurner(
         }
         val generation = ++probeGeneration
         val nav = navigator ?: return
+        val token = onMoveIssued(nav.currentLocator.value, null)
         if (isScrolling()) {
-            scrollScreenful(nav, forward, generation)
+            scrollScreenful(nav, forward, generation, token)
             return
         }
         if (forward && isOnLastResource(nav)) {
             val probed = nav.currentLocator.value
             askIfLastContentVisible(nav) { atEnd ->
-                if (!probeStillHolds(generation, nav, probed)) return@askIfLastContentVisible
-                if (atEnd) revealEnd() else turnPaginated(nav, forward = true)
+                if (!probeStillHolds(generation, nav, probed)) {
+                    onMoveDropped(token)
+                    return@askIfLastContentVisible
+                }
+                if (atEnd) {
+                    onMoveDropped(token)
+                    revealEnd()
+                } else {
+                    turnPaginated(nav, forward = true, token = token)
+                }
             }
             return
         }
-        turnPaginated(nav, forward)
+        turnPaginated(nav, forward, token)
     }
 
-    private fun turnPaginated(nav: OverflowableNavigator, forward: Boolean) {
+    private fun turnPaginated(nav: OverflowableNavigator, forward: Boolean, token: Int) {
         if (!isAnimated()) {
-            navigate(nav, forward, animated = false)
+            navigate(nav, forward, animated = false, token = token)
             return
         }
         val win = window
@@ -159,11 +186,11 @@ class PageTurner(
         ) {
             // Rapid taps while a turn is animating jump instantly to
             // keep up with the reader's pace.
-            navigate(nav, forward, animated = !effect.isRunning)
+            navigate(nav, forward, animated = !effect.isRunning, token = token)
             return
         }
         copyPage(win, view) { bitmap ->
-            val moved = navigate(nav, forward, animated = false)
+            val moved = navigate(nav, forward, animated = false, token = token)
             val rtl = nav.overflow.value.readingProgression == ReadingProgression.RTL
             if (moved && bitmap != null) {
                 effect.start(bitmap, slideLeft = forward != rtl)
@@ -223,8 +250,10 @@ class PageTurner(
         nav: OverflowableNavigator,
         forward: Boolean,
         animated: Boolean,
+        token: Int,
     ): Boolean {
         val moved = if (forward) nav.goForward(animated) else nav.goBackward(animated)
+        if (!moved) onMoveDropped(token)
         // The last resource can still refuse to move even when the page
         // itself was not sure it was finished; that refusal is the end.
         if (forward && !moved && isOnLastResource(nav)) revealEnd()
@@ -288,9 +317,10 @@ class PageTurner(
         nav: OverflowableNavigator,
         forward: Boolean,
         generation: Long,
+        token: Int,
     ) {
         val web = visibleWebView(nav.publicationView) ?: run {
-            navigate(nav, forward, animated = false)
+            navigate(nav, forward, animated = false, token = token)
             return
         }
         val script = scrollScreenfulScript(
@@ -323,17 +353,23 @@ class PageTurner(
         val nav = navigator ?: return false
         val pub = publication ?: return false
         val readingOrder = pub.readingOrder
-        val index = readingOrder.indexOfFirstWithHref(nav.currentLocator.value.href)
-            ?: return false
+        val here = nav.currentLocator.value
+        val index = readingOrder.indexOfFirstWithHref(here.href) ?: return false
         val next = readingOrder.getOrNull(index + if (forward) 1 else -1) ?: run {
             if (forward) revealEnd()
             return false
         }
-        val locator = pub.locatorFromLink(next) ?: return nav.go(next, animated = false)
-        return nav.go(
-            if (forward) locator else locator.copyWithLocations(progression = 1.0),
-            animated = false,
-        )
+        // Announced where the chapter is known and not before: the
+        // returns above move nobody, and a step announced for one of
+        // them would have the screen waiting on an arrival that is not
+        // coming.
+        val locator = pub.locatorFromLink(next) ?: run {
+            val stepToken = onMoveIssued(here, null)
+            return nav.go(next, animated = false).also { if (!it) onMoveDropped(stepToken) }
+        }
+        val target = if (forward) locator else locator.copyWithLocations(progression = 1.0)
+        val stepToken = onMoveIssued(here, target)
+        return nav.go(target, animated = false).also { if (!it) onMoveDropped(stepToken) }
     }
 }
 
