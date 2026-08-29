@@ -76,6 +76,14 @@ data class StorageUse(val count: Int, val bytes: Long)
  * tested without standing up WorkManager and a database.
  */
 class BulkTransferGate(maxConcurrent: Int = DEFAULT_MAX_CONCURRENT) {
+    init {
+        // Semaphore(0) or a negative count would wait forever rather
+        // than throw, and that wait looks identical to a slow server
+        // from everywhere else in the app. Caught here, once, rather
+        // than as a batch that never starts.
+        require(maxConcurrent >= 1) { "maxConcurrent must be at least 1, was $maxConcurrent" }
+    }
+
     private val slots = Semaphore(maxConcurrent)
 
     /** Runs [block] once a transfer slot is free. */
