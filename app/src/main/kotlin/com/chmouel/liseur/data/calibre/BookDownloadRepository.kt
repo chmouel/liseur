@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
@@ -56,6 +58,41 @@ data class DownloadProgress(
 /** What downloaded books are costing in device storage. */
 data class StorageUse(val count: Int, val bytes: Long)
 
+/**
+ * Limits how many bulk-download transfers may pull bytes over the
+ * network at once.
+ *
+ * WorkManager's own executor is happy to start many [BookDownloadWorker]s
+ * in parallel once their constraints are met, which for "download
+ * everything" is at once. That is fine for the bookkeeping each does
+ * before and after, but every one of them opens its own connection to
+ * the same server for the transfer itself, and a modest self-hosted
+ * instance answering four or more of those at once is exactly what
+ * turns a slow response into a dropped one (#89). A single download the
+ * reader asked for by name never touches this: it has no batch to share
+ * a server with.
+ *
+ * Plain Kotlin, not a repository method, so the limit itself can be
+ * tested without standing up WorkManager and a database.
+ */
+class BulkTransferGate(maxConcurrent: Int = DEFAULT_MAX_CONCURRENT) {
+    private val slots = Semaphore(maxConcurrent)
+
+    /** Runs [block] once a transfer slot is free. */
+    suspend fun <T> withSlot(block: suspend () -> T): T = slots.withPermit { block() }
+
+    companion object {
+        /**
+         * Kept low on purpose: this is a courtesy to whatever the reader
+         * is self-hosting, not a limit the device needs. Two lets a
+         * finished transfer's teardown overlap with the next one
+         * starting, without asking a small server to answer a handful of
+         * large requests in parallel.
+         */
+        const val DEFAULT_MAX_CONCURRENT = 2
+    }
+}
+
 /** Starts, watches and undoes book downloads. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BookDownloadRepository(
@@ -64,8 +101,13 @@ class BookDownloadRepository(
     private val bookRemoval: BookRemoval,
     private val scope: CoroutineScope,
     private val bulkStore: BulkDownloadStore = BulkDownloadStore(context),
+    private val bulkTransferGate: BulkTransferGate = BulkTransferGate(),
 ) {
     private val workManager get() = WorkManager.getInstance(context)
+
+    /** Runs [block] once a bulk-download transfer slot is free. */
+    suspend fun <T> withBulkTransferSlot(block: suspend () -> T): T =
+        bulkTransferGate.withSlot(block)
 
     val downloaded: Flow<List<Book>> = bookDao.observeDownloaded()
 
