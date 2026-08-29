@@ -146,7 +146,8 @@ class ReaderActivity : FragmentActivity() {
                 LiseurTheme(
                     darkTheme = appIsDark,
                     dynamicColor = settings.dynamicColor,
-                    monochrome = LocalEInk.current,
+                    eInk = LocalEInk.current,
+                    colorEInk = settings.colorEInk,
                 ) {
                     // Nothing may touch the view model until the book has a
                     // name, because building it is what fixes that name.

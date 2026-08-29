@@ -500,6 +500,8 @@
     <string name="settings_scroll_mode_detail">The chapter runs on as one long page instead of being broken into pages you turn. A single book can be set apart from the reader\'s own switch.</string>
     <string name="settings_eink">E-ink screen</string>
     <string name="settings_eink_detail">Drops animation, which electronic paper smears rather than draws. Detected automatically; set it yourself if the guess is wrong.</string>
+    <string name="settings_color_eink">Color E-ink</string>
+    <string name="settings_color_eink_detail">Keep useful accents and highlight colors with a small, static palette.</string>
     <string name="eink_auto">Auto</string>
     <string name="eink_on">On</string>
     <string name="eink_off">Off</string>
