@@ -41,7 +41,7 @@ usage() {
 Usage:
   hack/release [--no-fdroid] [--no-play]
   hack/release [-n] [--no-fdroid] [--no-play] VERSION RELEASE NOTES...
-  hack/release [-n] --test [VERSION]
+  hack/release [-n] [--no-play] --test [VERSION]
   hack/release --fdroid-only VERSION
   hack/release [--no-play] --sync-secrets
 
@@ -56,6 +56,7 @@ Examples:
   hack/release --no-play 0.2.2 "Leave Google Play out of this one."
   hack/release --test
   hack/release -n --test 0.3.0
+  hack/release --no-play --test 0.3.0
   hack/release --fdroid-only 0.2.1
   hack/release --sync-secrets
 
@@ -67,12 +68,13 @@ answer that has no default: picking a version and writing a changelog
 still need a terminal, so a run with no VERSION refuses either way.
 
 --test builds the same signed APK and publishes it as a GitHub
-prerelease, without telling F-Droid or Google Play about it. Because it
+prerelease and uploads it to the Google Play testing tracks (unless
+--no-play is given), without telling F-Droid about it. Because it
 carries the release signature, it installs over a copy that came from
-F-Droid, and F-Droid updates over it once a real release goes out above
-its versionCode. VERSION is the version being worked towards (the next
-patch by default) and the tag numbers the attempts: v0.3.0-test.1, then
-v0.3.0-test.2. The version bump is committed but never pushed to a
+F-Droid or Google Play, and F-Droid updates over it once a real release
+goes out above its versionCode. VERSION is the version being worked towards
+(the next patch by default) and the tag numbers the attempts: v0.3.0-test.1,
+then v0.3.0-test.2. The version bump is committed but never pushed to a
 branch — only the tag that points at it — so main keeps a history of
 real releases. There is no changelog to write and no local test, lint or
 reproducibility run: the point of a test release is to be quick.
@@ -509,7 +511,12 @@ create_test_release() {
         "$version" "$version_code" "$(git rev-parse --short HEAD)" \
         "$(git branch --show-current || printf 'detached')"
     printf 'It is signed with the release key and published as a GitHub\n'
-    printf 'prerelease. F-Droid and Google Play are not told about it.\n'
+    if [[ "$skip_play" == false ]]; then
+        printf 'prerelease, and uploaded to the Google Play testing tracks.\n'
+        printf 'F-Droid is not told about it.\n'
+    else
+        printf 'prerelease. F-Droid and Google Play are not told about it.\n'
+    fi
     confirm
 
     sync_release_secrets
@@ -951,14 +958,13 @@ if [[ "$sync_secrets_only" == true ]]; then
     exit 0
 fi
 
-# A test release goes nowhere near F-Droid or Play, so it needs neither
-# their tooling nor their credentials, and none of the checks that keep
-# main a straight line of releases apply to a tag that is not on it.
+# A test release goes nowhere near F-Droid, so it needs none of its
+# tooling or credentials, and none of the checks that keep main a
+# straight line of releases apply to a tag that is not on it.
 if [[ "$test_release" == true ]]; then
     [[ "$fdroid_only" == false ]] ||
         die "--test and --fdroid-only are mutually exclusive"
     [[ $# -le 1 ]] || die "--test takes at most a version"
-    skip_play=true
 
     for command in git gh jq sed awk pass curl python3; do
         require_command "$command"

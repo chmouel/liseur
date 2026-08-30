@@ -227,12 +227,14 @@ where a handful of people can install it from and nowhere else:
 ```bash
 hack/release --test          # the next patch: v0.9.4-test.1, then .2
 hack/release --test 0.10.0   # a version you are working towards
+hack/release --no-play --test # skip Google Play testing tracks
 ```
 
-It publishes a GitHub **prerelease** with the signed APK attached, and
-stops there: no F-Droid merge request, no Play upload, no changelog to
+It publishes a GitHub **prerelease** with the signed APK attached, uploads
+the app bundle to Google Play's **internal** and **closed** (`Testing`)
+tracks, and stops there: no F-Droid merge request, no changelog to
 write, and no local test, lint or reproducibility run. The point of a
-test release is to be quick.
+test release is to be quick. Pass `--no-play` to leave Google Play out.
 
 The signature is what makes it worth doing. It is the one F-Droid
 publishes under, through the dual-signing flow, so the APK installs

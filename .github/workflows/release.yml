@@ -46,15 +46,16 @@ jobs:
           version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
             app/build.gradle.kts)
           # A test release (hack/release --test) is built and signed like
-          # any other; what it skips is the two stores. It updates no
-          # listing, so it carries no changelog, and nothing below asks
-          # it for one.
+          # any other; what it skips is F-Droid. It updates no
+          # F-Droid listing, so it carries no F-Droid changelog, and
+          # nothing below asks it for one.
           if [[ "$version" == *-test.* ]]; then
             printf 'prerelease=true\n' >> "$GITHUB_OUTPUT"
           else
             printf 'prerelease=false\n' >> "$GITHUB_OUTPUT"
             test -s "fastlane/metadata/android/en-US/changelogs/$version_code.txt"
           fi
+          printf 'version_code=%s\n' "$version_code" >> "$GITHUB_OUTPUT"
 
       - name: Configure release signing
         env:
@@ -113,8 +114,8 @@ jobs:
               printf 'A test build. It carries the release signature, so it\n'
               printf 'installs over a copy that came from F-Droid, and F-Droid\n'
               printf 'updates over it once the next real release reaches it.\n\n'
-              printf 'It is not on F-Droid or Google Play, and it is not the\n'
-              printf 'version to install if you are not looking for this one.\n\n'
+              printf 'It is on Google Play testing tracks (Internal/Testing) and\n'
+              printf 'GitHub prerelease, but not on F-Droid or Google Play production.\n\n'
               printf '### Commits%s\n\n' "${previous:+ since $previous}"
               git log --no-decorate --pretty='- %s' \
                 --invert-grep --grep='^chore: test release ' "$range"
@@ -155,14 +156,10 @@ jobs:
       - name: Check for the Play credential
         id: play
         env:
-          PRERELEASE: ${{ steps.version.outputs.prerelease }}
           SERVICE_ACCOUNT: ${{ secrets.LISEUR_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-          if [[ "$PRERELEASE" == true ]]; then
-            printf 'enabled=false\n' >> "$GITHUB_OUTPUT"
-            printf 'A test release; skipping Google Play.\n'
-          elif [[ -n "$SERVICE_ACCOUNT" ]]; then
+          if [[ -n "$SERVICE_ACCOUNT" ]]; then
             printf 'enabled=true\n' >> "$GITHUB_OUTPUT"
           else
             printf 'enabled=false\n' >> "$GITHUB_OUTPUT"
@@ -183,7 +180,10 @@ jobs:
         if: steps.play.outputs.enabled == 'true'
         continue-on-error: true
         env:
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          RELEASE_TAG: ${{ github.ref_name }}
           SERVICE_ACCOUNT: ${{ secrets.LISEUR_PLAY_SERVICE_ACCOUNT_JSON }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           set -euo pipefail
           key="$RUNNER_TEMP/play-service-account.json"
@@ -191,5 +191,9 @@ jobs:
           # outlive this step whatever fastlane makes of it.
           trap 'rm -f "$key"' EXIT
           (umask 077 && printf '%s' "$SERVICE_ACCOUNT" > "$key")
+          changelog="fastlane/metadata/android/en-US/changelogs/$VERSION_CODE.txt"
+          if [[ "$PRERELEASE" == true && ! -f "$changelog" ]]; then
+            printf 'Test release %s\n' "$RELEASE_TAG" > "$changelog"
+          fi
           gem install fastlane -v 2.238.0 --no-document
           SUPPLY_JSON_KEY="$key" fastlane android internal
