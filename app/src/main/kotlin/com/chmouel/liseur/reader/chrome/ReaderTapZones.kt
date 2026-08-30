@@ -21,16 +21,24 @@ import kotlin.math.abs
  * └─────────┴────────┴────────┘
  * ```
  *
+ * drawn for a left-to-right book on the standard preset.
+ *
  * Tapping the top strip or the center of the page gently reveals the
- * chrome (menu), as fullscreen reading apps do; the left side goes
- * back a page and the rest goes forward. When the chrome is showing,
- * any tap on the page dismisses it. Page turns are delegated to
- * [onTurnPage] so they can run the page-turn effect.
+ * chrome (menu), as fullscreen reading apps do; the side the book came
+ * from goes back a page and the rest goes forward, which is the left of
+ * the page on a left-to-right book and the right of it on a
+ * right-to-left one. When the chrome is showing, any tap on the page
+ * dismisses it. Page turns are delegated to [onTurnPage] so they can
+ * run the page-turn effect.
  *
  * Which side is which is the reader's to choose: [isSwapped] is the
- * Settings → Reading preset, and turns the left of the page into the
- * forward one for a reader holding the phone in the other hand. The
- * chrome zones do not move — only the two sides trade places.
+ * Settings → Reading preset, and puts the forward turn under the other
+ * thumb for a reader holding the phone in the other hand. It composes
+ * with reading direction rather than replacing it: on a left-to-right
+ * book that moves forward to the left, and on a right-to-left one,
+ * which already turns forward there, it moves forward back to the
+ * right. The chrome zones do not move — only the two sides trade
+ * places.
  *
  * A book read by scrolling has no page to turn, so the whole page
  * becomes the chrome zone and the text is moved by dragging it. Side

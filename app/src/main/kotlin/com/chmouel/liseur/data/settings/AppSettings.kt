@@ -78,10 +78,12 @@ enum class EInkMode(val id: String) {
 /**
  * Which side of a paginated page turns forward.
  *
- * [STANDARD] is the layout the app has always had: the left of the page
- * goes back, the rest goes forward. [SWAPPED] puts the forward turn
- * under the other thumb, for a reader holding the phone in the other
- * hand — every page turn otherwise reaches across the screen.
+ * [STANDARD] is the layout the app has always had: the side the book
+ * came from goes back, the rest goes forward — the left of the page on
+ * a left-to-right book, the right of it on a right-to-left one.
+ * [SWAPPED] puts the forward turn under the other thumb, for a reader
+ * holding the phone in the other hand — every page turn otherwise
+ * reaches across the screen.
  *
  * "The other thumb" and not "the left side": a book that reads right to
  * left already turns forward on the left, so [SWAPPED] puts forward back
