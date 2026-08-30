@@ -135,9 +135,10 @@ fun ReadingAppearanceScreen(
                     lineHeight = prefs.lineHeight,
                     pageMargins = prefs.pageMargins,
                     columnMode = prefs.columnMode,
-                    // Unlike the sheet, there is no book here to be
-                    // scrolled, so the count always has something to
-                    // divide and the control is always worth offering.
+                    // The sheet hides this in a scrolled book, where
+                    // columns don't apply. There is no book here to
+                    // check, so the preference is always offered; the
+                    // reader surface decides whether to honor it.
                     showColumns = true,
                     onLineHeightChanged = onLineHeight,
                     onPageMarginsChanged = onPageMargins,
