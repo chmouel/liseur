@@ -22,9 +22,7 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
   </tr>
 </table>
 
-<sub><a href="docs/SCREENSHOTS.md">More screenshots</a> — the notebook, search,
-definitions, series, reading stats, the dark theme and a tablet. Captures use
-<a href="https://standardebooks.org">Standard Ebooks</a> editions (public domain).</sub>
+<sub><a href="docs/SCREENSHOTS.md">More screenshots</a> here</sub>
 
 ## About Liseur
 
