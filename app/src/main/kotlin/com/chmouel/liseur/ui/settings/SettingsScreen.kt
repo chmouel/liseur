@@ -74,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.WiktionaryEditions
@@ -95,6 +96,7 @@ fun SettingsScreen(
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
     onVolumeKeys: (Boolean) -> Unit,
+    onTapZones: (TapZones) -> Unit,
     onEInkMode: (EInkMode) -> Unit,
     onColorEInk: (Boolean) -> Unit,
     onVendorRefresh: (Boolean) -> Unit,
@@ -277,6 +279,15 @@ fun SettingsScreen(
                         onCheckedChange = onVolumeKeys,
                     )
                     RowDivider()
+                    ChipRow(
+                        title = stringResource(R.string.settings_tap_zones),
+                        subtitle = stringResource(R.string.settings_tap_zones_detail),
+                        options = TapZones.entries,
+                        selected = settings.tapZones,
+                        label = { stringResource(it.label) },
+                        onSelected = onTapZones,
+                    )
+                    RowDivider()
                     SwitchRow(
                         title = stringResource(R.string.settings_resume),
                         subtitle = stringResource(R.string.settings_resume_detail),
@@ -379,6 +390,12 @@ private val EInkMode.label: Int
         EInkMode.AUTO -> R.string.eink_auto
         EInkMode.ON -> R.string.eink_on
         EInkMode.OFF -> R.string.eink_off
+    }
+
+private val TapZones.label: Int
+    get() = when (this) {
+        TapZones.STANDARD -> R.string.tap_zones_standard
+        TapZones.SWAPPED -> R.string.tap_zones_swapped
     }
 
 private val DefinitionTarget.label: Int

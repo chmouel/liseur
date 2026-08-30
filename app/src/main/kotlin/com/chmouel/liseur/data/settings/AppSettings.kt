@@ -75,6 +75,51 @@ enum class EInkMode(val id: String) {
     }
 }
 
+/**
+ * Which side of a paginated page turns forward.
+ *
+ * [STANDARD] is the layout the app has always had: the side the book
+ * came from goes back, the rest goes forward — the left of the page on
+ * a left-to-right book, the right of it on a right-to-left one.
+ * [SWAPPED] puts the forward turn under the other thumb, for a reader
+ * holding the phone in the other hand — every page turn otherwise
+ * reaches across the screen.
+ *
+ * "The other thumb" and not "the left side": a book that reads right to
+ * left already turns forward on the left, so [SWAPPED] puts forward back
+ * on the right there. The preset says which hand is holding the phone,
+ * and leaves the book to say where its next page is.
+ *
+ * Only two, and deliberately: a zone editor is a settings hobby, and a
+ * third preset has to earn its place by describing a hand position that
+ * actually occurs. See `docs/adr/0009-tap-zone-customization.md`.
+ *
+ * The centre and the top strip still reveal the chrome under both, the
+ * volume keys still go forward on down, and a book read by scrolling has
+ * no page sides to tap in the first place.
+ */
+enum class TapZones(val id: String) {
+    STANDARD("standard"),
+    SWAPPED("swapped"),
+    ;
+
+    /**
+     * Whether the sides are the other way round.
+     *
+     * Read against reading direction rather than instead of it: an RTL
+     * book already turns forward on the left, and swapping it puts
+     * forward back on the right. The composition is in
+     * [com.chmouel.liseur.reader.chrome.ReaderTapZones.forward].
+     */
+    val swapped: Boolean get() = this == SWAPPED
+
+    companion object {
+        val Default = STANDARD
+
+        fun fromId(id: String?): TapZones = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
 /** Where the Define action sends selected text. */
 enum class DefinitionTarget(val id: String) {
     BUILT_IN("built_in"),
@@ -97,6 +142,7 @@ enum class DefinitionTarget(val id: String) {
  *   On by default where the system can do it; the hand-made palette is
  *   what you get back by turning it off, and what older phones always get.
  * @param volumeKeysTurnPages Volume keys page forward and back while reading.
+ * @param tapZones Which side of a paginated page turns forward.
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param keepScreenOn The screen stays awake while a book is open. Off
  *   until asked for: it costs battery, and it overrides a device setting
@@ -128,6 +174,7 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
     val dynamicColor: Boolean = true,
     val volumeKeysTurnPages: Boolean = true,
+    val tapZones: TapZones = TapZones.Default,
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = false,
     val scrollMode: Boolean = false,
@@ -176,6 +223,7 @@ class AppSettingsRepository(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
+        val TAP_ZONES = stringPreferencesKey("tap_zones")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val SCROLL_MODE = booleanPreferencesKey("scroll_mode")
@@ -214,6 +262,7 @@ class AppSettingsRepository(private val context: Context) {
             themeMode = ThemeMode.fromId(p[Keys.THEME_MODE]),
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
             volumeKeysTurnPages = p[Keys.VOLUME_KEYS] ?: true,
+            tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: false,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,
@@ -255,6 +304,10 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setVolumeKeysTurnPages(enabled: Boolean) {
         context.appSettingsStore.edit { it[Keys.VOLUME_KEYS] = enabled }
+    }
+
+    suspend fun setTapZones(zones: TapZones) {
+        context.appSettingsStore.edit { it[Keys.TAP_ZONES] = zones.id }
     }
 
     suspend fun setResumeLastBook(enabled: Boolean) {
