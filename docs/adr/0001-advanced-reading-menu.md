@@ -72,10 +72,13 @@ cannot be empty. The rows that do not apply still hide themselves —
 auto-scroll only in a scrolled book, the page-turn animation only in a
 paginated one, columns only when there is width for two.
 
-Settings → Reading appearance shows the same controls without a book,
-so it carries the same split: the six live behind a collapsed
-**Advanced** section there. A reader who learned where the margins are
-in one place does not have to learn it again in the other.
+Settings → Reading appearance shows the same six controls without a
+book, but not behind a collapsed section: that screen has nothing else
+competing for room, so there is no empty-sheet problem to avoid, and a
+reader who came looking for the margins should not have to open
+anything to find them. The typography sheet still collapses them, being
+the surface that stays Kindle-simple; the settings screen just lists
+them.
 
 New reading settings default to Advanced. `AGENTS.md` carries that as a
 convention, so the next reasonable row has to argue its way onto the
