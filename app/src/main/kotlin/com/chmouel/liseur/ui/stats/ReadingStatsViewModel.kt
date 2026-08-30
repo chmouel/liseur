@@ -246,29 +246,30 @@ class ReadingStatsViewModel(
                 coverUrl = book.coverUrl,
             )
         }
+        val spans = sessions.map {
+            SessionSpan(
+                bookUrl = it.bookUrl,
+                startedAt = it.startedAt,
+                durationMs = it.durationMs,
+                lastReadAt = it.lastCheckpointAt,
+                uploaded = it.uploadedAt != null,
+                startProgression = it.startProgression,
+                endProgression = it.endProgression,
+            )
+        }
         LocalStats(
             stats = readingStats(
-                sessions = sessions.map {
-                    SessionSpan(
-                        bookUrl = it.bookUrl,
-                        startedAt = it.startedAt,
-                        durationMs = it.durationMs,
-                        lastReadAt = it.lastCheckpointAt,
-                        uploaded = it.uploadedAt != null,
-                        startProgression = it.startProgression,
-                        endProgression = it.endProgression,
-                    )
-                },
+                sessions = spans,
                 books = statsBooks,
                 zone = zone(),
                 today = today(),
                 range = range,
             ),
             books = statsBooks,
-            firstReadAtByUrl = sessions
+            firstReadAtByUrl = spans
                 .filter { it.durationMs > 0 }
                 .groupBy { it.bookUrl }
-                .mapValues { (_, spans) -> spans.minOf { it.startedAt } },
+                .mapValues { (_, sittings) -> sittings.minOf { it.startedAt } },
         )
     }
 
