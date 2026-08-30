@@ -17,9 +17,14 @@ size, a few layout choices, done.
 ## Decision
 
 The typography sheet gains exactly one new row, **Advanced**, at the
-bottom. Everything that genuinely needs a setting lives behind it.
-Nothing else in the app grows a menu, a screen or a piece of chrome for
-these features.
+bottom. Everything that genuinely needs a reading-comfort setting lives
+behind it, and nothing in the reader grows a second menu, screen or
+piece of chrome for these features.
+
+A feature that turns out not to be about reading comfort is not
+smuggled in behind Advanced either: it goes to the settings surface it
+actually belongs to, next to the setting it is a sibling of. That is a
+row on a screen the app already has, never a new one.
 
 Most of the nine do not even get a row there, because they can be a
 gesture or fold into something that already exists:
@@ -33,13 +38,18 @@ gesture or fold into something that already exists:
 - Translation ([ADR 10](0010-translation-on-selection.md)) is one
   action in the selection popup, switched on from the dictionary
   settings that already exist.
+- The tap-zone preset ([ADR 9](0009-tap-zone-customization.md)) is a
+  chip row in Settings → Reading, beside the volume-key switch it is
+  the thumb's version of. Not a reading-comfort setting after all: it
+  is how the device is held, set once when the app is set up, and it
+  belongs with the other page-turning hardware rather than with the
+  page's appearance.
 
 That leaves the Advanced sheet holding what actually needs a home:
 fine typography ([ADR 2](0002-typography-fine-tuning.md)), read-aloud
 ([ADR 3](0003-read-aloud-tts.md)), user fonts
-([ADR 4](0004-user-imported-fonts.md)), auto-scroll
-([ADR 6](0006-auto-scroll.md)) and the tap-zone preset
-([ADR 9](0009-tap-zone-customization.md)).
+([ADR 4](0004-user-imported-fonts.md)) and auto-scroll
+([ADR 6](0006-auto-scroll.md)).
 
 ## Consequences
 
@@ -52,8 +62,8 @@ first, not a navigation destination: dismissing it lands back on the
 typography sheet, and dismissing that lands back on the page.
 
 It exists as of auto-scroll ([ADR 6](0006-auto-scroll.md)), which was
-the first of the five to be built and so brought the sheet with it. The
-other four arrive with their own issues.
+the first of the four to be built and so brought the sheet with it. The
+other three arrive with their own issues.
 
 The typography sheet did grow anyway, one reasonable row at a time,
 until it carried eleven controls and the Advanced row held one. Six of

@@ -50,9 +50,9 @@ import com.chmouel.liseur.ui.windowWidth
  * text block, what the footer says, whether pages turn with an
  * animation, whether the page moves on its own, and whether any of it is
  * this book's alone. The rest of what belongs here — finer typography,
- * read-aloud, imported fonts, tap-zone presets — arrives with its own
- * issue, and the shape of the sheet is the point: five rows, or ten, it
- * is the same sheet and the reader learns it once.
+ * read-aloud, imported fonts — arrives with its own issue, and the shape
+ * of the sheet is the point: five rows, or ten, it is the same sheet and
+ * the reader learns it once.
  *
  * [scrolling] is whether the text runs rather than turns, which is not
  * only the reader's own choice: vertical text is laid out that way
