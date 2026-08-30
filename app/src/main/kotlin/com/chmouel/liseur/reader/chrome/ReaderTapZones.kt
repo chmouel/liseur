@@ -34,11 +34,11 @@ import kotlin.math.abs
  * Which side is which is the reader's to choose: [isSwapped] is the
  * Settings → Reading preset, and puts the forward turn under the other
  * thumb for a reader holding the phone in the other hand. It composes
- * with reading direction rather than replacing it: on a left-to-right
- * book that moves forward to the left, and on a right-to-left one,
- * which already turns forward there, it moves forward back to the
- * right. The chrome zones do not move — only the two sides trade
- * places.
+ * with reading direction rather than replacing it: swapping a
+ * left-to-right book moves the forward zone from the right of the page
+ * to the left, and swapping a right-to-left one, which by default turns
+ * forward on the left, moves it back to the right. The chrome zones do
+ * not move — only the two sides trade places.
  *
  * A book read by scrolling has no page to turn, so the whole page
  * becomes the chrome zone and the text is moved by dragging it. Side
