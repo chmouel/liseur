@@ -564,14 +564,18 @@ class ReadingStatsViewModelTest {
             knownBooks = known,
             serverRecent = null,
             serverBooks = mapOf("old" to one, "new" to one),
+            // The old URL was begun before the window the rows describe;
+            // only the all-time map remembers it.
+            firstReadAtByUrl = mapOf("old" to 5L, "new" to 300L),
         )
 
         assertEquals(1, merged.books.size)
         assertEquals("old", merged.books.single().bookUrl)
         assertEquals(50 * 60_000L, merged.books.single().totalMs)
         // The book was begun when its earliest URL was first opened —
-        // moving the file does not restart its history.
-        assertEquals(10L, merged.books.single().firstReadAt)
+        // moving the file does not restart its history, and a start
+        // older than the window is not forgotten by looking at a week.
+        assertEquals(5L, merged.books.single().firstReadAt)
         assertEquals(50 * 60_000L, merged.totalMs)
     }
 

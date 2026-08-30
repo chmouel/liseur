@@ -217,6 +217,15 @@ class ReadingStatsViewModel(
     private data class LocalStats(
         val stats: ReadingStats,
         val books: Map<String, StatsBook>,
+        /**
+         * When each URL's first sitting began, over everything on record.
+         *
+         * Kept beside the ranged stats because a row only exists for a
+         * URL with reading inside the window: a moved file whose old URL
+         * was last read before the span would otherwise lose the date it
+         * was begun to the range the reader happens to be looking at.
+         */
+        val firstReadAtByUrl: Map<String, Long>,
     )
 
     private val local = combine(
@@ -256,6 +265,10 @@ class ReadingStatsViewModel(
                 range = range,
             ),
             books = statsBooks,
+            firstReadAtByUrl = sessions
+                .filter { it.durationMs > 0 }
+                .groupBy { it.bookUrl }
+                .mapValues { (_, spans) -> spans.minOf { it.startedAt } },
         )
     }
 
@@ -266,7 +279,13 @@ class ReadingStatsViewModel(
         booksAcrossDevices,
         _range,
     ) { local, server, recent, serverBooks, range ->
-        val merged = mergeDashboard(local.stats, local.books, recent, serverBooks)
+        val merged = mergeDashboard(
+            local.stats,
+            local.books,
+            recent,
+            serverBooks,
+            local.firstReadAtByUrl,
+        )
         ReadingStatsUiState.Ready(
             stats = merged,
             headline = mergeHeadline(merged, local.stats, server, range, today()),
@@ -389,6 +408,7 @@ class ReadingStatsViewModel(
             knownBooks: Map<String, StatsBook>,
             serverRecent: List<InsightDay>?,
             serverBooks: Map<String, WorkInsights>?,
+            firstReadAtByUrl: Map<String, Long> = emptyMap(),
         ): ReadingStats {
             val mergedBooks = local.books.associateBy { it.bookUrl }.toMutableMap()
             serverBooks.orEmpty().entries
@@ -424,7 +444,11 @@ class ReadingStatsViewModel(
                         lastReadAt = lastReadAt,
                         // The server has no started-at; the earliest local
                         // start across the work's URLs is the only source.
-                        firstReadAt = rows.mapNotNull { it.firstReadAt }.minOrNull(),
+                        // Read from the all-time map first: a URL whose
+                        // reading all predates the window has no row to
+                        // carry its date.
+                        firstReadAt = urls.mapNotNull { firstReadAtByUrl[it] }.minOrNull()
+                            ?: rows.mapNotNull { it.firstReadAt }.minOrNull(),
                         progression = metadata.progression,
                         finished = metadata.finished,
                         sessions = maxOf(
