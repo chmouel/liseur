@@ -89,10 +89,12 @@ target wrapping them — run `make help` for the short list. See
   the app, the fdroiddata metadata, any open merge request with its
   pipeline state, and what sits on each Google Play track. It also says
   when the closed track that testers are recruited into falls behind
-  internal, and prints the opt-in link they are handed. Everything
-  but the Play section reads public sources; Play has no public answer
-  while the app is in testing, so that one signs a token with
-  the service account from `pass` and is skipped with a line when it
+  internal, who may install from it — which countries it reaches, and
+  whether its testers come from a Google Group or from an email list the
+  API cannot read — and prints the opt-in link they are handed.
+  Everything but the Play section reads public sources; Play has no
+  public answer while the app is in testing, so that one signs a token
+  with the service account from `pass` and is skipped with a line when it
   cannot. Backs `make store-status`.
 - **`verify-reproducible`** — Builds the release APK twice from two
   independent clean checkouts and diffs them byte for byte, the check

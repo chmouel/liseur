@@ -329,16 +329,53 @@ these are the things that quietly turn a correct opt-in link into "this
 app isn't available":
 
 - The closed `Testing` track needs an **email list** attached, holding
-  the Google account each tester uses *on their phone*. A Google Group
-  works too, but adds an approval step that nobody sees fail: an
-  unapproved join request and a missing address look identical from the
-  tester's side.
-- Country availability for the track has to include the countries
-  testers are writing from.
+  the Google account each tester uses *on their phone*. `hack/store-status`
+  says which of the two kinds of list the track is on, but it cannot say
+  who is on an email list: `edits.testers` models only Google Groups, and
+  its own reference says email lists are not supported by the resource.
+  That address goes on by hand in the console, and nothing here can do it
+  for you.
+- **A Google Group is not an addition to that list, it is a replacement.**
+  The console offers Email and Google Groups as one choice, not two, and
+  the API has only a `googleGroups[]` field. Attaching a group cuts off
+  every tester already on the email list until each of them joins it,
+  which restarts the fourteen-day clock this whole exercise is running
+  down. Two things are worth knowing before reaching for one anyway: the
+  trap that made the group fail before is avoidable, because a consumer
+  group's owner can *directly* add members rather than wait on join
+  requests, but a group still buys no automation — consumer
+  `@googlegroups.com` membership has no API of any kind, Admin SDK and
+  Cloud Identity both being Workspace-only, so it moves the clicking from
+  one web UI to another.
+- Country availability is **not** the reason, and has not been for as
+  long as anyone has been asking. The track is open to 176 named
+  countries *and* to the rest of the world, so there is no country left
+  over to be missing; `hack/store-status` prints this outright so the
+  question stops being guessed at. Russia is on the list and works: Google
+  paused Play *billing* there in 2022 and stopped paying developers with
+  Russian bank accounts in 2024, and both notices say in terms that free
+  apps still download. Only North Korea and Syria are absent, which is
+  Google's sanction policy rather than a switch in the console.
+  This is track-level console state, and the release carries no
+  `countryTargeting` of its own, which is why a `supply` upload has never
+  disturbed it.
 - The track's release must be `completed`, not draft. `hack/store-status`
   prints the status of each one.
 - Adding an address is not instant. Play takes a few hours to
-  propagate, so a tester told to try again should be told to wait.
+  propagate, and up to a day or two to move the opted-in count, so a
+  tester told to try again should be told to wait.
+- If the store still says the app is not available after all that, the
+  usual cause is on the tester's side: the account signed into the Play
+  Store on the phone is not the address that was added. A browser signed
+  into a second Google account looks exactly the same.
+
+The service account holds *Release to testing tracks*, which covers
+everything in this repository: uploads, promotions, and every read
+`hack/store-status` makes. It deliberately does not hold *Manage testing
+tracks and edit tester lists* (`CAN_MANAGE_TRACK_USERS_GLOBAL`), the
+permission `edits.testers.update` would need — nothing automated has any
+business rewriting who may install the app, and while the track runs off
+an email list that call could not help anyway.
 
 Only the changelog is pushed from the repository. The store listing is
 edited in the console, because Play holds declarations that no file here

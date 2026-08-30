@@ -26,6 +26,11 @@ readonly PLAY_SCOPE="https://www.googleapis.com/auth/androidpublisher"
 # twelve Play wants before a personal account may publish.
 readonly PLAY_CLOSED_TRACK="Testing"
 readonly PLAY_OPT_IN_URL="https://play.google.com/apps/testing/$APP_ID"
+# Consulted only when the track is not open to the rest of the world,
+# and then only to name what a tester would find missing. Neither KP nor
+# SY belongs here: Google distributes to neither at all, so their
+# absence is sanction policy rather than a switch anyone can throw.
+readonly PLAY_COUNTRY_WATCHLIST='["BR","BY","DE","FR","GB","ID","IN","RU","TR","UA","US"]'
 
 die() {
     printf 'error: %s\n' "$*" >&2
@@ -77,32 +82,87 @@ play_access_token() (
 )
 
 # Reading what is on a track goes through an edit, because the API
-# offers no other way to list them. It is opened, read, and deleted
-# without ever being committed, so the listing is not touched.
-play_tracks() {
-    local token=$1
-    local edit tracks
+# offers no other way to list them. One edit serves every read below and
+# is deleted without ever being committed, so the listing is not touched.
+play_edit_open() {
+    curl -fsS --max-time 30 -X POST \
+        -H "Authorization: Bearer $1" -H "Content-Length: 0" \
+        "$PLAY_API/applications/$APP_ID/edits" | jq -er '.id // empty'
+}
 
-    edit=$(curl -fsS --max-time 30 -X POST \
-        -H "Authorization: Bearer $token" -H "Content-Length: 0" \
-        "$PLAY_API/applications/$APP_ID/edits" | jq -er '.id // empty') ||
-        return 1
+play_edit_close() {
+    curl -fsS --max-time 30 -X DELETE -H "Authorization: Bearer $1" \
+        "$PLAY_API/applications/$APP_ID/edits/$2" >/dev/null 2>&1 || true
+}
 
-    tracks=$(curl -fsS --max-time 30 -H "Authorization: Bearer $token" \
-        "$PLAY_API/applications/$APP_ID/edits/$edit/tracks") || tracks=''
+# One GET under the open edit. Every caller reads an empty answer as
+# "could not tell", so a section that fails costs its own line rather
+# than the rest of the report.
+play_get() {
+    curl -fsS --max-time 30 -H "Authorization: Bearer $1" \
+        "$PLAY_API/applications/$APP_ID/edits/$2/$3" 2>/dev/null
+}
 
-    curl -fsS --max-time 30 -X DELETE -H "Authorization: Bearer $token" \
-        "$PLAY_API/applications/$APP_ID/edits/$edit" >/dev/null 2>&1 || true
+# Who may install it, country-wise. This is track-level console state
+# that an upload never touches, which is why it outlives every release,
+# and it is the first thing a tester blames when the store tells them
+# the app is not available — usually wrongly. "Rest of the world" being
+# on settles the question by itself: there is no country left over to be
+# missing, so the watchlist is only worth consulting when it is off.
+report_play_countries() {
+    local countries=$1
 
-    [[ -n "$tracks" ]] || return 1
-    printf '%s' "$tracks"
+    if [[ -z "$countries" ]]; then
+        printf '  countries: could not be read\n'
+        return
+    fi
+
+    printf '%s' "$countries" | jq -r --argjson watch "$PLAY_COUNTRY_WATCHLIST" '
+        [(.countries // [])[].countryCode] as $codes
+        | if .restOfWorld then
+              "  countries: all of them — \($codes | length) named and rest of"
+              + " the world is on, so nobody is turned away for theirs"
+          else
+              ("  countries: \($codes | length) named, rest of the world is OFF"),
+              (($watch - $codes) as $missing
+               | if ($missing | length) == 0 then
+                     "  every country on the watchlist is switched on"
+                 else
+                     "  warning: switched off: \($missing | join(", "))"
+                 end)
+          end'
+}
+
+# Who may install it, person-wise — as far as it can be told, which is
+# not far. A track draws its testers either from Google Groups or from
+# an email list, never both, and the API models only the first: its own
+# reference says email lists are not supported by this resource. So an
+# empty answer here is not an empty track, it is the ordinary state of
+# one running off a list that only the console can show. Said outright,
+# because the alternative is reading it as "nobody is a tester" and
+# hunting a fault that was never there.
+report_play_testers() {
+    local testers=$1
+
+    if [[ -z "$testers" ]]; then
+        printf '  testers: could not be read\n'
+        return
+    fi
+
+    printf '%s' "$testers" | jq -r '
+        if ((.googleGroups // []) | length) > 0 then
+            "  testers: Google Groups — \(.googleGroups | join(", "))"
+        else
+            "  testers: an email list in the console, which the API cannot"
+            + " read; who is on it has to be looked up there"
+        end'
 }
 
 # Play is the one section behind a login, and the only one that can be
 # skipped: an unlocked password store is a lot to ask of someone who
 # wanted to know what F-Droid is showing.
 report_play() {
-    local key token tracks
+    local key token edit tracks countries testers
 
     if ! command -v openssl >/dev/null; then
         printf '  openssl is needed to sign the token request; skipped\n'
@@ -121,7 +181,21 @@ report_play() {
         printf '  the service account was refused a token; skipped\n'
         return
     fi
-    if ! tracks=$(play_tracks "$token"); then
+    if ! edit=$(play_edit_open "$token") || [[ -z "$edit" ]]; then
+        printf '  the Play Developer API did not answer for %s\n' "$APP_ID"
+        return
+    fi
+
+    tracks=$(play_get "$token" "$edit" "tracks")
+    countries=$(play_get "$token" "$edit" "countryAvailability/$PLAY_CLOSED_TRACK")
+    testers=$(play_get "$token" "$edit" "testers/$PLAY_CLOSED_TRACK")
+    play_edit_close "$token" "$edit"
+
+    # A tracks read that came back empty means the edit or the account is
+    # unusable, not that the app has no tracks, and the two reads beside
+    # it will have failed for the same reason. One line, rather than
+    # three saying the same thing.
+    if [[ -z "$tracks" ]]; then
         printf '  the Play Developer API did not answer for %s\n' "$APP_ID"
         return
     fi
@@ -171,6 +245,8 @@ report_play() {
           else
               "  \($closed) is level with internal at versionCode \($recruiting)"
           end'
+    report_play_countries "$countries"
+    report_play_testers "$testers"
     printf '  tester opt-in: %s\n' "$PLAY_OPT_IN_URL"
 }
 
