@@ -6,8 +6,10 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.domain.StatsRange
 import java.io.IOException
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.WeekFields
 import org.json.JSONObject
 
 /**
@@ -69,10 +71,14 @@ class LiseurSyncInsights(
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
 ) {
 
-    suspend fun summary(range: StatsRange = StatsRange.Default, today: LocalDate): InsightsSummary? {
+    suspend fun summary(
+        range: StatsRange = StatsRange.Default,
+        today: LocalDate,
+        weekStart: DayOfWeek = WeekFields.ISO.firstDayOfWeek,
+    ): InsightsSummary? {
         val account = account() ?: return null
         val credentials = account.credentials ?: return null
-        val from = range.startDate(today)
+        val from = range.startDate(today, weekStart)
         val answer = try {
             http.get(
                 LiseurSyncApi.insightsSummary(account.baseUrl, from, today),
@@ -181,12 +187,13 @@ class LiseurSyncInsights(
     suspend fun allBooks(
         range: StatsRange = StatsRange.Default,
         today: LocalDate,
+        weekStart: DayOfWeek = WeekFields.ISO.firstDayOfWeek,
     ): Map<String, WorkInsights>? {
         val account = account() ?: return null
         val credentials = account.credentials ?: return null
         val aliases = identityDao.aliasesFor(account.accountKey).filter { it.usable }
         if (aliases.isEmpty()) return emptyMap()
-        val from = range.startDate(today)
+        val from = range.startDate(today, weekStart)
         val answer = try {
             http.get(
                 LiseurSyncApi.allWorkInsights(account.baseUrl, from, today),

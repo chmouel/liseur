@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +52,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
@@ -192,9 +194,20 @@ fun BookReadingStatsScreen(
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             ) {
                                 Text(
-                                    text = range.days(LocalDate.now())?.let {
-                                        stringResource(R.string.reading_stats_in_last_days_local, it)
-                                    } ?: stringResource(R.string.reading_stats_in_total),
+                                    text = when {
+                                        range == StatsRange.THIS_WEEK ->
+                                            stringResource(R.string.reading_stats_this_week_local)
+
+                                        else -> range.days(
+                                            LocalDate.now(),
+                                            localeWeekStart(LocalLocale.current.platformLocale),
+                                        )?.let {
+                                            stringResource(
+                                                R.string.reading_stats_in_last_days_local,
+                                                it,
+                                            )
+                                        } ?: stringResource(R.string.reading_stats_in_total)
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),

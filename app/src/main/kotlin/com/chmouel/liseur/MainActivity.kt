@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -37,6 +38,7 @@ import com.chmouel.liseur.reader.ReaderActivity
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.listSaver
 import com.chmouel.liseur.domain.displayTitle
+import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
@@ -205,6 +207,11 @@ private fun LiseurApp(settings: AppSettings) {
             val model: ReadingStatsViewModel = viewModel(
                 factory = ReadingStatsViewModel.factory(),
             )
+            // The view model outlives the configuration change that a
+            // language switch is, so the week's first day is pushed in
+            // from here, where the locale is observable state.
+            val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
+            LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
             LaunchedEffect(model) { model.refreshServerInsights() }
             val statsState by model.state.collectAsStateWithLifecycle()
             ReadingStatsScreen(
@@ -232,6 +239,8 @@ private fun LiseurApp(settings: AppSettings) {
                 val model: ReadingStatsViewModel = viewModel(
                     factory = ReadingStatsViewModel.factory(),
                 )
+                val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
+                LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
                 LaunchedEffect(model, target.bookUrl) { model.refreshServerInsights() }
                 val bookStatsState by remember(model, target.bookUrl) { model.forBook(target.bookUrl) }
                     .collectAsStateWithLifecycle()

@@ -129,7 +129,7 @@ class ReadingStatsTest {
             books = mapOf("a" to book("a")),
             zone = zone,
             today = today,
-            range = StatsRange.LAST_7_DAYS,
+            range = StatsRange.THIS_WEEK,
         )
         assertEquals(RECENT_DAYS, stats.recent.size)
         assertEquals(today, stats.recent.last().date)
@@ -217,7 +217,7 @@ class ReadingStatsTest {
             books = mapOf("a" to book("a")),
             zone = zone,
             today = today,
-            range = StatsRange.LAST_7_DAYS,
+            range = StatsRange.THIS_WEEK,
         )
         assertEquals(60_000L, stats.totalMs)
         assertEquals(1, stats.sessions)
@@ -239,7 +239,7 @@ class ReadingStatsTest {
         fun countedIn(range: StatsRange) =
             readingStats(sessions, books, zone, today, range).sessions
 
-        assertEquals(2, countedIn(StatsRange.LAST_7_DAYS))
+        assertEquals(2, countedIn(StatsRange.THIS_WEEK))
         assertEquals(3, countedIn(StatsRange.LAST_30_DAYS))
         assertEquals(4, countedIn(StatsRange.LAST_90_DAYS))
         assertEquals(5, countedIn(StatsRange.LAST_YEAR))
@@ -255,7 +255,7 @@ class ReadingStatsTest {
             books = mapOf("a" to book("a")),
             zone = zone,
             today = today,
-            range = StatsRange.LAST_7_DAYS,
+            range = StatsRange.THIS_WEEK,
         )
         assertEquals(60_000, stats.totalMs)
     }
@@ -299,7 +299,7 @@ class ReadingStatsTest {
             books = mapOf("a" to book("a")),
             zone = zone,
             today = today,
-            range = StatsRange.LAST_7_DAYS,
+            range = StatsRange.THIS_WEEK,
         )
         assertTrue(stats.isEmpty)
         assertEquals(0, stats.sessions)
@@ -340,7 +340,7 @@ class ReadingStatsTest {
             mapOf("a" to book("a")),
             zone,
             today,
-            StatsRange.LAST_7_DAYS,
+            StatsRange.THIS_WEEK,
         )
         assertEquals(7, stats.sessions)
         assertEquals(20, stats.streakDays)
@@ -362,7 +362,7 @@ class ReadingStatsTest {
             books = mapOf("a" to book("a"), "b" to book("b")),
             zone = zone,
             today = today,
-            range = StatsRange.LAST_7_DAYS,
+            range = StatsRange.THIS_WEEK,
         )
         assertEquals(5_400_000, stats.totalMs)
         assertEquals(1_800_000, stats.pendingMs)
@@ -494,7 +494,7 @@ class ReadingStatsTest {
             books = mapOf("a" to book("a")),
             zone = zone,
             today = today,
-            range = StatsRange.LAST_7_DAYS,
+            range = StatsRange.THIS_WEEK,
         )
         assertEquals(begun, stats.books.single().firstReadAt)
     }

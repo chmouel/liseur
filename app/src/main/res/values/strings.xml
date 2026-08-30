@@ -612,7 +612,7 @@
     <string name="reading_stats_total">Time spent reading</string>
     <string name="reading_stats_books_read">Books read from</string>
     <string name="reading_stats_books_finished">Books finished</string>
-    <string name="reading_stats_recent">This past week</string>
+    <string name="reading_stats_recent">This week</string>
     <string name="reading_stats_by_book">By book</string>
     <string name="reading_stats_empty_title">Nothing recorded yet.</string>
     <string name="reading_stats_empty_detail">Liseur starts counting from the moment you open a book. Reading you did before this arrived is not here, because there is no honest way to work out how long it took.</string>
@@ -629,12 +629,14 @@
     <string name="reading_stats_day_read">%1$s on %2$s</string>
     <string name="reading_stats_in_last_days">In the last %1$d days, on every device</string>
     <string name="reading_stats_in_last_days_local">In the last %1$d days</string>
+    <string name="reading_stats_this_week">This week, on every device</string>
+    <string name="reading_stats_this_week_local">This week</string>
     <string name="reading_stats_in_total">In total</string>
     <string name="reading_stats_sessions">Sittings</string>
     <string name="reading_stats_streak">Day streak</string>
     <string name="reading_stats_time_left">About %1$s left, at the pace you have been reading</string>
     <string name="reading_stats_range">Change the span</string>
-    <string name="reading_stats_range_7d">Last 7 days</string>
+    <string name="reading_stats_range_7d">This week</string>
     <string name="reading_stats_range_30d">Last 30 days</string>
     <string name="reading_stats_range_90d">Last 90 days</string>
     <string name="reading_stats_range_365d">Last 365 days</string>
@@ -652,6 +654,8 @@
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>
+    <string name="duration_days">%1$d d</string>
+    <string name="duration_days_hours">%1$d d %2$d h</string>
     <string name="duration_none">None</string>
     <string name="more_options">More</string>
     <string name="reader_footnote">Note</string>

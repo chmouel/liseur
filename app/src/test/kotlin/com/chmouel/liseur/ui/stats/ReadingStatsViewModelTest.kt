@@ -17,6 +17,7 @@ import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -46,7 +47,7 @@ class ReadingStatsViewModelTest {
     private lateinit var models: ViewModelStore
 
     private val zone = ZoneId.of("Europe/Paris")
-    private val today = LocalDate.of(2026, 8, 10)
+    private val today = LocalDate.of(2026, 8, 9)
 
     @Before
     fun open() {
@@ -140,16 +141,53 @@ class ReadingStatsViewModelTest {
                 db.readingSessionDao().insert(session(url, today.minusDays(back.toLong()), 60_000))
             }
             val model = model()
-            model.selectRange(StatsRange.LAST_7_DAYS)
+            model.selectRange(StatsRange.THIS_WEEK)
 
             val week = model.state.first {
-                it is ReadingStatsUiState.Ready && it.range == StatsRange.LAST_7_DAYS
+                it is ReadingStatsUiState.Ready && it.range == StatsRange.THIS_WEEK
             } as ReadingStatsUiState.Ready
 
             // Seven days of reading counted, but twenty days of streak:
             // a streak is a fact about the reader, not about the window.
             assertEquals(7, week.headline.sessions)
             assertEquals(20, week.headline.streakDays)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `changing language moves the week without changing the reading`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            // today is a Sunday. A Monday-first reader counts it as the
+            // last day of this week; a Sunday-first reader as the first,
+            // so the Saturday before belongs to one week and not the
+            // other.
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            db.readingSessionDao().insert(session(url, today, 60_000))
+            db.readingSessionDao().insert(session(url, today.minusDays(1), 60_000))
+            val model = model()
+            model.selectRange(StatsRange.THIS_WEEK)
+
+            val mondayFirst = model.state.first {
+                it is ReadingStatsUiState.Ready && it.range == StatsRange.THIS_WEEK
+            } as ReadingStatsUiState.Ready
+            assertEquals(120_000L, mondayFirst.headline.totalMs)
+            assertEquals(7, mondayFirst.headline.rangeDays)
+
+            model.setWeekStart(DayOfWeek.SUNDAY)
+
+            // Nothing about the sessions changed, only where the week
+            // begins. The sums, the caption and the chart must all move
+            // together, or the screen describes two different weeks.
+            val sundayFirst = model.state.first {
+                it is ReadingStatsUiState.Ready && it.headline.rangeDays == 1
+            } as ReadingStatsUiState.Ready
+            assertEquals(60_000L, sundayFirst.headline.totalMs)
+            assertEquals(listOf(today), sundayFirst.stats.recent.map { it.date })
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -633,6 +671,12 @@ class ReadingStatsViewModelTest {
                     progressDao = db.readingProgressDao(),
                     zone = { zone },
                     today = { today },
+                    // Pinned rather than read off the JVM's locale: the
+                    // week's first day is what decides how far the
+                    // default span reaches, and a test that reaches a
+                    // different distance on a different machine is not
+                    // testing anything.
+                    initialWeekStart = DayOfWeek.MONDAY,
                 )
             }
         }
