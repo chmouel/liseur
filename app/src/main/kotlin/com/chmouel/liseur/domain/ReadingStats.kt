@@ -20,6 +20,15 @@ data class BookReadingStats(
      */
     val pendingMs: Long = 0,
     val lastReadAt: Long,
+    /**
+     * When the very first sitting began, over everything on record.
+     *
+     * A fact about the book, not the window: like the streak, it is
+     * answered before the range is applied, because "when did I start
+     * this" does not change with the span the reader chose to look at.
+     * Null only for a book this device never recorded a sitting for.
+     */
+    val firstReadAt: Long? = null,
     /** Where the reader is in it, if known. */
     val progression: Double?,
     val finished: Boolean,
@@ -150,6 +159,10 @@ fun readingStats(
     // applied, so that asking about the last week cannot report a
     // months-long run as seven days.
     val streak = streakDays(recorded, zone, today)
+    // First-read dates are likewise answered from everything: when a
+    // book was begun is a fact about the book, not about the window.
+    val firstStarts = recorded.groupBy { it.bookUrl }
+        .mapValues { (_, spans) -> spans.minOf { it.startedAt } }
     val start = range.startDate(today)
     val counted = if (start == null) recorded else recorded.filter { !it.day(zone).isBefore(start) }
     if (counted.isEmpty()) return ReadingStats.Empty.copy(streakDays = streak)
@@ -166,6 +179,7 @@ fun readingStats(
             totalMs = spans.sumOf { it.durationMs },
             pendingMs = spans.filterNot { it.uploaded }.sumOf { it.durationMs },
             lastReadAt = spans.maxOf { it.lastReadAt },
+            firstReadAt = firstStarts[url],
             progression = book?.progression,
             finished = book?.finished == true,
             sessions = spans.size,

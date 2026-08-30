@@ -92,7 +92,7 @@ class ReadingStatsViewModelTest {
                 as ReadingStatsUiState.Ready
 
             assertEquals(60_000L, loaded.headline.totalMs)
-            assertEquals(30, loaded.headline.rangeDays)
+            assertEquals(7, loaded.headline.rangeDays)
             // Sittings and the streak used to vanish without a server.
             // This device can count both perfectly well.
             assertEquals(1, loaded.headline.sessions)
@@ -112,9 +112,9 @@ class ReadingStatsViewModelTest {
             db.readingSessionDao().insert(session(url, today.minusDays(200), 60_000))
             val model = model()
 
-            val thirty = model.state.first { it is ReadingStatsUiState.Ready }
+            val week = model.state.first { it is ReadingStatsUiState.Ready }
                 as ReadingStatsUiState.Ready
-            assertEquals(0L, thirty.headline.totalMs)
+            assertEquals(0L, week.headline.totalMs)
 
             model.selectRange(StatsRange.ALL_TIME)
             val everything = model.state.first {
@@ -536,12 +536,12 @@ class ReadingStatsViewModelTest {
             books = listOf(
                 BookReadingStats(
                     bookUrl = "old", title = "A book", author = null,
-                    totalMs = 40 * 60_000L, lastReadAt = 100,
+                    totalMs = 40 * 60_000L, lastReadAt = 100, firstReadAt = 10,
                     progression = 0.5, finished = false, sessions = 2,
                 ),
                 BookReadingStats(
                     bookUrl = "new", title = "A book", author = null,
-                    totalMs = 10 * 60_000L, lastReadAt = 400,
+                    totalMs = 10 * 60_000L, lastReadAt = 400, firstReadAt = 300,
                     progression = 0.5, finished = false, sessions = 1,
                 ),
             ),
@@ -569,6 +569,9 @@ class ReadingStatsViewModelTest {
         assertEquals(1, merged.books.size)
         assertEquals("old", merged.books.single().bookUrl)
         assertEquals(50 * 60_000L, merged.books.single().totalMs)
+        // The book was begun when its earliest URL was first opened —
+        // moving the file does not restart its history.
+        assertEquals(10L, merged.books.single().firstReadAt)
         assertEquals(50 * 60_000L, merged.totalMs)
     }
 

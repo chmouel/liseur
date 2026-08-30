@@ -158,7 +158,7 @@ class LiseurSyncInsightsTest {
         val lastRead = "2026-08-11T16:30:00Z"
         server.enqueue(
             ok(
-                """{"from":"2026-07-13","to":"2026-08-11","works":[""" +
+                """{"from":"2026-08-05","to":"2026-08-11","works":[""" +
                     """{"work_id":"w-1","sessions":8,""" +
                     """"total_active_minutes":106.25,"eta_seconds":3600,""" +
                     """"last_read_at":"$lastRead"}]}""",
@@ -172,7 +172,7 @@ class LiseurSyncInsightsTest {
         assertEquals("w-1", book.workId)
         assertEquals(Instant.parse(lastRead).toEpochMilli(), book.lastReadAt)
         assertEquals(
-            "/v1/insights/works?from=2026-07-13&to=2026-08-11",
+            "/v1/insights/works?from=2026-08-05&to=2026-08-11",
             server.takeRequest().target,
         )
     }
@@ -282,7 +282,7 @@ class LiseurSyncInsightsTest {
     @Test
     fun `a reading pace is carried through and a missing one is not invented`() = runTest {
         connect()
-        val span = """"from":"2026-07-13","to":"2026-08-11""""
+        val span = """"from":"2026-08-05","to":"2026-08-11""""
         server.enqueue(
             ok("""{$span,"total_active_minutes":90,"sessions":4,"speed_prog_per_hour":0.25}"""),
         )

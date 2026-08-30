@@ -463,4 +463,55 @@ class ReadingStatsTest {
         assertEquals(2, stats.books.single { it.bookUrl == "a" }.sessions)
         assertEquals(1, stats.books.single { it.bookUrl == "b" }.sessions)
     }
+
+    // --- When the book was begun ----------------------------------------
+
+    @Test
+    fun `a book remembers when its first sitting began`() {
+        val begun = noonOn(today.minusDays(2))
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan("a", begun, 60_000),
+                SessionSpan("a", noonOn(today), 60_000),
+            ),
+            books = mapOf("a" to book("a")),
+            zone = zone,
+            today = today,
+        )
+        assertEquals(begun, stats.books.single().firstReadAt)
+    }
+
+    @Test
+    fun `when a book was begun is not narrowed by the span being looked at`() {
+        // Begun three months ago, still being read this week. The week
+        // view must not claim the book was started on Tuesday.
+        val begun = noonOn(today.minusDays(90))
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan("a", begun, 60_000),
+                SessionSpan("a", noonOn(today), 60_000),
+            ),
+            books = mapOf("a" to book("a")),
+            zone = zone,
+            today = today,
+            range = StatsRange.LAST_7_DAYS,
+        )
+        assertEquals(begun, stats.books.single().firstReadAt)
+    }
+
+    @Test
+    fun `a sitting of no length does not date the beginning of a book`() {
+        // Opened and shut a month ago, actually read yesterday. The
+        // glance is not when reading began.
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan("a", noonOn(today.minusDays(30)), 0),
+                SessionSpan("a", noonOn(today.minusDays(1)), 60_000),
+            ),
+            books = mapOf("a" to book("a")),
+            zone = zone,
+            today = today,
+        )
+        assertEquals(noonOn(today.minusDays(1)), stats.books.single().firstReadAt)
+    }
 }
