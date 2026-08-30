@@ -1,12 +1,5 @@
 package com.chmouel.liseur.ui.settings
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,19 +20,12 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,7 +38,6 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
-import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingBrightnessSlider
 import com.chmouel.liseur.ui.reading.ReadingFontDropdown
@@ -146,13 +131,26 @@ fun ReadingAppearanceScreen(
                     onImport = fontLibrary.pick,
                     onRemove = fontLibrary.remove,
                 )
-                AdvancedSection(
-                    prefs = prefs,
-                    onLineHeight = onLineHeight,
-                    onPageMargins = onPageMargins,
-                    onColumnMode = onColumnMode,
-                    onFooterMode = onFooterMode,
-                    onPageTurnAnimation = onPageTurnAnimation,
+                ReadingLayoutControls(
+                    lineHeight = prefs.lineHeight,
+                    pageMargins = prefs.pageMargins,
+                    columnMode = prefs.columnMode,
+                    // The sheet hides this in a scrolled book, where
+                    // columns don't apply. There is no book here to
+                    // check, so the preference is always offered; the
+                    // reader surface decides whether to honor it.
+                    showColumns = true,
+                    onLineHeightChanged = onLineHeight,
+                    onPageMarginsChanged = onPageMargins,
+                    onColumnModeChanged = onColumnMode,
+                )
+                ReadingFooterModeDropdown(
+                    selected = prefs.footerMode,
+                    onSelected = onFooterMode,
+                )
+                ReadingPageTurnAnimationToggle(
+                    enabled = prefs.pageTurnAnimation,
+                    onChanged = onPageTurnAnimation,
                 )
                 Text(
                     text = stringResource(R.string.settings_reading_appearance_detail),
@@ -160,71 +158,6 @@ fun ReadingAppearanceScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-    }
-}
-
-/**
- * The same split the reader sees, on the screen that has no book.
- *
- * The shared settings behind the "Aa" sheet's Advanced row are behind
- * this too, in the same order: a reader who learned where the margins
- * live in one place should not have to learn it again in the other.
- *
- * Only the shared ones. The rest of that sheet has no meaning here —
- * auto-scroll needs a page that is running, and setting a book apart
- * needs a book — so this holds the layout controls, the footer mode and
- * the page-turn animation, and nothing else. See
- * `docs/adr/0001-advanced-reading-menu.md`.
- */
-@Composable
-private fun AdvancedSection(
-    prefs: ReaderPrefs,
-    onLineHeight: (Double?) -> Unit,
-    onPageMargins: (Double?) -> Unit,
-    onColumnMode: (ColumnMode) -> Unit,
-    onFooterMode: (FooterMode) -> Unit,
-    onPageTurnAnimation: (Boolean) -> Unit,
-) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-
-    TextButton(onClick = { expanded = !expanded }) {
-        Text(
-            stringResource(
-                if (expanded) R.string.reader_hide_advanced else R.string.reader_advanced,
-            ),
-        )
-    }
-    // Sliding this open on electronic paper is a full repaint of the
-    // lower half of the screen for every frame; it is the same list
-    // either way, so it simply appears.
-    val eInk = LocalEInk.current
-    AnimatedVisibility(
-        visible = expanded,
-        enter = if (eInk) EnterTransition.None else fadeIn() + expandVertically(),
-        exit = if (eInk) ExitTransition.None else fadeOut() + shrinkVertically(),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            ReadingLayoutControls(
-                lineHeight = prefs.lineHeight,
-                pageMargins = prefs.pageMargins,
-                columnMode = prefs.columnMode,
-                // Unlike the sheet, there is no book here to be
-                // scrolled, so the count always has something to
-                // divide and the control is always worth offering.
-                showColumns = true,
-                onLineHeightChanged = onLineHeight,
-                onPageMarginsChanged = onPageMargins,
-                onColumnModeChanged = onColumnMode,
-            )
-            ReadingFooterModeDropdown(
-                selected = prefs.footerMode,
-                onSelected = onFooterMode,
-            )
-            ReadingPageTurnAnimationToggle(
-                enabled = prefs.pageTurnAnimation,
-                onChanged = onPageTurnAnimation,
-            )
         }
     }
 }
