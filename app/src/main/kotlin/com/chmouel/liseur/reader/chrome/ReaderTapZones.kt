@@ -27,6 +27,11 @@ import kotlin.math.abs
  * any tap on the page dismisses it. Page turns are delegated to
  * [onTurnPage] so they can run the page-turn effect.
  *
+ * Which side is which is the reader's to choose: [isSwapped] is the
+ * Settings → Reading preset, and turns the left of the page into the
+ * forward one for a reader holding the phone in the other hand. The
+ * chrome zones do not move — only the two sides trade places.
+ *
  * A book read by scrolling has no page to turn, so the whole page
  * becomes the chrome zone and the text is moved by dragging it. Side
  * taps there would scroll by a screenful with no page-turn to make
@@ -45,6 +50,7 @@ class ReaderTapZones(
     private val navigator: OverflowableNavigator,
     private val isChromeVisible: () -> Boolean,
     private val isScrolling: () -> Boolean = { false },
+    private val isSwapped: () -> Boolean = { false },
     private val onTurnPage: (forward: Boolean) -> Unit,
     private val onShowChrome: () -> Unit,
     private val onHideChrome: () -> Unit,
@@ -64,10 +70,10 @@ class ReaderTapZones(
         val dp = view.resources.displayMetrics.density
         val rtl = navigator.overflow.value.readingProgression == ReadingProgression.RTL
 
-        when (zoneAt(event.point.x, event.point.y, width, height, dp, isScrolling())) {
-            Zone.CHROME -> onShowChrome()
-            Zone.BACK -> onTurnPage(rtl)
-            Zone.FORWARD -> onTurnPage(!rtl)
+        val zone = zoneAt(event.point.x, event.point.y, width, height, dp, isScrolling())
+        when (val forward = forward(zone, rtl, isSwapped())) {
+            null -> onShowChrome()
+            else -> onTurnPage(forward)
         }
         return true
     }
@@ -144,6 +150,27 @@ class ReaderTapZones(
                 fx < BACK_ZONE -> Zone.BACK
                 else -> Zone.FORWARD
             }
+        }
+
+        /**
+         * Which way a tapped [zone] turns the page, or null for the chrome.
+         *
+         * [zoneAt] answers in sides of the screen; this is the one place
+         * that turns a side into a direction, so the reading page and the
+         * endpaper cannot come to different answers about the same tap.
+         *
+         * The two things that reorder the sides compose rather than
+         * overrule each other. [rtl] is the book's: a right-to-left book
+         * turns forward on the left, because that is where the next page
+         * is. [swapped] is the reader's, and means "the other thumb"
+         * whatever the book does — so on an RTL book it puts forward back
+         * on the right. Both at once is the standard layout again, which
+         * is why this is an equality and not a pair of branches.
+         */
+        fun forward(zone: Zone, rtl: Boolean, swapped: Boolean): Boolean? = when (zone) {
+            Zone.CHROME -> null
+            Zone.BACK -> rtl != swapped
+            Zone.FORWARD -> rtl == swapped
         }
     }
 }

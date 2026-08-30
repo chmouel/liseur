@@ -79,10 +79,11 @@ import kotlinx.coroutines.delay
  * columns Readium would keep turning through.
  *
  * It is a page, so the same tap zones apply — the back side returns to
- * the last page of the book, the forward side stays put. The actions
- * stay at the foot of the page so a short window or a large font cannot
- * push them off the screen; the colophon above them scrolls if it must.
- * The next volume is a small card of its own: cover, name, and one
+ * the last page of the book, the forward side stays put, and [swapped]
+ * moves which side is which exactly as it does while reading. The
+ * actions stay at the foot of the page so a short window or a large font
+ * cannot push them off the screen; the colophon above them scrolls if it
+ * must. The next volume is a small card of its own: cover, name, and one
  * action, in the reading colours rather than a second chrome.
  */
 @Composable
@@ -99,6 +100,7 @@ fun Endpaper(
     noNextInLibrary: Boolean = false,
     seriesCompletion: SeriesCompletion?,
     rtl: Boolean,
+    swapped: Boolean,
     onTurnBack: () -> Unit,
     onLibrary: () -> Unit,
     onOpenNext: () -> Unit,
@@ -139,7 +141,7 @@ fun Endpaper(
             .background(theme.background)
             .semantics { contentDescription = description }
             .onSizeChanged { size = it }
-            .pointerInput(size, rtl, density) {
+            .pointerInput(size, rtl, swapped, density) {
                 if (size.width <= 0 || size.height <= 0) return@pointerInput
                 detectTapGestures { offset ->
                     val zone = ReaderTapZones.zoneAt(
@@ -149,11 +151,8 @@ fun Endpaper(
                         height = size.height.toFloat(),
                         density = density,
                     )
-                    val forward = when (zone) {
-                        ReaderTapZones.Zone.BACK -> rtl
-                        ReaderTapZones.Zone.FORWARD -> !rtl
-                        ReaderTapZones.Zone.CHROME -> return@detectTapGestures
-                    }
+                    val forward = ReaderTapZones.forward(zone, rtl, swapped)
+                        ?: return@detectTapGestures
                     if (!forward) onTurnBack()
                 }
             },

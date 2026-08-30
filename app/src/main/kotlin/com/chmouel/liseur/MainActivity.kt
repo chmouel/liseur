@@ -258,6 +258,7 @@ private fun LiseurApp(settings: AppSettings) {
                 onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
+                onTapZones = { scope.launch { repository.setTapZones(it) } },
                 onEInkMode = { scope.launch { repository.setEInkMode(it) } },
                 onColorEInk = { scope.launch { repository.setColorEInk(it) } },
                 onVendorRefresh = { scope.launch { repository.setVendorRefresh(it) } },

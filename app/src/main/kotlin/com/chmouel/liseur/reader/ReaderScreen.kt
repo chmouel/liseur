@@ -106,6 +106,7 @@ import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.reader.chrome.CatchUpPill
 import com.chmouel.liseur.reader.chrome.AdvancedSheet
 import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
@@ -302,6 +303,7 @@ fun ReaderScreen(
     onKeepScreenOnChanged: (Boolean) -> Unit,
     scrollModeFlow: StateFlow<Boolean>,
     onScrollModeChanged: (Boolean) -> Unit,
+    tapZonesFlow: StateFlow<TapZones>,
     // The activity draws dialogs of its own over this screen — a link
     // out of the book, a sync, an offer to send the book up — and a tap
     // on a link never reaches the tap zones, so the screen would
@@ -323,6 +325,8 @@ fun ReaderScreen(
     val prefs by prefsFlow.collectAsStateWithLifecycle()
     val keepScreenOn by keepScreenOnFlow.collectAsStateWithLifecycle()
     val scrollMode by scrollModeFlow.collectAsStateWithLifecycle()
+    val tapZones by tapZonesFlow.collectAsStateWithLifecycle()
+    val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
     // Readium reads vertical text off the book rather than off the
     // reader: it cannot paginate lines that run down the page, so such a
     // book is scrolled whatever the setting says. Everything that asks
@@ -1391,6 +1395,7 @@ fun ReaderScreen(
                     navigator = it,
                     isChromeVisible = { chromeVisibleNow },
                     isScrolling = { effectiveScrollingNow },
+                    isSwapped = { swappedZonesNow },
                     onTurnPage = pageTurner::turn,
                     onShowChrome = { chromeVisible = true },
                     onHideChrome = { chromeVisible = false },
@@ -1551,6 +1556,7 @@ fun ReaderScreen(
                 noNextInLibrary = continuation?.noNextInLibrary == true,
                 seriesCompletion = continuation?.seriesCompletion,
                 rtl = endpaperRtl,
+                swapped = tapZones.swapped,
                 onTurnBack = {
                     showingEnd = false
                     onLeftEndpaper()

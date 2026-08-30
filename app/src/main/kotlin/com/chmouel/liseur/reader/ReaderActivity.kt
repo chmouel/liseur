@@ -337,6 +337,7 @@ class ReaderActivity : FragmentActivity() {
                                     onKeepScreenOnChanged = viewModel::setKeepScreenOn,
                                     scrollModeFlow = viewModel.scrollMode,
                                     onScrollModeChanged = viewModel::setScrollMode,
+                                    tapZonesFlow = viewModel.tapZones,
                                     // Dialogs of this activity's own,
                                     // drawn over the reader. The page
                                     // must not carry on scrolling under

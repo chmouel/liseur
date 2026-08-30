@@ -49,6 +49,7 @@ import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.seriesIdForExtras
@@ -641,6 +642,11 @@ class ReaderViewModel(
         .map { it.scrollMode }
         .combine(readingModeDao.observe(bookId)) { global, own -> own.scrollsWith(global) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Which side of the page turns forward, app-wide. */
+    val tapZones: StateFlow<TapZones> = appSettings.settings
+        .map { it.tapZones }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, TapZones.Default)
 
     /** Most recent position, used to persist progress and to survive recreation. */
     var lastLocator: Locator? = null

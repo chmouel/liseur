@@ -1,8 +1,10 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.reader.chrome.ReaderTapZones.Companion.forward
 import com.chmouel.liseur.reader.chrome.ReaderTapZones.Companion.zoneAt
 import com.chmouel.liseur.reader.chrome.ReaderTapZones.Zone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -93,6 +95,46 @@ class ReaderTapZonesTest {
                 for (fy in listOf(0.02f, 0.25f, 0.5f, 0.75f, 0.98f)) {
                     assertEquals(Zone.CHROME, screen.scrolledAt(fx, fy))
                 }
+            }
+        }
+    }
+
+    @Test
+    fun `the standard preset is the layout the app always had`() {
+        assertEquals(false, forward(Zone.BACK, rtl = false, swapped = false))
+        assertEquals(true, forward(Zone.FORWARD, rtl = false, swapped = false))
+    }
+
+    @Test
+    fun `swapping puts forward on the left`() {
+        assertEquals(true, forward(Zone.BACK, rtl = false, swapped = true))
+        assertEquals(false, forward(Zone.FORWARD, rtl = false, swapped = true))
+    }
+
+    @Test
+    fun `a right-to-left book already turns forward on the left`() {
+        assertEquals(true, forward(Zone.BACK, rtl = true, swapped = false))
+        assertEquals(false, forward(Zone.FORWARD, rtl = true, swapped = false))
+    }
+
+    @Test
+    fun `swapping a right-to-left book comes back to the standard sides`() {
+        // The preset means "the other thumb", not "the left side goes
+        // on", so it composes with the book's direction rather than
+        // overruling it: both reorderings at once cancel out.
+        for (zone in listOf(Zone.BACK, Zone.FORWARD)) {
+            assertEquals(
+                forward(zone, rtl = false, swapped = false),
+                forward(zone, rtl = true, swapped = true),
+            )
+        }
+    }
+
+    @Test
+    fun `no preset gives the chrome a direction`() {
+        for (rtl in listOf(false, true)) {
+            for (swapped in listOf(false, true)) {
+                assertNull(forward(Zone.CHROME, rtl, swapped))
             }
         }
     }
