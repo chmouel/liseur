@@ -1,9 +1,11 @@
 package com.chmouel.liseur.domain
 
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.time.temporal.WeekFields
 
 /** What one book's reading adds up to. */
 data class BookReadingStats(
@@ -146,6 +148,11 @@ const val RECENT_DAYS = 7
  *
  * [range] narrows every figure here except the streak, which is counted
  * over the whole of [sessions] on purpose — see [ReadingStats.streakDays].
+ *
+ * [weekStart] is which day the reader's calendar begins on, and only
+ * [StatsRange.THIS_WEEK] consults it. It defaults to the ISO Monday so
+ * that a caller with no locale to hand still gets a defined week rather
+ * than whichever one the JVM was started in.
  */
 fun readingStats(
     sessions: List<SessionSpan>,
@@ -153,6 +160,7 @@ fun readingStats(
     zone: ZoneId,
     today: LocalDate,
     range: StatsRange = StatsRange.Default,
+    weekStart: DayOfWeek = WeekFields.ISO.firstDayOfWeek,
 ): ReadingStats {
     val recorded = sessions.filter { it.durationMs > 0 }
     // The streak is answered from everything, before the window is
@@ -163,7 +171,7 @@ fun readingStats(
     // book was begun is a fact about the book, not about the window.
     val firstStarts = recorded.groupBy { it.bookUrl }
         .mapValues { (_, spans) -> spans.minOf { it.startedAt } }
-    val start = range.startDate(today)
+    val start = range.startDate(today, weekStart)
     val counted = if (start == null) recorded else recorded.filter { !it.day(zone).isBefore(start) }
     if (counted.isEmpty()) return ReadingStats.Empty.copy(streakDays = streak)
 
@@ -195,7 +203,7 @@ fun readingStats(
         booksRead = stats.size,
         booksFinished = stats.count { it.finished },
         books = stats,
-        recent = dailySeries(counted, zone, today, range),
+        recent = dailySeries(counted, zone, today, range, weekStart),
         sessions = counted.size,
         pendingSessions = counted.count { !it.uploaded },
         streakDays = streak,
@@ -227,9 +235,10 @@ private fun dailySeries(
     zone: ZoneId,
     today: LocalDate,
     range: StatsRange,
+    weekStart: DayOfWeek,
 ): List<ReadingDay> {
     val byDay = sessions.groupBy { it.day(zone) }
-    val start = range.startDate(today)
+    val start = range.startDate(today, weekStart)
         ?: byDay.keys.minOrNull()
         ?: today.minusDays((RECENT_DAYS - 1).toLong())
     val span = ChronoUnit.DAYS.between(start, today)

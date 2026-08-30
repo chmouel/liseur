@@ -1,6 +1,19 @@
 package com.chmouel.liseur.domain
 
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.WeekFields
+import java.util.Locale
+
+/**
+ * Which day [locale] considers a week to begin on.
+ *
+ * Spelled once, because a screen that starts its week on Monday beside
+ * a chart that starts it on Sunday is not a formatting difference, it
+ * is two different weeks.
+ */
+fun localeWeekStart(locale: Locale): DayOfWeek = WeekFields.of(locale).firstDayOfWeek
 
 /**
  * How far back the reading dashboard is looking.
@@ -20,7 +33,7 @@ import java.time.LocalDate
  * than the list beneath it could not be explained to anybody.
  */
 enum class StatsRange(val id: String) {
-    LAST_7_DAYS("7d"),
+    THIS_WEEK("7d"),
     LAST_30_DAYS("30d"),
     LAST_90_DAYS("90d"),
     LAST_YEAR("365d"),
@@ -31,13 +44,20 @@ enum class StatsRange(val id: String) {
     /**
      * The first day counted, or null for a span with no beginning.
      *
+     * "This week" runs from the most recent [weekStart] to today, so it
+     * holds one to seven days and grows through the week. A rolling
+     * seven days would be a longer span more of the time, but it begins
+     * on a different weekday every morning, which makes the chart
+     * impossible to compare with the one the reader saw yesterday and
+     * puts the same weekday at both ends of it.
+     *
      * "This year" is resolved against [today] rather than a day count,
      * because the first of January is a different distance away every
      * time it is asked, and a fixed 365 would call last December part of
      * this year for most of the spring.
      */
-    fun startDate(today: LocalDate): LocalDate? = when (this) {
-        LAST_7_DAYS -> today.minusDays(6)
+    fun startDate(today: LocalDate, weekStart: DayOfWeek): LocalDate? = when (this) {
+        THIS_WEEK -> today.with(TemporalAdjusters.previousOrSame(weekStart))
         LAST_30_DAYS -> today.minusDays(29)
         LAST_90_DAYS -> today.minusDays(89)
         LAST_YEAR -> today.minusDays(364)
@@ -52,8 +72,10 @@ enum class StatsRange(val id: String) {
      * day-by-day chart is drawn, so it counts both endpoints: a seven
      * day range is seven bars, not six.
      */
-    fun days(today: LocalDate): Int? =
-        startDate(today)?.let { java.time.temporal.ChronoUnit.DAYS.between(it, today).toInt() + 1 }
+    fun days(today: LocalDate, weekStart: DayOfWeek): Int? =
+        startDate(today, weekStart)?.let {
+            java.time.temporal.ChronoUnit.DAYS.between(it, today).toInt() + 1
+        }
 
     /**
      * Whether the span is short enough to read as a row of daily bars.
@@ -61,10 +83,11 @@ enum class StatsRange(val id: String) {
      * Past this a bar per day is a picket fence nobody can read a
      * weekday off, and the heatmap takes over.
      */
-    fun suitsDailyBars(today: LocalDate): Boolean = (days(today) ?: Int.MAX_VALUE) <= MAX_BAR_DAYS
+    fun suitsDailyBars(today: LocalDate, weekStart: DayOfWeek): Boolean =
+        (days(today, weekStart) ?: Int.MAX_VALUE) <= MAX_BAR_DAYS
 
     companion object {
-        val Default = LAST_7_DAYS
+        val Default = THIS_WEEK
 
         /** As many bars as fit across a phone without becoming hatching. */
         const val MAX_BAR_DAYS = 31

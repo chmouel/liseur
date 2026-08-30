@@ -27,9 +27,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.ReadingDay
+import com.chmouel.liseur.domain.localeWeekStart
 import java.time.DayOfWeek
 import java.time.format.TextStyle
-import java.time.temporal.WeekFields
 
 /**
  * A long span of reading, one square a day.
@@ -49,7 +49,7 @@ import java.time.temporal.WeekFields
 internal fun ReadingHeatmap(days: List<ReadingDay>, modifier: Modifier = Modifier) {
     if (days.isEmpty()) return
     val locale = LocalLocale.current.platformLocale
-    val firstDayOfWeek = WeekFields.of(locale).firstDayOfWeek
+    val firstDayOfWeek = localeWeekStart(locale)
     // Pad the first column so every row is one weekday, the way a wall
     // calendar reads. Without this the grid is a spiral and the weekday
     // labels down the side are a lie.

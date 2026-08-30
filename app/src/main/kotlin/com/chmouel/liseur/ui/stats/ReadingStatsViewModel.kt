@@ -23,9 +23,13 @@ import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
+import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.domain.readingStats
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.WeekFields
+import java.util.Locale
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -97,10 +101,23 @@ class ReadingStatsViewModel(
     initialRange: StatsRange = StatsRange.Default,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
     private val today: () -> LocalDate = { LocalDate.now(ZoneId.systemDefault()) },
+    initialWeekStart: DayOfWeek = localeWeekStart(Locale.getDefault()),
 ) : ViewModel() {
 
     private val _range = MutableStateFlow(initialRange)
     val range: StateFlow<StatsRange> = _range.asStateFlow()
+
+    /**
+     * Which day the reader's week begins on.
+     *
+     * A flow rather than a value read where it is needed, for the same
+     * reason [_range] is one: the sums, the server request and the
+     * caption over them all have to describe one week. Sampling it
+     * inside the aggregation would leave a retained view model holding
+     * last locale's totals under this locale's heading, because a
+     * language change emits nothing the aggregation is listening to.
+     */
+    private val _weekStart = MutableStateFlow(initialWeekStart)
 
     /** Set once the reader has picked a span for themselves. */
     private var rangeChosen = false
@@ -162,6 +179,26 @@ class ReadingStatsViewModel(
     }
 
     /**
+     * Follows the reader's language to a different first day of week.
+     *
+     * Called from the screen, which reads the locale as Compose state,
+     * because a view model outlives the configuration change that moved
+     * it: `Locale.getDefault()` is right when this is constructed and
+     * stale from then on.
+     */
+    fun setWeekStart(day: DayOfWeek) {
+        if (_weekStart.value == day) return
+        _weekStart.value = day
+        // The server was asked for a span that began on the old week's
+        // first day. Its answer is about days this screen no longer
+        // claims to be showing.
+        _acrossDevices.value = null
+        _recentAcrossDevices.value = null
+        _booksAcrossDevices.value = null
+        refreshServerInsights()
+    }
+
+    /**
      * Refreshes the server decoration whenever a statistics screen opens.
      *
      * Each refresh replaces the last outright: the previous one is
@@ -179,13 +216,14 @@ class ReadingStatsViewModel(
         refresh?.cancel()
         refresh = viewModelScope.launch {
             val end = today()
+            val week = _weekStart.value
             launch {
-                val summary = source.summary(range, end)
+                val summary = source.summary(range, end, week)
                 if (token == generation) _acrossDevices.value = summary
             }
             launch {
                 val calendar = source.calendar(
-                    from = range.startDate(end) ?: maxOf(
+                    from = range.startDate(end, week) ?: maxOf(
                         EARLIEST_PLAUSIBLE_DAY,
                         end.minusDays(CALENDAR_HORIZON_DAYS),
                     ),
@@ -194,7 +232,7 @@ class ReadingStatsViewModel(
                 if (token == generation) _recentAcrossDevices.value = calendar
             }
             launch {
-                val books = source.allBooks(range, end)
+                val books = source.allBooks(range, end, week)
                 if (token == generation) _booksAcrossDevices.value = books
             }
         }
@@ -236,6 +274,8 @@ class ReadingStatsViewModel(
          * that do not answer it.
          */
         val range: StatsRange,
+        /** The week's first day [stats] was computed against, likewise. */
+        val weekStart: DayOfWeek,
     )
 
     private val local = combine(
@@ -243,7 +283,8 @@ class ReadingStatsViewModel(
         bookDao.observeAll(),
         progressDao.observeProgressions(),
         _range,
-    ) { sessions, books, progressions, range ->
+        _weekStart,
+    ) { sessions, books, progressions, range, weekStart ->
         val progressionByUrl = progressions.associateBy({ it.bookUrl }, { it.totalProgression })
         val statsBooks = books.associate { book ->
             book.url to StatsBook(
@@ -274,6 +315,7 @@ class ReadingStatsViewModel(
                 zone = zone(),
                 today = today(),
                 range = range,
+                weekStart = weekStart,
             ),
             books = statsBooks,
             firstReadAtByUrl = spans
@@ -281,6 +323,7 @@ class ReadingStatsViewModel(
                 .groupBy { it.bookUrl }
                 .mapValues { (_, sittings) -> sittings.minOf { it.startedAt } },
             range = range,
+            weekStart = weekStart,
         )
     }
 
@@ -299,7 +342,14 @@ class ReadingStatsViewModel(
         )
         ReadingStatsUiState.Ready(
             stats = merged,
-            headline = mergeHeadline(merged, local.stats, server, local.range, today()),
+            headline = mergeHeadline(
+                merged,
+                local.stats,
+                server,
+                local.range,
+                today(),
+                local.weekStart,
+            ),
             range = local.range,
         )
     }.stateIn(
@@ -379,12 +429,13 @@ class ReadingStatsViewModel(
             server: InsightsSummary?,
             range: StatsRange,
             today: LocalDate,
+            weekStart: DayOfWeek = WeekFields.ISO.firstDayOfWeek,
         ): StatsHeadline = StatsHeadline(
             totalMs = maxOf(
                 merged.totalMs,
                 (server?.activeMinutes?.minutesAsMillis() ?: 0L) + local.pendingMs,
             ),
-            rangeDays = range.days(today),
+            rangeDays = range.days(today, weekStart),
             sessions = maxOf(local.sessions, (server?.sessions ?: 0) + local.pendingSessions),
             streakDays = maxOf(local.streakDays, server?.streakDays ?: 0),
             progressionPerHour = server?.progressionPerHour ?: local.progressionPerHour,

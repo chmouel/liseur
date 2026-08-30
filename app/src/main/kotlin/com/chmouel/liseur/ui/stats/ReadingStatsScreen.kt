@@ -75,6 +75,7 @@ import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
@@ -171,7 +172,7 @@ fun ReadingStatsScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 item {
-                    BentoHero(stats, ready.headline)
+                    BentoHero(stats, ready.headline, ready.range)
                 }
                 item {
                     ActivityCard(stats = stats, range = ready.range)
@@ -211,7 +212,7 @@ fun ReadingStatsScreen(
  * the grid instead of leaving a hole in it.
  */
 @Composable
-private fun BentoHero(stats: ReadingStats, headline: StatsHeadline) {
+private fun BentoHero(stats: ReadingStats, headline: StatsHeadline, range: StatsRange) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -258,9 +259,18 @@ private fun BentoHero(stats: ReadingStats, headline: StatsHeadline) {
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
-                        text = headline.rangeDays?.let {
-                            stringResource(R.string.reading_stats_in_last_days, it)
-                        } ?: stringResource(R.string.reading_stats_in_total),
+                        text = when {
+                            range == StatsRange.THIS_WEEK ->
+                                stringResource(R.string.reading_stats_this_week)
+
+                            headline.rangeDays != null ->
+                                stringResource(
+                                    R.string.reading_stats_in_last_days,
+                                    headline.rangeDays,
+                                )
+
+                            else -> stringResource(R.string.reading_stats_in_total)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -394,13 +404,14 @@ private fun BentoTile(
  *
  * Bars while a day is still a readable unit, a grid once it is not.
  * Both draw the same days; only the span the reader asked for decides
- * which can be read. "This past week" is only true when it is one —
- * thirty bars under that heading is the screen telling the reader
- * something it can see is false.
+ * which can be read. "This week" is only true when it is one — thirty
+ * bars under that heading is the screen telling the reader something it
+ * can see is false.
  */
 @Composable
 private fun ActivityCard(stats: ReadingStats, range: StatsRange) {
-    val daily = range.suitsDailyBars(LocalDate.now())
+    val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
+    val daily = range.suitsDailyBars(LocalDate.now(), weekStart)
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -420,7 +431,7 @@ private fun ActivityCard(stats: ReadingStats, range: StatsRange) {
             ) {
                 Text(
                     text = stringResource(
-                        if (daily && range == StatsRange.LAST_7_DAYS) {
+                        if (daily && range == StatsRange.THIS_WEEK) {
                             R.string.reading_stats_recent
                         } else {
                             R.string.reading_stats_calendar
@@ -432,7 +443,7 @@ private fun ActivityCard(stats: ReadingStats, range: StatsRange) {
                 )
                 // The week's own sum, next to its heading, so the chart
                 // can be read without adding seven bars in one's head.
-                if (daily && range == StatsRange.LAST_7_DAYS) {
+                if (daily && range == StatsRange.THIS_WEEK) {
                     val weekMs = stats.recent.sumOf { it.totalMs }
                     if (weekMs > 0) {
                         Surface(
@@ -862,7 +873,7 @@ private fun RangeMenu(selected: StatsRange, onSelect: (StatsRange) -> Unit) {
 
 private val StatsRange.label: Int
     get() = when (this) {
-        StatsRange.LAST_7_DAYS -> R.string.reading_stats_range_7d
+        StatsRange.THIS_WEEK -> R.string.reading_stats_range_7d
         StatsRange.LAST_30_DAYS -> R.string.reading_stats_range_30d
         StatsRange.LAST_90_DAYS -> R.string.reading_stats_range_90d
         StatsRange.LAST_YEAR -> R.string.reading_stats_range_365d
