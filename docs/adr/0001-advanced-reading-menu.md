@@ -72,8 +72,9 @@ cannot be empty. The rows that do not apply still hide themselves —
 auto-scroll only in a scrolled book, the page-turn animation only in a
 paginated one, columns only when there is width for two.
 
-Settings → Reading appearance shows the same six controls without a
-book, but not behind a collapsed section: that screen has nothing else
+Settings → Reading appearance shows five of the six without a book —
+the just-this-book toggle needs a book to set apart, and there is none
+here — and not behind a collapsed section: that screen has nothing else
 competing for room, so there is no empty-sheet problem to avoid, and a
 reader who came looking for the margins should not have to open
 anything to find them. The typography sheet still collapses them, being
