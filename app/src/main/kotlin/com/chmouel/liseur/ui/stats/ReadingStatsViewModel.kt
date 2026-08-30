@@ -226,6 +226,16 @@ class ReadingStatsViewModel(
          * was begun to the range the reader happens to be looking at.
          */
         val firstReadAtByUrl: Map<String, Long>,
+        /**
+         * The span [stats] was computed for.
+         *
+         * Carried with the figures rather than read again from `_range`
+         * downstream: `combine` does not synchronise its inputs, so a
+         * freshly selected span could otherwise be paired with sums
+         * still describing the previous one — a caption over numbers
+         * that do not answer it.
+         */
+        val range: StatsRange,
     )
 
     private val local = combine(
@@ -270,6 +280,7 @@ class ReadingStatsViewModel(
                 .filter { it.durationMs > 0 }
                 .groupBy { it.bookUrl }
                 .mapValues { (_, sittings) -> sittings.minOf { it.startedAt } },
+            range = range,
         )
     }
 
@@ -278,8 +289,7 @@ class ReadingStatsViewModel(
         acrossDevices,
         recentAcrossDevices,
         booksAcrossDevices,
-        _range,
-    ) { local, server, recent, serverBooks, range ->
+    ) { local, server, recent, serverBooks ->
         val merged = mergeDashboard(
             local.stats,
             local.books,
@@ -289,8 +299,8 @@ class ReadingStatsViewModel(
         )
         ReadingStatsUiState.Ready(
             stats = merged,
-            headline = mergeHeadline(merged, local.stats, server, range, today()),
-            range = range,
+            headline = mergeHeadline(merged, local.stats, server, local.range, today()),
+            range = local.range,
         )
     }.stateIn(
         viewModelScope,
