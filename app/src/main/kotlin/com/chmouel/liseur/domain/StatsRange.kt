@@ -64,7 +64,7 @@ enum class StatsRange(val id: String) {
     fun suitsDailyBars(today: LocalDate): Boolean = (days(today) ?: Int.MAX_VALUE) <= MAX_BAR_DAYS
 
     companion object {
-        val Default = LAST_30_DAYS
+        val Default = LAST_7_DAYS
 
         /** As many bars as fit across a phone without becoming hatching. */
         const val MAX_BAR_DAYS = 31

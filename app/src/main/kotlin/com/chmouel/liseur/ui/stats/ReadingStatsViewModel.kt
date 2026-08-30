@@ -422,6 +422,9 @@ class ReadingStatsViewModel(
                         totalMs = maxOf(localMs, serverMs + pendingMs),
                         pendingMs = pendingMs,
                         lastReadAt = lastReadAt,
+                        // The server has no started-at; the earliest local
+                        // start across the work's URLs is the only source.
+                        firstReadAt = rows.mapNotNull { it.firstReadAt }.minOrNull(),
                         progression = metadata.progression,
                         finished = metadata.finished,
                         sessions = maxOf(

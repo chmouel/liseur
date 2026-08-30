@@ -19,8 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +57,7 @@ import com.chmouel.liseur.ui.windowWidth
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 /**
@@ -207,17 +210,51 @@ fun BookReadingStatsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        val zone = ZoneId.systemDefault()
+                        val lastDate = Instant.ofEpochMilli(stats.lastReadAt)
+                            .atZone(zone)
+                            .toLocalDate()
+                        val firstDate = stats.firstReadAt?.let {
+                            Instant.ofEpochMilli(it).atZone(zone).toLocalDate()
+                        }
+                        if (firstDate != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                BookMetricTile(
+                                    icon = Icons.Outlined.Flag,
+                                    value = firstDate.format(lastReadFormat()),
+                                    label = stringResource(R.string.reading_stats_started_label),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                // Both endpoints count: begun and last read
+                                // on the same day is one day with the book,
+                                // not none.
+                                val daysWithBook =
+                                    ChronoUnit.DAYS.between(firstDate, lastDate) + 1
+                                BookMetricTile(
+                                    icon = Icons.Outlined.CalendarMonth,
+                                    value = if (daysWithBook <= 1L) {
+                                        stringResource(R.string.reading_stats_reading_for_one_day)
+                                    } else {
+                                        stringResource(
+                                            R.string.reading_stats_reading_for_days,
+                                            daysWithBook,
+                                        )
+                                    },
+                                    label = stringResource(R.string.reading_stats_reading_for_label),
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            val lastDate = Instant.ofEpochMilli(stats.lastReadAt)
-                                .atZone(ZoneId.systemDefault())
-                                .toLocalDate()
-                                .format(lastReadFormat())
                             BookMetricTile(
                                 icon = Icons.Outlined.DateRange,
-                                value = lastDate,
+                                value = lastDate.format(lastReadFormat()),
                                 label = stringResource(R.string.reading_stats_last_read_label),
                                 modifier = Modifier.weight(1f),
                             )

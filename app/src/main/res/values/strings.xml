@@ -616,6 +616,11 @@
     <string name="reading_stats_no_reading_day">Nothing read on %1$s</string>
     <string name="reading_stats_last_read">Last read %1$s</string>
     <string name="reading_stats_last_read_label">Last read</string>
+    <string name="reading_stats_started_label">Started</string>
+    <string name="reading_stats_reading_for_label">Reading for</string>
+    <string name="reading_stats_reading_for_days">%1$d days</string>
+    <string name="reading_stats_reading_for_one_day">1 day</string>
+    <string name="reading_stats_week_total">%1$s this week</string>
     <string name="reading_stats_progress">%1$d%% through</string>
     <string name="reading_stats_day_read">%1$s on %2$s</string>
     <string name="reading_stats_in_last_days">In the last %1$d days, on every device</string>

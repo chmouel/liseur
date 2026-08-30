@@ -51,6 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -410,18 +412,48 @@ private fun ActivityCard(stats: ReadingStats, range: StatsRange) {
             // month of them has none to spare.
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
         ) {
-            Text(
-                text = stringResource(
-                    if (daily && range == StatsRange.LAST_7_DAYS) {
-                        R.string.reading_stats_recent
-                    } else {
-                        R.string.reading_stats_calendar
-                    },
-                ),
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(
+                        if (daily && range == StatsRange.LAST_7_DAYS) {
+                            R.string.reading_stats_recent
+                        } else {
+                            R.string.reading_stats_calendar
+                        },
+                    ),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                // The week's own sum, next to its heading, so the chart
+                // can be read without adding seven bars in one's head.
+                if (daily && range == StatsRange.LAST_7_DAYS) {
+                    val weekMs = stats.recent.sumOf { it.totalMs }
+                    if (weekMs > 0) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    R.string.reading_stats_week_total,
+                                    readingDuration(weekMs),
+                                ),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
             Spacer(Modifier.height(16.dp))
             if (daily) {
                 WeekBars(stats.recent)
@@ -439,9 +471,16 @@ private fun ActivityCard(stats: ReadingStats, range: StatsRange) {
  * anything, and a bar of nothing reads correctly as a day with no
  * reading in it, which a line would smooth over.
  *
- * Every bar that has reading in it is drawn the same. Singling out the
- * longest day would make the chart a scoreboard with a record to beat,
- * and the height already says which day was the longest.
+ * At a week or less, each bar with reading on it carries its own
+ * figure, because "how long on Tuesday" is the question the chart
+ * exists to answer and a height alone answers it only relatively. Past
+ * a week there is no room for figures, and the heights go back to
+ * speaking for themselves.
+ *
+ * Today's bar is drawn in full and the rest a shade quieter — not as a
+ * grade, but as a cursor: the eye needs to know which bar it is living
+ * in before it can count backwards. The longest day is still not
+ * singled out; the height already says which day was the longest.
  *
  * The gap between bars narrows as they multiply, because the bars are
  * weighted and the gaps are not: thirty-one fixed 8dp gaps eat almost
@@ -463,6 +502,8 @@ private fun WeekBars(days: List<ReadingDay>) {
     // of the captioned ones.
     val lastIndex = days.lastIndex
     val everyBar = days.size <= DAYS_IN_WEEK
+    // Gradients dither into stripes on an e-ink panel; flat ink reads.
+    val eInk = LocalEInk.current
     val gap = when {
         days.size <= DAYS_IN_WEEK -> 8.dp
         days.size <= DAYS_IN_WEEK * 2 -> 5.dp
@@ -471,16 +512,20 @@ private fun WeekBars(days: List<ReadingDay>) {
     }
     // A 6dp radius on a bar 6dp wide is a lozenge, not a bar.
     val corner = if (days.size <= DAYS_IN_WEEK) 6.dp else 2.dp
+    // The figures above the bars need headroom of their own, or the
+    // tallest bar pushes its label out of the card.
+    val chartHeight = if (everyBar) 150.dp else 130.dp
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(130.dp),
+            .height(chartHeight),
         horizontalArrangement = Arrangement.spacedBy(gap),
         verticalAlignment = Alignment.Bottom,
     ) {
         days.forEachIndexed { index, day ->
             val captioned = everyBar || (lastIndex - index) % DAYS_IN_WEEK == 0
+            val isToday = index == lastIndex
             val amount = readingDuration(day.totalMs)
             val weekday = day.date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
             val barHeight = if (day.totalMs > 0) {
@@ -493,6 +538,16 @@ private fun WeekBars(days: List<ReadingDay>) {
             } else {
                 stringResource(R.string.reading_stats_no_reading_day, weekday)
             }
+            val primary = MaterialTheme.colorScheme.primary
+            val barBrush = when {
+                day.totalMs <= 0 -> SolidColor(MaterialTheme.colorScheme.surfaceContainerHighest)
+                eInk || isToday -> SolidColor(primary)
+                // Yesterday and before fade towards their base, so the
+                // week reads as a shape with today at its leading edge.
+                else -> Brush.verticalGradient(
+                    listOf(primary.copy(alpha = 0.8f), primary.copy(alpha = 0.45f)),
+                )
+            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -503,6 +558,23 @@ private fun WeekBars(days: List<ReadingDay>) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Bottom,
             ) {
+                if (everyBar) {
+                    Text(
+                        text = compactDuration(day.totalMs).orEmpty(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                        ),
+                        color = if (isToday) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Visible,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -511,19 +583,19 @@ private fun WeekBars(days: List<ReadingDay>) {
                         // every bar fill its column and look identical.
                         .height(barHeight)
                         .clip(RoundedCornerShape(corner))
-                        .background(
-                            if (day.totalMs > 0) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHighest
-                            },
-                        ),
+                        .background(barBrush),
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = if (captioned) weekday else "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = if (isToday && everyBar) FontWeight.Bold else FontWeight.Normal,
+                    ),
+                    color = if (isToday && everyBar) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Visible,
