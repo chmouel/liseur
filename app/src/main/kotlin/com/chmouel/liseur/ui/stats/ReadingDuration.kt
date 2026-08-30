@@ -27,7 +27,7 @@ sealed interface DurationParts {
 /**
  * Splits [millis] into the largest units that still say something.
  *
- * Rounded to the minute and no finer. Seconds are noise here — nobody
+ * Resolved to the minute and no finer. Seconds are noise here — nobody
  * reads for four minutes and eleven seconds, they read for a few
  * minutes — and showing them would invite the reader to watch a number
  * that is only ever an estimate tick upwards.
