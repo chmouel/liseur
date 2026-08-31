@@ -159,8 +159,10 @@ class ReaderPreferencesMapperTest {
         // lets one value read on white, beige, dark grey and black, and
         // it is why the value cannot go through RsProperties' own
         // selectionBackgroundColor, which takes six hex digits at most.
+        // Spelled rgba() and not eight-digit hex, which the WebView on
+        // our oldest Android is two versions too old to parse.
         val overrides = readingRsProperties(ColumnMode.AUTO).overrides
-        assertEquals("#4A90E266", overrides["--RS__selectionBackgroundColor"])
+        assertEquals("rgba(74, 144, 226, 0.4)", overrides["--RS__selectionBackgroundColor"])
         assertEquals("currentColor", overrides["--RS__selectionTextColor"])
     }
 
