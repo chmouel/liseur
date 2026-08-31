@@ -25,10 +25,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.DropdownMenu
@@ -72,6 +75,9 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.BookReadingStats
+import com.chmouel.liseur.domain.ComparisonDirection
+import com.chmouel.liseur.domain.ComparisonPeriod
+import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.StatsRange
@@ -253,24 +259,23 @@ private fun BentoHero(stats: ReadingStats, headline: StatsHeadline, range: Stats
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                // A period with nothing in it never reaches here: the
+                // screen has already returned its empty state. That is
+                // deliberate. A nought in this face, captioned with the
+                // largest negative percentage there is, is the one thing
+                // this design could say that would read as a reprimand,
+                // and reading less is not a fault. See ADR 18.
+                headline.comparison?.let { comparison ->
+                    Spacer(Modifier.height(6.dp))
+                    ComparisonLine(comparison)
+                }
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
-                        text = when {
-                            range == StatsRange.THIS_WEEK ->
-                                stringResource(R.string.reading_stats_this_week)
-
-                            headline.rangeDays != null ->
-                                stringResource(
-                                    R.string.reading_stats_in_last_days,
-                                    headline.rangeDays,
-                                )
-
-                            else -> stringResource(R.string.reading_stats_in_total)
-                        },
+                        text = stringResource(range.caption),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -874,12 +879,82 @@ private fun RangeMenu(selected: StatsRange, onSelect: (StatsRange) -> Unit) {
 private val StatsRange.label: Int
     get() = when (this) {
         StatsRange.THIS_WEEK -> R.string.reading_stats_range_7d
-        StatsRange.LAST_30_DAYS -> R.string.reading_stats_range_30d
-        StatsRange.LAST_90_DAYS -> R.string.reading_stats_range_90d
-        StatsRange.LAST_YEAR -> R.string.reading_stats_range_365d
+        StatsRange.THIS_MONTH -> R.string.reading_stats_range_this_month
         StatsRange.THIS_YEAR -> R.string.reading_stats_range_this_year
         StatsRange.ALL_TIME -> R.string.reading_stats_range_all
     }
+
+/**
+ * What the figure above it covers.
+ *
+ * Every span the reader can pick is calendar-named, so the caption names
+ * the calendar too. It used to count days for anything that was not this
+ * week, which read as "in the last 227 days" over a total captioned
+ * "This year" in the menu that produced it.
+ */
+private val StatsRange.caption: Int
+    get() = when (this) {
+        StatsRange.THIS_WEEK -> R.string.reading_stats_this_week
+        StatsRange.THIS_MONTH -> R.string.reading_stats_this_month
+        StatsRange.THIS_YEAR -> R.string.reading_stats_this_year
+        StatsRange.ALL_TIME -> R.string.reading_stats_in_total
+    }
+
+/**
+ * Whether this period was more or less than the one before it.
+ *
+ * Deliberately plain. The arrow says which way and the sentence says the
+ * same thing in words, so nothing here depends on seeing the icon or
+ * telling two colours apart — and there are no two colours to tell
+ * apart, because a quiet week is not an error state. Both take
+ * `onSurfaceVariant`, the same weight as the caption below.
+ */
+@Composable
+private fun ComparisonLine(comparison: ReadingComparison) {
+    val period = stringResource(
+        when (comparison.period) {
+            ComparisonPeriod.WEEK -> R.string.reading_stats_period_week
+            ComparisonPeriod.MONTH -> R.string.reading_stats_period_month
+            ComparisonPeriod.YEAR -> R.string.reading_stats_period_year
+        },
+    )
+    val percent = comparison.percent
+    val text = when {
+        comparison.direction == ComparisonDirection.SAME ->
+            stringResource(R.string.reading_stats_compare_same, period)
+
+        // No baseline to divide by. An infinity, or a number in the
+        // hundreds of thousands, is not a fact about the reader's week.
+        percent == null -> stringResource(R.string.reading_stats_compare_more_than, period)
+
+        comparison.direction == ComparisonDirection.MORE ->
+            stringResource(R.string.reading_stats_compare_more, percent, period)
+
+        else -> stringResource(R.string.reading_stats_compare_less, percent, period)
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = when (comparison.direction) {
+                ComparisonDirection.MORE -> Icons.Outlined.ArrowUpward
+                ComparisonDirection.LESS -> Icons.Outlined.ArrowDownward
+                ComparisonDirection.SAME -> Icons.Outlined.Remove
+            },
+            // The sentence beside it already says which way, by how much
+            // and against what.
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun EmptyStats(modifier: Modifier = Modifier, narrowedByRange: Boolean = false) {

@@ -16,19 +16,23 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.BookReadingStats
+import com.chmouel.liseur.domain.ComparisonSpans
+import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.SessionSpan
+import com.chmouel.liseur.domain.SpanTotals
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.domain.compareReading
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.domain.readingStats
+import com.chmouel.liseur.domain.readingTotals
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.temporal.WeekFields
 import java.util.Locale
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Job
@@ -39,6 +43,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed interface ReadingStatsUiState {
@@ -59,17 +64,16 @@ sealed interface ReadingStatsUiState {
  * them twice. When the server has nothing — offline, or no statistics
  * token — the local figures stand in.
  *
- * [rangeDays] is null only for a span with no beginning, so the caption
- * can say "in total" rather than pretending a window.
+ * [comparison] is null for a span with no previous period to measure
+ * against, which is only "all time".
  */
 data class StatsHeadline(
     val totalMs: Long,
-    /** Days the total covers, or null for all time. */
-    val rangeDays: Int?,
     val sessions: Int,
     val streakDays: Int,
     /** Fraction of a book per hour, or null with nothing to divide by. */
     val progressionPerHour: Double?,
+    val comparison: ReadingComparison? = null,
 )
 
 sealed interface BookReadingStatsUiState {
@@ -100,24 +104,51 @@ class ReadingStatsViewModel(
     private val settings: AppSettingsRepository? = null,
     initialRange: StatsRange = StatsRange.Default,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
-    private val today: () -> LocalDate = { LocalDate.now(ZoneId.systemDefault()) },
+    private val today: (ZoneId) -> LocalDate = LocalDate::now,
     initialWeekStart: DayOfWeek = localeWeekStart(Locale.getDefault()),
 ) : ViewModel() {
 
-    private val _range = MutableStateFlow(initialRange)
-    val range: StateFlow<StatsRange> = _range.asStateFlow()
-
     /**
-     * Which day the reader's week begins on.
+     * Everything that decides which question the screen is asking.
      *
-     * A flow rather than a value read where it is needed, for the same
-     * reason [_range] is one: the sums, the server request and the
-     * caption over them all have to describe one week. Sampling it
-     * inside the aggregation would leave a retained view model holding
-     * last locale's totals under this locale's heading, because a
-     * language change emits nothing the aggregation is listening to.
+     * One value rather than four, because all four have to move
+     * together. The span, the day it ends on, the day the reader's week
+     * begins and the zone the sums are done in are a single question,
+     * and the answers to it — this device's and the server's — are only
+     * comparable if they were asked the same one. While the day and the
+     * zone were sampled from the clock wherever they happened to be
+     * needed, "this week" could be resolved twice in one emission and
+     * come out differently either side of midnight.
+     *
+     * It also makes an answer refusable. A `combine` does not
+     * synchronise its inputs, so a server reply can arrive between a
+     * range change and the local recomputation it triggers; tagging each
+     * reply with the window it was asked about is what stops a month's
+     * total being merged into a week's.
      */
-    private val _weekStart = MutableStateFlow(initialWeekStart)
+    private data class StatsWindow(
+        val range: StatsRange,
+        val weekStart: DayOfWeek,
+        val zone: ZoneId,
+        val today: LocalDate,
+    )
+
+    /** A server answer, and the question it was the answer to. */
+    private data class Answered<T>(val window: StatsWindow, val value: T)
+
+    private fun <T> Answered<T>?.forWindow(window: StatsWindow): T? =
+        this?.takeIf { it.window == window }?.value
+
+    private val _window = MutableStateFlow(
+        zone().let { StatsWindow(initialRange, initialWeekStart, it, today(it)) },
+    )
+
+    val range: StateFlow<StatsRange> =
+        _window.map { it.range }.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            _window.value.range,
+        )
 
     /** Set once the reader has picked a span for themselves. */
     private var rangeChosen = false
@@ -126,9 +157,10 @@ class ReadingStatsViewModel(
     private var generation = 0L
     private var refresh: Job? = null
 
-    private val _acrossDevices = MutableStateFlow<InsightsSummary?>(null)
-    private val _recentAcrossDevices = MutableStateFlow<List<InsightDay>?>(null)
-    private val _booksAcrossDevices = MutableStateFlow<Map<String, WorkInsights>?>(null)
+    private val _acrossDevices = MutableStateFlow<Answered<InsightsSummary?>?>(null)
+    private val _previousAcrossDevices = MutableStateFlow<Answered<InsightsSummary?>?>(null)
+    private val _recentAcrossDevices = MutableStateFlow<Answered<List<InsightDay>?>?>(null)
+    private val _booksAcrossDevices = MutableStateFlow<Answered<Map<String, WorkInsights>?>?>(null)
 
     /**
      * The same reading, counted on every device rather than this one.
@@ -137,7 +169,17 @@ class ReadingStatsViewModel(
      * does not care which machine did the reading, and two figures that
      * answer the same question differently are a doubt, not a feature.
      */
-    private val acrossDevices: StateFlow<InsightsSummary?> = _acrossDevices.asStateFlow()
+    private val acrossDevices = _acrossDevices.asStateFlow()
+
+    /**
+     * The same, for the period this one is being measured against.
+     *
+     * Kept apart from [acrossDevices] rather than fetched with it so
+     * that a slow baseline cannot hold up the headline. Either may fail
+     * on its own; a baseline that does falls back to this device's own
+     * history, which is what the whole screen does without a server.
+     */
+    private val previousAcrossDevices = _previousAcrossDevices.asStateFlow()
     private val recentAcrossDevices = _recentAcrossDevices.asStateFlow()
     private val booksAcrossDevices = _booksAcrossDevices.asStateFlow()
 
@@ -148,7 +190,7 @@ class ReadingStatsViewModel(
                 // A reader who reached the menu before the store answered
                 // has already said what they want; the stored value is
                 // then a stale answer to a question they have re-asked.
-                if (!rangeChosen) _range.value = saved
+                if (!rangeChosen) _window.update { it.copy(range = saved) }
                 refreshServerInsights()
             }
         }
@@ -170,11 +212,9 @@ class ReadingStatsViewModel(
         // `rangeChosen` is about to stop the stored value from being
         // applied over the top of it.
         viewModelScope.launch { settings?.setStatsRange(range) }
-        if (_range.value == range) return
-        _range.value = range
-        _acrossDevices.value = null
-        _recentAcrossDevices.value = null
-        _booksAcrossDevices.value = null
+        if (_window.value.range == range) return
+        _window.update { it.copy(range = range) }
+        forgetServerAnswers()
         refreshServerInsights()
     }
 
@@ -187,21 +227,33 @@ class ReadingStatsViewModel(
      * stale from then on.
      */
     fun setWeekStart(day: DayOfWeek) {
-        if (_weekStart.value == day) return
-        _weekStart.value = day
+        if (_window.value.weekStart == day) return
+        _window.update { it.copy(weekStart = day) }
         // The server was asked for a span that began on the old week's
         // first day. Its answer is about days this screen no longer
         // claims to be showing.
+        forgetServerAnswers()
+        refreshServerInsights()
+    }
+
+    private fun forgetServerAnswers() {
         _acrossDevices.value = null
+        _previousAcrossDevices.value = null
         _recentAcrossDevices.value = null
         _booksAcrossDevices.value = null
-        refreshServerInsights()
     }
 
     /**
      * Refreshes the server decoration whenever a statistics screen opens.
      *
-     * Each refresh replaces the last outright: the previous one is
+     * The window moves to today first, and before the check for a server.
+     * Nothing here observes the clock, so this visit is the moment the
+     * screen learns what day it is; doing it after the early return would
+     * leave the one reader with no server — for whom the local figures
+     * are the entire screen — looking at yesterday's week for as long as
+     * the app stayed open.
+     *
+     * Each refresh then replaces the last outright: the previous one is
      * cancelled and its answers are refused by generation, not by which
      * span they were for. Comparing spans is not enough — a reader who
      * looks at a week, then a month, then the week again would otherwise
@@ -210,30 +262,44 @@ class ReadingStatsViewModel(
      * would look wrong.
      */
     fun refreshServerInsights() {
+        val zone = zone()
+        _window.update { it.copy(zone = zone, today = today(zone)) }
+        val window = _window.value
         val source = insights ?: return
-        val range = _range.value
         val token = ++generation
         refresh?.cancel()
+        val spans = window.range.comparison(window.today, window.weekStart)
+        // A span with nothing to compare against must not keep an answer
+        // fetched while it had one.
+        if (spans == null) _previousAcrossDevices.value = null
         refresh = viewModelScope.launch {
-            val end = today()
-            val week = _weekStart.value
+            val end = window.today
+            val week = window.weekStart
             launch {
-                val summary = source.summary(range, end, week)
-                if (token == generation) _acrossDevices.value = summary
+                val summary = source.summary(window.range, end, week)
+                if (token == generation) _acrossDevices.value = Answered(window, summary)
+            }
+            if (spans != null) {
+                launch {
+                    val summary = source.summary(spans.previous.from, spans.previous.to)
+                    if (token == generation) {
+                        _previousAcrossDevices.value = Answered(window, summary)
+                    }
+                }
             }
             launch {
                 val calendar = source.calendar(
-                    from = range.startDate(end, week) ?: maxOf(
+                    from = window.range.startDate(end, week) ?: maxOf(
                         EARLIEST_PLAUSIBLE_DAY,
                         end.minusDays(CALENDAR_HORIZON_DAYS),
                     ),
                     to = end,
                 )
-                if (token == generation) _recentAcrossDevices.value = calendar
+                if (token == generation) _recentAcrossDevices.value = Answered(window, calendar)
             }
             launch {
-                val books = source.allBooks(range, end, week)
-                if (token == generation) _booksAcrossDevices.value = books
+                val books = source.allBooks(window.range, end, week)
+                if (token == generation) _booksAcrossDevices.value = Answered(window, books)
             }
         }
     }
@@ -244,9 +310,17 @@ class ReadingStatsViewModel(
      * This is the same aggregate used by the dashboard row, so its total
      * and estimate are fetched together and cannot describe different
      * snapshots of the server.
+     *
+     * The window is combined in rather than read from underneath. Most
+     * of what moves it also drops the server answers, but a refresh that
+     * finds the date has changed does not, and reading the window inside
+     * a `map` over the answers alone would leave this estimate serving a
+     * superseded day until the next reply arrived.
      */
     fun serverEstimateFor(bookUrl: String): StateFlow<WorkInsights?> =
-        booksAcrossDevices.map { it?.get(bookUrl) }.stateIn(
+        combine(booksAcrossDevices, _window) { answered, window ->
+            answered.forWindow(window)?.get(bookUrl)
+        }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             null,
@@ -265,26 +339,35 @@ class ReadingStatsViewModel(
          */
         val firstReadAtByUrl: Map<String, Long>,
         /**
-         * The span [stats] was computed for.
+         * The question [stats] answers.
          *
-         * Carried with the figures rather than read again from `_range`
+         * Carried with the figures rather than read again from `_window`
          * downstream: `combine` does not synchronise its inputs, so a
          * freshly selected span could otherwise be paired with sums
          * still describing the previous one — a caption over numbers
-         * that do not answer it.
+         * that do not answer it. It is also what every server answer is
+         * checked against before being merged.
          */
-        val range: StatsRange,
-        /** The week's first day [stats] was computed against, likewise. */
-        val weekStart: DayOfWeek,
+        val window: StatsWindow,
+        /** The two spans being compared, or null for a span with none. */
+        val spans: ComparisonSpans?,
+        /**
+         * This device's own reading over [spans]'s baseline period.
+         *
+         * Reduced from the same session list, in the same zone, by the
+         * same day rule as [stats]. Anything less and the two halves of
+         * the comparison could disagree about which side of midnight an
+         * evening fell on, and report a difference the reader never made.
+         */
+        val previous: SpanTotals?,
     )
 
     private val local = combine(
         sessionDao.observeAll(),
         bookDao.observeAll(),
         progressDao.observeProgressions(),
-        _range,
-        _weekStart,
-    ) { sessions, books, progressions, range, weekStart ->
+        _window,
+    ) { sessions, books, progressions, window ->
         val progressionByUrl = progressions.associateBy({ it.bookUrl }, { it.totalProgression })
         val statsBooks = books.associate { book ->
             book.url to StatsBook(
@@ -308,22 +391,24 @@ class ReadingStatsViewModel(
                 endProgression = it.endProgression,
             )
         }
+        val comparison = window.range.comparison(window.today, window.weekStart)
         LocalStats(
             stats = readingStats(
                 sessions = spans,
                 books = statsBooks,
-                zone = zone(),
-                today = today(),
-                range = range,
-                weekStart = weekStart,
+                zone = window.zone,
+                today = window.today,
+                range = window.range,
+                weekStart = window.weekStart,
             ),
             books = statsBooks,
             firstReadAtByUrl = spans
                 .filter { it.durationMs > 0 }
                 .groupBy { it.bookUrl }
                 .mapValues { (_, sittings) -> sittings.minOf { it.startedAt } },
-            range = range,
-            weekStart = weekStart,
+            window = window,
+            spans = comparison,
+            previous = comparison?.let { readingTotals(spans, window.zone, it.previous) },
         )
     }
 
@@ -332,25 +417,27 @@ class ReadingStatsViewModel(
         acrossDevices,
         recentAcrossDevices,
         booksAcrossDevices,
-    ) { local, server, recent, serverBooks ->
+        previousAcrossDevices,
+    ) { local, server, recent, serverBooks, previousServer ->
+        val window = local.window
         val merged = mergeDashboard(
             local.stats,
             local.books,
-            recent,
-            serverBooks,
+            recent.forWindow(window),
+            serverBooks.forWindow(window),
             local.firstReadAtByUrl,
         )
         ReadingStatsUiState.Ready(
             stats = merged,
             headline = mergeHeadline(
-                merged,
-                local.stats,
-                server,
-                local.range,
-                today(),
-                local.weekStart,
+                merged = merged,
+                local = local.stats,
+                server = server.forWindow(window),
+                spans = local.spans,
+                previousLocal = local.previous,
+                previousServer = previousServer.forWindow(window),
             ),
-            range = local.range,
+            range = window.range,
         )
     }.stateIn(
         viewModelScope,
@@ -422,24 +509,51 @@ class ReadingStatsViewModel(
          * local arithmetic can produce. Each falls back independently: a
          * server that reports a streak but no pace should not cost the
          * reader the pace this device works out for itself.
+         *
+         * The baseline is merged by the same rule as the total it is
+         * measured against, and that is the point of doing it here
+         * rather than anywhere else: were the current period allowed to
+         * count a second device and the previous one not, an evening on
+         * a laptop would appear in one half of the comparison and vanish
+         * from the other, and the screen would report a change in the
+         * reader's habits that was really a change in its own arithmetic.
+         *
+         * A baseline the server could not answer for falls back to this
+         * device's own history rather than hiding the comparison. That
+         * is what the rest of the screen does without a server, and a
+         * statistics screen is not worth an error.
          */
         internal fun mergeHeadline(
             merged: ReadingStats,
             local: ReadingStats,
             server: InsightsSummary?,
-            range: StatsRange,
-            today: LocalDate,
-            weekStart: DayOfWeek = WeekFields.ISO.firstDayOfWeek,
-        ): StatsHeadline = StatsHeadline(
-            totalMs = maxOf(
+            spans: ComparisonSpans? = null,
+            previousLocal: SpanTotals? = null,
+            previousServer: InsightsSummary? = null,
+        ): StatsHeadline {
+            val totalMs = maxOf(
                 merged.totalMs,
                 (server?.activeMinutes?.minutesAsMillis() ?: 0L) + local.pendingMs,
-            ),
-            rangeDays = range.days(today, weekStart),
-            sessions = maxOf(local.sessions, (server?.sessions ?: 0) + local.pendingSessions),
-            streakDays = maxOf(local.streakDays, server?.streakDays ?: 0),
-            progressionPerHour = server?.progressionPerHour ?: local.progressionPerHour,
-        )
+            )
+            return StatsHeadline(
+                totalMs = totalMs,
+                sessions = maxOf(local.sessions, (server?.sessions ?: 0) + local.pendingSessions),
+                streakDays = maxOf(local.streakDays, server?.streakDays ?: 0),
+                progressionPerHour = server?.progressionPerHour ?: local.progressionPerHour,
+                comparison = spans?.let {
+                    val baseline = previousLocal ?: SpanTotals.Empty
+                    compareReading(
+                        period = it.period,
+                        currentMs = totalMs,
+                        previousMs = maxOf(
+                            baseline.totalMs,
+                            (previousServer?.activeMinutes?.minutesAsMillis() ?: 0L) +
+                                baseline.pendingMs,
+                        ),
+                    )
+                },
+            )
+        }
 
         /**
          * Folds the server's aggregates into the local ones, never
