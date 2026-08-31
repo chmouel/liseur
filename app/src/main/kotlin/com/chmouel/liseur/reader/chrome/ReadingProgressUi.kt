@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -34,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -153,7 +156,7 @@ fun ReadingScrubber(
             .fillMaxWidth()
             .background(theme.background)
             .padding(horizontal = 20.dp)
-            .padding(top = 8.dp, bottom = 12.dp),
+            .padding(top = 8.dp, bottom = 2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
@@ -183,12 +186,26 @@ fun ReadingScrubber(
             ),
             modifier = Modifier.chapterTicks(chapterTicks, accent.copy(alpha = 0.5f)),
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             FooterHint(stringResource(R.string.footer_percent, progress.percent), accent)
             FooterHint(
                 stringResource(R.string.footer_page, previewPosition, progress.totalPositions),
                 accent,
-                Modifier.clickableWithoutRipple(onGoToPage),
+                Modifier
+                    .clickableWithoutRipple(
+                        onClick = onGoToPage,
+                        role = Role.Button,
+                        onClickLabel = stringResource(R.string.go_to_page_title),
+                    )
+                    // The readout is a line of small print, so the tap
+                    // target is grown to a comfortable size around it
+                    // rather than left the height of the text.
+                    .heightIn(min = 48.dp)
+                    .wrapContentHeight(Alignment.CenterVertically),
             )
         }
     }
@@ -210,10 +227,16 @@ private fun FooterHint(text: String, color: Color, modifier: Modifier = Modifier
  * don't turn the page.
  */
 @Composable
-private fun Modifier.clickableWithoutRipple(onClick: () -> Unit): Modifier =
+private fun Modifier.clickableWithoutRipple(
+    onClick: () -> Unit,
+    role: Role? = null,
+    onClickLabel: String? = null,
+): Modifier =
     clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,
+        role = role,
+        onClickLabel = onClickLabel,
         onClick = onClick,
     )
 
