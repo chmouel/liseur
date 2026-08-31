@@ -98,3 +98,14 @@ first sheet rather than simply land there.
 *Where:* `reader/chrome/TypographySheet.kt`,
 `reader/chrome/AdvancedSheet.kt`,
 `ui/settings/ReadingAppearanceScreen.kt`.
+
+## Update
+
+The Settings screen went the way this ADR describes the sheet going.
+Its Reading section had grown to eight switches, a chip row and two
+rows that only some devices show, so it moved behind a single row into
+**Settings → Reading & navigation**
+(`ui/settings/ReadingNavigationScreen.kt`), taking the dictionary
+section with it. Reading appearance is unchanged and still holds how
+the page looks; the tap-zone chip row named above is now on the new
+screen. `AGENTS.md` names both destinations.

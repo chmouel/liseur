@@ -560,6 +560,10 @@
     <string name="footer_mode_none">Hide the footer</string>
 
     <string name="settings_reading">Reading</string>
+    <string name="settings_reading_navigation">Reading &amp; navigation</string>
+    <string name="settings_reading_navigation_paged">Paged. Page-turn sides: %1$s</string>
+    <string name="settings_reading_navigation_scrolling">Read by scrolling.</string>
+    <string name="settings_screen">Screen</string>
     <string name="settings_volume_keys">Volume keys turn pages</string>
     <string name="settings_volume_keys_detail">Volume down goes forward, volume up goes back.</string>
     <string name="settings_tap_zones">Page-turn sides</string>
