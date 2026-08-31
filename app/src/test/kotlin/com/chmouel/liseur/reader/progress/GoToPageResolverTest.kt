@@ -128,12 +128,34 @@ class GoToPageResolverTest {
     }
 
     @Test
-    fun `a printed page the reading order does not carry is not offered`() {
+    fun `a page list that lands nowhere falls back to the footer's pages`() {
         val spine = spine("first.xhtml" to 2)
         val pages = listOf(link("missing.xhtml", "9"))
         val resolver = GoToPageResolver(pages, spine.positions(), spine::locatorFromLink)
 
-        assertEquals("9", resolver.promptAt(2).currentLabel)
+        val prompt = resolver.promptAt(2)
+        assertEquals(PageNumbering.POSITION, prompt.numbering)
+        assertEquals("1", prompt.firstLabel)
+        assertEquals("2", prompt.lastLabel)
+        assertEquals("2", prompt.currentLabel)
+        // Which is a numbering the reader can actually use.
+        assertEquals(1, resolver.resolve("1")?.locator?.locations?.position)
+        assertNull(resolver.resolve("9"))
+    }
+
+    @Test
+    fun `a percentage of a hundred steps lands on the step asked for`() {
+        val positions = spine("long.xhtml" to 101).positions()
+
+        // Every percentage is a whole step here, so any rounding at all
+        // is one step too far.
+        (0..100).forEach { percent ->
+            assertEquals(
+                "$percent% missed its step",
+                percent + 1,
+                goToPercent(percent.toString(), positions)?.locator?.locations?.position,
+            )
+        }
     }
 
     @Test

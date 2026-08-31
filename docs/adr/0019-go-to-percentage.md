@@ -83,7 +83,15 @@ to one mark per printed page, and paying for all of them belongs to the
 moment the reader opens the dialog rather than to every book that is
 merely opened.
 
-Two rules in it are deliberate. Marks landing on the same position keep
+A page list whose marks land nowhere in the reading order is not a
+numbering at all, whatever the file declares: every label it offered
+would be refused, and the reader would be left with a dialog that cannot
+answer. Such a book falls back to the page the footer shows. The
+endpoints of a real one are still read off the document rather than the
+index, because a page list is not sorted by position — roman numerals
+through the front matter is the ordinary case.
+
+Two rules in the index are deliberate. Marks landing on the same position keep
 the *earliest* label, because a chapter whose marks all resolve to its
 first position should read as the page it starts on, not the page it
 ends on. And a reader ahead of no mark at all — in the cover and the
@@ -94,7 +102,9 @@ The percentage resolver is a function, not a class: there is no per-book
 index to hold, only `BookPositions`.
 
 It maps a percentage to the *first* position the footer would call that
-percentage. That is the only mapping that keeps the promise the feature
+percentage, in integer arithmetic, because that boundary is the whole
+point: 7% of a hundred steps is 7.000000000000001 in binary floating
+point, and rounding that up steps a page past the page being asked for. That is the only mapping that keeps the promise the feature
 is for: type the number the footer is showing and the footer still shows
 it. Rounding the other way — flooring, which is what
 `locatorAtOrBeforeProgression()` does for sync — lands a page short, and

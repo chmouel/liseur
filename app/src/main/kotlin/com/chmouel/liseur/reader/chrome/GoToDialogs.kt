@@ -113,7 +113,11 @@ private fun GoToDialog(
     onConfirm: (GoToDestination) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var answer by rememberSaveable(start, stateSaver = TextFieldValue.Saver) {
+    // Seeded once and deliberately not keyed on [start]: the reader's
+    // position can settle under the dialog, and a key would take the
+    // half-typed answer with it. The dialog is created when it opens, so
+    // the next one starts from wherever the reader is by then.
+    var answer by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(start, TextRange(0, start.length)))
     }
     val destination = resolve(answer.text)

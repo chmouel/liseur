@@ -2,7 +2,6 @@ package com.chmouel.liseur.reader.progress
 
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
-import kotlin.math.ceil
 
 /** Which page number the go-to-page dialog asks the reader for. */
 enum class PageNumbering {
@@ -43,13 +42,6 @@ class GoToPageResolver(
         orderedPrintedPages.forEach { (label, link) -> putIfAbsent(label, link) }
     }
 
-    private val numbering: PageNumbering =
-        if (orderedPrintedPages.isEmpty()) PageNumbering.POSITION else PageNumbering.PRINTED
-    private val firstLabel: String =
-        orderedPrintedPages.firstOrNull()?.first ?: "1"
-    private val lastLabel: String =
-        orderedPrintedPages.lastOrNull()?.first ?: positions.totalPositions.toString()
-
     /**
      * Where each printed page falls in the book, in reading order.
      *
@@ -71,6 +63,32 @@ class GoToPageResolver(
             .sortedBy { it.first }
             .distinctBy { it.first }
     }
+
+    /**
+     * A page list none of whose marks land anywhere in the book is not a
+     * numbering, whatever it declares: every label it offers would be
+     * refused. Such a book is asked for the page the footer shows, which
+     * it can always answer.
+     */
+    private val numbering: PageNumbering
+        get() = if (printedPagesByPosition.isEmpty()) {
+            PageNumbering.POSITION
+        } else {
+            PageNumbering.PRINTED
+        }
+
+    // The endpoints are the ones the book lists, in the order it lists
+    // them. A page list is not sorted by position -- front matter in
+    // roman numerals is the ordinary case -- so the ends of the range are
+    // read off the document, not off the index.
+    private val firstLabel: String
+        get() = if (numbering == PageNumbering.PRINTED) orderedPrintedPages.first().first else "1"
+    private val lastLabel: String
+        get() = if (numbering == PageNumbering.PRINTED) {
+            orderedPrintedPages.last().first
+        } else {
+            positions.totalPositions.toString()
+        }
 
     /** The dialog to show for a reader currently on [position]. */
     fun promptAt(position: Int): GoToPagePrompt = GoToPagePrompt(
@@ -132,8 +150,11 @@ fun goToPercent(answer: String, positions: BookPositions): GoToDestination? {
     val percent = answer.trim().toIntOrNull()?.takeIf { it in 0..100 } ?: return null
     val total = positions.totalPositions
     if (total < 1) return null
-    val coordinate = 1.0 + percent / 100.0 * (total - 1)
-    val locator = positions.locatorAt(ceil(coordinate).toInt()) ?: return null
+    // Integer arithmetic, because the boundary is the whole point: 7% of
+    // a hundred steps is 7.000000000000001 in binary floating point, and
+    // rounding that up steps a page past the page being asked for.
+    val steps = (percent * (total - 1) + 99) / 100
+    val locator = positions.locatorAt(1 + steps) ?: return null
     return positions.destinationAt(locator)
 }
 
