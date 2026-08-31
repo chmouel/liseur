@@ -93,6 +93,21 @@ class ReadingCssTest {
     }
 
     @Test
+    fun `traditional Chinese is CJK and never RTL`() {
+        // Readium's Language.isRtl lists zh-hant and zh-tw, and the
+        // mirror in ReaderPrefs keeps them so it stays an exact copy.
+        // Layout.from tests CJK first, so those books get the CJK sheet
+        // whatever their progression says. This is what makes keeping
+        // the two tags in the mirror harmless; if a refactor ever
+        // reordered the branches, this is what would fail.
+        for (code in listOf("zh-Hant", "ZH-HANT", "zh-TW", "zh_TW")) {
+            assertEquals(ReadingCss.Cjk, cssFor(language = code))
+            assertEquals(ReadingCss.Cjk, cssFor(language = code, metadataRtl = true))
+            assertEquals(ReadingCss.Cjk, cssFor(language = code, metadataRtl = false))
+        }
+    }
+
+    @Test
     fun `a book that says nothing about itself gets the default`() {
         for (code in listOf(null, "", "   ", "-", "not a language")) {
             assertEquals(ReadingCss.Default, cssFor(language = code))

@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderFontWeight
@@ -374,17 +375,28 @@ fun DefaultableSpacingSlider(
  * promise that the slider lands on round numbers is kept here, by
  * formatting, rather than by arithmetic — and through [NumberFormat], so
  * a reader whose locale writes `0,15` sees that.
+ *
+ * The formatter is remembered against the composition's locale rather
+ * than held in a static, because a static one is fixed to whichever
+ * locale was current when the class loaded and would go on writing
+ * `0.15` after the reader switches languages. [NumberFormat] is also
+ * not thread-safe, and one per composition is not shared.
  */
 @Composable
-private fun spacingLabel(value: Double?): String = when {
-    value == null -> stringResource(R.string.reader_spacing_value_default)
-    value == 0.0 -> stringResource(R.string.reader_spacing_value_none)
-    else -> stringResource(R.string.reader_spacing_value, spacingNumberFormat.format(value))
-}
-
-private val spacingNumberFormat: NumberFormat = NumberFormat.getNumberInstance().apply {
-    minimumFractionDigits = 0
-    maximumFractionDigits = 2
+private fun spacingLabel(value: Double?): String {
+    val locale = Locale.current
+    val format = remember(locale) {
+        NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag(locale.toLanguageTag()))
+            .apply {
+                minimumFractionDigits = 0
+                maximumFractionDigits = 2
+            }
+    }
+    return when {
+        value == null -> stringResource(R.string.reader_spacing_value_default)
+        value == 0.0 -> stringResource(R.string.reader_spacing_value_none)
+        else -> stringResource(R.string.reader_spacing_value, format.format(value))
+    }
 }
 
 @Composable

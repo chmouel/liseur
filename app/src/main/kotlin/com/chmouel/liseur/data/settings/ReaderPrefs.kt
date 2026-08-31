@@ -525,7 +525,27 @@ private fun isCjkLanguage(language: String?): Boolean {
 /**
  * Readium's `Language.isRtl`, which compares the whole code to a fixed
  * list — so `ar-EG` is not right-to-left to it. Mirrored for the same
- * reason as [isCjkLanguage].
+ * reason as [isCjkLanguage]:
+ *
+ * ```kotlin
+ * internal val Language.isRtl: Boolean get() {
+ *     val c = code.lowercase()
+ *     return c == "ar" || c == "fa" || c == "he" || c == "zh-hant" || c == "zh-tw"
+ * }
+ * ```
+ *
+ * `zh-hant` and `zh-tw` are in that list even though they are Chinese,
+ * and they are kept here on purpose. Readium uses this predicate to
+ * resolve a book's *reading progression*, and only then picks a
+ * stylesheet, where CJK is tested first — so a `zh-Hant` book is
+ * right-to-left *and* gets the CJK stylesheet. [readingCssFor] tests CJK
+ * first for that reason and never returns [ReadingCss.Rtl] for a `zh-*`
+ * book, which the `traditional Chinese is CJK and never RTL` test pins.
+ *
+ * Pruning the two tags would read better and would make this stop
+ * matching Readium: anyone reordering the branches in [readingCssFor]
+ * would then get an answer Readium does not give, which is the failure
+ * mode the exact mirror exists to prevent.
  */
 private fun isRtlLanguage(language: String?): Boolean {
     val code = language?.replace("_", "-")?.lowercase() ?: return false
