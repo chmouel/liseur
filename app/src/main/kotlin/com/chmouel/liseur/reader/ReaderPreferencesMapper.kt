@@ -115,8 +115,13 @@ private const val TWO_COLUMN_WIDTH_VW = 45.0
  * Carried as a raw override rather than through
  * `RsProperties.selectionBackgroundColor`, whose `Color.Hex` refuses
  * anything but three or six hex digits — an alpha channel among them.
+ * Spelled `rgba()` rather than `#4A90E266` because eight-digit hex only
+ * became valid in Chromium 62 and the WebView that shipped with our
+ * oldest supported Android was 60: there, the hex form parses as a
+ * custom property and then fails as a colour, which would leave exactly
+ * the page this is here to fix.
  */
-private const val SELECTION_BACKGROUND = "#4A90E266"
+private const val SELECTION_BACKGROUND = "rgba(74, 144, 226, 0.4)"
 
 /**
  * The ink of selected text: the page's own, whatever the theme made it.
