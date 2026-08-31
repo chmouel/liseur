@@ -7,15 +7,19 @@ import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.ui.WidthClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.readium.r2.navigator.epub.css.ColCount
 import org.readium.r2.navigator.preferences.ColumnCount
 import org.readium.r2.navigator.preferences.Theme
+import org.readium.r2.shared.ExperimentalReadiumApi
 
 /**
  * Columns are the one reading preference the window gets a veto on, so
  * the veto is checked here rather than by opening a book on a tablet.
  */
+@OptIn(ExperimentalReadiumApi::class)
 class ReaderPreferencesMapperTest {
 
     /** The palette the reader arrived at; irrelevant to these cases. */
@@ -146,5 +150,49 @@ class ReaderPreferencesMapperTest {
         for (palette in ReaderTheme.entries) {
             assertNull(ReaderPrefs().toEpubPreferences(palette).imageFilter)
         }
+    }
+
+    @Test
+    fun `the selection is painted in a colour the page can blend`() {
+        // Readium CSS would otherwise paint an opaque #b4d8fe under both
+        // dark themes' pale ink. The alpha is the whole fix: it is what
+        // lets one value read on white, beige, dark grey and black, and
+        // it is why the value cannot go through RsProperties' own
+        // selectionBackgroundColor, which takes six hex digits at most.
+        val overrides = readingRsProperties(ColumnMode.AUTO).overrides
+        assertEquals("#4A90E266", overrides["--RS__selectionBackgroundColor"])
+        assertEquals("currentColor", overrides["--RS__selectionTextColor"])
+    }
+
+    @Test
+    fun `the selection is painted the same way whatever the page is`() {
+        // No column mode, and no theme either, has any business changing
+        // it: RS properties are fixed when the navigator is built, so a
+        // value that varied would be the one thing here that goes stale
+        // the moment the reader switches theme mid-book.
+        for (columns in ColumnMode.entries) {
+            assertEquals(
+                readingRsProperties(ColumnMode.AUTO).overrides,
+                readingRsProperties(columns).overrides,
+            )
+        }
+    }
+
+    @Test
+    fun `two columns still ask for a width they can fit in`() {
+        // The column count alone is a ceiling: Readium's default 45em
+        // column width means two of them only appear on a screen wide
+        // enough for ninety.
+        val auto = readingRsProperties(ColumnMode.AUTO)
+        assertNull(auto.colCount)
+        assertNull(auto.colWidth)
+
+        val one = readingRsProperties(ColumnMode.ONE)
+        assertEquals(ColCount.ONE, one.colCount)
+        assertNull(one.colWidth)
+
+        val two = readingRsProperties(ColumnMode.TWO)
+        assertEquals(ColCount.TWO, two.colCount)
+        assertNotNull(two.colWidth)
     }
 }
