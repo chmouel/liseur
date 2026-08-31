@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.sanitized
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -41,20 +42,40 @@ data class BookTypography(
          * instead would quietly destroy the choice: set a book apart while
          * its font happens to be gone, and re-importing the file would no
          * longer bring it back.
+         *
+         * The numbers, unlike the font id, are written already made
+         * safe. A row here is a file on a device, and every one of these
+         * three is a number `EpubPreferences` will refuse — so a bad one
+         * stored now is a crash the next time the book is opened, long
+         * after anything could explain it.
          */
-        fun from(bookUrl: String, prefs: ReaderPrefs) = BookTypography(
-            bookUrl = bookUrl,
-            font = prefs.font.id,
-            fontSize = prefs.fontSize,
-            lineHeight = prefs.lineHeight,
-            pageMargins = prefs.pageMargins,
-        )
+        fun from(bookUrl: String, prefs: ReaderPrefs): BookTypography {
+            val safe = prefs.sanitized()
+            return BookTypography(
+                bookUrl = bookUrl,
+                font = prefs.font.id,
+                fontSize = safe.fontSize,
+                lineHeight = safe.lineHeight,
+                pageMargins = safe.pageMargins,
+            )
+        }
     }
 }
 
 /**
  * How this book reads: the shared settings, with a book's own set taking
  * over entirely when it has one.
+ *
+ * Sanitized *after* the merge rather than before it, so the values that
+ * are checked are the ones that will actually be used: a book's own row
+ * is the newer, less trustworthy source, and checking the shared
+ * settings it replaces would prove nothing about it.
+ *
+ * The fine typography settings are deliberately not among the fields a
+ * book can hold. Alignment, hyphenation, weight and the three spacings
+ * stay shared even for a book that has been set apart — they are about
+ * how the reader reads rather than about the book, and the row would
+ * need a migration to carry them.
  */
 fun ReaderPrefs.withTypographyOf(own: BookTypography?): ReaderPrefs =
     if (own == null) {
@@ -65,7 +86,7 @@ fun ReaderPrefs.withTypographyOf(own: BookTypography?): ReaderPrefs =
             fontSize = own.fontSize,
             lineHeight = own.lineHeight,
             pageMargins = own.pageMargins,
-        )
+        ).sanitized()
     }
 
 @Dao

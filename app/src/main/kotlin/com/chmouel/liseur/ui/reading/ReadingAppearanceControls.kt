@@ -458,6 +458,11 @@ fun ReadingLayoutControls(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_line_spacing))
+        // A stored value that is none of the three — from an older
+        // build, or a hand-edited row — leaves nothing selected, which
+        // is deliberate: snapping it to the nearest option would change
+        // the page to a setting the reader never chose, and do it
+        // silently, just because they opened this sheet.
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             val options = listOf(
                 R.string.reader_spacing_compact to 1.2,
