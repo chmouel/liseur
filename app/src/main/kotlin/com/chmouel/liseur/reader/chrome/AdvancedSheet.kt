@@ -29,8 +29,11 @@ import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.reading.FineTypographyActions
+import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
 import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
 import com.chmouel.liseur.ui.reading.ReadingPageTurnAnimationToggle
@@ -71,6 +74,8 @@ fun AdvancedSheet(
     autoScrolling: Boolean,
     autoScrollSpeed: Float,
     typographyIsOwn: Boolean,
+    readingCss: ReadingCss,
+    fineTypography: FineTypographyActions,
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
@@ -102,6 +107,11 @@ fun AdvancedSheet(
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
                 onColumnModeChanged = onColumnModeChanged,
+            )
+            ReadingFineTypographyControls(
+                prefs = prefs,
+                css = readingCss,
+                actions = fineTypography,
             )
             ReadingFooterModeDropdown(
                 selected = prefs.footerMode,

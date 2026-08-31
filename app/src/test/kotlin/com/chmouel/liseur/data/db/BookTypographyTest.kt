@@ -2,10 +2,13 @@ package com.chmouel.liseur.data.db
 
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.data.settings.ReaderFontWeight
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.ReaderTextAlign
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -97,5 +100,57 @@ class BookTypographyTest {
         val digest = "b".repeat(64)
         val missing = shared.copy(font = ReadingFont.Imported(digest))
         assertEquals("user:" + digest, BookTypography.from("book", missing).font)
+    }
+
+    @Test
+    fun `the fine typography settings stay shared even for a book set apart`() {
+        // Alignment, hyphenation, weight and the three spacings are
+        // about how the reader reads rather than about the book, and the
+        // row would need a migration to carry them. A book taking them
+        // over silently would be the feature quietly growing.
+        val tuned = shared.copy(
+            textAlign = ReaderTextAlign.JUSTIFIED,
+            fontWeight = ReaderFontWeight.LIGHT,
+            hyphens = true,
+            letterSpacing = 0.05,
+            wordSpacing = 0.1,
+            paragraphSpacing = 0.4,
+        )
+        val effective = tuned.withTypographyOf(own)
+
+        assertEquals(ReaderTextAlign.JUSTIFIED, effective.textAlign)
+        assertEquals(ReaderFontWeight.LIGHT, effective.fontWeight)
+        assertEquals(true, effective.hyphens)
+        assertEquals(0.05, effective.letterSpacing!!, 1e-9)
+        assertEquals(0.1, effective.wordSpacing!!, 1e-9)
+        assertEquals(0.4, effective.paragraphSpacing!!, 1e-9)
+    }
+
+    @Test
+    fun `a book's own row cannot hold a value that would crash the reader`() {
+        // This row is a file on a device, and it is the newer and less
+        // trustworthy of the two sources — so it is what has to be
+        // checked, after the merge rather than before it.
+        val effective = shared.withTypographyOf(
+            own.copy(fontSize = Double.NaN, lineHeight = -3.0, pageMargins = 99.0),
+        )
+        assertEquals(1.0, effective.fontSize, 1e-9)
+        assertNull(effective.lineHeight)
+        assertNull(effective.pageMargins)
+    }
+
+    @Test
+    fun `setting a book apart writes down numbers it can be opened with`() {
+        // A bad value stored now is a crash the next time the book is
+        // opened, long after anything could explain it.
+        val wrecked = shared.copy(
+            fontSize = Double.POSITIVE_INFINITY,
+            lineHeight = Double.NaN,
+            pageMargins = -1.0,
+        )
+        val row = BookTypography.from("book", wrecked)
+        assertEquals(1.0, row.fontSize, 1e-9)
+        assertNull(row.lineHeight)
+        assertNull(row.pageMargins)
     }
 }

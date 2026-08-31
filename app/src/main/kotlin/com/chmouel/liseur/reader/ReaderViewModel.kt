@@ -47,9 +47,12 @@ import com.chmouel.liseur.sync.SyncScope
 import com.chmouel.liseur.sync.PositionUpdate
 import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.data.settings.ColumnMode
+import com.chmouel.liseur.data.settings.ReaderFontWeight
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.ReaderTextAlign
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.TapZones
+import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.seriesIdForExtras
@@ -1356,24 +1359,46 @@ class ReaderViewModel(
 
     fun setFontSize(size: Double) = typography(
         shared = { prefsRepo.setFontSize(size) },
-        own = {
-            it.copy(
-                fontSize = size.coerceIn(ReaderPrefs.MIN_FONT_SIZE, ReaderPrefs.MAX_FONT_SIZE),
-            )
-        },
+        own = { it.copy(fontSize = TypographyRange.FONT_SIZE.require(size)) },
     )
 
     fun setTheme(theme: ReaderThemeChoice) = viewModelScope.launch { prefsRepo.setTheme(theme) }
 
     fun setLineHeight(value: Double?) = typography(
         shared = { prefsRepo.setLineHeight(value) },
-        own = { it.copy(lineHeight = value) },
+        own = { it.copy(lineHeight = TypographyRange.LINE_HEIGHT.sanitize(value)) },
     )
 
     fun setPageMargins(value: Double?) = typography(
         shared = { prefsRepo.setPageMargins(value) },
-        own = { it.copy(pageMargins = value) },
+        own = { it.copy(pageMargins = TypographyRange.PAGE_MARGINS.sanitize(value)) },
     )
+
+    /**
+     * The fine typography settings, which go to the shared store even
+     * for a book that has been set apart.
+     *
+     * Deliberately not routed through [typography]: `book_typography`
+     * has four columns and these are not among them, and adding them
+     * would be a schema migration in service of a distinction no reader
+     * has asked for. Alignment, hyphenation, weight and spacing are
+     * about how someone reads rather than about one book.
+     */
+    fun setTextAlign(align: ReaderTextAlign) =
+        viewModelScope.launch { prefsRepo.setTextAlign(align) }
+
+    fun setFontWeight(weight: ReaderFontWeight) =
+        viewModelScope.launch { prefsRepo.setFontWeight(weight) }
+
+    fun setHyphens(value: Boolean?) = viewModelScope.launch { prefsRepo.setHyphens(value) }
+
+    fun setLetterSpacing(value: Double?) =
+        viewModelScope.launch { prefsRepo.setLetterSpacing(value) }
+
+    fun setWordSpacing(value: Double?) = viewModelScope.launch { prefsRepo.setWordSpacing(value) }
+
+    fun setParagraphSpacing(value: Double?) =
+        viewModelScope.launch { prefsRepo.setParagraphSpacing(value) }
 
     fun setBrightness(value: Float?) = viewModelScope.launch { prefsRepo.setBrightness(value) }
 

@@ -33,6 +33,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.settings.UploadPolicy
+import com.chmouel.liseur.data.settings.readingCssFor
+import com.chmouel.liseur.ui.reading.FineTypographyActions
+import org.readium.r2.shared.publication.Layout
+import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
 import com.chmouel.liseur.ui.UploadBookOfferDialog
 import com.chmouel.liseur.ui.library.UploadDecision
 import com.chmouel.liseur.ui.library.canUploadTo
@@ -243,16 +247,42 @@ class ReaderActivity : FragmentActivity() {
                                 // exactly what this navigator was built
                                 // with to tell an already-rendered
                                 // preference from one still to submit.
+                                // The same classification ReaderScreen
+                                // makes, from the same publication:
+                                // whether this book's stylesheet can
+                                // honour the fine typography settings
+                                // decides whether they are worth
+                                // switching advanced styles on for, and
+                                // the answer has to be the same in the
+                                // preferences the navigator is built
+                                // with as in the ones submitted later,
+                                // or the book reflows once for nothing
+                                // the moment it opens.
+                                val readingCss = remember(s.publication) {
+                                    readingCssFor(
+                                        reflowable =
+                                            s.publication.metadata.layout != Layout.FIXED,
+                                        language = s.publication.metadata.language?.code,
+                                        metadataRtl =
+                                            when (s.publication.metadata.readingProgression) {
+                                                PublicationReadingProgression.RTL -> true
+                                                PublicationReadingProgression.LTR -> false
+                                                null -> null
+                                            },
+                                    )
+                                }
                                 val initialPreferences = remember(
                                     s.navigatorFactory,
                                     columnMode,
                                     scrollMode,
                                     fontKey,
+                                    readingCss,
                                 ) {
                                     prefs.toEpubPreferences(
                                         theme = readingTheme,
                                         columnMode = columnMode,
                                         scroll = scrollMode,
+                                        css = readingCss,
                                     )
                                 }
                                 remember(s.navigatorFactory, columnMode, scrollMode, fontKey) {
@@ -359,6 +389,15 @@ class ReaderActivity : FragmentActivity() {
                                             setColumnMode = viewModel::setColumnMode,
                                             setAutoScrollSpeed = viewModel::setAutoScrollSpeed,
                                             setTypographyIsOwn = viewModel::setTypographyIsOwn,
+                                            fineTypography = FineTypographyActions(
+                                                onTextAlignChanged = viewModel::setTextAlign,
+                                                onHyphensChanged = viewModel::setHyphens,
+                                                onFontWeightChanged = viewModel::setFontWeight,
+                                                onLetterSpacingChanged = viewModel::setLetterSpacing,
+                                                onWordSpacingChanged = viewModel::setWordSpacing,
+                                                onParagraphSpacingChanged =
+                                                    viewModel::setParagraphSpacing,
+                                            ),
                                         )
                                     },
                                     onProgressAction = remember {

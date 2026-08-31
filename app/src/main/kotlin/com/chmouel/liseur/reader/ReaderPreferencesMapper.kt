@@ -7,8 +7,12 @@ import androidx.compose.ui.graphics.toArgb
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.ReaderTextAlign
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.data.settings.fonts.UserFont
+import com.chmouel.liseur.data.settings.requiresAdvancedStyles
+import com.chmouel.liseur.data.settings.sanitized
 import com.chmouel.liseur.ui.WidthClass
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
@@ -19,6 +23,7 @@ import org.readium.r2.navigator.epub.css.FontStyle
 import org.readium.r2.navigator.preferences.Color
 import org.readium.r2.navigator.preferences.ColumnCount
 import org.readium.r2.navigator.preferences.FontFamily
+import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.ExperimentalReadiumApi
 
@@ -34,16 +39,33 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  * [scroll] is not part of [ReaderPrefs] either: it is answered per book
  * against an app-wide default, so it arrives from the reader's own flow
  * rather than from the shared reading settings.
+ *
+ * [css] is which stylesheet Readium will render this book with, which
+ * decides whether the fine typography settings can be honoured at all —
+ * see [requiresAdvancedStyles]. It is worked out from the publication,
+ * so it is known here even though this runs before the navigator exists.
+ *
+ * **This function must not set `language`, `readingProgression` or
+ * `verticalText`.** [readingCssFor] reproduces Readium's own resolution
+ * of those three from publication metadata, which is only exact while
+ * no preference overrides them. `ReaderPreferencesMapperTest` fails if
+ * one ever does.
  */
 @OptIn(ExperimentalReadiumApi::class)
 fun ReaderPrefs.toEpubPreferences(
     theme: ReaderTheme,
     columnMode: ColumnMode = this.columnMode,
     scroll: Boolean = false,
-): EpubPreferences =
-    EpubPreferences(
-        fontFamily = font.cssName?.let { FontFamily(it) },
-        fontSize = fontSize,
+    css: ReadingCss = ReadingCss.Default,
+): EpubPreferences {
+    // Sanitized here as well as in the store, because a book's own
+    // typography row is another way in and this is where every path
+    // meets. EpubPreferences throws from its constructor on a negative
+    // number, so an unusable one is a crash rather than a wrong page.
+    val prefs = sanitized()
+    return EpubPreferences(
+        fontFamily = prefs.font.cssName?.let { FontFamily(it) },
+        fontSize = prefs.fontSize,
         scroll = scroll,
         theme = when (theme) {
             ReaderTheme.LIGHT -> Theme.LIGHT
@@ -57,8 +79,8 @@ fun ReaderPrefs.toEpubPreferences(
         // colours for every theme so the two always match.
         backgroundColor = Color(theme.background.toArgb()),
         textColor = Color(theme.foreground.toArgb()),
-        lineHeight = lineHeight,
-        pageMargins = pageMargins,
+        lineHeight = prefs.lineHeight,
+        pageMargins = prefs.pageMargins,
         // Left unset on Auto rather than sent as ColumnCount.AUTO, so a
         // reader who never touches this setting gets exactly the page
         // Readium would have laid out on its own.
@@ -67,19 +89,25 @@ fun ReaderPrefs.toEpubPreferences(
             ColumnMode.ONE -> ColumnCount.ONE
             ColumnMode.TWO -> ColumnCount.TWO
         },
-        // Readium CSS applies the font size whatever the publisher styles
-        // say, but only applies the advanced settings (line height,
-        // margins…) when they are turned off. So they are only turned off
-        // for those: turning them off rewrites the size of every element
-        // on the page, and having that happen because a font-size slider
-        // crossed its default made the page reflow far beyond the change
-        // that was asked for — and the reading position with it.
-        publisherStyles = if (lineHeight != null || pageMargins != null) {
-            false
-        } else {
-            null
+        textAlign = when (prefs.textAlign) {
+            ReaderTextAlign.DEFAULT -> null
+            ReaderTextAlign.RAGGED -> TextAlign.START
+            ReaderTextAlign.JUSTIFIED -> TextAlign.JUSTIFY
         },
+        fontWeight = prefs.fontWeight.multiplier,
+        hyphens = prefs.hyphens,
+        letterSpacing = prefs.letterSpacing,
+        wordSpacing = prefs.wordSpacing,
+        paragraphSpacing = prefs.paragraphSpacing,
+        // Every value above is sent whatever the stylesheet, so a
+        // setting a book cannot use is still there for the next book
+        // that can. What the stylesheet decides is whether it *counts*:
+        // switching publisher styles off normalizes the whole type
+        // scale, and doing that to apply a rule the sheet does not
+        // contain is a page rewritten for nothing.
+        publisherStyles = if (prefs.requiresAdvancedStyles(css)) false else null,
     )
+}
 
 /**
  * Column width asked for in two-column mode, as a share of the viewport.

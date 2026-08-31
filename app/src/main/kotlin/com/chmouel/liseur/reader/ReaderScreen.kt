@@ -104,6 +104,8 @@ import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.readingCssFor
+import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.TapZones
@@ -173,6 +175,7 @@ import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
 
 /** Duration of the gentle chrome show/hide animation. */
 private const val CHROME_ANIM_MS = 300
@@ -428,6 +431,29 @@ fun ReaderScreen(
     // about where the reader is either.
     val reflowableText = remember(publication) {
         publication.metadata.layout != Layout.FIXED
+    }
+
+    // Which of Readium's four stylesheets this book will be rendered
+    // with, and so which of the fine typography settings it can honour.
+    //
+    // Worked out from the publication rather than from the navigator's
+    // resolved settings, which is what lets it exist before the
+    // navigator does: the preferences below need it to decide whether
+    // advanced styles have to go on, and classifying late would mean
+    // opening the book one way and correcting it a moment later — a
+    // reflow, and the reading position moving while the reader watches.
+    // It also means there is no window, while a fragment is being built
+    // or replaced, in which the answer is unknown.
+    val readingCss = remember(publication) {
+        readingCssFor(
+            reflowable = reflowableText,
+            language = publication.metadata.language?.code,
+            metadataRtl = when (publication.metadata.readingProgression) {
+                PublicationReadingProgression.RTL -> true
+                PublicationReadingProgression.LTR -> false
+                null -> null
+            },
+        )
     }
 
     // The place the reader was at when a run of preference changes began.
@@ -826,7 +852,7 @@ fun ReaderScreen(
             prefsFlow,
             snapshotFlow { Triple(readingThemeNow, columnMode, scrollMode) },
         ) { p, (theme, columns, scrolling) ->
-            p.toEpubPreferences(theme, columns, scrolling)
+            p.toEpubPreferences(theme, columns, scrolling, readingCss)
         }
             // What the book is rendered with, not what the reader
             // happens to be holding. Reading preferences carry answers
@@ -1961,6 +1987,8 @@ fun ReaderScreen(
             autoScrolling = autoScrollArmed,
             autoScrollSpeed = prefs.autoScrollSpeed,
             typographyIsOwn = typographyIsOwn,
+            readingCss = readingCss,
+            fineTypography = onPrefsAction.fineTypography,
             onLineHeightChanged = onPrefsAction.setLineHeight,
             onPageMarginsChanged = onPrefsAction.setPageMargins,
             onColumnModeChanged = onPrefsAction.setColumnMode,
@@ -2209,6 +2237,7 @@ class ReaderPrefsActions(
     val setColumnMode: (ColumnMode) -> Unit,
     val setAutoScrollSpeed: (Float) -> Unit,
     val setTypographyIsOwn: (Boolean) -> Unit,
+    val fineTypography: FineTypographyActions,
 )
 
 /** Bundle of progress and navigation actions for the reader chrome. */

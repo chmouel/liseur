@@ -27,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
@@ -45,7 +45,14 @@ import com.chmouel.liseur.ui.reading.readingFamily
 import com.chmouel.liseur.ui.reading.rememberFontLibrary
 import com.chmouel.liseur.ui.reading.ReadingFontSizeSlider
 import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
+import com.chmouel.liseur.data.settings.ReadingCss
+import com.chmouel.liseur.ui.reading.FineTypographyActions
+import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
+import com.chmouel.liseur.ui.reading.previewFontWeight
+import com.chmouel.liseur.ui.reading.previewLetterSpacing
+import com.chmouel.liseur.ui.reading.previewParagraphGapSp
+import com.chmouel.liseur.ui.reading.previewTextAlign
 import com.chmouel.liseur.ui.reading.ReadingPageTurnAnimationToggle
 import com.chmouel.liseur.ui.reading.ReadingSectionLabel
 import com.chmouel.liseur.ui.reading.ReadingThemeRow
@@ -78,6 +85,7 @@ fun ReadingAppearanceScreen(
     onColumnMode: (ColumnMode) -> Unit,
     onFooterMode: (FooterMode) -> Unit,
     onPageTurnAnimation: (Boolean) -> Unit,
+    fineTypography: FineTypographyActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -144,6 +152,14 @@ fun ReadingAppearanceScreen(
                     onPageMarginsChanged = onPageMargins,
                     onColumnModeChanged = onColumnMode,
                 )
+                // No book is open here, so nothing is disabled and the
+                // wording names the writing systems a setting applies
+                // to rather than claiming anything about one book.
+                ReadingFineTypographyControls(
+                    prefs = prefs,
+                    css = ReadingCss.Unknown,
+                    actions = fineTypography,
+                )
                 ReadingFooterModeDropdown(
                     selected = prefs.footerMode,
                     onSelected = onFooterMode,
@@ -178,6 +194,12 @@ private fun ReadingPreview(
     imported: List<UserFont>,
 ) {
     val family = prefs.font.readingFamily(imported)
+    val textSp = 17 * prefs.fontSize
+    // Derived in sp and converted here, so the gap follows the size
+    // slider and the system font scale rather than only the first.
+    val paragraphGap = with(LocalDensity.current) {
+        previewParagraphGapSp(prefs.paragraphSpacing, textSp).sp.toDp()
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_preview_title))
         Box(
@@ -190,14 +212,28 @@ private fun ReadingPreview(
                     vertical = 20.dp,
                 ),
         ) {
-            Text(
-                text = stringResource(R.string.reader_preview_body),
-                color = theme.foreground,
-                fontFamily = family,
-                fontSize = (17 * prefs.fontSize).sp,
-                lineHeight = (17 * prefs.fontSize * (prefs.lineHeight ?: 1.4)).sp,
-                textAlign = TextAlign.Start,
-            )
+            // Two paragraphs rather than one, so paragraph spacing has a
+            // gap to be visible in. Hyphenation and word spacing are not
+            // drawn here — neither shows reliably in this little text,
+            // and a preview that only sometimes tells the truth is worse
+            // than one that does not claim to.
+            Column(verticalArrangement = Arrangement.spacedBy(paragraphGap)) {
+                listOf(
+                    R.string.reader_preview_body,
+                    R.string.reader_preview_body_second,
+                ).forEach { body ->
+                    Text(
+                        text = stringResource(body),
+                        color = theme.foreground,
+                        fontFamily = family,
+                        fontSize = textSp.sp,
+                        fontWeight = previewFontWeight(prefs.fontWeight),
+                        letterSpacing = previewLetterSpacing(prefs.letterSpacing),
+                        lineHeight = (textSp * (prefs.lineHeight ?: 1.4)).sp,
+                        textAlign = previewTextAlign(prefs.textAlign),
+                    )
+                }
+            }
         }
     }
 }

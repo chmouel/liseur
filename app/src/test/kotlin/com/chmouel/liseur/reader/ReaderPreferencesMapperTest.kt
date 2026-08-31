@@ -1,17 +1,24 @@
 package com.chmouel.liseur.reader
 
 import com.chmouel.liseur.data.settings.ColumnMode
+import com.chmouel.liseur.data.settings.ReaderFontWeight
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.ReaderTextAlign
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.data.settings.ReadingCss
+import com.chmouel.liseur.data.settings.justificationHyphenates
 import com.chmouel.liseur.ui.WidthClass
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.readium.r2.navigator.epub.css.ColCount
 import org.readium.r2.navigator.preferences.ColumnCount
+import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
 import org.readium.r2.shared.ExperimentalReadiumApi
 
@@ -24,6 +31,19 @@ class ReaderPreferencesMapperTest {
 
     /** The palette the reader arrived at; irrelevant to these cases. */
     private val theme = ReaderTheme.LIGHT
+
+    /**
+     * One setting each, of the six that need Readium's advanced styles
+     * in a stylesheet that carries their rule.
+     */
+    private val advancedSingletons = listOf(
+        ReaderPrefs(lineHeight = 1.6),
+        ReaderPrefs(paragraphSpacing = 0.5),
+        ReaderPrefs(textAlign = ReaderTextAlign.JUSTIFIED),
+        ReaderPrefs(hyphens = true),
+        ReaderPrefs(letterSpacing = 0.1),
+        ReaderPrefs(wordSpacing = 0.1),
+    )
 
     @Test
     fun `a compact window refuses a column count it cannot carry`() {
@@ -117,26 +137,184 @@ class ReaderPreferencesMapperTest {
         assertNotEquals(dark.backgroundColor, black.backgroundColor)
     }
 
+    /** What a book's stylesheet says about a set of preferences. */
+    private fun ReaderPrefs.advancedIn(css: ReadingCss) =
+        toEpubPreferences(theme, css = css).publisherStyles
+
     @Test
-    fun `a font size change leaves publisher styles alone`() {
-        // Readium CSS applies --USER__fontSize whatever the publisher
-        // styles say. Turning them off just because the slider left its
-        // default rewrites every element's size, and the page reflows far
-        // beyond the change asked for.
-        assertNull(ReaderPrefs().toEpubPreferences(theme).publisherStyles)
-        assertNull(ReaderPrefs(fontSize = 1.4).toEpubPreferences(theme).publisherStyles)
+    fun `settings that Readium applies regardless leave publisher styles alone`() {
+        // Readium CSS applies --USER__fontSize and --USER__pageMargins
+        // whatever the publisher styles say, and font weight rides the
+        // user-properties overrides map with no rule of its own.
+        // EpubPreferencesEditor agrees: it gates fontSize's and
+        // pageMargins' effectiveness on nothing but a reflowable book.
+        //
+        // Turning advanced styles off for one of them rewrites every
+        // heading's size for nothing, so the page reflows far beyond the
+        // change asked for. Page margins used to do exactly that.
+        for (css in ReadingCss.entries) {
+            assertNull(ReaderPrefs().advancedIn(css))
+            assertNull(ReaderPrefs(fontSize = 1.4).advancedIn(css))
+            assertNull(ReaderPrefs(pageMargins = 1.5).advancedIn(css))
+            assertNull(ReaderPrefs(fontWeight = ReaderFontWeight.BOLD).advancedIn(css))
+        }
     }
 
     @Test
-    fun `advanced settings are what turn publisher styles off`() {
+    fun `each advanced setting turns publisher styles off on its own`() {
+        for (prefs in advancedSingletons) {
+            assertEquals("$prefs", false, prefs.advancedIn(ReadingCss.Default))
+        }
+    }
+
+    @Test
+    fun `zero and off are things the reader asked for`() {
+        // The absence of a request is null. An explicit "no extra space"
+        // and hyphenation deliberately switched off are both requests,
+        // and neither survives without advanced styles.
+        assertEquals(false, ReaderPrefs(letterSpacing = 0.0).advancedIn(ReadingCss.Default))
+        assertEquals(false, ReaderPrefs(hyphens = false).advancedIn(ReadingCss.Default))
+    }
+
+    @Test
+    fun `a right-to-left book is not renormalized for rules its stylesheet lacks`() {
+        // The RTL stylesheet carries no hyphens, letter-spacing or
+        // word-spacing rule, so switching advanced styles on for one of
+        // them would flatten the book's type scale and apply none of the
+        // spacing that asked for it. It keeps textAlign, though, which is
+        // why one "not the default stylesheet" state would not do.
+        assertNull(ReaderPrefs(letterSpacing = 0.1).advancedIn(ReadingCss.Rtl))
+        assertNull(ReaderPrefs(wordSpacing = 0.1).advancedIn(ReadingCss.Rtl))
+        assertNull(ReaderPrefs(hyphens = true).advancedIn(ReadingCss.Rtl))
+
+        assertEquals(false, ReaderPrefs(lineHeight = 1.6).advancedIn(ReadingCss.Rtl))
+        assertEquals(false, ReaderPrefs(paragraphSpacing = 0.5).advancedIn(ReadingCss.Rtl))
         assertEquals(
             false,
-            ReaderPrefs(lineHeight = 1.6).toEpubPreferences(theme).publisherStyles,
+            ReaderPrefs(textAlign = ReaderTextAlign.JUSTIFIED).advancedIn(ReadingCss.Rtl),
         )
-        assertEquals(
-            false,
-            ReaderPrefs(pageMargins = 1.5).toEpubPreferences(theme).publisherStyles,
+    }
+
+    @Test
+    fun `a CJK book loses alignment as well`() {
+        for (prefs in advancedSingletons) {
+            val expected = prefs.lineHeight != null || prefs.paragraphSpacing != null
+            assertEquals("$prefs", expected, prefs.advancedIn(ReadingCss.Cjk) == false)
+        }
+    }
+
+    @Test
+    fun `a fixed layout book honours none of it`() {
+        for (prefs in advancedSingletons) {
+            assertNull("$prefs", prefs.advancedIn(ReadingCss.Unsupported))
+        }
+    }
+
+    @Test
+    fun `a setting a book cannot use is still sent`() {
+        // It stops counting towards advanced styles; it is not erased.
+        // The reader set it app-wide, and the next book they open may be
+        // one whose stylesheet has the rule.
+        for (css in ReadingCss.entries) {
+            val prefs = ReaderPrefs(
+                letterSpacing = 0.1,
+                wordSpacing = 0.2,
+                hyphens = true,
+                textAlign = ReaderTextAlign.JUSTIFIED,
+            ).toEpubPreferences(theme, css = css)
+            assertEquals(0.1, prefs.letterSpacing!!, 1e-9)
+            assertEquals(0.2, prefs.wordSpacing!!, 1e-9)
+            assertEquals(true, prefs.hyphens)
+            assertEquals(TextAlign.JUSTIFY, prefs.textAlign)
+        }
+    }
+
+    @Test
+    fun `each fine typography setting reaches the field Readium reads`() {
+        val prefs = ReaderPrefs(
+            textAlign = ReaderTextAlign.RAGGED,
+            fontWeight = ReaderFontWeight.LIGHT,
+            hyphens = false,
+            letterSpacing = 0.05,
+            wordSpacing = 0.1,
+            paragraphSpacing = 0.4,
+        ).toEpubPreferences(theme, css = ReadingCss.Default)
+
+        assertEquals(TextAlign.START, prefs.textAlign)
+        assertEquals(0.75, prefs.fontWeight!!, 1e-9)
+        assertEquals(false, prefs.hyphens)
+        assertEquals(0.05, prefs.letterSpacing!!, 1e-9)
+        assertEquals(0.1, prefs.wordSpacing!!, 1e-9)
+        assertEquals(0.4, prefs.paragraphSpacing!!, 1e-9)
+    }
+
+    @Test
+    fun `leaving a setting alone sends nothing at all`() {
+        val prefs = ReaderPrefs().toEpubPreferences(theme, css = ReadingCss.Default)
+        assertNull(prefs.textAlign)
+        assertNull(prefs.fontWeight)
+        assertNull(prefs.hyphens)
+        assertNull(prefs.letterSpacing)
+        assertNull(prefs.wordSpacing)
+        assertNull(prefs.paragraphSpacing)
+    }
+
+    @Test
+    fun `justified text hyphenates until told otherwise`() {
+        // The stylesheet carries
+        //   :root[readium-advanced-on][--USER__textAlign: justify] body
+        //     { hyphens: auto }
+        // and --USER__bodyHyphens is !important, so an explicit setting
+        // wins and no setting loses. The way out is Off, not Default.
+        assertTrue(justificationHyphenates(ReaderTextAlign.JUSTIFIED, null))
+        assertFalse(justificationHyphenates(ReaderTextAlign.JUSTIFIED, false))
+        assertFalse(justificationHyphenates(ReaderTextAlign.JUSTIFIED, true))
+        assertFalse(justificationHyphenates(ReaderTextAlign.RAGGED, null))
+        assertFalse(justificationHyphenates(ReaderTextAlign.DEFAULT, null))
+    }
+
+    @Test
+    fun `a stored number that cannot be used neither throws nor changes the page`() {
+        // EpubPreferences throws from its constructor on a negative
+        // size, spacing or margin, and this runs while the reader is
+        // changing their settings. NaN gets through a clamp untouched,
+        // so it has to be refused rather than coerced.
+        val wrecked = ReaderPrefs(
+            fontSize = Double.NaN,
+            lineHeight = Double.NEGATIVE_INFINITY,
+            pageMargins = -1.0,
+            letterSpacing = Double.NaN,
+            wordSpacing = -0.5,
+            paragraphSpacing = Double.POSITIVE_INFINITY,
         )
+        for (css in ReadingCss.entries) {
+            val prefs = wrecked.toEpubPreferences(theme, css = css)
+            assertEquals(1.0, prefs.fontSize!!, 1e-9)
+            assertNull(prefs.lineHeight)
+            assertNull(prefs.pageMargins)
+            assertNull(prefs.letterSpacing)
+            assertNull(prefs.wordSpacing)
+            assertNull(prefs.paragraphSpacing)
+            assertNull(prefs.publisherStyles)
+        }
+    }
+
+    @Test
+    fun `the mapper says nothing about a book's language or direction`() {
+        // readingCssFor reproduces Readium's own resolution of these
+        // three from publication metadata, and that reproduction is
+        // exact only while nothing overrides them. Setting one here
+        // would make the settings sheet describe a stylesheet the book
+        // is not being rendered with — silently, and only for the
+        // readers whose books are affected.
+        val prefs = ReaderPrefs(
+            textAlign = ReaderTextAlign.JUSTIFIED,
+            hyphens = true,
+            letterSpacing = 0.1,
+        ).toEpubPreferences(theme, css = ReadingCss.Default)
+        assertNull(prefs.language)
+        assertNull(prefs.readingProgression)
+        assertNull(prefs.verticalText)
     }
 
     @Test

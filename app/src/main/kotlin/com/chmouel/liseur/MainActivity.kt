@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.listSaver
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
+import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
@@ -318,6 +319,20 @@ private fun LiseurApp(settings: AppSettings) {
                 onPageTurnAnimation = {
                     scope.launch { readerPreferences.setPageTurnAnimation(it) }
                 },
+                fineTypography = FineTypographyActions(
+                    onTextAlignChanged = { scope.launch { readerPreferences.setTextAlign(it) } },
+                    onHyphensChanged = { scope.launch { readerPreferences.setHyphens(it) } },
+                    onFontWeightChanged = { scope.launch { readerPreferences.setFontWeight(it) } },
+                    onLetterSpacingChanged = {
+                        scope.launch { readerPreferences.setLetterSpacing(it) }
+                    },
+                    onWordSpacingChanged = {
+                        scope.launch { readerPreferences.setWordSpacing(it) }
+                    },
+                    onParagraphSpacingChanged = {
+                        scope.launch { readerPreferences.setParagraphSpacing(it) }
+                    },
+                ),
                 onBack = back,
             )
         }
