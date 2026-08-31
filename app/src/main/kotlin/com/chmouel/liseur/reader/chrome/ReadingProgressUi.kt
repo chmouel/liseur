@@ -142,6 +142,7 @@ fun ReadingScrubber(
     positionAtProgression: (Float) -> Int,
     onSeek: (Int) -> Unit,
     onGoToPage: () -> Unit,
+    onGoToPercent: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (progress == null) return
@@ -191,7 +192,18 @@ fun ReadingScrubber(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FooterHint(stringResource(R.string.footer_percent, progress.percent), accent)
+            FooterHint(
+                stringResource(R.string.footer_percent, progress.percent),
+                accent,
+                Modifier
+                    .clickableWithoutRipple(
+                        onClick = onGoToPercent,
+                        role = Role.Button,
+                        onClickLabel = stringResource(R.string.go_to_percent_title),
+                    )
+                    .heightIn(min = 48.dp)
+                    .wrapContentHeight(Alignment.CenterVertically),
+            )
             FooterHint(
                 stringResource(R.string.footer_page, previewPosition, progress.totalPositions),
                 accent,
@@ -201,8 +213,8 @@ fun ReadingScrubber(
                         role = Role.Button,
                         onClickLabel = stringResource(R.string.go_to_page_title),
                     )
-                    // The readout is a line of small print, so the tap
-                    // target is grown to a comfortable size around it
+                    // The readouts are lines of small print, so the tap
+                    // targets are grown to a comfortable size around them
                     // rather than left the height of the text.
                     .heightIn(min = 48.dp)
                     .wrapContentHeight(Alignment.CenterVertically),

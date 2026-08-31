@@ -133,6 +133,10 @@
     <string name="go_to_printed_page_invalid">This book does not list that printed page.</string>
     <string name="go_to_page_chapter">Chapter: %s</string>
     <string name="go_to_page_confirm">Go</string>
+    <string name="go_to_percent_title">Go to percentage</string>
+    <string name="go_to_percent_label">Percentage read</string>
+    <string name="go_to_percent_range">Enter a percentage from 0 to 100.</string>
+    <string name="go_to_percent_invalid">Enter a whole percentage from 0 to 100.</string>
     <string name="duration_under_minute">Less than a minute</string>
     <string name="duration_hours_and_minutes">%1$s %2$s</string>
     <plurals name="duration_minutes">

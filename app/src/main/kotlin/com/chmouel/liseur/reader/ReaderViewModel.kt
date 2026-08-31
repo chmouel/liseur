@@ -65,9 +65,10 @@ import com.chmouel.liseur.reader.annotations.markedPassage
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
-import com.chmouel.liseur.reader.progress.GoToPageDestination
+import com.chmouel.liseur.reader.progress.GoToDestination
 import com.chmouel.liseur.reader.progress.GoToPagePrompt
 import com.chmouel.liseur.reader.progress.GoToPageResolver
+import com.chmouel.liseur.reader.progress.goToPercent
 import com.chmouel.liseur.reader.footnotes.FootnoteResolver
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingPace
@@ -1030,9 +1031,17 @@ class ReaderViewModel(
     /** The locator for a position on the scrubber, numbered from 1. */
     fun locatorAtPosition(position: Int): Locator? = bookPositions?.locatorAt(position)
 
-    fun goToPagePrompt(): GoToPagePrompt? = goToPageResolver?.prompt
+    /** The go-to-page question to ask, starting from where the reader is. */
+    fun goToPagePrompt(): GoToPagePrompt? =
+        goToPageResolver?.promptAt(_progress.value?.position ?: 1)
 
-    fun resolvePage(answer: String): GoToPageDestination? = goToPageResolver?.resolve(answer)
+    fun resolvePage(answer: String): GoToDestination? = goToPageResolver?.resolve(answer)
+
+    /** How far through the book the reader is, as the footer prints it. */
+    fun currentPercent(): Int = _progress.value?.percent ?: 0
+
+    fun resolvePercent(answer: String): GoToDestination? =
+        bookPositions?.takeIf { it.isUsable }?.let { goToPercent(answer, it) }
 
     fun locatorAtOrBeforeProgression(progression: Double): Locator? =
         bookPositions?.locatorAtOrBeforeProgression(progression)

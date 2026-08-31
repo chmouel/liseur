@@ -9,15 +9,16 @@ enum class PageNumbering {
     POSITION,
 }
 
-/** The wording and accepted endpoints shown by the go-to-page dialog. */
+/** The wording, accepted endpoints and starting point of a go-to dialog. */
 data class GoToPagePrompt(
     val numbering: PageNumbering,
     val firstLabel: String,
     val lastLabel: String,
+    val currentLabel: String,
 )
 
-/** A valid page together with the chapter the dialog can preview. */
-data class GoToPageDestination(
+/** A valid destination together with the chapter the dialog can preview. */
+data class GoToDestination(
     val locator: Locator,
     val chapterTitle: String?,
 )
@@ -41,24 +42,81 @@ class GoToPageResolver(
         orderedPrintedPages.forEach { (label, link) -> putIfAbsent(label, link) }
     }
 
-    val prompt: GoToPagePrompt = if (orderedPrintedPages.isNotEmpty()) {
-        GoToPagePrompt(
-            numbering = PageNumbering.PRINTED,
-            firstLabel = orderedPrintedPages.first().first,
-            lastLabel = orderedPrintedPages.last().first,
-        )
-    } else {
-        GoToPagePrompt(
-            numbering = PageNumbering.POSITION,
-            firstLabel = "1",
-            lastLabel = positions.totalPositions.toString(),
-        )
+    /**
+     * Where each printed page falls in the book, in reading order.
+     *
+     * Built on first use: a page list runs to a mark per printed page and
+     * every one of them costs a locator resolution, which is worth paying
+     * once the reader opens the dialog and not on every book that is
+     * merely opened. Marks sharing a position keep the earliest label, so
+     * a chapter whose marks all land on its first position reads as the
+     * page it starts on rather than the page it ends on.
+     */
+    private val printedPagesByPosition: List<Pair<Int, String>> by lazy {
+        orderedPrintedPages
+            .mapNotNull { (label, link) ->
+                locatorFromLink(link)
+                    ?.let(positions::resolve)
+                    ?.position
+                    ?.let { it to label }
+            }
+            .sortedBy { it.first }
+            .distinctBy { it.first }
+    }
+
+    /**
+     * A page list none of whose marks land anywhere in the book is not a
+     * numbering, whatever it declares: every label it offers would be
+     * refused. Such a book is asked for the page the footer shows, which
+     * it can always answer.
+     */
+    private val numbering: PageNumbering
+        get() = if (printedPagesByPosition.isEmpty()) {
+            PageNumbering.POSITION
+        } else {
+            PageNumbering.PRINTED
+        }
+
+    // The endpoints are the ones the book lists, in the order it lists
+    // them. A page list is not sorted by position -- front matter in
+    // roman numerals is the ordinary case -- so the ends of the range are
+    // read off the document, not off the index.
+    private val firstLabel: String
+        get() = if (numbering == PageNumbering.PRINTED) orderedPrintedPages.first().first else "1"
+    private val lastLabel: String
+        get() = if (numbering == PageNumbering.PRINTED) {
+            orderedPrintedPages.last().first
+        } else {
+            positions.totalPositions.toString()
+        }
+
+    /** The dialog to show for a reader currently on [position]. */
+    fun promptAt(position: Int): GoToPagePrompt = GoToPagePrompt(
+        numbering = numbering,
+        firstLabel = firstLabel,
+        lastLabel = lastLabel,
+        currentLabel = labelAt(position),
+    )
+
+    /**
+     * The page the reader is on, in the numbering the dialog asks for.
+     *
+     * A printed page list rarely starts at the first position — a cover
+     * and a title page are before page one is printed — so a reader ahead
+     * of no mark at all is told the first page the book prints.
+     */
+    private fun labelAt(position: Int): String = when (numbering) {
+        PageNumbering.POSITION ->
+            position.coerceIn(1, positions.totalPositions.coerceAtLeast(1)).toString()
+
+        PageNumbering.PRINTED ->
+            printedPagesByPosition.lastOrNull { it.first <= position }?.second ?: firstLabel
     }
 
     /** Returns null when [answer] is not a page this book declares. */
-    fun resolve(answer: String): GoToPageDestination? {
+    fun resolve(answer: String): GoToDestination? {
         val label = answer.trim()
-        val locator = when (prompt.numbering) {
+        val locator = when (numbering) {
             PageNumbering.PRINTED -> printedPages[label]?.let(locatorFromLink)
             PageNumbering.POSITION -> {
                 val position = label.toIntOrNull()
@@ -67,10 +125,40 @@ class GoToPageResolver(
                 positions.locatorAt(position)
             }
         } ?: return null
-        val chapter = positions.resolve(locator)
-            ?.position
-            ?.let(positions::chapterAt)
-            ?.title
-        return GoToPageDestination(locator, chapter)
+        return positions.destinationAt(locator)
     }
 }
+
+/**
+ * Resolves a whole percentage of the book a reader can type.
+ *
+ * The answer is the *first* position the footer would call that
+ * percentage, which is the one promise worth keeping here: type the
+ * number the footer is showing and the footer still shows it. Rounding
+ * the other way lands a page short of the mark, and since the footer
+ * truncates, typing 70 would leave 69% on screen — an answer a reader
+ * can only read as a refusal, and retype forever.
+ *
+ * It is also the conservative direction for the prefilled answer.
+ * Confirming it untouched goes to where that percentage begins, which is
+ * at or a little before where the reader already is, never past it.
+ *
+ * Decimals are refused: on a five hundred page book a tenth of a percent
+ * is half a page, and that precision is what the page dialog is for.
+ */
+fun goToPercent(answer: String, positions: BookPositions): GoToDestination? {
+    val percent = answer.trim().toIntOrNull()?.takeIf { it in 0..100 } ?: return null
+    val total = positions.totalPositions
+    if (total < 1) return null
+    // Integer arithmetic, because the boundary is the whole point: 7% of
+    // a hundred steps is 7.000000000000001 in binary floating point, and
+    // rounding that up steps a page past the page being asked for.
+    val steps = (percent * (total - 1) + 99) / 100
+    val locator = positions.locatorAt(1 + steps) ?: return null
+    return positions.destinationAt(locator)
+}
+
+private fun BookPositions.destinationAt(locator: Locator): GoToDestination = GoToDestination(
+    locator = locator,
+    chapterTitle = resolve(locator)?.position?.let { chapterAt(it) }?.title,
+)
