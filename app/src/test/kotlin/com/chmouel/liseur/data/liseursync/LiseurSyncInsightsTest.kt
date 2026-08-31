@@ -198,15 +198,61 @@ class LiseurSyncInsightsTest {
         connect()
         server.enqueue(
             ok(
-                """{"from":"2025-08-12","to":"2026-08-11",""" +
+                """{"from":"2026-01-01","to":"2026-08-11",""" +
                     """"total_active_minutes":90,"sessions":4}""",
             ),
         )
 
-        assertEquals(4, insights().summary(StatsRange.LAST_YEAR, TODAY)!!.sessions)
+        assertEquals(4, insights().summary(StatsRange.THIS_YEAR, TODAY)!!.sessions)
         assertEquals(
-            "/v1/insights/summary?from=2025-08-12&to=2026-08-11",
+            "/v1/insights/summary?from=2026-01-01&to=2026-08-11",
             server.takeRequest().target,
+        )
+    }
+
+    /**
+     * The baseline a period is compared against ends before today, so it
+     * cannot be named by a range and a date. It is asked for outright.
+     */
+    @Test
+    fun `a comparison baseline is asked for by its own two dates`() = runTest {
+        connect()
+        server.enqueue(
+            ok(
+                """{"from":"2026-07-01","to":"2026-07-11",""" +
+                    """"total_active_minutes":45,"sessions":3}""",
+            ),
+        )
+
+        val baseline = insights().summary(
+            from = LocalDate.of(2026, 7, 1),
+            to = LocalDate.of(2026, 7, 11),
+        )
+
+        assertEquals(3, baseline!!.sessions)
+        assertEquals(45.0, baseline.activeMinutes, 1e-9)
+        assertEquals(
+            "/v1/insights/summary?from=2026-07-01&to=2026-07-11",
+            server.takeRequest().target,
+        )
+    }
+
+    /** And checked like any other, so a wrong month is never compared. */
+    @Test
+    fun `a baseline about the wrong days is refused`() = runTest {
+        connect()
+        server.enqueue(
+            ok(
+                """{"from":"2026-06-01","to":"2026-06-11",""" +
+                    """"total_active_minutes":45,"sessions":3}""",
+            ),
+        )
+
+        assertNull(
+            insights().summary(
+                from = LocalDate.of(2026, 7, 1),
+                to = LocalDate.of(2026, 7, 11),
+            ),
         )
     }
 
@@ -227,8 +273,8 @@ class LiseurSyncInsightsTest {
             ok("""{"works":[{"work_id":"w-1","sessions":80,"total_active_minutes":9000}]}"""),
         )
 
-        assertNull(insights().summary(StatsRange.LAST_30_DAYS, TODAY))
-        assertNull(insights().allBooks(StatsRange.LAST_30_DAYS, TODAY))
+        assertNull(insights().summary(StatsRange.THIS_MONTH, TODAY))
+        assertNull(insights().allBooks(StatsRange.THIS_MONTH, TODAY))
     }
 
     /** Nor is a span the server narrowed on its own account accepted. */
@@ -242,7 +288,7 @@ class LiseurSyncInsightsTest {
             ),
         )
 
-        assertNull(insights().summary(StatsRange.LAST_30_DAYS, TODAY))
+        assertNull(insights().summary(StatsRange.THIS_MONTH, TODAY))
     }
 
     /**

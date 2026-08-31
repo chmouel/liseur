@@ -6,6 +6,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** What one book's reading adds up to. */
 data class BookReadingStats(
@@ -172,7 +174,16 @@ fun readingStats(
     val firstStarts = recorded.groupBy { it.bookUrl }
         .mapValues { (_, spans) -> spans.minOf { it.startedAt } }
     val start = range.startDate(today, weekStart)
-    val counted = if (start == null) recorded else recorded.filter { !it.day(zone).isBefore(start) }
+    // Bounded at both ends, and the upper bound matters as much as the
+    // lower one. A session dated after today — a clock corrected
+    // backwards, an imported row, a flight east — would otherwise land
+    // in the total while `dailySeries`, which stops at today, left it
+    // off the chart, and while `readingTotals` left it out of the
+    // comparison this total is measured against.
+    val counted = recorded.filter { session ->
+        val day = session.day(zone)
+        !day.isAfter(today) && (start == null || !day.isBefore(start))
+    }
     if (counted.isEmpty()) return ReadingStats.Empty.copy(streakDays = streak)
 
     val stats = counted.groupBy { it.bookUrl }.map { (url, spans) ->
@@ -316,3 +327,93 @@ private const val MILLIS_PER_HOUR = 3_600_000.0
 
 private fun SessionSpan.day(zone: ZoneId): LocalDate =
     Instant.ofEpochMilli(lastReadAt).atZone(zone).toLocalDate()
+
+/** Reading time over one span, and how much of it no server has yet. */
+data class SpanTotals(val totalMs: Long, val pendingMs: Long) {
+    companion object {
+        val Empty = SpanTotals(0, 0)
+    }
+}
+
+/**
+ * What [sessions] add up to over [span], on both ends inclusive.
+ *
+ * The bounded sibling of [readingStats], for the baseline a period is
+ * compared against. It deliberately shares [day] and the same
+ * "a sitting of no length is not a sitting" filter: a comparison whose
+ * two halves disagreed about which side of midnight an evening fell on
+ * would report a difference the reader did not make.
+ */
+fun readingTotals(sessions: List<SessionSpan>, zone: ZoneId, span: DateSpan): SpanTotals {
+    var total = 0L
+    var pending = 0L
+    for (session in sessions) {
+        if (session.durationMs <= 0) continue
+        val day = session.day(zone)
+        if (day.isBefore(span.from) || day.isAfter(span.to)) continue
+        total += session.durationMs
+        if (!session.uploaded) pending += session.durationMs
+    }
+    return SpanTotals(total, pending)
+}
+
+/** Which way a period went against the one before it. */
+enum class ComparisonDirection { MORE, LESS, SAME }
+
+/**
+ * How this period's reading compares with the last one's.
+ *
+ * [percent] is null when there is no honest percentage to give: a
+ * baseline of nothing has no denominator, and inventing one would print
+ * an infinity or a number in the millions the first time a reader picks
+ * the app up again.
+ */
+data class ReadingComparison(
+    val period: ComparisonPeriod,
+    val direction: ComparisonDirection,
+    val percent: Int?,
+)
+
+/**
+ * Compares two totals, without ever dividing by nothing.
+ *
+ * Equal to the nearest whole percent reads as the same. "0% more than
+ * last week" is a sentence that says nothing twice, and the rounding
+ * that produced it is not something the reader can see.
+ *
+ * The arithmetic is done in [Double] from the start. Subtracting two
+ * [Long]s and taking the absolute value can overflow, and
+ * `abs(Long.MIN_VALUE)` is still negative; neither is reachable from
+ * real sessions, but this is pure and total and should not depend on
+ * its callers to keep it so. The clamp is written out for the same
+ * reason, rather than left to `roundToInt`'s saturation.
+ */
+fun compareReading(
+    period: ComparisonPeriod,
+    currentMs: Long,
+    previousMs: Long,
+): ReadingComparison {
+    val current = currentMs.coerceAtLeast(0L).toDouble()
+    val previous = previousMs.coerceAtLeast(0L).toDouble()
+    if (previous <= 0.0) {
+        return ReadingComparison(
+            period = period,
+            direction = if (current > 0.0) ComparisonDirection.MORE else ComparisonDirection.SAME,
+            percent = null,
+        )
+    }
+    val percent = (abs(current - previous) / previous * 100.0)
+        .takeIf { it.isFinite() }
+        ?.coerceAtMost(Int.MAX_VALUE.toDouble())
+        ?.roundToInt()
+    val direction = when {
+        percent == null || percent == 0 -> ComparisonDirection.SAME
+        current > previous -> ComparisonDirection.MORE
+        else -> ComparisonDirection.LESS
+    }
+    return ReadingComparison(
+        period = period,
+        direction = direction,
+        percent = percent.takeIf { direction != ComparisonDirection.SAME },
+    )
+}

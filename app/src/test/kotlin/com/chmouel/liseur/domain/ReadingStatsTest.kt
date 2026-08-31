@@ -1,6 +1,7 @@
 package com.chmouel.liseur.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -227,9 +228,12 @@ class ReadingStatsTest {
 
     @Test
     fun `each span reaches exactly as far back as it says`() {
+        // Today is Sunday the 9th of August 2026, so a Monday-first week
+        // began on the 3rd and the month on the 1st.
         val sessions = listOf(
             SessionSpan("a", noonOn(today), 1_000),
             SessionSpan("a", noonOn(today.minusDays(6)), 1_000),
+            SessionSpan("a", noonOn(today.minusDays(8)), 1_000),
             SessionSpan("a", noonOn(today.minusDays(29)), 1_000),
             SessionSpan("a", noonOn(today.minusDays(89)), 1_000),
             SessionSpan("a", noonOn(today.minusDays(364)), 1_000),
@@ -240,10 +244,30 @@ class ReadingStatsTest {
             readingStats(sessions, books, zone, today, range).sessions
 
         assertEquals(2, countedIn(StatsRange.THIS_WEEK))
-        assertEquals(3, countedIn(StatsRange.LAST_30_DAYS))
-        assertEquals(4, countedIn(StatsRange.LAST_90_DAYS))
-        assertEquals(5, countedIn(StatsRange.LAST_YEAR))
-        assertEquals(6, countedIn(StatsRange.ALL_TIME))
+        assertEquals(3, countedIn(StatsRange.THIS_MONTH))
+        assertEquals(5, countedIn(StatsRange.THIS_YEAR))
+        assertEquals(7, countedIn(StatsRange.ALL_TIME))
+    }
+
+    @Test
+    fun `a sitting dated after today is in no span at all`() {
+        // A clock corrected backwards, a row imported from elsewhere, a
+        // flight east. The chart has always stopped at today, so time
+        // counted into the total but drawn nowhere was a figure the
+        // reader could not account for — and the period it is now
+        // compared against is bounded at both ends, so leaving it in one
+        // side only would invent a difference.
+        val sessions = listOf(
+            SessionSpan("a", noonOn(today), 60_000),
+            SessionSpan("a", noonOn(today.plusDays(3)), 60_000),
+        )
+        val books = mapOf("a" to book("a"))
+        for (range in StatsRange.entries) {
+            val stats = readingStats(sessions, books, zone, today, range)
+            assertEquals("$range counted a session from the future", 60_000L, stats.totalMs)
+            assertEquals(1, stats.sessions)
+            assertTrue(stats.recent.none { it.date.isAfter(today) })
+        }
     }
 
     @Test
@@ -513,5 +537,137 @@ class ReadingStatsTest {
             today = today,
         )
         assertEquals(noonOn(today.minusDays(1)), stats.books.single().firstReadAt)
+    }
+
+    // --- The baseline a period is measured against --------------------
+
+    @Test
+    fun `a bounded span counts both of its endpoints and nothing outside`() {
+        val span = DateSpan(today.minusDays(6), today.minusDays(4))
+        val totals = readingTotals(
+            sessions = listOf(
+                SessionSpan("a", noonOn(today.minusDays(7)), 1_000),
+                SessionSpan("a", noonOn(today.minusDays(6)), 2_000),
+                SessionSpan("a", noonOn(today.minusDays(5)), 4_000),
+                SessionSpan("a", noonOn(today.minusDays(4)), 8_000),
+                SessionSpan("a", noonOn(today.minusDays(3)), 16_000),
+            ),
+            zone = zone,
+            span = span,
+        )
+        assertEquals(14_000L, totals.totalMs)
+    }
+
+    @Test
+    fun `the baseline keeps what no server has heard about apart`() {
+        val totals = readingTotals(
+            sessions = listOf(
+                SessionSpan("a", noonOn(today.minusDays(8)), 60_000, uploaded = true),
+                SessionSpan("a", noonOn(today.minusDays(8)), 30_000, uploaded = false),
+            ),
+            zone = zone,
+            span = DateSpan(today.minusDays(13), today.minusDays(7)),
+        )
+        assertEquals(90_000L, totals.totalMs)
+        assertEquals(30_000L, totals.pendingMs)
+    }
+
+    @Test
+    fun `the baseline puts a sitting past midnight where the headline does`() {
+        // Half eleven until half twelve. Both sides have to agree which
+        // day that was, or the comparison reports a difference nobody
+        // made. Sessions are dated by where they ended.
+        val startedAt = today.minusDays(8).atTime(23, 30).atZone(zone).toInstant().toEpochMilli()
+        val endedAt = today.minusDays(7).atTime(0, 30).atZone(zone).toInstant().toEpochMilli()
+        val session = SessionSpan("a", startedAt, 3_600_000, lastReadAt = endedAt)
+
+        assertEquals(
+            0L,
+            readingTotals(listOf(session), zone, DateSpan(today.minusDays(9), today.minusDays(8)))
+                .totalMs,
+        )
+        assertEquals(
+            3_600_000L,
+            readingTotals(listOf(session), zone, DateSpan(today.minusDays(7), today.minusDays(7)))
+                .totalMs,
+        )
+    }
+
+    @Test
+    fun `a sitting of no length is not a sitting, on either side`() {
+        val totals = readingTotals(
+            sessions = listOf(SessionSpan("a", noonOn(today.minusDays(3)), 0)),
+            zone = zone,
+            span = DateSpan(today.minusDays(6), today),
+        )
+        assertEquals(SpanTotals.Empty, totals)
+    }
+
+    // --- More, less, or the same --------------------------------------
+
+    @Test
+    fun `more and less are stated as whole percents`() {
+        val more = compareReading(ComparisonPeriod.WEEK, 125_000, 100_000)
+        assertEquals(ComparisonDirection.MORE, more.direction)
+        assertEquals(25, more.percent)
+
+        val less = compareReading(ComparisonPeriod.MONTH, 88_000, 100_000)
+        assertEquals(ComparisonDirection.LESS, less.direction)
+        assertEquals(12, less.percent)
+    }
+
+    @Test
+    fun `a difference too small to name is the same, not nought per cent`() {
+        // "0% more than last week" says nothing twice, and the rounding
+        // that produced it is not something the reader can see.
+        val same = compareReading(ComparisonPeriod.YEAR, 100_400, 100_000)
+        assertEquals(ComparisonDirection.SAME, same.direction)
+        assertNull(same.percent)
+
+        val exactly = compareReading(ComparisonPeriod.WEEK, 100_000, 100_000)
+        assertEquals(ComparisonDirection.SAME, exactly.direction)
+        assertNull(exactly.percent)
+    }
+
+    @Test
+    fun `nothing to divide by is not an infinity`() {
+        val started = compareReading(ComparisonPeriod.WEEK, 60_000, 0)
+        assertEquals(ComparisonDirection.MORE, started.direction)
+        // No percentage at all: the screen says "More than last week".
+        assertNull(started.percent)
+
+        val neither = compareReading(ComparisonPeriod.WEEK, 0, 0)
+        assertEquals(ComparisonDirection.SAME, neither.direction)
+        assertNull(neither.percent)
+    }
+
+    @Test
+    fun `a period with nothing in it is a hundred per cent less`() {
+        // The screen shows its empty state instead of drawing this, but
+        // the arithmetic has to be defined either way.
+        val nothing = compareReading(ComparisonPeriod.WEEK, 0, 60_000)
+        assertEquals(ComparisonDirection.LESS, nothing.direction)
+        assertEquals(100, nothing.percent)
+    }
+
+    @Test
+    fun `absurd totals neither overflow nor go negative`() {
+        // Unreachable from real sessions, but this is pure arithmetic
+        // and should not depend on its callers to stay sane. Subtracting
+        // these as Longs wraps; abs of the result stays negative.
+        val huge = compareReading(ComparisonPeriod.WEEK, Long.MAX_VALUE, 1)
+        assertEquals(ComparisonDirection.MORE, huge.direction)
+        assertEquals(Int.MAX_VALUE, huge.percent)
+
+        val negative = compareReading(ComparisonPeriod.WEEK, Long.MIN_VALUE, 100)
+        assertEquals(ComparisonDirection.LESS, negative.direction)
+        assertEquals(100, negative.percent)
+    }
+
+    @Test
+    fun `the period asked about is the period answered for`() {
+        for (period in ComparisonPeriod.entries) {
+            assertEquals(period, compareReading(period, 1, 2).period)
+        }
     }
 }

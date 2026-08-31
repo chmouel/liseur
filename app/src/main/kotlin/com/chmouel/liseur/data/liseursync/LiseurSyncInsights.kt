@@ -75,20 +75,30 @@ class LiseurSyncInsights(
         range: StatsRange = StatsRange.Default,
         today: LocalDate,
         weekStart: DayOfWeek = WeekFields.ISO.firstDayOfWeek,
-    ): InsightsSummary? {
+    ): InsightsSummary? = summary(range.startDate(today, weekStart), today)
+
+    /**
+     * The same aggregate, over a span named outright.
+     *
+     * The comparison's baseline ends before today, so it cannot be
+     * described by a range and a date. It goes through the same
+     * [covers] check as everything else: a server that ignored the
+     * bounds answers about some other stretch of the reader's life, and
+     * "12% less than last month" over that is worse than no comparison.
+     */
+    suspend fun summary(from: LocalDate?, to: LocalDate): InsightsSummary? {
         val account = account() ?: return null
         val credentials = account.credentials ?: return null
-        val from = range.startDate(today, weekStart)
         val answer = try {
             http.get(
-                LiseurSyncApi.insightsSummary(account.baseUrl, from, today),
+                LiseurSyncApi.insightsSummary(account.baseUrl, from, to),
                 credentials,
             )
         } catch (e: IOException) {
             Log.i(TAG, "No statistics from the server this time", e)
             return null
         }
-        if (!answer.covers(from, today)) return null
+        if (!answer.covers(from, to)) return null
         return InsightsSummary(
             activeMinutes = answer.optDouble("total_active_minutes", 0.0),
             sessions = answer.optInt("sessions"),

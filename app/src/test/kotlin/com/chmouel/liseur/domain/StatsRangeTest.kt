@@ -7,6 +7,7 @@ import org.junit.Test
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 /** Where each span begins, and which day of the week it begins on. */
@@ -74,11 +75,11 @@ class StatsRangeTest {
     }
 
     @Test
-    fun `the longer spans stay rolling day counts, whatever the locale`() {
+    fun `the calendar spans ignore the locale except for the week`() {
         for (weekStart in DayOfWeek.entries) {
             assertEquals(
-                wednesday.minusDays(29),
-                StatsRange.LAST_30_DAYS.startDate(wednesday, weekStart),
+                wednesday.withDayOfMonth(1),
+                StatsRange.THIS_MONTH.startDate(wednesday, weekStart),
             )
             assertEquals(
                 wednesday.withDayOfYear(1),
@@ -89,11 +90,141 @@ class StatsRangeTest {
     }
 
     @Test
+    fun `a month is drawn as bars right up to its last day`() {
+        // Thirty-one days is what MAX_BAR_DAYS is sized for. A month that
+        // fell back to the heatmap on the 31st would change shape once a
+        // quarter for no reason the reader could see.
+        val lastOfMarch = LocalDate.of(2026, 3, 31)
+        assertEquals(31, StatsRange.THIS_MONTH.days(lastOfMarch, DayOfWeek.MONDAY))
+        assertTrue(StatsRange.THIS_MONTH.suitsDailyBars(lastOfMarch, DayOfWeek.MONDAY))
+        assertTrue(!StatsRange.THIS_YEAR.suitsDailyBars(lastOfMarch, DayOfWeek.MONDAY))
+    }
+
+    @Test
     fun `the stored id survives the range being renamed`() {
         // DataStore holds "7d" from before this was a calendar week. A
         // reader upgrading must not be silently moved to another span.
         assertEquals(StatsRange.THIS_WEEK, StatsRange.fromId("7d"))
         assertEquals("7d", StatsRange.THIS_WEEK.id)
+    }
+
+    @Test
+    fun `a retired span lands on the nearest one still offered`() {
+        // These three are on readers' disks and can never be selected
+        // again. Falling through to the default would drop someone who
+        // had asked for a year of history down to this week without
+        // saying so.
+        assertEquals(StatsRange.THIS_MONTH, StatsRange.fromId("30d"))
+        assertEquals(StatsRange.THIS_YEAR, StatsRange.fromId("90d"))
+        assertEquals(StatsRange.THIS_YEAR, StatsRange.fromId("365d"))
+        // Anything genuinely unknown still falls back.
+        assertEquals(StatsRange.Default, StatsRange.fromId("42d"))
+        assertEquals(StatsRange.Default, StatsRange.fromId(null))
+    }
+
+    @Test
+    fun `a week is compared with the same weekdays of the week before`() {
+        val spans = StatsRange.THIS_WEEK.comparison(wednesday, DayOfWeek.MONDAY)!!
+        assertEquals(ComparisonPeriod.WEEK, spans.period)
+        assertEquals(DateSpan(LocalDate.of(2026, 8, 3), wednesday), spans.current)
+        assertEquals(
+            DateSpan(LocalDate.of(2026, 7, 27), LocalDate.of(2026, 7, 29)),
+            spans.previous,
+        )
+    }
+
+    @Test
+    fun `every locale's week is compared with three of its own days`() {
+        // Whichever day the week begins on, a Wednesday is three days in
+        // for a Monday-first reader and four for a Sunday-first one, and
+        // the baseline has to hold exactly as many.
+        for (weekStart in DayOfWeek.entries) {
+            val spans = StatsRange.THIS_WEEK.comparison(wednesday, weekStart)!!
+            assertEquals(
+                ChronoUnit.DAYS.between(spans.current.from, spans.current.to),
+                ChronoUnit.DAYS.between(spans.previous.from, spans.previous.to),
+            )
+            assertEquals(spans.current.from.dayOfWeek, spans.previous.from.dayOfWeek)
+            assertEquals(spans.current.to.dayOfWeek, spans.previous.to.dayOfWeek)
+        }
+    }
+
+    @Test
+    fun `the first day of a period is compared with one day, not with none`() {
+        val firstOfMonth = LocalDate.of(2026, 8, 1)
+        val month = StatsRange.THIS_MONTH.comparison(firstOfMonth, DayOfWeek.MONDAY)!!
+        assertEquals(DateSpan(firstOfMonth, firstOfMonth), month.current)
+        assertEquals(
+            DateSpan(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 1)),
+            month.previous,
+        )
+
+        val newYear = LocalDate.of(2026, 1, 1)
+        val year = StatsRange.THIS_YEAR.comparison(newYear, DayOfWeek.MONDAY)!!
+        assertEquals(DateSpan(newYear, newYear), year.current)
+        // A comparison made on New Year's Day reaches into last January,
+        // not into last December.
+        assertEquals(
+            DateSpan(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 1)),
+            year.previous,
+        )
+    }
+
+    @Test
+    fun `a month end with no counterpart stops on the last day there is`() {
+        // The 31st of March against February, which has 28 days in 2026.
+        val march = StatsRange.THIS_MONTH.comparison(
+            LocalDate.of(2026, 3, 31),
+            DayOfWeek.MONDAY,
+        )!!
+        assertEquals(
+            DateSpan(LocalDate.of(2026, 2, 1), LocalDate.of(2026, 2, 28)),
+            march.previous,
+        )
+
+        // The 31st of May against April, which has 30.
+        val may = StatsRange.THIS_MONTH.comparison(LocalDate.of(2026, 5, 31), DayOfWeek.MONDAY)!!
+        assertEquals(
+            DateSpan(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 30)),
+            may.previous,
+        )
+
+        // The 30th of March against February again: still clamped.
+        val thirtieth = StatsRange.THIS_MONTH.comparison(
+            LocalDate.of(2026, 3, 30),
+            DayOfWeek.MONDAY,
+        )!!
+        assertEquals(LocalDate.of(2026, 2, 28), thirtieth.previous.to)
+
+        // A day that does exist in the previous month is not clamped.
+        val fifteenth = StatsRange.THIS_MONTH.comparison(
+            LocalDate.of(2026, 3, 15),
+            DayOfWeek.MONDAY,
+        )!!
+        assertEquals(
+            DateSpan(LocalDate.of(2026, 2, 1), LocalDate.of(2026, 2, 15)),
+            fifteenth.previous,
+        )
+    }
+
+    @Test
+    fun `a leap day is compared with the 28th of February`() {
+        val leapDay = LocalDate.of(2024, 2, 29)
+        assertEquals(DayOfWeek.THURSDAY, leapDay.dayOfWeek)
+        val spans = StatsRange.THIS_YEAR.comparison(leapDay, DayOfWeek.MONDAY)!!
+        assertEquals(ComparisonPeriod.YEAR, spans.period)
+        assertEquals(DateSpan(LocalDate.of(2024, 1, 1), leapDay), spans.current)
+        assertEquals(
+            DateSpan(LocalDate.of(2023, 1, 1), LocalDate.of(2023, 2, 28)),
+            spans.previous,
+        )
+    }
+
+    @Test
+    fun `a span with no previous period has nothing to compare`() {
+        for (weekStart in DayOfWeek.entries) {
+            assertNull(StatsRange.ALL_TIME.comparison(wednesday, weekStart))
+        }
     }
 
     @Test

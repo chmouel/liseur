@@ -13,8 +13,13 @@ import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.domain.BookReadingStats
+import com.chmouel.liseur.domain.ComparisonDirection
+import com.chmouel.liseur.domain.ComparisonPeriod
+import com.chmouel.liseur.domain.ComparisonSpans
+import com.chmouel.liseur.domain.DateSpan
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
+import com.chmouel.liseur.domain.SpanTotals
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import java.time.DayOfWeek
@@ -31,6 +36,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -93,7 +99,6 @@ class ReadingStatsViewModelTest {
                 as ReadingStatsUiState.Ready
 
             assertEquals(60_000L, loaded.headline.totalMs)
-            assertEquals(7, loaded.headline.rangeDays)
             // Sittings and the streak used to vanish without a server.
             // This device can count both perfectly well.
             assertEquals(1, loaded.headline.sessions)
@@ -123,8 +128,8 @@ class ReadingStatsViewModelTest {
             } as ReadingStatsUiState.Ready
 
             assertEquals(60_000L, everything.headline.totalMs)
-            // All time has no window to name, so the caption says so.
-            assertEquals(null, everything.headline.rangeDays)
+            // All time has no period before it to be measured against.
+            assertNull(everything.headline.comparison)
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -176,7 +181,7 @@ class ReadingStatsViewModelTest {
                 it is ReadingStatsUiState.Ready && it.range == StatsRange.THIS_WEEK
             } as ReadingStatsUiState.Ready
             assertEquals(120_000L, mondayFirst.headline.totalMs)
-            assertEquals(7, mondayFirst.headline.rangeDays)
+            assertEquals(7, mondayFirst.stats.recent.size)
 
             model.setWeekStart(DayOfWeek.SUNDAY)
 
@@ -184,7 +189,7 @@ class ReadingStatsViewModelTest {
             // begins. The sums, the caption and the chart must all move
             // together, or the screen describes two different weeks.
             val sundayFirst = model.state.first {
-                it is ReadingStatsUiState.Ready && it.headline.rangeDays == 1
+                it is ReadingStatsUiState.Ready && it.stats.recent.size == 1
             } as ReadingStatsUiState.Ready
             assertEquals(60_000L, sundayFirst.headline.totalMs)
             assertEquals(listOf(today), sundayFirst.stats.recent.map { it.date })
@@ -206,13 +211,10 @@ class ReadingStatsViewModelTest {
             merged = local,
             local = local,
             server = server,
-            range = StatsRange.LAST_30_DAYS,
-            today = today,
         )
 
         // 500 minutes from the server, not 501 from adding the local one.
         assertEquals(TimeUnit.MINUTES.toMillis(500), headline.totalMs)
-        assertEquals(30, headline.rangeDays)
         assertEquals(4, headline.streakDays)
         assertEquals(12, headline.sessions)
     }
@@ -235,8 +237,6 @@ class ReadingStatsViewModelTest {
             merged = local,
             local = local,
             server = server,
-            range = StatsRange.LAST_30_DAYS,
-            today = today,
         )
 
         assertEquals(TimeUnit.MINUTES.toMillis(60), headline.totalMs)
@@ -259,8 +259,6 @@ class ReadingStatsViewModelTest {
             merged = merged,
             local = merged,
             server = server,
-            range = StatsRange.LAST_30_DAYS,
-            today = today,
         )
 
         assertTrue(headline.totalMs >= merged.totalMs)
@@ -278,11 +276,8 @@ class ReadingStatsViewModelTest {
             merged = local,
             local = local,
             server = null,
-            range = StatsRange.LAST_30_DAYS,
-            today = today,
         )
         assertEquals(90_000L, headline.totalMs)
-        assertEquals(30, headline.rangeDays)
         assertEquals(4, headline.sessions)
         assertEquals(3, headline.streakDays)
         assertEquals(0.2, headline.progressionPerHour!!, 1e-9)
@@ -300,8 +295,6 @@ class ReadingStatsViewModelTest {
                 streakDays = 1,
                 progressionPerHour = null,
             ),
-            range = StatsRange.LAST_30_DAYS,
-            today = today,
         )
         assertEquals(0.15, headline.progressionPerHour!!, 1e-9)
     }
@@ -468,9 +461,7 @@ class ReadingStatsViewModelTest {
         assertEquals(11, merged.books.single().sessions)
         assertEquals(
             11,
-            ReadingStatsViewModel.mergeHeadline(
-                merged, local, server, StatsRange.LAST_30_DAYS, today,
-            ).sessions,
+            ReadingStatsViewModel.mergeHeadline(merged, local, server).sessions,
         )
     }
 
@@ -643,6 +634,333 @@ class ReadingStatsViewModelTest {
         }
     }
 
+    // ---- The period before this one -------------------------------
+
+    /**
+     * A week is read against the same weekdays of the week before.
+     *
+     * `today` is a Sunday and the reader's week begins on a Monday, so
+     * this week is the seven days ending today and the one before it is
+     * the seven ending last Sunday. Twice as much reading this week is
+     * a hundred per cent more, not two hundred.
+     */
+    @Test
+    fun `a period is measured against the same days of the one before`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            db.readingSessionDao().insert(session(url, today, 120_000))
+            db.readingSessionDao().insert(session(url, today.minusDays(7), 60_000))
+            val model = model()
+
+            val loaded = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+
+            val comparison = loaded.headline.comparison!!
+            assertEquals(ComparisonPeriod.WEEK, comparison.period)
+            assertEquals(ComparisonDirection.MORE, comparison.direction)
+            assertEquals(100, comparison.percent)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /**
+     * The baseline stops where the current period began.
+     *
+     * Reading done the day before this week started belongs to last
+     * week; reading done the day before *that* week started belongs to
+     * neither, and must not be swept into the baseline by a span that
+     * merely reaches back far enough.
+     */
+    @Test
+    fun `the period before is a period, not everything earlier`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            db.readingSessionDao().insert(session(url, today, 60_000))
+            db.readingSessionDao().insert(session(url, today.minusDays(7), 60_000))
+            // A fortnight ago: older than the baseline's first day.
+            db.readingSessionDao().insert(session(url, today.minusDays(14), 600_000))
+            val model = model()
+
+            val loaded = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+
+            assertEquals(ComparisonDirection.SAME, loaded.headline.comparison!!.direction)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /**
+     * A period with nothing before it says so without a figure.
+     *
+     * Dividing by an empty baseline is an infinity, and "∞% more than
+     * last week" is not a sentence. The wording drops the number.
+     */
+    @Test
+    fun `a first week of reading is more, without a percentage`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            db.readingSessionDao().insert(session(url, today, 60_000))
+            val model = model()
+
+            val loaded = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+
+            val comparison = loaded.headline.comparison!!
+            assertEquals(ComparisonDirection.MORE, comparison.direction)
+            assertNull(comparison.percent)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /**
+     * Having read nothing yet is a hundred per cent less.
+     *
+     * The screen never draws it: `ReadingStatsScreen` returns its empty
+     * state before the hero whenever the span holds no reading, so this
+     * value is computed and then not reached. It is pinned here because
+     * the arithmetic must still be right — the early return is control
+     * flow, and control flow moves.
+     */
+    @Test
+    fun `a period with no reading in it is all of the last one lost`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            db.readingSessionDao().insert(session(url, today.minusDays(7), 60_000))
+            val model = model()
+
+            val loaded = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+
+            val comparison = loaded.headline.comparison!!
+            assertEquals(ComparisonDirection.LESS, comparison.direction)
+            assertEquals(100, comparison.percent)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `a month is measured against the month before, not against the week`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            db.readingSessionDao().insert(session(url, today, 60_000))
+            db.readingSessionDao().insert(session(url, LocalDate.of(2026, 7, 5), 60_000))
+            val model = model()
+            model.selectRange(StatsRange.THIS_MONTH)
+
+            val loaded = model.state.first {
+                it is ReadingStatsUiState.Ready && it.range == StatsRange.THIS_MONTH
+            } as ReadingStatsUiState.Ready
+
+            assertEquals(ComparisonPeriod.MONTH, loaded.headline.comparison!!.period)
+            assertEquals(ComparisonDirection.SAME, loaded.headline.comparison!!.direction)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    // ---- The window every answer is about ---------------------------
+
+    /**
+     * A day change moves the screen even with no server to ask.
+     *
+     * Nothing here watches the clock, so a visit to the statistics
+     * screen is when it learns what day it is. That happens before the
+     * check for a server, or the one reader whose figures are entirely
+     * local would be the one left looking at yesterday's week.
+     */
+    @Test
+    fun `a day change moves the window with no server to ask`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            // `today` is a Sunday and the reader's week begins on a
+            // Monday, so both of these are in this week. Tomorrow they
+            // are both in last week and this one is a day old.
+            db.readingSessionDao().insert(session(url, today, 60_000))
+            db.readingSessionDao().insert(session(url, today.minusDays(6), 60_000))
+            var day = today
+            val model = model(today = { day })
+
+            val sunday = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+            assertEquals(120_000L, sunday.headline.totalMs)
+
+            day = today.plusDays(1)
+            model.refreshServerInsights()
+
+            val monday = model.state.first {
+                it is ReadingStatsUiState.Ready && it.headline.totalMs == 0L
+            } as ReadingStatsUiState.Ready
+            // A Monday compares with the Monday before, which is the
+            // one this reader read on.
+            assertEquals(ComparisonDirection.LESS, monday.headline.comparison!!.direction)
+            assertEquals(100, monday.headline.comparison!!.percent)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /**
+     * A new zone recounts the reading even when the date is unchanged.
+     *
+     * A sitting half an hour after midnight in Paris happened the
+     * evening before in London, and a reader whose week begins on a
+     * Sunday has just watched it leave the week. The date did not move,
+     * so the zone has to be part of what the screen is asking about, or
+     * the sums stay where they were.
+     */
+    @Test
+    fun `a new zone with the same date still recounts the reading`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            // 00:30 on the Sunday in Paris is 22:30 on the Saturday in
+            // London.
+            val at = today.atTime(LocalTime.of(0, 30)).atZone(zone).toInstant().toEpochMilli()
+            db.readingSessionDao().insert(
+                ReadingSession(
+                    bookUrl = url,
+                    startedAt = at,
+                    endedAt = at + 60_000,
+                    lastCheckpointAt = at + 60_000,
+                    durationMs = 60_000,
+                ),
+            )
+            var here = zone
+            val model = model(zone = { here }, weekStart = DayOfWeek.SUNDAY)
+
+            val paris = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+            assertEquals(60_000L, paris.headline.totalMs)
+
+            here = ZoneId.of("Europe/London")
+            model.refreshServerInsights()
+
+            val london = model.state.first {
+                it is ReadingStatsUiState.Ready && it.headline.totalMs == 0L
+            }
+            assertTrue(london is ReadingStatsUiState.Ready)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    // ---- The baseline the server answers for ------------------------
+
+    /**
+     * The baseline is merged the same way the headline above it is.
+     *
+     * The server counts every device but not the last twenty minutes,
+     * which are still queued to upload. Both periods are offered that
+     * same allowance, or a second device appears in one of them and
+     * vanishes from the other, and the percentage is a comparison of
+     * two different populations.
+     */
+    @Test
+    fun `the baseline counts other devices and this one's unsent time alike`() {
+        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
+        val headline = ReadingStatsViewModel.mergeHeadline(
+            merged = local,
+            local = local,
+            server = InsightsSummary(activeMinutes = 60.0, sessions = 2, streakDays = 1),
+            spans = spans,
+            previousLocal = SpanTotals(
+                totalMs = TimeUnit.MINUTES.toMillis(20),
+                pendingMs = TimeUnit.MINUTES.toMillis(20),
+            ),
+            previousServer = InsightsSummary(activeMinutes = 100.0, sessions = 4, streakDays = 2),
+        )
+
+        // A hundred server minutes plus the twenty this device has not
+        // sent: a hundred and twenty against this period's sixty.
+        assertEquals(ComparisonDirection.LESS, headline.comparison!!.direction)
+        assertEquals(50, headline.comparison!!.percent)
+    }
+
+    /** A baseline the server could not answer falls back to this device. */
+    @Test
+    fun `a baseline the server declined falls back to this device`() {
+        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
+        val headline = ReadingStatsViewModel.mergeHeadline(
+            merged = local,
+            local = local,
+            server = null,
+            spans = spans,
+            previousLocal = SpanTotals(totalMs = TimeUnit.MINUTES.toMillis(30), pendingMs = 0),
+            previousServer = null,
+        )
+
+        assertEquals(ComparisonDirection.MORE, headline.comparison!!.direction)
+        assertEquals(100, headline.comparison!!.percent)
+    }
+
+    /**
+     * A server that answers nought is answering, not failing.
+     *
+     * Both cases arrive as the same value, and they mean the same thing
+     * here: nothing to divide by, so the sentence drops its figure.
+     */
+    @Test
+    fun `a server baseline of nothing reads as no baseline at all`() {
+        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
+        val headline = ReadingStatsViewModel.mergeHeadline(
+            merged = local,
+            local = local,
+            server = null,
+            spans = spans,
+            previousLocal = SpanTotals.Empty,
+            previousServer = InsightsSummary(activeMinutes = 0.0, sessions = 0, streakDays = 0),
+        )
+
+        assertEquals(ComparisonDirection.MORE, headline.comparison!!.direction)
+        assertNull(headline.comparison!!.percent)
+    }
+
+    /** With no spans there is no comparison, whatever the server said. */
+    @Test
+    fun `a span with nothing before it keeps no comparison`() {
+        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
+        val headline = ReadingStatsViewModel.mergeHeadline(
+            merged = local,
+            local = local,
+            server = null,
+            spans = null,
+            previousLocal = SpanTotals(totalMs = TimeUnit.MINUTES.toMillis(30), pendingMs = 0),
+            previousServer = InsightsSummary(activeMinutes = 30.0, sessions = 1, streakDays = 1),
+        )
+
+        assertNull(headline.comparison)
+    }
+
+    private val spans = ComparisonSpans(
+        period = ComparisonPeriod.WEEK,
+        current = DateSpan(LocalDate.of(2026, 8, 3), LocalDate.of(2026, 8, 9)),
+        previous = DateSpan(LocalDate.of(2026, 7, 27), LocalDate.of(2026, 8, 2)),
+    )
+
     private fun localStats(totalMs: Long) = ReadingStats(
         totalMs = totalMs,
         booksRead = 1,
@@ -662,21 +980,25 @@ class ReadingStatsViewModelTest {
         )
     }
 
-    private fun model(): ReadingStatsViewModel {
+    private fun model(
+        zone: () -> ZoneId = { this.zone },
+        today: () -> LocalDate = { this.today },
+        weekStart: DayOfWeek = DayOfWeek.MONDAY,
+    ): ReadingStatsViewModel {
         val factory = viewModelFactory {
             initializer {
                 ReadingStatsViewModel(
                     sessionDao = db.readingSessionDao(),
                     bookDao = db.bookDao(),
                     progressDao = db.readingProgressDao(),
-                    zone = { zone },
-                    today = { today },
+                    zone = zone,
+                    today = { today() },
                     // Pinned rather than read off the JVM's locale: the
                     // week's first day is what decides how far the
                     // default span reaches, and a test that reaches a
                     // different distance on a different machine is not
                     // testing anything.
-                    initialWeekStart = DayOfWeek.MONDAY,
+                    initialWeekStart = weekStart,
                 )
             }
         }
