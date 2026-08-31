@@ -130,8 +130,9 @@ import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FootnoteCard
 import com.chmouel.liseur.reader.chrome.GoToPageDialog
+import com.chmouel.liseur.reader.chrome.GoToPercentDialog
 import com.chmouel.liseur.reader.chrome.TypographySheet
-import com.chmouel.liseur.reader.progress.GoToPageDestination
+import com.chmouel.liseur.reader.progress.GoToDestination
 import com.chmouel.liseur.reader.progress.GoToPagePrompt
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
@@ -326,6 +327,7 @@ fun ReaderScreen(
     var showToc by remember { mutableStateOf(false) }
     var searchFor by remember { mutableStateOf<String?>(null) }
     var goToPage by remember { mutableStateOf(false) }
+    var goToPercent by remember { mutableStateOf(false) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
     var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
@@ -1109,6 +1111,7 @@ fun ReaderScreen(
         !showToc &&
         searchFor == null &&
         !goToPage &&
+        !goToPercent &&
         footnote == null &&
         selection == null &&
         noteFor == null &&
@@ -1707,6 +1710,7 @@ fun ReaderScreen(
                         onGoToPage = {
                             if (onProgressAction.goToPagePrompt() != null) goToPage = true
                         },
+                        onGoToPercent = { goToPercent = true },
                     )
                 }
             }
@@ -2049,6 +2053,19 @@ fun ReaderScreen(
         }
     }
 
+    if (goToPercent) {
+        GoToPercentDialog(
+            currentPercent = onProgressAction.currentPercent(),
+            resolve = onProgressAction.resolvePercent,
+            onConfirm = { destination ->
+                goToPercent = false
+                onProgressAction.onJump()
+                navigateLater(destination.locator, NavigatorPositionEvent.LOCAL_JUMP)
+            },
+            onDismiss = { goToPercent = false },
+        )
+    }
+
     // Taking the other device's position moves the reader there, which is
     // a jump like any other: the way back stays one tap away. The way back
     // is recorded before the move, so it is not done again here.
@@ -2253,7 +2270,9 @@ class ReaderProgressActions(
     val positionAtProgression: (Float) -> Int,
     val locatorAtPosition: (Int) -> Locator?,
     val goToPagePrompt: () -> GoToPagePrompt?,
-    val resolvePage: (String) -> GoToPageDestination?,
+    val resolvePage: (String) -> GoToDestination?,
+    val currentPercent: () -> Int,
+    val resolvePercent: (String) -> GoToDestination?,
     val locatorAtOrBeforeProgression: (Double) -> Locator?,
     val prepareLocator: (Locator) -> Locator,
     val onApproximateResume: () -> Unit,
