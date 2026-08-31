@@ -62,6 +62,9 @@ import com.chmouel.liseur.reader.annotations.markedPassage
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.reader.progress.GoToPageDestination
+import com.chmouel.liseur.reader.progress.GoToPagePrompt
+import com.chmouel.liseur.reader.progress.GoToPageResolver
 import com.chmouel.liseur.reader.footnotes.FootnoteResolver
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingPace
@@ -94,6 +97,7 @@ import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.epub.pageList
 import org.readium.r2.shared.publication.indexOfFirstWithHref
 import org.readium.r2.shared.publication.services.search.search
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -519,7 +523,7 @@ class ReaderViewModel(
         // On failure the disagreement stays preserved and will be
         // settled on the next open; the book still opens now.
         if (outcome != ResolveOutcome.Done || !takeRemote) return
-        if (bookPositions == null) bookPositions = BookPositions.of(publication)
+        positionsFor(publication)
         offerWayBack(localLocator, here, preview)
     }
 
@@ -561,8 +565,7 @@ class ReaderViewModel(
 
     /** Navigates to the exact adopted locator, or conservatively before its percentage. */
     private suspend fun goToRemotePosition(preview: SyncPreview) {
-        val positions = bookPositions ?: BookPositions.of(publication ?: return)
-            .also { bookPositions = it }
+        val positions = positionsFor(publication ?: return)
         val stored = progressDao.get(bookId) ?: return
         val exact = runCatching { Locator.fromJSON(JSONObject(stored.locatorJson)) }
             .getOrNull()
@@ -590,6 +593,7 @@ class ReaderViewModel(
 
     private var publication: Publication? = null
     private var bookPositions: BookPositions? = null
+    private var goToPageResolver: GoToPageResolver? = null
     private var speed = ReadingSpeedEstimator()
     private var jumpBackTimer: Job? = null
     private var catchUpChecking = false
@@ -783,8 +787,7 @@ class ReaderViewModel(
                 bookPace = stored?.readingPace
                     ?: ReadingPace.Unknown,
             )
-            val positions = BookPositions.of(publication)
-            bookPositions = positions
+            val positions = positionsFor(publication)
             if (pulledAutomatically != null) {
                 val localLocator = beforeSync?.locatorJson
                     ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
@@ -1024,6 +1027,10 @@ class ReaderViewModel(
     /** The locator for a position on the scrubber, numbered from 1. */
     fun locatorAtPosition(position: Int): Locator? = bookPositions?.locatorAt(position)
 
+    fun goToPagePrompt(): GoToPagePrompt? = goToPageResolver?.prompt
+
+    fun resolvePage(answer: String): GoToPageDestination? = goToPageResolver?.resolve(answer)
+
     fun locatorAtOrBeforeProgression(progression: Double): Locator? =
         bookPositions?.locatorAtOrBeforeProgression(progression)
 
@@ -1046,6 +1053,19 @@ class ReaderViewModel(
         return positions.chapters
             .map { (it.firstPosition - 1) / denominator }
             .filter { it > 0f }
+    }
+
+    /** Builds the synthetic and printed-page indexes together, once per book. */
+    private suspend fun positionsFor(publication: Publication): BookPositions {
+        bookPositions?.let { return it }
+        return BookPositions.of(publication).also { positions ->
+            bookPositions = positions
+            goToPageResolver = GoToPageResolver(
+                pageList = publication.pageList,
+                positions = positions,
+                locatorFromLink = publication::locatorFromLink,
+            )
+        }
     }
 
     private fun progressAt(

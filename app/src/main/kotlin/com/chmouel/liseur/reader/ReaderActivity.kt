@@ -373,6 +373,8 @@ class ReaderActivity : FragmentActivity() {
                                             chapterTitleAtPosition = viewModel::chapterTitleAtPosition,
                                             positionAtProgression = viewModel::positionAtProgression,
                                             locatorAtPosition = viewModel::locatorAtPosition,
+                                            goToPagePrompt = viewModel::goToPagePrompt,
+                                            resolvePage = viewModel::resolvePage,
                                             locatorAtOrBeforeProgression =
                                                 viewModel::locatorAtOrBeforeProgression,
                                             prepareLocator = viewModel::prepareLocator,

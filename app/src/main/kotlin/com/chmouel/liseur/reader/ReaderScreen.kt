@@ -127,7 +127,10 @@ import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FootnoteCard
+import com.chmouel.liseur.reader.chrome.GoToPageDialog
 import com.chmouel.liseur.reader.chrome.TypographySheet
+import com.chmouel.liseur.reader.progress.GoToPageDestination
+import com.chmouel.liseur.reader.progress.GoToPagePrompt
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.progress.OpeningRestoration
@@ -319,6 +322,7 @@ fun ReaderScreen(
     var chromeVisible by remember { mutableStateOf(false) }
     var showToc by remember { mutableStateOf(false) }
     var searchFor by remember { mutableStateOf<String?>(null) }
+    var goToPage by remember { mutableStateOf(false) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
     var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
@@ -1078,6 +1082,7 @@ fun ReaderScreen(
         sheet == ReaderSheet.NONE &&
         !showToc &&
         searchFor == null &&
+        !goToPage &&
         footnote == null &&
         selection == null &&
         noteFor == null &&
@@ -1673,6 +1678,9 @@ fun ReaderScreen(
                                 navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
                             }
                         },
+                        onGoToPage = {
+                            if (onProgressAction.goToPagePrompt() != null) goToPage = true
+                        },
                     )
                 }
             }
@@ -1998,6 +2006,21 @@ fun ReaderScreen(
         )
     }
 
+    if (goToPage) {
+        onProgressAction.goToPagePrompt()?.let { prompt ->
+            GoToPageDialog(
+                prompt = prompt,
+                resolve = onProgressAction.resolvePage,
+                onConfirm = { destination ->
+                    goToPage = false
+                    onProgressAction.onJump()
+                    navigateLater(destination.locator, NavigatorPositionEvent.LOCAL_JUMP)
+                },
+                onDismiss = { goToPage = false },
+            )
+        }
+    }
+
     // Taking the other device's position moves the reader there, which is
     // a jump like any other: the way back stays one tap away. The way back
     // is recorded before the move, so it is not done again here.
@@ -2200,6 +2223,8 @@ class ReaderProgressActions(
     val chapterTitleAtPosition: (Int) -> String?,
     val positionAtProgression: (Float) -> Int,
     val locatorAtPosition: (Int) -> Locator?,
+    val goToPagePrompt: () -> GoToPagePrompt?,
+    val resolvePage: (String) -> GoToPageDestination?,
     val locatorAtOrBeforeProgression: (Double) -> Locator?,
     val prepareLocator: (Locator) -> Locator,
     val onApproximateResume: () -> Unit,
