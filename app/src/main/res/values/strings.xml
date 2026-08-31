@@ -123,6 +123,16 @@
     <string name="footer_page">Page %1$d of %2$d</string>
     <string name="footer_page_compact">%1$d of %2$d</string>
     <string name="footer_percent">%d%%</string>
+    <string name="go_to_page_title">Go to page</string>
+    <string name="go_to_printed_page_title">Go to printed page</string>
+    <string name="go_to_page_position_label">Page shown in the footer</string>
+    <string name="go_to_printed_page_label">Printed page</string>
+    <string name="go_to_page_position_range">Enter a page from %1$s to %2$s.</string>
+    <string name="go_to_printed_page_range">This book lists printed pages from %1$s to %2$s.</string>
+    <string name="go_to_page_position_invalid">Enter a page in this range.</string>
+    <string name="go_to_printed_page_invalid">This book does not list that printed page.</string>
+    <string name="go_to_page_chapter">Chapter: %s</string>
+    <string name="go_to_page_confirm">Go</string>
     <string name="duration_under_minute">Less than a minute</string>
     <string name="duration_hours_and_minutes">%1$s %2$s</string>
     <plurals name="duration_minutes">

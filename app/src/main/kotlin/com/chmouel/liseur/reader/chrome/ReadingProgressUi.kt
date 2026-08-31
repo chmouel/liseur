@@ -138,6 +138,7 @@ fun ReadingScrubber(
     titleAtPosition: (Int) -> String?,
     positionAtProgression: (Float) -> Int,
     onSeek: (Int) -> Unit,
+    onGoToPage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (progress == null) return
@@ -187,17 +188,19 @@ fun ReadingScrubber(
             FooterHint(
                 stringResource(R.string.footer_page, previewPosition, progress.totalPositions),
                 accent,
+                Modifier.clickableWithoutRipple(onGoToPage),
             )
         }
     }
 }
 
 @Composable
-private fun FooterHint(text: String, color: Color) {
+private fun FooterHint(text: String, color: Color, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
         color = color.copy(alpha = 0.6f),
+        modifier = modifier,
     )
 }
 
