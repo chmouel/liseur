@@ -79,10 +79,15 @@ server exposes, what Liseur implements against it, and why the gaps remain.
 
 **Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified, like the English word *leisure*.
 
-Here is a painting of Pierre-August Renoir portraying C.Monet as "Le liseur"
+Here is a painting by [Pierre-Auguste Renoir](https://en.wikipedia.org/wiki/Pierre-Auguste_Renoir) portraying [Claude Monet](https://en.wikipedia.org/wiki/Claude_Monet) as "Le Liseur":
 
-[<img width="336" height="568" alt="image" src="https://github.com/user-attachments/assets/3a412231-9d5d-4131-8afd-b1a1f6da2a90" />
-](https://fr.wikipedia.org/wiki/Fichier:Pierre-Auguste_Renoir_-_Claude_Monet_(Le_Liseur).jpg)
+
+<p align="center">
+  <picture>
+    <img width="30%" height="30%" alt="image" align="center" src="https://github.com/user-attachments/assets/3a412231-9d5d-4131-8afd-b1a1f6da2a90" />
+  </picture>
+</p>
+
 ## Author
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github)](https://github.com/sponsors/chmouel)
