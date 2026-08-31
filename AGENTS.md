@@ -272,7 +272,10 @@ emulator.
   (Light/Sepia/Dark/Black) are decoupled from the app's Material theme.
 - A new reading setting goes in the Advanced sheet
   (`reader/chrome/AdvancedSheet.kt`), and directly on Settings → Reading
-  appearance, which has no Advanced section to collapse it behind. The
+  appearance if it is about how the page *looks*, or on Settings →
+  Reading & navigation (`ui/settings/ReadingNavigationScreen.kt`) if it
+  is about how the book is turned, held or looked up. Neither settings
+  screen has an Advanced section to collapse a row behind. The
   typography sheet is the short list a reader changes often — theme,
   size, brightness, font, and how the book is read — and it only grows
   for a setting that genuinely belongs there. Make that case in the pull

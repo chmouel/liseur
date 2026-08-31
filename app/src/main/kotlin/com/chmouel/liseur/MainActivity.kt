@@ -57,6 +57,7 @@ import com.chmouel.liseur.ui.settings.AboutScreen
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
+import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
 import com.chmouel.liseur.ui.settings.AnnotationBackupUi
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.ProvideEInk
@@ -151,6 +152,7 @@ private enum class Screen {
     LIBRARY,
     SETTINGS,
     READING_APPEARANCE,
+    READING_NAVIGATION,
     SERVER_ACCOUNT,
     LICENCES,
     ABOUT,
@@ -267,20 +269,38 @@ private fun LiseurApp(settings: AppSettings) {
                 dynamicColorAvailable = dynamicColorAvailable,
                 onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
-                onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
-                onTapZones = { scope.launch { repository.setTapZones(it) } },
-                onEInkMode = { scope.launch { repository.setEInkMode(it) } },
-                onColorEInk = { scope.launch { repository.setColorEInk(it) } },
-                onVendorRefresh = { scope.launch { repository.setVendorRefresh(it) } },
-                vendorName = context.container.eInkDisplay.vendor,
-                onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
-                onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
                 onGroupSeries = { grouped ->
                     scope.launch {
                         repository.editLibraryFilters { it.copy(groupBySeries = grouped) }
                     }
                 },
+                onOpenAccount = {
+                    accountReturnsTo = Screen.SETTINGS
+                    screen = Screen.SERVER_ACCOUNT
+                },
+                onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
+                onOpenReadingNavigation = { screen = Screen.READING_NAVIGATION },
+                backup = annotationBackup,
+                connections = context.container.connections,
+                onOpenAbout = { screen = Screen.ABOUT },
+                onBack = { screen = Screen.LIBRARY },
+            )
+        }
+
+        Screen.READING_NAVIGATION -> {
+            val back = { screen = Screen.SETTINGS }
+            BackHandler { back() }
+            ReadingNavigationScreen(
+                settings = settings,
+                vendorName = context.container.eInkDisplay.vendor,
+                onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
+                onTapZones = { scope.launch { repository.setTapZones(it) } },
+                onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onScrollMode = { scope.launch { repository.setScrollMode(it) } },
+                onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
+                onEInkMode = { scope.launch { repository.setEInkMode(it) } },
+                onColorEInk = { scope.launch { repository.setColorEInk(it) } },
+                onVendorRefresh = { scope.launch { repository.setVendorRefresh(it) } },
                 onDefinitionTarget = {
                     scope.launch { repository.setDefinitionTarget(it) }
                 },
@@ -290,15 +310,7 @@ private fun LiseurApp(settings: AppSettings) {
                 onDictionaryBaseUrl = {
                     scope.launch { repository.setDictionaryBaseUrl(it) }
                 },
-                onOpenAccount = {
-                    accountReturnsTo = Screen.SETTINGS
-                    screen = Screen.SERVER_ACCOUNT
-                },
-                onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
-                backup = annotationBackup,
-                connections = context.container.connections,
-                onOpenAbout = { screen = Screen.ABOUT },
-                onBack = { screen = Screen.LIBRARY },
+                onBack = back,
             )
         }
 

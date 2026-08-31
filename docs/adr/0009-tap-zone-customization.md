@@ -87,3 +87,11 @@ forgotten.
 *Where:* `data/settings/AppSettings.kt`,
 `reader/chrome/ReaderTapZones.kt`, `reader/chrome/Endpaper.kt`,
 `ui/settings/SettingsScreen.kt`.
+
+## Update
+
+The Reading section it landed in later moved behind a row of its own,
+so the chip row is now in **Settings → Reading & navigation**
+(`ui/settings/ReadingNavigationScreen.kt`), still directly under
+"Volume keys turn pages" and still not in Reading appearance. See
+`docs/adr/0001-advanced-reading-menu.md`.
