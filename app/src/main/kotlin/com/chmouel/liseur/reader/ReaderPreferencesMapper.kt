@@ -91,6 +91,71 @@ fun ReaderPrefs.toEpubPreferences(
 private const val TWO_COLUMN_WIDTH_VW = 45.0
 
 /**
+ * What the page paints behind text the reader has marked out.
+ *
+ * Readium CSS ships `#b4d8fe` and its night rule repeats the same value
+ * with the selected text left at `inherit`, so on a dark page the mark is
+ * the theme's pale ink on a pale blue block — barely readable, which is
+ * what issue #117 reported.
+ *
+ * The answer is one translucent colour rather than four opaque ones. The
+ * blend happens in the page, against whichever background the theme has
+ * put there, so white, beige, dark grey and black each get their own
+ * shade for free — and so does any theme added later. It also has to be
+ * this way round: RS properties are injected when a resource loads, from
+ * the configuration the navigator fragment was *built* with, so a value
+ * chosen per theme could only follow a theme changed mid-book by
+ * rebuilding the fragment under the reader — at every tap of the theme
+ * buttons, and again when the app turns itself dark at dusk.
+ *
+ * Over white it lands within a couple of points of the blue that was
+ * there before, so the two themes nobody complained about keep the look
+ * they had.
+ *
+ * Carried as a raw override rather than through
+ * `RsProperties.selectionBackgroundColor`, whose `Color.Hex` refuses
+ * anything but three or six hex digits — an alpha channel among them.
+ */
+private const val SELECTION_BACKGROUND = "#4A90E266"
+
+/**
+ * The ink of selected text: the page's own, whatever the theme made it.
+ *
+ * Night mode pins this to `inherit`, which is the same answer, and day
+ * mode leaves it unset — `color: var(--RS__selectionTextColor)` is then
+ * invalid at computed-value time and `color` is inherited anyway. Saying
+ * it once, for every theme, means the rule reads as what it does.
+ */
+private const val SELECTION_TEXT = "currentColor"
+
+/** The two of them under the names Readium CSS reads them by. */
+private val selectionOverrides = mapOf(
+    "--RS__selectionBackgroundColor" to SELECTION_BACKGROUND,
+    "--RS__selectionTextColor" to SELECTION_TEXT,
+)
+
+/**
+ * The stylesheet's own properties, as the navigator is built with them.
+ *
+ * Split out from [epubNavigatorConfiguration] to be readable on the JVM:
+ * the configuration around it declares font faces by URL, and a URL is
+ * Android's, so building one at all needs a device.
+ */
+@OptIn(ExperimentalReadiumApi::class)
+internal fun readingRsProperties(columnMode: ColumnMode): RsProperties = RsProperties(
+    colCount = when (columnMode) {
+        ColumnMode.AUTO -> null
+        ColumnMode.ONE -> ColCount.ONE
+        ColumnMode.TWO -> ColCount.TWO
+    },
+    colWidth = when (columnMode) {
+        ColumnMode.TWO -> Length.Vw(TWO_COLUMN_WIDTH_VW)
+        else -> null
+    },
+    overrides = selectionOverrides,
+)
+
+/**
  * The column mode a window this wide can actually carry out.
  *
  * Two things happen here, at either end of the range.
@@ -145,7 +210,8 @@ fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode = when {
  * offers actions a book has no use for, and cannot show highlight colours.
  * Taking it over means taking on what it did for free, so the callback
  * reports the selection on every change and its disappearance on the way
- * out — see the callback itself for why both matter.
+ * out — see the callback itself for why both matter. What the selection
+ * is *painted* in is set here too; see [SELECTION_BACKGROUND].
  *
  * [scroll] switches off Readium's page turns, which in a scrolled book
  * are a whole chapter at a time: a sideways swipe would throw the reader
@@ -163,14 +229,7 @@ fun epubNavigatorConfiguration(
     EpubNavigatorFragment.Configuration {
         servedAssets = listOf("fonts/.*")
         disablePageTurnsWhileScrolling = scroll
-        readiumCssRsProperties = when (columnMode) {
-            ColumnMode.AUTO -> RsProperties()
-            ColumnMode.ONE -> RsProperties(colCount = ColCount.ONE)
-            ColumnMode.TWO -> RsProperties(
-                colCount = ColCount.TWO,
-                colWidth = Length.Vw(TWO_COLUMN_WIDTH_VW),
-            )
-        }
+        readiumCssRsProperties = readingRsProperties(columnMode)
         selectionActionModeCallback = object : ActionMode.Callback {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 onTextSelected()
