@@ -310,10 +310,16 @@ class ReadingStatsViewModel(
      * This is the same aggregate used by the dashboard row, so its total
      * and estimate are fetched together and cannot describe different
      * snapshots of the server.
+     *
+     * The window is combined in rather than read from underneath. Most
+     * of what moves it also drops the server answers, but a refresh that
+     * finds the date has changed does not, and reading the window inside
+     * a `map` over the answers alone would leave this estimate serving a
+     * superseded day until the next reply arrived.
      */
     fun serverEstimateFor(bookUrl: String): StateFlow<WorkInsights?> =
-        booksAcrossDevices.map { answered ->
-            answered.forWindow(_window.value)?.get(bookUrl)
+        combine(booksAcrossDevices, _window) { answered, window ->
+            answered.forWindow(window)?.get(bookUrl)
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
