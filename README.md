@@ -60,8 +60,19 @@ servers and dictionary sources you configure. See the
 
 ## Install
 
-- [F-Droid](https://f-droid.org/en/packages/com.chmouel.liseur/)
-- [GitHub Releases](https://github.com/chmouel/liseur/releases)
+<p align="center">
+  <a href="https://f-droid.org/en/packages/com.chmouel.liseur/">
+    <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80" />
+  </a>
+  <a href="https://github.com/chmouel/liseur/releases">
+    <img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png"
+         alt="Get it on GitHub" height="80" />
+  </a>
+  <a href="https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/chmouel/liseur">
+    <img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png"
+         alt="Get it on Obtainium" height="80" />
+  </a>
+</p>
 
 ## Related Projects
 
@@ -80,7 +91,6 @@ server exposes, what Liseur implements against it, and why the gaps remain.
 **Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified, like the English word *leisure*.
 
 Here is a painting by [Pierre-Auguste Renoir](https://en.wikipedia.org/wiki/Pierre-Auguste_Renoir) portraying [Claude Monet](https://en.wikipedia.org/wiki/Claude_Monet) as "Le Liseur":
-
 
 <p align="center">
   <picture>
