@@ -235,6 +235,28 @@ class LiseurSyncUploadClientTest {
 
     private var books = 0
 
+    /**
+     * A server can answer with no body at all, and bounding the read
+     * must not be what turns that into a crash. Raised in review as a
+     * possible null dereference: OkHttp 5 makes `Response.body`
+     * non-null, so there is nothing to dereference, and this pins the
+     * behaviour rather than the reasoning in case that ever changes.
+     */
+    @Test
+    fun `an answer with no body at all is read, not thrown`() = runTest {
+        server.enqueue(MockResponse.Builder().code(204).build())
+
+        assertTrue(upload() is ServerUploadResult.Failed)
+    }
+
+    /** The same, for an answer this client treats as a verdict. */
+    @Test
+    fun `a refusal with no body is still a refusal`() = runTest {
+        server.enqueue(MockResponse.Builder().code(422).build())
+
+        assertEquals(ServerUploadResult.Rejected(null), upload())
+    }
+
     private suspend fun upload(): ServerUploadResult {
         val book = temp.newFile("book-${books++}.epub")
         book.writeBytes(ByteArray(64) { it.toByte() })
