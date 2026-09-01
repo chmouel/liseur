@@ -45,6 +45,8 @@ class PositionSyncCoordinatorTest {
         var preview: PreviewOutcome = PreviewOutcome.NotSynced
         var conflict: SyncPreview? = null
         val resolved = mutableListOf<Pair<String, Boolean>>()
+        val conflictsAskedFor = mutableListOf<String?>()
+        val peersResolved = mutableListOf<String?>()
 
         val snapshots = mutableListOf<SyncSnapshot?>()
 
@@ -71,18 +73,24 @@ class PositionSyncCoordinatorTest {
 
         override suspend fun previewBook(bookUrl: String) = preview
 
-        override suspend fun preservedConflict(bookUrl: String) = conflict
+        override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? {
+            conflictsAskedFor += peerId
+            return conflict
+        }
 
         override suspend fun takeRemotePosition(
             bookUrl: String,
             atRevision: Long,
+            peerId: String?,
         ): ResolveOutcome {
             resolved += bookUrl to true
+            peersResolved += peerId
             return ResolveOutcome.Done
         }
 
-        override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+        override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome {
             resolved += bookUrl to false
+            peersResolved += peerId
             return ResolveOutcome.Done
         }
     }
@@ -384,6 +392,186 @@ class PositionSyncCoordinatorTest {
         coordinator.resolve("b", takeRemote = false, atRevision = 3)
 
         assertEquals(listOf("b" to true, "b" to false), sync.resolved)
+    }
+
+    /** The server's answer as a dialog would have shown it. */
+    private fun shown() = SyncPreview(
+        local = 0.2,
+        remote = 0.8,
+        remoteAt = 1_000,
+        peerId = "catalog",
+        accountKey = "https://books.example|alice",
+        remoteStatus = "reading",
+        remoteLocatorJson = """{"href":"/ch3.xhtml"}""",
+    )
+
+    @Test
+    fun `a choice about the answer still on disk goes through`() = runTest {
+        val sync = FakeSync()
+        sync.conflict = shown()
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = true,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+            peerId = "catalog",
+        )
+
+        assertEquals(ResolveOutcome.Done, outcome)
+        assertEquals(listOf("b" to true), sync.resolved)
+    }
+
+    @Test
+    fun `a server position that moved while the question was up is superseded`() = runTest {
+        val sync = FakeSync()
+        // A background run landed a newer position from the server. The
+        // local revision guard says nothing about that: nothing here
+        // changed.
+        sync.conflict = shown().copy(remote = 0.9)
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = true,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+        )
+
+        assertEquals(ResolveOutcome.Superseded, outcome)
+        assertTrue(sync.resolved.isEmpty())
+    }
+
+    @Test
+    fun `a different anchor at the same percentage is superseded`() = runTest {
+        val sync = FakeSync()
+        // Same percentage, same timestamp, same everything a progression
+        // can see — and a different place in the book.
+        sync.conflict = shown().copy(remoteLocatorJson = """{"href":"/ch9.xhtml"}""")
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = true,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+        )
+
+        assertEquals(ResolveOutcome.Superseded, outcome)
+    }
+
+    @Test
+    fun `a status that moved on its own is superseded`() = runTest {
+        val sync = FakeSync()
+        sync.conflict = shown().copy(remoteStatus = "finished")
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = true,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+        )
+
+        assertEquals(ResolveOutcome.Superseded, outcome)
+    }
+
+    @Test
+    fun `a newer server timestamp on the same page is superseded`() = runTest {
+        val sync = FakeSync()
+        sync.conflict = shown().copy(remoteAt = 2_000)
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = true,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+        )
+
+        assertEquals(ResolveOutcome.Superseded, outcome)
+    }
+
+    @Test
+    fun `an account switched while the question was up is superseded`() = runTest {
+        val sync = FakeSync()
+        sync.conflict = shown().copy(accountKey = "https://books.example|bob")
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = true,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+        )
+
+        // Bob's page is not Alice's page, however alike the numbers look.
+        assertEquals(ResolveOutcome.Superseded, outcome)
+    }
+
+    @Test
+    fun `another peer answering is superseded`() = runTest {
+        val sync = FakeSync()
+        sync.conflict = shown().copy(peerId = "kosync")
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = true,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+        )
+
+        assertEquals(ResolveOutcome.Superseded, outcome)
+    }
+
+    @Test
+    fun `a disagreement settled while the question was up is superseded`() = runTest {
+        val sync = FakeSync()
+        sync.conflict = null
+        val coordinator = PositionSyncCoordinator(sync)
+
+        val outcome = coordinator.resolve(
+            "b",
+            takeRemote = false,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+        )
+
+        assertEquals(ResolveOutcome.Superseded, outcome)
+        assertTrue(sync.resolved.isEmpty())
+    }
+
+    @Test
+    fun `the peer a question was about is the one asked and acted on`() = runTest {
+        val sync = FakeSync()
+        sync.conflict = shown()
+        val coordinator = PositionSyncCoordinator(sync)
+
+        coordinator.resolve(
+            "b",
+            takeRemote = false,
+            atRevision = 3,
+            expecting = shown().fingerprint(),
+            peerId = "catalog",
+        )
+
+        assertEquals(listOf("catalog"), sync.conflictsAskedFor)
+        assertEquals(listOf("catalog"), sync.peersResolved)
+    }
+
+    @Test
+    fun `an unguarded resolve reads no conflict at all`() = runTest {
+        // The automatic paths decide and act inside one turn, so there is
+        // nothing to revalidate and no extra read to pay for.
+        val sync = FakeSync()
+        sync.conflict = shown()
+        val coordinator = PositionSyncCoordinator(sync)
+
+        coordinator.resolve("b", takeRemote = true, atRevision = 3)
+
+        assertTrue(sync.conflictsAskedFor.isEmpty())
     }
 
     @Test

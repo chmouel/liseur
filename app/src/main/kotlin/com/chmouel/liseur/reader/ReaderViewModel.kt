@@ -9,6 +9,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
+import com.chmouel.liseur.reader.chrome.BookSyncChoice
+import com.chmouel.liseur.reader.chrome.BookSyncVerdict
+import com.chmouel.liseur.reader.chrome.SyncRelation
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
@@ -387,9 +390,40 @@ class ReaderViewModel(
         data object Idle : BookSync
         data object Asking : BookSync
 
+        /**
+         * Both positions, for the reader to choose between.
+         *
+         * Nothing has been applied by the time this appears: the server's
+         * answer has been written down, but neither side has been
+         * changed. It is raised whenever the two differ, the server being
+         * *behind* included — that case is the reason the button exists,
+         * since ordinary syncing has nothing to say about it and it is
+         * exactly what happens after reading on a device that has not
+         * caught up.
+         */
+        data class Choice(
+            val here: SyncPoint,
+            val there: SyncPoint,
+            val relation: SyncRelation,
+            /** The server's answer as it was shown, to act on or refuse. */
+            val preview: SyncPreview,
+        ) : BookSync
+
         /** Nothing left to do: a message, and then out of the way. */
         data class Note(val messageRes: Int) : BookSync
     }
+
+    /** One side's position, in the terms the reader sees on the page. */
+    data class SyncPoint(
+        val progression: Double,
+        val page: Int?,
+        val totalPages: Int?,
+        /** When the server recorded it, if it said. */
+        val at: Long? = null,
+        /** A few words from around the anchor, when one travelled. */
+        val excerpt: String? = null,
+        val confidence: ResumeConfidence = ResumeConfidence.APPROXIMATE,
+    )
 
     private val _bookSync = MutableStateFlow<BookSync>(BookSync.Idle)
     val bookSync: StateFlow<BookSync> = _bookSync.asStateFlow()
@@ -446,56 +480,173 @@ class ReaderViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /**
-     * Brings this book in step with the server, taking whichever side has
-     * read further.
+     * Asks the server where this book was left, and puts both answers to
+     * the reader.
      *
-     * There is no choosing: the further position wins outright, because
-     * that is almost always the answer, and being asked to compare two
-     * page numbers mid-book is a chore. Jumping ahead raises the same
-     * "back to page N" pill as any other jump, so a deliberate reread is
-     * one tap from being restored — and sending it again from there makes
-     * this device the further one.
+     * The one gesture in the app that is somebody asking on purpose, so
+     * it is the one that asks back rather than deciding by distance. The
+     * automatic paths — a book opening, the catch-up pill — still take
+     * whichever side has read further, because nobody is there to answer
+     * them.
+     *
+     * Nothing is pulled or pushed until the choice is made. Doing it the
+     * other way round is the ordinary sync, which is exactly what has
+     * already failed to help by the time this is pressed.
      */
     fun syncThisBook() {
+        // A choice already on screen is the question being asked; a
+        // second press behind it must not start a second one.
         if (_bookSync.value == BookSync.Asking) return
+        if (_bookSync.value is BookSync.Choice) return
         _bookSync.value = BookSync.Asking
         viewModelScope.launch {
+            // Every page turn already accepted has to be on disk before
+            // the question is asked. Otherwise "keep this device's
+            // position" offers a page no row holds — every provider reads
+            // that row afresh — and the answer sends an older place, or
+            // nothing at all.
+            if (!positionPublisher.flush(bookId)) {
+                _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
+                return@launch
+            }
             _bookSync.value = when (val outcome = positionSync.preview(bookId)) {
                 PreviewOutcome.NotSynced -> BookSync.Note(R.string.reader_sync_book_not_synced)
                 is PreviewOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
-                is PreviewOutcome.Ready -> adoptFurthest(
-                    outcome.preview,
-                    progressDao.currentRevision(bookId) ?: 0,
-                )
+                is PreviewOutcome.Ready -> put(outcome.preview)
             }
         }
     }
 
-    private suspend fun adoptFurthest(preview: SyncPreview, atRevision: Long): BookSync {
-        val there = preview.remote
-            ?: return BookSync.Note(R.string.reader_sync_book_no_remote)
-        if (preview.agrees) return BookSync.Note(R.string.reader_sync_book_in_step)
-        val here = preview.local ?: lastLocator?.locations?.totalProgression ?: 0.0
-        val takeRemote = there > here
-        return when (val outcome = positionSync.resolve(bookId, takeRemote, atRevision)) {
-            is ResolveOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
+    /** Turns a verdict into either a message or a question. */
+    private suspend fun put(preview: SyncPreview): BookSync =
+        when (val verdict = BookSyncChoice.decide(preview)) {
+            BookSyncVerdict.NoRemote -> BookSync.Note(R.string.reader_sync_book_no_remote)
+            BookSyncVerdict.InStep -> BookSync.Note(R.string.reader_sync_book_in_step)
 
-            // A page was turned while this ran, so the answer was about
-            // somewhere the reader no longer is.
-            ResolveOutcome.Superseded -> BookSync.Note(R.string.reader_sync_book_moved)
+            // Nothing to choose between: this device has no position at
+            // all, so the server's is simply taken.
+            BookSyncVerdict.NoLocal -> adoptRemote(preview)
 
-            ResolveOutcome.Done -> {
-                if (takeRemote) {
+            // The server is only behind on this device's own pushes.
+            // There is one position, and sending it is the whole of it.
+            BookSyncVerdict.Owed -> keptHere()
+
+            is BookSyncVerdict.Ask -> BookSync.Choice(
+                here = point(preview.local ?: 0.0),
+                there = point(
+                    progression = preview.remote ?: 0.0,
+                    at = preview.remoteAt,
+                    excerpt = preview.excerpt,
+                    confidence = preview.confidence,
+                ),
+                relation = verdict.relation,
+                preview = preview,
+            )
+        }
+
+    /**
+     * One side, said in pages where the book has been laid out and as a
+     * percentage where it has not — a page number is what a reader can
+     * place themselves by, but it is not known until the book has been
+     * measured.
+     */
+    private fun point(
+        progression: Double,
+        at: Long? = null,
+        excerpt: String? = null,
+        confidence: ResumeConfidence = ResumeConfidence.APPROXIMATE,
+    ): SyncPoint {
+        val positions = bookPositions?.takeIf { it.isUsable }
+        return SyncPoint(
+            progression = progression,
+            page = positions?.positionAtProgression(progression.toFloat()),
+            totalPages = positions?.totalPositions,
+            at = at,
+            excerpt = excerpt,
+            confidence = confidence,
+        )
+    }
+
+    /**
+     * Acts on the choice.
+     *
+     * The server's answer is acted on as it was *shown*: the fingerprint
+     * goes back with the decision, so a background run that landed a
+     * different answer while the dialog sat there is refused rather than
+     * silently applied. Taking the other device's position moves the
+     * reader there straight away, because that is the whole point of
+     * having asked.
+     */
+    fun resolveBookSync(takeRemote: Boolean) {
+        val asked = _bookSync.value as? BookSync.Choice ?: return
+        val preview = asked.preview
+        _bookSync.value = BookSync.Asking
+        viewModelScope.launch {
+            val outcome = positionSync.resolve(
+                bookUrl = bookId,
+                takeRemote = takeRemote,
+                // The revision the position on the dialog came from, not a
+                // fresher read: a page turn that committed in between is
+                // newer than the decision and must supersede it.
+                atRevision = preview.localRevision ?: 0,
+                expecting = preview.fingerprint(),
+                peerId = preview.peerId,
+            )
+            _bookSync.value = when (outcome) {
+                is ResolveOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
+                ResolveOutcome.Superseded -> BookSync.Note(R.string.reader_sync_book_moved)
+                ResolveOutcome.Done -> if (takeRemote) {
                     goToRemotePosition(preview)
                     BookSync.Idle
                 } else {
-                    BookSync.Note(R.string.reader_sync_book_sent)
+                    keptHere()
                 }
             }
         }
     }
 
-    /** Puts the message away. */
+    /**
+     * Sends the position that was kept, and says only what it can see.
+     *
+     * Settling the disagreement is not sending: calibre-web and Komga
+     * push inside that call, liseur-sync and kosync only clear what was
+     * pending and leave the position owed. So a book sync follows — and
+     * its outcome is still not proof, since with two partners it is the
+     * two of them folded into one answer. Hence the wording: kept here,
+     * and on its way.
+     */
+    private suspend fun keptHere(): BookSync {
+        runCatching { positionSync.request(SyncScope.Book(bookId)) }
+        return BookSync.Note(R.string.reader_sync_book_kept)
+    }
+
+    /**
+     * Takes the server's position where there is nothing to weigh it
+     * against, and moves the reader there.
+     *
+     * Guarded like a decision made in a dialog, because it is one made a
+     * moment earlier: the turn was let go between the preview and this,
+     * and what the preview saw must still be what the server says.
+     */
+    private suspend fun adoptRemote(preview: SyncPreview): BookSync {
+        val outcome = positionSync.resolve(
+            bookUrl = bookId,
+            takeRemote = true,
+            atRevision = preview.localRevision ?: 0,
+            expecting = preview.fingerprint(),
+            peerId = preview.peerId,
+        )
+        return when (outcome) {
+            is ResolveOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
+            ResolveOutcome.Superseded -> BookSync.Note(R.string.reader_sync_book_moved)
+            ResolveOutcome.Done -> {
+                goToRemotePosition(preview)
+                BookSync.Idle
+            }
+        }
+    }
+
+    /** Puts the question away, leaving the server's answer on disk for later. */
     fun dismissBookSync() {
         _bookSync.value = BookSync.Idle
     }
@@ -942,8 +1093,9 @@ class ReaderViewModel(
      *
      * An offer, not a report: every failure is silence, and declining
      * one place is remembered so the same pill does not chase the
-     * reader around. Accepting goes through the same adopt-furthest
-     * path as syncing the book by hand.
+     * reader around. Accepting takes the further side outright — the
+     * question the manual button asks belongs to a reader who went
+     * looking for it, not to a pill that appeared on its own.
      */
     private fun maybeOfferCatchUp() {
         if (catchUpChecking || publication == null) return
@@ -957,6 +1109,9 @@ class ReaderViewModel(
                     ?: lastLocator?.locations?.totalProgression
                     ?: 0.0
                 if (preview.agrees || there <= here) return@launch
+                // An answer nobody wrote down cannot be adopted, so
+                // offering it would put up a pill that does nothing.
+                if (!preview.resolvable) return@launch
                 // Declining an offer declines that place; only reading
                 // done elsewhere since brings the pill back.
                 if (catchUpDeclined?.let { kotlin.math.abs(it - there) < EPSILON } == true) {

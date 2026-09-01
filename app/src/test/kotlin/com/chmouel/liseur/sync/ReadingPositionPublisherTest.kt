@@ -4,12 +4,19 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.FinishedOverride
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -376,6 +383,162 @@ class ReadingPositionPublisherTest {
         assertEquals(2, attempts)
         assertEquals(listOf("book"), failures)
         job.cancel()
+    }
+
+    /** A publisher whose writes can be made to fail on demand. */
+    private fun TestScope.publisher(
+        events: MutableList<String>,
+        persistFails: () -> Boolean = { false },
+        completionFails: () -> Boolean = { false },
+    ): ReadingPositionPublisher {
+        val sync = LatestPositionSync(
+            scope = backgroundScope,
+            request = { SyncOutcome.Success },
+            scheduleRetry = {},
+            onError = { _, _ -> },
+        )
+        return ReadingPositionPublisher(
+            scope = backgroundScope,
+            overrideFor = { FinishedOverride.NONE },
+            persist = { update, _ ->
+                if (persistFails()) error("write failed")
+                events += "write:${update.progression}"
+            },
+            refreshFinished = {},
+            markFinished = {
+                if (completionFails()) error("flag failed")
+                events += "complete:$it"
+            },
+            latestSync = sync,
+            scheduleClose = {},
+            onError = { _, _ -> },
+        )
+    }
+
+    @Test
+    fun `a flush waits for every page accepted before it`() = runTest {
+        val events = mutableListOf<String>()
+        val publisher = publisher(events)
+
+        publisher.publish(update(0.1))
+        publisher.publish(update(0.2))
+        val answer = async { publisher.flush("book") }
+        advanceUntilIdle()
+
+        // The question the button asks is about a position on disk. A
+        // flush that answered before these two landed would let "keep
+        // this device's position" send the page before last.
+        assertTrue(answer.await())
+        assertEquals(listOf("write:0.1", "write:0.2"), events)
+    }
+
+    @Test
+    fun `a page that never landed is not flushed away`() = runTest {
+        val events = mutableListOf<String>()
+        var failing = true
+        val publisher = publisher(events, persistFails = { failing })
+
+        publisher.publish(update(0.1))
+        advanceUntilIdle()
+
+        assertFalse(publisher.flush("book"))
+
+        // A later success of the same kind repairs it: the row now holds
+        // a position, and it is a newer one than the failed write.
+        failing = false
+        publisher.publish(update(0.2))
+        advanceUntilIdle()
+
+        assertTrue(publisher.flush("book"))
+    }
+
+    @Test
+    fun `a completion that never landed is not flushed away either`() = runTest {
+        val events = mutableListOf<String>()
+        var failing = true
+        val publisher = publisher(events, completionFails = { failing })
+
+        publisher.completeBook("book")
+        advanceUntilIdle()
+
+        assertFalse(publisher.flush("book"))
+
+        failing = false
+        publisher.completeBook("book")
+        advanceUntilIdle()
+
+        assertTrue(publisher.flush("book"))
+    }
+
+    @Test
+    fun `a good completion does not repair a page that never landed`() = runTest {
+        val events = mutableListOf<String>()
+        val publisher = publisher(events, persistFails = { true })
+
+        publisher.publish(update(0.1))
+        publisher.completeBook("book")
+        advanceUntilIdle()
+
+        // Two different injuries. The book is marked finished and the
+        // locator is still missing, which is exactly the position the
+        // button would have offered to send.
+        assertFalse(publisher.flush("book"))
+    }
+
+    @Test
+    fun `a good page does not repair a completion that never landed`() = runTest {
+        val events = mutableListOf<String>()
+        val publisher = publisher(events, completionFails = { true })
+
+        publisher.completeBook("book")
+        publisher.publish(update(0.9))
+        advanceUntilIdle()
+
+        assertFalse(publisher.flush("book"))
+    }
+
+    @Test
+    fun `another book's failure is not this book's problem`() = runTest {
+        val events = mutableListOf<String>()
+        val publisher = publisher(events, persistFails = { true })
+
+        publisher.publish(update(0.1))
+        advanceUntilIdle()
+
+        assertTrue(publisher.flush("other"))
+    }
+
+    @Test
+    fun `a flush with nobody left to answer it is false`() = runTest {
+        val events = mutableListOf<String>()
+        val scope = CoroutineScope(coroutineContext + Job())
+        val sync = LatestPositionSync(
+            scope = backgroundScope,
+            request = { SyncOutcome.Success },
+            scheduleRetry = {},
+            onError = { _, _ -> },
+        )
+        val publisher = ReadingPositionPublisher(
+            scope = scope,
+            overrideFor = { FinishedOverride.NONE },
+            persist = { update, _ -> events += "write:${update.progression}" },
+            refreshFinished = {},
+            markFinished = {},
+            latestSync = sync,
+            scheduleClose = {},
+            onError = { _, _ -> },
+        )
+        publisher.publish(update(0.1))
+        advanceUntilIdle()
+
+        scope.cancel()
+        advanceUntilIdle()
+
+        // Both the flush still queued when the consumer left and one
+        // arriving afterwards. Waiting for ever on a queue nobody reads
+        // would hang the button rather than answer it.
+        assertFalse(publisher.flush("book"))
+        assertFalse(publisher.flush("book"))
     }
 
     private fun update(progression: Double) = PositionUpdate(

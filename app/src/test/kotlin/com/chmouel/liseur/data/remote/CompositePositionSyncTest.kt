@@ -30,6 +30,7 @@ class CompositePositionSyncTest {
         var fullRuns = 0
         var refreshes = 0
         var resolved = 0
+        var conflictsRead = 0
 
         override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome {
             fullRuns++
@@ -43,14 +44,21 @@ class CompositePositionSyncTest {
 
         override suspend fun canSync(bookUrl: String) = syncable
         override suspend fun previewBook(bookUrl: String) = preview
-        override suspend fun preservedConflict(bookUrl: String) = conflict
+        override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? {
+            conflictsRead++
+            return conflict
+        }
 
-        override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
+        override suspend fun takeRemotePosition(
+            bookUrl: String,
+            atRevision: Long,
+            peerId: String?,
+        ): ResolveOutcome {
             resolved++
             return resolveOutcome
         }
 
-        override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+        override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome {
             resolved++
             return resolveOutcome
         }
@@ -143,7 +151,7 @@ class CompositePositionSyncTest {
 
         val outcome = composite(broken, fine).previewBook("file:///b")
 
-        assertEquals(PreviewOutcome.Ready(answer), outcome)
+        assertEquals(PreviewOutcome.Ready(answer.copy(peerId = "fine")), outcome)
     }
 
     @Test
@@ -155,6 +163,72 @@ class CompositePositionSyncTest {
             PreviewOutcome.Failed(SyncFailure.Offline),
             composite(broken, silent).previewBook("file:///b"),
         )
+    }
+
+    @Test
+    fun `the peer that answered a preview is named on it`() = runTest {
+        val peer = FakePeer(
+            "kosync",
+            preview = PreviewOutcome.Ready(SyncPreview(local = 0.1, remote = 0.4, remoteAt = 10)),
+        )
+
+        val outcome = composite(peer).previewBook("file:///b") as PreviewOutcome.Ready
+
+        // Without this the choice made about kosync's page has no way
+        // back to kosync, and would be handed to every partner at once.
+        assertEquals("kosync", outcome.preview.peerId)
+    }
+
+    @Test
+    fun `a peer with no position does not silence one that has`() = runTest {
+        val blank = FakePeer("blank", preview = PreviewOutcome.Ready(SyncPreview(0.1, null, null)))
+        val knows = FakePeer("knows", preview = PreviewOutcome.Ready(SyncPreview(0.1, 0.4, 10)))
+
+        val outcome = composite(blank, knows).previewBook("file:///b") as PreviewOutcome.Ready
+
+        assertEquals("knows", outcome.preview.peerId)
+        assertEquals(0.4, outcome.preview.remote!!, 0.0001)
+    }
+
+    @Test
+    fun `nobody having a position is still an answer`() = runTest {
+        val blank = FakePeer("blank", preview = PreviewOutcome.Ready(SyncPreview(0.1, null, null)))
+        val quiet = FakePeer("quiet", preview = PreviewOutcome.NotSynced)
+
+        val outcome = composite(blank, quiet).previewBook("file:///b") as PreviewOutcome.Ready
+
+        // "The server has no position for this book yet" is a thing to
+        // say. Turning it into NotSynced would claim the book does not
+        // sync at all.
+        assertNull(outcome.preview.remote)
+        assertEquals("blank", outcome.preview.peerId)
+    }
+
+    @Test
+    fun `a named choice reaches that peer and no other`() = runTest {
+        val catalog = FakePeer("catalog", conflict = SyncPreview(0.1, 0.4, 10))
+        val kosync = FakePeer("kosync", conflict = SyncPreview(0.2, 0.9, 20))
+
+        // The dialog was about kosync's position, and kosync's alone —
+        // even though the catalog server is holding a disagreement of
+        // its own that nobody was shown.
+        val outcome = composite(catalog, kosync).takeRemotePosition("b", 3, peerId = "kosync")
+
+        assertEquals(ResolveOutcome.Done, outcome)
+        assertEquals(0, catalog.resolved)
+        assertEquals(1, kosync.resolved)
+    }
+
+    @Test
+    fun `a named preserved conflict is read from that peer alone`() = runTest {
+        val catalog = FakePeer("catalog", conflict = SyncPreview(0.1, 0.4, 10))
+        val kosync = FakePeer("kosync", conflict = SyncPreview(0.2, 0.9, 20))
+
+        val held = composite(catalog, kosync).preservedConflict("b", peerId = "kosync")
+
+        assertEquals(0.9, held!!.remote!!, 0.0001)
+        assertEquals("kosync", held.peerId)
+        assertEquals(0, catalog.conflictsRead)
     }
 
     @Test

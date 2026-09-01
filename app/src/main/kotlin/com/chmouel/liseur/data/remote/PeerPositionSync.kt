@@ -53,7 +53,7 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
         peers.any { it.canSync(bookUrl) }
 
     /**
-     * The first peer with something to say.
+     * The first peer with something to say, said in its own name.
      *
      * A preview answers "where does the server think you are", and with
      * several servers there is no single answer. The first peer that can
@@ -61,27 +61,48 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
      * is the one whose own interface shows the position too. A failure
      * is only reported when nobody could answer, since one unreachable
      * partner should not hide another's perfectly good answer.
+     *
+     * A peer that answers but has no position for this book is not an
+     * answer worth stopping at either: it is kept in reserve and the
+     * search goes on, so a partner that has never heard of the book
+     * cannot silence one that has.
+     *
+     * Whoever answered is named on the preview. A choice made about one
+     * partner's position must reach that partner and no other, and by
+     * the time it is made this composite is long out of the picture.
      */
     override suspend fun previewBook(bookUrl: String): PreviewOutcome {
         var failure: SyncFailure? = null
+        var empty: PreviewOutcome.Ready? = null
         for (peer in peers) {
             when (val outcome = peer.previewBook(bookUrl)) {
-                is PreviewOutcome.Ready -> return outcome
+                is PreviewOutcome.Ready -> {
+                    val named = PreviewOutcome.Ready(outcome.preview.from(peer))
+                    if (named.preview.remote != null) return named
+                    empty = empty ?: named
+                }
+
                 is PreviewOutcome.Failed -> failure = failure ?: outcome.reason
                 PreviewOutcome.NotSynced -> Unit
             }
         }
-        return failure?.let(PreviewOutcome::Failed) ?: PreviewOutcome.NotSynced
+        return empty ?: failure?.let(PreviewOutcome::Failed) ?: PreviewOutcome.NotSynced
     }
 
-    override suspend fun preservedConflict(bookUrl: String): SyncPreview? =
-        peers.firstNotNullOfOrNull { it.preservedConflict(bookUrl) }
+    override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? =
+        holders(peerId).firstNotNullOfOrNull { peer ->
+            peer.preservedConflict(bookUrl)?.from(peer)
+        }
 
-    override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome =
-        resolve(bookUrl) { it.takeRemotePosition(bookUrl, atRevision) }
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+    ): ResolveOutcome =
+        resolve(bookUrl, peerId) { it.takeRemotePosition(bookUrl, atRevision) }
 
-    override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome =
-        resolve(bookUrl) { it.keepLocalPosition(bookUrl) }
+    override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
+        resolve(bookUrl, peerId) { it.keepLocalPosition(bookUrl) }
 
     override suspend fun refreshUnresolved() {
         peers.forEach { it.refreshUnresolved() }
@@ -106,12 +127,21 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
      * Handing it to every peer would tell partners that never had a
      * conflict to act on one, and "keep what is here" against a peer
      * that already agreed is a write for no reason.
+     *
+     * [peerId] narrows it further, to the partner a question was actually
+     * asked about. Without that, a dialog showing calibre-web's page
+     * settles a kosync disagreement nobody was shown — and worse, one
+     * peer adopting a position bumps the revision the next peer is
+     * guarding against, so the second answers `Superseded` and the
+     * combined answer reports that nothing happened after something
+     * already has.
      */
     private suspend fun resolve(
         bookUrl: String,
+        peerId: String?,
         act: suspend (PeerPositionSync) -> ResolveOutcome,
     ): ResolveOutcome {
-        val holders = peers.filter { it.preservedConflict(bookUrl) != null }
+        val holders = holders(peerId).filter { it.preservedConflict(bookUrl) != null }
         if (holders.isEmpty()) return ResolveOutcome.Done
         return holders
             .map { act(it) }
@@ -124,6 +154,14 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
                 }
             }
     }
+
+    /** The peers a request is about: one named, or all of them. */
+    private fun holders(peerId: String?): List<PeerPositionSync> =
+        if (peerId == null) peers else peers.filter { it.peerId == peerId }
+
+    /** Names this peer on what it said, so a choice can find its way back. */
+    private fun SyncPreview.from(peer: PeerPositionSync): SyncPreview =
+        copy(peerId = peer.peerId)
 
     /**
      * What several partners' outcomes add up to.

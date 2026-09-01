@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.readingStatusFor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -45,20 +46,49 @@ class ReadingPositionPublisher(
         data class Complete(val bookUrl: String) : Event
         data class Close(val bookUrl: String) : Event
         data class Barrier(val action: suspend () -> Unit) : Event
+        data class Flush(
+            val bookUrl: String,
+            val answer: CompletableDeferred<Boolean>,
+        ) : Event
     }
+
+    /** The two kinds of write that can fail, tracked apart; see [flush]. */
+    private enum class Injury { POSITION, COMPLETION }
 
     private val events = Channel<Event>(Channel.UNLIMITED)
     private val _failures = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val failures: SharedFlow<String> = _failures.asSharedFlow()
 
+    /**
+     * What did not reach the disk, per book, read and written only by the
+     * consumer below — which is what makes [flush] an answer rather than a
+     * guess about a race with the failures flow.
+     */
+    private val outstanding = mutableMapOf<String, MutableSet<Injury>>()
+
     init {
         scope.launch {
-            for (event in events) {
-                when (event) {
-                    is Event.Position -> store(event.update)
-                    is Event.Complete -> complete(event.bookUrl)
-                    is Event.Close -> scheduleClose(event.bookUrl)
-                    is Event.Barrier -> event.action()
+            try {
+                for (event in events) {
+                    when (event) {
+                        is Event.Position -> store(event.update)
+                        is Event.Complete -> complete(event.bookUrl)
+                        is Event.Close -> scheduleClose(event.bookUrl)
+                        is Event.Barrier -> event.action()
+                        is Event.Flush -> event.answer.complete(
+                            outstanding[event.bookUrl].isNullOrEmpty(),
+                        )
+                    }
+                }
+            } finally {
+                // Nothing will consume this queue again, so shut the door
+                // before draining it: a flush that arrives after the drain
+                // would otherwise be accepted by an unlimited channel and
+                // waited on for ever.
+                events.close()
+                while (true) {
+                    val left = events.tryReceive().getOrNull() ?: break
+                    (left as? Event.Flush)?.answer?.complete(false)
                 }
             }
         }
@@ -91,15 +121,42 @@ class ReadingPositionPublisher(
     fun afterQueuedWrites(action: suspend () -> Unit): Boolean =
         events.trySend(Event.Barrier(action)).isSuccess
 
+    /**
+     * Waits for every position event accepted before this call, and says
+     * whether they are all on disk.
+     *
+     * Answered from inside the consumer, so it cannot race the queue the
+     * way the [failures] flow can: that flow is emitted and collected
+     * independently, and a barrier could finish before a collector had
+     * heard about a write that failed. `publish` returning true only ever
+     * meant the channel took the event.
+     *
+     * A page turn that did not persist and a book completion that did not
+     * are counted apart. They are different injuries, and a later
+     * completion does not repair a locator that never landed any more
+     * than a later page turn repairs a completion that did not.
+     *
+     * False also means "nobody is listening": the consumer closes the
+     * queue on its way out and answers what is still in it, and a send
+     * refused afterwards answers itself.
+     */
+    suspend fun flush(bookUrl: String): Boolean {
+        val answer = CompletableDeferred<Boolean>()
+        if (events.trySend(Event.Flush(bookUrl, answer)).isFailure) return false
+        return answer.await()
+    }
+
     private suspend fun store(update: PositionUpdate) {
         val stored = retry {
             val override = overrideFor(update.bookUrl)
             persist(update, readingStatusFor(update.progression, override).wireName)
         }
         if (!stored) {
+            hurt(update.bookUrl, Injury.POSITION)
             _failures.tryEmit(update.bookUrl)
             return
         }
+        healed(update.bookUrl, Injury.POSITION)
 
         latestSync.signal(update.bookUrl)
 
@@ -118,10 +175,22 @@ class ReadingPositionPublisher(
             wrote = true
         }
         if (!stored) {
+            hurt(bookUrl, Injury.COMPLETION)
             _failures.tryEmit(bookUrl)
             return
         }
+        healed(bookUrl, Injury.COMPLETION)
         if (wrote) latestSync.signal(bookUrl)
+    }
+
+    private fun hurt(bookUrl: String, injury: Injury) {
+        outstanding.getOrPut(bookUrl) { mutableSetOf() }.add(injury)
+    }
+
+    private fun healed(bookUrl: String, injury: Injury) {
+        val left = outstanding[bookUrl] ?: return
+        left.remove(injury)
+        if (left.isEmpty()) outstanding.remove(bookUrl)
     }
 
     private suspend fun retry(block: suspend () -> Unit): Boolean {

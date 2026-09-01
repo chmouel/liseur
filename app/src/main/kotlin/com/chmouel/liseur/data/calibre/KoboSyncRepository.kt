@@ -128,11 +128,15 @@ class KoboSyncRepository(
                 now = System.currentTimeMillis(),
             )
         }
+        val stored = progressDao.get(bookUrl)
         return PreviewOutcome.Ready(
             SyncPreview(
-                local = progressDao.get(bookUrl)?.totalProgression,
+                local = stored?.totalProgression,
                 remote = remote?.progression,
                 remoteAt = remote?.updatedAt?.takeIf { it > 0 },
+                accountKey = account,
+                remoteStatus = remote?.status?.wireName,
+                localRevision = stored?.localRevision,
             ),
         )
     }
@@ -152,7 +156,11 @@ class KoboSyncRepository(
      * preserved came from a different account, or when the two sides
      * turn out to agree after all.
      */
-    override suspend fun preservedConflict(bookUrl: String): SyncPreview? {
+    // One partner already, so there is no peer to narrow to.
+    override suspend fun preservedConflict(
+        bookUrl: String,
+        peerId: String?,
+    ): SyncPreview? {
         val server = serverDao.get() ?: return null
         if (server.koboToken == null) return null
         val stored = progressDao.get(bookUrl) ?: return null
@@ -162,6 +170,9 @@ class KoboSyncRepository(
             local = stored.totalProgression,
             remote = there,
             remoteAt = stored.remoteUpdatedAt?.takeIf { it > 0 },
+            accountKey = server.accountKey,
+            remoteStatus = stored.pendingStatus,
+            localRevision = stored.localRevision,
         ).takeIf { !it.agrees }
     }
 
@@ -172,7 +183,11 @@ class KoboSyncRepository(
      * Still refuses if a page was turned in between, since that page turn
      * is newer than the choice being acted on.
      */
-    override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+    ): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
         val progression = stored.pendingProgression ?: return ResolveOutcome.Done
@@ -194,7 +209,10 @@ class KoboSyncRepository(
      * Sends this device's position for one book, because someone said to,
      * and stops the server's answer from being offered again.
      */
-    override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+    override suspend fun keepLocalPosition(
+        bookUrl: String,
+        peerId: String?,
+    ): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val token = server.koboToken ?: return ResolveOutcome.Done
         val uuid = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return ResolveOutcome.Done

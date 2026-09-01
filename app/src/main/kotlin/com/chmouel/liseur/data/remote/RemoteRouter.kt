@@ -89,13 +89,17 @@ class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
     override suspend fun previewBook(bookUrl: String): PreviewOutcome =
         router.positionSync()?.previewBook(bookUrl) ?: PreviewOutcome.NotSynced
 
-    override suspend fun preservedConflict(bookUrl: String): SyncPreview? =
+    override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? =
         router.positionSync()?.preservedConflict(bookUrl)
 
-    override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome =
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+    ): ResolveOutcome =
         router.positionSync()?.takeRemotePosition(bookUrl, atRevision) ?: ResolveOutcome.Done
 
-    override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome =
+    override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
         router.positionSync()?.keepLocalPosition(bookUrl) ?: ResolveOutcome.Done
 
     override suspend fun refreshUnresolved() {
