@@ -26,8 +26,7 @@ import kotlin.math.roundToInt
  * here. It is deliberately not called "not now": the server's answer is
  * on disk either way, and the next time the book is opened an ordinary
  * sync settles it by taking the further side, exactly as it would have
- * done had the button never been pressed. Nothing about cancelling books
- * this question for later.
+ * done had the button never been pressed. Cancelling buys no delay.
  */
 @Composable
 fun BookSyncDialog(
