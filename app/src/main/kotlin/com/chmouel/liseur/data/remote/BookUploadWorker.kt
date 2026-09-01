@@ -238,9 +238,17 @@ class BookUploadWorker(
      *
      * One source is immutable by construction — the app's own store,
      * where the file *is* named after its digest — and is sent where it
-     * lies. Everything else is copied into the cache first and hashed on
-     * the way through, which is what the content-URI path already did
-     * for its own reasons.
+     * lies. Everything else is copied into the cache first, which is
+     * what the content-URI path already did for its own reasons.
+     *
+     * The copy is then read back to hash it, rather than hashed as it
+     * streams past. That second pass is the point: the request body is
+     * read off the spooled file when the call is made, so a digest taken
+     * from the passing stream would describe bytes that were on their
+     * way to disk rather than the bytes that will actually be sent. A
+     * short write or a full cache would go unnoticed, and this whole
+     * mechanism rests on the digest naming exactly what went up. It is
+     * a local file read against a network round trip.
      */
     private suspend fun snapshot(
         book: Book,
