@@ -17,6 +17,9 @@ keystore.properties
 *.keystore
 *.p12
 
+# Personal Copilot CLI instructions.
+.github/instructions/liseur-local.instructions.md
+
 # fastlane writes these next to the configuration it is given.
 fastlane/report.xml
 fastlane/README.md
