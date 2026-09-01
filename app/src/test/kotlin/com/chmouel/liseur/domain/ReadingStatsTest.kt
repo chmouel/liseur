@@ -750,6 +750,44 @@ class ReadingStatsTest {
     }
 
     /**
+     * A sitting running past the cutoff counts, wherever it ended.
+     *
+     * The reader's own sitting at this moment has not ended anywhere
+     * yet. It will be dated to tonight or to tomorrow depending on when
+     * they put the book down, and the comparison cannot wait to find
+     * out. So the evening a week ago that ran past midnight is counted
+     * for the part of it that had gone by this time, exactly as today's
+     * is — the day it was eventually filed under decides the headline,
+     * not this.
+     */
+    @Test
+    fun `a sitting that outlived the day still counts up to the cutoff`() {
+        val lastDay = today.minusDays(7)
+        val startedAt = at(lastDay, 18, 0)
+        // Six hours on the clock, ending at half past midnight, of which
+        // three were active reading.
+        val session = SessionSpan(
+            "a",
+            startedAt,
+            10_800_000,
+            lastReadAt = startedAt + 21_600_000,
+        )
+        val span = DateSpan(lastDay.minusDays(1), lastDay)
+
+        // Forty minutes in: a ninth of the six hours, so a ninth of the
+        // three that were read.
+        assertEquals(
+            1_200_000L,
+            readingTotals(listOf(session), zone, span, LocalTime.of(18, 40)).totalMs,
+        )
+
+        // The same sitting is not in that span at all once the span runs
+        // to the end of its day: it ended on the next one, and that is
+        // where the headline files it.
+        assertEquals(0L, readingTotals(listOf(session), zone, span, LocalTime.MAX).totalMs)
+    }
+
+    /**
      * The hour struck twice is the first of them.
      *
      * On the morning the clocks go back, 02:30 happens twice in Paris.

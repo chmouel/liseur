@@ -371,6 +371,17 @@ data class SpanTotals(val totalMs: Long, val pendingMs: Long) {
  * belongs whole to the day it ended on, exactly as it does in the
  * headline above and on liseur-sync. Splitting it here would make the
  * two halves of a comparison disagree with the total over them.
+ *
+ * When a time of day *is* named, the span is an interval between two
+ * moments rather than a run of whole days, and the day a sitting is
+ * dated to stops deciding the matter. A sitting begun before the cutoff
+ * and still running at it counts for its elapsed part whether it went on
+ * to end that evening or past the following midnight. That is the point
+ * rather than an oversight: the sitting on the other side of the
+ * comparison is the one open on the reader's screen at this moment, and
+ * it will not be dated to any day until they put the book down. Dropping
+ * the older one for having ended on the Wednesday would measure a reader
+ * mid-chapter against nothing at all.
  */
 fun readingTotals(
     sessions: List<SessionSpan>,
