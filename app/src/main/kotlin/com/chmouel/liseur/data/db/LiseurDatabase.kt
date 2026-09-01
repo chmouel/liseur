@@ -25,8 +25,9 @@ import androidx.sqlite.execSQL
         SeriesExtra::class,
         AnnotationSync::class,
         KosyncPeer::class,
+        UploadRefusal::class,
     ],
-    version = 43,
+    version = 44,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -46,6 +47,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookScreenDao(): BookScreenDao
     abstract fun bookReadingModeDao(): BookReadingModeDao
     abstract fun seriesExtraDao(): SeriesExtraDao
+    abstract fun uploadRefusalDao(): UploadRefusalDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1089,6 +1091,41 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Remembers that a server would not take a book (ADR pending).
+         *
+         * Nothing is backfilled: before this table there was nowhere to
+         * record a refusal, so every phone starts with none and the
+         * first refusal after the upgrade is the first one written. The
+         * cascade is what keeps a deleted book from leaving a row behind
+         * for a later import of the same file to trip over.
+         */
+        val MIGRATION_43_44 = object : Migration(43, 44) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `upload_refusal` (
+                        `book_url` TEXT NOT NULL,
+                        `account_key` TEXT NOT NULL,
+                        `refused_at` INTEGER NOT NULL,
+                        `kind` TEXT NOT NULL,
+                        `reason` TEXT,
+                        `content_sha256` TEXT,
+                        `seen_at` INTEGER,
+                        PRIMARY KEY(`book_url`, `account_key`),
+                        FOREIGN KEY(`book_url`) REFERENCES `books`(`url`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS " +
+                        "`index_upload_refusal_account_key_seen_at` " +
+                        "ON `upload_refusal` (`account_key`, `seen_at`)",
+                )
+            }
+        }
+
         val MIGRATION_39_40 = object : Migration(39, 40) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1205,6 +1242,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_40_41,
             MIGRATION_41_42,
             MIGRATION_42_43,
+            MIGRATION_43_44,
         )
     }
 }

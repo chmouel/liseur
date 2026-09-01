@@ -135,6 +135,8 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.RefusedBytes
+import com.chmouel.liseur.data.db.UploadRefusal
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.ui.LocalEInk
@@ -182,6 +184,8 @@ fun LibraryScreen(
     onDownloadAndOpen: (Book) -> Unit,
     failedOpens: Flow<Book>,
     sentUp: Flow<Book>,
+    uploadRefusals: Flow<UploadRefusal>,
+    onRefusalShown: (UploadRefusal) -> Unit,
     onPendingOpenHandled: () -> Unit,
     onSearchQueryChange: (String) -> Unit = {},
     onToggleFilter: (LibraryFilterOption) -> Unit = {},
@@ -238,6 +242,33 @@ fun LibraryScreen(
     val sending = stringResource(R.string.upload_sending)
     LaunchedEffect(sentUp) {
         sentUp.collect { book -> snackbarHost.showSnackbar(sending.format(book.title)) }
+    }
+
+    // A book the server would not take. Said out loud rather than only
+    // logged, because the alternative — which is what this used to be —
+    // is a book that quietly stops being offered, or worse, is offered
+    // again on every launch with no explanation either way.
+    val refusedNoReason = stringResource(R.string.upload_refused)
+    val refusedBecause = stringResource(R.string.upload_refused_reason)
+    val refusedTooLarge = stringResource(R.string.upload_refused_too_large)
+    val refusedUnreadable = stringResource(R.string.upload_refused_unreadable)
+    LaunchedEffect(uploadRefusals) {
+        uploadRefusals.collect { refusal ->
+            val title = state.books.firstOrNull { it.url == refusal.bookUrl }?.title
+                ?: refusal.bookUrl.substringAfterLast('/')
+            snackbarHost.showSnackbar(
+                when {
+                    refusal.kind == UploadRefusal.TOO_LARGE -> refusedTooLarge.format(title)
+                    refusal.kind == UploadRefusal.FILE_UNREADABLE ->
+                        refusedUnreadable.format(title)
+                    refusal.reason != null -> refusedBecause.format(title, refusal.reason)
+                    else -> refusedNoReason.format(title)
+                },
+            )
+            // After the snackbar, not before: a notice the reader never
+            // saw because the process died is one worth showing again.
+            onRefusalShown(refusal)
+        }
     }
 
     // Raised on the series screen, shown here: the screen that raised it
@@ -750,6 +781,7 @@ fun LibraryScreen(
             serverDeleteNeedsReconnect = state.serverDeleteNeedsReconnect,
             canUploadToServer = state.canUploadToServer,
             uploading = book.url in state.uploading,
+            refusal = state.refusedUploads[book.url],
             onDownload = { onDownload(book); sheetBook = null },
             onCancelDownload = { onCancelDownload(book); sheetBook = null },
             onRemoveDownload = { confirmRemoveDownload = book; sheetBook = null },
@@ -977,6 +1009,7 @@ internal fun BookActionsSheet(
     serverDeleteNeedsReconnect: Boolean,
     canUploadToServer: Boolean,
     uploading: Boolean,
+    refusal: RefusedBytes?,
     onDismiss: () -> Unit,
     onDownload: () -> Unit,
     onCancelDownload: () -> Unit,
@@ -1076,6 +1109,29 @@ internal fun BookActionsSheet(
             if (book.livesOnlyOnThisDevice() && canUploadToServer && !uploading) {
                 TextButton(onClick = onUploadToServer, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.upload_to_server))
+                }
+                // The durable half of the notice. A snackbar is missed
+                // by anyone who was not looking at the screen, and this
+                // is the one place a reader wondering why a book never
+                // reached the server will actually come looking. It sits
+                // under the action rather than replacing it, because
+                // asking again is exactly what to do once the server has
+                // been upgraded or the folder has come back.
+                refusal?.let {
+                    Text(
+                        text = when {
+                            it.kind == UploadRefusal.TOO_LARGE ->
+                                stringResource(R.string.upload_refused_here_too_large)
+                            it.kind == UploadRefusal.FILE_UNREADABLE ->
+                                stringResource(R.string.upload_refused_here_unreadable)
+                            it.reason != null ->
+                                stringResource(R.string.upload_refused_here_reason, it.reason)
+                            else -> stringResource(R.string.upload_refused_here)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    )
                 }
             }
             if (book.remoteUuid != null && canDeleteFromServer) {

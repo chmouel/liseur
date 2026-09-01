@@ -876,10 +876,74 @@ class MigrationTest {
             }
     }
 
+    /**
+     * A refusal belongs to a book, and dies with it. Otherwise deleting
+     * a book and importing the same file again would land on a row
+     * saying the server had already turned it down — which is exactly
+     * how a reader ends up unable to send a book with no explanation.
+     *
+     * The cascade is enforced by the database rather than remembered at
+     * a call site, so no future deletion path can forget it.
+     */
+    @Test
+    fun `a deleted book takes its refusals with it`() {
+        helper.createDatabase(TEST_DB, 43).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_override, series_claim_pending,
+                    series_claim_reset, series_index_override
+                ) VALUES (
+                    'file:///a.epub', 'Born to Run', 'McDougall', NULL, NULL, 1, 2,
+                    'LOCAL', 0, 0, 0, 0, 0
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.execSQL("PRAGMA foreign_keys = ON")
+                db.execSQL(
+                    """
+                    INSERT INTO upload_refusal (
+                        book_url, account_key, refused_at, kind, reason, content_sha256, seen_at
+                    ) VALUES ('file:///a.epub', 'sync|me', 10, 'server_refused', NULL, 'aa', NULL)
+                    """.trimIndent(),
+                )
+                db.execSQL("DELETE FROM books WHERE url = 'file:///a.epub'")
+                db.query("SELECT COUNT(*) FROM upload_refusal").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0, cursor.getInt(0))
+                }
+            }
+    }
+
+    /**
+     * Nothing is backfilled: before this table there was nowhere to
+     * record a refusal, so every phone starts with none and the first
+     * refusal after the upgrade is the first one written. A phone that
+     * arrived here with rows in it would be suppressing offers nobody
+     * ever made.
+     */
+    @Test
+    fun `an upgraded phone starts with nothing refused`() {
+        helper.createDatabase(TEST_DB, 43).close()
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT COUNT(*) FROM upload_refusal").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0, cursor.getInt(0))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 43
+        const val LATEST = 44
     }
 }

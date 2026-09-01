@@ -274,7 +274,7 @@ sealed interface ServerUploadResult {
     data object TooLarge : ServerUploadResult
 
     /** The server would not read it as an EPUB. */
-    data object Rejected : ServerUploadResult
+    data class Rejected(val reason: String?) : ServerUploadResult
 
     /** Worth trying again: a network failure, or a server that was busy. */
     data class Failed(val message: String?) : ServerUploadResult

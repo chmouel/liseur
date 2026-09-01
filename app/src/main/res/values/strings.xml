@@ -445,6 +445,15 @@
     <string name="upload_offer_one_title">Send %1$s to the server?</string>
     <string name="upload_offer_one_message">This book is only on this device. Sending it puts it in the library on your other devices too. Where you are in it stays where it is.</string>
     <string name="upload_sending">Sending %1$s to your server</string>
+    <string name="upload_refused">Your server would not take %1$s. It stays on this device.</string>
+    <string name="upload_refused_reason">Your server would not take %1$s: %2$s</string>
+    <string name="upload_refused_too_large">%1$s is larger than your server accepts. It stays on this device.</string>
+    <string name="upload_refused_unreadable">%1$s could not be read to send it.</string>
+    <!-- Shown under the book's own title in the actions sheet, so the title is not repeated. -->
+    <string name="upload_refused_here">Your server would not take this book. It stays on this device.</string>
+    <string name="upload_refused_here_reason">Your server would not take this book: %1$s</string>
+    <string name="upload_refused_here_too_large">This book is larger than your server accepts. It stays on this device.</string>
+    <string name="upload_refused_here_unreadable">This file could not be read to send it. Check the folder is still available, then try again.</string>
     <string name="upload_policy">Books added on this device</string>
     <string name="upload_policy_ask">Ask before sending</string>
     <string name="upload_policy_ask_detail">You are asked each time, and can say no.</string>

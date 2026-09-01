@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.calibre.CalibreParsing
 import com.chmouel.liseur.data.calibre.CalibreSetupClient
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.AnnotationSyncDao
+import com.chmouel.liseur.data.db.UploadRefusalDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.SeriesExtraDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
@@ -58,6 +59,12 @@ class RemoteAccountRepository(
      * in. Null in tests that do not exercise a liseur-sync account.
      */
     private val annotationSyncDao: AnnotationSyncDao? = null,
+    /**
+     * What a server would not take. One server's opinion, and no use to
+     * the next: the same book may be perfectly acceptable there, and a
+     * reader who has just switched accounts should be offered it.
+     */
+    private val uploadRefusalDao: UploadRefusalDao? = null,
     /**
      * The KOReader pairing, which a connection may drop, replace or
      * leave alone.
@@ -694,7 +701,12 @@ class RemoteAccountRepository(
      * receives the history it should have.
      */
     private suspend fun forgetSyncPeer(server: RemoteServer?) {
-        if (server?.kind != ServerKind.LISEUR_SYNC) return
+        if (server == null) return
+        // Before the kind check, and deliberately: a refusal is not a
+        // liseur-sync idea, it is any server's answer, and the row would
+        // otherwise outlive the account that produced it.
+        uploadRefusalDao?.clearAccount(server.accountKey)
+        if (server.kind != ServerKind.LISEUR_SYNC) return
         peerStateDao?.forgetPeer(server.accountKey)
         identityDao?.forgetPeerAliases(server.accountKey)
         identityDao?.forgetPeerAmbiguities(server.accountKey)

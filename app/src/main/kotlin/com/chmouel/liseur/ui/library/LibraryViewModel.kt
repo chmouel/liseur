@@ -26,6 +26,9 @@ import com.chmouel.liseur.data.db.BookProgression
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.RefusedBytes
+import com.chmouel.liseur.data.db.UploadRefusal
+import com.chmouel.liseur.data.db.UploadRefusalDao
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettings
@@ -208,6 +211,14 @@ data class LibraryUiState(
     /** Books on their way up to the server right now, by URL. */
     val uploading: Set<String> = emptySet(),
     /**
+     * What this server would not take, by book URL.
+     *
+     * Held so a book that quietly stopped being offered can say why
+     * when the reader goes looking, rather than only in a snackbar they
+     * may never have seen.
+     */
+    val refusedUploads: Map<String, RefusedBytes> = emptyMap(),
+    /**
      * Books that are on this device and not on the server, waiting to be
      * offered. Empty unless the reader asked to be asked.
      */
@@ -299,6 +310,7 @@ class LibraryViewModel(
     private val bookDao: BookDao,
     private val seriesOrderDao: SeriesOrderDao,
     private val seriesExtras: SeriesExtrasRepository,
+    private val refusals: UploadRefusalDao,
 ) : ViewModel() {
 
     /**
@@ -366,6 +378,67 @@ class LibraryViewModel(
     /** Deletions that did not happen, so the library can say so. */
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
+    /**
+     * What the connected account has refused, and whether it still would.
+     *
+     * A refusal is spent the moment the bytes change: it was recorded
+     * against a digest, and a book whose file no longer hashes to it is
+     * a different book as far as the server is concerned. That
+     * comparison happens in SQL, so nothing has to remember to clear a
+     * row when a reader replaces a copy — the row simply stops matching.
+     *
+     * One flow, keyed by book, rather than a set for the offer and a
+     * second query for the sheet: the rule that decides a book is not
+     * worth offering and the sentence explaining why it vanished have to
+     * be the same fact, or the reader is told one thing and shown
+     * another.
+     */
+    private val refusedByServer: Flow<Map<String, RefusedBytes>> = account.server
+        .flatMapLatest { server ->
+            if (server == null) {
+                flowOf(emptyMap())
+            } else {
+                refusals.observeFor(server.accountKey).map { rows ->
+                    rows.associateBy { it.bookUrl }
+                }
+            }
+        }
+        .distinctUntilChanged()
+
+    /**
+     * A refusal the reader has not been told about.
+     *
+     * The row is the notice, not a flow the worker emits into: the
+     * worker runs in its own process with no ViewModel to reach, and a
+     * refusal that happened while the app was closed is exactly the one
+     * worth saying. One collector marks it read, after the snackbar has
+     * been dismissed rather than when it goes up, so a notice missed
+     * because the process died comes back once more.
+     */
+    val uploadRefusals: Flow<UploadRefusal> = account.server
+        .flatMapLatest { server ->
+            if (server == null) {
+                flowOf(emptyList())
+            } else {
+                refusals.observeUnseen(server.accountKey)
+            }
+        }
+        .mapNotNull { it.firstOrNull() }
+        .distinctUntilChanged()
+
+    /** Records that a refusal has been shown, and only that one. */
+    fun refusalSeen(refusal: UploadRefusal) {
+        viewModelScope.launch {
+            refusals.markSeen(
+                bookUrl = refusal.bookUrl,
+                accountKey = refusal.accountKey,
+                refusedAt = refusal.refusedAt,
+                kind = refusal.kind,
+                seenAt = System.currentTimeMillis(),
+            )
+        }
+    }
+
     private val _searchQuery = MutableStateFlow("")
     private val _isSearchActive = MutableStateFlow(false)
 
@@ -400,6 +473,7 @@ class LibraryViewModel(
                 progressDao.observeReadAt(),
                 progressDao.observeProgressions(),
                 uploads.inFlight,
+                refusedByServer,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -425,6 +499,9 @@ class LibraryViewModel(
                 .toMap()
             @Suppress("UNCHECKED_CAST")
             val uploading = baseValues[9] as Set<String>
+            @Suppress("UNCHECKED_CAST")
+            val refusedRows = baseValues[10] as Map<String, RefusedBytes>
+            val refused = refusedRows.filterValues { it.stillApplies }.keys
 
             val onTheShelf = books.filter { !it.archived }
             val allShelves = onTheShelf.groupedIntoSeries(progressions)
@@ -544,6 +621,11 @@ class LibraryViewModel(
                     server?.kind == ServerKind.LISEUR_SYNC,
                 canUploadToServer = canUploadTo(server, router),
                 uploading = uploading,
+                // Kept whether or not it still suppresses the offer: the
+                // per-book sheet is the surface that outlives a
+                // snackbar, and a reader coming back to a book to ask
+                // why it never went up deserves an answer there.
+                refusedUploads = refusedRows.filterValues { it.worthSaying },
                 // Only under Ask: Always has already sent them and Never
                 // is an answer that does not want asking again. Books
                 // answered in the reader are gone from here too, or
@@ -554,7 +636,7 @@ class LibraryViewModel(
                 ) {
                     emptyList()
                 } else {
-                    books.awaitingUpload(canUploadTo(server, router))
+                    books.awaitingUpload(canUploadTo(server, router), refused)
                         .filterNot { it.url in uploading || it.url in answered }
                 },
                 canResetSharedSeries = server?.kind == ServerKind.LISEUR_SYNC && server.canAdmin,
@@ -652,11 +734,21 @@ class LibraryViewModel(
         // this seeing the same book again while it is still queued keeps
         // the first attempt rather than starting a second.
         viewModelScope.launch {
-            combine(library.books, appSettings.settings, account.server) { books, settings, server ->
-                booksToSendUp(books, settings.uploadPolicy, canUploadTo(server, router))
-            }.collect { pending ->
+            combine(
+                library.books,
+                appSettings.settings,
+                account.server,
+                refusedByServer,
+            ) { books, settings, server, refused ->
+                server to booksToSendUp(
+                    books,
+                    settings.uploadPolicy,
+                    canUploadTo(server, router),
+                    refused.filterValues { it.stillApplies }.keys,
+                )
+            }.collect { (server, pending) ->
                 pending.forEach {
-                    uploads.enqueue(it)
+                    uploads.enqueue(it, accountKey = server?.accountKey)
                     prompts.answer(it.url)
                     // Sending without asking used to be sending without
                     // saying, which is how a book could fail to arrive
@@ -1086,20 +1178,36 @@ class LibraryViewModel(
         viewModelScope.launch { library.importBook(uri) }
     }
 
-    /** Sends one book the reader added here up to the server. */
+    /**
+     * Sends one book the reader added here up to the server.
+     *
+     * Asking by hand always tries again, whatever this account said last
+     * time: the reader may have replaced the file, or the server may
+     * have been fixed, and neither is something the app can see. So the
+     * refusal is cleared first — which is also what makes the book
+     * offerable again if this attempt does not reach a verdict.
+     */
     fun uploadToServer(book: Book) {
-        uploads.enqueue(book)
-        prompts.answer(book.url)
+        send(listOf(book))
         uploadPromptDismissed.value = true
     }
 
     /** Accepts the offer covering everything on the device but not the server. */
     fun uploadPending() {
-        state.value.pendingUploads.forEach {
-            uploads.enqueue(it)
-            prompts.answer(it.url)
-        }
+        send(state.value.pendingUploads)
         uploadPromptDismissed.value = true
+    }
+
+    private fun send(books: List<Book>) {
+        if (books.isEmpty()) return
+        viewModelScope.launch {
+            val server = account.current()
+            books.forEach { book ->
+                server?.let { refusals.clear(book.url, it.accountKey) }
+                uploads.enqueue(book, accountKey = server?.accountKey, manual = true)
+                prompts.answer(book.url)
+            }
+        }
     }
 
     /**
@@ -1141,6 +1249,7 @@ class LibraryViewModel(
                     bookDao = container.database.bookDao(),
                     seriesOrderDao = container.database.seriesOrderDao(),
                     seriesExtras = container.seriesExtras,
+                    refusals = container.database.uploadRefusalDao(),
                 )
             }
         }
@@ -1231,10 +1340,16 @@ internal fun uploadOnOpen(
     policy: UploadPolicy,
     canUpload: Boolean,
     alreadyAnswered: Boolean,
+    refused: Set<String> = emptySet(),
 ): UploadDecision = when {
     // Offering what the server will refuse is worse than offering
     // nothing, and a book it already has is not a question.
     !canUpload || !book.mayGoUp() -> UploadDecision.NOTHING
+    // Already offered to this account, already refused. Asking again
+    // every launch, forever, with nothing said about why, is the bug
+    // this whole thing exists for. The per-book action still reaches
+    // it, which is the way back.
+    book.url in refused -> UploadDecision.NOTHING
     alreadyAnswered -> UploadDecision.NOTHING
     policy == UploadPolicy.NEVER -> UploadDecision.NOTHING
     policy == UploadPolicy.ALWAYS -> UploadDecision.SEND
@@ -1254,8 +1369,10 @@ internal fun booksToSendUp(
     books: List<Book>,
     policy: UploadPolicy,
     canUpload: Boolean,
+    refused: Set<String> = emptySet(),
 ): List<Book> = books.filter {
-    uploadOnOpen(it, policy, canUpload, alreadyAnswered = false) == UploadDecision.SEND
+    uploadOnOpen(it, policy, canUpload, alreadyAnswered = false, refused = refused) ==
+        UploadDecision.SEND
 }
 
 /**
@@ -1265,9 +1382,12 @@ internal fun booksToSendUp(
  * moment to volunteer sending it somewhere. Asking for one by hand is a
  * different question, so the per-book action does not apply this.
  */
-internal fun List<Book>.awaitingUpload(canUpload: Boolean): List<Book> {
+internal fun List<Book>.awaitingUpload(
+    canUpload: Boolean,
+    refused: Set<String> = emptySet(),
+): List<Book> {
     if (!canUpload) return emptyList()
-    return filter { it.mayGoUp() }
+    return filter { it.mayGoUp() && it.url !in refused }
 }
 
 /** Whether a book is one the server has not got and would be given. */
