@@ -163,6 +163,7 @@ class AppContainer(context: Context) {
         identityDao = database.workIdentityDao(),
         sessionDao = database.readingSessionDao(),
         annotationSyncDao = database.annotationSyncDao(),
+        uploadRefusalDao = database.uploadRefusalDao(),
         // Declared later in this file, so it is reached through the
         // lambda rather than held: the pairing is only ever touched
         // after a connection has landed, never while one is being built.

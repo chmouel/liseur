@@ -118,11 +118,39 @@ class LiseurSyncUploadClientTest {
         for ((code, expected) in listOf(
             403 to ServerUploadResult.NotAllowed,
             413 to ServerUploadResult.TooLarge,
-            422 to ServerUploadResult.Rejected,
+            422 to ServerUploadResult.Rejected("no"),
         )) {
             server.enqueue(json("""{"error":"no"}""", code = code))
             assertEquals("HTTP $code", expected, upload())
         }
+    }
+
+    /**
+     * The one string a server picks that a reader reads, so nothing
+     * about it is taken on trust. A refusal is now written down and
+     * shown, which is exactly what makes an unbounded one worth
+     * bounding: a newline forges a line of the app's own text, and a
+     * megabyte of it is a snackbar nobody can dismiss.
+     */
+    @Test
+    fun `the reason a server gives is bounded and kept to one line`() = runTest {
+        server.enqueue(
+            json("""{"error":"line\nbreak\ttab"}""", code = 422),
+        )
+        assertEquals(ServerUploadResult.Rejected("line break tab"), upload())
+
+        server.enqueue(json("""{"error":"${"x".repeat(500)}"}""", code = 422))
+        val long = upload() as ServerUploadResult.Rejected
+        assertTrue("length ${long.reason?.length}", (long.reason?.length ?: 0) <= 161)
+    }
+
+    @Test
+    fun `a refusal with nothing to say says nothing`() = runTest {
+        server.enqueue(json("""{"error":"   "}""", code = 422))
+        assertEquals(ServerUploadResult.Rejected(null), upload())
+
+        server.enqueue(json("{}", code = 422))
+        assertEquals(ServerUploadResult.Rejected(null), upload())
     }
 
     @Test

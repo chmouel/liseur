@@ -105,7 +105,10 @@ class LiseurSyncUploadClient(
             .build()
         try {
             http.client.newCall(request).execute().use { response ->
-                answerFor(response.code, response.body?.string().orEmpty())
+                // Bounded on the way in, not after: a server answering a
+                // gigabyte of HTML is not a thing to hold in a phone's
+                // memory before deciding it was not JSON.
+                answerFor(response.code, response.peekBody(MAX_BODY).string())
             }
         } catch (e: IOException) {
             Log.i(TAG, "The book could not be sent to the server", e)
@@ -136,7 +139,7 @@ class LiseurSyncUploadClient(
             202 -> ServerUploadResult.Pending
             401, 403 -> ServerUploadResult.NotAllowed
             413 -> ServerUploadResult.TooLarge
-            422 -> ServerUploadResult.Rejected
+            422 -> ServerUploadResult.Rejected(readable(body?.optString("error")))
             else -> ServerUploadResult.Failed(
                 body?.optString("error")?.takeIf { it.isNotEmpty() } ?: "HTTP $code",
             )
@@ -150,10 +153,29 @@ class LiseurSyncUploadClient(
         null
     }
 
+    /**
+     * A sentence from the server, fit to put in front of a reader.
+     *
+     * This is the one string in the app that a server chooses and the
+     * reader sees, so nothing is taken on trust: it is trimmed to one
+     * line, stripped of control characters that could forge one, and cut
+     * to a length that fits a snackbar rather than filling the screen.
+     * Null when there is nothing worth showing, and the caller — which
+     * has resources and this does not — says something of its own.
+     */
+    private fun readable(raw: String?): String? = raw
+        ?.replace(CONTROL, " ")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { if (it.length > MAX_REASON) it.take(MAX_REASON).trimEnd() + "…" else it }
+
     private companion object {
         const val TAG = "LiseurSyncUpload"
         const val FOLDER_PAGE = 200
         const val MAX_PAGES = 50
+        const val MAX_REASON = 160
+        const val MAX_BODY = 64L * 1024
+        val CONTROL = Regex("[\\p{Cntrl}\\p{Cf}]+")
         val EPUB = "application/epub+zip".toMediaType()
     }
 }
