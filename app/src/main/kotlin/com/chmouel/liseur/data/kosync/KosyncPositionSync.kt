@@ -138,28 +138,45 @@ class KosyncPositionSync(
                 )
             }
         }
+        val stored = progressDao.get(bookUrl)
         return PreviewOutcome.Ready(
             SyncPreview(
-                local = progressDao.get(bookUrl)?.totalProgression,
+                local = stored?.totalProgression,
                 remote = remote?.percentage,
                 remoteAt = remote?.timestamp?.takeIf { it > 0 },
+                accountKey = account.peerId,
+                remoteStatus = remote?.percentage
+                    ?.let { ReadingStatus.forProgression(it).wireName },
+                localRevision = stored?.localRevision,
             ),
         )
     }
 
-    override suspend fun preservedConflict(bookUrl: String): SyncPreview? {
+    // One partner already, so there is no peer to narrow to.
+    override suspend fun preservedConflict(
+        bookUrl: String,
+        peerId: String?,
+    ): SyncPreview? {
         val account = account() ?: return null
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return null
         if (!state.hasPending) return null
         val there = state.pendingProgression ?: return null
+        val stored = progressDao.get(bookUrl)
         return SyncPreview(
-            local = progressDao.get(bookUrl)?.totalProgression,
+            local = stored?.totalProgression,
             remote = there,
             remoteAt = state.remoteUpdatedAt?.takeIf { it > 0 },
+            accountKey = account.peerId,
+            remoteStatus = state.pendingStatus,
+            localRevision = stored?.localRevision,
         ).takeIf { !it.agrees }
     }
 
-    override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+    ): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
         val progression = state.pendingProgression ?: return ResolveOutcome.Done
@@ -205,7 +222,10 @@ class KosyncPositionSync(
      * still owed to the server. Next run the server looks still and this
      * side looks moved, which is the ordinary shape of a push.
      */
-    override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+    override suspend fun keepLocalPosition(
+        bookUrl: String,
+        peerId: String?,
+    ): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
         peerStateDao.settle(

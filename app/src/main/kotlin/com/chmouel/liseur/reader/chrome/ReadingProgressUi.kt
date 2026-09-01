@@ -515,9 +515,18 @@ private fun resumeHeadline(
     return relativeAge(remoteAt)?.let { "$base · $it" } ?: base
 }
 
+/**
+ * How long ago the server recorded something, in the words the pills and
+ * the sync dialog both use, so there is only one spelling of "3 hours
+ * ago" in the app.
+ *
+ * A server's clock is a server's clock: a timestamp from the future ages
+ * to "just now" rather than counting down to it.
+ */
 @Composable
-private fun relativeAge(timestamp: Long?): String? {
+internal fun relativeAge(timestamp: Long?): String? {
     timestamp ?: return null
+    if (timestamp <= 0L) return null
     val minutes = ((System.currentTimeMillis() - timestamp).coerceAtLeast(0L) / 60_000L).toInt()
     return when {
         minutes < 1 -> stringResource(R.string.remote_age_now)

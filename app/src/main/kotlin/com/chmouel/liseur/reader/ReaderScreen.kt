@@ -2281,6 +2281,7 @@ class ReaderProgressActions(
 /** Syncing this one book on purpose, from the Navigate screen. */
 class ReaderBookSyncActions(
     val start: () -> Unit,
+    val resolve: (takeRemote: Boolean) -> Unit,
 )
 
 /** Hides the status and navigation bars while the chrome is hidden. */

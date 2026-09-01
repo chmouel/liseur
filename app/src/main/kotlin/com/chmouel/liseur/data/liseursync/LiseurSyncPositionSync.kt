@@ -123,7 +123,11 @@ class LiseurSyncPositionSync(
             return PreviewOutcome.Failed(reasonFor(e))
         } ?: return PreviewOutcome.NotSynced
 
-        if (head.deviceId == null || head.deviceId != account.deviceId) {
+        // This device's own op is an echo, not news: landing it would
+        // file our own last push as another device's reading. Nothing is
+        // preserved, so there is nothing to choose either.
+        val ours = head.deviceId != null && head.deviceId == account.deviceId
+        if (!ours) {
             forAccount(account) { land(account, bookUrl, head) }
         }
 
@@ -148,11 +152,21 @@ class LiseurSyncPositionSync(
                     stored?.locatorJson,
                     exact,
                 ),
+                accountKey = account.peerId,
+                remoteStatus = head.progression
+                    .let { ReadingStatus.forProgression(it).wireName },
+                remoteLocatorJson = exact,
+                localRevision = stored?.localRevision,
+                resolvable = !ours,
             ),
         )
     }
 
-    override suspend fun preservedConflict(bookUrl: String): SyncPreview? {
+    // One partner already, so there is no peer to narrow to.
+    override suspend fun preservedConflict(
+        bookUrl: String,
+        peerId: String?,
+    ): SyncPreview? {
         val account = account() ?: return null
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return null
         if (!state.hasPending) return null
@@ -173,6 +187,10 @@ class LiseurSyncPositionSync(
                 progressDao.get(bookUrl)?.locatorJson,
                 exact,
             ),
+            accountKey = account.peerId,
+            remoteStatus = state.pendingStatus,
+            remoteLocatorJson = exact,
+            localRevision = progressDao.get(bookUrl)?.localRevision,
         ).takeIf { !it.agrees }
     }
 
@@ -183,7 +201,11 @@ class LiseurSyncPositionSync(
      * this server can do that calibre-web cannot: the book reopens on
      * the word it was left on rather than at roughly the right place.
      */
-    override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+    ): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
         val progression = state.pendingProgression ?: return ResolveOutcome.Done
@@ -229,7 +251,10 @@ class LiseurSyncPositionSync(
      * on the device — including any page turned while the question was
      * on screen.
      */
-    override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+    override suspend fun keepLocalPosition(
+        bookUrl: String,
+        peerId: String?,
+    ): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
         peerStateDao.clearPending(bookUrl, account.peerId)
         return ResolveOutcome.Done

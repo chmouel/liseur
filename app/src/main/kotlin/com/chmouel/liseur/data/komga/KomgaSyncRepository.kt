@@ -155,6 +155,10 @@ class KomgaSyncRepository(
                     stored?.locatorJson,
                     exact,
                 ),
+                accountKey = server.accountKey,
+                remoteStatus = remote?.state?.status?.wireName,
+                remoteLocatorJson = remoteLocatorJson,
+                localRevision = stored?.localRevision,
             ),
         )
     }
@@ -163,7 +167,11 @@ class KomgaSyncRepository(
      * The unresolved disagreement an ordinary sync left behind, if there
      * is one, without asking the server anything.
      */
-    override suspend fun preservedConflict(bookUrl: String): SyncPreview? {
+    // One partner already, so there is no peer to narrow to.
+    override suspend fun preservedConflict(
+        bookUrl: String,
+        peerId: String?,
+    ): SyncPreview? {
         val server = serverDao.get() ?: return null
         val stored = progressDao.get(bookUrl) ?: return null
         val pending = stored.pendingStateFor(server.accountKey) ?: return null
@@ -182,6 +190,10 @@ class KomgaSyncRepository(
                 stored.locatorJson,
                 stored.pendingLocatorJson,
             ),
+            accountKey = server.accountKey,
+            remoteStatus = stored.pendingStatus,
+            remoteLocatorJson = stored.pendingLocatorJson,
+            localRevision = stored.localRevision,
         ).takeIf { !it.agrees }
     }
 
@@ -192,7 +204,11 @@ class KomgaSyncRepository(
      * The exact place is the one persisted with the pending percentage,
      * so a restart cannot pair the choice with a later server answer.
      */
-    override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long): ResolveOutcome {
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+    ): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
         val progression = stored.pendingProgression ?: return ResolveOutcome.Done
@@ -215,7 +231,10 @@ class KomgaSyncRepository(
      * Sends this device's position for one book, because someone said to,
      * and stops the server's answer from being offered again.
      */
-    override suspend fun keepLocalPosition(bookUrl: String): ResolveOutcome {
+    override suspend fun keepLocalPosition(
+        bookUrl: String,
+        peerId: String?,
+    ): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val credentials = server.credentials ?: return ResolveOutcome.Done
         val id = bookDao.getByUrl(bookUrl)?.remoteUuid ?: return ResolveOutcome.Done

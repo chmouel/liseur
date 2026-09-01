@@ -160,11 +160,13 @@ class ReaderActivity : FragmentActivity() {
                         return@LiseurTheme
                     }
                     val state by viewModel.state.collectAsStateWithLifecycle()
-                    // Hosted above the loading state so a note about a manual
-                    // sync can show whatever screen the reader is on.
+                    // Hosted above the loading state so a question or a note
+                    // about a manual sync can show over whatever screen the
+                    // reader is on.
                     val bookSync by viewModel.bookSync.collectAsStateWithLifecycle()
                     BookSyncDialog(
                         state = bookSync,
+                        onResolve = viewModel::resolveBookSync,
                         onDismiss = viewModel::dismissBookSync,
                     )
                     // Only over a book that is actually on screen. Asked
@@ -455,6 +457,7 @@ class ReaderActivity : FragmentActivity() {
                                     onBookSyncAction = remember {
                                         ReaderBookSyncActions(
                                             start = viewModel::syncThisBook,
+                                            resolve = viewModel::resolveBookSync,
                                         )
                                     },
                                     onBack = ::finish,

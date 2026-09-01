@@ -3,6 +3,7 @@ package com.chmouel.liseur.sync
 import com.chmouel.liseur.data.remote.PositionSync
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.ResolveOutcome
+import com.chmouel.liseur.data.remote.SyncFingerprint
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncSnapshot
@@ -173,16 +174,36 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
      * [atRevision] is the position the choice was made about. Taking the
      * server's position is refused if a page has been turned since, since
      * that page turn is newer than the decision being acted on.
+     *
+     * [expecting] is the server's side as it was shown. A choice can sit
+     * on screen for as long as somebody looks at it, and the turn is not
+     * held for any of that: a background run can land a different answer
+     * in between without touching the local row, leaving the revision
+     * guard satisfied and applying a page nobody was ever shown. So the
+     * preserved disagreement is read again here, under the turn, and
+     * anything but the same answer from the same partner and the same
+     * account is `Superseded` — the question stands, and it is worth
+     * asking again with what the server says now.
+     *
+     * [peerId] is the partner the choice was about. Without it, every
+     * partner holding a disagreement acts, which is what the automatic
+     * paths want and never what a dialog does.
      */
     suspend fun resolve(
         bookUrl: String,
         takeRemote: Boolean,
         atRevision: Long,
+        expecting: SyncFingerprint? = null,
+        peerId: String? = null,
     ): ResolveOutcome = turn.withLock {
+        if (expecting != null) {
+            val now = sync.preservedConflict(bookUrl, peerId)?.fingerprint()
+            if (now == null || !expecting.matches(now)) return@withLock ResolveOutcome.Superseded
+        }
         if (takeRemote) {
-            sync.takeRemotePosition(bookUrl, atRevision)
+            sync.takeRemotePosition(bookUrl, atRevision, peerId)
         } else {
-            sync.keepLocalPosition(bookUrl)
+            sync.keepLocalPosition(bookUrl, peerId)
         }
     }
 
