@@ -99,6 +99,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -252,9 +253,15 @@ fun LibraryScreen(
     val refusedBecause = stringResource(R.string.upload_refused_reason)
     val refusedTooLarge = stringResource(R.string.upload_refused_too_large)
     val refusedUnreadable = stringResource(R.string.upload_refused_unreadable)
+    // Read through the composition rather than closed over: this effect
+    // is keyed on the flow, so it starts once and never restarts, and a
+    // plain capture would pin the shelf as it was when the screen was
+    // built — which is the empty one it is built with while the library
+    // loads. Every refusal would then be announced by its file name.
+    val shelf by rememberUpdatedState(state.books)
     LaunchedEffect(uploadRefusals) {
         uploadRefusals.collect { refusal ->
-            val title = state.books.firstOrNull { it.url == refusal.bookUrl }?.title
+            val title = shelf.firstOrNull { it.url == refusal.bookUrl }?.title
                 ?: refusal.bookUrl.substringAfterLast('/')
             snackbarHost.showSnackbar(
                 when {
