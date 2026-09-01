@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.library
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import android.provider.DocumentsContract
@@ -488,16 +489,108 @@ class LocalLibraryRepository(
     }
 
     private suspend fun saveCover(publication: Publication, identity: String): String? {
-        val cover = publication.cover() ?: return null
-        val dir = File(context.filesDir, "covers").apply { mkdirs() }
-        val file = File(dir, "${sha1Hex(identity)}.jpg")
+        // The whole thing, not just the write. `publication.cover()`
+        // reads an entry out of the archive and decodes it, and this is
+        // reached from `importBook`, which the library view model
+        // launches in `viewModelScope` — so without this the shelf is
+        // drawn on the thread doing the decoding.
         return withContext(Dispatchers.IO) {
+            val cover = publication.cover()
+                ?: coverNamedCover(publication)
+                ?: return@withContext null
+            val dir = File(context.filesDir, "covers").apply { mkdirs() }
+            val file = File(dir, "${sha1Hex(identity)}.jpg")
             runCatching {
                 file.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, 85, it) }
                 file.absolutePath
             }.getOrNull()
         }
     }
+
+    /**
+     * The cover of a book that never says it has one.
+     *
+     * Readium finds a cover by the two routes a publication can declare
+     * it: the EPUB 3 `cover-image` property, and the EPUB 2 `<meta
+     * name="cover">` pointer at a manifest id. A book that uses neither
+     * has no cover as far as the format is concerned, and some do —
+     * their artwork is reachable only because the first page of the
+     * book happens to be an XHTML page that displays it. That is why
+     * such a book looks fine in a reader and turns up blank on a shelf.
+     *
+     * So when nothing usable comes back, fall back to the near-universal
+     * convention and take an image the book called `cover`. "Nothing
+     * usable" is the honest description and it is deliberate: a
+     * declaration that points at an entry which is missing or will not
+     * decode leaves Readium with no cover either, and falling through to
+     * the convention is a better answer than a blank tile. liseur-sync's
+     * candidate list behaves the same way for the same reason.
+     *
+     * It is only ever reached once the declared routes have come back
+     * empty, because a declaration is a statement and a filename is a
+     * guess. Being a guess is also why the match is exact and why the
+     * bytes behind it are treated as hostile: see [isNamedCover] and
+     * [decodeBounded].
+     *
+     * One asymmetry with the server is worth naming: liseur-sync also
+     * matches a manifest *id* of `cover`, so it resolves
+     * `<item id="cover" href="front.jpg"/>` where this does not.
+     * Readium's `Link` does not carry the manifest id, so there is
+     * nothing here to match on. The filename is the common case by a
+     * long way, and disagreeing costs a cover rather than correctness.
+     */
+    private suspend fun coverNamedCover(publication: Publication): Bitmap? {
+        // Both collections, because Readium splits the manifest into the
+        // spine and everything else, and an image is occasionally a
+        // spine item. Resource order and then spine order: neither is
+        // the manifest's own order, but both are fixed, so a book with
+        // two candidates always resolves to the same one.
+        val link = (publication.resources + publication.readingOrder).firstOrNull {
+            it.mediaType?.isBitmap == true && isNamedCover(it.url().filename)
+        } ?: return null
+        // Off the main thread by the time anything is read or decoded —
+        // belt and braces with [saveCover], which already dispatches,
+        // because a suspend function that reads and decodes should not
+        // depend on its caller to be safe.
+        return withContext(Dispatchers.IO) {
+            val resource = publication.get(link) ?: return@withContext null
+            val bytes = try {
+                // Asking the range rather than trusting `length()`, which
+                // Readium documents as a hint that "might not reflect the
+                // actual bytes length". Out-of-range reads are clamped, so
+                // a small entry comes back whole, and one byte past the
+                // limit is enough to tell a file at the limit from one
+                // over it.
+                resource.read(0 until MAX_COVER_BYTES + 1).getOrNull()
+            } finally {
+                resource.close()
+            }
+            if (bytes == null || bytes.size > MAX_COVER_BYTES) null else decodeBounded(bytes)
+        }
+    }
+
+    /**
+     * Turns bytes chosen by their name into a bitmap of a sane size.
+     *
+     * A declared cover was at least pointed at by the book; this one was
+     * picked because of what it is called, out of an archive that may
+     * have arrived from anywhere. An image header can claim any
+     * dimensions it likes, and a few kilobytes of it can ask for
+     * gigabytes of pixels, so the header is read on its own first — with
+     * `inJustDecodeBounds`, which allocates nothing — and the real
+     * decode is subsampled down to something a shelf can use.
+     */
+    private fun decodeBounded(bytes: ByteArray): Bitmap? = runCatching {
+        val header = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, header)
+        val sample = coverSampleSize(header.outWidth, header.outHeight) ?: return@runCatching null
+        BitmapFactory.decodeByteArray(
+            bytes,
+            0,
+            bytes.size,
+            BitmapFactory.Options().apply { inSampleSize = sample },
+        )
+    }.getOrNull()
 
     private companion object {
         const val TAG = "local-library"
@@ -511,7 +604,52 @@ class LocalLibraryRepository(
          * competing with the covers the reader is waiting for.
          */
         const val BACKFILL_PAUSE_MS = 250L
+
+        /**
+         * The most encoded bytes worth reading for a guessed cover.
+         *
+         * Cover artwork runs to a few hundred kilobytes; this is roomy
+         * enough that no real book meets it and small enough that a file
+         * named `cover.jpg` to be read cannot cost much.
+         */
+        const val MAX_COVER_BYTES = 16L * 1024 * 1024
     }
+}
+
+/**
+ * The most pixels a cover is decoded to.
+ *
+ * The bound is on area rather than on either edge, because what is
+ * being guarded is the allocation: at four bytes a pixel this is 16MB,
+ * and an ordinary portrait cover of 1600 by 2400 comes to less, so a
+ * real book is decoded whole and only the absurd is brought down.
+ */
+private const val MAX_COVER_PIXELS = 2048L * 2048
+
+/**
+ * How much to subsample an image of [width] by [height], or null when
+ * the header did not describe an image at all.
+ *
+ * `BitmapFactory` rounds `inSampleSize` down to a power of two, so
+ * powers of two are what this returns — asking for 3 and silently
+ * getting 2 would put the bound somewhere other than where it reads.
+ * A header that could not be parsed leaves the dimensions at -1, which
+ * is the null: there is nothing to decode and no point trying. A
+ * nonsensical bound is the same answer, because there is no sample size
+ * that would satisfy it and looking for one does not end.
+ */
+internal fun coverSampleSize(width: Int, height: Int, max: Long = MAX_COVER_PIXELS): Int? {
+    if (width <= 0 || height <= 0 || max <= 0) return null
+    var sample = 1
+    // Long, and both edges floored at one: a 100000 by 1 image samples
+    // its short edge to zero long before its long edge is small enough,
+    // and a zero would make the product look acceptable.
+    while ((width / sample).coerceAtLeast(1).toLong() *
+        (height / sample).coerceAtLeast(1) > max
+    ) {
+        sample *= 2
+    }
+    return sample
 }
 
 internal fun sha1Hex(value: String): String =
@@ -529,3 +667,24 @@ internal fun sha1Hex(value: String): String =
  */
 internal fun importedFileName(digest: ByteArray): String =
     digest.joinToString("", postfix = ".epub") { "%02x".format(it) }
+
+/**
+ * Whether a file inside a book is named as its cover.
+ *
+ * The extension is dropped before comparing, so `cover.jpg`, `cover.png`
+ * and a bare `cover` all answer the same, and the comparison ignores
+ * case because the convention is written every way round. The match is
+ * deliberately exact after that: `cover-page`, `covers` and
+ * `frontcover` are not covers, and a book with several images would
+ * otherwise be a lottery.
+ *
+ * Kept out of the repository, and out of Android, so the rule that
+ * decides what a reader sees on the shelf can be tested without a
+ * device. It mirrors `coverStem` in liseur-sync.
+ */
+internal fun isNamedCover(filename: String?): Boolean {
+    val name = filename ?: return false
+    val dot = name.lastIndexOf('.')
+    val stem = if (dot > 0) name.substring(0, dot) else name
+    return stem.equals("cover", ignoreCase = true)
+}
