@@ -908,6 +908,14 @@ private val StatsRange.caption: Int
  * telling two colours apart — and there are no two colours to tell
  * apart, because a quiet week is not an error state. Both take
  * `onSurfaceVariant`, the same weight as the caption below.
+ *
+ * Every one of those sentences names this device, and it is not
+ * decoration. The figure above is every device's reading and says so in
+ * the caption below; this line is a comparison, and a comparison holds
+ * only between two figures gathered the same way, so both of its halves
+ * are this device's own sittings. Saying "12% less than last week" over
+ * an all-device total would be a claim about a reader's month that the
+ * arithmetic underneath has not made. See ADR 18.
  */
 @Composable
 private fun ComparisonLine(comparison: ReadingComparison) {

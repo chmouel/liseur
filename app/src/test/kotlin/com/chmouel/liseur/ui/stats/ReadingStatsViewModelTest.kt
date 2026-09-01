@@ -19,13 +19,13 @@ import com.chmouel.liseur.domain.ComparisonSpans
 import com.chmouel.liseur.domain.DateSpan
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
-import com.chmouel.liseur.domain.SpanTotals
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -799,7 +799,7 @@ class ReadingStatsViewModelTest {
             db.readingSessionDao().insert(session(url, today, 60_000))
             db.readingSessionDao().insert(session(url, today.minusDays(6), 60_000))
             var day = today
-            val model = model(today = { day })
+            val model = model(now = { day.atTime(LocalTime.MAX).atZone(it) })
 
             val sunday = model.state.first { it is ReadingStatsUiState.Ready }
                 as ReadingStatsUiState.Ready
@@ -815,6 +815,44 @@ class ReadingStatsViewModelTest {
             // one this reader read on.
             assertEquals(ComparisonDirection.LESS, monday.headline.comparison!!.direction)
             assertEquals(100, monday.headline.comparison!!.percent)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /**
+     * An afternoon is not measured against a completed evening.
+     *
+     * The baseline's last day stops at the hour today has reached, or
+     * the sentence under the headline drifts towards "less" as every
+     * afternoon wears on and springs back at midnight — a change in the
+     * arithmetic, reported as a change in the reader's habits.
+     */
+    @Test
+    fun `the baseline stops where today's clock has got to`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            db.bookDao().upsert(book(url))
+            // `today` is a Sunday, the week begins on a Monday, so the
+            // baseline's last day is the Sunday before.
+            val lastSunday = today.minusWeeks(1)
+            db.readingSessionDao().insert(session(url, today, 120_000, LocalTime.of(10, 0)))
+            db.readingSessionDao().insert(session(url, lastSunday, 60_000, LocalTime.of(10, 0)))
+            // Read after the hour today has reached: that evening has
+            // not happened yet as far as this comparison is concerned.
+            db.readingSessionDao().insert(session(url, lastSunday, 60_000, LocalTime.of(20, 0)))
+            val model = model(now = { today.atTime(LocalTime.NOON).atZone(it) })
+
+            val ready = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+
+            assertEquals(120_000L, ready.headline.totalMs)
+            // Two minutes against the one the reader had read by noon,
+            // not against the two they finished the evening on.
+            assertEquals(ComparisonDirection.MORE, ready.headline.comparison!!.direction)
+            assertEquals(100, ready.headline.comparison!!.percent)
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -868,78 +906,99 @@ class ReadingStatsViewModelTest {
         }
     }
 
-    // ---- The baseline the server answers for ------------------------
+    // ---- The two sides of the comparison ----------------------------
 
     /**
-     * The baseline is merged the same way the headline above it is.
+     * The comparison is this device's own reading, on both sides.
      *
-     * The server counts every device but not the last twenty minutes,
-     * which are still queued to upload. Both periods are offered that
-     * same allowance, or a second device appears in one of them and
-     * vanishes from the other, and the percentage is a comparison of
-     * two different populations.
+     * The headline over it counts every device; the sentence under it
+     * cannot, because a summary aggregates whole days and neither side
+     * ends on one. Adding a server's whole days to this device's part
+     * day would either double-count the overlap between the server's
+     * calendar and this one's, or drop the gap between them, and would
+     * count one population on one side if a single request failed.
      */
     @Test
-    fun `the baseline counts other devices and this one's unsent time alike`() {
+    fun `the comparison ignores the server the headline is merged with`() {
         val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
         val headline = ReadingStatsViewModel.mergeHeadline(
             merged = local,
             local = local,
-            server = InsightsSummary(activeMinutes = 60.0, sessions = 2, streakDays = 1),
+            // A second device read four hours this one never saw.
+            server = InsightsSummary(activeMinutes = 240.0, sessions = 9, streakDays = 4),
             spans = spans,
-            previousLocal = SpanTotals(
-                totalMs = TimeUnit.MINUTES.toMillis(20),
-                pendingMs = TimeUnit.MINUTES.toMillis(20),
-            ),
-            previousServer = InsightsSummary(activeMinutes = 100.0, sessions = 4, streakDays = 2),
+            currentMs = TimeUnit.MINUTES.toMillis(60),
+            previousMs = TimeUnit.MINUTES.toMillis(30),
         )
 
-        // A hundred server minutes plus the twenty this device has not
-        // sent: a hundred and twenty against this period's sixty.
-        assertEquals(ComparisonDirection.LESS, headline.comparison!!.direction)
-        assertEquals(50, headline.comparison!!.percent)
-    }
-
-    /** A baseline the server could not answer falls back to this device. */
-    @Test
-    fun `a baseline the server declined falls back to this device`() {
-        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            server = null,
-            spans = spans,
-            previousLocal = SpanTotals(totalMs = TimeUnit.MINUTES.toMillis(30), pendingMs = 0),
-            previousServer = null,
-        )
-
+        // The figure above counts the other device.
+        assertEquals(TimeUnit.MINUTES.toMillis(240), headline.totalMs)
+        // The sentence below compares like with like: sixty against thirty.
         assertEquals(ComparisonDirection.MORE, headline.comparison!!.direction)
         assertEquals(100, headline.comparison!!.percent)
     }
 
     /**
-     * A server that answers nought is answering, not failing.
+     * A baseline of nothing leaves the direction without a figure.
      *
-     * Both cases arrive as the same value, and they mean the same thing
-     * here: nothing to divide by, so the sentence drops its figure.
+     * There is nothing to divide by, and "infinitely more than last
+     * week" is not a sentence to put under a reading total.
      */
     @Test
-    fun `a server baseline of nothing reads as no baseline at all`() {
+    fun `a baseline of nothing reads as no percentage at all`() {
         val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
         val headline = ReadingStatsViewModel.mergeHeadline(
             merged = local,
             local = local,
             server = null,
             spans = spans,
-            previousLocal = SpanTotals.Empty,
-            previousServer = InsightsSummary(activeMinutes = 0.0, sessions = 0, streakDays = 0),
+            currentMs = TimeUnit.MINUTES.toMillis(60),
+            previousMs = 0,
         )
 
         assertEquals(ComparisonDirection.MORE, headline.comparison!!.direction)
         assertNull(headline.comparison!!.percent)
     }
 
-    /** With no spans there is no comparison, whatever the server said. */
+    /**
+     * The headline's own figure is never one side of the comparison.
+     *
+     * On the first day of a period the two sides are a few hours each,
+     * and the difference between counting one device and counting them
+     * all is the whole sentence. A reader whose laptop did the reading
+     * would be told they had read six times more than a period in which
+     * they had in fact read exactly as much.
+     */
+    @Test
+    fun `the first day of a period compares two halves counted alike`() {
+        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(10))
+        val firstDay = ComparisonSpans(
+            period = ComparisonPeriod.MONTH,
+            current = DateSpan(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 1)),
+            previous = DateSpan(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 1)),
+            through = LocalTime.NOON,
+        )
+
+        val headline = ReadingStatsViewModel.mergeHeadline(
+            merged = local,
+            local = local,
+            // An hour today, fifty minutes of it on a device this one
+            // cannot see; the same hour on the first of last month.
+            server = InsightsSummary(activeMinutes = 60.0, sessions = 3, streakDays = 1),
+            spans = firstDay,
+            currentMs = TimeUnit.MINUTES.toMillis(10),
+            previousMs = TimeUnit.MINUTES.toMillis(10),
+        )
+
+        // The headline still says what every device read.
+        assertEquals(TimeUnit.MINUTES.toMillis(60), headline.totalMs)
+        // The sentence says the reader is level, which they are, and a
+        // level reader is given no figure to read into.
+        assertEquals(ComparisonDirection.SAME, headline.comparison!!.direction)
+        assertNull(headline.comparison!!.percent)
+    }
+
+    /** With no spans there is no comparison, whatever was counted. */
     @Test
     fun `a span with nothing before it keeps no comparison`() {
         val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
@@ -948,8 +1007,8 @@ class ReadingStatsViewModelTest {
             local = local,
             server = null,
             spans = null,
-            previousLocal = SpanTotals(totalMs = TimeUnit.MINUTES.toMillis(30), pendingMs = 0),
-            previousServer = InsightsSummary(activeMinutes = 30.0, sessions = 1, streakDays = 1),
+            currentMs = TimeUnit.MINUTES.toMillis(60),
+            previousMs = TimeUnit.MINUTES.toMillis(30),
         )
 
         assertNull(headline.comparison)
@@ -959,6 +1018,7 @@ class ReadingStatsViewModelTest {
         period = ComparisonPeriod.WEEK,
         current = DateSpan(LocalDate.of(2026, 8, 3), LocalDate.of(2026, 8, 9)),
         previous = DateSpan(LocalDate.of(2026, 7, 27), LocalDate.of(2026, 8, 2)),
+        through = LocalTime.MAX,
     )
 
     private fun localStats(totalMs: Long) = ReadingStats(
@@ -969,8 +1029,13 @@ class ReadingStatsViewModelTest {
         recent = emptyList(),
     )
 
-    private fun session(url: String, day: LocalDate, durationMs: Long): ReadingSession {
-        val at = day.atTime(LocalTime.NOON).atZone(zone).toInstant().toEpochMilli()
+    private fun session(
+        url: String,
+        day: LocalDate,
+        durationMs: Long,
+        time: LocalTime = LocalTime.NOON,
+    ): ReadingSession {
+        val at = day.atTime(time).atZone(zone).toInstant().toEpochMilli()
         return ReadingSession(
             bookUrl = url,
             startedAt = at,
@@ -982,7 +1047,10 @@ class ReadingStatsViewModelTest {
 
     private fun model(
         zone: () -> ZoneId = { this.zone },
-        today: () -> LocalDate = { this.today },
+        // The end of the day unless a test says otherwise: a baseline
+        // stops where the clock has got to, and a test that is not about
+        // that wants its last day counted whole.
+        now: (ZoneId) -> ZonedDateTime = { this.today.atTime(LocalTime.MAX).atZone(it) },
         weekStart: DayOfWeek = DayOfWeek.MONDAY,
     ): ReadingStatsViewModel {
         val factory = viewModelFactory {
@@ -992,7 +1060,7 @@ class ReadingStatsViewModelTest {
                     bookDao = db.bookDao(),
                     progressDao = db.readingProgressDao(),
                     zone = zone,
-                    today = { today() },
+                    now = now,
                     // Pinned rather than read off the JVM's locale: the
                     // week's first day is what decides how far the
                     // default span reaches, and a test that reaches a

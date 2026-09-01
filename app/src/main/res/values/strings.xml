@@ -691,10 +691,12 @@
     <string name="reading_stats_this_year">This year, on every device</string>
     <string name="reading_stats_this_year_local">This year</string>
     <string name="reading_stats_in_total">In total</string>
-    <string name="reading_stats_compare_more">%1$d%% more than %2$s</string>
-    <string name="reading_stats_compare_less">%1$d%% less than %2$s</string>
-    <string name="reading_stats_compare_more_than">More than %1$s</string>
-    <string name="reading_stats_compare_same">Same as %1$s</string>
+    <!-- The figure above these is every device's; the comparison under it is
+         this one's alone, so each of them says so. See ADR 18. -->
+    <string name="reading_stats_compare_more">%1$d%% more than %2$s, on this device</string>
+    <string name="reading_stats_compare_less">%1$d%% less than %2$s, on this device</string>
+    <string name="reading_stats_compare_more_than">More than %1$s, on this device</string>
+    <string name="reading_stats_compare_same">Same as %1$s, on this device</string>
     <string name="reading_stats_period_week">last week</string>
     <string name="reading_stats_period_month">last month</string>
     <string name="reading_stats_period_year">last year</string>

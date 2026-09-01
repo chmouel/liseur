@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -225,6 +226,60 @@ class StatsRangeTest {
         for (weekStart in DayOfWeek.entries) {
             assertNull(StatsRange.ALL_TIME.comparison(wednesday, weekStart))
         }
+    }
+
+    /**
+     * The baseline stops where the clock has got to, not at midnight.
+     *
+     * Without this a Wednesday afternoon is measured against the whole
+     * of the Wednesday before, evening included, and the sentence under
+     * the headline drifts towards "less" through every day and springs
+     * back at midnight.
+     */
+    @Test
+    fun `the baseline stops at the time of day the reader has reached`() {
+        val spans = StatsRange.THIS_WEEK.comparison(
+            wednesday,
+            DayOfWeek.MONDAY,
+            LocalTime.of(16, 7),
+        )!!
+        assertEquals(LocalTime.of(16, 7), spans.through)
+        // The dates are untouched by it: only the last of them is cut short.
+        assertEquals(
+            DateSpan(wednesday.minusWeeks(1).minusDays(2), wednesday.minusWeeks(1)),
+            spans.previous,
+        )
+    }
+
+    /** Asked for nothing in particular, a baseline is a whole day long. */
+    @Test
+    fun `a baseline with no time of day named runs to the end of its last day`() {
+        assertEquals(
+            LocalTime.MAX,
+            StatsRange.THIS_WEEK.comparison(wednesday, DayOfWeek.MONDAY)!!.through,
+        )
+    }
+
+    /**
+     * The cutoff applies to both sides, or it fixes nothing.
+     *
+     * Stopping only the baseline would leave a Tuesday afternoon
+     * measured against a Tuesday evening still; stopping only this
+     * period would invert the same drift.
+     */
+    @Test
+    fun `the same time of day bounds both sides`() {
+        val spans = StatsRange.THIS_WEEK.comparison(
+            wednesday,
+            DayOfWeek.MONDAY,
+            LocalTime.NOON,
+        )!!
+        // One value, read by whatever counts either side.
+        assertEquals(LocalTime.NOON, spans.through)
+        // And the two spans end on days a week apart, so noon on each is
+        // the same point of the same weekday.
+        assertEquals(spans.current.to.minusWeeks(1), spans.previous.to)
+        assertEquals(spans.current.from.minusWeeks(1), spans.previous.from)
     }
 
     @Test

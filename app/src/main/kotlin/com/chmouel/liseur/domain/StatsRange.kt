@@ -2,6 +2,7 @@ package com.chmouel.liseur.domain
 
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.time.temporal.WeekFields
@@ -93,13 +94,21 @@ enum class StatsRange(val id: String) {
      * Null for a span with no previous period to name, which is only
      * [ALL_TIME] — and would be any rolling window, were one added back.
      *
-     * The baseline is deliberately partial. Comparing the first Wednesday
-     * of a month with the whole of the month before it would report every
-     * reader as falling behind on the second of every month, so the
-     * baseline stops at the same point in its own period that today is at
-     * in this one.
+     * The baseline is deliberately partial, in both directions. Comparing
+     * the first Wednesday of a month with the whole of the month before it
+     * would report every reader as falling behind on the second of every
+     * month, so the baseline stops on the same day of its own period that
+     * today is in this one — and, because today itself has only reached
+     * [through], it stops at that time of day too. Without the second
+     * bound the afternoon is measured against a completed evening, and the
+     * sentence under the headline slides towards "less" through every
+     * day and springs back at midnight.
      */
-    fun comparison(today: LocalDate, weekStart: DayOfWeek): ComparisonSpans? {
+    fun comparison(
+        today: LocalDate,
+        weekStart: DayOfWeek,
+        through: LocalTime = LocalTime.MAX,
+    ): ComparisonSpans? {
         val period = when (this) {
             THIS_WEEK -> ComparisonPeriod.WEEK
             THIS_MONTH -> ComparisonPeriod.MONTH
@@ -128,6 +137,7 @@ enum class StatsRange(val id: String) {
             period = period,
             current = DateSpan(from, today),
             previous = previous,
+            through = through,
         )
     }
 
@@ -179,4 +189,21 @@ data class ComparisonSpans(
     val period: ComparisonPeriod,
     val current: DateSpan,
     val previous: DateSpan,
+    /**
+     * The wall-clock time each span stops at on its last day.
+     *
+     * Wall clock rather than an instant, deliberately. An instant an
+     * exact week ago is an hour adrift of the reader's Tuesday
+     * afternoon on the two weekends a year the clocks move, and would
+     * hand one side of the comparison an hour the other never had. This
+     * is the time of day the reader has reached, and it means the same
+     * thing on both sides whatever the offset was; where a day has no
+     * such time, or two of them, [readingTotals] says which one it took.
+     *
+     * It applies to the last day of each span alike. [previous] ends on
+     * the day matching today a period ago, and stopping only that one
+     * would measure a Tuesday afternoon against a Tuesday that had had
+     * its evening.
+     */
+    val through: LocalTime,
 )

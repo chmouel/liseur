@@ -21,7 +21,6 @@ import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.SessionSpan
-import com.chmouel.liseur.domain.SpanTotals
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.compareReading
@@ -32,7 +31,9 @@ import com.chmouel.liseur.domain.readingStats
 import com.chmouel.liseur.domain.readingTotals
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.util.Locale
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Job
@@ -104,21 +105,22 @@ class ReadingStatsViewModel(
     private val settings: AppSettingsRepository? = null,
     initialRange: StatsRange = StatsRange.Default,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
-    private val today: (ZoneId) -> LocalDate = LocalDate::now,
+    private val now: (ZoneId) -> ZonedDateTime = ZonedDateTime::now,
     initialWeekStart: DayOfWeek = localeWeekStart(Locale.getDefault()),
 ) : ViewModel() {
 
     /**
      * Everything that decides which question the screen is asking.
      *
-     * One value rather than four, because all four have to move
-     * together. The span, the day it ends on, the day the reader's week
-     * begins and the zone the sums are done in are a single question,
-     * and the answers to it — this device's and the server's — are only
-     * comparable if they were asked the same one. While the day and the
-     * zone were sampled from the clock wherever they happened to be
-     * needed, "this week" could be resolved twice in one emission and
-     * come out differently either side of midnight.
+     * One value rather than five, because all of them have to move
+     * together. The span, the day it ends on, the time of day it has
+     * reached, the day the reader's week begins and the zone the sums
+     * are done in are a single question, and the answers to it — this
+     * device's and the server's — are only comparable if they were asked
+     * the same one. While the day and the zone were sampled from the
+     * clock wherever they happened to be needed, "this week" could be
+     * resolved twice in one emission and come out differently either
+     * side of midnight.
      *
      * It also makes an answer refusable. A `combine` does not
      * synchronise its inputs, so a server reply can arrive between a
@@ -131,16 +133,41 @@ class ReadingStatsViewModel(
         val weekStart: DayOfWeek,
         val zone: ZoneId,
         val today: LocalDate,
-    )
+        /**
+         * How far into [today] the clock had got when this was sampled.
+         *
+         * Taken from the same reading as [today], never from a second
+         * one: a date read at a minute to midnight and a time read a
+         * moment later would put the cutoff at the top of a day the date
+         * says is already over, and empty the baseline's last day.
+         */
+        val timeOfDay: LocalTime,
+    ) {
+        /**
+         * The part of this that a server answer is an answer to.
+         *
+         * [timeOfDay] is left out on purpose. It decides where *this
+         * device* stops counting the baseline's last day, and the server
+         * is not asked about that day at all — so a reply fetched at
+         * four o'clock is still a reply to the question asked at five.
+         * Were it in, every visit to the screen would sample a new time,
+         * refuse the answers already on hand, and drop the headline back
+         * to local figures until the network answered again.
+         */
+        fun asked(): StatsWindow = copy(timeOfDay = LocalTime.MIDNIGHT)
+    }
 
     /** A server answer, and the question it was the answer to. */
     private data class Answered<T>(val window: StatsWindow, val value: T)
 
     private fun <T> Answered<T>?.forWindow(window: StatsWindow): T? =
-        this?.takeIf { it.window == window }?.value
+        this?.takeIf { it.window.asked() == window.asked() }?.value
 
     private val _window = MutableStateFlow(
-        zone().let { StatsWindow(initialRange, initialWeekStart, it, today(it)) },
+        zone().let { zone ->
+            val at = now(zone)
+            StatsWindow(initialRange, initialWeekStart, zone, at.toLocalDate(), at.toLocalTime())
+        },
     )
 
     val range: StateFlow<StatsRange> =
@@ -158,7 +185,6 @@ class ReadingStatsViewModel(
     private var refresh: Job? = null
 
     private val _acrossDevices = MutableStateFlow<Answered<InsightsSummary?>?>(null)
-    private val _previousAcrossDevices = MutableStateFlow<Answered<InsightsSummary?>?>(null)
     private val _recentAcrossDevices = MutableStateFlow<Answered<List<InsightDay>?>?>(null)
     private val _booksAcrossDevices = MutableStateFlow<Answered<Map<String, WorkInsights>?>?>(null)
 
@@ -170,16 +196,6 @@ class ReadingStatsViewModel(
      * answer the same question differently are a doubt, not a feature.
      */
     private val acrossDevices = _acrossDevices.asStateFlow()
-
-    /**
-     * The same, for the period this one is being measured against.
-     *
-     * Kept apart from [acrossDevices] rather than fetched with it so
-     * that a slow baseline cannot hold up the headline. Either may fail
-     * on its own; a baseline that does falls back to this device's own
-     * history, which is what the whole screen does without a server.
-     */
-    private val previousAcrossDevices = _previousAcrossDevices.asStateFlow()
     private val recentAcrossDevices = _recentAcrossDevices.asStateFlow()
     private val booksAcrossDevices = _booksAcrossDevices.asStateFlow()
 
@@ -238,7 +254,6 @@ class ReadingStatsViewModel(
 
     private fun forgetServerAnswers() {
         _acrossDevices.value = null
-        _previousAcrossDevices.value = null
         _recentAcrossDevices.value = null
         _booksAcrossDevices.value = null
     }
@@ -246,12 +261,13 @@ class ReadingStatsViewModel(
     /**
      * Refreshes the server decoration whenever a statistics screen opens.
      *
-     * The window moves to today first, and before the check for a server.
-     * Nothing here observes the clock, so this visit is the moment the
-     * screen learns what day it is; doing it after the early return would
-     * leave the one reader with no server — for whom the local figures
-     * are the entire screen — looking at yesterday's week for as long as
-     * the app stayed open.
+     * The window moves to the present first, and before the check for a
+     * server. Nothing here observes the clock, so this visit is the
+     * moment the screen learns what day it is and how far into it the
+     * reader has got; doing it after the early return would leave the one
+     * reader with no server — for whom the local figures are the entire
+     * screen — looking at yesterday's week for as long as the app stayed
+     * open.
      *
      * Each refresh then replaces the last outright: the previous one is
      * cancelled and its answers are refused by generation, not by which
@@ -263,29 +279,20 @@ class ReadingStatsViewModel(
      */
     fun refreshServerInsights() {
         val zone = zone()
-        _window.update { it.copy(zone = zone, today = today(zone)) }
+        val at = now(zone)
+        _window.update {
+            it.copy(zone = zone, today = at.toLocalDate(), timeOfDay = at.toLocalTime())
+        }
         val window = _window.value
         val source = insights ?: return
         val token = ++generation
         refresh?.cancel()
-        val spans = window.range.comparison(window.today, window.weekStart)
-        // A span with nothing to compare against must not keep an answer
-        // fetched while it had one.
-        if (spans == null) _previousAcrossDevices.value = null
         refresh = viewModelScope.launch {
             val end = window.today
             val week = window.weekStart
             launch {
                 val summary = source.summary(window.range, end, week)
                 if (token == generation) _acrossDevices.value = Answered(window, summary)
-            }
-            if (spans != null) {
-                launch {
-                    val summary = source.summary(spans.previous.from, spans.previous.to)
-                    if (token == generation) {
-                        _previousAcrossDevices.value = Answered(window, summary)
-                    }
-                }
             }
             launch {
                 val calendar = source.calendar(
@@ -352,14 +359,21 @@ class ReadingStatsViewModel(
         /** The two spans being compared, or null for a span with none. */
         val spans: ComparisonSpans?,
         /**
-         * This device's own reading over [spans]'s baseline period.
+         * This period and the one before it, from this device alone.
          *
-         * Reduced from the same session list, in the same zone, by the
-         * same day rule as [stats]. Anything less and the two halves of
-         * the comparison could disagree about which side of midnight an
-         * evening fell on, and report a difference the reader never made.
+         * Both reduced from the same session list, in the same zone, by
+         * the same day rule as [stats], and both stopped at the same
+         * time of day. Anything less and the two halves could disagree
+         * about which side of midnight an evening fell on, and report a
+         * difference the reader never made.
+         *
+         * Not the headline's figure for this period, which runs to the
+         * end of today across every device: there is no baseline that
+         * can be built that way, and a comparison whose halves counted
+         * different machines is arithmetic pretending to be a habit.
          */
-        val previous: SpanTotals?,
+        val currentMs: Long,
+        val previousMs: Long,
     )
 
     private val local = combine(
@@ -391,7 +405,8 @@ class ReadingStatsViewModel(
                 endProgression = it.endProgression,
             )
         }
-        val comparison = window.range.comparison(window.today, window.weekStart)
+        val comparison = window.range
+            .comparison(window.today, window.weekStart, window.timeOfDay)
         LocalStats(
             stats = readingStats(
                 sessions = spans,
@@ -408,7 +423,12 @@ class ReadingStatsViewModel(
                 .mapValues { (_, sittings) -> sittings.minOf { it.startedAt } },
             window = window,
             spans = comparison,
-            previous = comparison?.let { readingTotals(spans, window.zone, it.previous) },
+            currentMs = comparison
+                ?.let { readingTotals(spans, window.zone, it.current, it.through).totalMs }
+                ?: 0L,
+            previousMs = comparison
+                ?.let { readingTotals(spans, window.zone, it.previous, it.through).totalMs }
+                ?: 0L,
         )
     }
 
@@ -417,8 +437,8 @@ class ReadingStatsViewModel(
         acrossDevices,
         recentAcrossDevices,
         booksAcrossDevices,
-        previousAcrossDevices,
-    ) { local, server, recent, serverBooks, previousServer ->
+    ) { local, server, recent, serverBooks ->
+
         val window = local.window
         val merged = mergeDashboard(
             local.stats,
@@ -434,8 +454,8 @@ class ReadingStatsViewModel(
                 local = local.stats,
                 server = server.forWindow(window),
                 spans = local.spans,
-                previousLocal = local.previous,
-                previousServer = previousServer.forWindow(window),
+                currentMs = local.currentMs,
+                previousMs = local.previousMs,
             ),
             range = window.range,
         )
@@ -510,26 +530,44 @@ class ReadingStatsViewModel(
          * server that reports a streak but no pace should not cost the
          * reader the pace this device works out for itself.
          *
-         * The baseline is merged by the same rule as the total it is
-         * measured against, and that is the point of doing it here
-         * rather than anywhere else: were the current period allowed to
-         * count a second device and the previous one not, an evening on
-         * a laptop would appear in one half of the comparison and vanish
-         * from the other, and the screen would report a change in the
-         * reader's habits that was really a change in its own arithmetic.
+         * The comparison beneath it is the one figure on this screen the
+         * server does not touch, and that is deliberate. What the
+         * sentence claims is a *relationship* between two spans, and a
+         * relationship only holds between two figures gathered the same
+         * way. Both sides are therefore this device's own sittings, over
+         * spans that stop at the same time of day.
          *
-         * A baseline the server could not answer for falls back to this
-         * device's own history rather than hiding the comparison. That
-         * is what the rest of the screen does without a server, and a
-         * statistics screen is not worth an error.
+         * Mixing the two sources within a side cannot be made safe here.
+         * A summary aggregates whole days, so the day that stops where
+         * the clock has got to is one no server can answer for, and the
+         * only way to use a server at all would be to add its whole days
+         * to this device's part-day. That sum is unsound twice over.
+         * Its days are the *server's* calendar days, and this device
+         * splits by its own zone, so an offset between the two leaves
+         * the two spans overlapping — reading counted once by the server
+         * and again in the part-day — or with a gap between them. And
+         * were one of the two requests to fail, one side would count
+         * every device while the other counted one, which is the
+         * evening-on-a-laptop reported as a change in the reader's
+         * habits that the whole comparison exists to avoid.
+         *
+         * The cost is that a reader with a second device is compared
+         * against themselves on this one. It is an undercount of both
+         * sides alike, which is what leaves the percentage between them
+         * standing, and the figure over it still counts everything.
+         *
+         * It is also why the comparison does not simply use [totalMs].
+         * That figure is the most complete one available and belongs
+         * over the screen, but it counts every device right up to this
+         * minute, and there is no baseline that can be built that way.
          */
         internal fun mergeHeadline(
             merged: ReadingStats,
             local: ReadingStats,
             server: InsightsSummary?,
             spans: ComparisonSpans? = null,
-            previousLocal: SpanTotals? = null,
-            previousServer: InsightsSummary? = null,
+            currentMs: Long = 0,
+            previousMs: Long = 0,
         ): StatsHeadline {
             val totalMs = maxOf(
                 merged.totalMs,
@@ -541,16 +579,7 @@ class ReadingStatsViewModel(
                 streakDays = maxOf(local.streakDays, server?.streakDays ?: 0),
                 progressionPerHour = server?.progressionPerHour ?: local.progressionPerHour,
                 comparison = spans?.let {
-                    val baseline = previousLocal ?: SpanTotals.Empty
-                    compareReading(
-                        period = it.period,
-                        currentMs = totalMs,
-                        previousMs = maxOf(
-                            baseline.totalMs,
-                            (previousServer?.activeMinutes?.minutesAsMillis() ?: 0L) +
-                                baseline.pendingMs,
-                        ),
-                    )
+                    compareReading(it.period, currentMs = currentMs, previousMs = previousMs)
                 },
             )
         }
