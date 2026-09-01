@@ -82,6 +82,11 @@ feeds `ReaderTapZones`, `ScrollEdgeTurner` and `PageTurner`, which read
 the preference alone before — without that, a tap on a vertical book
 turns a page instead of pausing, and this pause does not work at all.
 
+> Amended by [ADR-0020](0020-fixed-layout-reading-settings.md): it gains
+> a third clause, `reflowable &&`. A fixed-layout book paginates
+> whatever the preference says, so leaving scroll mode on and opening
+> one gave it scrolled chrome over a page that turns.
+
 **Chapter boundaries.** Reaching the bottom is not the moment to leave;
 the last lines have only just arrived. The loop dwells there for one
 screen's worth of reading time at the reader's pace, then asks
