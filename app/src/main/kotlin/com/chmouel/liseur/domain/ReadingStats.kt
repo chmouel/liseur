@@ -3,11 +3,13 @@ package com.chmouel.liseur.domain
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.time.temporal.WeekFields
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** What one book's reading adds up to. */
 data class BookReadingStats(
@@ -338,23 +340,78 @@ data class SpanTotals(val totalMs: Long, val pendingMs: Long) {
 /**
  * What [sessions] add up to over [span], on both ends inclusive.
  *
- * The bounded sibling of [readingStats], for the baseline a period is
- * compared against. It deliberately shares [day] and the same
+ * The bounded sibling of [readingStats], for the two halves of a
+ * period-over-period comparison. It deliberately shares the same
  * "a sitting of no length is not a sitting" filter: a comparison whose
- * two halves disagreed about which side of midnight an evening fell on
- * would report a difference the reader did not make.
+ * halves disagreed about what counted would report a difference the
+ * reader did not make.
+ *
+ * [through] stops the count part-way through the span's last day, which
+ * is what makes a finished period comparable with one that has only
+ * reached this afternoon. Every earlier day in the span is counted
+ * whole, whatever hour its reading happened at.
+ *
+ * The time of day is resolved to a moment on that last day rather than
+ * compared as a wall clock, so that the two weekends a year the clocks
+ * move are answered rather than ignored. Where the hour is struck twice
+ * it is the first of them; where it does not exist at all it is moved on
+ * by the length of the hour that was skipped. Either way there is exactly
+ * one cutoff, on the day being counted, and reading is measured against
+ * the same instants it was recorded at.
+ *
+ * A sitting still running at that cutoff is counted for the share of its
+ * length that had elapsed. This is the one place a sitting is divided,
+ * and it is divided because the sitting it is being compared with — the
+ * one open on the reader's screen right now — is already only recorded
+ * as far as its last checkpoint. Dropping the older one whole, or
+ * keeping it whole, would compare an afternoon with something else.
+ *
+ * Midnight is not such a cutoff. With no time of day named the span runs
+ * to the end of its last day, and a sitting that ran past that midnight
+ * belongs whole to the day it ended on, exactly as it does in the
+ * headline above and on liseur-sync. Splitting it here would make the
+ * two halves of a comparison disagree with the total over them.
  */
-fun readingTotals(sessions: List<SessionSpan>, zone: ZoneId, span: DateSpan): SpanTotals {
+fun readingTotals(
+    sessions: List<SessionSpan>,
+    zone: ZoneId,
+    span: DateSpan,
+    through: LocalTime = LocalTime.MAX,
+): SpanTotals {
+    val from = span.from.atStartOfDay(zone).toInstant().toEpochMilli()
+    val cutoff = span.to.atTime(through).atZone(zone).toInstant().toEpochMilli()
+    val cutShort = through != LocalTime.MAX
     var total = 0L
     var pending = 0L
     for (session in sessions) {
         if (session.durationMs <= 0) continue
-        val day = session.day(zone)
-        if (day.isBefore(span.from) || day.isAfter(span.to)) continue
-        total += session.durationMs
-        if (!session.uploaded) pending += session.durationMs
+        if (session.lastReadAt < from) continue
+        val counted =
+            if (cutShort) session.countedBy(cutoff)
+            else if (session.lastReadAt <= cutoff) session.durationMs
+            else 0
+        if (counted <= 0) continue
+        total += counted
+        if (!session.uploaded) pending += counted
     }
     return SpanTotals(total, pending)
+}
+
+/**
+ * How much of a sitting had happened by [cutoff].
+ *
+ * Whole when it had already ended, nothing when it had not yet begun,
+ * and otherwise the share of its length that the wall clock says had
+ * gone by. The length is active time from a monotonic clock and the
+ * extent is wall-clock, so the share is an estimate; it is a far closer
+ * one than nought or all of it.
+ */
+private fun SessionSpan.countedBy(cutoff: Long): Long {
+    if (lastReadAt <= cutoff) return durationMs
+    if (startedAt >= cutoff) return 0
+    val extent = lastReadAt - startedAt
+    if (extent <= 0) return 0
+    return (durationMs.toDouble() * (cutoff - startedAt) / extent).roundToLong()
 }
 
 /** Which way a period went against the one before it. */

@@ -5,7 +5,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /** The arithmetic behind the dashboard. */
 class ReadingStatsTest {
@@ -16,6 +18,10 @@ class ReadingStatsTest {
     /** Midday on a given day, in the zone the sums are done in. */
     private fun noonOn(date: LocalDate): Long =
         date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+
+    /** A given hour on a given day, in that same zone. */
+    private fun at(date: LocalDate, hour: Int, minute: Int): Long =
+        date.atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
 
     private fun book(url: String, finished: Boolean = false, progression: Double? = null) =
         StatsBook(url, "Title of $url", "An Author", progression, finished)
@@ -601,6 +607,226 @@ class ReadingStatsTest {
             span = DateSpan(today.minusDays(6), today),
         )
         assertEquals(SpanTotals.Empty, totals)
+    }
+
+    /**
+     * The baseline's last day stops where today's clock has got to.
+     *
+     * A period that has only reached four in the afternoon measured
+     * against a completed evening reports the reader as falling behind
+     * every day, and back level at midnight.
+     */
+    @Test
+    fun `a baseline leaves out what came after the hour today has reached`() {
+        val lastDay = today.minusDays(7)
+        val morning = SessionSpan("a", at(lastDay, 10, 0), 60_000)
+        val evening = SessionSpan("a", at(lastDay, 20, 0), 60_000)
+
+        val totals = readingTotals(
+            sessions = listOf(morning, evening),
+            zone = zone,
+            span = DateSpan(lastDay, lastDay),
+            through = LocalTime.of(16, 0),
+        )
+        assertEquals(60_000L, totals.totalMs)
+
+        // Sitting still, the reader crosses the same hour and it counts.
+        assertEquals(
+            120_000L,
+            readingTotals(
+                sessions = listOf(morning, evening),
+                zone = zone,
+                span = DateSpan(lastDay, lastDay),
+                through = LocalTime.of(21, 0),
+            ).totalMs,
+        )
+    }
+
+    /** Only the last day is cut short; every day before it is whole. */
+    @Test
+    fun `an earlier day in the baseline keeps its evening`() {
+        val lastDay = today.minusDays(7)
+        val totals = readingTotals(
+            sessions = listOf(
+                SessionSpan("a", at(lastDay.minusDays(1), 23, 0), 60_000),
+                SessionSpan("a", at(lastDay, 23, 0), 60_000),
+            ),
+            zone = zone,
+            span = DateSpan(lastDay.minusDays(1), lastDay),
+            through = LocalTime.of(9, 0),
+        )
+        assertEquals(60_000L, totals.totalMs)
+    }
+
+    /**
+     * The cutoff dates a sitting by where it ended, as everything does.
+     *
+     * A stretch begun before the hour and still running past it is one
+     * the reader had not finished by this time last week either.
+     */
+    @Test
+    fun `a sitting that ran past the hour is dated by where it ended`() {
+        val lastDay = today.minusDays(7)
+        val startedAt = at(lastDay, 15, 30)
+        val session = SessionSpan(
+            "a",
+            startedAt,
+            3_600_000,
+            lastReadAt = startedAt + 3_600_000,
+        )
+
+        // Half past four is half an hour in.
+        assertEquals(
+            1_800_000L,
+            readingTotals(listOf(session), zone, DateSpan(lastDay, lastDay), LocalTime.of(16, 0))
+                .totalMs,
+        )
+        assertEquals(
+            3_600_000L,
+            readingTotals(listOf(session), zone, DateSpan(lastDay, lastDay), LocalTime.of(17, 0))
+                .totalMs,
+        )
+    }
+
+    /**
+     * Midnight divides nothing, whichever way the sitting crossed it.
+     *
+     * The end of a day is where one belongs, not where one is cut: a
+     * sitting is dated by where it ended, here and in the headline and
+     * on liseur-sync alike. Were the last midnight of a span a cutoff
+     * like any other, the two halves of a comparison would not add up
+     * to the whole the reader is shown above them.
+     */
+    @Test
+    fun `the end of a day divides no sitting`() {
+        val startedAt = at(today.minusDays(8), 23, 30)
+        val session = SessionSpan("a", startedAt, 3_600_000, lastReadAt = startedAt + 3_600_000)
+
+        val before = DateSpan(today.minusDays(9), today.minusDays(8))
+        val after = DateSpan(today.minusDays(7), today.minusDays(7))
+        assertEquals(0L, readingTotals(listOf(session), zone, before, LocalTime.MAX).totalMs)
+        assertEquals(3_600_000L, readingTotals(listOf(session), zone, after, LocalTime.MAX).totalMs)
+    }
+
+    /**
+     * A sitting still running at the cutoff counts for what had elapsed.
+     *
+     * The sitting it is being compared with is the one open on the
+     * reader's screen right now, and that one is only recorded as far as
+     * its last checkpoint. Dropping this one whole would compare an
+     * afternoon with nothing; keeping it whole would compare it with an
+     * evening.
+     */
+    @Test
+    fun `a sitting straddling the cutoff counts for the part that had gone`() {
+        val lastDay = today.minusDays(7)
+        val startedAt = at(lastDay, 15, 0)
+        // An hour on the clock, of which forty minutes was actually read.
+        val session = SessionSpan(
+            "a",
+            startedAt,
+            2_400_000,
+            lastReadAt = startedAt + 3_600_000,
+        )
+
+        // A quarter of the way in: a quarter of the forty minutes.
+        assertEquals(
+            600_000L,
+            readingTotals(listOf(session), zone, DateSpan(lastDay, lastDay), LocalTime.of(15, 15))
+                .totalMs,
+        )
+        // Begun but not yet reached.
+        assertEquals(
+            0L,
+            readingTotals(listOf(session), zone, DateSpan(lastDay, lastDay), LocalTime.of(15, 0))
+                .totalMs,
+        )
+        // Over and done with.
+        assertEquals(
+            2_400_000L,
+            readingTotals(listOf(session), zone, DateSpan(lastDay, lastDay), LocalTime.of(16, 0))
+                .totalMs,
+        )
+    }
+
+    /**
+     * The hour struck twice is the first of them.
+     *
+     * On the morning the clocks go back, 02:30 happens twice in Paris.
+     * A cutoff that named the wall clock and nothing else would count
+     * reading from the second of them against a period that had only
+     * reached the first, which is the extra hour this rule exists to
+     * refuse.
+     */
+    @Test
+    fun `an hour the clocks repeat is counted once, at its first turn`() {
+        // 25 October 2026: 03:00 CEST becomes 02:00 CET in Paris.
+        val fallBack = LocalDate.of(2026, 10, 25)
+        val first = ZonedDateTime.of(fallBack, LocalTime.of(2, 30), zone)
+            .withEarlierOffsetAtOverlap()
+        val second = first.withLaterOffsetAtOverlap()
+        assertTrue(second.toInstant() > first.toInstant())
+
+        val sessions = listOf(
+            SessionSpan("a", first.toInstant().toEpochMilli(), 60_000),
+            SessionSpan("a", second.toInstant().toEpochMilli(), 60_000),
+        )
+
+        assertEquals(
+            60_000L,
+            readingTotals(sessions, zone, DateSpan(fallBack, fallBack), LocalTime.of(2, 30))
+                .totalMs,
+        )
+        // Later in the day both are behind the reader.
+        assertEquals(
+            120_000L,
+            readingTotals(sessions, zone, DateSpan(fallBack, fallBack), LocalTime.of(9, 0))
+                .totalMs,
+        )
+    }
+
+    /**
+     * An hour the clocks skip is moved on by the hour that was skipped.
+     *
+     * 02:30 does not exist in Paris on the morning the clocks go
+     * forward, and a comparison cannot simply refuse to happen on it.
+     * There is one defined answer, it is the one `java.time` gives, and
+     * it stays on the day the reader is looking at.
+     */
+    @Test
+    fun `an hour the clocks skip is moved on by the length of the gap`() {
+        // 29 March 2026: 02:00 CET becomes 03:00 CEST in Paris, so a
+        // cutoff of 02:30 resolves to 03:30.
+        val springForward = LocalDate.of(2026, 3, 29)
+        val resolved = ZonedDateTime.of(springForward, LocalTime.of(3, 30), zone)
+        val justBefore = SessionSpan("a", resolved.toInstant().toEpochMilli() - 60_000, 60_000)
+        val justAfter = SessionSpan("a", resolved.toInstant().toEpochMilli() + 60_000, 60_000)
+
+        val totals = readingTotals(
+            sessions = listOf(justBefore, justAfter),
+            zone = zone,
+            span = DateSpan(springForward, springForward),
+            through = LocalTime.of(2, 30),
+        )
+        assertEquals(60_000L, totals.totalMs)
+    }
+
+    /** A cut-short day keeps unsent time apart just as a whole one does. */
+    @Test
+    fun `a cut short baseline still says what no server has heard`() {
+        val lastDay = today.minusDays(7)
+        val totals = readingTotals(
+            sessions = listOf(
+                SessionSpan("a", at(lastDay, 9, 0), 60_000, uploaded = true),
+                SessionSpan("a", at(lastDay, 10, 0), 30_000, uploaded = false),
+                SessionSpan("a", at(lastDay, 20, 0), 90_000, uploaded = false),
+            ),
+            zone = zone,
+            span = DateSpan(lastDay, lastDay),
+            through = LocalTime.of(12, 0),
+        )
+        assertEquals(90_000L, totals.totalMs)
+        assertEquals(30_000L, totals.pendingMs)
     }
 
     // --- More, less, or the same --------------------------------------

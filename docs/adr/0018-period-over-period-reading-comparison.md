@@ -48,6 +48,37 @@ of the immediately preceding calendar period:
   month and day in the previous year. A leap-day comparison ends on 28
   February in a non-leap year.
 
+Each side's last day stops at the time of day the reader has reached, not
+at midnight. Matching the day is not enough on its own: the current
+period's final day is today, counted only as far as *now*, while the
+baseline's is a complete twenty-four hours. Without the second bound a
+Tuesday afternoon is measured against the whole of the Tuesday before,
+evening included, so the sentence slides towards "less than last week" as
+every day wears on and springs back at midnight — a change in the
+arithmetic, reported to the reader as a change in their habits.
+
+The bound is named as a wall-clock time rather than as an instant exactly
+one period ago, because "as far as I have got today" is what the reader
+means and an instant a week ago is an hour adrift of it on the two
+weekends a year the clocks move. Naming it is not the same as comparing
+it: on each side it is resolved against that side's own day to a single
+moment, so the clocks moving cannot hand one side an hour the other never
+had. Where an hour is struck twice the earlier of the two is taken; where
+one is skipped the cutoff moves on by the length of the gap. Neither case
+is likely and both are decided rather than left to whatever a wall-clock
+comparison would happen to do.
+
+A sitting still running at that moment is counted for the share of its
+length that had elapsed. Everywhere else a sitting belongs whole to the
+day it ended on, and midnight still divides nothing: the rule is there so
+that this device, the headline above and liseur-sync all agree which day
+reading happened on. The cutoff answers a different question — how much
+had been read by now — and the sitting on the other side of the
+comparison is the one open on the reader's screen, which is itself only
+recorded as far as its last checkpoint. Counted whole it would be an
+evening measured against an afternoon; dropped whole it would be an
+afternoon measured against nothing.
+
 Only active reading time is compared. Books, sessions, streak, pace, and
 finished counts continue to describe the selected current span and do not
 gain deltas. A single comparison under the large reading-time figure keeps
@@ -93,21 +124,61 @@ current span and its previous-period baseline. It owns the month-end and
 leap-year clamping rules and is tested independently of Compose and Android.
 Ranges that are not calendar-to-date return no comparison span.
 
-Local totals for both spans are reduced from the same session snapshot and
-timezone. The current dashboard continues to use `readingStats()` for its
-books, chart, and headline; the comparison only needs the total duration for
-the baseline. Sessions are assigned to days by the same rule as the existing
+Totals for both spans are reduced from the same session snapshot, in the
+same timezone, by the same `readingTotals()` call with the same cutoff. The
+current dashboard continues to use `readingStats()` for its books, chart,
+and headline. Sessions are assigned to days by the same rule as the existing
 statistics so midnight and timezone behaviour cannot disagree between the
 headline and its comparison.
 
-When liseur-sync is connected, `LiseurSyncInsights` requests summaries by
-explicit `from` and `to` dates for both periods. Each displayed total uses
-the existing merge rule: the larger of the local total and the server total
-plus locally pending time for that exact span. The two server answers are
-accepted independently. If the previous-period answer fails, the app uses
-the local baseline; if local history cannot represent a trustworthy
-cross-device baseline, the comparison is simply local, as the rest of the
-screen already is when server insights are unavailable.
+A sitting still running at the cutoff is counted for the share of its
+length that had elapsed, and that is the one place a sitting is divided.
+Midnight still divides nothing: a sitting belongs whole to the day it ended
+on, here as in the headline and on liseur-sync, so the two halves of a
+comparison still add up to a total over both. The proration exists because
+the sitting on the other side is the one open on the reader's screen, which
+is itself only recorded as far as its last checkpoint — counted whole the
+older one would be an evening against an afternoon, dropped whole it would
+be an afternoon against nothing.
+
+The clock is sampled once, as a single zoned moment, and the day and the
+time of day are both read off it. Two readings could straddle midnight and
+put the cutoff at the top of a day the date says is already over, which
+would empty a span's last day.
+
+When liseur-sync is connected, `LiseurSyncInsights` still supplies the
+headline: the reader does not care which machine did the reading, and the
+merge rule there is the larger of the local total and the server total plus
+this device's locally pending time.
+
+**The comparison beneath it is local on both sides, and does not consult
+the server at all.** What the sentence claims is a *relationship* between
+two spans, and a relationship only holds between two figures gathered the
+same way. Both sides are therefore this device's own sittings, reduced over
+spans that stop at the same time of day.
+
+Mixing the two sources within a side cannot be made safe. A summary
+aggregates whole days, so a day stopping where the clock has got to is one
+no server can answer for; the only way to use a server at all would be to
+add its whole days to this device's part-day, and that sum is unsound twice
+over:
+
+- Its days are the *server's* calendar days — `InsightDay` is documented as
+  such — while this device splits by its own zone. An offset between the
+  two leaves the server's final whole day overlapping the device's partial
+  day, so uploaded reading is counted by the server and again locally; a
+  westward offset leaves a gap instead. The server does not declare its
+  timezone, so the app cannot align the split.
+- The two requests fail independently. One succeeding and the other timing
+  out would leave one side counting every device and the other counting
+  one — an evening on a laptop appearing in one half of the comparison and
+  vanishing from the other, which is exactly the false report of a changed
+  habit this whole decision exists to prevent. `summary()` also folds a
+  genuinely empty period into the same `null` as a failure, so the two
+  cannot be told apart.
+
+Neither is a hypothetical the arithmetic can be hardened against; both
+disappear when a side has one source.
 
 Stale replies are guarded twice. The existing refresh generation refuses
 an answer from a superseded request; that is not sufficient on its own,
@@ -116,7 +187,13 @@ still be paired with a local snapshot taken before the range changed. So
 the span, the week's first day, the timezone and today's date are held as
 one value, and every server answer is tagged with the one it was asked
 about. An answer whose tag no longer matches the local snapshot is
-ignored rather than merged.
+ignored rather than merged. The time of day travels in that same value but
+is deliberately left out of the tag: it bounds the comparison, which is
+local, and the server is never asked about it, so a reply fetched at four
+o'clock is still an answer to the question asked at five. Were it in the
+tag, every visit to the screen would sample a new time, refuse the answers
+already on hand, and drop the headline back to local figures until the
+network answered again.
 
 `StatsHeadline` carries an optional comparison value containing the previous
 total and its period label. `BentoHero` renders it immediately beneath the
@@ -127,8 +204,27 @@ new dependency, setting, or server endpoint is required.
 
 The default weekly view gains context that grows fairly through the week:
 Wednesday is compared with Monday-to-Wednesday, not with all seven days of
-last week. Month and year views follow the same rule, so a partial period is
-never measured against a completed one.
+last week, and Wednesday lunchtime with Monday-to-Wednesday lunchtime rather
+than with a Wednesday that had its evening. Month and year views follow the
+same rule, so a partial period is never measured against a completed one.
+
+A reader with a second device is compared against themselves on this one,
+and **the sentence says so**: every wording of it ends "on this device",
+directly under a total captioned "on every device". The two lines sit in
+one card and the contrast between them is what tells the reader which
+figure is which.
+
+Naming the scope is not politeness, it is the claim being made. Leaving
+both devices out of both halves does not preserve the all-device
+percentage — a laptop that did four hours last week and none this week
+would still show "more than last week" on a phone that read a little more
+than it did before. What the line reports is a trend *on this device*, and
+that is a true and useful thing to report; reporting it as a trend in the
+reader's month would not be. A test asserts the qualifier is present, so it
+cannot drift out of the strings later.
+
+The comparison costs no network request. The baseline summary this ADR
+originally specified is gone.
 
 The range menu loses three entries and gains one, which is the cost of the
 comparison applying everywhere it is offered. A reader who used "Last 90
