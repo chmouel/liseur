@@ -2278,10 +2278,14 @@ class ReaderProgressActions(
     val onApproximateResume: () -> Unit,
 )
 
-/** Syncing this one book on purpose, from the Navigate screen. */
+/**
+ * Syncing this one book on purpose, from the Navigate screen.
+ *
+ * Only starting it belongs here. Answering the question it may ask is
+ * the dialog's business, and the dialog is hosted by the activity.
+ */
 class ReaderBookSyncActions(
     val start: () -> Unit,
-    val resolve: (takeRemote: Boolean) -> Unit,
 )
 
 /** Hides the status and navigation bars while the chrome is hidden. */

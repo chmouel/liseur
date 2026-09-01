@@ -457,7 +457,6 @@ class ReaderActivity : FragmentActivity() {
                                     onBookSyncAction = remember {
                                         ReaderBookSyncActions(
                                             start = viewModel::syncThisBook,
-                                            resolve = viewModel::resolveBookSync,
                                         )
                                     },
                                     onBack = ::finish,
