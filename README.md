@@ -76,9 +76,8 @@ servers and dictionary sources you configure. See the
 
 ## Related Projects
 
-- [liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur
+- [liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur (may be lagging compared to the android app).
 - [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats
-- [Grimmory](https://github.com/grimmory-tools/grimmory): Self-hosted library manager. Liseur browses and downloads from it
 
 ## Development
 
@@ -90,7 +89,7 @@ server exposes, what Liseur implements against it, and why the gaps remain.
 
 **Liseur** ([li.zœʁ], *lee-ZUR*) is the French word for an avid reader or book lover. It sounds dignified, like the English word *leisure*.
 
-Here is a painting by [Pierre-Auguste Renoir](https://en.wikipedia.org/wiki/Pierre-Auguste_Renoir) portraying [Claude Monet](https://en.wikipedia.org/wiki/Claude_Monet) as "Le Liseur":
+Another inspiration was a painting by [Pierre-Auguste Renoir](https://en.wikipedia.org/wiki/Pierre-Auguste_Renoir) portraying [Claude Monet](https://en.wikipedia.org/wiki/Claude_Monet) as "Le Liseur":
 
 <p align="center">
   <picture>
