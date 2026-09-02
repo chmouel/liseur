@@ -77,7 +77,7 @@ servers and dictionary sources you configure. See the
 ## Related Projects
 
 - [liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur (may be lagging compared to the android app).
-- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats
+- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats. This will give you the best "kindle/just work" experience compared to the other sync servers.
 
 ## Development
 
