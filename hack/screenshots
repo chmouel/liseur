@@ -903,7 +903,26 @@ seed_reading() {
 
     dismiss_popup
     reader_chrome_up
-    tap_if_there "Bookmark this page" && note "bookmarked the page"
+    # The bookmark is the one mark taken from the chrome, and a tap there
+    # that lands on nothing looks exactly like a tap that worked: the
+    # button stays where it was and the run carries on. So the label has
+    # to turn over and the row has to appear. This reported a bookmark it
+    # had never taken, and the demo shelf shipped without one.
+    #
+    # A page already carrying one is left as it is: tapping would take
+    # the mark off, and the shelf would end up as bare as before.
+    if on_screen "Remove bookmark"; then
+        note "the page was already bookmarked"
+    else
+        before=$(annotation_count)
+        tap_on "Bookmark this page"
+        wait_for "Remove bookmark" 10 >/dev/null ||
+            die "the bookmark button did not take the mark"
+        after=$(annotation_count)
+        [[ ${after:-0} -gt ${before:-0} ]] ||
+            die "the bookmark button turned over without writing a mark"
+        note "bookmarked the page"
+    fi
     reader_chrome_down
 
     # Back to a page carrying a highlight, because that is the page the
