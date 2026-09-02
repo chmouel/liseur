@@ -1,9 +1,13 @@
 package com.chmouel.liseur.data.liseursync
 
 import android.util.Log
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
-import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.WorkIdentityDao
+import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteHttpFailure
+import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.domain.StatsRange
 import java.io.IOException
 import java.time.DayOfWeek
@@ -47,10 +51,50 @@ data class WorkInsights(
      * the reader twice for one evening.
      */
     val workId: String = "",
+    /**
+     * What the server calls the book, when it says.
+     *
+     * The only thing needed to list a work this device has no file for
+     * (ADR-0021). Empty from a server too old to send it, which is a
+     * work that cannot be shown rather than one shown nameless.
+     */
+    val title: String = "",
+    val author: String? = null,
+    /**
+     * Where the reader is in the book, by the newest position any device
+     * sent; null when no position has ever reached the server.
+     *
+     * Never windowed: a place in a book is true now, whatever span the
+     * figures beside it cover. Read for a book this device has no file
+     * for and nothing else (ADR-0021): for a book that is here the
+     * local position is fresher than anything a server can relay, but
+     * for one that is not, this is the only account of it there is.
+     */
+    val currentProgression: Double? = null,
 )
 
 /** One server-timezone calendar day, added up across every device. */
 data class InsightDay(val date: LocalDate, val activeMinutes: Double)
+
+/**
+ * Every book the server counted for one window, sorted by whether this
+ * device has a file for it.
+ *
+ * [byBookUrl] is what the dashboard can put a cover, a progression and a
+ * tap target against. [elsewhere] is the rest: works read on another
+ * device, or ones this device has never resolved. They used to be
+ * dropped at the mapping, which left the list under the headline smaller
+ * than the headline itself and gave no reason for the difference
+ * (ADR-0021).
+ */
+data class WorkTotals(
+    val byBookUrl: Map<String, WorkInsights>,
+    val elsewhere: List<WorkInsights>,
+) {
+    companion object {
+        val Empty = WorkTotals(emptyMap(), emptyList())
+    }
+}
 
 /**
  * Statistics from a liseur-sync server, when there are any.
@@ -63,7 +107,9 @@ data class InsightDay(val date: LocalDate, val activeMinutes: Double)
  * on a train should see their own figures rather than a complaint.
  *
  * The token needs the `read-insights` scope; one minted without it is
- * refused, which lands in the same silent null as being offline.
+ * refused, which lands in the same silent null as being offline — but
+ * the refusal is written down on the account, so the reader can be told
+ * where it can still be fixed (ADR-0021).
  */
 class LiseurSyncInsights(
     private val serverDao: RemoteServerDao,
@@ -89,15 +135,9 @@ class LiseurSyncInsights(
     suspend fun summary(from: LocalDate?, to: LocalDate): InsightsSummary? {
         val account = account() ?: return null
         val credentials = account.credentials ?: return null
-        val answer = try {
-            http.get(
-                LiseurSyncApi.insightsSummary(account.baseUrl, from, to),
-                credentials,
-            )
-        } catch (e: IOException) {
-            Log.i(TAG, "No statistics from the server this time", e)
-            return null
-        }
+        val answer = ask("No statistics from the server this time") {
+            fetch(account, credentials, LiseurSyncApi.insightsSummary(account.baseUrl, from, to))
+        } ?: return null
         if (!answer.covers(from, to)) return null
         return InsightsSummary(
             activeMinutes = answer.optDouble("total_active_minutes", 0.0),
@@ -120,12 +160,9 @@ class LiseurSyncInsights(
         val account = account() ?: return null
         val credentials = account.credentials ?: return null
         val alias = identityDao.alias(bookUrl, account.accountKey)?.takeIf { it.usable } ?: return null
-        val answer = try {
-            http.get(LiseurSyncApi.workInsights(account.baseUrl, alias.workId), credentials)
-        } catch (e: IOException) {
-            Log.i(TAG, "No statistics for this book", e)
-            return null
-        }
+        val answer = ask("No statistics for this book") {
+            fetch(account, credentials, LiseurSyncApi.workInsights(account.baseUrl, alias.workId))
+        } ?: return null
         return parseWork(answer)?.takeIf { it.sessions > 0 || it.etaSeconds != null }
     }
 
@@ -142,22 +179,26 @@ class LiseurSyncInsights(
     suspend fun calendar(from: LocalDate, to: LocalDate): List<InsightDay>? {
         val account = account() ?: return null
         val credentials = account.credentials ?: return null
-        val answers = try {
-            val bounded = http.get(
-                LiseurSyncApi.insightsCalendar(account.baseUrl, from, to),
+        val answers = mutableListOf<JSONObject>()
+        ask("No reading calendar from the server this time") {
+            val bounded = fetch(
+                account,
                 credentials,
+                LiseurSyncApi.insightsCalendar(account.baseUrl, from, to),
             )
             if (bounded.covers(from, to)) {
-                listOf(bounded)
+                answers += bounded
             } else {
-                (from.year..to.year).map { year ->
-                    http.get(LiseurSyncApi.insightsCalendar(account.baseUrl, year), credentials)
+                for (year in from.year..to.year) {
+                    answers += fetch(
+                        account,
+                        credentials,
+                        LiseurSyncApi.insightsCalendar(account.baseUrl, year),
+                    )
                 }
             }
-        } catch (e: IOException) {
-            Log.i(TAG, "No reading calendar from the server this time", e)
-            return null
-        }
+            bounded
+        } ?: return null
         return runCatching {
             answers.flatMap { answer ->
                 val days = answer.getJSONArray("days")
@@ -179,8 +220,8 @@ class LiseurSyncInsights(
     }
 
     /**
-     * Per-book aggregates for [range], keyed by this device's permanent
-     * book URL.
+     * Per-book aggregates for [range]: those this device has a book for,
+     * keyed by its permanent book URL, and those it has not.
      *
      * The same window the dashboard's headline uses, so the rows below it
      * add up to the figure above them — and the same check, so a server
@@ -192,48 +233,53 @@ class LiseurSyncInsights(
      * a file move); each usable alias receives the same aggregate, and
      * carries the work id so that a caller adding rows up can tell that
      * it is looking at one book twice. Doubtful aliases stay excluded
-     * until the reader confirms them, just like position sync.
+     * until the reader confirms them, just like position sync — and a
+     * work excluded that way is a work read elsewhere as far as this is
+     * concerned, which is the honest answer: its time is in the total
+     * either way, and this device cannot say which of its files it is.
+     *
+     * A work with no name is dropped rather than listed blank. The
+     * figures are already counted in the headline, so what a nameless
+     * row would add is a line the reader cannot identify.
      */
     suspend fun allBooks(
         range: StatsRange = StatsRange.Default,
         today: LocalDate,
         weekStart: DayOfWeek = WeekFields.ISO.firstDayOfWeek,
-    ): Map<String, WorkInsights>? {
+    ): WorkTotals? {
         val account = account() ?: return null
         val credentials = account.credentials ?: return null
         val aliases = identityDao.aliasesFor(account.accountKey).filter { it.usable }
-        if (aliases.isEmpty()) return emptyMap()
         val from = range.startDate(today, weekStart)
-        val answer = try {
-            http.get(
-                LiseurSyncApi.allWorkInsights(account.baseUrl, from, today),
-                credentials,
-            )
-        } catch (e: IOException) {
-            Log.i(TAG, "No per-book statistics from the server this time", e)
-            return null
-        }
+        val answer = ask("No per-book statistics from the server this time") {
+            fetch(account, credentials, LiseurSyncApi.allWorkInsights(account.baseUrl, from, today))
+        } ?: return null
         if (!answer.covers(from, today)) return null
         return runCatching {
             val byWork = aliases.groupBy { it.workId }
             val works = answer.getJSONArray("works")
-            buildMap {
-                for (index in 0 until works.length()) {
-                    val item = works.optJSONObject(index) ?: continue
-                    val workId = item.getString("work_id")
-                    val insight = parseWork(item)?.copy(workId = workId) ?: continue
-                    for (alias in byWork[workId].orEmpty()) {
-                        put(alias.bookUrl, insight)
-                    }
+            val known = mutableMapOf<String, WorkInsights>()
+            val elsewhere = mutableListOf<WorkInsights>()
+            for (index in 0 until works.length()) {
+                val item = works.optJSONObject(index) ?: continue
+                val workId = item.getString("work_id")
+                val insight = parseWork(item)?.copy(workId = workId) ?: continue
+                val here = byWork[workId].orEmpty()
+                if (here.isEmpty()) {
+                    if (insight.title.isNotEmpty()) elsewhere += insight
+                    continue
                 }
+                for (alias in here) known[alias.bookUrl] = insight
             }
+            WorkTotals(byBookUrl = known, elsewhere = elsewhere)
         }.getOrElse {
             Log.i(TAG, "The server returned malformed per-book statistics", it)
             null
         }
     }
 
-    private fun parseWork(answer: JSONObject): WorkInsights? = runCatching {        WorkInsights(
+    private fun parseWork(answer: JSONObject): WorkInsights? = runCatching {
+        WorkInsights(
             sessions = answer.optInt("sessions"),
             activeMinutes = answer.optDouble("total_active_minutes", 0.0)
                 .takeIf { it.isFinite() && it >= 0 } ?: 0.0,
@@ -245,8 +291,90 @@ class LiseurSyncInsights(
             lastReadAt = answer.optString("last_read_at")
                 .takeIf { it.isNotEmpty() }
                 ?.let { Instant.parse(it).toEpochMilli() },
+            title = answer.optString("title"),
+            author = answer.optString("author").takeIf { it.isNotEmpty() },
+            currentProgression = answer.optDouble("current_progression")
+                .takeIf { it.isFinite() && it > 0.0 }
+                ?.coerceAtMost(1.0),
         )
     }.getOrNull()
+
+    /**
+     * Runs one request and writes down what its answer proved about the
+     * token.
+     *
+     * `can_read_insights` is read off the token's scopes at connect and
+     * nowhere else, so an account paired before the column existed
+     * would carry its pessimistic default for good, and the account
+     * screen would go on saying statistics are refused to a reader
+     * whose statistics work. The answers settle it: a body is proof the
+     * token may ask, a 403 is proof it may not, and either is written
+     * down so the screen says what is true. Any other failure — offline,
+     * a server too old, a malformed body — says nothing about the token
+     * and changes nothing (ADR-0021).
+     *
+     * Conditional on the account, as every write from a background
+     * answer is: a reply to a question asked of an account the reader
+     * has since left must not describe the one they are on.
+     */
+    private suspend fun ask(
+        whenRefused: String,
+        request: suspend () -> JSONObject,
+    ): JSONObject? = try {
+        request()
+    } catch (e: RemoteHttpFailure) {
+        Log.i(TAG, whenRefused, e)
+        null
+    } catch (e: IOException) {
+        Log.i(TAG, whenRefused, e)
+        null
+    }
+
+    /**
+     * One HTTP call, with the capability column corrected from its own
+     * outcome alone.
+     *
+     * A multi-request caller such as [calendar] can have an early call
+     * prove the token capable and a later one fail outright; recording
+     * only once the whole caller returns would lose that proof the
+     * moment anything after it throws. Wrapping each call here instead
+     * means a body updates the column the instant it arrives, no matter
+     * what any later call in the same caller does.
+     */
+    private suspend fun fetch(
+        account: RemoteServer,
+        credentials: RemoteCredentials,
+        url: String,
+    ): JSONObject {
+        try {
+            val answer = http.get(url, credentials)
+            if (!account.canReadInsights) record(account, allowed = true)
+            return answer
+        } catch (e: RemoteHttpFailure) {
+            if (e.reason == SyncFailure.Forbidden && account.canReadInsights) {
+                record(account, allowed = false)
+            }
+            throw e
+        }
+    }
+
+    /**
+     * Writes [allowed] for the token that made the request, and only
+     * that token.
+     *
+     * [RemoteServer.accountKey] deliberately survives a token rotation
+     * (a re-pasted token for the same account keeps it), so it cannot
+     * guard this: the permission belongs to the token, not the account.
+     * Keying the update on the token cipher instead — and folding the
+     * check into the `WHERE` clause of that one statement — closes the
+     * gap a separate read-then-write would leave open, where a
+     * reconnect replaces the row between the request going out and its
+     * answer coming back, and the late answer for the old token would
+     * otherwise overwrite the new one's permission.
+     */
+    private suspend fun record(account: RemoteServer, allowed: Boolean) {
+        serverDao.setCanReadInsights(allowed, account.liseurTokenCipher)
+    }
 
     /**
      * The connected liseur-sync account, or null when the server is of

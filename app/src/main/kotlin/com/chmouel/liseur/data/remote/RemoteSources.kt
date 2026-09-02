@@ -112,6 +112,18 @@ data class ServerCapabilities(
      * server decides per folder too — so this says "worth offering".
      */
     val canDelete: Boolean = false,
+    /**
+     * Whether the account may ask liseur-sync for reading statistics
+     * (ADR-0021).
+     *
+     * Half an answer like [canUpload] and [canDelete]: it says the token
+     * may ask, not that the server has anything to say. Recorded because
+     * the alternative was silence — a token minted without
+     * `read-insights` is refused on every statistics call for the life
+     * of the account, and a reader who is never told cannot re-pair to
+     * fix it.
+     */
+    val canReadInsights: Boolean = false,
     /** Whether the account can also write the shared catalog layer. */
     val canAdmin: Boolean = false,
     /** Who the server says we are, for telling two logins apart. */

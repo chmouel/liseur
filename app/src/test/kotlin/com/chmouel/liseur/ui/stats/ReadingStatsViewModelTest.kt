@@ -12,6 +12,7 @@ import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.data.liseursync.WorkInsights
+import com.chmouel.liseur.data.liseursync.WorkTotals
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonPeriod
@@ -329,13 +330,16 @@ class ReadingStatsViewModelTest {
             local = local,
             knownBooks = known,
             serverRecent = listOf(InsightDay(monday, 23.5), InsightDay(tuesday, 137.0)),
-            serverBooks = mapOf(
-                "book" to WorkInsights(
-                    sessions = 98,
-                    activeMinutes = 160.5,
-                    etaSeconds = null,
-                    lastReadAt = 200,
+            serverBooks = WorkTotals(
+                byBookUrl = mapOf(
+                    "book" to WorkInsights(
+                        sessions = 98,
+                        activeMinutes = 160.5,
+                        etaSeconds = null,
+                        lastReadAt = 200,
+                    ),
                 ),
+                elsewhere = emptyList(),
             ),
         )
 
@@ -386,14 +390,17 @@ class ReadingStatsViewModelTest {
             local = local,
             knownBooks = known,
             serverRecent = listOf(InsightDay(monday, 90.0)),
-            serverBooks = mapOf(
-                "book" to WorkInsights(
-                    workId = "w-1",
-                    sessions = 5,
-                    activeMinutes = 90.0,
-                    etaSeconds = null,
-                    lastReadAt = 200,
+            serverBooks = WorkTotals(
+                byBookUrl = mapOf(
+                    "book" to WorkInsights(
+                        workId = "w-1",
+                        sessions = 5,
+                        activeMinutes = 90.0,
+                        etaSeconds = null,
+                        lastReadAt = 200,
+                    ),
                 ),
+                elsewhere = emptyList(),
             ),
         )
 
@@ -447,14 +454,17 @@ class ReadingStatsViewModelTest {
             local = local,
             knownBooks = known,
             serverRecent = null,
-            serverBooks = mapOf(
-                "book" to WorkInsights(
-                    workId = "w-1",
-                    sessions = 10,
-                    activeMinutes = 100.0,
-                    etaSeconds = null,
-                    lastReadAt = 200,
+            serverBooks = WorkTotals(
+                byBookUrl = mapOf(
+                    "book" to WorkInsights(
+                        workId = "w-1",
+                        sessions = 10,
+                        activeMinutes = 100.0,
+                        etaSeconds = null,
+                        lastReadAt = 200,
+                    ),
                 ),
+                elsewhere = emptyList(),
             ),
         )
 
@@ -462,6 +472,250 @@ class ReadingStatsViewModelTest {
         assertEquals(
             11,
             ReadingStatsViewModel.mergeHeadline(merged, local, server).sessions,
+        )
+    }
+
+    /**
+     * A book only the server knows about is a row, not a rounding
+     * difference (ADR-0021). Its minutes are in the headline whether it
+     * is listed or not, so dropping it is what made the list smaller
+     * than the total above it.
+     */
+    @Test
+    fun `a book only the server knows about is listed and counted`() {
+        val local = ReadingStats(
+            totalMs = 20 * 60_000L,
+            booksRead = 1,
+            booksFinished = 0,
+            books = listOf(
+                BookReadingStats(
+                    bookUrl = "book",
+                    title = "A book",
+                    author = "An author",
+                    totalMs = 20 * 60_000L,
+                    lastReadAt = 100,
+                    progression = 0.5,
+                    finished = false,
+                    sessions = 1,
+                ),
+            ),
+            recent = emptyList(),
+        )
+
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = local,
+            knownBooks = mapOf(
+                "book" to StatsBook("book", "A book", "An author", 0.5, finished = false),
+            ),
+            serverRecent = null,
+            serverBooks = WorkTotals(
+                byBookUrl = emptyMap(),
+                elsewhere = listOf(
+                    WorkInsights(
+                        workId = "w-2",
+                        sessions = 4,
+                        activeMinutes = 50.0,
+                        etaSeconds = null,
+                        lastReadAt = 900,
+                        title = "Dune",
+                        author = "Frank Herbert",
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(2, merged.books.size)
+        assertEquals(2, merged.booksRead)
+        assertEquals(70 * 60_000L, merged.totalMs)
+        val elsewhere = merged.books.first { it.bookUrl == null }
+        assertEquals("Dune", elsewhere.title)
+        assertEquals("Frank Herbert", elsewhere.author)
+        assertEquals(50 * 60_000L, elsewhere.totalMs)
+        assertEquals(4, elsewhere.sessions)
+        // Nothing to open, nothing to draw, and nowhere in the book to
+        // report: there is no file here.
+        assertEquals(false, elsewhere.isLocal)
+        assertNull(elsewhere.progression)
+        assertNull(elsewhere.coverPath)
+        assertEquals(false, elsewhere.finished)
+        assertEquals("work:w-2", elsewhere.key)
+    }
+
+    /**
+     * A book finished on the laptop is finished (ADR-0021). The server's
+     * place in it is the only one there is for a work with no local
+     * file, and the same threshold that position sync applies decides
+     * whether that place is the end — so `booksFinished` counts it, and
+     * a book merely begun elsewhere stays a book in progress.
+     */
+    @Test
+    fun `a book finished on another device counts as finished`() {
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = ReadingStats.Empty,
+            knownBooks = emptyMap(),
+            serverRecent = null,
+            serverBooks = WorkTotals(
+                byBookUrl = emptyMap(),
+                elsewhere = listOf(
+                    WorkInsights(
+                        workId = "w-done",
+                        sessions = 9,
+                        activeMinutes = 300.0,
+                        etaSeconds = null,
+                        lastReadAt = 900,
+                        title = "Dune",
+                        currentProgression = 0.99,
+                    ),
+                    WorkInsights(
+                        workId = "w-going",
+                        sessions = 1,
+                        activeMinutes = 10.0,
+                        etaSeconds = null,
+                        lastReadAt = 800,
+                        title = "Emma",
+                        currentProgression = 0.4,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(2, merged.booksRead)
+        assertEquals(1, merged.booksFinished)
+        val done = merged.books.first { it.workId == "w-done" }
+        assertTrue(done.finished)
+        assertEquals(0.99, done.progression!!, 0.0001)
+        val going = merged.books.first { it.workId == "w-going" }
+        assertEquals(false, going.finished)
+        assertEquals(0.4, going.progression!!, 0.0001)
+    }
+
+    /**
+     * A book opened straight from Android has sittings here and no
+     * library row. A server figure for its URL has a local row to merge
+     * into, and must go there rather than be listed a second time as
+     * read elsewhere — that would charge the reader twice for one book.
+     */
+    @Test
+    fun `a book with sittings but no library row is merged, not listed twice`() {
+        val local = ReadingStats(
+            totalMs = 20 * 60_000L,
+            booksRead = 1,
+            booksFinished = 0,
+            books = listOf(
+                BookReadingStats(
+                    bookUrl = "content://opened/book.epub",
+                    title = "book.epub",
+                    author = null,
+                    totalMs = 20 * 60_000L,
+                    lastReadAt = 100,
+                    progression = null,
+                    finished = false,
+                    sessions = 1,
+                ),
+            ),
+            recent = emptyList(),
+        )
+
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = local,
+            knownBooks = emptyMap(),
+            serverRecent = null,
+            serverBooks = WorkTotals(
+                byBookUrl = mapOf(
+                    "content://opened/book.epub" to WorkInsights(
+                        workId = "w-1",
+                        sessions = 3,
+                        activeMinutes = 60.0,
+                        etaSeconds = null,
+                        lastReadAt = 500,
+                        title = "Dune",
+                    ),
+                ),
+                elsewhere = emptyList(),
+            ),
+        )
+
+        assertEquals(1, merged.books.size)
+        val row = merged.books.single()
+        assertEquals("content://opened/book.epub", row.bookUrl)
+        assertEquals("book.epub", row.title)
+        assertEquals(60 * 60_000L, row.totalMs)
+        assertEquals(60 * 60_000L, merged.totalMs)
+    }
+
+    /**
+     * An alias outlives the book it named: removing a file from the
+     * library leaves the work resolved against a URL nothing answers
+     * to. Such a work is one this device has no book for, whatever the
+     * alias says, and it belongs on the list with the others rather
+     * than in the gap between a matched row and an unmatched one.
+     */
+    @Test
+    fun `a work aliased to a book no longer in the library is listed as elsewhere`() {
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = ReadingStats(
+                totalMs = 0,
+                booksRead = 0,
+                booksFinished = 0,
+                books = emptyList(),
+                recent = emptyList(),
+            ),
+            knownBooks = emptyMap(),
+            serverRecent = null,
+            serverBooks = WorkTotals(
+                byBookUrl = mapOf(
+                    "gone" to WorkInsights(
+                        workId = "w-3",
+                        sessions = 2,
+                        activeMinutes = 30.0,
+                        etaSeconds = null,
+                        lastReadAt = 400,
+                        title = "Dune",
+                        author = "Frank Herbert",
+                    ),
+                ),
+                elsewhere = emptyList(),
+            ),
+        )
+
+        assertEquals(1, merged.books.size)
+        val row = merged.books.single()
+        assertEquals("Dune", row.title)
+        assertEquals(30 * 60_000L, row.totalMs)
+        assertEquals(false, row.isLocal)
+        assertEquals(30 * 60_000L, merged.totalMs)
+    }
+
+    /**
+     * The screen has always been one device's or every device's and
+     * never said which, so the same blank meant "you are offline", "your
+     * token cannot ask" and "the server agreed" (ADR-0021). An answer to
+     * the question on screen is what makes it all of them; no answer at
+     * all is this device, whatever the reason.
+     */
+    @Test
+    fun `provenance follows whether an answer arrived, not whether a server exists`() {
+        assertEquals(
+            StatsProvenance.THIS_DEVICE,
+            ReadingStatsViewModel.provenanceOf(null, null, null),
+        )
+        assertEquals(
+            StatsProvenance.ALL_DEVICES,
+            ReadingStatsViewModel.provenanceOf(
+                InsightsSummary(activeMinutes = 10.0, sessions = 1, streakDays = 1),
+                null,
+                null,
+            ),
+        )
+        // The headline can have nothing to report for a span the list and
+        // the chart still answered for. That is still every device.
+        assertEquals(
+            StatsProvenance.ALL_DEVICES,
+            ReadingStatsViewModel.provenanceOf(null, emptyList(), null),
+        )
+        assertEquals(
+            StatsProvenance.ALL_DEVICES,
+            ReadingStatsViewModel.provenanceOf(null, null, WorkTotals.Empty),
         )
     }
 
@@ -489,7 +743,7 @@ class ReadingStatsViewModelTest {
                 InsightDay(monday.minusDays(1), 30.0),
                 InsightDay(monday, 45.0),
             ),
-            serverBooks = emptyMap(),
+            serverBooks = WorkTotals.Empty,
         )
 
         assertEquals(2, merged.recent.size)
@@ -532,14 +786,17 @@ class ReadingStatsViewModelTest {
             knownBooks = known,
             // The server has heard about Monday and nothing since.
             serverRecent = listOf(InsightDay(monday, 30.0)),
-            serverBooks = mapOf(
-                "book" to WorkInsights(
-                    sessions = 2,
-                    activeMinutes = 30.0,
-                    etaSeconds = null,
-                    lastReadAt = 100,
-                    workId = "w-1",
+            serverBooks = WorkTotals(
+                byBookUrl = mapOf(
+                    "book" to WorkInsights(
+                        sessions = 2,
+                        activeMinutes = 30.0,
+                        etaSeconds = null,
+                        lastReadAt = 100,
+                        workId = "w-1",
+                    ),
                 ),
+                elsewhere = emptyList(),
             ),
         )
 
@@ -592,7 +849,7 @@ class ReadingStatsViewModelTest {
             local = local,
             knownBooks = known,
             serverRecent = null,
-            serverBooks = mapOf("old" to one, "new" to one),
+            serverBooks = WorkTotals(mapOf("old" to one, "new" to one), emptyList()),
             // The old URL was begun before the window the rows describe;
             // only the all-time map remembers it.
             firstReadAtByUrl = mapOf("old" to 5L, "new" to 300L),

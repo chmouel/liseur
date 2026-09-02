@@ -31,6 +31,8 @@ import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Timer
@@ -181,14 +183,20 @@ fun ReadingStatsScreen(
                     BentoHero(stats, ready.headline, ready.range)
                 }
                 item {
+                    ProvenanceLine(ready.provenance)
+                }
+                item {
                     ActivityCard(stats = stats, range = ready.range)
                 }
                 if (stats.books.isNotEmpty()) {
                     item {
                         BooksSectionHeader(count = stats.books.size)
                     }
-                    items(stats.books, key = { it.bookUrl }) { book ->
-                        BookStatCard(book = book, onClick = { onOpenBook(book) })
+                    items(stats.books, key = { it.key }) { book ->
+                        BookStatCard(
+                            book = book,
+                            onClick = if (book.isLocal) ({ onOpenBook(book) }) else null,
+                        )
                     }
                 }
             }
@@ -355,6 +363,44 @@ private fun BentoHero(stats: ReadingStats, headline: StatsHeadline, range: Stats
 
 /** One figure and what it counts. */
 private data class Tally(val icon: ImageVector, val value: String, val label: String)
+
+/**
+ * Where the figures above came from: this device, or all of them.
+ *
+ * A statement of provenance and nothing more (ADR-0021). Not a warning,
+ * not an error, and nothing to dismiss: a reader offline on a train is
+ * looking at their own reading, which is not a fault, and the screen
+ * saying so is the difference between a number they can trust and one
+ * they cannot place.
+ */
+@Composable
+private fun ProvenanceLine(provenance: StatsProvenance) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = when (provenance) {
+                StatsProvenance.THIS_DEVICE -> Icons.Outlined.PhoneAndroid
+                StatsProvenance.ALL_DEVICES -> Icons.Outlined.Devices
+            },
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = stringResource(
+                when (provenance) {
+                    StatsProvenance.THIS_DEVICE -> R.string.reading_stats_from_this_device
+                    StatsProvenance.ALL_DEVICES -> R.string.reading_stats_from_all_devices
+                },
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 /** How many tallies share a row. */
 private const val TILES_PER_ROW = 2
@@ -653,15 +699,21 @@ private fun BooksSectionHeader(count: Int) {
 
 /**
  * Editorial card for an individual book's reading breakdown.
+ *
+ * [onClick] is null for a book only another device has (ADR-0021).
+ * There is no file here to open, so the card is not made to look like
+ * something that would open one: no ripple, no cover, and a line saying
+ * where it was read. Its place in the book is the server's and is drawn
+ * like any other, so a book finished elsewhere reads as finished.
  */
 @Composable
-private fun BookStatCard(book: BookReadingStats, onClick: () -> Unit) {
+private fun BookStatCard(book: BookReadingStats, onClick: (() -> Unit)?) {
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .let { if (onClick == null) it else it.clickable(onClick = onClick) },
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -699,6 +751,18 @@ private fun BookStatCard(book: BookReadingStats, onClick: () -> Unit) {
                     )
                 }
                 Spacer(Modifier.height(6.dp))
+                if (!book.isLocal) {
+                    // Why this row has no cover and nothing to open. Said
+                    // plainly rather than left to be inferred from what
+                    // is missing; the place in the book beneath it is the
+                    // server's, and is shown the same way as any other.
+                    Text(
+                        text = stringResource(R.string.reading_stats_book_elsewhere),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
                 if (book.finished) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

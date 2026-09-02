@@ -165,7 +165,7 @@ class LiseurSyncInsightsTest {
             ),
         )
 
-        val book = insights().allBooks(today = TODAY)!![BOOK]!!
+        val book = insights().allBooks(today = TODAY)!!.byBookUrl[BOOK]!!
 
         assertEquals(8, book.sessions)
         assertEquals(106.25, book.activeMinutes, 0.001)
@@ -188,7 +188,10 @@ class LiseurSyncInsightsTest {
         alias()
         server.enqueue(ok("""{"range_days":0,"works":[]}"""))
 
-        assertEquals(emptyMap<String, WorkInsights>(), insights().allBooks(StatsRange.ALL_TIME, TODAY))
+        assertEquals(
+            WorkTotals.Empty,
+            insights().allBooks(StatsRange.ALL_TIME, TODAY),
+        )
 
         assertEquals("/v1/insights/works?range=all", server.takeRequest().target)
     }
@@ -253,6 +256,83 @@ class LiseurSyncInsightsTest {
                 from = LocalDate.of(2026, 7, 1),
                 to = LocalDate.of(2026, 7, 11),
             ),
+        )
+    }
+
+    /**
+     * A work the server counted and this device has no book for is
+     * carried rather than dropped (ADR-0021). Dropping it at the mapping
+     * is what left a reader who did a year on a laptop seeing the year
+     * in the total and not one book of it in the list.
+     */
+    @Test
+    fun `a work with no local book is kept and named`() = runTest {
+        connect()
+        alias()
+        server.enqueue(
+            ok(
+                """{"from":"2026-08-10","to":"2026-08-11","works":[""" +
+                    """{"work_id":"w-1","sessions":2,"total_active_minutes":10},""" +
+                    """{"work_id":"w-2","sessions":5,"total_active_minutes":50,""" +
+                    """"title":"Dune","author":"Frank Herbert"}]}""",
+            ),
+        )
+
+        val totals = insights().allBooks(today = TODAY)!!
+
+        assertEquals(setOf(BOOK), totals.byBookUrl.keys)
+        assertEquals(1, totals.elsewhere.size)
+        val other = totals.elsewhere.single()
+        assertEquals("w-2", other.workId)
+        assertEquals("Dune", other.title)
+        assertEquals("Frank Herbert", other.author)
+        assertEquals(5, other.sessions)
+    }
+
+    /**
+     * A nameless work is not listed. Its minutes are in the headline
+     * either way, and a row the reader cannot identify buys nothing —
+     * which is all an older server, or one whose work record has gone,
+     * has to offer.
+     */
+    @Test
+    fun `a work the server will not name is not listed`() = runTest {
+        connect()
+        alias()
+        server.enqueue(
+            ok(
+                """{"from":"2026-08-10","to":"2026-08-11","works":[""" +
+                    """{"work_id":"w-9","sessions":5,"total_active_minutes":50}]}""",
+            ),
+        )
+
+        assertEquals(emptyList<WorkInsights>(), insights().allBooks(today = TODAY)!!.elsewhere)
+    }
+
+    /**
+     * A device with nothing resolved still asks. Every work is then one
+     * it has no book for, which is exactly the reader this is for: the
+     * app newly installed beside a laptop that has been reading for a
+     * year.
+     */
+    @Test
+    fun `a device with no aliases still asks for the works`() = runTest {
+        connect()
+        server.enqueue(
+            ok(
+                """{"from":"2026-08-10","to":"2026-08-11","works":[""" +
+                    """{"work_id":"w-2","sessions":5,"total_active_minutes":50,""" +
+                    """"title":"Dune"}]}""",
+            ),
+        )
+
+        val totals = insights().allBooks(today = TODAY)!!
+
+        assertEquals(emptyMap<String, WorkInsights>(), totals.byBookUrl)
+        assertEquals("Dune", totals.elsewhere.single().title)
+        assertEquals(
+            "/v1/insights/works?from=2026-08-10&to=2026-08-11",
+            server.takeRequest().target,
         )
     }
 
@@ -350,6 +430,83 @@ class LiseurSyncInsightsTest {
         )
 
         assertNull(insights().summary(StatsRange.THIS_WEEK, TODAY))
+    }
+
+    /**
+     * The scope is read off the token at connect and nowhere else, so an
+     * account paired before it was recorded would carry its pessimistic
+     * default for good — and the account screen would go on telling a
+     * reader whose statistics work that they are refused (ADR-0021). An
+     * answer with a body is proof the token may ask; write it down.
+     */
+    @Test
+    fun `a body from the server proves the token may read statistics`() = runTest {
+        connect()
+        assertEquals(false, db.remoteServerDao().get()!!.canReadInsights)
+        server.enqueue(
+            ok("""{"from":"2026-08-10","to":"2026-08-11","total_active_minutes":30,"sessions":1}"""),
+        )
+
+        insights().summary(today = TODAY)
+
+        assertEquals(true, db.remoteServerDao().get()!!.canReadInsights)
+    }
+
+    /** A 403 is the server saying the token may not ask; write that down too. */
+    @Test
+    fun `a refusal proves the token may not read statistics`() = runTest {
+        connect()
+        db.remoteServerDao().setCanReadInsights(true, db.remoteServerDao().get()!!.liseurTokenCipher)
+        server.enqueue(MockResponse(code = 403, body = """{"error":"insufficient scope"}"""))
+
+        assertNull(insights().summary(today = TODAY))
+
+        assertEquals(false, db.remoteServerDao().get()!!.canReadInsights)
+    }
+
+    /**
+     * Offline, a server too old, a malformed body: none of these says
+     * anything about the token, so none of them may change the record.
+     */
+    @Test
+    fun `a failure that is not a refusal leaves the record alone`() = runTest {
+        connect()
+        db.remoteServerDao().setCanReadInsights(true, db.remoteServerDao().get()!!.liseurTokenCipher)
+        server.enqueue(MockResponse(code = 500, body = ""))
+        assertNull(insights().summary(today = TODAY))
+        assertEquals(true, db.remoteServerDao().get()!!.canReadInsights)
+
+        // An answer about the wrong span is a body all the same: the
+        // token was allowed to ask, the server just did not understand.
+        db.remoteServerDao().setCanReadInsights(false, db.remoteServerDao().get()!!.liseurTokenCipher)
+        server.enqueue(ok("""{"total_active_minutes":30,"sessions":1}"""))
+        assertNull(insights().summary(today = TODAY))
+        assertEquals(true, db.remoteServerDao().get()!!.canReadInsights)
+    }
+
+    /**
+     * The server's place in a book is carried for a work this device has
+     * no file for, since nobody else has one (ADR-0021). It is the one
+     * figure that lets a book finished on the laptop count as finished
+     * here. Nought is no place at all.
+     */
+    @Test
+    fun `a work read elsewhere carries the server's place in it`() = runTest {
+        connect()
+        server.enqueue(
+            ok(
+                """{"from":"2026-08-10","to":"2026-08-11","works":[""" +
+                    """{"work_id":"w-9","title":"Dune","sessions":3,"total_active_minutes":50,""" +
+                    """"current_progression":0.985},""" +
+                    """{"work_id":"w-8","title":"Emma","sessions":1,"total_active_minutes":5,""" +
+                    """"current_progression":0}]}""",
+            ),
+        )
+
+        val elsewhere = insights().allBooks(today = TODAY)!!.elsewhere.associateBy { it.workId }
+
+        assertEquals(0.985, elsewhere.getValue("w-9").currentProgression!!, 0.0001)
+        assertNull(elsewhere.getValue("w-8").currentProgression)
     }
 
     private fun insights() = LiseurSyncInsights(

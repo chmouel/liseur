@@ -13,7 +13,17 @@ import kotlin.math.roundToLong
 
 /** What one book's reading adds up to. */
 data class BookReadingStats(
-    val bookUrl: String,
+    /**
+     * The book on this device, or null for one only a server knows.
+     *
+     * A work read on another phone, or one this device has never
+     * resolved, is still the reader's reading and is still in the total
+     * above the list (ADR-0021). It has no file here, so it has no
+     * cover and nothing to open — but it can still carry [progression]
+     * and [finished], read off the server's own `current_progression`
+     * for that work, and nothing that reads a row must assume otherwise.
+     */
+    val bookUrl: String?,
     val title: String,
     val author: String?,
     val totalMs: Long,
@@ -35,7 +45,15 @@ data class BookReadingStats(
      * Null only for a book this device never recorded a sitting for.
      */
     val firstReadAt: Long? = null,
-    /** Where the reader is in it, if known. */
+    /**
+     * Where the reader is in it, if known.
+     *
+     * For a local book, this is what the reader's own device knows. For
+     * a [bookUrl]-less row it comes from the server instead — its
+     * `current_progression` for that work — since this device has no
+     * file to read a locator off; null there means the server itself had
+     * nothing recent enough to say.
+     */
     val progression: Double?,
     val finished: Boolean,
     /** How many separate sittings it took, in the window being counted. */
@@ -44,7 +62,21 @@ data class BookReadingStats(
     val pendingSessions: Int = 0,
     val coverPath: String? = null,
     val coverUrl: String? = null,
-)
+    /**
+     * The server's name for the work, when this row came from one.
+     *
+     * Only ever set on a row with no [bookUrl], where it is the row's
+     * whole identity: a list needs a stable key, and a book this device
+     * does not have has no URL to be keyed by.
+     */
+    val workId: String? = null,
+) {
+    /** A stable identity for a list, whichever kind of row this is. */
+    val key: String get() = bookUrl ?: "work:${workId.orEmpty()}"
+
+    /** Whether the book is on this device, and so can be opened. */
+    val isLocal: Boolean get() = bookUrl != null
+}
 
 /** How much was read on one day. */
 data class ReadingDay(

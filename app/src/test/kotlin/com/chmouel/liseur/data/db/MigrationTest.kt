@@ -940,10 +940,47 @@ class MigrationTest {
             }
     }
 
+    /**
+     * A phone paired before the scope was recorded arrives pessimistic
+     * (ADR-0021). It has to: a token minted without `read-insights`
+     * cannot be widened from here, and assuming it holds the scope would
+     * put the statistics screen back where it was — asking, being
+     * refused, and saying nothing about it.
+     */
+    @Test
+    fun `an upgraded phone is not assumed to hold the statistics scope`() {
+        helper.createDatabase(TEST_DB, 44).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO remote_server (
+                    id, kind, base_url, catalog_url, username, password_cipher,
+                    api_key_cipher, account_id, user_id, kobo_token, can_download,
+                    can_manage_library, can_upload, can_delete, can_admin, added_at,
+                    catalog_synced_at, position_synced_at, sync_token,
+                    liseur_token_cipher, sync_cursor_seq, annotation_cursor_seq
+                ) VALUES (
+                    1, 'LISEUR_SYNC', 'https://sync.example', 'https://sync.example',
+                    'me', NULL, NULL, 'dev', NULL, NULL, 1, 0, 0, 0, 0, 1,
+                    NULL, NULL, NULL, NULL, 0, 0
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT can_read_insights FROM remote_server WHERE id = 1")
+                    .use { cursor ->
+                        assertTrue(cursor.moveToFirst())
+                        assertEquals(0, cursor.getInt(0))
+                    }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 44
+        const val LATEST = 45
     }
 }
