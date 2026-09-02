@@ -33,6 +33,7 @@ import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.FineTypographyActions
+import com.chmouel.liseur.ui.reading.FixedLayoutNotice
 import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
 import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
@@ -59,10 +60,18 @@ import com.chmouel.liseur.ui.windowWidth
  *
  * [scrolling] is whether the text runs rather than turns, which is not
  * only the reader's own choice: vertical text is laid out that way
- * whatever the setting says. Three rows turn on it, and they are the
- * same question asked once — a page that scrolls has no columns to
- * count and no turn to animate, and is the only kind that can be
- * scrolled along on its own.
+ * whatever the setting says, and a fixed-layout book is paginated
+ * whatever it says. Three rows turn on it, and they are the same
+ * question asked once — a page that scrolls has no columns to count and
+ * no turn to animate, and is the only kind that can be scrolled along on
+ * its own.
+ *
+ * [readingCss] is what this book can honour. A fixed-layout book greys
+ * the line spacing, the margins and the columns along with the fine
+ * typography rows, under the one line at the top. The footer, the
+ * page-turn animation and "just this book" are Liseur's own and know
+ * nothing about layout, so they stay live. See
+ * `docs/adr/0020-fixed-layout-reading-settings.md`.
  *
  * See `docs/adr/0001-advanced-reading-menu.md`.
  */
@@ -96,6 +105,8 @@ fun AdvancedSheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            val reshapeable = readingCss.honoursAnything
+            if (!reshapeable) FixedLayoutNotice()
             ReadingLayoutControls(
                 lineHeight = prefs.lineHeight,
                 pageMargins = prefs.pageMargins,
@@ -104,6 +115,7 @@ fun AdvancedSheet(
                 // has nothing to divide and the control would take a tap
                 // and change nothing.
                 showColumns = !scrolling,
+                enabled = reshapeable,
                 onLineHeightChanged = onLineHeightChanged,
                 onPageMarginsChanged = onPageMarginsChanged,
                 onColumnModeChanged = onColumnModeChanged,

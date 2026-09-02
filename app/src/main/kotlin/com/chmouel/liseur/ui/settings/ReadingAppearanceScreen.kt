@@ -130,11 +130,18 @@ fun ReadingAppearanceScreen(
                     resolved = resolved,
                     onSelected = onTheme,
                 )
-                ReadingFontSizeSlider(value = prefs.fontSize, onChanged = onFontSize)
+                ReadingFontSizeSlider(
+                    value = prefs.fontSize,
+                    // No book here, so nothing is refused: the reader is
+                    // choosing a default for every book they will open.
+                    enabled = true,
+                    onChanged = onFontSize,
+                )
                 ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightness)
                 ReadingFontDropdown(
                     selected = prefs.font,
                     imported = fontLibrary.fonts,
+                    enabled = true,
                     onSelected = onFont,
                     onImport = fontLibrary.pick,
                     onRemove = fontLibrary.remove,
@@ -148,6 +155,7 @@ fun ReadingAppearanceScreen(
                     // check, so the preference is always offered; the
                     // reader surface decides whether to honor it.
                     showColumns = true,
+                    enabled = true,
                     onLineHeightChanged = onLineHeight,
                     onPageMarginsChanged = onPageMargins,
                     onColumnModeChanged = onColumnMode,

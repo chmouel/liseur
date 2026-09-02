@@ -519,7 +519,7 @@
     <string name="reader_spacing_value">+%1$s</string>
     <string name="reader_spacing_customize">Set a value</string>
     <string name="reader_spacing_reset">Back to default</string>
-    <string name="reader_typography_fixed_layout">This book has a fixed layout, so its text cannot be reshaped.</string>
+    <string name="reader_typography_fixed_layout">This book has a fixed layout: its pages are set by the publisher, so these settings do not change them.</string>
     <string name="reader_typography_not_in_cjk">Not applied in Chinese, Japanese, Korean or vertical books.</string>
     <string name="reader_typography_latin_not_in_rtl">Hyphenation and letter and word spacing are not applied in right-to-left books.</string>
     <string name="reader_typography_latin_not_in_cjk">Hyphenation and letter and word spacing are not applied in Chinese, Japanese, Korean or vertical books.</string>
