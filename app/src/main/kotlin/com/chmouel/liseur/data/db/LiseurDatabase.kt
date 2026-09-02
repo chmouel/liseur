@@ -27,7 +27,7 @@ import androidx.sqlite.execSQL
         KosyncPeer::class,
         UploadRefusal::class,
     ],
-    version = 44,
+    version = 45,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1126,6 +1126,23 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Records whether the connected token may ask for reading
+         * statistics (ADR-0021). Off for every existing row, and for the
+         * same reason as [MIGRATION_35_36]: a token minted before the
+         * scope existed does not carry it, and the app cannot widen one
+         * without an account password it never keeps. The next
+         * introspection corrects a token that does hold it.
+         */
+        val MIGRATION_44_45 = object : Migration(44, 45) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `remote_server` ADD COLUMN `can_read_insights` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
         val MIGRATION_39_40 = object : Migration(39, 40) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1243,6 +1260,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_41_42,
             MIGRATION_42_43,
             MIGRATION_43_44,
+            MIGRATION_44_45,
         )
     }
 }

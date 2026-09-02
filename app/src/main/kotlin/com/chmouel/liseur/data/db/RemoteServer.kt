@@ -66,6 +66,17 @@ data class RemoteServer(
      * this column existed.
      */
     @ColumnInfo(name = "can_delete") val canDelete: Boolean = false,
+    /**
+     * Whether this connection's token may ask for reading statistics
+     * (ADR-0021). liseur-sync only, and false for every account paired
+     * before the column existed: a token minted without the scope
+     * cannot be widened from here, so the pessimistic value is the
+     * honest one until the account is introspected again — or until the
+     * first insights request answers with a body, which is proof enough
+     * on its own and corrects the value immediately rather than waiting
+     * for the next introspection.
+     */
+    @ColumnInfo(name = "can_read_insights") val canReadInsights: Boolean = false,
     @ColumnInfo(name = "can_admin") val canAdmin: Boolean = false,
     @ColumnInfo(name = "added_at") val addedAt: Long,
     @ColumnInfo(name = "catalog_synced_at") val catalogSyncedAt: Long?,
@@ -251,6 +262,33 @@ interface RemoteServerDao {
 
     @Query("UPDATE remote_server SET can_upload = :allowed WHERE id = :id")
     suspend fun setCanUpload(allowed: Boolean, id: Long = RemoteServer.SINGLE_ID)
+
+    /**
+     * Records what the server actually said about statistics — but only
+     * if [tokenCipher] is still the token the row holds.
+     *
+     * The column is written at connect from the token's scopes and
+     * corrected here from the answers: an account paired before the
+     * column existed starts pessimistic, and the first summary that
+     * arrives is proof enough that the token may ask (ADR-0021). The
+     * permission belongs to the token, not the account — [RemoteServer.accountKey]
+     * deliberately survives a token rotation, so it cannot be what
+     * guards this write. Folding the check into the `WHERE` clause makes
+     * the read-then-write one atomic statement: a reconnect that swaps
+     * in a new token between a request going out and its answer coming
+     * back leaves this a no-op, rather than a late answer for the old
+     * token overwriting the new one's permission. The row count returned
+     * says whether it landed.
+     */
+    @Query(
+        "UPDATE remote_server SET can_read_insights = :allowed " +
+            "WHERE id = :id AND liseur_token_cipher = :tokenCipher",
+    )
+    suspend fun setCanReadInsights(
+        allowed: Boolean,
+        tokenCipher: String?,
+        id: Long = RemoteServer.SINGLE_ID,
+    ): Int
 
     /**
      * Moves the liseur-sync cursor, touching nothing else.

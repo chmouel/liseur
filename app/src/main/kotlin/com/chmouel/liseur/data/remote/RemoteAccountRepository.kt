@@ -571,6 +571,7 @@ class RemoteAccountRepository(
                 canManageLibrary = capabilities.canManageLibrary,
                 canUpload = capabilities.canUpload,
                 canDelete = capabilities.canDelete,
+                canReadInsights = capabilities.canReadInsights,
                 canAdmin = capabilities.canAdmin,
                 addedAt = existing?.addedAt ?: System.currentTimeMillis(),
                 catalogSyncedAt = existing?.catalogSyncedAt,

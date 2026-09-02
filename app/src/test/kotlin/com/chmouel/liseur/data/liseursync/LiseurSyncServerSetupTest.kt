@@ -74,6 +74,7 @@ class LiseurSyncServerSetupTest {
         assertTrue(capabilities.canManageLibrary)
         assertTrue(capabilities.canUpload)
         assertTrue(capabilities.canDelete)
+        assertTrue(capabilities.canReadInsights)
         assertEquals("ada", capabilities.displayName)
 
         // The password went to the login route and nowhere else, and
@@ -116,6 +117,10 @@ class LiseurSyncServerSetupTest {
         // not get the permission by being old. The action stays hidden
         // rather than being offered and refused.
         assertFalse(capabilities.canUpload)
+        // Nor does it get to read statistics by being old (ADR-0021).
+        // Recorded as a fact rather than found out one 403 at a time on
+        // a screen that says nothing about it.
+        assertFalse(capabilities.canReadInsights)
         val asked = server.takeRequest()
         assertTrue(asked.target!!.endsWith("/v1/token"))
         assertEquals("Bearer pasted-secret", asked.headers["Authorization"])
@@ -148,6 +153,7 @@ class LiseurSyncServerSetupTest {
         assertTrue(capabilities.canAdmin)
         assertTrue(capabilities.canManageLibrary)
         assertTrue(capabilities.canDownload)
+        assertTrue(capabilities.canReadInsights)
     }
 
     @Test

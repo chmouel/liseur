@@ -87,10 +87,17 @@ disagree, and `booksRead` and `booksFinished` follow from the merged set
 rather than from the local rows. A book with no local file cannot be
 opened from the dashboard and must not pretend otherwise.
 
-Leave `total_pages` and `current_progression` unread. Both are in every
-answer and neither has a home: pages are a KOReader notion that a
-reflowable EPUB does not have, and this device knows its own progression
-better than the server does. They are not an oversight.
+Leave `total_pages` unread, and `current_progression` unread for any
+book this device has. Pages are a KOReader notion that a reflowable EPUB
+does not have, and for a book that is here the local position is fresher
+than anything a server can relay. Neither is an oversight. The one row
+that does read `current_progression` is the one with no local book,
+because there the server's is the only account of the reader's place
+there is, and without it a book finished on the laptop would sit in the
+list forever unread and never reach `booksFinished`. Whether that place
+is the end is decided by the same threshold position sync applies when
+the same reading arrives as a peer's position, so the two cannot
+disagree about one book.
 
 Two things are deliberately not decided here. The timezone difference
 between the server's day buckets, which follow the account's configured
@@ -104,7 +111,13 @@ change. And nothing here alters how sessions reach the server.
 `can_upload` and `can_delete`. Like those two it is half an answer: it
 says the token may ask, not that the server has anything to say. An
 account paired before the column existed defaults to the pessimistic
-value and is corrected the next time it is introspected.
+value. Introspection happens only at connect, so waiting for the next
+one would leave every upgraded phone telling its reader that statistics
+are refused while the statistics work. The answers correct it instead:
+`LiseurSyncInsights` writes the column from what the server actually
+said, true on any body and false on a 403, guarded on the account being
+the one the question was asked of. Offline, a server too old and a
+malformed body prove nothing about the token and change nothing.
 
 `LiseurSyncInsights` keeps returning null on every failure. Provenance
 is a separate question from the figures and is answered separately:
@@ -117,7 +130,9 @@ mapping them onto local URLs, which is what stops one file counted under
 two names being charged twice. A work with no alias falls out at that
 mapping, and it is there that it has to be kept instead: the row it
 becomes has the server's title and no local book behind it, so it
-carries no cover, no progression and no tap target.
+carries no cover and no tap target — but it does carry the same
+`current_progression`-derived progression and finished state described
+above, since that is the one figure this device has for it.
 
 ## Consequences
 
@@ -140,8 +155,13 @@ reading client.
 Nothing here makes statistics load-bearing. Every one of these is still
 a screen that has to work with the network off.
 
-*Where (when built):* `data/liseursync/LiseurSyncServerSetup.kt`,
+*Where:* `data/liseursync/LiseurSyncServerSetup.kt`,
 `data/liseursync/LiseurSyncInsights.kt`, `data/remote/RemoteSources.kt`,
-`data/db/RemoteServer.kt`, `data/db/LiseurDatabase.kt`,
+`data/remote/RemoteAccountRepository.kt`, `data/db/RemoteServer.kt`,
+`data/db/LiseurDatabase.kt`, `domain/ReadingStats.kt`,
 `ui/stats/ReadingStatsViewModel.kt`, `ui/stats/ReadingStatsScreen.kt`,
-`res/values/strings.xml`.
+`ui/settings/ServerAccountScreen.kt`, `res/values/strings.xml`.
+
+The server names each work in `GET /v1/insights/works`, which is what
+lets a book with no local file be listed at all: liseur-sync's
+`internal/api/insights.go`, `docs/openapi.yaml` and `docs/integrating.md`.

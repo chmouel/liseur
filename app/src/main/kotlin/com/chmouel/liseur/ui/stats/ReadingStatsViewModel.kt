@@ -14,12 +14,14 @@ import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.WorkInsights
+import com.chmouel.liseur.data.liseursync.WorkTotals
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonSpans
 import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
+import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.SessionSpan
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
@@ -28,6 +30,7 @@ import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.domain.readingStats
+import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.readingTotals
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -53,7 +56,25 @@ sealed interface ReadingStatsUiState {
         val stats: ReadingStats,
         val headline: StatsHeadline,
         val range: StatsRange,
+        val provenance: StatsProvenance = StatsProvenance.THIS_DEVICE,
     ) : ReadingStatsUiState
+}
+
+/**
+ * Which devices the figures on screen counted (ADR-0021).
+ *
+ * A statement, never a warning. The screen has always been one or the
+ * other and never said which, so the same blank meant "you are offline",
+ * "your token cannot ask" and "the server agreed with this device" — and
+ * a reader had no way to tell them apart. It must not become an error or
+ * anything to dismiss: reading on one phone is not a fault.
+ */
+enum class StatsProvenance {
+    /** No server answered for this window, so these are local sums. */
+    THIS_DEVICE,
+
+    /** liseur-sync answered for the span on screen. */
+    ALL_DEVICES,
 }
 
 /**
@@ -186,7 +207,7 @@ class ReadingStatsViewModel(
 
     private val _acrossDevices = MutableStateFlow<Answered<InsightsSummary?>?>(null)
     private val _recentAcrossDevices = MutableStateFlow<Answered<List<InsightDay>?>?>(null)
-    private val _booksAcrossDevices = MutableStateFlow<Answered<Map<String, WorkInsights>?>?>(null)
+    private val _booksAcrossDevices = MutableStateFlow<Answered<WorkTotals?>?>(null)
 
     /**
      * The same reading, counted on every device rather than this one.
@@ -326,7 +347,7 @@ class ReadingStatsViewModel(
      */
     fun serverEstimateFor(bookUrl: String): StateFlow<WorkInsights?> =
         combine(booksAcrossDevices, _window) { answered, window ->
-            answered.forWindow(window)?.get(bookUrl)
+            answered.forWindow(window)?.byBookUrl?.get(bookUrl)
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -440,11 +461,14 @@ class ReadingStatsViewModel(
     ) { local, server, recent, serverBooks ->
 
         val window = local.window
+        val summary = server.forWindow(window)
+        val recentDays = recent.forWindow(window)
+        val bookTotals = serverBooks.forWindow(window)
         val merged = mergeDashboard(
             local.stats,
             local.books,
-            recent.forWindow(window),
-            serverBooks.forWindow(window),
+            recentDays,
+            bookTotals,
             local.firstReadAtByUrl,
         )
         ReadingStatsUiState.Ready(
@@ -452,12 +476,13 @@ class ReadingStatsViewModel(
             headline = mergeHeadline(
                 merged = merged,
                 local = local.stats,
-                server = server.forWindow(window),
+                server = summary,
                 spans = local.spans,
                 currentMs = local.currentMs,
                 previousMs = local.previousMs,
             ),
             range = window.range,
+            provenance = provenanceOf(summary, recentDays, bookTotals),
         )
     }.stateIn(
         viewModelScope,
@@ -507,6 +532,33 @@ class ReadingStatsViewModel(
          * plausible limit for good.
          */
         private const val CALENDAR_HORIZON_DAYS = 3650L
+
+        /**
+         * Which devices the figures on screen counted.
+         *
+         * Any answer to the question the screen is asking means every
+         * device: the summary carries the headline, the per-book totals
+         * carry the list and the calendar carries the chart, and each is
+         * the same reading counted everywhere. All three refused is this
+         * device alone, and it makes no difference which of offline, a
+         * token without the scope or a server that has nothing to say
+         * produced the refusal — the figures are the same either way,
+         * and it is the reader's word for them that was missing.
+         *
+         * Not "is a server connected". That would claim a merge that did
+         * not happen: connected and unreachable is exactly the case the
+         * line exists to name.
+         */
+        internal fun provenanceOf(
+            summary: InsightsSummary?,
+            recent: List<InsightDay>?,
+            books: WorkTotals?,
+        ): StatsProvenance =
+            if (summary != null || recent != null || books != null) {
+                StatsProvenance.ALL_DEVICES
+            } else {
+                StatsProvenance.THIS_DEVICE
+            }
 
         /**
          * The one headline, from both sources.
@@ -607,65 +659,142 @@ class ReadingStatsViewModel(
          * becomes one row rather than two. The server counts it once, so
          * showing it twice would both charge the reader twice in the
          * total and present one book as two.
+         *
+         * A work the server knows and this library does not becomes a
+         * row of its own (ADR-0021). Its time is in the headline whether
+         * it is listed or not, so leaving it out is what made the list
+         * smaller than the total above it and gave no reason for the
+         * difference. It carries the server's name and the server's
+         * place in the book, and nothing else: there is no file here to
+         * open and no cover to draw, and nothing downstream may assume
+         * otherwise. The place is read because the server is the only
+         * one who has it, and it is what lets a book finished on the
+         * laptop be counted as finished here rather than left forever
+         * unread in the figure above the list.
          */
         internal fun mergeDashboard(
             local: ReadingStats,
             knownBooks: Map<String, StatsBook>,
             serverRecent: List<InsightDay>?,
-            serverBooks: Map<String, WorkInsights>?,
+            serverBooks: WorkTotals?,
             firstReadAtByUrl: Map<String, Long> = emptyMap(),
         ): ReadingStats {
-            val mergedBooks = local.books.associateBy { it.bookUrl }.toMutableMap()
-            serverBooks.orEmpty().entries
-                .filter { knownBooks.containsKey(it.key) }
+            val mergedBooks = local.books
+                .mapNotNull { row -> row.bookUrl?.let { it to row } }
+                .toMap()
+                .toMutableMap()
+            // A URL this device can put a row against: a book on the
+            // shelf, or one with sittings recorded here even though it
+            // never had a library row (opened straight from Android).
+            // The second matters as much as the first — a server figure
+            // for such a URL has a local row to merge into, and listing
+            // it a second time as read elsewhere would charge the
+            // reader twice.
+            fun here(url: String) = knownBooks.containsKey(url) || mergedBooks.containsKey(url)
+            // An alias can outlive the book it named — a file removed
+            // from the library leaves one behind. Such a work is one
+            // this device has no book for, whatever the alias says, and
+            // it belongs with the rest of them rather than in the gap
+            // between the two.
+            val (aliased, orphaned) = serverBooks?.byBookUrl.orEmpty().entries
                 .groupBy { it.value.workId }
-                .forEach { (_, entries) ->
-                    val urls = entries.map { it.key }
-                    val insight = entries.first().value
-                    val rows = urls.mapNotNull { mergedBooks[it] }
-                    // The row the reader has put the most time into is
-                    // the one the merged figure belongs on; the rest are
-                    // the same book under a URL it used to have.
-                    val canonical = rows.maxWithOrNull(
-                        compareBy<BookReadingStats> { it.totalMs }.thenByDescending { it.bookUrl },
-                    )?.bookUrl ?: urls.min()
-                    val metadata = knownBooks[canonical] ?: return@forEach
-                    val serverMs = insight.activeMinutes.minutesAsMillis()
-                    val localMs = rows.sumOf { it.totalMs }
-                    val pendingMs = rows.sumOf { it.pendingMs }
-                    val lastReadAt = maxOf(
-                        insight.lastReadAt ?: 0L,
-                        rows.maxOfOrNull { it.lastReadAt } ?: 0L,
-                    )
-                    if (lastReadAt <= 0L) return@forEach
-                    if (serverMs <= 0L && rows.isEmpty()) return@forEach
-                    urls.forEach { mergedBooks.remove(it) }
-                    mergedBooks[canonical] = BookReadingStats(
-                        bookUrl = canonical,
-                        title = metadata.title,
-                        author = metadata.author,
-                        totalMs = maxOf(localMs, serverMs + pendingMs),
-                        pendingMs = pendingMs,
-                        lastReadAt = lastReadAt,
-                        // The server has no started-at; the earliest local
-                        // start across the work's URLs is the only source.
-                        // Read from the all-time map first: a URL whose
-                        // reading all predates the window has no row to
-                        // carry its date.
-                        firstReadAt = urls.mapNotNull { firstReadAtByUrl[it] }.minOrNull()
-                            ?: rows.mapNotNull { it.firstReadAt }.minOrNull(),
-                        progression = metadata.progression,
-                        finished = metadata.finished,
-                        sessions = maxOf(
-                            rows.sumOf { it.sessions },
-                            insight.sessions + rows.sumOf { it.pendingSessions },
-                        ),
-                        pendingSessions = rows.sumOf { it.pendingSessions },
-                        coverPath = metadata.coverPath,
-                        coverUrl = metadata.coverUrl,
+                .entries
+                .partition { (_, entries) -> entries.any { here(it.key) } }
+            aliased.forEach { (_, allEntries) ->
+                val entries = allEntries.filter { here(it.key) }
+                val urls = entries.map { it.key }
+                val insight = entries.first().value
+                val rows = urls.mapNotNull { mergedBooks[it] }
+                // The row the reader has put the most time into is
+                // the one the merged figure belongs on; the rest are
+                // the same book under a URL it used to have.
+                val canonical = rows.maxWithOrNull(
+                    compareBy<BookReadingStats> { it.totalMs }
+                        .thenByDescending { it.bookUrl.orEmpty() },
+                )?.bookUrl ?: urls.min()
+                // A row with no library entry keeps what its sittings
+                // already said about it, which is all this device knows.
+                val metadata = knownBooks[canonical]
+                    ?: mergedBooks[canonical]?.let { row ->
+                        StatsBook(
+                            bookUrl = canonical,
+                            title = row.title,
+                            author = row.author,
+                            progression = row.progression,
+                            finished = row.finished,
+                            coverPath = row.coverPath,
+                            coverUrl = row.coverUrl,
+                        )
+                    }
+                    ?: return@forEach
+                val serverMs = insight.activeMinutes.minutesAsMillis()
+                val localMs = rows.sumOf { it.totalMs }
+                val pendingMs = rows.sumOf { it.pendingMs }
+                val lastReadAt = maxOf(
+                    insight.lastReadAt ?: 0L,
+                    rows.maxOfOrNull { it.lastReadAt } ?: 0L,
+                )
+                if (lastReadAt <= 0L) return@forEach
+                if (serverMs <= 0L && rows.isEmpty()) return@forEach
+                urls.forEach { mergedBooks.remove(it) }
+                mergedBooks[canonical] = BookReadingStats(
+                    bookUrl = canonical,
+                    title = metadata.title,
+                    author = metadata.author,
+                    totalMs = maxOf(localMs, serverMs + pendingMs),
+                    pendingMs = pendingMs,
+                    lastReadAt = lastReadAt,
+                    // The server has no started-at; the earliest local
+                    // start across the work's URLs is the only source.
+                    // Read from the all-time map first: a URL whose
+                    // reading all predates the window has no row to
+                    // carry its date.
+                    firstReadAt = urls.mapNotNull { firstReadAtByUrl[it] }.minOrNull()
+                        ?: rows.mapNotNull { it.firstReadAt }.minOrNull(),
+                    progression = metadata.progression,
+                    finished = metadata.finished,
+                    sessions = maxOf(
+                        rows.sumOf { it.sessions },
+                        insight.sessions + rows.sumOf { it.pendingSessions },
+                    ),
+                    pendingSessions = rows.sumOf { it.pendingSessions },
+                    coverPath = metadata.coverPath,
+                    coverUrl = metadata.coverUrl,
+                )
+            }
+            val elsewhere = (
+                serverBooks?.elsewhere.orEmpty() +
+                    orphaned.map { (_, entries) -> entries.first().value }
+                )
+                .filter { it.title.isNotEmpty() }
+                // A work whose whole span is nought minutes is a work
+                // with nothing to say for this window; the server sends
+                // one when the reading it has is all outside the span.
+                .filter { it.activeMinutes > 0 || it.sessions > 0 }
+                .map { insight ->
+                    BookReadingStats(
+                        bookUrl = null,
+                        workId = insight.workId,
+                        title = insight.title,
+                        author = insight.author,
+                        totalMs = insight.activeMinutes.minutesAsMillis(),
+                        lastReadAt = insight.lastReadAt ?: 0L,
+                        // Nothing local to draw on: no file, no cover and
+                        // no first sitting on record here. The place in
+                        // the book is the server's, because nobody else
+                        // has one, and whether that place is the end is
+                        // decided by the one threshold position sync
+                        // applies when the same reading arrives as a
+                        // peer's position — so a book finished on the
+                        // laptop is finished here too, and by the same
+                        // rule.
+                        progression = insight.currentProgression,
+                        finished = readingStatusFor(insight.currentProgression) ==
+                            ReadingStatus.FINISHED,
+                        sessions = insight.sessions,
                     )
                 }
-            val books = mergedBooks.values.sortedWith(
+            val books = (mergedBooks.values + elsewhere).sortedWith(
                 compareByDescending<BookReadingStats> { it.totalMs }.thenBy { it.title },
             )
             val recent = if (serverRecent == null) {

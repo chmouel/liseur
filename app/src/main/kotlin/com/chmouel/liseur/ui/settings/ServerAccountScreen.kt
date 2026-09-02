@@ -1071,6 +1071,18 @@ private fun ConnectedCard(
         )
     }
 
+    // The same for statistics (ADR-0021), and said here because this is
+    // the one place it can still be fixed. Left unsaid, a token without
+    // the scope is refused on every insights call for the life of the
+    // account, and the dashboard shows the same blank as being offline.
+    if (server.kind == ServerKind.LISEUR_SYNC && !server.canReadInsights) {
+        Text(
+            text = stringResource(R.string.server_insights_needs_reconnect),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
     // The Kobo token is a calibre-web notion; the others have nothing like it.
     if (server.kind == ServerKind.CALIBRE) {        AdvancedSection(server = server, onKoboToken = onKoboToken)
     }

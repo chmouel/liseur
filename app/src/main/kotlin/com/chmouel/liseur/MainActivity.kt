@@ -220,9 +220,15 @@ private fun LiseurApp(settings: AppSettings) {
             ReadingStatsScreen(
                 state = statsState,
                 onOpenBook = { book ->
-                    statsBook = StatsTarget(book.bookUrl, book.title)
-                    bookStatsReturnsTo = Screen.STATS
-                    screen = Screen.BOOK_STATS
+                    // Only a book this device has can be opened. A row
+                    // the server counted and this library has no file
+                    // for carries no tap target at all (ADR-0021), so
+                    // this is belt and braces rather than a path taken.
+                    book.bookUrl?.let { url ->
+                        statsBook = StatsTarget(url, book.title)
+                        bookStatsReturnsTo = Screen.STATS
+                        screen = Screen.BOOK_STATS
+                    }
                 },
                 onBack = { screen = Screen.LIBRARY },
                 onSelectRange = model::selectRange,
