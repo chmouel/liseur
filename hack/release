@@ -20,6 +20,9 @@ readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
 readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
 readonly PASS_GEMINI_KEY="google/gemini-api"
 readonly PASS_PLAY_SERVICE_ACCOUNT="android/google.play.service.serviceaccount"
+readonly LOCAL_SIGNING_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/liseur/signing"
+readonly LOCAL_KEYSTORE="$LOCAL_SIGNING_DIR/release.p12"
+readonly KEYSTORE_PROPERTIES="keystore.properties"
 readonly NOTES_MODEL="gemini-3.6-flash"
 readonly REQUIRED_SECRETS=(
     LISEUR_KEYSTORE_BASE64
@@ -178,6 +181,70 @@ pass_show() {
         die "missing pass entry: $entry"
     [[ -n "$value" ]] || die "pass entry is empty: $entry"
     printf '%s' "$value"
+}
+
+ensure_local_release_signing() {
+    local configured="" configured_path="" configured_password=""
+    local configured_alias="" configured_key_password=""
+    local password alias keystore_tmp properties_tmp
+
+    if [[ -f "$KEYSTORE_PROPERTIES" ]]; then
+        configured=$(sed -nE \
+            's/^[[:space:]]*storeFile[[:space:]]*=[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' \
+            "$KEYSTORE_PROPERTIES" | tail -n 1)
+        configured_password=$(sed -nE \
+            's/^[[:space:]]*storePassword[[:space:]]*=[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' \
+            "$KEYSTORE_PROPERTIES" | tail -n 1)
+        configured_alias=$(sed -nE \
+            's/^[[:space:]]*keyAlias[[:space:]]*=[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' \
+            "$KEYSTORE_PROPERTIES" | tail -n 1)
+        configured_key_password=$(sed -nE \
+            's/^[[:space:]]*keyPassword[[:space:]]*=[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' \
+            "$KEYSTORE_PROPERTIES" | tail -n 1)
+        configured_path=$configured
+        if [[ -n "$configured_path" && "$configured_path" != /* ]]; then
+            configured_path="$repo_root/$configured_path"
+        fi
+        if [[ -n "$configured_path" && -f "$configured_path" &&
+            -n "$configured_password" && -n "$configured_alias" &&
+            -n "$configured_key_password" ]]; then
+            if LISEUR_KEYSTORE_PASSWORD="$configured_password" \
+                keytool -list -keystore "$configured_path" \
+                    -storepass:env LISEUR_KEYSTORE_PASSWORD \
+                    -alias "$configured_alias" >/dev/null 2>&1; then
+                return
+            fi
+        fi
+    fi
+
+    printf 'Restoring the local release signing files from pass.\n'
+    password=$(pass_show "$PASS_KEYSTORE_PASSWORD")
+    alias=$(pass_show "$PASS_KEY_ALIAS")
+    install -d -m 700 "$LOCAL_SIGNING_DIR"
+    keystore_tmp=$(mktemp "$LOCAL_SIGNING_DIR/.release.p12.XXXXXX")
+    properties_tmp=$(mktemp "$LOCAL_SIGNING_DIR/.keystore.properties.XXXXXX")
+    chmod 600 "$keystore_tmp" "$properties_tmp"
+
+    if ! pass_show "$PASS_KEYSTORE" | base64 --decode > "$keystore_tmp"; then
+        rm -f "$keystore_tmp" "$properties_tmp"
+        die "could not decode $PASS_KEYSTORE"
+    fi
+    if ! LISEUR_KEYSTORE_PASSWORD="$password" \
+        keytool -list -keystore "$keystore_tmp" -storetype PKCS12 \
+            -storepass:env LISEUR_KEYSTORE_PASSWORD \
+            -alias "$alias" >/dev/null 2>&1; then
+        rm -f "$keystore_tmp" "$properties_tmp"
+        die "the release keystore or its password-store credentials are invalid"
+    fi
+
+    {
+        printf 'storeFile=%s\n' "$LOCAL_KEYSTORE"
+        printf 'storePassword=%s\n' "$password"
+        printf 'keyAlias=%s\n' "$alias"
+        printf 'keyPassword=%s\n' "$password"
+    } > "$properties_tmp"
+    mv "$keystore_tmp" "$LOCAL_KEYSTORE"
+    mv "$properties_tmp" "$KEYSTORE_PROPERTIES"
 }
 
 # Secrets are pushed through stdin rather than --body so that they never
@@ -999,7 +1066,7 @@ else
         die "VERSION must use X.Y.Z format"
 fi
 
-for command in git gh glab jq base64 sed awk pass curl python3; do
+for command in git gh glab jq base64 sed awk pass curl python3 keytool; do
     require_command "$command"
 done
 
@@ -1074,6 +1141,7 @@ fi
 "./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-test.1"
 
 sync_release_secrets
+ensure_local_release_signing
 
 changelog_path="$CHANGELOG_DIR/$current_version_code.txt"
 new_release=false

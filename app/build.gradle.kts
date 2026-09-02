@@ -1,4 +1,3 @@
-import java.io.FileInputStream
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -12,11 +11,32 @@ plugins {
 // is absent (e.g. on a fresh clone or in CI), the release build type simply
 // stays unsigned rather than failing the build.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = Properties().apply {
+val keystoreProperties = Properties()
+val releaseKeystoreFile =
     if (keystorePropertiesFile.exists()) {
-        load(FileInputStream(keystorePropertiesFile))
+        keystorePropertiesFile.inputStream().use(keystoreProperties::load)
+        val missingProperties =
+            listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+                .filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+        if (missingProperties.isNotEmpty()) {
+            throw GradleException(
+                "Invalid keystore.properties: missing ${missingProperties.joinToString()}. " +
+                    "See DEVELOPER.md#signing-a-release-build-optional."
+            )
+        }
+
+        rootProject.file(keystoreProperties.getProperty("storeFile")).also {
+            if (!it.isFile) {
+                throw GradleException(
+                    "Release signing keystore does not exist: ${it.absolutePath}. " +
+                        "Regenerate the local signing setup described in " +
+                        "DEVELOPER.md#signing-a-release-build-optional."
+                )
+            }
+        }
+    } else {
+        null
     }
-}
 
 android {
     namespace = "com.chmouel.liseur"
@@ -31,9 +51,9 @@ android {
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (releaseKeystoreFile != null) {
             create("release") {
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storeFile = releaseKeystoreFile
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -52,7 +72,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (keystorePropertiesFile.exists()) {
+            if (releaseKeystoreFile != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }

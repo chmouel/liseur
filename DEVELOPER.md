@@ -38,17 +38,31 @@ The real signing key for published releases lives in `pass`:
 | `android/liseur.keystore-alias` | key alias (`liseur`) |
 
 To build a signed APK locally with it, write a `keystore.properties`
-(gitignored, per-developer) pointing at a decoded copy:
+(gitignored, per-developer) pointing at a decoded copy. Keep that copy in
+persistent user data rather than `/tmp`, which may be cleared between builds:
 
 ```bash
-pass show android/liseur.keystore.p12 | base64 -d > /tmp/liseur.p12
+signing_dir="${XDG_DATA_HOME:-$HOME/.local/share}/liseur/signing"
+install -d -m 700 "$signing_dir"
+umask 077
+pass show android/liseur.keystore.p12 | base64 -d > "$signing_dir/release.p12"
 {
-  echo "storeFile=/tmp/liseur.p12"
+  echo "storeFile=$signing_dir/release.p12"
   echo "storePassword=$(pass show android/liseur.keystore-password)"
   echo "keyAlias=$(pass show android/liseur.keystore-alias)"
   echo "keyPassword=$(pass show android/liseur.keystore-password)"
 } > keystore.properties
 ```
+
+If `keystore.properties` exists but its `storeFile` has been removed, Gradle
+stops during configuration with recovery instructions. Run the commands above
+again to restore the decoded keystore and refresh the properties file. Delete
+`keystore.properties` only when you deliberately want the unsigned build used
+by clean checkouts and F-Droid.
+
+`hack/release` performs this check before a release and runs the same recovery
+automatically when the properties file or decoded keystore is missing. It
+leaves an existing usable custom signing path unchanged.
 
 Contributors without access to that key can generate their own instead.
 Any key produces an installable APK; it simply won't update over one
