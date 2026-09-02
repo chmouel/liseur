@@ -182,7 +182,10 @@ emulator.
   than deleted, or the next run asks again.
 - Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
-  must stand on its own.
+  must stand on its own. The two sources are merged by maximum and never
+  by sum — the server's count already contains this device's uploads —
+  and an answer to a window other than the one on screen is refused. See
+  `docs/adr/0021-cross-device-reading-statistics.md`.
 - Annotations are the exception to that rule, because they are mutable
   and deletable: an id derived from current content stops being
   reproducible the moment the reader edits the row. `annotation_sync`
