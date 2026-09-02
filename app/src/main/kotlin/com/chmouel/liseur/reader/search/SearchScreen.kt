@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
@@ -85,7 +85,11 @@ fun SearchScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = theme.background,
-        contentWindowInsets = WindowInsets.systemBars,
+        // safeDrawing, not systemBars: the field takes focus the moment the
+        // screen opens, so the keyboard is up before the first hit lands and
+        // the last results would sit under it. It also keeps the query and
+        // the hit text clear of a display cutout in landscape.
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             Column {
                 TopAppBar(
