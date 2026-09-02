@@ -1474,11 +1474,10 @@ fun ReaderScreen(
      * Marks the page, or unmarks it, from wherever the reader asked.
      *
      * The ribbon in the corner and the button in the chrome are two
-     * doors onto one room: the corner belongs to the app bar while the
-     * chrome is up, which is what took the ribbon's taps for itself, so
-     * the toolbar carries the control there instead. A bookmark has to
-     * land in the same place whichever was used, so neither of them owns
-     * this.
+     * doors onto one room: with the chrome up the app bar is hit before
+     * the ribbon and the corner's taps die on it, so the toolbar carries
+     * the control there instead. A bookmark has to land in the same
+     * place whichever was used, so neither of them owns this.
      *
      * A scrolled page moves under the reader's thumb without Readium
      * saying so: its current locator is debounced, and between two of
@@ -1666,10 +1665,11 @@ fun ReaderScreen(
         PageTurnOverlay(pageTurnEffect)
 
         // The ribbon is the marker for a page with no chrome on it. The
-        // app bar covers this corner and, being a Surface, swallows what
-        // lands there, so while the chrome is up the ribbon would be a
-        // target that ignores every tap. The bookmark button in the bar
-        // is what answers there instead.
+        // app bar is placed over this corner and hit first, and its
+        // pointer input is not shared with the siblings under it
+        // (sharePointerInputWithSiblings), so while the chrome is up a
+        // tap here never reaches the ribbon at all. The bookmark button
+        // in the bar is what answers there instead.
         if (!showingEnd && !chromeVisible) {
             BookmarkRibbon(
                 bookmarked = bookmarked,
