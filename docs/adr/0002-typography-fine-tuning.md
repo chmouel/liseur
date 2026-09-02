@@ -289,6 +289,12 @@ just above.
   size, margins and columns are equally inert there and are *not*
   disabled — a pre-existing inconsistency this change deliberately did
   not widen its scope to fix.
+
+  > Amended by [ADR-0020](0020-fixed-layout-reading-settings.md),
+  > proposed: it would disable every reflowable-only setting in a
+  > fixed-layout book, the scrolling toggle among them, and say the line
+  > once per sheet rather than once above these six. Until that ships,
+  > this bullet is what the app does.
 - No new dependency, and no new network, file, credential or permission
   surface. The security-adjacent question is what a malformed stored
   value can do, and the policy above is the answer.
