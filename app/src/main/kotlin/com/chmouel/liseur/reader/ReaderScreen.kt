@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -1468,6 +1470,47 @@ fun ReaderScreen(
     // decides everything else, and this adds nothing once the page stops.
     KeepScreenOn(enabled = keepScreenOn || autoScrollArmed)
 
+    /**
+     * Marks the page, or unmarks it, from wherever the reader asked.
+     *
+     * The ribbon in the corner and the button in the chrome are two
+     * doors onto one room: the corner belongs to the app bar while the
+     * chrome is up, which is what took the ribbon's taps for itself, so
+     * the toolbar carries the control there instead. A bookmark has to
+     * land in the same place whichever was used, so neither of them owns
+     * this.
+     *
+     * A scrolled page moves under the reader's thumb without Readium
+     * saying so: its current locator is debounced, and between two of
+     * those the view model's idea of the place can be a screen or more
+     * behind what is on the page. A bookmark is taken at the moment it
+     * is asked for and has to mean that moment, so the document is asked
+     * where it is now — the same question the reader leaving the book
+     * already asks — and only then is the mark made. It also decides
+     * which mark is being toggled, so asking first is what stops a tap
+     * meant as a new bookmark deleting the one behind it.
+     *
+     * Only a scrolled page is asked. A book set in pages publishes its
+     * place on the turn, long before a finger can reach the corner, and
+     * it does not scroll: `scrolledPlace` would read an offset of
+     * nothing over a screenful and file the reader at the top of the
+     * chapter — the very thing this is here to prevent. Every other
+     * caller guards on the same flag.
+     */
+    fun toggleBookmarkHere() {
+        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        effectScope.launch {
+            if (effectiveScrollingNow) {
+                navigatorNow?.let { nav ->
+                    scrolledPlace(nav)?.let {
+                        onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                    }
+                }
+            }
+            onAnnotationAction.toggleBookmark()
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -1622,44 +1665,16 @@ fun ReaderScreen(
 
         PageTurnOverlay(pageTurnEffect)
 
-        if (!showingEnd) {
+        // The ribbon is the marker for a page with no chrome on it. The
+        // app bar covers this corner and, being a Surface, swallows what
+        // lands there, so while the chrome is up the ribbon would be a
+        // target that ignores every tap. The bookmark button in the bar
+        // is what answers there instead.
+        if (!showingEnd && !chromeVisible) {
             BookmarkRibbon(
                 bookmarked = bookmarked,
                 theme = readingTheme,
-                onToggle = {
-                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    // A scrolled page moves under the reader's thumb
-                    // without Readium saying so: its current locator is
-                    // debounced, and between two of those the view
-                    // model's idea of the place can be a screen or more
-                    // behind what is on the page. A bookmark is taken at
-                    // the moment the ribbon is tapped and has to mean
-                    // that moment, so the document is asked where it is
-                    // now — the same question the reader leaving the
-                    // book already asks — and only then is the mark
-                    // made. It also decides which mark is being toggled,
-                    // so asking first is what stops a tap meant as a new
-                    // bookmark deleting the one behind it.
-                    //
-                    // Only a scrolled page is asked. A book set in pages
-                    // publishes its place on the turn, long before a
-                    // finger can reach the ribbon, and it does not
-                    // scroll: `scrolledPlace` would read an offset of
-                    // nothing over a screenful and file the reader at
-                    // the top of the chapter — the very thing this is
-                    // here to prevent. Every other caller guards on the
-                    // same flag.
-                    effectScope.launch {
-                        if (effectiveScrollingNow) {
-                            navigatorNow?.let { nav ->
-                                scrolledPlace(nav)?.let {
-                                    onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
-                                }
-                            }
-                        }
-                        onAnnotationAction.toggleBookmark()
-                    }
-                },
+                onToggle = ::toggleBookmarkHere,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(end = 12.dp),
@@ -1836,6 +1851,25 @@ fun ReaderScreen(
                         Icon(
                             Icons.AutoMirrored.Outlined.List,
                             contentDescription = stringResource(R.string.reader_contents),
+                        )
+                    }
+                    // The bar owns this corner while it is up, ribbon and
+                    // all, so it owns the bookmark with it. Last of the
+                    // actions to keep the mark where the ribbon hangs.
+                    IconButton(onClick = ::toggleBookmarkHere) {
+                        Icon(
+                            if (bookmarked) {
+                                Icons.Filled.Bookmark
+                            } else {
+                                Icons.Outlined.BookmarkBorder
+                            },
+                            contentDescription = stringResource(
+                                if (bookmarked) {
+                                    R.string.reader_remove_bookmark
+                                } else {
+                                    R.string.reader_add_bookmark
+                                },
+                            ),
                         )
                     }
                 },
