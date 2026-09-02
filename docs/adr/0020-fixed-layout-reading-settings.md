@@ -1,6 +1,6 @@
 # 20. Settings a fixed-layout book cannot use
 
-Status: proposed
+Status: accepted
 GitHub issue: [#123](https://github.com/chmouel/liseur/issues/123)
 
 ## Context
@@ -69,8 +69,19 @@ change would widen the scope again, which is exactly the move that
 produced this issue, and it has an issue of its own to arrive under.
 
 The rest need no argument. Brightness is the screen's, not the page's.
-The footer, the page-turn animation and "just this book" are Liseur's
-own and know nothing about layout.
+The footer and the page-turn animation are Liseur's own and know nothing
+about layout.
+
+**"Just this book" stays live, and it is not as obvious as the rest.**
+Its subject is precisely the set being greyed — what the book is set in,
+how big, how open, how wide — so a fixed-layout book shows four disabled
+rows above a switch that decides whether those four are the book's own.
+It stays because it is a *filing* decision rather than a typographic
+one: it is answered once, before or after the settings it governs, and
+a reader who sets it while a comic is open has recorded something true
+that takes effect the moment they set anything the comic could use.
+Disabling it would be the one place in this change where a control that
+still does something is taken away.
 
 ## Design
 
@@ -118,21 +129,64 @@ enum gains no member.
 It asks what the reader chose and whether the book runs down the page;
 it never asks whether the book can scroll at all.
 
-Three things hang off it: the tap zones, the footer, and whether the
-sheet offers auto-scroll or a page-turn animation. So a reader who left
-scroll mode on and then opens a fixed-layout book gets scroll-flavoured
-chrome over a page Readium is paginating regardless: tap zones that
-scroll a page that turns, no footer, and an auto-scroll switch that moves
-nothing. It becomes `reflowable && (scrollMode || verticalText)`, which
-widens the derivation [ADR 6](0006-auto-scroll.md) named "effectively
-scrolled" by the one clause it never had: it asks what the reader chose
-and what the book's lines do, and now also whether the book has anything
-to scroll.
+A good deal hangs off it: the tap zones, the footer, whether the sheet
+offers auto-scroll or a page-turn animation, `ScrollEdgeTurner`,
+`canAutoScroll`, the held-place retirement, the loop that measures a
+scrolled place, the bookmark ribbon's scrolled path, and
+`PageTurner.isScrolling`. So a reader who left scroll mode on and then
+opens a fixed-layout book gets scroll-flavoured chrome over a page
+Readium is paginating regardless: tap zones that scroll a page that
+turns, no footer, an auto-scroll switch that moves nothing, and a loop
+reading `scrollY` off a web view that never scrolls. It becomes
+`reflowable && (scrollMode || verticalText)`, which widens the
+derivation [ADR 6](0006-auto-scroll.md) named "effectively scrolled" by
+the one clause it never had: it asks what the reader chose and what the
+book's lines do, and now also whether the book has anything to scroll.
 
-What is *sent* to Readium does not change. `scroll` goes on being passed
-as the reader left it, because Readium ignores it for a fixed layout on
-its own, and rebuilding the navigator fragment over a value it ignores
-would cost a reader their place to no effect.
+### Two answers, and they must stay two
+
+The container the navigator fragment is laid out in — its insets, and
+the band reserved under it for the footer — asks the same question and
+needs a **different** answer: `reflowable && scrollMode`, with no
+`verticalText` term.
+
+`verticalText` is not known until the navigator has read the
+publication. It arrives false and turns true a moment later. The footer
+is guarded by the chrome's answer while its reserved band is set by the
+container's, so the two have to agree about a fixed-layout book or the
+footer prints over the page — but a container that also followed
+`verticalText` would take that band back out from under a book already
+laid out with it, reflowing the page under the reader on open, on every
+vertical book. The existing comment on that padding says as much from
+the other side: an unused 38dp is the cheaper of the two.
+
+Hence `chromeScrolls()` and `containerScrolls()`, pure and unit-tested,
+with a test whose only job is to fail if someone merges them.
+
+### What is sent to Readium does not change, and the fragment key stays raw
+
+`scroll` goes on being passed as the reader left it, and the fragment
+key (`key(columnMode, scrollMode, fontKey)`) goes on being the raw
+preference too.
+
+Not for the reason first written here. It is *not* true that "Readium
+ignores `scroll` for a fixed layout on its own" — that holds for
+rendering only. `EpubSettingsResolver.settings()` resolves `scroll` with
+no layout gate, and `EpubNavigatorViewModel`'s `needsInvalidation`
+compares `oldSettings.scroll != newSettings.scroll` with no layout gate
+either, sending `InvalidateViewPager`: `resetResourcePager()` and a
+`go(locator)`, the whole pager rebuilt. A fixed-layout book renders the
+same whatever `scroll` says and still gets torn down when it changes.
+
+Which is exactly why the key is left alone. It is one half of a two-part
+operation whose other half is in `ReaderActivity`, where the restore
+target, the initial preferences and the fragment factory are all
+remembered on the raw preference. Correcting one half would let a
+changed `scroll` reach `submitPreferences` without the fragment being
+recreated for it, and the reader would lose their place to a value that
+changes nothing they can see. The raw preference is constant while a
+fixed-layout book is open anyway, because the toggle that changes it is
+now disabled.
 
 ### Everything is still sent
 
@@ -150,8 +204,12 @@ one step further.
 - The reading theme and the brightness stay enabled, and the audit
   above is the reason. Anyone reading `EpubPreferencesEditor` alone will
   conclude the theme belongs in the disabled set; it does not, because
-  Liseur passes its own colours and Readium paints the pager with them
-  in every layout.
+  Liseur passes its own `backgroundColor` and Readium paints the pager
+  with it in every layout. `textColor` *is* gated, so what the swatches
+  change in a fixed-layout book is the letterbox around the page and not
+  the page — which is more than nothing, and is why the notice says
+  these settings do not change the *pages* rather than claiming the book
+  cannot be recoloured at all.
 - A stored value survives a fixed-layout book, because nothing about
   what is sent changes.
 - `spread` remains unreachable. A fixed-layout book gets a more
@@ -166,4 +224,5 @@ one step further.
 *Where:* `ui/reading/ReadingFineTypography.kt`,
 `ui/reading/ReadingAppearanceControls.kt`,
 `reader/chrome/TypographySheet.kt`, `reader/chrome/AdvancedSheet.kt`,
-`reader/ReaderScreen.kt`, `res/values/strings.xml`.
+`reader/ReaderScreen.kt`, `reader/ScrolledPage.kt`,
+`res/values/strings.xml`.

@@ -85,6 +85,33 @@ fun ReadingSectionLabel(text: String) {
     )
 }
 
+/** A line under a control, saying what it cannot do or will do anyway. */
+@Composable
+fun ReadingSupportingText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+}
+
+/**
+ * The one line a fixed-layout book gets, at the top of a sheet.
+ *
+ * A fixed-layout EPUB is placed by the publisher, page by page, and
+ * Readium honours no reflowable-text preference inside one. Several rows
+ * on each sheet are greyed because of it, and a note under each would
+ * print the same sentence three times, so it is said once, above
+ * everything it answers for.
+ *
+ * See `docs/adr/0020-fixed-layout-reading-settings.md`.
+ */
+@Composable
+fun FixedLayoutNotice() {
+    ReadingSupportingText(stringResource(R.string.reader_typography_fixed_layout))
+}
+
 /**
  * The reading themes, as swatches of themselves.
  *
@@ -159,11 +186,21 @@ fun ReadingThemeRow(
     }
 }
 
+/**
+ * The reading face, bundled and imported alike.
+ *
+ * [enabled] is false in a fixed-layout book, whose pages carry their own
+ * typesetting: Readium gates `fontFamily` on a reflowable publication,
+ * so opening this menu there would take a tap and change nothing. The
+ * chosen face still shows, because it has not been lost — the next book
+ * that can be set in it will be.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingFontDropdown(
     selected: ReadingFont,
     imported: List<UserFont>,
+    enabled: Boolean,
     onSelected: (ReadingFont) -> Unit,
     onImport: () -> Unit,
     onRemove: (UserFont) -> Unit,
@@ -171,29 +208,35 @@ fun ReadingFontDropdown(
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     var pendingRemoval by remember { mutableStateOf<UserFont?>(null) }
+    val open = expanded && enabled
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_font))
         ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
+            expanded = open,
+            onExpandedChange = { if (enabled) expanded = it },
         ) {
             OutlinedTextField(
                 value = selected.displayName(imported),
                 onValueChange = {},
                 readOnly = true,
                 singleLine = true,
+                enabled = enabled,
                 textStyle = LocalTextStyle.current.copy(
                     fontFamily = selected.readingFamily(imported),
                     fontSize = 18.sp,
                 ),
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    // The anchor takes the same answer, not just the
+                    // field. Without it the node keeps its `expandable`
+                    // semantics and a screen reader announces a menu
+                    // that can be opened, which this one cannot.
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled),
             )
             ExposedDropdownMenu(
-                expanded = expanded,
+                expanded = open,
                 onDismissRequest = { expanded = false },
             ) {
                 ReaderFont.entries.forEach { font ->
@@ -382,8 +425,16 @@ fun ReadingFooterModeDropdown(selected: FooterMode, onSelected: (FooterMode) -> 
     }
 }
 
+/**
+ * How big the text is set.
+ *
+ * [enabled] is false in a fixed-layout book: Readium gates `fontSize` on
+ * a reflowable publication, so the thumb would slide and the page would
+ * not move. The stored size still shows, and comes back with the next
+ * book that can be resized.
+ */
 @Composable
-fun ReadingFontSizeSlider(value: Double, onChanged: (Double) -> Unit) {
+fun ReadingFontSizeSlider(value: Double, enabled: Boolean, onChanged: (Double) -> Unit) {
     var sliderValue by remember(value) { mutableFloatStateOf(value.toFloat()) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_size))
@@ -391,6 +442,7 @@ fun ReadingFontSizeSlider(value: Double, onChanged: (Double) -> Unit) {
             Text("A", fontSize = 14.sp)
             Slider(
                 value = sliderValue,
+                enabled = enabled,
                 onValueChange = { sliderValue = it },
                 onValueChangeFinished = { onChanged(sliderValue.toDouble()) },
                 valueRange = ReaderPrefs.MIN_FONT_SIZE.toFloat()..ReaderPrefs.MAX_FONT_SIZE.toFloat(),
@@ -446,12 +498,22 @@ fun ReadingBrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
     }
 }
 
+/**
+ * The shape of the text block: line spacing, margins and columns.
+ *
+ * [showColumns] hides the column count where it cannot apply — a
+ * scrolled chapter is one running column, and a phone has no room for
+ * two. [enabled] is a different question: all three rules are gated on a
+ * reflowable publication, so in a fixed-layout book every row here is
+ * greyed and goes on showing what the reader chose.
+ */
 @Composable
 fun ReadingLayoutControls(
     lineHeight: Double?,
     pageMargins: Double?,
     columnMode: ColumnMode,
     showColumns: Boolean,
+    enabled: Boolean,
     onLineHeightChanged: (Double?) -> Unit,
     onPageMarginsChanged: (Double?) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
@@ -472,6 +534,7 @@ fun ReadingLayoutControls(
             options.forEachIndexed { index, (label, v) ->
                 SegmentedButton(
                     selected = lineHeight == v,
+                    enabled = enabled,
                     onClick = { onLineHeightChanged(v) },
                     shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(label)) }
@@ -487,6 +550,7 @@ fun ReadingLayoutControls(
             options.forEachIndexed { index, (label, v) ->
                 SegmentedButton(
                     selected = pageMargins == v,
+                    enabled = enabled,
                     onClick = { onPageMarginsChanged(v) },
                     shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 ) { Text(stringResource(label)) }
@@ -502,6 +566,7 @@ fun ReadingLayoutControls(
                 options.forEachIndexed { index, mode ->
                     SegmentedButton(
                         selected = columnMode == mode,
+                        enabled = enabled,
                         onClick = { onColumnModeChanged(mode) },
                         shape = SegmentedButtonDefaults.itemShape(index, options.size),
                     ) { Text(stringResource(mode.label)) }

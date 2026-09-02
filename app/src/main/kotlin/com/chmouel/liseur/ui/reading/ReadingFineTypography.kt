@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Restore
@@ -83,6 +82,11 @@ data class FineTypographyActions(
  * It keeps showing its stored value while disabled: the setting has not
  * been lost, it is waiting for a book that can use it.
  *
+ * A fixed-layout book disables every row here, and says so nowhere: the
+ * sheet above says it once at the top, for these rows and for the size,
+ * the face, the margins and the columns alike. See
+ * [com.chmouel.liseur.ui.reading.FixedLayoutNotice].
+ *
  * [ReadingCss.Unknown] is the settings screen, where no book is open.
  * Nothing is disabled there — the reader is choosing a default for every
  * book they will open, not for this one — and the wording names the
@@ -95,10 +99,7 @@ fun ReadingFineTypographyControls(
     actions: FineTypographyActions,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (css == ReadingCss.Unsupported) {
-            ReadingSupportingText(stringResource(R.string.reader_typography_fixed_layout))
-        }
-        val enabled = css != ReadingCss.Unsupported
+        val enabled = css.honoursAnything
 
         AlignmentRow(
             value = prefs.textAlign,
@@ -397,14 +398,4 @@ private fun spacingLabel(value: Double?): String {
         value == 0.0 -> stringResource(R.string.reader_spacing_value_none)
         else -> stringResource(R.string.reader_spacing_value, format.format(value))
     }
-}
-
-@Composable
-private fun ReadingSupportingText(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 2.dp),
-    )
 }
