@@ -1482,8 +1482,15 @@ fun ReaderScreen(
     LaunchedEffect(chromeVisible) {
         if (chromeVisible && effectiveScrollingNow) {
             navigatorNow?.let { nav ->
+                // Held and published through the one path the scroll
+                // loop uses, or a measurement the loop is still carrying
+                // would come back at pause and walk the reader
+                // backwards over the place this just published.
+                val since = heldPlace.mark()
                 scrolledPlace(nav)?.let {
-                    onLocatorChanged(it, NavigatorPositionEvent.READER_MOVEMENT)
+                    if (heldPlace.hold(it, since)) {
+                        onLocatorChanged(it, NavigatorPositionEvent.READER_MOVEMENT)
+                    }
                 }
             }
         }
@@ -1520,8 +1527,11 @@ fun ReaderScreen(
         effectScope.launch {
             if (effectiveScrollingNow) {
                 navigatorNow?.let { nav ->
+                    val since = heldPlace.mark()
                     scrolledPlace(nav)?.let {
-                        onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                        if (heldPlace.hold(it, since)) {
+                            onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                        }
                     }
                 }
             }
