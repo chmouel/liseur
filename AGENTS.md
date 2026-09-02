@@ -1,15 +1,15 @@
-# Liseur — Copilot instructions
+# Liseur: Copilot instructions
 
 Open-source Android ebook reader: local EPUB library + calibre-web,
 Komga and liseur-sync clients (browse/download and position sync against
 any of them), with a Kindle-inspired reading experience. Kotlin + Jetpack Compose + Readium Kotlin Toolkit.
-FOSS-only dependencies — the app targets F-Droid inclusion. See `README.md`
+FOSS-only dependencies. The app targets F-Droid inclusion. See `README.md`
 for user-facing goals.
 
 ## Build, test, lint
 
-Always use the wrapper (`./gradlew`), never a system-wide `gradle` —
-the project is pinned to Gradle 9.6.1 via `gradle/wrapper/`.
+Always use the wrapper (`./gradlew`), never a system-wide `gradle`.
+The project is pinned to Gradle 9.6.1 via `gradle/wrapper/`.
 
 ```bash
 ./gradlew assembleDebug              # unsigned debug APK -> app/build/outputs/apk/debug/
@@ -51,8 +51,8 @@ CI (`.github/workflows/build.yml`) runs `testDebugUnitTest`, `lintDebug`, and
 An emulator is scratch space. Boot one, install over whatever is on it,
 wipe its storage, reseed the demo shelf, write straight into the app's
 database with `adb shell run-as`, rotate it, drive it with
-`adb shell input` — no permission needed for any of it, and no need to
-ask before starting. Everything on an emulator can be rebuilt in a
+`adb shell input`. These operations need no permission or approval.
+Everything on an emulator can be rebuilt in a
 minute by `make reset`, so there is nothing there worth protecting.
 `make shutdown` when you are done, or say you left it running.
 
@@ -95,9 +95,9 @@ credential is absent, so Play is never what makes a release fail, and
 `hack/release --no-play` asks for that skip. Promoting a build out of
 internal testing is a manual action in the console.
 
-Toolchain: JDK 17, AGP 9.x (built-in Kotlin support — **do not** add the
-`org.jetbrains.kotlin.android` plugin, only `org.jetbrains.kotlin.plugin.compose`
-is applied), compileSdk/targetSdk 37, minSdk 26. Dependencies are managed in
+Toolchain: JDK 17, AGP 9.x. AGP has built-in Kotlin support, so **do not** add the
+`org.jetbrains.kotlin.android` plugin; only `org.jetbrains.kotlin.plugin.compose`
+is applied. compileSdk/targetSdk 37, minSdk 26. Dependencies are managed in
 `gradle/libs.versions.toml` (version catalog).
 
 ## Git hooks
@@ -111,14 +111,14 @@ push. Skip with `git push --no-verify`.
 
 ## Hard constraints
 
-- **F-Droid compatibility**: every dependency must be FOSS and come from
-  Maven Central or Google's Maven repo. No proprietary blobs, trackers,
+- Every dependency must be FOSS and come from Maven Central or Google's
+  Maven repo, for F-Droid compatibility. No proprietary blobs, trackers,
   analytics, or Google Play services. In particular, never add
-  `readium-lcp` (depends on the proprietary liblcp).
-- **The release build must stay reproducible** (`hack/verify-reproducible`
-  must pass): F-Droid rebuilds every tag from source. Do not remove the
-  `dependenciesInfo` or `packaging.jniLibs.keepDebugSymbols` settings in
-  `app/build.gradle.kts` — both exist only for this. `DEVELOPER.md`
+  `readium-lcp`, since it depends on the proprietary liblcp.
+- The release build must stay reproducible: `hack/verify-reproducible`
+  must pass, because F-Droid rebuilds every tag from source. Do not remove
+  the `dependenciesInfo` or `packaging.jniLibs.keepDebugSymbols` settings in
+  `app/build.gradle.kts`; both exist only for this. `DEVELOPER.md`
   explains why.
 - Network access is limited to the user-configured book server
   (calibre-web, Komga or liseur-sync) and opt-in dictionary lookups.
@@ -127,22 +127,22 @@ push. Skip with `git push --no-verify`.
 
 Single `:app` module, layered packages under `com.chmouel.liseur`:
 
-- `data/` — Room database, DataStore settings, local library repository
+- `data/`: Room database, DataStore settings, local library repository
   (SAF folder scanning + Readium streamer metadata extraction), and the
   remote-server layer: `data/remote/` holds provider-neutral contracts;
   `data/calibre/` (OPDS + Kobo sync), `data/komga/` (REST) and
   `data/liseursync/` (native REST + append-only op log) implement them,
   and `RemoteRouter` dispatches on the connected server's kind.
-  liseur-sync is a full `ServerKind` like the other two — it catalogs,
-  serves files, and syncs — and its position sync also covers books
+  liseur-sync is a full `ServerKind` like the other two: it catalogs,
+  serves files, and syncs, and its position sync also covers books
   that never came from a server, resolving them by their hashes.
-- `domain/` — small use-case layer, only where logic is non-trivial
+- `domain/`: small use-case layer, only where logic is non-trivial
   (sync merge, time-left estimator). Keep pure and JVM-testable.
-- `reader/` — Readium `EpubNavigatorFragment` hosted in Compose, plus the
+- `reader/`: Readium `EpubNavigatorFragment` hosted in Compose, plus the
   custom reading chrome (tap zones, typography sheet, progress, annotations,
   search).
-- `ui/` — Compose screens: theme (`ui/theme`), library, settings.
-- `sync/` — WorkManager workers for downloads, uploads and position sync.
+- `ui/`: Compose screens: theme (`ui/theme`), library, settings.
+- `sync/`: WorkManager workers for downloads, uploads and position sync.
 
 State management: plain `ViewModel` + `StateFlow`, unidirectional data flow.
 DI is a manual composition root (no Hilt/Koin). Extract non-trivial logic
@@ -158,7 +158,7 @@ emulator.
   exchanges percentage progression (`locations.totalProgression`); Komga
   and liseur-sync exchange a full locator, so they also restore the
   exact spot. All three go
-  through `domain/ReadingStateMerge.kt` — write conflict rules there, once,
+  through `domain/ReadingStateMerge.kt`; write conflict rules there, once,
   not per provider.
 - One server is connected at a time. Anything provider-shaped belongs
   behind a `data/remote/` contract, not in a `when (kind)` at the call
@@ -173,7 +173,7 @@ emulator.
   server answers `duplicate`. Do not introduce a random id or a
   `pending_ops` table.
 - A book's name on liseur-sync is a `work_alias`. A book from its
-  own catalog resolves through `POST /v1/books/{id}/resolve` — the
+  own catalog resolves through `POST /v1/books/{id}/resolve`. The
   server reads the identifiers off its record, so no download is needed
   and two devices name it identically. Any other book resolves from
   SHA-256 + KOReader partial-MD5 + a normalised `ta:` title/author. A
@@ -183,7 +183,7 @@ emulator.
 - Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
   must stand on its own. The two sources are merged by maximum and never
-  by sum — the server's count already contains this device's uploads —
+  by sum (the server's count already contains this device's uploads),
   and an answer to a window other than the one on screen is refused. See
   `docs/adr/0021-cross-device-reading-statistics.md`.
 - Annotations are the exception to that rule, because they are mutable
@@ -191,7 +191,7 @@ emulator.
   reproducible the moment the reader edits the row. `annotation_sync`
   holds what the server confirmed *and* the exact bytes of any request
   in flight, written before the call and replayed verbatim through
-  `postRaw` — first send and retry alike. Do not rebuild an item from
+  `postRaw`, for both the first send and any retry. Do not rebuild an item from
   `JSONObject` on the way out; `org.json` has no key ordering and the
   server compares raw bytes. Two fingerprints: the acknowledged one is
   content only (never `base_rev`, never `edition_sha`), the pending one
@@ -218,7 +218,7 @@ emulator.
   against. A note landing the first time gets a copy picked the same way
   every run; one already filed here goes back where it already lives.
   Pass the known `bookId` rather than sending `edition_sha` on a note.
-- The annotation pass runs settle → pull → reconcile → push → deletes,
+- The annotation pass runs settle -> pull -> reconcile -> push -> deletes,
   and that order is not negotiable. Reconciling a work's live set before
   pushing is what stops an offline edit to a swept tombstone being sent
   as a create, which resurrects a highlight the reader deleted
@@ -238,8 +238,8 @@ emulator.
   newer one the reader wrote after the request left. Compare the local
   content, not the sync row: editing a highlight does not touch it.
 - Every annotation network call checks the account is still the
-  connected one first, not just before storing the answer — the request
-  is the side effect. A record's home alias is likewise re-read inside
+  connected one first, not just before storing the answer, because the
+  request is the side effect. A record's home alias is likewise re-read inside
   the transaction that commits it, so a file that took over the path
   mid-pass cannot have another book's highlight anchored into it.
 - An annotation id is opaque, so `.` and `..` are ids to carry and push
@@ -252,7 +252,7 @@ emulator.
   dropping only the agreements would push every mark again as new when
   the book came back. `BookRemoval.contentReplaced()` is the one path
   that clears both, in one transaction, because a different file took
-  over the path — a sync row with no annotation behind it reads as a
+  over the path: a sync row with no annotation behind it reads as a
   deletion the reader made.
 - Per-account annotation state is cleared inside
   `RemoteAccountRepository.forgetSyncPeer()`, never at a call site.
@@ -266,7 +266,7 @@ emulator.
   local row keeps its own `url`, because that is the key every reading
   position, annotation and session hangs off, and only `remote_uuid` and
   `download_href` are written (`BookDao.linkToRemote`). Never rewrite
-  `books.url` to the server's spelling — the reader's place goes with it.
+  `books.url` to the server's spelling: the reader's place goes with it.
 - Blocking network calls move to `Dispatchers.IO` inside the client that
   blocks, not in the caller. A `suspend` signature reads as a promise
   that the thread is safe, and a repository reached from a
@@ -274,13 +274,13 @@ emulator.
 - Reader settings map to Readium `EpubPreferences`; reading themes
   (Light/Sepia/Dark/Black) are decoupled from the app's Material theme.
 - A new reading setting goes in the Advanced sheet
-  (`reader/chrome/AdvancedSheet.kt`), and directly on Settings → Reading
-  appearance if it is about how the page *looks*, or on Settings →
+  (`reader/chrome/AdvancedSheet.kt`), and directly on Settings -> Reading
+  appearance if it is about how the page *looks*, or on Settings ->
   Reading & navigation (`ui/settings/ReadingNavigationScreen.kt`) if it
   is about how the book is turned, held or looked up. Neither settings
   screen has an Advanced section to collapse a row behind. The
-  typography sheet is the short list a reader changes often — theme,
-  size, brightness, font, and how the book is read — and it only grows
+  typography sheet is the short list a reader changes often (theme,
+  size, brightness, font, and how the book is read), and it only grows
   for a setting that genuinely belongs there. Make that case in the pull
   request; the default is Advanced. It grew to eleven controls once, one
   reasonable row at a time. See `docs/adr/0001-advanced-reading-menu.md`.

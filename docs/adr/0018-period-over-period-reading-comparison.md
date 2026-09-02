@@ -54,7 +54,7 @@ period's final day is today, counted only as far as *now*, while the
 baseline's is a complete twenty-four hours. Without the second bound a
 Tuesday afternoon is measured against the whole of the Tuesday before,
 evening included, so the sentence slides towards "less than last week" as
-every day wears on and springs back at midnight — a change in the
+every day wears on and springs back at midnight. That is a change in the
 arithmetic, reported to the reader as a change in their habits.
 
 The bound is named as a wall-clock time rather than as an instant exactly
@@ -72,8 +72,8 @@ A sitting still running at that moment is counted for the share of its
 length that had elapsed. Everywhere else a sitting belongs whole to the
 day it ended on, and midnight still divides nothing: the rule is there so
 that this device, the headline above and liseur-sync all agree which day
-reading happened on. The cutoff answers a different question — how much
-had been read by now — and the sitting on the other side of the
+reading happened on. The cutoff answers a different question, how much
+had been read by now, and the sitting on the other side of the
 comparison is the one open on the reader's screen, which is itself only
 recorded as far as its last checkpoint. Counted whole it would be an
 evening measured against an afternoon; dropped whole it would be an
@@ -102,7 +102,7 @@ every entry but "All time" carries a comparison. `ALL_TIME` has no period
 before it and shows none.
 
 A saved range id is what is on disk, so the three withdrawn ids stay
-resolvable forever — they are simply no longer `StatsRange` entries, and
+resolvable forever: they are simply no longer `StatsRange` entries, and
 nothing can select them again. `StatsRange.fromId()` maps each to the
 nearest surviving span rather than dropping the reader to the current week
 without telling them:
@@ -137,7 +137,7 @@ Midnight still divides nothing: a sitting belongs whole to the day it ended
 on, here as in the headline and on liseur-sync, so the two halves of a
 comparison still add up to a total over both. The proration exists because
 the sitting on the other side is the one open on the reader's screen, which
-is itself only recorded as far as its last checkpoint — counted whole the
+is itself only recorded as far as its last checkpoint; counted whole, the
 older one would be an evening against an afternoon, dropped whole it would
 be an afternoon against nothing.
 
@@ -163,15 +163,15 @@ no server can answer for; the only way to use a server at all would be to
 add its whole days to this device's part-day, and that sum is unsound twice
 over:
 
-- Its days are the *server's* calendar days — `InsightDay` is documented as
-  such — while this device splits by its own zone. An offset between the
+- Its days are the *server's* calendar days (`InsightDay` is documented as
+  such), while this device splits by its own zone. An offset between the
   two leaves the server's final whole day overlapping the device's partial
   day, so uploaded reading is counted by the server and again locally; a
   westward offset leaves a gap instead. The server does not declare its
   timezone, so the app cannot align the split.
 - The two requests fail independently. One succeeding and the other timing
   out would leave one side counting every device and the other counting
-  one — an evening on a laptop appearing in one half of the comparison and
+  one, with an evening on a laptop appearing in one half of the comparison and
   vanishing from the other, which is exactly the false report of a changed
   habit this whole decision exists to prevent. `summary()` also folds a
   genuinely empty period into the same `null` as a failure, so the two
@@ -216,7 +216,7 @@ figure is which.
 
 Naming the scope is not politeness, it is the claim being made. Leaving
 both devices out of both halves does not preserve the all-device
-percentage — a laptop that did four hours last week and none this week
+percentage. A laptop that did four hours last week and none this week
 would still show "more than last week" on a phone that read a little more
 than it did before. What the line reports is a trend *on this device*, and
 that is a true and useful thing to report; reporting it as a trend in the
@@ -230,7 +230,7 @@ The range menu loses three entries and gains one, which is the cost of the
 comparison applying everywhere it is offered. A reader who used "Last 90
 days" loses a span; the year is what they are moved to, and it is the only
 survivor that does not show them less than they had. In exchange nothing
-in the menu is a window whose caption has to be read arithmetically —
+in the menu is a window whose caption has to be read arithmetically:
 "This year" now says so rather than reading "In the last 227 days".
 
 `THIS_YEAR` and `THIS_MONTH` also gain proper captions, which fixes a

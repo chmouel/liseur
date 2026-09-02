@@ -15,7 +15,7 @@ translation feature must not quietly widen it.
 ## Decision
 
 A **Translate** action in the selection popup, sending the selection to
-a translation endpoint the user configures themselves — a LibreTranslate
+a translation endpoint the user configures themselves: a LibreTranslate
 instance or anything speaking its API. Off until an endpoint is entered;
 no default server, not even a FOSS one, because a default turns opt-in
 into opt-out.
@@ -44,7 +44,7 @@ configured, and nowhere otherwise.
 
 ## Consequences
 
-Selected passages leave the device — to a server the reader chose,
+Selected passages leave the device for a server the reader chose,
 named in settings, and only when they press Translate. A reader who
 self-hosts LibreTranslate gets translation with no third party at all.
 There is no offline mode; bundling a translation model is the offline

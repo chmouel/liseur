@@ -15,7 +15,7 @@ the difference between using the app and not.
 ## Decision
 
 Expose alignment, hyphenation, letter spacing, word spacing, paragraph
-spacing and font weight as rows in the Advanced sheet, and on Settings →
+spacing and font weight as rows in the Advanced sheet, and on Settings ->
 Reading appearance, which has no Advanced section to collapse them
 behind.
 
@@ -43,7 +43,7 @@ because those are what render our pages. Re-check on upgrade.
 `publisherStyles = false` becomes `--USER__advancedSettings:
 readium-advanced-on`, and turning it on **unconditionally restyles
 `:root`, `h1`–`h6`, `p`, `li`, `dd`, `div`, `pre`, `small`, `sub` and
-`sup`** — it normalizes the whole type scale and overrides the sizes the
+`sup`**; it normalizes the whole type scale and overrides the sizes the
 book's designer chose, whatever else is set. It is a large price, and it
 is worth paying only for a setting the reader asked for *and* the book
 can honour.
@@ -53,13 +53,13 @@ Audited property by property in the bundled default stylesheet:
 | Property | Gated on `readium-advanced-on` |
 | --- | --- |
 | `lineHeight`, `textAlign`, `bodyHyphens`, `letterSpacing`, `wordSpacing`, `paraSpacing` | **yes** |
-| `pageMargins`, `fontSize` | no — they work without it |
+| `pageMargins`, `fontSize` | no; they work without it |
 | `fontWeight` | no rule at all; it rides the user-properties `overrides` map |
 
 **This is a behaviour change: page margins used to turn advanced styles
 off and no longer does.** A reader who had only widened their margins
 was losing their book's heading sizes for nothing. Readium's own
-`EpubPreferencesEditor` corroborates it — it gates `pageMargins`' and
+`EpubPreferencesEditor` corroborates it; it gates `pageMargins`' and
 `fontSize`'s effectiveness on nothing but a reflowable publication,
 while gating every one of the six on `!publisherStyles`.
 
@@ -92,7 +92,7 @@ do not agree:
 So **alignment survives into an RTL book and dies in a CJK one**. A
 single "not the default stylesheet" state would tell an Arabic reader
 their alignment control is dead when it works, and a Japanese reader
-that it works when it does not — hence three live states, not two.
+that it works when it does not. Hence three live states, not two.
 Readium's `isTextAlignEffective` says the same thing
 (`stylesheets in [Default, Rtl]`, against `== Default` for the other
 three), but it is `internal`.
@@ -105,14 +105,14 @@ stylesheet has a rule for it. Without the scope, an app-wide letter
 spacing would switch advanced styles on for an Arabic book whose
 stylesheet has no letter-spacing rule: Readium would normalize that
 book's entire type scale and apply none of the spacing that asked for
-it. Pure loss — and it would contradict the row telling the reader the
+it. It would be pure loss, and it would contradict the row telling the reader the
 setting does not apply here.
 
 The values themselves are still *sent*. A setting a book cannot use is
 not erased, it merely stops counting, so it is there for the next book
 that can honour it.
 
-Both narrowings — by property, and by stylesheet — mean strictly *less*
+Both narrowings (by property and by stylesheet) mean strictly *less*
 interference than before.
 
 ### `readingCssFor` mirrors three pieces of `internal` Readium
@@ -121,7 +121,7 @@ interference than before.
 extensions are all `internal`, so the classification is a copy rather
 than a call. It is derived from `publication.metadata` alone, and is
 exact **only because Liseur sets no `language`, `readingProgression` or
-`verticalText` preference and no `EpubDefaults`** — every branch of the
+`verticalText` preference and no `EpubDefaults`**; every branch of the
 resolver that could diverge from metadata is unreachable.
 `ReaderPreferencesMapperTest` pins that invariant, so the day someone
 adds a reading-direction preference the build fails and points here.
@@ -130,8 +130,8 @@ Deriving it from the publication rather than from the navigator's
 resolved settings is what lets the answer exist *before* the navigator
 does. The mapper needs it to build the initial preferences; classifying
 late would mean opening the book one way and correcting it a moment
-later — a reflow, and a reading position that moves while the reader
-watches.
+later, causing a reflow and moving the reading position while the
+reader watches.
 
 The mirror includes Readium's bugs, deliberately, because the sheet has
 to describe the page Readium will actually produce:
@@ -139,9 +139,9 @@ to describe the page Readium will actually produce:
 | Tag | Readium's answer |
 | --- | --- |
 | `ja`, `ko`, `zh`, `zh-Hant`, `zh-TW` | CJK |
-| **`ja-JP`, `ko-KR`** | **not CJK** — `ja`/`ko` are compared against the whole code, and only `zh` is region-stripped |
+| **`ja-JP`, `ko-KR`** | **not CJK**; `ja`/`ko` are compared against the whole code, and only `zh` is region-stripped |
 | `ar`, `fa`, `he` | RTL |
-| **`ar-EG`** | **not RTL** — `isRtl` compares the whole code to a fixed list |
+| **`ar-EG`** | **not RTL**; `isRtl` compares the whole code to a fixed list |
 
 Fix those upstream, not here. Re-check the mirror on every Readium
 upgrade; `ReadingCssTest` is what will notice.
@@ -162,7 +162,7 @@ styling, restored". The rows say **Default**, matching
 
 ### Default versus zero, and the two-way toggle
 
-`0.0` is a value — "no extra spacing" — and it counts as an override.
+`0.0` is a value ("no extra spacing"), and it counts as an override.
 But a null and an explicit `0.0` both rest the thumb at the range start,
 so no drag reaches one from the other and a zero-distance press is not
 guaranteed to report itself. The trailing button is therefore a two-way
@@ -173,28 +173,29 @@ and from an explicit value it returns to Default.
 
 `EpubPreferences` throws from its constructor on a negative `fontSize`,
 `letterSpacing`, `wordSpacing`, `paragraphSpacing`, `pageMargins` or
-`typeScale`, and on a `fontWeight` outside `0.0..2.5` — and the moment
+`typeScale`, and on a `fontWeight` outside `0.0..2.5`; the moment
 that would happen is the moment the reader is changing their settings.
 `NaN >= 0` is `false` and `NaN.coerceIn(a, b)` is still `NaN`, so
 anything not finite has to be refused rather than clamped.
 
 Three categories, because "clamp" and "discard" are different answers:
 
-- **Sliders** (letter, word, paragraph spacing). Not finite or negative
-  → discarded; `0.0` kept; above the maximum clamped, because Liseur's
+- Sliders (letter, word, paragraph spacing). Not finite or negative
+  -> discarded; `0.0` kept; above the maximum clamped, because Liseur's
   ranges are deliberately narrower than Readium's and a larger value is
   a real preference from a wider one.
-- **Segmented doubles** (`lineHeight`, `pageMargins`). The reader can
+- Segmented doubles (`lineHeight`, `pageMargins`). The reader can
   only ever write one of three offered values or nothing, so anything
   else is corruption or another build: out of range is **discarded, never
   clamped**. `lineHeight = 0.0` is below Readium's minimum of `1.0` and
   goes; `pageMargins = 0.0` is inside its range and stays.
-- **`fontSize`**, which has no null to fall back to, falls back to `1.0`
+- `fontSize`, which has no null to fall back to, falls back to `1.0`
   and clamps a finite out-of-range value.
 
 Clamping a negative into range would turn a corrupt byte into an
 explicit override, which would then switch advanced styles on and
-renormalize the book — a page rewritten because a file was damaged.
+renormalize the book. The page would be rewritten because a file was
+damaged.
 `requiresAdvancedStyles` is computed from sanitized values so that
 cannot happen.
 
@@ -204,12 +205,12 @@ and a broken label.
 
 Every door a number comes through calls `sanitized()`: the preference
 store on read and write, a book's own typography row (after the merge,
-not before — the row is the newer and less trustworthy source), and the
+not before; the row is the newer and less trustworthy source), and the
 mapper itself, which is reached by paths that built a `ReaderPrefs`
 directly.
 
 A stored `lineHeight` or `pageMargins` that is valid but none of the
-three offered values — from an older build, or a hand-edited row —
+three offered values (from an older build, or a hand-edited row)
 leaves its segmented row with nothing selected, and is left intact.
 Snapping it to the nearest option would change the page to a setting the
 reader never chose, silently, just because they opened the sheet.
@@ -252,7 +253,7 @@ word spacing needs more words than two paragraphs hold.
 A row whose rule is not in the book's stylesheet is disabled, showing
 its stored value, under a line saying why. Annotating it instead would
 let a reader set letter spacing inside an Arabic book, see nothing
-change, and — before the scoped predicate — have silently normalized
+change and, before the scoped predicate, have silently normalized
 that book's type scale. Now neither half can happen.
 
 The settings screen passes `ReadingCss.Unknown`, where nothing is
@@ -272,22 +273,22 @@ just above.
 
 ## Consequences
 
-- **Two narrowings of existing behaviour**, both meaning less
+- Two narrowings of existing behaviour, both meaning less
   interference: page margins alone no longer normalizes a book's type
   scale, and an RTL or CJK book is no longer normalized for settings its
   stylesheet cannot apply.
-- **Turning advanced styles on reflows the page** and can move the
+- Turning advanced styles on reflows the page and can move the
   reading position. Unchanged in kind, but now it happens in fewer
   cases.
-- **A font weight override reaches everything that inherits it**,
+- A font weight override reaches everything that inherits it,
   headings included, so a book's own emphasis flattens towards the
   chosen weight. That is the setting working as asked, and why the
   default sends nothing.
-- **Three mirrors of `internal` Readium code**, quirks and all, standing
+- Three mirrors of `internal` Readium code, quirks and all, standing
   on an invariant a test pins. A copy drifts; re-check on upgrade.
 - Fixed-layout books honour none of the six, and the rows say so. Font
   size, margins and columns are equally inert there and are *not*
-  disabled — a pre-existing inconsistency this change deliberately did
+  disabled. A pre-existing inconsistency this change deliberately did
   not widen its scope to fix.
 
   > Amended by [ADR-0020](0020-fixed-layout-reading-settings.md),

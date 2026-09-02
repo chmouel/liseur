@@ -39,7 +39,7 @@ gesture or fold into something that already exists:
   action in the selection popup, switched on from the dictionary
   settings that already exist.
 - The tap-zone preset ([ADR 9](0009-tap-zone-customization.md)) is a
-  chip row in Settings → Reading, beside the volume-key switch it is
+  chip row in Settings -> Reading, beside the volume-key switch it is
   the thumb's version of. Not a reading-comfort setting after all: it
   is how the device is held, set once when the app is set up, and it
   belongs with the other page-turning hardware rather than with the
@@ -67,9 +67,9 @@ other three arrive with their own issues.
 
 The typography sheet did grow anyway, one reasonable row at a time,
 until it carried eleven controls and the Advanced row held one. Six of
-them have since moved behind Advanced — line height, page margins,
+them have since moved behind Advanced: line height, page margins,
 columns, the footer mode, the page-turn animation and the
-just-this-book toggle — leaving the first sheet the five answers a
+just-this-book toggle, leaving the first sheet the five answers a
 reader changes often: the theme, the size, the light, the face, and
 whether the book is read by scrolling or by turning pages. Keeping the
 screen awake stays there too, being a thing a reader reaches for
@@ -78,13 +78,13 @@ mid-chapter.
 The Advanced row is no longer conditional. It was hidden in a paginated
 book while auto-scroll was all that lived behind it, because the way in
 to an empty sheet is worse than no way in; with six more rows there, it
-cannot be empty. The rows that do not apply still hide themselves —
+cannot be empty. The rows that do not apply still hide themselves:
 auto-scroll only in a scrolled book, the page-turn animation only in a
 paginated one, columns only when there is width for two.
 
-Settings → Reading appearance shows five of the six without a book —
-the just-this-book toggle needs a book to set apart, and there is none
-here — and not behind a collapsed section: that screen has nothing else
+Settings -> Reading appearance shows five of the six without a book (the
+just-this-book toggle needs a book to set apart, and there is none
+here) and not behind a collapsed section: that screen has nothing else
 competing for room, so there is no empty-sheet problem to avoid, and a
 reader who came looking for the margins should not have to open
 anything to find them. The typography sheet still collapses them, being
@@ -104,7 +104,7 @@ first sheet rather than simply land there.
 The Settings screen went the way this ADR describes the sheet going.
 Its Reading section had grown to eight switches, a chip row and two
 rows that only some devices show, so it moved behind a single row into
-**Settings → Reading & navigation**
+**Settings -> Reading & navigation**
 (`ui/settings/ReadingNavigationScreen.kt`), taking the dictionary
 section with it. Reading appearance is unchanged and still holds how
 the page looks; the tap-zone chip row named above is now on the new

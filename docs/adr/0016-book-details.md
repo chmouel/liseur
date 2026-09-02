@@ -9,16 +9,16 @@ remembers about a book fits on a spine: a title, an author, a cover, a
 series and a place in it, a page count and a size the server claimed.
 Most of what the book says about itself is read past.
 
-`LocalLibraryRepository` opens every EPUB through Readium's streamer —
+`LocalLibraryRepository` opens every EPUB through Readium's streamer,
 in `indexBook()`, in `reindexBook()` when the file's modification time
-moves, and in `indexDownloadedFile()` when a download lands — and takes
+moves, and in `indexDownloadedFile()` when a download lands, and takes
 five things: the title, the author, the cover, the identifier (folded
 into `work_id` by `workIdOf()`), and the series. Behind those,
 `Publication.metadata` was also holding a subtitle, a description, a
 publisher and imprint list, a language list, a publication date, a
 subject list, a page count, an `Accessibility` record, and a full
 contributor list with roles
-— translators, narrators, illustrators, editors. The publication closes
+: translators, narrators, illustrators, editors. The publication closes
 and they go with it.
 
 The catalogs fare no better. calibre-web puts the book's description in
@@ -33,7 +33,7 @@ then stores.
 The device knows a few things no server does: the watched folder tree a
 local book was found under, what the file weighs, when it arrived, when
 it was downloaded, and when it was last modified. It knows the two
-hashes as well, but only for books something has already asked about —
+hashes as well, but only for books something has already asked about;
 `BookFingerprintStore` reads the whole file to compute them and does it
 lazily, for sync.
 
@@ -47,12 +47,12 @@ first chapter.
 
 ## Decision
 
-**A screen, not a bigger sheet.** The actions sheet is a column of
+A screen, not a bigger sheet. The actions sheet is a column of
 conditional rows that has grown once per verb the app learned, and
 details are not a verb: they are somewhere to stay, scroll, and come
 back to. So a full screen, routed from `MainActivity` beside
 `Screen.BOOK_STATS`, with the same `returnsTo` treatment, reachable from
-the actions sheet wherever that sheet already opens — the library and
+the actions sheet wherever that sheet already opens: the library and
 the series screen. The sheet gains one row and loses the pressure to
 become a details view itself.
 
@@ -61,29 +61,29 @@ that does not host the actions sheet and does not route through
 `MainActivity.Screen`, so an entry point there is an activity contract,
 not a row: a separate decision, and not this one.
 
-**Read-only.** Correcting what a book says about itself is a different
+Read-only. Correcting what a book says about itself is a different
 feature with a different shape. An edit has to survive every catalog
-refresh and every re-index, which means a third precedence layer — the
+refresh and every re-index, which means a third precedence layer: the
 one the series columns already carry in `user_series_name`, with its
 own conflict rules. Series editing exists and stays where it is. This
 screen displays.
 
-**Five bands, and a field with nothing behind it is not drawn.**
+Five bands, and a field with nothing behind it is not drawn.
 
-- *The book* — cover, title, subtitle, contributors with their roles,
+- *The book*: cover, title, subtitle, contributors with their roles,
   series and position.
-- *About* — description, subjects.
-- *Publication* — publishers, imprints, publication date, languages,
+- *About*: description, subjects.
+- *Publication*: publishers, imprints, publication date, languages,
   identifiers, page count, and the accessibility record when the file
   declares one.
-- *This copy* — format, size, where it came from, added, downloaded and
+- *This copy*: format, size, where it came from, added, downloaded and
   file-modified dates, and the two hashes when they have already been
   computed. Nothing here computes a hash: reading a whole book off a
   document provider to fill in a row the reader did not ask for is the
   wrong trade, and `BookFingerprintStore` will fill it in the first time
   sync needs it. A book with no file on this device shows no hash, even
   if a row survives from a copy that used to be here.
-- *Reading* — progress, time left, finished and archived state,
+- *Reading*: progress, time left, finished and archived state,
   annotation counts, and a way into `BookReadingStatsScreen`.
 
 A screen of em dashes says less than a short screen, so an absent field
@@ -94,7 +94,7 @@ and that is an honest answer.
 The reading band links rather than repeats. Everything on it is one
 line; the moment it wants a chart it is the stats screen, which exists.
 
-**Stored, with a backfill pass, not read while the reader waits.**
+Stored, with a backfill pass, not read while the reader waits.
 Mounting a document provider, opening a container and parsing an OPF is
 the work the indexing pass already does, and it is not work to start
 inside a navigation. The larger reason is that a book in
@@ -102,7 +102,7 @@ inside a navigation. The larger reason is that a book in
 can only ever be what the catalog said and what was written down at the
 time.
 
-**One row per source, not one column per field.** `books` keeps
+One row per source, not one column per field. `books` keeps
 `file_series_name` apart from `catalog_series_name` precisely so a
 catalog refresh cannot overwrite what the file said, and that reasoning
 holds for every field here. Doing it the same way would add fourteen
@@ -113,10 +113,10 @@ that each source's contribution is a *snapshot* that has to be replaced
 whole: when a catalog refresh no longer mentions a description, the
 right answer is that the server no longer has one, and paired columns
 make that an update per field where a row makes it one write. A
-`book_metadata` table keyed by `(book_url, source)` holds exactly that —
+`book_metadata` table keyed by `(book_url, source)` holds exactly that:
 one row per source, replaced atomically, resolved by one pure function.
 
-**Derived state dies with the book.** `book_metadata` is the one table
+Derived state dies with the book. `book_metadata` is the one table
 in this schema that should cascade, and it gets this schema's first
 foreign key: `book_url` references `books.url` `ON DELETE CASCADE`.
 `reading_progress`, `annotations` and `annotation_sync` have no foreign
@@ -151,19 +151,19 @@ book_metadata(
 ```
 
 Lists are JSON in a column, which is what `reading_progress.locator_json`
-already does. Child tables would buy queries nobody has asked for — the
-screen reads a book's rows and renders them — and cost three more tables
+already does. Child tables would buy queries nobody has asked for; the
+screen reads a book's rows and renders them, and they cost three more tables
 and three more cascades.
 
 There is no `updated_at`. A row is replaced whole and precedence never
 asks when either source last spoke, so a timestamp here would be a
-column that decides nothing — the same reason `client_ts` decides
+column that decides nothing: the same reason `client_ts` decides
 nothing in annotation sync.
 
 `file_size_bytes` is the size the device measured, and it is deliberately
 not `books.size_bytes`, which is the catalog's claim and is treated as
 untrusted wherever it is added up. The screen labels the two differently
-— what the file weighs here, and what the server says it weighs —
+(what the file weighs here, and what the server says it weighs)
 because when they disagree that is worth knowing rather than worth
 hiding.
 
@@ -172,8 +172,8 @@ scan already has the number: `findEpubs()` runs a projection per
 directory, so `COLUMN_SIZE` joins `COLUMN_LAST_MODIFIED` in it at no
 extra round trip, and the scanned size is carried on `ScannedEpub`. A
 downloaded book is a `File` in `booksDir()` with a `length()`. Anything
-else — a single book imported through the picker, and every old book
-`backfillMetadata()` walks, where no scan is in flight — is one
+else (a single book imported through the picker, and every old book
+`backfillMetadata()` walks, where no scan is in flight) is one
 `ContentResolver.query()` for `COLUMN_SIZE` against that document URI.
 A provider that answers null, or that will not answer at all because the
 permission was never persisted, leaves the size unknown, which is a
@@ -197,14 +197,14 @@ blurb.
 
 Scalars coalesce, catalog first: description, subtitle, published date,
 page count. This is the way round the series columns
-already resolve — `COALESCE(:catalogSeriesName, file_series_name)` — and
+already resolve (`COALESCE(:catalogSeriesName, file_series_name)`), and
 for descriptions in particular it is right on its own merits: a calibre
 library has usually been curated, and the blurb a reader put on the
 server is the blurb they want to see, while the OPF's is whatever the
 retailer shipped.
 
 Collections merge and deduplicate: contributors, subjects, languages,
-identifiers. Coalescing them would lose data the screen exists to show —
+identifiers. Coalescing them would lose data the screen exists to show:
 a catalog author would hide the file's translator and illustrator, a
 catalog ISBN would hide the EPUB's UUID, and a subject list from either
 side would silently replace the other's. Order is catalog first, then
@@ -233,13 +233,13 @@ is the direction, not the machinery.
 
 ### Where each source is written
 
-The file snapshot is written wherever a publication is already open —
-`indexBook()`, `reindexBook()`, `indexDownloadedFile()` — in the same
+The file snapshot is written wherever a publication is already open
+(`indexBook()`, `reindexBook()`, `indexDownloadedFile()`), in the same
 write that stores the book, and marked with `file_metadata_checked`.
 
 `reindexBook()` needs its order fixed to survive this. It writes the
 book through `refreshIndexedFile()` and only then, on a `work_id` that
-does not match, calls `contentReplaced()` — so under these rules it
+does not match, calls `contentReplaced()`. So under these rules it
 would write the new file's snapshot and delete it a line later. The
 replacement case becomes one transaction that clears first and writes
 second: the old reading, sync, fingerprint, metadata, remote, catalog
@@ -271,8 +271,8 @@ off a copy that is no longer here.
 
 It drops the book's `book_fingerprint` row in the same breath, which is
 a hole this ADR inherits rather than opens. `BookFingerprintStore`
-caches on `file_modified_at`, and a downloaded book has none —
-`indexDownloadedFile()` never sets one — so a retained row's null
+caches on `file_modified_at`, and a downloaded book has none
+(`indexDownloadedFile()` never sets one), so a retained row's null
 matches the null of whatever is downloaded next. A server that replaced
 the file behind the same UUID would then be told the old hash, and the
 reading state would be filed against the wrong bytes. Removing the file
@@ -283,14 +283,14 @@ existing transaction, and unlinks the whole remote and catalog
 association with them: `remote_uuid`, `remote_book_id`, `download_href`,
 `cover_url`, `remote_updated_at`, `remote_page_count`, `size_bytes`,
 `catalog_series_name`, `catalog_series_index`, `catalog_folder_id`,
-`catalog_series_source` and `catalog_missing_since` — after which the
+`catalog_series_source` and `catalog_missing_since`, after which the
 effective series is resolved again from the file's own columns.
 
 Clearing the catalog snapshot alone is treating the symptom, and
 clearing only the `remote_*` fields is treating half of it.
 `clearSeriesForReplacedWork()` today drops `series_id` and the user
 layer, then sets `series_name = COALESCE(catalog_series_name,
-file_series_name)` — so a replaced file stays filed under the old work's
+file_series_name)`. So a replaced file stays filed under the old work's
 catalog series even with `remote_uuid` gone. And for a row that was
 adopted after an upload, which keeps its local `url` and gains only
 `remote_uuid` and `download_href` per `BookDao.linkToRemote`, the new
@@ -305,7 +305,7 @@ to be true of every column that says otherwise, in one transaction.
 `RemoteBook` gains subtitle, description, publishers, imprints,
 published date, languages, subjects, identifiers and
 contributors-with-roles. The rule
-is not that two servers must supply a field — `calibreBookId`,
+is not that two servers must supply a field: `calibreBookId`,
 `pageCount`, `seriesId` and `sha256` are each one server's and each on
 the contract already. It is that provider-neutral catalog data with a
 common destination belongs on the contract, and everything here has one:
@@ -324,13 +324,13 @@ book has passed through no server at all. So the stripping and the
 bounds below apply to both sources, on the way in, without exception.
 
 The stripper is `HtmlCompat.fromHtml(…).toString()`, which is AndroidX
-and therefore lives in `data/`, not in `domain/MetadataSanitizer.kt` —
+and therefore lives in `data/`, not in `domain/MetadataSanitizer.kt`;
 the domain layer is pure Kotlin so it stays testable without Robolectric,
 and dragging an Android dependency into it to save an import is the
 wrong trade.
 
 calibre-web's `<content>` is not a description with tags in it. It mixes
-generated labels — `SERIES:`, ratings, tags — with the actual blurb, and
+generated labels, `SERIES:`, ratings, and tags, with the actual blurb, and
 `OpdsParser.directText()` skips nested paragraphs deliberately for that
 reason. Flattening the element wholesale would put catalog boilerplate
 on screen as the book's description, so the description is taken from
@@ -351,9 +351,9 @@ nobody can read is still a row every query carries:
 - contributors: at most 64; name at most 256 characters, role at most 64;
 - identifiers: at most 8; scheme at most 64 characters, value at most 256;
 - languages: at most 8, each tag at most 64 characters;
-- accessibility: the typed fields Readium parses — conformance profiles,
+- accessibility: the typed fields Readium parses: conformance profiles,
   access modes, sufficient access modes, features, hazards, the summary,
-  the certification and the exemptions — and nothing else. Each list at
+  the certification, and the exemptions, and nothing else. Each list at
   most 32 entries of at most 64 characters; the summary and the
   certifier's report at most 1,000. A value the enumerations do not
   cover is dropped rather than shown, because an unrecognised access
@@ -363,15 +363,15 @@ nobody can read is still a row every query carries:
 - series position: finite, non-negative, at most 10,000;
 - `file_size_bytes`: a measured `Long` from `Cursor.getLong()` or
   `File.length()`, kept only within `0..2^53` and discarded otherwise.
-  There is no parsing here — the value never was text.
+  There is no parsing here. The value never was text.
 
 Numbers are checked here because `size_bytes` is barely checked today.
 `OpdsParser` reads the `length` attribute with `toLongOrNull()` and
 accepts whatever comes back, negatives included; `KomgaBooks` and
 `LiseurSyncCatalogClient` keep a size only when it is `> 0`, with no
-ceiling on either. This ADR does not fix that column — that is a change
-to what every catalog refresh writes, and it belongs to whoever makes it
-— so the screen validates it on the way out instead, against the same
+ceiling on either. This ADR does not fix that column. That is a change
+to what every catalog refresh writes, and it belongs to whoever makes it,
+so the screen validates it on the way out instead, against the same
 `0..2^53` window. Outside it, the catalog's size is not formatted and
 not shown, which is the answer the reader would have got if the server
 had said nothing. The new column has the rule the old one lacks, and the
@@ -392,8 +392,8 @@ limited to the configured book server and opt-in dictionary lookups.
 A publication date is often a year, sometimes a year and month.
 Converting it to epoch milliseconds invents a timezone and a precision
 the book never claimed, so it is stored as ISO-8601 text that keeps
-whatever precision arrived — a bare `1962` is not `1962-01-01T00:00:00Z`
-— and rendered at the precision it has.
+whatever precision arrived. A bare `1962` is not
+`1962-01-01T00:00:00Z`, and it is rendered at the precision it has.
 
 For the catalog sources that is achievable, because their parsers hold
 the server's own string and can normalise it without widening it. For
@@ -404,7 +404,7 @@ that said `1962` has already become a full instant before
 recover the year would mean reading the package document a second way,
 past the API that exists to read it, and that is a larger cost than the
 month it buys. So the file source stores the date derived from that
-instant, and the column's contract is the precision of what arrived —
+instant, and the column's contract is the precision of what arrived,
 not a promise that the book only claimed that much.
 
 Languages are plural in EPUB metadata and all valid tags are kept.
@@ -435,8 +435,8 @@ The fields here are chosen; the bag is not.
 now. For a local book it is `books.source`, the watched folder tree.
 That column holds a tree URI and nothing stores its display name, so the
 name is asked of the document provider when the screen opens and falls
-back to a string resource — not to the raw URI, which is a
-percent-encoded document id no reader should be shown — when the
+back to a string resource (not to the raw URI, which is a
+percent-encoded document id no reader should be shown) when the
 provider is gone or the permission was revoked. For a book that arrived
 from a catalog it is the provider kind, recovered from `books.url`
 through `ServerKind.urlPrefix`, which is already how the app tells a
@@ -452,7 +452,7 @@ guess.
 The route carries `book.url` and nothing else. The screen observes the
 `Book` and its metadata rows through a view model, the way every other
 screen here does, rather than being handed a `Book` that was current
-when the sheet opened — a catalog refresh during a long read of the
+when the sheet opened; a catalog refresh during a long read of the
 description would otherwise show yesterday's row. Progress, time left
 and annotation counts come from that same model, not from DAO calls in
 a composable. If the book disappears while the screen is open, because
@@ -461,7 +461,7 @@ sitting on a row that no longer exists.
 
 ### Migration
 
-Room goes to 43 → 44: a hand-written `MIGRATION_43_44` creating the
+Room goes to 43 -> 44: a hand-written `MIGRATION_43_44` creating the
 table and adding `file_metadata_checked`, registered in `MIGRATIONS`,
 with `app/schemas/…/44.json` exported and `MigrationTest` replaying it.
 There is nothing to backfill in SQL; the pass fills the rows from the
@@ -475,7 +475,7 @@ that the fingerprint goes with it; content replacement, including the
 remote unlink, that the replaced file is no longer filed under the old
 work's catalog series, and that a reindex which replaces the work ends
 with the new file's snapshot rather than none; and the sanitiser at its
-boundaries — an oversized description, a subject list past its cap, a
+boundaries: an oversized description, a subject list past its cap, a
 negative size, a page count of zero, an unparseable date, an `xhtml`
 summary, and a calibre
 `<content>` block whose `SERIES:` label must not become the
@@ -489,7 +489,7 @@ same cost and the same pacing: a big library takes a while, and the
 shelf is drawn and usable throughout.
 
 A catalog-only book shows what the server said and no more, and that
-looks thin beside a downloaded one. It is thin — nothing has read the
+looks thin beside a downloaded one. It is thin. Nothing has read the
 file, because there is no file.
 
 This schema now has a foreign key. It is one table and the right table,

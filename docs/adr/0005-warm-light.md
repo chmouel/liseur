@@ -17,8 +17,8 @@ One warmth slider that draws an amber tint over the page, from nothing
 to distinctly candle-lit, remembered like brightness.
 
 Fit with Liseur's simplicity: the slider sits directly under the
-brightness slider in the typography sheet — the two answer the same
-question, "how does the light feel" — and there is no schedule, no
+brightness slider in the typography sheet, because the two answer the
+same question, "how does the light feel", and there is no schedule, no
 automation, no per-theme value.
 
 ## Design

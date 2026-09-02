@@ -7,7 +7,7 @@ GitHub issue: [#6](https://github.com/chmouel/liseur/issues/6)
 
 Four bundled families cover most tastes, but not the reader who has
 paid for a font they love, needs OpenDyslexic, or reads a script the
-bundled four render badly. The bundle cannot grow to meet them all —
+bundled four render badly. The bundle cannot grow to meet them all;
 every family is APK weight everyone carries.
 
 ## Decision
@@ -19,17 +19,17 @@ the bundled four, applied to the open book at once.
 Fit with Liseur's simplicity: one "Add a font…" entry at the end of the
 existing font list, and imported fonts in that same list, previewed in
 their own face, with a remove affordance behind a confirmation. No
-manager screen, and — this is what keeps ADR 0001 satisfied — **no new
-row**: the font control the typography sheet and Settings → Reading
+manager screen, and **no new row**: this is what keeps ADR 0001
+satisfied. The font control the typography sheet and Settings -> Reading
 appearance already share is the one that grows.
 
 ## Design
 
 ### Storage
 
-Import is `ACTION_OPEN_DOCUMENT`, the bytes copied to `filesDir/fonts/`
-— copied, not referenced, so the choice survives the source file moving
-or the SAF grant lapsing. The MIME filter includes
+Import is `ACTION_OPEN_DOCUMENT`, the bytes copied to `filesDir/fonts/`.
+They are copied, not referenced, so the choice survives the source file
+moving or the SAF grant lapsing. The MIME filter includes
 `application/octet-stream`, because `MimeTypeMap` has no `ttf` entry and
 most DocumentsProviders report a font that way; a filter without it
 hides the very files being looked for. Nothing is trusted from the
@@ -39,7 +39,7 @@ disk with it.
 A font is stored as `<sha256>.<ext>` and known by `user:<sha256>`.
 Content-addressing is what lets a font be deleted, and the same file
 imported again months later, and every book that was reading in it pick
-it straight back up — the id was never a handle into a table, it was
+it straight back up; the id was never a handle into a table, it was
 always the bytes. `filesDir/fonts/index.json` caches only the display
 name, the one thing a font with no `name` table cannot tell us twice; a
 lost or corrupt index costs a name and never a font.
@@ -63,7 +63,7 @@ nothing else. Widening `servedAssets` widens *what is allowed*, never
 *where it is read from*, so a file in `filesDir/fonts/` returns 404.
 Readium's own guide documents only assets-bundled fonts.
 
-A `data:` URL is refused by `Url()` — `AbsoluteUrl` requires a
+A `data:` URL is refused by `Url()`, because `AbsoluteUrl` requires a
 hierarchical URI and a `data:` URI is opaque. A `file://` URL is refused
 by the web view as a subresource of an `https://` page. There is no
 `@font-face` hook in `readiumCssRsProperties`, which is a typed
@@ -72,13 +72,13 @@ by the web view as a subresource of an `https://` page. There is no
 What does work: a request whose host is *not* `readium_assets` is
 treated as a publication resource and goes to `publication.get(href)`,
 and Liseur builds the `Publication` itself. So the book's container is
-wrapped —
+wrapped:
 
 ```kotlin
 container = CompositeContainer(UserFontsContainer(userFonts::value), container)
 ```
 
-— and each family is declared with an **absolute** source,
+Each family is declared with an **absolute** source,
 `https://readium_package/__liseur_fonts__/<digest>.<ext>`.
 `ReadiumCss.normalizeAssetUrl` is `assetsBaseHref.resolve(url)` and
 `Url.resolve` returns an `AbsoluteUrl` unchanged, so the assets host is
@@ -93,7 +93,7 @@ a digest it holds, so it shadows nothing else.
 
 Matching is exact-string, against an href built from a font already in
 the registry, and rejects `%2f`, `%5c`, `%2e`, dot segments, doubled
-slashes and backslashes on the **raw** url before any normalisation —
+slashes and backslashes on the **raw** url before any normalisation;
 normalising first is what turns `x/../y` into something that compares
 equal. A fragment or query is tolerated rather than refused, because
 `Publication.get` looks up `href` and then retries with the query
@@ -106,9 +106,9 @@ font, so traversal has nothing to aim at even in principle.
 `UserFontResources.PACKAGE_ORIGIN`; a Readium upgrade that changes it
 breaks this quietly, and this paragraph is where to look. And
 `MimeTypeMap` has no `ttf`/`otf` entry, so an imported font is served
-with a **null `Content-Type`** — verified on device to render anyway,
+with a **null `Content-Type`** (verified on device to render anyway,
 for both TTF and OTF, because Blink does not content-type-check
-`@font-face`. It is the same reason the bundled four are served as
+`@font-face`). It is the same reason the bundled four are served as
 `text/plain` today.
 
 ### Applying
@@ -119,8 +119,8 @@ four; the web view only fetches the family the page uses.
 
 An import applies to the open book immediately. `ReaderScreen`'s
 `key(columnMode, scrollMode, fontKey)` is what actually tears the
-fragment down and rebuilds it — rebuilding the factory alone leaves the
-live fragment in place — so a generation key over the imported ids is
+fragment down and rebuilds it. Rebuilding the factory alone leaves the
+live fragment in place, so a generation key over the imported ids is
 threaded through that, the factory `remember`, and the `restoreTarget`
 snapshot, which is what keeps the reader on the page they were on rather
 than where the book opened. This is the mechanism a column-mode change
@@ -135,13 +135,13 @@ do nothing.
 
 `ReaderViewModel.open()` awaits the repository's first scan before
 taking its font snapshot, or a book already set to an imported font
-opens in the default for a beat and then reflows — unasked for, on the
+opens in the default for a beat and then reflows, unasked for, on the
 screen someone was trying to read.
 
 ### Backup
 
-Fonts are **excluded from cloud backup** — they are user-supplied
-binaries, up to 32 of them, against a 25 MB quota — and **included in
+Fonts are **excluded from cloud backup**; they are user-supplied
+binaries, up to 32 of them, against a 25 MB quota, and **included in
 device transfer**, which is not quota-limited and is where "everything
 is as it was on my new phone" is the promise. A cloud restore therefore
 lands on the dormant-id path above: books fall back to the default, and

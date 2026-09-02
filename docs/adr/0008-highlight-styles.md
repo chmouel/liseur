@@ -44,7 +44,7 @@ visual register on the page, not a category worth exporting.
 
 The popup gets slightly busier, which is the entire UI cost. The Room
 schema version bumps, joining the migrations that `docs/ROADMAP.md`
-already wants tested. Two styles is deliberate — squiggles and boxes
+already wants tested. Two styles is deliberate: squiggles and boxes
 invite a formatting hobby that has nothing to do with reading.
 
 *Where:* `data/db/BookAnnotation.kt`, `data/db/LiseurDatabase.kt`,

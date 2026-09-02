@@ -32,8 +32,8 @@ request succeeded, failed, or was never made.
 
 The list beneath it is bounded by the local shelf. Per-book aggregates
 arrive keyed by the server's `work_id` and are mapped onto local book
-URLs through `work_alias`; a work with no usable alias here — a book
-read only on the other device, or one this device has never resolved —
+URLs through `work_alias`; a work with no usable alias here (a book
+read only on the other device, or one this device has never resolved)
 contributes nothing. `booksRead` and `booksFinished` are then counted
 off those rows, so they cannot exceed what is in this library. A reader
 who did a year on a laptop sees the year in the total and not one book
@@ -50,7 +50,7 @@ And the scope is the one thing never written down.
 `library-manage`, `library-upload`, `library-delete` and `admin` into
 `ServerCapabilities`; `read-insights` is not among them. The app's own
 pairing mints it, so this is invisible until somebody pastes in a token
-minted elsewhere — and liseur-sync's own token form leaves that box
+minted elsewhere, and liseur-sync's own token form leaves that box
 unticked. Such a reader gets a 403 on every insights call for the life
 of the account and is never told.
 
@@ -61,7 +61,7 @@ stand as they are:
 
 Both sides are asked about the same window, and an answer to a different
 one is refused. The two are merged by maximum and never by sum. A
-failure produces no error state — the local figures are a complete
+failure produces no error state; the local figures are a complete
 screen on their own. The period-over-period comparison stays local on
 both sides, for the reasons ADR-0018 gives: a relationship only holds
 between two figures gathered the same way, and half a comparison
@@ -74,7 +74,7 @@ the list stops being smaller than the total above it.
 Record `read-insights` as a stored capability, alongside the five scopes
 already read at connect time. A token that lacks it is then a fact the
 app holds rather than a silence it repeats, and the one reader who has
-to do something about it — re-pair, or tick the box — can be told so.
+to do something about it (re-pair, or tick the box) can be told so.
 
 Say on the screen where the figures came from: this device, or every
 device. One line, and only ever a statement of provenance. It must not
@@ -107,7 +107,7 @@ account paired before the column existed defaults to the pessimistic
 value and is corrected the next time it is introspected.
 
 `LiseurSyncInsights` keeps returning null on every failure. Provenance
-is a separate question from the figures and is answered separately —
+is a separate question from the figures and is answered separately:
 whether an answer arrived for the window on screen, which the view model
 already knows, since refusing a stale one is exactly what
 `forWindow` does. Nothing in the merge needs to change to know it.
@@ -127,8 +127,8 @@ and the honesty is the point: the same blank meaning "you are offline"
 and "your token cannot ask" was worse than either message.
 
 The dashboard's list stops being a subset of its own headline. That is
-the visible change, and it brings a new kind of row with it — a book
-this device does not have — which every consumer of `BookReadingStats`
+the visible change, and it brings a new kind of row with it (a book
+this device does not have), which every consumer of `BookReadingStats`
 has to tolerate rather than assume away.
 
 The scope becomes visible at the moment it can still be fixed, when an

@@ -8,8 +8,8 @@ Status: accepted
 speaks to four servers, and each one is a client written against a
 particular product: calibre-web's OPDS routes and Kobo endpoints, Komga's
 REST API, liseur-sync's op log, Grimmory through the Komga shim
-(ADR-0012). A reader whose books live on anything else — Calibre's own
-content server, COPS, Kavita, a static feed on a NAS — has no way in.
+(ADR-0012). A reader whose books live on anything else, Calibre's own
+content server, COPS, Kavita, or a static feed on a NAS, has no way in.
 
 OPDS is the standard those servers all speak, and Liseur has parsed it
 since the beginning: `data/calibre/OpdsParser.kt`. But it was never a
@@ -24,17 +24,17 @@ is no obvious server to pair with.
 
 ## Decision
 
-**One kind, two addresses, either of which may be blank.** A Custom
+One kind, two addresses, either of which may be blank. A Custom
 connection holds an OPDS catalog address and a KOReader sync address.
 Filling in both is the ordinary case; a catalog with no sync and a sync
 server with no catalog are both real, and both are things a reader has.
 
-Two kinds — "OPDS" and "kosync" — was the alternative. It was rejected
+Two kinds, "OPDS" and "kosync", was the alternative. It was rejected
 because one server is connected at a time: a reader with a catalog and a
 sync server would have had to choose, and the two halves are not
 alternatives to each other.
 
-**Catalog absence is a column, not an inference.** `remote_server` gains
+Catalog absence is a column, not an inference. `remote_server` gains
 a nullable `catalog_url`. It is the only address any catalog path reads.
 Null means this connection catalogs nothing, and every catalog path
 answers "nothing to do" rather than reporting a failure.
@@ -42,7 +42,7 @@ answers "nothing to do" rather than reporting a failure.
 Modelling it as `baseUrl` plus `canDownload = false` was tried on paper
 and does not work: `RemoteCatalogRepository.refresh()` reads
 `server.credentials` and treats null as a lost account, then asks the
-router for a client and hands it `baseUrl` — so a sync-only connection
+router for a client and hands it `baseUrl`. So a sync-only connection
 would either report a broken account or try to parse a kosync endpoint
 as an Atom feed.
 
@@ -52,11 +52,11 @@ column would tell every existing calibre-web, Komga, Grimmory and
 liseur-sync account that it has no catalog, and those libraries would
 stop refreshing the moment the reader updated.
 
-**A book's identity carries the catalog that issued it.** OPDS entry ids
+A book's identity carries the catalog that issued it. OPDS entry ids
 are opaque and unique only within their own feed: `1` is legal, and two
 unrelated servers can both use it. A downloaded book keeps its URL
 across an account switch, so `custom:{entry-id}` would let a second
-Custom server adopt the first one's rows — the wrong file, the wrong
+Custom server adopt the first one's rows: the wrong file, the wrong
 metadata, somebody else's reading history behind it.
 
 So the URL is `custom:{fingerprint}:{hashed-entry-id}`, the fingerprint
@@ -72,15 +72,15 @@ server picks: one containing `/` is a download that fails, and
 sixteen-byte digest is fixed-length, safe as a filename, and the same
 one on every refresh, which is the whole of what the identity has to do.
 
-**The catalog's password goes to the catalog's origin and nowhere
-else.** A feed is a document written by someone else, and every link in
-it — the next page, a shelf, a cover, the book itself — is an address
+The catalog's password goes to the catalog's origin and nowhere
+else. A feed is a document written by someone else, and every link in
+it, the next page, a shelf, a cover, or the book itself, is an address
 the server chose. OPDS is federated: pointing at another host is a
 feature. `RemoteHttp` signs whatever URL it is handed, so following
 those links as written would post the reader's password wherever the
 feed said.
 
-The rule is by origin — scheme, host and port — and not by origin plus
+The rule is by origin (scheme, host and port), and not by origin plus
 path prefix, which is what the plan for this work proposed. Catalogs
 routinely serve their files from a path beside the feed rather than
 beneath it (`/opds` and `/get`), so a prefix rule breaks the ordinary
@@ -94,18 +94,18 @@ unsigned. `RemoteOrigin.ofOrigin()` drops the path for the kinds whose
 links are absolute, so the rule the catalog is fetched under is the rule
 its covers are fetched under.
 
-**The fingerprint includes the query.** `?shelf=…` and `?library=…` are
+The fingerprint includes the query. `?shelf=…` and `?library=…` are
 how catalogs commonly pick which books to show, so two shelves of one
 server are two catalogs. Trimmed off, they would share one namespace and
 each could adopt the other's books. `RemoteUrl.normaliseBase` drops a
 query for every other kind, where it is noise; OPDS setup opts in.
 
-**Redirects are walked by hand.** Checking where a redirect landed is
+Redirects are walked by hand. Checking where a redirect landed is
 too late: OkHttp re-sends the `Authorization` header on a same-host hop
 and has already delivered the password by the time anything can object.
 `OpdsHttp` disables automatic redirects and decides per hop, before each
 one is sent. An https catalog is never followed down to http, whatever
-the server says — a redirect is not the reader agreeing to send their
+the server says; a redirect is not the reader agreeing to send their
 password in the clear.
 
 The downgrade rule is asked of the *scope*, not of the current call. An
@@ -124,10 +124,10 @@ setup redirect that leaves the origin is refused, and the reader is one
 retyped address away from the same connection. An anonymous one is
 followed, because nothing is being handed out.
 
-**A catalog on the internet does not reach into the house.** A feed can
+A catalog on the internet does not reach into the house. A feed can
 name `192.168.1.1`, `169.254.169.254` or `printer.local` and have the
 phone go and fetch it, which is a reachability probe from outside that
-the reader never asked for and cannot see. Refused — but only from a
+the reader never asked for and cannot see. It is refused, but only from a
 public catalog. Self-hosting is the ordinary case here and lives at
 `192.168.…`, and a catalog already inside the house gains nothing by
 naming its neighbour, so a private root may fetch privately. Judged from
@@ -160,7 +160,7 @@ goes out on every call. Plain HTTP to a public sync server is refused;
 plain HTTP across a network the reader controls is their call to make,
 and refusing it would break most of the sync servers actually in use.
 
-**Links are resolved against the document they were written in.**
+Links are resolved against the document they were written in.
 `RemoteUrl.resolve()` throws an absolute href's host away and rewrites
 it onto the configured base. That is right for a reverse-proxied
 calibre-web and catastrophic for an arbitrary catalog: it would silently
@@ -168,9 +168,9 @@ retarget a CDN acquisition link at the OPDS host. The walker resolves
 against the URL that answered, honouring `xml:base`, and stores absolute
 URLs. `ServerKind.linksAreAbsolute` is where that difference lives.
 
-**The walk is bounded, and says when a bound stopped it.** A catalog
+The walk is bounded, and says when a bound stopped it. A catalog
 root may hold books, or shelves, or shelves of shelves, so the walk has
-to find the books — and stop. Three bounds: a visited set, a depth limit
+to find the books and stop. Three bounds: a visited set, a depth limit
 of four, and a total request budget of four hundred. Depth alone does
 not bound breadth; an author index is one level deep and ten thousand
 feeds across.
@@ -179,7 +179,7 @@ When a bound stops the walk it reports `CatalogWalk(complete = false)`,
 which is what stops the library treating a walk cut short as proof that
 everything it did not reach has been deleted.
 
-**Only formats Readium can open are offered.** An entry commonly
+Only formats Readium can open are offered. An entry commonly
 advertises EPUB, PDF, CBZ, an audiobook and a DRM-protected variant side
 by side. The client picks a DRM-free EPUB; an entry with none is listed
 without a download rather than dropped, because dropping it leaves the
@@ -187,19 +187,19 @@ reader hunting for a book the server does show. `buy`, `borrow`,
 `sample` and `subscribe` are acquisitions in the specification's sense
 and files the reader does not have, so they are not downloads.
 
-**A blank credential is `Anonymous`, not absent.** Plain OPDS is often
+A blank credential is `Anonymous`, not absent. Plain OPDS is often
 unauthenticated. A null `credentials` already means "the stored secret
 cannot be decrypted, this account is lost", so an open catalog spelled
 that way would be reported as broken for ever.
 
-**Both halves are proved before either is written.** Two addresses mean
+Both halves are proved before either is written. Two addresses mean
 two servers that can refuse independently. Both are probed first, and
-publication — retiring the old account, storing the server, adopting or
-dropping the pairing — happens in one transaction. Half a connection is
+publication happens in one transaction: retiring the old account,
+storing the server, adopting or dropping the pairing. Half a connection is
 not what the reader filled in, and a process death between the two
 writes would leave a catalog with last week's pairing attached.
 
-**A connection with no catalog is still signed in as somebody.** Its
+A connection with no catalog is still signed in as somebody. Its
 catalog credential is `Anonymous`, because there is no catalog, but the
 reader typed a name into the sync fields and that name is the account.
 Left out of `remote_server.username`, two kosync users on one sync
@@ -207,13 +207,13 @@ server would share an `accountKey`, a switch between them would read as
 the same account coming back and keep the other person's sync state, and
 Settings could not say who is connected.
 
-**The form is authoritative on every successful Custom connection.** A
+The form is authoritative on every successful Custom connection. A
 filled sync address replaces any existing pairing; an empty one removes
 it. Without that, choosing a catalog-only Custom after Grimmory would
 leave Grimmory's pairing running against a field the reader
 deliberately left blank.
 
-**A sync-only connection speaks about the books on the device.** The
+A sync-only connection speaks about the books on the device. The
 kosync run starts from `bookDao.allRemote()`, whose query is
 `WHERE remote_uuid IS NOT NULL`, so changing a predicate could not have
 done this: a sideloaded book is gone before any predicate sees it. A

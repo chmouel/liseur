@@ -27,8 +27,8 @@ side.
 | File download | `GET /api/v1/books/{id}/file` | `KomgaFileSource` | Requires `FILE_DOWNLOAD` role, checked at setup |
 | Position sync | `GET/PUT /api/v1/books/{id}/progression` (R2Progression), `PATCH/DELETE .../read-progress`, `GET .../positions` | `KomgaSyncRepository` via `KomgaProgressionClient` | Full Readium locators with position snapping. Bidirectional, uses shared `reconcileReadingState` |
 | Series metadata | `GET /api/v1/series/{id}` | `KomgaSeriesClient` | On-demand |
-| Book upload | No remote upload API. `POST /api/v1/books/import` accepts JSON with server-side filesystem paths (transient books scanned from a local folder). The only multipart endpoints are for poster/thumbnail images | Not implemented | Not possible from a remote client — Komga's design is filesystem-first, books are placed in library folders and scanned |
-| Book delete | No client-facing delete API | Not implemented | Intentionally hidden — deleting a file is an administrator's job |
+| Book upload | No remote upload API. `POST /api/v1/books/import` accepts JSON with server-side filesystem paths (transient books scanned from a local folder). The only multipart endpoints are for poster/thumbnail images | Not implemented | Not possible from a remote client. Komga's design is filesystem-first: books are placed in library folders and scanned |
+| Book delete | No client-facing delete API | Not implemented | Intentionally hidden. Deleting a file is an administrator's job |
 
 **Capability detection:** `KomgaSetupClient` probes `GET /api/v2/users/me`
 and reads roles. Only `FILE_DOWNLOAD` is currently checked; `canUpload`
@@ -45,7 +45,7 @@ provisioned during setup.
 | Search | `/opds/search?query=` | `CalibreCatalogClient.search()` | |
 | File download | OPDS acquisition links, fallback `/opds/download/{id}/epub/` | `CalibreFileSource` | Uses stored `downloadHref` from the OPDS feed, with a derived fallback |
 | Position sync | Kobo protocol: `/v1/library/sync`, `/v1/library/{uuid}/state` | `KoboSyncRepository` via `KoboClient` | Percentages only, no full locators. Bidirectional, shares `reconcileReadingState`. Kobo token provisioned at setup via a web session |
-| Book upload | Web UI form at `/upload` — multipart POST behind a session cookie and CSRF token, admin permission required | Not implemented | Not a real API: uploading would mean logging in like a browser (`CalibreWebSession`), fetching a CSRF token, and posting to a web UI route. The pattern exists for delete, but it is fragile and considered out of scope for upload |
+| Book upload | Web UI form at `/upload`; multipart POST behind a session cookie and CSRF token, admin permission required | Not implemented | Not a real API: uploading would mean logging in like a browser (`CalibreWebSession`), fetching a CSRF token, and posting to a web UI route. The pattern exists for delete, but it is fragile and considered out of scope for upload |
 | Book delete | Web UI form: `POST /delete/{bookId}` with session cookie and CSRF | `CalibreDeleteClient` via `CalibreBookDeleter` | Works through `CalibreWebSession.logIn()`; checks for the login-page-as-200 pattern that a refused session returns |
 
 **Capability detection:** `CalibreSetupClient` probes `/opds` for the
@@ -87,12 +87,12 @@ into Grimmory with.
 
 Two things have to be set up in Grimmory first, both as an administrator:
 
-1. **Settings → OPDS**: create an OPDS user and share the libraries you want
+1. **Settings -> OPDS**: create an OPDS user and share the libraries you want
    on your phone with it. This is the login Liseur uses; an ordinary
    Grimmory account will not work.
 2. **Settings**: switch the Komga API on. It is off by default.
 
-Then in Liseur, **Settings → Book server → Grimmory**: the address of your
+Then in Liseur, **Settings -> Book server -> Grimmory**: the address of your
 Grimmory server (the same one you open in a browser, with the `/komga` path
 added for you) and the OPDS user's name and password.
 
@@ -118,18 +118,17 @@ the Komga client does would refuse every download.
 **A walk that is not understood does not prune.** `dropVanished()` deletes
 every catalogued book a completed walk did not see, taking its reading
 progress with it. So `GrimmoryCatalogClient` reports `complete = false` for
-anything it cannot account for — a page that does not describe itself, one
+anything it cannot account for: a page that does not describe itself, one
 shorter than the count it declared, a catalog whose size changed between
 pages, the same book counted twice, a `content` field that is not an array,
 an unparseable id, a media type this build has never heard of, or a whole
-catalog that filtered down to nothing — rather than letting a changed
-response read as an emptied library.
+catalog that filtered down to nothing. This prevents a changed response
+from being read as an emptied library.
 
 ## Custom (OPDS, KOReader sync, or one of the two)
 
-Not a product but a standard, and a way in for the servers nobody has
-written a client for: Calibre's own content server, COPS, Kavita, a
-static feed on a NAS. See
+Custom is a standard-based connection for servers with no dedicated client:
+Calibre's own content server, COPS, Kavita, or a static feed on a NAS. See
 [`adr/0015-custom-server.md`](adr/0015-custom-server.md).
 
 A Custom connection holds two addresses and either may be left blank:
@@ -137,16 +136,16 @@ an OPDS catalog root, and a KOReader sync (kosync) server. Filling in
 both is the ordinary case; a catalog with no sync and a sync server with
 no catalog are both real.
 
-**Auth:** Basic, or none at all — plain OPDS is often open, and a blank
+**Auth:** Basic or none at all. Plain OPDS is often open, and a blank
 username and password are stored as an anonymous credential rather than
 as a missing one. The kosync half keeps its own login and stores a
 derived key, never a password.
 
 ### Connecting to one
 
-In Liseur, **Settings → Book server → Custom**:
+In Liseur, **Settings -> Book server -> Custom**:
 
-1. **OPDS catalog address** — the server *root*, not a books path.
+1. **OPDS catalog address:** the server *root*, not a books path.
    Liseur walks the navigation feeds from there to find the shelves.
 2. **Username and password**, if the catalog asks for them. Both blank
    means an open catalog.
@@ -163,23 +162,23 @@ a previous server.
 | Catalog browse | Any Atom/OPDS 1.x feed | `OpdsCatalogClient` | Starts at the root and walks navigation entries breadth-first, following each `next` chain. Bounded by a visited set, a depth limit of 4 and a budget of 400 requests; a walk stopped by a bound reports `complete = false` and prunes nothing |
 | Search | OpenSearch description document, advertised per server | Returns nothing | The description is not at a path that can be guessed and every server fills it in differently. Liseur's library search is local and covers the whole catalog, which is walked into the database anyway |
 | File download | The entry's acquisition link | `OpdsFileSource` | Only DRM-free EPUB (`application/epub+zip`, `application/x-kobo-epub+zip`, or a link that states no type). `buy`, `borrow`, `sample` and `subscribe` are not downloads. An entry with no usable format is listed without a download rather than dropped |
-| Position sync | None — OPDS carries no reading state | `KosyncPositionSync`, paired on the same screen | Percentages only, matched by file hash. With no OPDS address, the pairing covers the books already on the device instead of a catalog's |
+| Position sync | None. OPDS carries no reading state | `KosyncPositionSync`, paired on the same screen | Percentages only, matched by file hash. With no OPDS address, the pairing covers the books already on the device instead of a catalog's |
 | Series metadata | calibre-style `SERIES: Name [n]` in the entry's content block, where a server writes it | Parsed opportunistically | No standard field exists |
 | Book upload / delete | Not part of OPDS 1.x | Not implemented | |
 
 **Capability detection:** `OpdsSetupClient` fetches the root and requires
-it to parse as an Atom `<feed>` — a sign-in page answering 200 with HTML
-is well-formed XML and would otherwise be accepted as a catalog. What is
-stored is the URL that *answered*, so a root that redirects is not
-redirected again on every refresh. `canDownload` is true even for a root
-that lists only shelves: the books are a walk away.
+it to parse as an Atom `<feed>`. A sign-in page answering 200 with HTML is
+well-formed XML and would otherwise be accepted as a catalog. What is stored
+is the URL that *answered*, so a root that redirects is not redirected again
+on every refresh. `canDownload` is true even for a root that lists only
+shelves: the books are a walk away.
 
 **The catalog's password goes to the catalog's origin and nowhere else.**
-A feed is written by someone else and may point anywhere — OPDS is
-federated, so pointing at another host is a feature. Links outside the
-configured origin are still followed, unsigned. Redirects are walked by
-hand so the decision is made before each hop rather than after, and an
-https catalog is never followed down to http.
+A feed is written by someone else and may point anywhere. OPDS is federated,
+so pointing at another host is a feature. Links outside the configured
+origin are still followed, unsigned. Redirects are walked by hand so the
+decision is made before each hop rather than after, and an https catalog is
+never followed down to http.
 
 **A book carries the catalog that issued it.** Entry ids are opaque and
 unique only within their own feed, so `books.url` is
@@ -201,7 +200,7 @@ Already in place, independent of any one server:
 - `BookUploader` interface (`RemoteSources.kt`).
 - `BookUploadWorker`, a WorkManager `CoroutineWorker` that resolves the
   local file, picks a folder, calls the uploader, and adopts the result.
-- `BookUploadRepository` — enqueue/cancel/inFlight via WorkManager.
+- `BookUploadRepository`: enqueue/cancel/inFlight via WorkManager.
 - `ServerCapabilities.canUpload`, detected at setup and stored on
   `RemoteServer.can_upload`.
 - `UploadPolicy` (ASK / ALWAYS / NEVER).
@@ -214,9 +213,9 @@ Already in place, independent of any one server:
 **Known issue:** `BookUploadWorker.adopt()` hardcodes
 `downloadHref = "/v1/books/$remoteBookId/download"`, which is
 liseur-sync's path shape. If a second server ever gets upload support,
-this needs to be parameterised — e.g. `ServerUploadResult.Uploaded`
-carrying its own `downloadHref`, since Komga and calibre-web each use a
-different path.
+this needs to be parameterised, for example with
+`ServerUploadResult.Uploaded` carrying its own `downloadHref`, since Komga
+and calibre-web each use a different path.
 
 ## Delete infrastructure
 

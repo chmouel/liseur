@@ -18,7 +18,7 @@ those decisions live in [`adr/`](adr/), starting from
 A restored backup carries the database and the settings across, but not
 the credentials: they are sealed with a key that never leaves the
 original device's keystore. `forgetUnreadableAccount()` notices this on
-launch and drops the account row, which is correct but silent — the user
+launch and drops the account row, which is correct but silent. The user
 just finds themselves signed out with no explanation.
 
 Tell them once, on the calibre-web screen, that credentials cannot travel
@@ -127,17 +127,17 @@ an emulator in CI, which is why it has not happened yet.
 
 Recorded so they do not get raised again without new evidence.
 
-- **Splitting up `ReaderViewModel`.** It is around 500 lines and every
+- Splitting up `ReaderViewModel`. It is around 500 lines and every
   part of it belongs to the same reading session. Splitting it now would
   be refactoring for its own sake. Revisit if a second reader surface or
   a second format arrives.
-- **Interfaces in front of the repositories, or several Gradle modules.**
+- Interfaces in front of the repositories, or several Gradle modules.
   The manual composition root in `AppContainer.kt` is a deliberate
   choice: no Hilt, no Koin, no indirection that only exists for tests.
   The pure logic that needs testing already lives in `domain/`.
-- **Bundling an offline dictionary.** Several megabytes of APK and a
+- Bundling an offline dictionary. Several megabytes of APK and a
   licensing problem for F-Droid, to replace a handoff that already works
   with whichever dictionary the user has installed.
-- **Counting local books in the storage figure.** The settings screen
+- Counting local books in the storage figure. The settings screen
   reports what Liseur has downloaded and therefore what it can free.
   Books in the user's own folder are not Liseur's to count or to reclaim.
