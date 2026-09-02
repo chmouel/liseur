@@ -144,8 +144,8 @@ one step further.
 
 ## Consequences
 
-- **The inconsistency ADR 2 recorded is closed.** A fixed-layout book
-  now presents one state, not two: everything that cannot work is
+- **The inconsistency ADR 2 recorded closes.** A fixed-layout book
+  presents one state instead of two: everything that cannot work is
   greyed, and the sheet says why once.
 - **The reading theme and the brightness stay enabled**, and the audit
   above is the reason. Anyone reading `EpubPreferencesEditor` alone will
