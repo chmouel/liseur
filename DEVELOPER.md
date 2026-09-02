@@ -451,9 +451,10 @@ release.
 Re-check the claim, rather than trusting this table, if androidx moves:
 
 ```bash
-unzip -p "$(find ~/.gradle/caches/modules-2 -name 'activity-*.aar' | head -1)" \
-  classes.jar > /tmp/a.jar
-unzip -p /tmp/a.jar '*.class' | grep -ac setStatusBarColor
+activity_version=$(sed -n 's/^activityCompose = "\(.*\)"/\1/p' gradle/libs.versions.toml)
+unzip -p "$(find ~/.gradle/caches/modules-2/files-2.1/androidx.activity/activity/"$activity_version" \
+  -name '*.aar' -print -quit)" classes.jar > /tmp/a.jar
+unzip -p /tmp/a.jar '*.class' | grep -ao setStatusBarColor | wc -l
 ```
 
 What the first advisory *is* good for is prompting an actual look. Doing
