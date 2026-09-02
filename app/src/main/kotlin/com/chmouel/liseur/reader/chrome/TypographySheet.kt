@@ -28,8 +28,10 @@ import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.reading.FixedLayoutNotice
 import com.chmouel.liseur.ui.reading.ReadingBrightnessSlider
 import com.chmouel.liseur.ui.reading.ReadingFontDropdown
 import com.chmouel.liseur.ui.reading.rememberFontLibrary
@@ -50,12 +52,22 @@ import com.chmouel.liseur.ui.windowWidth
  * It is deliberately short. Everything a reader sets once, if ever, is a
  * tap further in, behind the Advanced row at the bottom — see
  * `docs/adr/0001-advanced-reading-menu.md`.
+ *
+ * [readingCss] is what this book can honour. A fixed-layout book greys
+ * the size, the face and the scrolling toggle, because Readium gates all
+ * three on a reflowable publication, and the line at the top says so
+ * once for the three of them. The theme and the brightness stay live:
+ * the brightness is the screen's, and Liseur passes its own
+ * `backgroundColor`, which Readium paints the pager with whatever the
+ * layout — so the swatches still change the surround of a fixed page.
+ * See `docs/adr/0020-fixed-layout-reading-settings.md`.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TypographySheet(
     prefs: ReaderPrefs,
     readingTheme: ReaderTheme,
+    readingCss: ReadingCss,
     onFontSelected: (ReadingFont) -> Unit,
     onFontSizeChanged: (Double) -> Unit,
     onThemeSelected: (ReaderThemeChoice) -> Unit,
@@ -77,23 +89,31 @@ fun TypographySheet(
                 .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            val reshapeable = readingCss.honoursAnything
+            if (!reshapeable) FixedLayoutNotice()
             ReadingThemeRow(
                 selected = prefs.themeChoice,
                 resolved = readingTheme,
                 onSelected = onThemeSelected,
             )
-            ReadingFontSizeSlider(value = prefs.fontSize, onChanged = onFontSizeChanged)
+            ReadingFontSizeSlider(
+                value = prefs.fontSize,
+                enabled = reshapeable,
+                onChanged = onFontSizeChanged,
+            )
             ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightnessChanged)
             val fontLibrary = rememberFontLibrary(onSelected = onFontSelected)
             ReadingFontDropdown(
                 selected = prefs.font,
                 imported = fontLibrary.fonts,
+                enabled = reshapeable,
                 onSelected = onFontSelected,
                 onImport = fontLibrary.pick,
                 onRemove = fontLibrary.remove,
             )
             ScrollModeToggle(
-                enabled = scrollMode,
+                checked = scrollMode,
+                enabled = reshapeable,
                 onChanged = onScrollModeChanged,
             )
             KeepScreenOnToggle(
@@ -144,15 +164,23 @@ private fun AdvancedRow(onClick: () -> Unit) {
  * starts from; flipping it here sets this book apart for good, the same
  * way the screen switch below does, so a later change in Settings leaves
  * this book where it was put.
+ *
+ * [enabled] is false in a fixed-layout book, which Readium paginates
+ * whatever this says.
  */
 @Composable
-private fun ScrollModeToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
+private fun ScrollModeToggle(
+    checked: Boolean,
+    enabled: Boolean,
+    onChanged: (Boolean) -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .toggleable(
-                value = enabled,
+                value = checked,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onChanged,
             ),
@@ -163,7 +191,7 @@ private fun ScrollModeToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
-        Switch(checked = enabled, onCheckedChange = null)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }
 

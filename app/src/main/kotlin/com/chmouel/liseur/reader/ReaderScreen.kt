@@ -342,8 +342,19 @@ fun ReaderScreen(
     // "is this book scrolled" has to ask it this way, or a vertical book
     // gets tap zones that turn pages it has not got.
     var verticalText by remember { mutableStateOf(false) }
-    val effectiveScrolling = scrollMode || verticalText
+    // A fixed-layout book places everything by absolute coordinates:
+    // nothing reflows, so measuring what "fits" means nothing, and the
+    // document does not move under the viewport, so a fraction of its
+    // length says nothing about where the reader is either. Readium
+    // paginates it whatever the scrolling preference says, too.
+    val reflowableText = remember(publication) {
+        publication.metadata.layout != Layout.FIXED
+    }
+    // The chrome's answer, and the container's, which are not the same
+    // one and must not be merged: see [chromeScrolls]/[containerScrolls].
+    val effectiveScrolling = chromeScrolls(reflowableText, scrollMode, verticalText)
     val effectiveScrollingNow by rememberUpdatedState(effectiveScrolling)
+    val pageContainerScrolls = containerScrolls(reflowableText, scrollMode)
     var autoScrollArmed by remember { mutableStateOf(false) }
     val columnMode = prefs.columnMode.effectiveFor(widthClass())
 
@@ -426,14 +437,6 @@ fun ReaderScreen(
     // See ReflowScope: a locator nobody has claimed while this is open is the
     // layout moving, not the reader.
     val reflow = remember { ReflowScope() }
-
-    // A fixed-layout book places everything by absolute coordinates: nothing
-    // reflows, so measuring what "fits" means nothing, and the document does
-    // not move under the viewport, so a fraction of its length says nothing
-    // about where the reader is either.
-    val reflowableText = remember(publication) {
-        publication.metadata.layout != Layout.FIXED
-    }
 
     // Which of Readium's four stylesheets this book will be rendered
     // with, and so which of the fine typography settings it can honour.
@@ -852,6 +855,12 @@ fun ReaderScreen(
         // dusk has chosen nothing, and the open book should still follow.
         combine(
             prefsFlow,
+            // The reader's raw scrolling preference, not [containerScrolls]
+            // or [effectiveScrolling]. What is sent to Readium has to be
+            // byte-identical to the initialPreferences the activity built,
+            // or `dropWhile` below lets a value through on open and the
+            // book reflows for nothing. Readium renders a fixed-layout
+            // book paginated whatever this says.
             snapshotFlow { Triple(readingThemeNow, columnMode, scrollMode) },
         ) { p, (theme, columns, scrolling) ->
             p.toEpubPreferences(theme, columns, scrolling, readingCss)
@@ -1525,6 +1534,14 @@ fun ReaderScreen(
         // stop turning them when the pages become one long column.
         // And on the imported fonts, third of the three, because a
         // font family is declared at construction as well.
+        //
+        // This is the reader's raw preference, not [containerScrolls]:
+        // the key's job is to say what this fragment was *built* with,
+        // and the activity builds it — the factory, the initial
+        // preferences and the restore target all hang off the raw value
+        // there. The two halves have to flip together, and a `scroll`
+        // that differs between them invalidates Readium's view pager
+        // even in a fixed-layout book, where nothing renders from it.
         key(columnMode, scrollMode, fontKey) {
             // Derived, not measured: the reservation must exist before
             // the page lays out, or the last line is cut in half. The
@@ -1555,7 +1572,7 @@ fun ReaderScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(
-                        if (scrollMode) {
+                        if (pageContainerScrolls) {
                             Modifier.windowInsetsPadding(
                                 WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal),
                             )
@@ -1969,6 +1986,7 @@ fun ReaderScreen(
         TypographySheet(
             prefs = prefs,
             readingTheme = readingTheme,
+            readingCss = readingCss,
             onFontSelected = onPrefsAction.setFont,
             onFontSizeChanged = onPrefsAction.setFontSize,
             onThemeSelected = onPrefsAction.setTheme,
@@ -1986,7 +2004,8 @@ fun ReaderScreen(
         AdvancedSheet(
             prefs = prefs,
             // Not the reader's own answer but the page's: vertical text
-            // runs rather than turns whatever the setting says.
+            // runs rather than turns whatever the setting says, and a
+            // fixed-layout book turns rather than runs whatever it says.
             scrolling = effectiveScrolling,
             autoScrolling = autoScrollArmed,
             autoScrollSpeed = prefs.autoScrollSpeed,

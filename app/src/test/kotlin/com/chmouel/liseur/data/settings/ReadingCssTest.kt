@@ -134,6 +134,17 @@ class ReadingCssTest {
     }
 
     @Test
+    fun `a fixed layout book honours nothing at all`() {
+        // The single gate the reading sheets read, for the older rows
+        // and the newer ones alike: size, face, line spacing, margins,
+        // columns and scrolling as well as the six of ADR 2.
+        assertFalse(ReadingCss.Unsupported.honoursAnything)
+        assertTrue(ReadingCss.Default.honoursAnything)
+        assertTrue(ReadingCss.Rtl.honoursAnything)
+        assertTrue(ReadingCss.Cjk.honoursAnything)
+    }
+
+    @Test
     fun `the settings screen claims nothing it cannot know`() {
         // No book is open there, so every row stays usable.
         assertTrue(ReadingCss.Unknown.honoursAnything)
