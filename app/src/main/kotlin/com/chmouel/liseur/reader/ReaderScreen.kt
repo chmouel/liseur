@@ -1474,12 +1474,16 @@ fun ReaderScreen(
     // toggle, and a scrolled page can be a screen ahead of the debounced
     // locator the view model last heard about. Ask where it is as the
     // chrome arrives, so the icon and the toggle agree about which mark
-    // that is.
+    // that is. The page really moved under the reader's finger, so the
+    // answer goes as movement: sent as a jump it would land first and
+    // the debounced movement behind it would be dropped as a duplicate,
+    // and with it the pace sample and the reading-time checkpoint the
+    // scroll earned.
     LaunchedEffect(chromeVisible) {
         if (chromeVisible && effectiveScrollingNow) {
             navigatorNow?.let { nav ->
                 scrolledPlace(nav)?.let {
-                    onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                    onLocatorChanged(it, NavigatorPositionEvent.READER_MOVEMENT)
                 }
             }
         }
