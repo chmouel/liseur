@@ -1470,6 +1470,21 @@ fun ReaderScreen(
     // decides everything else, and this adds nothing once the page stops.
     KeepScreenOn(enabled = keepScreenOn || autoScrollArmed)
 
+    // The bar's bookmark button advertises the mark of the page it will
+    // toggle, and a scrolled page can be a screen ahead of the debounced
+    // locator the view model last heard about. Ask where it is as the
+    // chrome arrives, so the icon and the toggle agree about which mark
+    // that is.
+    LaunchedEffect(chromeVisible) {
+        if (chromeVisible && effectiveScrollingNow) {
+            navigatorNow?.let { nav ->
+                scrolledPlace(nav)?.let {
+                    onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                }
+            }
+        }
+    }
+
     /**
      * Marks the page, or unmarks it, from wherever the reader asked.
      *
