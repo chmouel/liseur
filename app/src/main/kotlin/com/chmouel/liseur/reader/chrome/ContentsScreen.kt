@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -122,7 +122,10 @@ fun ContentsScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = theme.background,
-        contentWindowInsets = WindowInsets.systemBars,
+        // safeDrawing, not systemBars: a landscape display cutout falls on
+        // the side edges, where there is no status bar to stand in for it,
+        // and would otherwise cut into the chapter and annotation rows.
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             Column {
                 TopAppBar(

@@ -416,6 +416,60 @@ java -jar pepk.jar --keystore="$d/release.p12" \
 `pepk.jar` and `encryption_public_key.pem` are downloaded from the
 console, and the temporary directory goes away afterwards.
 
+### The two edge-to-edge advisories
+
+Every release raises the same pair of warnings on the Play Console, and
+neither is a defect report:
+
+> Edge-to-edge may not display for all users.
+
+> Your app uses deprecated APIs or parameters for edge-to-edge.
+
+The first is attached to every app targeting SDK 35 or later. It asks us
+to test, not to change anything. The app has drawn edge-to-edge since it
+started targeting 35: `MainActivity` and `ReaderActivity` both call the
+no-argument `enableEdgeToEdge()`, no theme sets `android:statusBarColor`
+or `android:navigationBarColor`, and the manifest carries no opt-out.
+
+The second is static analysis of the bundle's bytecode, and it does not
+say whose bytecode. Ours calls none of the deprecated setters. Every
+flagged reference belongs to androidx:
+
+| Artifact | `setStatusBarColor` | `setNavigationBarColor` | `setDecorFitsSystemWindows` | `setSystemUiVisibility` |
+| --- | --- | --- | --- | --- |
+| `androidx.activity:activity` | 4 | 4 | 4 | 0 |
+| `androidx.core:core` | 1 | 1 | 4 | 7 |
+
+They are the version-guarded backports inside androidx's own
+`EdgeToEdge`, `WindowCompat` and `WindowInsetsControllerCompat`, which
+are the classes Google's own migration guide sends apps *to*. There is
+nothing to migrate away from, and hand-rolling around them to quieten a
+console page would be strictly worse. The warning stays until androidx
+changes, so treat it as noise rather than as something to fix before a
+release.
+
+Re-check the claim, rather than trusting this table, if androidx moves:
+
+```bash
+unzip -p "$(find ~/.gradle/caches/modules-2 -name 'activity-*.aar' | head -1)" \
+  classes.jar > /tmp/a.jar
+unzip -p /tmp/a.jar '*.class' | grep -ac setStatusBarColor
+```
+
+What the first advisory *is* good for is prompting an actual look. Doing
+that once turned up two real inset bugs the console never mentioned:
+the reader's search results were laid out 820px beneath the keyboard
+where nothing could reach them, and neither the search nor the contents
+screen kept clear of a display cutout in landscape. Both screens pinned
+`contentWindowInsets` to `WindowInsets.systemBars`, which omits the IME
+and the cutout; `safeDrawing` covers all three. An emulator with a cutout
+is the way to see it:
+
+```bash
+adb shell cmd overlay enable com.android.internal.display.cutout.emulation.tall
+adb reboot   # the display picks the cutout up on boot, not on enable
+```
+
 ### Release notes
 
 Two things are written for every release, and they are not the same
