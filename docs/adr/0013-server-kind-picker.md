@@ -7,8 +7,8 @@ Status: accepted
 [Issue #96](https://github.com/chmouel/liseur/issues/96). The kind picker
 on the book-server screen has been rebuilt once per kind added. It was a
 `SingleChoiceSegmentedButtonRow` while there were two, and adding
-Grimmory (#94) took four labels — "calibre-web", "Komga", "Grimmory",
-"liseur-sync" — past what a phone's width holds. A segmented control does
+Grimmory (#94) took four labels, "calibre-web", "Komga", "Grimmory",
+"liseur-sync", past what a phone's width holds. A segmented control does
 not wrap, so it became a `FlowRow` of `FilterChip`s.
 
 That works, and on a phone it is two rows of chips above a
@@ -16,22 +16,22 @@ That works, and on a phone it is two rows of chips above a
 button. The whole first screenful is spent on a choice most readers make
 once, and three things are wrong with it:
 
-- **The chips carry no information.** A reader who does not already know
+- The chips carry no information. A reader who does not already know
   which of these they run learns nothing from four product names, and
   the card underneath explains only the kind already selected. There is
   no state of this screen in which the four can be compared.
-- **It gets worse as it grows.** Every kind added makes every chip
+- It gets worse as it grows. Every kind added makes every chip
   narrower. A fifth wraps to a third row or starts truncating.
-- **The card is tall and mostly says what the fields say.** Two of the
+- The card is tall and mostly says what the fields say. Two of the
   four `server_intro_*` strings are "give the address of your server and
   the login you use for it", which is the `Server address` and `Password`
   labels restated at four times the height.
 
 ## Decision
 
-One `OutlinedCard` holding a `ListItem` — overline "Which kind of
+One `OutlinedCard` holding a `ListItem`: overline "Which kind of
 server?", headline the selected kind, supporting its tagline and one
-line on whether it keeps your place, trailing a chevron — which opens a
+line on whether it keeps your place, trailing a chevron, which opens a
 `ModalBottomSheet` listing every kind in the same shape with a radio
 button. `ServerKindRow` and `ServerKindSheet`, in their own file.
 
@@ -52,7 +52,7 @@ also makes the first thing a reader sees a wall of prose, when most of
 them know which server they run and want the address box.
 
 **An `ExposedDropdownMenuBox`.** The smallest footprint, and it fixes
-height and scaling — but a menu item is one line, so the taglines have
+height and scaling, but a menu item is one line, so the taglines have
 nowhere to go and we are back to four bare names. It also reads as a
 form field among form fields, when it is the switch deciding which form
 fields exist.
@@ -85,7 +85,7 @@ than dropped:
 `ServerKind.syncAbility` (`EXACT` / `PROGRESSION` / `NONE`) is new, and
 deliberately not `RemoteServer.canSync`. They answer different
 questions: the picker asks what a kind *can ever* do, with no account in
-existence yet, while `canSync` asks whether this account is ready now —
+existence yet, while `canSync` asks whether this account is ready now,
 and for calibre-web that waits on a Kobo token, which is an account's
 problem and not a reason to warn a reader off the kind. Folding them
 together would mean a picker inventing an account to interrogate, or a
@@ -110,7 +110,7 @@ persisted state: sheet visibility is a local `rememberSaveable`, so
 rotation is free and `onKindChange` keeps its signature.
 
 Switching kinds costs one more tap than a chip did. That is the trade,
-and it is a small one — switching is something a reader does while
+and it is a small one: switching is something a reader does while
 working out which server they have, and the sheet is better at that than
 four names ever were.
 
@@ -130,7 +130,7 @@ Licences screen.
 
 Komga's is not. Its repository is MIT, but the icon is, by Komga's own
 README, "based on an icon made by Freepik from flaticon.com", and
-Flaticon's licence is neither transferable nor sublicensable — so
+Flaticon's licence is neither transferable nor sublicensable, so
 Komga's MIT cannot reach it, and F-Droid's inclusion policy requires
 every bundled asset to be redistributable. Komga therefore gets a
 neutral book-server glyph, tinted with the theme rather than left in

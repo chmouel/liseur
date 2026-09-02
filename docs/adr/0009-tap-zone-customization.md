@@ -6,7 +6,7 @@ GitHub issue: [#46](https://github.com/chmouel/liseur/issues/46)
 ## Context
 
 The tap zones are fixed: the edge the book came from goes back, the
-opposite edge goes forward, middle for chrome — on a book that reads
+opposite edge goes forward, middle for chrome. On a book that reads
 left to right, that is back on the left and forward on the right. A
 left-handed reader holding a phone in one hand has the forward turn
 under the wrong thumb every single page. The fix most readers actually
@@ -15,7 +15,7 @@ want is not a zone editor, it is "swap the edges".
 ## Decision
 
 One two-way preference: **Standard** (today's layout, whichever way the
-book reads) and **Swapped** (the other thumb — the sides the other way
+book reads) and **Swapped** (the other thumb: the sides the other way
 round from whatever Standard gives that book).
 
 Two, not the three this ADR first proposed. The dropped one was "both
@@ -25,7 +25,7 @@ answer: the other two say which hand is holding the phone, while that
 one takes an action off the page and asks the reader to find it
 somewhere else.
 
-Fit with Liseur's simplicity: one chip row in **Settings → Reading**,
+Fit with Liseur's simplicity: one chip row in **Settings -> Reading**,
 directly under "Volume keys turn pages". Not the typography sheet this
 ADR first named, and not Reading appearance: a tap zone is not how the
 page looks, it is how the page is turned, and the switch it belongs
@@ -33,7 +33,7 @@ beside is the one that decides what the volume keys do. It is also set
 once, when the app is set up, which is what the reading sheet is
 explicitly not for ([ADR 1](0001-advanced-reading-menu.md)).
 
-No draggable zone editor, no per-zone action picker — that is a
+No draggable zone editor, no per-zone action picker. That is a
 settings hobby, and the two presets cover the readers who exist.
 
 ## Design
@@ -44,7 +44,7 @@ are geometry, and a preset that reorders the sides has nothing to say
 about them. The mapping from a side to a direction moves into one pure
 function, `ReaderTapZones.forward(zone, rtl, swapped)`, so the reading
 page and the endpaper cannot come to different answers about the same
-tap — the endpaper is a page, and had its own copy of that `when`.
+tap; the endpaper is a page, and had its own copy of that `when`.
 
 The preset composes with reading direction rather than overruling it. An
 RTL book turns forward on the left because that is where the next page
@@ -58,7 +58,7 @@ reaches the reader as a `StateFlow` on `ReaderViewModel`, and is read
 through a lambda so that changing it does not tear down and rebuild the
 navigator's input listeners.
 
-The volume keys are untouched — they already give a physical
+The volume keys are untouched: they already give a physical
 back/forward pair whatever the thumbs do. Scroll mode keeps its own
 scroll-aware tap behaviour: the whole page is the chrome zone there, so
 a scrolled book never resolves to a side and the preset has nothing to
@@ -66,7 +66,7 @@ reinterpret.
 
 The endpaper is the exception, and deliberately. It is the app's own
 page rather than the book's, is not scrolled by the navigator, and its
-chrome zone does nothing at all — so its sides stay live whatever the
+chrome zone does nothing at all, so its sides stay live whatever the
 reading mode, exactly as they did before this preset existed. Taking
 them away in scroll mode would leave a reader who scrolls no tap at all
 to get back into the book. The preset therefore reaches the endpaper
@@ -91,7 +91,7 @@ forgotten.
 ## Update
 
 The Reading section it landed in later moved behind a row of its own,
-so the chip row is now in **Settings → Reading & navigation**
+so the chip row is now in **Settings -> Reading & navigation**
 (`ui/settings/ReadingNavigationScreen.kt`), still directly under
 "Volume keys turn pages" and still not in Reading appearance. See
 `docs/adr/0001-advanced-reading-menu.md`.

@@ -6,8 +6,8 @@ GitHub issue: [#126](https://github.com/chmouel/liseur/issues/126)
 ## Context
 
 [ADR 17](0017-go-to-page.md) made the page readout under the scrubber a
-button. It left the readout beside it — the percentage, on the left of
-the same row — a label, and it left both halves of the question it
+button. It left the readout beside it, the percentage on the left of
+the same row, as a label, and it left both halves of the question it
 answers unfinished.
 
 The percentage is the number the rest of the app already speaks. It is
@@ -23,8 +23,8 @@ The percentage is also the only number that always exists. A printed
 private to the app. The percentage is on every book, in every server,
 and on the shelf.
 
-The second gap is in the dialog ADR 17 shipped. It names the endpoints —
-"Enter a page from 1 to 517" — and not the present. A reader typing an
+The second gap is in the dialog ADR 17 shipped. It names the endpoints
+and not the present: "Enter a page from 1 to 517". A reader typing an
 absolute number is very often moving relative to somewhere: back to the
 start of the chapter, on thirty pages, to the other side of a scene
 break. The number they need for that arithmetic is the one number the
@@ -76,26 +76,26 @@ only needed label to `Link`.
 are still per-book and computed once; only the starting point moves with
 the reader.
 
-The printed index — each `page-list` mark resolved through
-`locatorFromLink` and `BookPositions.resolve()` into a position, sorted,
-one label per position — is built lazily, on first use. A page list runs
-to one mark per printed page, and paying for all of them belongs to the
-moment the reader opens the dialog rather than to every book that is
-merely opened.
+The printed index is built lazily, on first use. Each `page-list` mark
+is resolved through `locatorFromLink` and `BookPositions.resolve()` into
+a position; the result is sorted, one label per position. A page list
+runs to one mark per printed page, and paying for all of them belongs
+to the moment the reader opens the dialog rather than to every book
+that is merely opened.
 
 A page list whose marks land nowhere in the reading order is not a
 numbering at all, whatever the file declares: every label it offered
 would be refused, and the reader would be left with a dialog that cannot
 answer. Such a book falls back to the page the footer shows. The
 endpoints of a real one are still read off the document rather than the
-index, because a page list is not sorted by position — roman numerals
+index, because a page list is not sorted by position; roman numerals
 through the front matter is the ordinary case.
 
 Two rules in the index are deliberate. Marks landing on the same position keep
 the *earliest* label, because a chapter whose marks all resolve to its
 first position should read as the page it starts on, not the page it
-ends on. And a reader ahead of no mark at all — in the cover and the
-title page, before the book prints a number — is told the first number
+ends on. And a reader ahead of no mark at all, in the cover and the
+title page before the book prints a number, is told the first number
 the book does print, rather than an empty field.
 
 The percentage resolver is a function, not a class: there is no per-book
@@ -104,10 +104,11 @@ index to hold, only `BookPositions`.
 It maps a percentage to the *first* position the footer would call that
 percentage, in integer arithmetic, because that boundary is the whole
 point: 7% of a hundred steps is 7.000000000000001 in binary floating
-point, and rounding that up steps a page past the page being asked for. That is the only mapping that keeps the promise the feature
-is for: type the number the footer is showing and the footer still shows
-it. Rounding the other way — flooring, which is what
-`locatorAtOrBeforeProgression()` does for sync — lands a page short, and
+point, and rounding that up steps a page past the page being asked for.
+That is the only mapping that keeps the promise the feature is for:
+type the number the footer is showing and the footer still shows it.
+Rounding the other way, flooring as
+`locatorAtOrBeforeProgression()` does for sync, lands a page short, and
 since the footer truncates rather than rounds, typing 70 leaves 69% on
 screen. A reader can only read that as a refusal, and retype it forever.
 It was written that way first and caught on a device, which is the
@@ -137,8 +138,8 @@ return one.
 
 Every absolute move the reader can name now has a way in, and the two
 they can name sit next to each other in the row that displays them. A
-book with no `page-list` and a reader who thinks in percentages — the
-common case, twice over — is no longer served worst.
+book with no `page-list` and a reader who thinks in percentages (the
+common case, twice over) is no longer served worst.
 
 The percentage is coarse on a long book: one percent of a nine hundred
 page book is nine pages. That is the honest resolution of the number,

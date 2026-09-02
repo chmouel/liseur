@@ -30,13 +30,13 @@ numbers onto points in the text, which is exactly the number a citation
 quotes and exactly the number written on the paper note. Readium parses
 it, and `Publication.pageList` in `readium-shared` 3.3.0 hands it over
 as links. Liseur reads past it, and the page number in its footer is
-Readium's synthetic position — stable, layout-independent, and unrelated
-to what the paper book called that page.
+Readium's synthetic position, which is stable, layout-independent, and
+unrelated to what the paper book called that page.
 
 ## Decision
 
-The page readout already printed under the scrubber — "Page 142 of 517"
-— becomes tappable, and opens a small dialog asking for a page. Typing
+The page readout already printed under the scrubber, "Page 142 of 517",
+becomes tappable, and opens a small dialog asking for a page. Typing
 one moves the book there.
 
 Where a book declares a `page-list`, the dialog asks for and accepts the
@@ -56,7 +56,7 @@ and behind a tab strip, for an answer the scrubber row is already
 displaying. A long-press on the scrubber has no affordance and would go
 undiscovered. The footer's own page number is tempting and wrong: footer
 taps already cycle the middle slot, a quiet gesture worth leaving alone,
-and the footer is the page the reader is trying to read past — putting a
+and the footer is the page the reader is trying to read past; putting a
 dialog under it makes the text itself a control.
 
 ## Design
@@ -64,7 +64,7 @@ dialog under it makes the text itself a control.
 `ReadingScrubber` in `reader/chrome/ReadingProgressUi.kt` draws the
 readout as a `FooterHint` in the row beneath the slider. It gains an
 `onGoToPage` callback and `clickableWithoutRipple`, which the file
-already defines for exactly this — chrome that must swallow a tap
+already defines for exactly this: chrome that must swallow a tap
 without turning the page and without a ripple.
 
 This composes with [ADR 7](0007-scrubber-page-peek.md), which stops a
@@ -90,9 +90,9 @@ speed estimator is already told not to count the jump as reading.
 
 The resolving is pure and lives in `reader/progress/`, beside
 `BookPositions`, so it is testable on the JVM without an emulator. It
-answers two questions — what to ask for, and what a typed answer means —
-from a `page-list` index built once when the publication opens, the same
-moment `BookPositions.of()` is built.
+answers two questions from a `page-list` index built once when the
+publication opens, the same moment `BookPositions.of()` is built: what
+to ask for, and what a typed answer means.
 
 The index is not an integer range, and the design must not pretend
 otherwise. A `page-list` label is a string: roman numerals across front
@@ -101,8 +101,8 @@ followed by 1 through 480 is neither sorted nor contiguous as a number.
 Labels can also repeat across volumes and can be absent entirely for
 stretches of a book. So the index is a map from label to `Link`, an
 ordered list of the labels for range hints, and nothing more. A label
-the book does not carry is refused — the field says so, and the dialog
-does not move the book — rather than rounded to the nearest thing, which
+the book does not carry is refused; the field says so, and the dialog
+does not move the book, rather than rounded to the nearest thing, which
 would silently answer a different question from the one asked.
 
 `publication.locatorFromLink(link)` turns the chosen `page-list` link
@@ -131,8 +131,8 @@ the lesser of the two costs: the alternative is to keep asking for a
 number nobody outside the app has ever seen. The dialog naming what it
 wants, and the chapter hint confirming where that lands, is what carries
 the difference. Renumbering the footer to the printed page is a much
-larger change — the scrubber, time-left, sync progressions and every
-stored annotation position hang off the synthetic ones — and is
+larger change: the scrubber, time-left, sync progressions and every
+stored annotation position hang off the synthetic ones, and it is
 deliberately not proposed here.
 
 Books with a `page-list` are a minority, and the ones that have it are

@@ -42,27 +42,27 @@ not copy your books anywhere.
 
 ## Network access
 
-Liseur talks to exactly two kinds of address, both of which are yours to
-choose:
+Liseur talks to exactly two kinds of address, both chosen by you.
 
-**Your book server.** If, and only if, you connect one, Liseur talks to
-the calibre-web, Komga or liseur-sync server whose address you typed in.
-It sends the credentials that server asked for, downloads the books and
-covers you request, and exchanges your reading position so the same book
-resumes in the right place on another device. That server is operated by
-you or by whoever you chose to trust; this policy does not cover what it
-does with the data it receives.
+### Your book server
 
-**A dictionary site, if you enable it.** Looking a word up online is off
-by default. When you switch it on, Liseur sends the single selected word
-to the dictionary site configured in Settings — by default the public
-Wiktionary API — over HTTPS. No identifier, no book title and no account
-accompanies it. You may point this at any Wiktionary edition or mirror,
-or leave the feature off and hand words to an offline dictionary app
-installed on your device instead. When you pick or type a dictionary
-site in Settings, Liseur checks it once with a fixed word ("book") so a
-dead address fails there and then; no request is made just for opening
-the screen.
+If you connect a book server, Liseur talks to the calibre-web, Komga or
+liseur-sync server whose address you entered. It sends the credentials that
+server asked for, downloads the books and covers you request, and exchanges
+your reading position so the same book resumes in the right place on another
+device. You operate that server, or someone you trust does. This policy does not
+cover what the server does with the data it receives.
+
+### A dictionary site, if you enable it
+
+Looking a word up online is off by default. When you switch it on, Liseur
+sends the single selected word to the dictionary site configured in Settings,
+by default the public Wiktionary API, over HTTPS. No identifier, book title
+or account accompanies it. You may point this at any Wiktionary edition or
+mirror, or leave the feature off and hand words to an offline dictionary app
+installed on your device instead. When you pick or type a dictionary site in
+Settings, Liseur checks it once with a fixed word ("book"). A dead address
+fails then, and opening the screen makes no request.
 
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the two purposes above and for
@@ -73,11 +73,11 @@ nothing else.
 Liseur takes part in Android's standard backup, so your library, reading
 positions, highlights, notes and settings can follow you to a new device.
 That backup is handled by Android and stored in your own Google account,
-under Google's terms, not the developer's — Liseur has no access to it.
+under Google's terms, not the developer's. Liseur has no access to it.
 Downloaded book files and generated covers are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
-because the key that encrypts them never leaves the old one; Liseur
-notices this and asks you to sign in again.
+because the key that encrypts them never leaves the old one. Liseur notices
+this and asks you to sign in again.
 
 You can turn this off in your device's backup settings.
 

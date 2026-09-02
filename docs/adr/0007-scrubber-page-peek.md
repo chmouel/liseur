@@ -13,8 +13,8 @@ reading position.
 
 ## Decision
 
-While the thumb is down, the scrubber only shows — a small label above
-it with the chapter title and page — and the book does not move until
+While the thumb is down, the scrubber only shows a small label above
+it with the chapter title and page, and the book does not move until
 release. After a release that moved the book, a single "Back to page N"
 chip offers the way home, and turning a page dismisses it.
 

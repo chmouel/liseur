@@ -1,9 +1,9 @@
 # tests/
 
 End-to-end scenarios that run against a real device or emulator over
-`adb`. They exist for the behaviour that only shows up on a device —
-timing, connectivity, the reader actually appearing — which is
-everything the JVM unit tests in `app/src/test` cannot see.
+`adb`. They cover behaviour that only shows up on a device: timing,
+connectivity, and the reader actually appearing. JVM unit tests in
+`app/src/test` cannot see those things.
 
 They are meant to be run by a person or by an agent, unattended:
 
@@ -23,9 +23,9 @@ as a device that passed.
 
 | Scenario | What it proves |
 | --- | --- |
-| `offline-open` | A book opens promptly with no network, and — the case that regressed — with a network whose server is unroutable. |
+| `offline-open` | A book opens promptly with no network and with a network whose server is unroutable, the case that regressed. |
 | `bench-open` | Not pass/fail: prints how long a book takes to open under each network condition. |
-| `grimmory-connect` | Liseur reaches a [Grimmory](https://github.com/grimmory-tools/grimmory) server through its Komga-compatibility API: an OPDS user signs in, the shelf fills from more than one HTTP page, comics stay off it, a second walk prunes nothing, covers load, a book downloads and opens, and nothing offers to keep the reader's place. Needs a server — `hack/grimmory-dev --up` — and skips itself without one. |
+| `grimmory-connect` | Liseur reaches a [Grimmory](https://github.com/grimmory-tools/grimmory) server through its Komga-compatibility API: an OPDS user signs in, the shelf fills from more than one HTTP page, comics stay off it, a second walk prunes nothing, covers load, a book downloads and opens, and nothing offers to keep the reader's place. Needs a server, `hack/grimmory-dev --up`; skips itself without one. |
 
 ## Preconditions
 
@@ -65,62 +65,63 @@ report
 ```
 
 `--help` prints the header comment, so the documentation cannot drift
-away from the code. Make the file executable — `run-all` picks up
+away from the code. Make the file executable: `run-all` picks up
 whatever is executable in this directory.
 
 ### What `lib/device.sh` gives you
 
 - `die`, `step`, `note` for output; `ok`, `bad`, `skip`, `report` for
   results. `report` exits non-zero if anything called `bad`.
-- `adb` — a wrapper pinned to the chosen serial. Always use it.
-- `query "<sql>"` — SQL against the app's database, and `sql_quote` to
+- `adb`: a wrapper pinned to the chosen serial. Always use it.
+- `query "<sql>"`: SQL against the app's database, and `sql_quote` to
   build a literal. Use it for anything that came off the device: a
   configured server address is text the reader typed, and one
   apostrophe pasted straight into a statement ends the string and runs
   whatever follows.
-- `shell_quote` — the same care for the *device's* shell. Everything
+- `shell_quote`: the same care for the *device's* shell. Everything
   handed to `adb shell` is re-parsed there, so a book title with an
   apostrophe in its file name would otherwise end the argument and run
   the rest as the shell user.
-- `set_server_url "<url>"` — points the connected server somewhere,
+- `set_server_url "<url>"`: points the connected server somewhere,
   with the app stopped first and the result checked afterwards.
-- `airplane_mode_state` — `on` or `off`, to read before you change it.
-- `device_now_ms` — the *device's* clock, so adb round-trips are not
+- `airplane_mode_state`: `on` or `off`, to read before you change it.
+- `device_now_ms`: the *device's* clock, so adb round-trips are not
   counted as time the app spent working.
-- `pick_downloaded_book` — sets `BOOK_URL` and `BOOK_LOCAL_URI`.
-- `time_book_open URL LOCAL_URI [CAP_MS]` — milliseconds, or `timeout`.
+- `pick_downloaded_book`: sets `BOOK_URL` and `BOOK_LOCAL_URI`.
+- `time_book_open URL LOCAL_URI [CAP_MS]`: milliseconds, or `timeout`.
 - `expect_open_under LABEL MEASURED BUDGET_MS`.
 - `airplane_mode on|off`.
 
-### Two things to get right
+### Use the database as the oracle
 
-**Use the database as the oracle.** Screen scraping is slow and lies.
+Screen scraping is slow and lies.
 Book-open timing keys off `books.last_opened_at`, which the reader
 writes one line before it shows the page, so it is the honest end of
 "the book opened".
 
-**Restore what you changed, from a trap.** These run against a device
-someone else will use next. Anything a scenario sets — airplane mode, a
-server address, app data — is put back on the way out, however the
-script leaves:
+### Restore what you changed from a trap
+
+Someone else will use the device after the scenario. Anything a scenario
+sets, such as airplane mode, a server address, or app data, is put back on
+the way out:
 
 ```bash
 trap restore EXIT
 ```
 
-Put back what was *there*, not what you assume: read airplane mode
-before turning it on, so a device that had it on keeps it. Stop the app
-before writing to its database, and check the value afterwards rather
-than announcing success — leaving a blackhole address behind quietly
-breaks the next thing anyone does with the device. `set_server_url`
-does all three.
+Put back what was *there*, not what you assume. Read airplane mode before
+turning it on, so a device that had it on keeps it. Stop the app before
+writing to its database, then check the value afterwards. Leaving a
+blackhole address behind breaks the next thing anyone does with the device.
+`set_server_url` does all three.
 
-**Point a server nowhere real.** To make a server unreachable these
-scenarios change only its address, so the app keeps the credentials it
-had and sends them to whatever answers. Use `192.0.2.1` (TEST-NET-1,
-reserved by RFC 5737 and routed nowhere), never a private `10.x` or
-`192.168.x` address, which on somebody's network is perfectly capable
-of answering.
+### Use a reserved address for unreachable-server tests
+
+To make a server unreachable, these scenarios change only its address, so
+the app keeps its existing credentials and sends them to whatever answers.
+Use `192.0.2.1` (TEST-NET-1, reserved by RFC 5737 and routed nowhere).
+Avoid private `10.x` or `192.168.x` addresses, which may answer on
+somebody's network.
 
 ## Related
 

@@ -12,7 +12,7 @@ it reflows, and Readium honours no reflowable-text setting inside one:
 [ADR 2](0002-typography-fine-tuning.md) disabled the six rows it added
 when the open book is fixed-layout, and said so in a line above them.
 The rows that were already there were left alone, deliberately, to keep
-that change reviewable — and its consequences say as much. So today the
+that change reviewable, and its consequences say as much. So today the
 reader opening a fixed-layout book gets a menu where alignment is greyed
 out and font size is not, though neither one does anything. Dragging the
 size slider reflows nothing, changes nothing, and gives no reason why.
@@ -52,10 +52,10 @@ Two rows in that table are worth arguing about.
 **`backgroundColor` carries no layout gate at all.** Readium's `theme`
 is reflowable-only, so the obvious reading is that the theme swatches
 belong in the disabled set with everything else. They do not. Liseur
-does not rely on `theme` for its colours — it passes explicit
+does not rely on `theme` for its colours; it passes explicit
 `backgroundColor` and `textColor`, because Readium's own palette is
 close to ours but not identical and the difference shows as bands above
-and below the text — and `EpubNavigatorFragment` calls
+and below the text, and `EpubNavigatorFragment` calls
 `resourcePager.setBackgroundColor(settings.effectiveBackgroundColor)`
 whatever the layout. So the swatches visibly change the letterbox around
 a fixed page, in every theme, and disabling them would take away the one
@@ -79,7 +79,7 @@ own and know nothing about layout.
 The same answer ADR 2 gave, for the same reason: the value is not lost,
 it is waiting for the next book that can use it. A reader who has settled
 on 120% and a wide margin should find both still set when they close the
-comic and go back to the novel — and should be able to see, while the
+comic and go back to the novel, and should be able to see, while the
 comic is open, that the app has not forgotten them.
 
 Hiding the rows instead would also make the two sheets change shape
@@ -95,8 +95,8 @@ and the scrolling joining them, a per-group note would print the same
 sentence three times on one sheet.
 
 So it is hoisted to the top of each sheet, above everything it applies
-to, and reworded. The current wording — "so its text cannot be reshaped"
-— was true of the six spacing and alignment rows; it is not what a
+to, and reworded. The current wording, "so its text cannot be reshaped",
+was true of the six spacing and alignment rows; it is not what a
 reader needs to be told when the size slider and the font picker are
 greyed out as well.
 
@@ -104,7 +104,7 @@ greyed out as well.
 
 `ReadingCss.honoursAnything` already answers this. It is false for
 `Unsupported` and true for `Unknown`, which is precisely what the two
-surfaces need: nothing is disabled on Settings → Reading appearance,
+surfaces need: nothing is disabled on Settings -> Reading appearance,
 where no book is open and the reader is choosing a default for every
 book they will open.
 
@@ -118,8 +118,8 @@ enum gains no member.
 It asks what the reader chose and whether the book runs down the page;
 it never asks whether the book can scroll at all.
 
-Three things hang off it — the tap zones, the footer, and whether the
-sheet offers auto-scroll or a page-turn animation — so a reader who left
+Three things hang off it: the tap zones, the footer, and whether the
+sheet offers auto-scroll or a page-turn animation. So a reader who left
 scroll mode on and then opens a fixed-layout book gets scroll-flavoured
 chrome over a page Readium is paginating regardless: tap zones that
 scroll a page that turns, no footer, and an auto-scroll switch that moves
@@ -137,27 +137,27 @@ would cost a reader their place to no effect.
 ### Everything is still sent
 
 No change to `toEpubPreferences`. Every preference keeps going to Readium
-exactly as before, whatever the layout — what the layout decides is
+exactly as before, whatever the layout; what the layout decides is
 whether a value *counts*, not whether it is stored. This is the rule ADR
 2 set for the stylesheet variants, and a fixed layout is the same rule
 one step further.
 
 ## Consequences
 
-- **The inconsistency ADR 2 recorded closes.** A fixed-layout book
+- The inconsistency ADR 2 recorded closes. A fixed-layout book
   presents one state instead of two: everything that cannot work is
   greyed, and the sheet says why once.
-- **The reading theme and the brightness stay enabled**, and the audit
+- The reading theme and the brightness stay enabled, and the audit
   above is the reason. Anyone reading `EpubPreferencesEditor` alone will
   conclude the theme belongs in the disabled set; it does not, because
   Liseur passes its own colours and Readium paints the pager with them
   in every layout.
-- **A stored value survives a fixed-layout book**, because nothing about
+- A stored value survives a fixed-layout book, because nothing about
   what is sent changes.
-- **`spread` remains unreachable.** A fixed-layout book gets a more
+- `spread` remains unreachable. A fixed-layout book gets a more
   honest menu out of this change and no new capability; the one setting
   it actually has is left to its own issue.
-- **The demo shelf has no fixed-layout book**, so this cannot be checked
+- The demo shelf has no fixed-layout book, so this cannot be checked
   by running `hack/screenshots`. Verifying it means building a
   pre-paginated EPUB by hand and side-loading it.
 - No new dependency, no new stored state, no migration, and no new
