@@ -1129,14 +1129,20 @@ internal fun BookActionsSheet(
 
                 else -> Unit
             }
-            if (book.remoteUuid == null) {
+            // A book with a file of its own here, whether or not a
+            // server also knows about it. Uploading one keeps its local
+            // URL and its file, so it is still a shelf entry the reader
+            // may want gone without losing the file (issue #147).
+            if (book.openableUrl != null) {
                 Spacer(Modifier.height(8.dp))
                 // Above deleting, and deliberately: the gentler of the
                 // two is the one most people reaching here actually
-                // want, and it used not to exist at all (issue #147).
+                // want, and it used not to exist at all.
                 OutlinedButton(onClick = onRemoveFromLibrary, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.remove_from_library))
                 }
+            }
+            if (book.remoteUuid == null) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onDeleteLocal, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.delete_file))
