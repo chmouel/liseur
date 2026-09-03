@@ -21,6 +21,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.cover
@@ -29,6 +31,24 @@ import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.toAbsoluteUrl
 import org.readium.r2.streamer.PublicationOpener
+
+/**
+ * What became of a book the reader picked by hand.
+ *
+ * Shelving one is not always adding one: the same file can already be
+ * on the shelf under another name, and the reader should be told that
+ * rather than shown a second copy of a book they already have.
+ */
+sealed interface ImportResult {
+    /** A book that was not here before, now indexed. */
+    data class Added(val book: Book) : ImportResult
+
+    /** The library entry this file already has. Nothing was added. */
+    data class AlreadyShelved(val book: Book) : ImportResult
+
+    /** The file could not be read as a book at all. */
+    data object Failed : ImportResult
+}
 
 /**
  * Indexes EPUBs into the library: from SAF folders the user picked
@@ -41,10 +61,22 @@ class LocalLibraryRepository(
     private val bookDao: BookDao,
     private val folderDao: LibraryFolderDao,
     private val bookRemoval: BookRemoval,
+    private val fingerprints: BookFingerprintStore,
 ) {
     val books: Flow<List<Book>> = bookDao.observeAll()
     val mostRecent: Flow<Book?> = bookDao.observeMostRecent()
     val folders: Flow<List<LibraryFolder>> = folderDao.observeAll()
+
+    /**
+     * Held by everything that can put a local book on the shelf.
+     *
+     * Recognising a file and inserting it are two steps, and a folder
+     * scan runs itself on every cold start while the reader is free to
+     * pick a file by hand at the same moment. Both would look, both
+     * would find nothing, and both would insert — the very duplicate
+     * this class now exists to prevent, only harder to reproduce.
+     */
+    private val importLock = Mutex()
 
     suspend fun addFolder(treeUri: Uri) {
         runCatching {
@@ -71,10 +103,44 @@ class LocalLibraryRepository(
         scanFolder(treeUri)
     }
 
-    suspend fun removeFolder(url: String) {
+    suspend fun removeFolder(url: String) = importLock.withLock {
         folderDao.delete(url)
         bookRemoval.deleteByUrls(bookDao.urlsForSource(url))
     }
+
+    /**
+     * Takes a book off the shelf and leaves its file alone.
+     *
+     * The other way out of the library deletes the file first, which is
+     * far too much to ask of someone who only wanted to be rid of a
+     * duplicate entry (issue #147).
+     *
+     * The row is marked, not deleted. The reader's place, their marks,
+     * the time they spent, what a server has been told about it and
+     * where they filed it by hand all hang off this row, and all of it
+     * is theirs whether the entry is showing or not. Marking is also the
+     * whole of the removal and the whole of the way back: one write
+     * each, so there is no moment where the book is neither on the shelf
+     * nor on the list of what was taken off it.
+     */
+    suspend fun removeFromLibrary(book: Book) {
+        bookDao.setHiddenAt(book.url, System.currentTimeMillis())
+    }
+
+    /**
+     * Puts a hidden book back on the shelf.
+     *
+     * Nothing is read and nothing is rebuilt: the entry was never taken
+     * apart, so showing it again is all there is to do. A file that has
+     * gone missing in the meantime is pruned by the next scan of its
+     * folder, exactly as it would have been had it never been hidden.
+     */
+    suspend fun unhide(bookUrl: String) {
+        bookDao.setHiddenAt(bookUrl, null)
+    }
+
+    /** Every book taken off the shelf, most recently taken off first. */
+    val hidden: Flow<List<Book>> = bookDao.observeHidden()
 
     /** Rescans every library folder, adding new books and pruning deleted files. */
     suspend fun rescanAll() {
@@ -83,11 +149,97 @@ class LocalLibraryRepository(
         }
     }
 
-    /** Adds a single, individually picked book to the library. */
-    suspend fun importBook(uri: Uri): Book? {
-        val url = uri.toAbsoluteUrl() ?: return null
-        bookDao.getByUrl(url.toString())?.let { return it }
-        return indexBook(url, source = null)
+    /**
+     * Adds a single, individually picked book to the library.
+     *
+     * The file may well be one the library already has. A folder scan
+     * writes the URI it built against the tree it was walking, and the
+     * single-file picker hands back a bare document URI, so one EPUB in
+     * a watched folder has two spellings and matching on the URL alone
+     * shelved it twice (issue #147). What it is, rather than what it is
+     * called, decides.
+     */
+    suspend fun importBook(uri: Uri): ImportResult = importLock.withLock {
+        val url = uri.toAbsoluteUrl() ?: return@withLock ImportResult.Failed
+        alreadyShelved(url)?.let { return@withLock shelveAgainOrReport(it) }
+        indexBook(url, source = null)
+            ?.let { ImportResult.Added(it) }
+            ?: ImportResult.Failed
+    }
+
+    /**
+     * What to answer about a file the library already has an entry for.
+     *
+     * Picking a book that was taken off the shelf is asking for it back,
+     * so it comes back rather than being reported as already there —
+     * under the URL it has always had, which is where its place and its
+     * marks are.
+     *
+     * The caller holds [importLock].
+     */
+    private suspend fun shelveAgainOrReport(book: Book): ImportResult =
+        if (book.hidden) {
+            unhide(book.url)
+            ImportResult.Added(bookDao.getByUrl(book.url) ?: book)
+        } else {
+            ImportResult.AlreadyShelved(book)
+        }
+
+    /**
+     * The library entry that already stands for this file, or null.
+     *
+     * Three questions, cheapest first, because the last one reads the
+     * whole file:
+     *
+     * 1. The same URL, which is all this used to ask.
+     * 2. The same document: authority and document id, which sees
+     *    through the two spellings SAF gives one file.
+     * 3. The same bytes, for a genuine second copy sitting somewhere
+     *    else. Hashing is confined to books that already claim to be
+     *    the same work, so the usual answer costs one metadata read and
+     *    no hashing at all, and a matching work id on its own is never
+     *    enough — two editions of one book are two books.
+     */
+    private suspend fun alreadyShelved(url: AbsoluteUrl): Book? {
+        val urlText = url.toString()
+        bookDao.getByUrl(urlText)?.let { return it }
+
+        val shelf = bookDao.allOnce()
+        documentIdentity(urlText)?.let { identity ->
+            shelf.firstOrNull { it.url != urlText && documentIdentity(it.url) == identity }
+                ?.let { return it }
+        }
+        return sameContentOnShelf(url, shelf)
+    }
+
+    private suspend fun sameContentOnShelf(url: AbsoluteUrl, shelf: List<Book>): Book? {
+        val workId = workIdOfFile(url) ?: return null
+        val candidates = shelf.filter {
+            it.workId == workId && it.url != url.toString() && it.openableUrl != null
+        }
+        if (candidates.isEmpty()) return null
+
+        val sha256 = fingerprints.compute(url.toString())?.sha256 ?: return null
+        return candidates.firstOrNull { fingerprints.of(it)?.sha256 == sha256 }
+    }
+
+    /** What work a file holds, without shelving it. */
+    private suspend fun workIdOfFile(url: AbsoluteUrl): String? {
+        val asset = assetRetriever.retrieve(url).getOrElse { return null }
+        val publication = publicationOpener.open(asset, allowUserInteraction = false)
+            .getOrElse {
+                asset.close()
+                return null
+            }
+        return try {
+            workIdOf(
+                publication.metadata.identifier,
+                publication.metadata.title,
+                publication.metadata.authors.joinToString(", ") { it.name }.ifBlank { null },
+            )
+        } finally {
+            publication.close()
+        }
     }
 
     /**
@@ -109,22 +261,30 @@ class LocalLibraryRepository(
      * given, because failing to file a book is no reason to refuse to
      * show it.
      */
-    suspend fun importExternalBook(uri: Uri): Book? {
-        val incoming = uri.toAbsoluteUrl() ?: return null
-        bookDao.getByUrl(incoming.toString())?.let { return it }
+    suspend fun importExternalBook(uri: Uri): Book? = importLock.withLock {
+        val incoming = uri.toAbsoluteUrl() ?: return@withLock null
+        // A book arriving from a file manager is very often one the
+        // library already has under the spelling a folder scan gave it,
+        // so ask what the file is and not only what it is called.
+        alreadyShelved(incoming)?.let {
+            // Sharing in a book that was taken off the shelf asks for it
+            // back just as plainly as picking it does.
+            if (it.hidden) unhide(it.url)
+            return@withLock bookDao.getByUrl(it.url) ?: it
+        }
 
         // A real file is already as permanent as the library is, and a
         // grant that survives is just as good. Either way the book is
         // indexed where it lies rather than copied.
         val keepsWorking = incoming.toString().startsWith("file:") || persistPermission(uri)
-        if (keepsWorking) return indexBook(incoming, source = null)
+        if (keepsWorking) return@withLock indexBook(incoming, source = null)
 
-        val copied = copyIntoLibrary(uri) ?: return null
+        val copied = copyIntoLibrary(uri) ?: return@withLock null
         // Content addressing makes this idempotent: the same file opened
         // twice lands on the same path, so the second time finds the row
         // the first one made instead of shelving the book again.
-        bookDao.getByUrl(copied.toString())?.let { return it }
-        return indexBook(copied, source = null)
+        bookDao.getByUrl(copied.toString())?.let { return@withLock it }
+        indexBook(copied, source = null)
     }
 
     /**
@@ -210,26 +370,90 @@ class LocalLibraryRepository(
 
     private suspend fun scanFolder(treeUri: Uri) = withContext(Dispatchers.IO) {
         val found = findEpubs(treeUri) ?: return@withContext
+        importLock.withLock {
+            // Walking the folder takes long enough for it to have been
+            // removed in the meantime, and shelving the walk's results
+            // then would file books under a folder nothing watches any
+            // more: never scanned again, and never pruned.
+            if (folderDao.getAll().none { it.url == treeUri.toString() }) return@withLock
+            shelve(treeUri, found)
+        }
+    }
+
+    private suspend fun shelve(treeUri: Uri, found: List<ScannedEpub>) {
         val knownUrls = bookDao.urlsForSource(treeUri.toString()).toMutableSet()
         // Everything on the shelf, read once. Looking each file up as it
         // was met meant a query per book per scan, on every cold start.
-        val knownBooks = bookDao.allOnce().associateBy { it.url }
+        val shelf = bookDao.allOnce()
+        val knownBooks = shelf.associateBy { it.url }
+        // The same file under its other spelling: what a duplicate entry
+        // made by an older version looks like.
+        val byIdentity = shelf.groupBy { documentIdentity(it.url) }
         val foundUrls = mutableSetOf<String>()
+        val duplicates = mutableListOf<String>()
 
         for (file in found) {
             val url = file.uri.toAbsoluteUrl() ?: continue
-            foundUrls += url.toString()
-            val existing = knownBooks[url.toString()]
+            val urlText = url.toString()
+            val identity = documentIdentity(urlText)
+            foundUrls += urlText
+            val aliases = identity
+                ?.let { id -> byIdentity[id].orEmpty().filter { it.url != urlText } }
+                .orEmpty()
+            // A row under the file's other spelling must survive this
+            // scan whatever its source says, or adopting it below would
+            // hand the book to a row that the pruning then deletes.
+            aliases.forEach { foundUrls += it.url }
+            val existing = knownBooks[urlText]
             when {
-                existing == null -> indexBook(url, source = treeUri.toString(), file.modifiedAt)
-                // The path is the same but the file behind it is not, so the
-                // title and cover we cached are no longer the book's.
-                file.modifiedAt != null && existing.fileModifiedAt != file.modifiedAt ->
-                    reindexBook(url, file.modifiedAt, existing.workId)
+                existing != null -> {
+                    // Any other spelling of a file the shelf already has
+                    // under this one is a duplicate an older version left.
+                    // Not one the reader took off the shelf, though:
+                    // that entry is theirs to put back, and deleting it
+                    // here would take it off the hidden list too.
+                    aliases.filterNot { it.hidden }.forEach { duplicates += it.url }
+                    // The path is the same but the file behind it is not, so the
+                    // title and cover we cached are no longer the book's.
+                    if (file.modifiedAt != null && existing.fileModifiedAt != file.modifiedAt) {
+                        reindexBook(url, file.modifiedAt, existing.workId)
+                    }
+                }
+                // The file is on the shelf already, under the name the
+                // single-file picker gave it. That row *is* the book —
+                // its URL is what the reader's place, marks and time all
+                // hang off — so the scan takes it as the entry for this
+                // file instead of adding a second one. Shelving the
+                // scanned spelling and then tidying up afterwards would
+                // only work while the picked entry had nothing on it,
+                // which is exactly the entry that has been read.
+                aliases.isNotEmpty() -> {
+                    val alias = aliases.first()
+                    // The entry keeps its URL but joins the folder, so
+                    // that it is pruned when the file goes and goes with
+                    // the folder when that is removed. A book picked by
+                    // hand belongs to nothing and would otherwise be
+                    // left behind by both.
+                    //
+                    // Only when it belongs to nothing. Two watched
+                    // folders can hold the same file — one inside the
+                    // other, most obviously — and taking the book off
+                    // whichever scanned first would let removing that
+                    // folder delete a book the other still holds.
+                    if (alias.source == null) {
+                        bookDao.setSource(alias.url, treeUri.toString())
+                    }
+                    if (file.modifiedAt != null && alias.fileModifiedAt != file.modifiedAt) {
+                        Uri.parse(alias.url).toAbsoluteUrl()
+                            ?.let { reindexBook(it, file.modifiedAt, alias.workId) }
+                    }
+                }
+                else -> indexBook(url, source = treeUri.toString(), file.modifiedAt)
             }
         }
 
         bookRemoval.deleteByUrls((knownUrls - foundUrls).toList())
+        bookRemoval.dropUntouchedDuplicates(duplicates)
     }
 
     private class ScannedEpub(val uri: Uri, val modifiedAt: Long?)

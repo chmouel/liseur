@@ -48,7 +48,7 @@ class BookFingerprintStore(
             return cached.fingerprint
         }
 
-        val fresh = compute(url) ?: return null
+        val fresh = read(url) ?: return null
         dao.upsert(
             BookFingerprintRow(
                 bookUrl = book.url,
@@ -62,7 +62,17 @@ class BookFingerprintStore(
         return fresh
     }
 
-    private suspend fun compute(url: String): BookFingerprint? = withContext(Dispatchers.IO) {
+    /**
+     * The fingerprint of a file that has no library row yet.
+     *
+     * Nothing is cached, because there is nothing to cache it against:
+     * this answers for a file the reader has only just picked, which
+     * may turn out to be a book the library already has and may never
+     * be shelved at all.
+     */
+    suspend fun compute(url: String): BookFingerprint? = read(url)
+
+    private suspend fun read(url: String): BookFingerprint? = withContext(Dispatchers.IO) {
         try {
             context.contentResolver.openInputStream(Uri.parse(url))?.use(BookFingerprints::of)
         } catch (e: IOException) {

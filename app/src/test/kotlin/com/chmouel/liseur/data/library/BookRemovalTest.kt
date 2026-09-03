@@ -9,8 +9,11 @@ import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.domain.LibraryFilterOption
+import com.chmouel.liseur.domain.LibraryFilters
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -162,6 +165,134 @@ class BookRemovalTest {
         // contained them.
         assertNull(db.workIdentityDao().alias("gone", "peer"))
         assertNull(db.workIdentityDao().fingerprint("gone"))
+    }
+
+    @Test
+    fun `a duplicate entry with nothing on it goes`() = runTest {
+        // Issue #147: the same file shelved twice, once by the folder
+        // scan and once by the file picker, and the second entry never
+        // opened.
+        db.bookDao().upsert(book("tree"))
+        db.bookDao().upsert(book("picked"))
+
+        assertEquals(listOf("picked"), removal.dropUntouchedDuplicates(listOf("picked")))
+
+        assertNull(db.bookDao().getByUrl("picked"))
+        assertNotNull(db.bookDao().getByUrl("tree"))
+    }
+
+    @Test
+    fun `a duplicate that was read is left alone`() = runTest {
+        // Reading through Add Book recorded the position against the
+        // duplicate, so dropping it would throw away where someone had
+        // got to. Better a duplicate than that; the reader can remove
+        // it themselves.
+        db.bookDao().upsert(book("picked"))
+        db.readingProgressDao().upsert(
+            ReadingProgress(
+                bookUrl = "picked",
+                locatorJson = "{}",
+                totalProgression = 0.42,
+                updatedAt = 1L,
+            ),
+        )
+
+        assertEquals(emptyList<String>(), removal.dropUntouchedDuplicates(listOf("picked")))
+        assertNotNull(db.bookDao().getByUrl("picked"))
+    }
+
+    @Test
+    fun `a duplicate that was marked, synced or timed is left alone`() = runTest {
+        db.bookDao().upsert(book("marked"))
+        db.bookDao().upsert(book("synced"))
+        db.bookDao().upsert(book("timed"))
+        db.annotationDao().upsert(mark().copy(id = "mark-2", bookId = "marked"))
+        db.annotationSyncDao().upsert(syncRow().copy(id = "mark-3", bookId = "synced"))
+        db.readingSessionDao().insert(session("timed"))
+
+        assertEquals(
+            emptyList<String>(),
+            removal.dropUntouchedDuplicates(listOf("marked", "synced", "timed")),
+        )
+        assertNotNull(db.bookDao().getByUrl("marked"))
+        assertNotNull(db.bookDao().getByUrl("synced"))
+        assertNotNull(db.bookDao().getByUrl("timed"))
+    }
+
+    @Test
+    fun `a duplicate carrying something only it knows is left alone`() = runTest {
+        // None of this is on the entry that would be kept, so none of it
+        // can be dropped quietly: the uuid is the only reason an
+        // uploaded book is not sent again, and the rest are decisions
+        // the reader made.
+        db.bookDao().upsert(book("uploaded", remoteUuid = "uuid-1"))
+        db.bookDao().upsert(book("opened").copy(lastOpenedAt = 1_700_000_000))
+        db.bookDao().upsert(book("finished").copy(finishedAt = 1_700_000_000))
+        db.bookDao().upsert(book("archived").copy(archivedAt = 1_700_000_000))
+        db.bookDao().upsert(book("refiled").copy(seriesName = "By hand"))
+
+        val urls = listOf("uploaded", "opened", "finished", "archived", "refiled")
+        assertEquals(emptyList<String>(), removal.dropUntouchedDuplicates(urls))
+        urls.forEach { assertNotNull(db.bookDao().getByUrl(it)) }
+    }
+
+    @Test
+    fun `taking a book off the shelf keeps every part of it`() = runTest {
+        // The reader is told the book can be put back, so putting it
+        // back has to give them all of it, not a stranger with the same
+        // title: their place in it, their marks, their time, and every
+        // decision they made about where it was filed.
+        db.bookDao().upsert(
+            book("hidden").copy(
+                addedAt = 5,
+                lastOpenedAt = 1_700_000_000,
+                finishedAt = 1_700_000_001,
+                seriesName = "By hand",
+                seriesIndex = 3.0,
+            ),
+        )
+        db.readingProgressDao().upsert(
+            ReadingProgress(
+                bookUrl = "hidden",
+                locatorJson = """{"href":"one"}""",
+                totalProgression = 0.5,
+                updatedAt = 1,
+            ),
+        )
+        db.annotationDao().upsert(mark().copy(id = "mark-4", bookId = "hidden"))
+        db.readingSessionDao().insert(session("hidden"))
+        val was = db.bookDao().getByUrl("hidden")!!
+
+        db.bookDao().setHiddenAt("hidden", 42)
+
+        val whileHidden = db.bookDao().getByUrl("hidden")!!
+        assertEquals(true, whileHidden.hidden)
+        assertNotNull(db.readingProgressDao().get("hidden"))
+        assertEquals(1, db.annotationDao().count("hidden"))
+        assertEquals(1, db.readingSessionDao().countForBook("hidden"))
+
+        db.bookDao().setHiddenAt("hidden", null)
+
+        assertEquals(was, db.bookDao().getByUrl("hidden"))
+    }
+
+    @Test
+    fun `a book taken off the shelf is out of every view of it`() = runTest {
+        // Not archiving, which has a shelf of its own: this one is
+        // nowhere, including on the shelf the archived box shows.
+        val hidden = book("hidden").copy(hiddenAt = 42)
+        assertEquals(false, LibraryFilters().accepts(hidden))
+        assertEquals(
+            false,
+            LibraryFilters(setOf(LibraryFilterOption.ARCHIVED)).accepts(hidden),
+        )
+        assertEquals(true, LibraryFilters().accepts(hidden.copy(hiddenAt = null)))
+    }
+
+    @Test
+    fun `a url with no book behind it is not an error`() = runTest {
+        assertEquals(emptyList<String>(), removal.dropUntouchedDuplicates(listOf("nothing")))
+        assertEquals(emptyList<String>(), removal.dropUntouchedDuplicates(emptyList()))
     }
 
     private fun mark() = BookAnnotation(

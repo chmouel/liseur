@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.TextFormat
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -75,6 +76,7 @@ fun SettingsScreen(
     onOpenAccount: () -> Unit,
     onOpenReadingAppearance: () -> Unit,
     onOpenReadingNavigation: () -> Unit,
+    onOpenHiddenBooks: () -> Unit,
     backup: AnnotationBackupUi,
     connections: ConnectionsState,
     onOpenAbout: () -> Unit,
@@ -234,6 +236,17 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_group_series_detail),
                         checked = settings.libraryFilters.groupBySeries,
                         onCheckedChange = onGroupSeries,
+                    )
+                    ConnectionRow(
+                        icon = {
+                            Icon(
+                                Icons.Outlined.VisibilityOff,
+                                contentDescription = null,
+                            )
+                        },
+                        title = stringResource(R.string.hidden_books),
+                        subtitle = stringResource(R.string.hidden_books_summary),
+                        onClick = onOpenHiddenBooks,
                     )
                 }
 

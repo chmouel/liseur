@@ -125,6 +125,9 @@ interface AnnotationSyncDao {
      * their highlights, and pushing tombstones because a file went away
      * would empty a library from the one device that lost it.
      */
+    @Query("SELECT COUNT(*) FROM annotation_sync WHERE book_id = :bookId")
+    suspend fun countForBook(bookId: String): Int
+
     @Query("DELETE FROM annotation_sync WHERE book_id = :bookId")
     suspend fun forgetBook(bookId: String)
 

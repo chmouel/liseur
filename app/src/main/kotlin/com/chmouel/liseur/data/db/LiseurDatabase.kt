@@ -27,7 +27,7 @@ import androidx.sqlite.execSQL
         KosyncPeer::class,
         UploadRefusal::class,
     ],
-    version = 45,
+    version = 46,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1213,9 +1213,18 @@ abstract class LiseurDatabase : RoomDatabase() {
         }
 
         /**
-         * Every migration, in order, as one list so that what the app
-         * runs and what the tests replay cannot drift apart.
+         * Remembers a book taken off the shelf whose file was kept.
+         *
+         * Without this the only way to be rid of a duplicate entry was
+         * to delete the book itself (issue #147), because anything left
+         * in a watched folder comes back on the next scan.
          */
+        val MIGRATION_45_46 = object : Migration(45, 46) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE books ADD COLUMN hidden_at INTEGER")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1261,6 +1270,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_42_43,
             MIGRATION_43_44,
             MIGRATION_44_45,
+            MIGRATION_45_46,
         )
     }
 }

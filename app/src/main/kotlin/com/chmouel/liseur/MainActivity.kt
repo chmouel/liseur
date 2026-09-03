@@ -9,6 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalLocale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -46,6 +50,7 @@ import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
 import com.chmouel.liseur.ui.library.ConfirmLocalDeleteDialog
 import com.chmouel.liseur.ui.library.ConfirmRemoveDownloadDialog
+import com.chmouel.liseur.ui.library.ConfirmRemoveFromLibraryDialog
 import com.chmouel.liseur.ui.library.ConfirmServerDeleteDialog
 import com.chmouel.liseur.ui.library.LibraryScreen
 import com.chmouel.liseur.ui.library.SeriesPickerSheet
@@ -57,6 +62,7 @@ import com.chmouel.liseur.ui.settings.AboutScreen
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
+import com.chmouel.liseur.ui.settings.HiddenBooksScreen
 import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
 import com.chmouel.liseur.ui.settings.AnnotationBackupUi
 import com.chmouel.liseur.ui.LocalEInk
@@ -153,6 +159,7 @@ private enum class Screen {
     SETTINGS,
     READING_APPEARANCE,
     READING_NAVIGATION,
+    HIDDEN_BOOKS,
     SERVER_ACCOUNT,
     LICENCES,
     ABOUT,
@@ -286,10 +293,23 @@ private fun LiseurApp(settings: AppSettings) {
                 },
                 onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
                 onOpenReadingNavigation = { screen = Screen.READING_NAVIGATION },
+                onOpenHiddenBooks = { screen = Screen.HIDDEN_BOOKS },
                 backup = annotationBackup,
                 connections = context.container.connections,
                 onOpenAbout = { screen = Screen.ABOUT },
                 onBack = { screen = Screen.LIBRARY },
+            )
+        }
+
+        Screen.HIDDEN_BOOKS -> {
+            val back = { screen = Screen.SETTINGS }
+            BackHandler { back() }
+            val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
+            val hidden by library.hidden.collectAsStateWithLifecycle(emptyList())
+            HiddenBooksScreen(
+                hidden = hidden,
+                onUnhide = { library.unhide(it.url) },
+                onBack = back,
             )
         }
 
@@ -556,9 +576,49 @@ private fun LibraryRoute(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                 )
             }
+            // The reader is not opened here any more. What was picked
+            // may be a book the library already has under the other
+            // spelling SAF gives one file, and opening the URI that was
+            // picked recorded the reading against an entry the shelf
+            // could not show (issue #147). The answer comes back below.
             viewModel.importBook(uri)
-            context.startActivity(ReaderActivity.intent(context, uri.toString()))
         }
+    }
+
+    // A book that really was new: opened where the library now keeps it.
+    LaunchedEffect(viewModel) {
+        viewModel.openImported.collect { open ->
+            context.startActivity(
+                ReaderActivity.intent(context, open.url, open.bookUrl ?: open.url),
+            )
+        }
+    }
+
+    var alreadyShelved by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    LaunchedEffect(viewModel) {
+        viewModel.alreadyShelved.collect { alreadyShelved = it }
+    }
+    alreadyShelved?.let { book ->
+        AlertDialog(
+            onDismissRequest = { alreadyShelved = null },
+            title = { Text(stringResource(R.string.already_shelved_title)) },
+            text = { Text(stringResource(R.string.already_shelved_message, book.title)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    alreadyShelved = null
+                    book.openableUrl?.let {
+                        context.startActivity(ReaderActivity.intent(context, it, book.url))
+                    }
+                }) {
+                    Text(stringResource(R.string.already_shelved_open))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { alreadyShelved = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 
     val addFolder = rememberLauncherForActivityResult(
@@ -621,6 +681,9 @@ private fun LibraryRoute(
     var seriesServerDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesLocalDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesRemoveDownload by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    var seriesRemoveFromLibrary by remember {
+        mutableStateOf<com.chmouel.liseur.data.db.Book?>(null)
+    }
     var seriesSheetRefile by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     val seriesExtras by viewModel.openSeriesExtras.collectAsStateWithLifecycle()
 
@@ -686,6 +749,10 @@ private fun LibraryRoute(
                 // offered here as well as on the shelf.
                 onEditSeries = { seriesSheetRefile = book; seriesSheetBook = null },
                 onDeleteLocal = { seriesLocalDelete = book; seriesSheetBook = null },
+                onRemoveFromLibrary = {
+                    seriesRemoveFromLibrary = book
+                    seriesSheetBook = null
+                },
                 // The same warning the shelf puts in front of it. An
                 // action offered here and answered nowhere would be a
                 // button that quietly does nothing.
@@ -740,6 +807,16 @@ private fun LibraryRoute(
                 onDismiss = { seriesLocalDelete = null },
             )
         }
+        seriesRemoveFromLibrary?.let { book ->
+            ConfirmRemoveFromLibraryDialog(
+                book = book,
+                onConfirm = {
+                    viewModel.removeFromLibrary(book)
+                    seriesRemoveFromLibrary = null
+                },
+                onDismiss = { seriesRemoveFromLibrary = null },
+            )
+        }
         seriesRemoveDownload?.let { book ->
             ConfirmRemoveDownloadDialog(
                 book = book,
@@ -772,6 +849,9 @@ private fun LibraryRoute(
         onSetFinished = viewModel::setFinished,
         onSetArchived = viewModel::setArchived,
         onDeleteLocal = viewModel::deleteLocalBook,
+        onRemoveFromLibrary = viewModel::removeFromLibrary,
+        onUnhide = viewModel::unhide,
+        hiddenBooks = viewModel.hiddenBooks,
         onDeleteFromServer = viewModel::deleteFromServer,
         onUploadToServer = viewModel::uploadToServer,
         onUploadPending = viewModel::uploadPending,
