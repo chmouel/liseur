@@ -977,10 +977,42 @@ class MigrationTest {
             }
     }
 
+    /**
+     * Upgrading does not take anything off the shelf. Every book that
+     * was showing before is still showing after, because being off the
+     * shelf is a thing the reader does and nothing else.
+     */
+    @Test
+    fun `a book from before is still on the shelf after upgrading`() {
+        helper.createDatabase(TEST_DB, 45).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    download_state, series_checked, series_override, series_claim_pending,
+                    series_claim_reset, series_index_override
+                ) VALUES (
+                    'file:///kept', 'Golden Son', 'Pierce Brown', NULL, NULL, 1, 2,
+                    'LOCAL', 0, 0, 0, 0, 0
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT hidden_at FROM books WHERE url = 'file:///kept'")
+                    .use { cursor ->
+                        assertTrue(cursor.moveToFirst())
+                        assertTrue(cursor.isNull(0))
+                    }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 45
+        const val LATEST = 46
     }
 }

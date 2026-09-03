@@ -586,26 +586,24 @@ private fun LibraryRoute(
     }
 
     // A book that really was new: opened where the library now keeps it.
-    LaunchedEffect(viewModel) {
-        viewModel.openImported.collect { open ->
-            context.startActivity(
-                ReaderActivity.intent(context, open.url, open.bookUrl ?: open.url),
-            )
-        }
+    val openImported by viewModel.openImported.collectAsStateWithLifecycle()
+    LaunchedEffect(openImported) {
+        val open = openImported ?: return@LaunchedEffect
+        viewModel.openImportedHandled()
+        context.startActivity(
+            ReaderActivity.intent(context, open.url, open.bookUrl ?: open.url),
+        )
     }
 
-    var alreadyShelved by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
-    LaunchedEffect(viewModel) {
-        viewModel.alreadyShelved.collect { alreadyShelved = it }
-    }
+    val alreadyShelved by viewModel.alreadyShelved.collectAsStateWithLifecycle()
     alreadyShelved?.let { book ->
         AlertDialog(
-            onDismissRequest = { alreadyShelved = null },
+            onDismissRequest = { viewModel.alreadyShelvedHandled() },
             title = { Text(stringResource(R.string.already_shelved_title)) },
             text = { Text(stringResource(R.string.already_shelved_message, book.title)) },
             confirmButton = {
                 TextButton(onClick = {
-                    alreadyShelved = null
+                    viewModel.alreadyShelvedHandled()
                     book.openableUrl?.let {
                         context.startActivity(ReaderActivity.intent(context, it, book.url))
                     }
@@ -614,7 +612,7 @@ private fun LibraryRoute(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { alreadyShelved = null }) {
+                TextButton(onClick = { viewModel.alreadyShelvedHandled() }) {
                     Text(stringResource(R.string.cancel))
                 }
             },

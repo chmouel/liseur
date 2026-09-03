@@ -62,6 +62,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
@@ -386,13 +387,30 @@ class LibraryViewModel(
     /** Deletions that did not happen, so the library can say so. */
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
-    private val _openImported = MutableSharedFlow<ImportedOpen>(extraBufferCapacity = 1)
-    /** A freshly shelved book, ready to be opened where it now lives. */
-    val openImported: Flow<ImportedOpen> = _openImported
+    private val _openImported = MutableStateFlow<ImportedOpen?>(null)
 
-    private val _alreadyShelved = MutableSharedFlow<Book>(extraBufferCapacity = 1)
+    /**
+     * A freshly shelved book, ready to be opened where it now lives.
+     *
+     * Held rather than announced once. Shelving a picked file reads its
+     * metadata and may hash it, which is long enough for the screen to
+     * be rebuilt underneath — a rotation, or coming back from the
+     * background — and an answer sent while nothing was listening left
+     * the reader with a picker that had apparently done nothing.
+     */
+    val openImported: StateFlow<ImportedOpen?> = _openImported.asStateFlow()
+
+    fun openImportedHandled() {
+        _openImported.value = null
+    }
+
+    private val _alreadyShelved = MutableStateFlow<Book?>(null)
     /** A picked file the library already had, for the reader to decide about. */
-    val alreadyShelved: Flow<Book> = _alreadyShelved
+    val alreadyShelved: StateFlow<Book?> = _alreadyShelved.asStateFlow()
+
+    fun alreadyShelvedHandled() {
+        _alreadyShelved.value = null
+    }
 
     private val _hiddenBook = MutableSharedFlow<Book>(extraBufferCapacity = 1)
     /** A book just taken off the shelf, so the removal can be undone. */
@@ -501,7 +519,11 @@ class LibraryViewModel(
             prompts.answered,
         ) { baseValues, query, searchActive, promptDismissed, answered ->
             @Suppress("UNCHECKED_CAST")
-            val books = baseValues[0] as List<Book>
+            // Taken out here rather than at each view, so that a book
+            // off the shelf is off every part of it: not counted, not
+            // filtered into anything, and not left inside a series pile
+            // whose other volumes are still showing.
+            val books = (baseValues[0] as List<Book>).filterNot { it.hidden }
             val recent = baseValues[1] as ContinueReading?
             val catalogStatus = baseValues[2] as CatalogStatus
             @Suppress("UNCHECKED_CAST")
@@ -1212,14 +1234,14 @@ class LibraryViewModel(
                     // reading position is keyed to the row, and opening
                     // under any other name records it where the shelf
                     // will never look.
-                    _openImported.emit(ImportedOpen(it, result.book.url))
+                    _openImported.value = ImportedOpen(it, result.book.url)
                 }
-                is ImportResult.AlreadyShelved -> _alreadyShelved.emit(result.book)
+                is ImportResult.AlreadyShelved -> _alreadyShelved.value = result.book
                 // Nothing readable came back, so the reader is left with
                 // the file they picked: opening it is still worth a try,
                 // and failing to shelve a book is no reason to refuse to
                 // show it.
-                ImportResult.Failed -> _openImported.emit(ImportedOpen(uri.toString(), null))
+                ImportResult.Failed -> _openImported.value = ImportedOpen(uri.toString(), null)
             }
         }
     }
