@@ -241,7 +241,9 @@ class ReaderViewModel(
 
     val continuation: StateFlow<EndpaperContinuation?> = combine(
         combine(
-            bookDao.observeAll(),
+            // A book taken off the shelf is not offered as what to read
+            // next: the reader put it away.
+            bookDao.observeAll().map { books -> books.filterNot { it.hidden } },
             progressDao.observeProgressions(),
             dismissedNextUp,
             endpaperReached,
@@ -823,7 +825,10 @@ class ReaderViewModel(
             bookDao.observeAll()
                 .map { books ->
                     val current = books.firstOrNull { it.url == bookId } ?: return@map null
-                    seriesIdForExtras(current, books)
+                    // The book being read is what it is even if it has
+                    // been taken off the shelf elsewhere; its siblings
+                    // are only the ones still on it.
+                    seriesIdForExtras(current, books.filterNot { it.hidden })
                 }
                 .distinctUntilChanged()
                 .collect { seriesId ->

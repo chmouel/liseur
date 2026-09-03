@@ -126,6 +126,17 @@ class BookRemoval(
             book.lastOpenedAt == null &&
             book.finishedAt == null &&
             book.archivedAt == null &&
+            // A book the reader took off the shelf is a decision of its
+            // own, and the one entry they can still act on.
+            book.hiddenAt == null &&
+            // The flags, not only what they currently produce. Filing a
+            // book by hand under the series its file already names looks
+            // like nothing was said, and a claim still waiting on a
+            // server is a decision even when it has changed nothing yet.
+            !book.seriesOverridden &&
+            !book.indexOverridden &&
+            !book.seriesClaimPending &&
+            !book.seriesClaimReset &&
             book.seriesName == book.fileSeriesName &&
             book.seriesIndex == book.fileSeriesIndex
 
