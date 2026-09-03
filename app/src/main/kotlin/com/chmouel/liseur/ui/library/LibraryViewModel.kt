@@ -1474,5 +1474,12 @@ internal fun List<Book>.awaitingUpload(
     return filter { it.mayGoUp() && it.url !in refused }
 }
 
-/** Whether a book is one the server has not got and would be given. */
-internal fun Book.mayGoUp(): Boolean = livesOnlyOnThisDevice() && archivedAt == null
+/**
+ * Whether a book is one the server has not got and would be given.
+ *
+ * A book the reader has put away or taken off the shelf is not offered
+ * up. Sending it would put it on their other devices, which is the
+ * opposite of what they asked for.
+ */
+internal fun Book.mayGoUp(): Boolean =
+    livesOnlyOnThisDevice() && archivedAt == null && hiddenAt == null
