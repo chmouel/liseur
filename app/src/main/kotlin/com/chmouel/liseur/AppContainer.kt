@@ -116,6 +116,18 @@ class AppContainer(context: Context) {
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
+    /**
+     * What a book's file hashes to, worked out on demand.
+     *
+     * Lazily, and never during a library scan: hashing a large EPUB on a
+     * memory card is slow enough to be felt, and nothing needs the
+     * answer until a book is named to a server.
+     */
+    val bookFingerprints = BookFingerprintStore(
+        context = context.applicationContext,
+        dao = database.workIdentityDao(),
+    )
+
     val libraryRepository = LocalLibraryRepository(
         context = context.applicationContext,
         assetRetriever = assetRetriever,
@@ -123,6 +135,7 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         folderDao = database.libraryFolderDao(),
         bookRemoval = bookRemoval,
+        fingerprints = bookFingerprints,
     )
 
     /** Highlights and notes written to a file, and read back on another device. */
@@ -227,18 +240,6 @@ class AppContainer(context: Context) {
         reporting = syncReporting,
         networkAvailability = networkAvailability,
         inTransaction = { work -> database.withTransaction { work() } },
-    )
-
-    /**
-     * What a book's file hashes to, worked out on demand.
-     *
-     * Lazily, and never during a library scan: hashing a large EPUB on a
-     * memory card is slow enough to be felt, and nothing needs the
-     * answer until a book is named to a server.
-     */
-    val bookFingerprints = BookFingerprintStore(
-        context = context.applicationContext,
-        dao = database.workIdentityDao(),
     )
 
     /** What a liseur-sync server calls each book, cached per account. */

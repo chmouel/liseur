@@ -186,10 +186,26 @@ data class Book(
      * fell out of sight. Nothing decides anything by its value.
      */
     @ColumnInfo(name = "catalog_missing_since") val catalogMissingSince: Long? = null,
+    /**
+     * When the reader took the book off the shelf without deleting its
+     * file, and null while it is on the shelf.
+     *
+     * Not archiving, which puts a book on a shelf of its own and is
+     * about having finished with it. This is about the entry being
+     * wrong: the same file shelved twice, which is what one file with
+     * two SAF spellings used to produce (issue #147). The row stays
+     * exactly as it was — the reader's place, their marks, their time,
+     * what a server was told — because the only thing being taken away
+     * is the entry, and putting it back has to give all of it back.
+     */
+    @ColumnInfo(name = "hidden_at") val hiddenAt: Long? = null,
 ) {
     val finished: Boolean get() = finishedAt != null
 
     val archived: Boolean get() = archivedAt != null
+
+    /** Off the shelf, file and all its history kept. */
+    val hidden: Boolean get() = hiddenAt != null
 
     /**
      * The series id worth asking a server about.
@@ -609,6 +625,31 @@ interface BookDao {
     @Query("UPDATE books SET cover_path = :coverPath WHERE url = :url")
     suspend fun setCoverPath(url: String, coverPath: String)
 
+    /**
+     * Files an existing entry under a library folder.
+     *
+     * A book picked by hand has no folder, and a folder scan that later
+     * meets the same file keeps that entry rather than making a second
+     * one. It has to join the folder to be looked after by it: pruned
+     * when the file goes, and removed when the folder is.
+     */
+    @Query("UPDATE books SET source = :source WHERE url = :url")
+    suspend fun setSource(url: String, source: String)
+
+    /**
+     * Takes a book off the shelf, or puts it back.
+     *
+     * The whole of the removal, and the whole of the way back. Nothing
+     * else on the row is touched, which is what lets *Put back* return
+     * the book as it was rather than as a stranger, and what makes both
+     * directions a single indivisible write.
+     */
+    @Query("UPDATE books SET hidden_at = :at WHERE url = :url")
+    suspend fun setHiddenAt(url: String, at: Long?)
+
+    @Query("SELECT * FROM books WHERE hidden_at IS NOT NULL ORDER BY hidden_at DESC")
+    fun observeHidden(): Flow<List<Book>>
+
     @Query("SELECT * FROM books WHERE local_uri IS NOT NULL")
     fun observeDownloaded(): Flow<List<Book>>
 
@@ -814,6 +855,7 @@ interface BookDao {
             SELECT books.* FROM books
             LEFT JOIN reading_progress ON reading_progress.book_url = books.url
             WHERE books.archived_at IS NULL
+              AND books.hidden_at IS NULL
               AND (
                   books.last_opened_at IS NOT NULL
                   OR reading_progress.total_progression IS NOT NULL

@@ -30,6 +30,7 @@ import com.chmouel.liseur.data.db.RefusedBytes
 import com.chmouel.liseur.data.db.UploadRefusal
 import com.chmouel.liseur.data.db.UploadRefusalDao
 import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.data.library.ImportResult
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.UploadPolicy
@@ -294,6 +295,13 @@ data class LibraryUiState(
  */
 data class DeleteFailure(val book: Book, val onServer: Boolean)
 
+/**
+ * A book to open after it was picked by hand: where its bytes are, and
+ * what the library calls it. The two differ for a book copied into the
+ * app's own storage, and the reading position follows the second.
+ */
+data class ImportedOpen(val url: String, val bookUrl: String?)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
     private val library: LocalLibraryRepository,
@@ -377,6 +385,18 @@ class LibraryViewModel(
     private val _deleteFailures = MutableSharedFlow<DeleteFailure>(extraBufferCapacity = 1)
     /** Deletions that did not happen, so the library can say so. */
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
+
+    private val _openImported = MutableSharedFlow<ImportedOpen>(extraBufferCapacity = 1)
+    /** A freshly shelved book, ready to be opened where it now lives. */
+    val openImported: Flow<ImportedOpen> = _openImported
+
+    private val _alreadyShelved = MutableSharedFlow<Book>(extraBufferCapacity = 1)
+    /** A picked file the library already had, for the reader to decide about. */
+    val alreadyShelved: Flow<Book> = _alreadyShelved
+
+    private val _hiddenBook = MutableSharedFlow<Book>(extraBufferCapacity = 1)
+    /** A book just taken off the shelf, so the removal can be undone. */
+    val hiddenBooks: Flow<Book> = _hiddenBook
 
     /**
      * What the connected account has refused, and whether it still would.
@@ -1173,10 +1193,52 @@ class LibraryViewModel(
         viewModelScope.launch { library.addFolder(treeUri) }
     }
 
-    /** Index a single picked file; the reader can open it right away. */
+    /**
+     * Indexes a single picked file, and says which book it turned out
+     * to be.
+     *
+     * A file picked by hand is very often one the library already has:
+     * the folder scan and the file picker spell the same document
+     * differently, and until this was resolved the book was shelved
+     * twice (issue #147). The reader is told rather than silently sent
+     * to the entry they already had, because being handed a book they
+     * did not think they owned is confusing in the other direction.
+     */
     fun importBook(uri: Uri) {
-        viewModelScope.launch { library.importBook(uri) }
+        viewModelScope.launch {
+            when (val result = library.importBook(uri)) {
+                is ImportResult.Added -> result.book.openableUrl?.let {
+                    // Named by its library row, not by the file: the
+                    // reading position is keyed to the row, and opening
+                    // under any other name records it where the shelf
+                    // will never look.
+                    _openImported.emit(ImportedOpen(it, result.book.url))
+                }
+                is ImportResult.AlreadyShelved -> _alreadyShelved.emit(result.book)
+                // Nothing readable came back, so the reader is left with
+                // the file they picked: opening it is still worth a try,
+                // and failing to shelve a book is no reason to refuse to
+                // show it.
+                ImportResult.Failed -> _openImported.emit(ImportedOpen(uri.toString(), null))
+            }
+        }
     }
+
+    /** Takes a book off the shelf without touching its file. */
+    fun removeFromLibrary(book: Book) {
+        viewModelScope.launch {
+            library.removeFromLibrary(book)
+            _hiddenBook.emit(book)
+        }
+    }
+
+    /** Puts a book back, from the undo notice or the hidden list alike. */
+    fun unhide(bookUrl: String) {
+        viewModelScope.launch { library.unhide(bookUrl) }
+    }
+
+    /** Books taken off the shelf, with their files left where they are. */
+    val hidden: Flow<List<Book>> = library.hidden
 
     /**
      * Sends one book the reader added here up to the server.

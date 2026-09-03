@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.library
 
 import com.chmouel.liseur.data.db.AnnotationSyncDao
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
@@ -77,6 +78,69 @@ class BookRemoval(
             bookDao.clearSeriesForReplacedWork(bookUrl)
         }
     }
+
+    /**
+     * Drops entries that are a second name for a book already on the
+     * shelf, and only those with nothing on them worth keeping.
+     *
+     * Earlier versions shelved one file twice whenever it was picked by
+     * hand as well as found by a folder scan (issue #147), and those
+     * duplicates are still there. A scan can now recognise them, but
+     * recognising is not licence to delete: the reader may well have
+     * been reading the duplicate — that is where a position opened
+     * through `+ -> Add Book` was recorded — and quietly discarding
+     * where someone had got to is worse than the duplicate itself. So a
+     * row goes only when it holds no reading position, no marks, no
+     * agreement with a server about marks, no reading time, and nothing
+     * on the row itself either. Anything else is left for the reader to
+     * remove by hand.
+     *
+     * Returns what was actually removed.
+     */
+    suspend fun dropUntouchedDuplicates(bookUrls: List<String>): List<String> {
+        if (bookUrls.isEmpty()) return emptyList()
+        val removable = mutableListOf<String>()
+        inTransaction {
+            for (url in bookUrls.distinct()) {
+                val book = bookDao.getByUrl(url) ?: continue
+                if (blank(book) && untouched(url)) removable += url
+            }
+            if (removable.isNotEmpty()) forget(removable)
+        }
+        return removable
+    }
+
+    /**
+     * Whether the row itself says nothing that the other one will not.
+     *
+     * Reading history is not the only thing a duplicate can be carrying.
+     * A row that has been uploaded holds the `remote_uuid` that is the
+     * only reason the book is not sent a second time; one that was
+     * opened, finished, archived or filed into a series by hand holds a
+     * decision the reader made. None of that is on the entry this would
+     * keep, so none of it may be dropped on the quiet.
+     */
+    private fun blank(book: Book): Boolean =
+        book.remoteUuid == null &&
+            book.remoteBookId == null &&
+            book.lastOpenedAt == null &&
+            book.finishedAt == null &&
+            book.archivedAt == null &&
+            book.seriesName == book.fileSeriesName &&
+            book.seriesIndex == book.fileSeriesIndex
+
+    private suspend fun untouched(bookUrl: String): Boolean =
+        progressDao.get(bookUrl) == null &&
+            annotationDao.count(bookUrl) == 0 &&
+            annotationSyncDao.countForBook(bookUrl) == 0 &&
+            sessionDao.countForBook(bookUrl) == 0 &&
+            // What a sync partner has agreed about this entry is state
+            // too, and `forget` below would take it with the row.
+            peerStateDao.countForBook(bookUrl) == 0 &&
+            // So is what a server was persuaded to call it. A rejected
+            // low-confidence match is a decision the reader made, and
+            // nothing here could work it out again.
+            identityDao.namingCountForBook(bookUrl) == 0
 
     /**
      * Everything keyed by a book URL, in one place.

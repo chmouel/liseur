@@ -73,6 +73,10 @@ abstract class SyncPeerStateDao {
     @Query("SELECT COUNT(*) FROM sync_peer_state WHERE peer_id = :peerId AND has_pending = 1")
     abstract suspend fun countPending(peerId: String): Int
 
+    /** How much a partner has agreed about one book, settled or not. */
+    @Query("SELECT COUNT(*) FROM sync_peer_state WHERE book_url = :bookUrl")
+    abstract suspend fun countForBook(bookUrl: String): Int
+
     @Upsert
     abstract suspend fun upsert(state: SyncPeerState)
 

@@ -193,6 +193,9 @@ interface ReadingSessionDao {
     @Query("UPDATE reading_sessions SET uploaded_at = NULL")
     suspend fun forgetUploads()
 
+    @Query("SELECT COUNT(*) FROM reading_sessions WHERE book_url = :bookUrl")
+    suspend fun countForBook(bookUrl: String): Int
+
     @Query("DELETE FROM reading_sessions WHERE book_url = :bookUrl")
     suspend fun deleteForBook(bookUrl: String)
 

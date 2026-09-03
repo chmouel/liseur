@@ -241,6 +241,15 @@ interface WorkIdentityDao {
     @Query("DELETE FROM work_alias WHERE book_url IN (:bookUrls)")
     suspend fun forgetAliases(bookUrls: List<String>)
 
+    /** How much a sync server has been persuaded to call one book, settled or not. */
+    @Query(
+        """
+        SELECT (SELECT COUNT(*) FROM work_alias WHERE book_url = :bookUrl) +
+               (SELECT COUNT(*) FROM work_ambiguity WHERE book_url = :bookUrl)
+        """,
+    )
+    suspend fun namingCountForBook(bookUrl: String): Int
+
     @Query("DELETE FROM work_ambiguity WHERE book_url IN (:bookUrls)")
     suspend fun forgetAmbiguities(bookUrls: List<String>)
 

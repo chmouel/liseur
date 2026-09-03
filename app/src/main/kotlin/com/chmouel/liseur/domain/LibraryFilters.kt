@@ -133,6 +133,11 @@ data class LibraryFilters(
      * finished ones — see [hidesFinished].
      */
     fun accepts(book: Book, progression: Double? = null): Boolean {
+        // A book taken off the shelf is off it, whatever else is ticked
+        // — including the archived box, which is a different wish.
+        // Settings -> Hidden books is the one place it appears, and that
+        // list does not come through here.
+        if (book.hidden) return false
         // Checked before anything else, and never as one condition among
         // the rest: an archived book is out of every view but its own,
         // however well it matches the others.

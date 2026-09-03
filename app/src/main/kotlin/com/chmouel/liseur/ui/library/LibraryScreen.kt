@@ -91,6 +91,7 @@ import kotlinx.coroutines.flow.Flow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -170,6 +171,9 @@ fun LibraryScreen(
     onSetFinished: (Book, Boolean) -> Unit,
     onSetArchived: (Book, Boolean) -> Unit,
     onDeleteLocal: (Book) -> Unit,
+    onRemoveFromLibrary: (Book) -> Unit,
+    onUnhide: (String) -> Unit,
+    hiddenBooks: Flow<Book>,
     onDeleteFromServer: (Book, Boolean) -> Unit,
     onUploadToServer: (Book) -> Unit,
     onUploadPending: () -> Unit,
@@ -217,6 +221,7 @@ fun LibraryScreen(
     var sheetBook by remember { mutableStateOf<Book?>(null) }
     var confirmServerDelete by remember { mutableStateOf<Book?>(null) }
     var confirmLocalDelete by remember { mutableStateOf<Book?>(null) }
+    var confirmRemoveFromLibrary by remember { mutableStateOf<Book?>(null) }
     var confirmRemoveDownload by remember { mutableStateOf<Book?>(null) }
     var editSeriesOf by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
@@ -231,6 +236,23 @@ fun LibraryScreen(
         deleteFailures.collect { failure ->
             val message = if (failure.onServer) serverDeleteFailed else localDeleteFailed
             snackbarHost.showSnackbar(message.format(failure.book.title))
+        }
+    }
+    // Removing a book from the library is quiet and easy to do by
+    // accident, and the entry it took away may be the one being read,
+    // so the way back is offered on the spot rather than only in
+    // Settings.
+    val hiddenMessage = stringResource(R.string.book_hidden)
+    val undoLabel = stringResource(R.string.undo)
+    LaunchedEffect(hiddenBooks) {
+        hiddenBooks.collect { book ->
+            val result = snackbarHost.showSnackbar(
+                message = hiddenMessage.format(book.title),
+                actionLabel = undoLabel,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                onUnhide(book.url)
+            }
         }
     }
     LaunchedEffect(failedOpens) {
@@ -745,6 +767,17 @@ fun LibraryScreen(
         )
     }
 
+    confirmRemoveFromLibrary?.let { book ->
+        ConfirmRemoveFromLibraryDialog(
+            book = book,
+            onConfirm = {
+                onRemoveFromLibrary(book)
+                confirmRemoveFromLibrary = null
+            },
+            onDismiss = { confirmRemoveFromLibrary = null },
+        )
+    }
+
     confirmRemoveDownload?.let { book ->
         ConfirmRemoveDownloadDialog(
             book = book,
@@ -797,6 +830,7 @@ fun LibraryScreen(
             onOpenStats = { onOpenBookStats(book); sheetBook = null },
             onEditSeries = { editSeriesOf = book; sheetBook = null },
             onDeleteLocal = { confirmLocalDelete = book; sheetBook = null },
+            onRemoveFromLibrary = { confirmRemoveFromLibrary = book; sheetBook = null },
             onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
             onUploadToServer = { onUploadToServer(book); sheetBook = null },
         )
@@ -952,6 +986,29 @@ internal fun ConfirmLocalDeleteDialog(
     )
 }
 
+/**
+ * The check in front of taking a book off the shelf and keeping it.
+ *
+ * Not destructive, and said so: the whole point of the action is that
+ * the file survives it, and a reader who has just been warned about
+ * deleting one needs to see that this is the other thing.
+ */
+@Composable
+internal fun ConfirmRemoveFromLibraryDialog(
+    book: Book,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ConfirmBookActionDialog(
+        title = stringResource(R.string.remove_from_library),
+        warning = stringResource(R.string.remove_from_library_warning, book.title),
+        confirmLabel = stringResource(R.string.remove),
+        destructive = false,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
+}
+
 /** The check in front of throwing away a copy the server can send again. */
 @Composable
 internal fun ConfirmRemoveDownloadDialog(
@@ -1026,6 +1083,7 @@ internal fun BookActionsSheet(
     onOpenStats: () -> Unit,
     onEditSeries: () -> Unit,
     onDeleteLocal: () -> Unit,
+    onRemoveFromLibrary: () -> Unit,
     onDeleteFromServer: () -> Unit,
     onUploadToServer: () -> Unit,
 ) {
@@ -1072,6 +1130,13 @@ internal fun BookActionsSheet(
                 else -> Unit
             }
             if (book.remoteUuid == null) {
+                Spacer(Modifier.height(8.dp))
+                // Above deleting, and deliberately: the gentler of the
+                // two is the one most people reaching here actually
+                // want, and it used not to exist at all (issue #147).
+                OutlinedButton(onClick = onRemoveFromLibrary, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.remove_from_library))
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onDeleteLocal, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.delete_file))

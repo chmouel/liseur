@@ -434,6 +434,18 @@
     <string name="delete_local_failed">Could not delete the file for “%1$s”. Liseur may only be allowed to read that folder — add it again to grant deletion.</string>
     <string name="delete">Delete</string>
 
+    <string name="remove_from_library">Remove from library</string>
+    <string name="remove_from_library_warning">“%1$s” will be taken off the shelf. The file stays on this device, and you can put the book back from Settings → Hidden books.</string>
+    <string name="book_hidden">“%1$s” removed from the library.</string>
+    <string name="undo">Undo</string>
+    <string name="already_shelved_title">Already in your library</string>
+    <string name="already_shelved_message">“%1$s” is already on your shelf, so it was not added again.</string>
+    <string name="already_shelved_open">Open</string>
+    <string name="hidden_books">Hidden books</string>
+    <string name="hidden_books_summary">Books taken off the shelf whose files were kept</string>
+    <string name="hidden_books_empty">Nothing is hidden. Books you remove from the library without deleting their file are listed here.</string>
+    <string name="hidden_books_put_back">Put back</string>
+
     <string name="upload_to_server">Upload to server</string>
     <string name="upload_offer_title">Send to the server?</string>
     <plurals name="upload_offer_message">
