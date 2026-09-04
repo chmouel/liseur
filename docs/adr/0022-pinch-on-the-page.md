@@ -91,10 +91,17 @@ fixed-layout book, committing a new size would change nothing at all.
 ### The rule is settled at the second finger
 
 A gesture whose meaning changed while the fingers moved is a gesture
-nobody can aim. So the page is asked what is under the centroid once, as
-the pinch begins, and whatever it answers holds until the fingers lift —
-even if they wander off the image, even if the text they wander onto
-would have resized.
+nobody can aim. So the page is asked what is under the first finger
+once, as the touch begins, and whatever it answers holds until the
+fingers lift — even if they wander off the image, even if the text they
+wander onto would have resized.
+
+The first finger rather than the centroid, because the answer has to be
+in hand *before* the second finger lands, and because a pinch that
+starts on a picture starts with a finger on it: by the time there is a
+centroid to measure, the fingers have already begun to spread, and the
+midpoint between them may be sitting on the margin beside the very image
+the reader is reaching for.
 
 ### Where the gesture lives, and what it consumes
 
@@ -154,11 +161,11 @@ nothing about a fixed layout stops an image being too small.
 
 ### Asking the page what is under the fingers, without stalling them
 
-`document.elementFromPoint` at the gesture's centroid, walking up for an
-`<img>` or an SVG `<image>`, answered as JSON — the shape `WideContentFit`
-established. The point is CSS pixels in the web view's viewport, so the
-Compose position is offset by the web view's screen rect and divided by
-the display density.
+`document.elementFromPoint` where the first finger landed, walking up for
+an `<img>` or an SVG `<image>`, answered as JSON — the shape
+`WideContentFit` established. The point is CSS pixels in the web view's
+viewport, so the Compose position is offset by the web view's screen rect
+and divided by the display density.
 
 `evaluateJavascript` is asynchronous and the fingers are already moving,
 so the answer has to arrive before it is needed. Two things make that

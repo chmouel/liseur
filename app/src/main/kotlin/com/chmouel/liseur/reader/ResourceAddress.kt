@@ -28,7 +28,21 @@ internal object ResourceAddress {
         return shown == named
     }
 
-    private fun path(raw: String?): String? {
+    /**
+     * The publication-relative href [webUrl] addresses, if any.
+     *
+     * The same origin-stripping [shows] compares by, exposed because
+     * reading a resource the page named — the file behind an `<img>`,
+     * say — has to spell it the way the publication does, and a second
+     * spelling of this is a second thing to get wrong.
+     *
+     * Percent escapes are *kept*, unlike in the comparison below: this
+     * answer is handed back to Readium as a URL, and a book is free to
+     * ship a file with a space in its name.
+     */
+    fun href(webUrl: String?): String? = relative(webUrl)
+
+    private fun relative(raw: String?): String? {
         val address = raw?.substringBefore('#')?.substringBefore('?')?.trim() ?: return null
         if (address.isEmpty()) return null
         val origin = address.indexOf("://")
@@ -37,8 +51,11 @@ internal object ResourceAddress {
         } else {
             address.substring(origin + 3).substringAfter('/', "")
         }
-        return decode(path).trimStart('/').takeIf { it.isNotEmpty() }
+        return path.trimStart('/').takeIf { it.isNotEmpty() }
     }
+
+    private fun path(raw: String?): String? =
+        relative(raw)?.let(::decode)?.trimStart('/')?.takeIf { it.isNotEmpty() }
 
     /**
      * Percent decoding, rather than `URLDecoder`, which reads `+` as a

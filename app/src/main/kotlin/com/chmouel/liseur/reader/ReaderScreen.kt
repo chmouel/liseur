@@ -65,7 +65,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -83,6 +87,8 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.os.SystemClock
 import android.webkit.WebView
+import org.readium.r2.shared.util.Url
+import org.readium.r2.shared.util.use
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -134,6 +140,8 @@ import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FixedLayoutPinchHud
 import com.chmouel.liseur.reader.chrome.FontSizeHud
 import com.chmouel.liseur.reader.chrome.FootnoteCard
+import com.chmouel.liseur.reader.chrome.ImageViewer
+import com.chmouel.liseur.reader.chrome.ViewedImage
 import com.chmouel.liseur.reader.chrome.PinchResize
 import com.chmouel.liseur.reader.chrome.PinchStart
 import com.chmouel.liseur.reader.chrome.GoToPageDialog
@@ -161,6 +169,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -174,6 +183,7 @@ import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
@@ -226,6 +236,21 @@ private const val MAX_CHAPTER_DWELL_MS = 8_000L
 // loss is a line, long enough that a document round trip every so often
 // costs nothing.
 private const val AUTO_SCROLL_SAVE_NANOS = 2_000_000_000L
+
+/**
+ * How long after a touch lands its meaning is still open to the
+ * document's answer about what is under it.
+ *
+ * The question goes out when the first finger lands, so the answer is
+ * normally back before a second one arrives and this is never reached.
+ * It bounds the case where it is not: past it the gesture is whatever it
+ * has become, because changing what fingers mean while they are already
+ * moving is worse than getting it wrong.
+ */
+private const val DECIDE_BUDGET_MS = 250L
+
+/** How often the long press looks to see whether the answer has landed. */
+private const val ANSWER_POLL_MS = 20L
 
 // How often a book scrolled by hand is looked in on, and so the most a
 // place kept for the pause can be behind the reader. The same interval
@@ -416,6 +441,8 @@ fun ReaderScreen(
     val pinchToResizeNow by rememberUpdatedState(pinchToResize)
     val fontSizeNow by rememberUpdatedState(prefs.fontSize)
     val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
+    val touch = remember { TouchProbe() }
+    var viewedImage by remember { mutableStateOf<ViewedImage?>(null) }
     // The tracker below outlives every recomposition, so it cannot read
     // `footnote` directly — it would keep seeing whatever was true when it
     // started. This gives it a window onto the current value.
@@ -1059,6 +1086,26 @@ fun ReaderScreen(
         }
     }
 
+    // Whether this page has a picture on it at all, asked once per
+    // resource that gets laid out — the same prompts, and for the same
+    // reasons, as the fit above.
+    //
+    // Most pages of most books have no image, and this is what keeps a
+    // touch on one of them from running any script at all: the answer is
+    // already no when the finger lands, so the pinch goes straight to
+    // resizing the text.
+    LaunchedEffect(navigator) {
+        val nav = navigator ?: return@LaunchedEffect
+        val root = nav.publicationView
+        var asked: WebView? = null
+        merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
+            val web = visibleWebView(root) ?: return@collect
+            if (web === asked) return@collect
+            asked = web
+            touch.resourceHasImages = ImageAtPoint.hasImages(nav)
+        }
+    }
+
     // Picking the selection up from the navigator when it tells us the
     // reader made one, and turning it into a place to put the action bar.
     //
@@ -1574,11 +1621,116 @@ fun ReaderScreen(
         }
     }
 
+    /*
+     * The image lookup, which the pinch and the long press both wait on.
+     *
+     * Plain fields rather than snapshot state: the pointer loop writes
+     * them and the coroutines below read them, and both run on the main
+     * thread. Only the viewer itself is state, because only the viewer is
+     * drawn.
+     *
+     * [TouchProbe.serial] is what makes an answer belong to a touch: a
+     * finger lifted before the document replied leaves a job in flight
+     * whose answer must not open a viewer over the next page.
+     */
+    var boxInWindow by remember { mutableStateOf(Offset.Zero) }
+    val longPressMs = LocalViewConfiguration.current.longPressTimeoutMillis
+    val pageDensity = LocalDensity.current.density
+    val publicationNow by rememberUpdatedState(publication)
+
+    /**
+     * Opens the picture, having fetched it out of the book.
+     *
+     * The bytes come from the publication rather than from the web view,
+     * because the web view has already thrown away everything above the
+     * size it drew the picture at, and the whole point is to see more
+     * than that.
+     */
+    fun showImage(hit: ImageAtPoint.Hit) {
+        if (touch.opening || viewedImage != null) return
+        touch.opening = true
+        val serial = touch.serial
+        effectScope.launch {
+            try {
+                val href = ResourceAddress.href(hit.src) ?: return@launch
+                val url = Url(href) ?: return@launch
+                val bytes = withContext(Dispatchers.IO) {
+                    publicationNow.get(url)?.use { it.read().getOrNull() }
+                } ?: return@launch
+                // The touch that asked may be long over, and the reader
+                // somewhere else entirely.
+                if (touch.serial != serial) return@launch
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                viewedImage = ViewedImage(bytes, hit.alt)
+            } finally {
+                touch.opening = false
+            }
+        }
+    }
+
+    /**
+     * Asks the document what is under the finger, as the finger lands.
+     *
+     * Fired on the *first* pointer rather than on the second, so that the
+     * answer is already in hand by the time a second finger turns the
+     * touch into a pinch and something has to be decided. On a resource
+     * with no images in it at all, nothing is asked.
+     */
+    fun probeUnderFinger(position: Offset) {
+        val serial = touch.serial
+        val nav = navigatorNow ?: run { touch.answered = true; return }
+        if (!touch.resourceHasImages) {
+            touch.answered = true
+            return
+        }
+        val web = visibleWebView(nav.publicationView) ?: run { touch.answered = true; return }
+        val origin = IntArray(2)
+        web.getLocationInWindow(origin)
+        val cssX = (boxInWindow.x + position.x - origin[0]) / pageDensity
+        val cssY = (boxInWindow.y + position.y - origin[1]) / pageDensity
+        effectScope.launch {
+            val hit = ImageAtPoint.at(nav, cssX, cssY)
+            if (touch.serial != serial) return@launch
+            touch.hit = hit
+            touch.answered = true
+            // The fingers may already be pinching, undecided, by the time
+            // this lands. An image takes the gesture back off the resize,
+            // which has committed nothing yet — but only while the pinch
+            // is still young: changing a gesture's meaning under fingers
+            // that have been moving for half a second is worse than
+            // getting it wrong.
+            val late = SystemClock.uptimeMillis() - touch.startedAt > DECIDE_BUDGET_MS
+            if (hit != null && touch.pointers >= 2 && !late) {
+                pinchStart.value = null
+                pinchTarget = null
+                pinchRefused = false
+                showImage(hit)
+            }
+        }
+        // A finger that stays put is the other way in. The wait is the
+        // platform's own, so a long press means here what it means
+        // everywhere else on the phone.
+        effectScope.launch {
+            delay(longPressMs)
+            // Almost always already answered, since the question went out
+            // when the finger landed; this is for the page that was busy.
+            var waited = 0L
+            while (!touch.answered && waited < DECIDE_BUDGET_MS) {
+                delay(ANSWER_POLL_MS)
+                waited += ANSWER_POLL_MS
+            }
+            if (touch.serial != serial || touch.moved || touch.pointers != 1) return@launch
+            touch.hit?.let(::showImage)
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
             .background(readingTheme.background)
+            .onGloballyPositioned { boxInWindow = it.positionInWindow() }
             .pointerInput(Unit) {
+                val slop = viewConfiguration.touchSlop
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -1592,8 +1744,41 @@ fun ReaderScreen(
                         // the card would become the new anchor and the card
                         // would jump out from under the finger scrolling it.
                         if (noteShowing) continue
+                        // The viewer is drawn inside this box and has
+                        // gestures of its own. Nothing on the page below
+                        // it is reachable while it is up.
+                        if (viewedImage != null) continue
 
                         val down = event.changes.filter { it.pressed }
+                        val was = touch.pointers
+                        touch.pointers = down.size
+                        when {
+                            down.isEmpty() -> Unit
+
+                            // A fresh touch. The serial moves here and
+                            // nowhere else: lifting a finger does not make
+                            // the answer to that touch stale, and a long
+                            // press ends with a lift.
+                            was == 0 -> {
+                                touch.serial++
+                                touch.hit = null
+                                touch.answered = false
+                                touch.moved = false
+                                touch.downAt = down[0].position
+                                touch.startedAt = SystemClock.uptimeMillis()
+                                probeUnderFinger(down[0].position)
+                            }
+
+                            (down[0].position - touch.downAt).getDistance() > slop ->
+                                touch.moved = true
+                        }
+                        // What is under the fingers decides which gesture
+                        // this is, and holds until they lift.
+                        if (down.size >= 2 && touch.hit != null) {
+                            touch.hit?.let(::showImage)
+                            event.changes.forEach { it.consume() }
+                            continue
+                        }
                         when {
                             down.size >= 2 && pinchToResizeNow -> {
                                 val span = PinchResize.spanOf(
@@ -2018,6 +2203,11 @@ fun ReaderScreen(
             pinchRefused -> FixedLayoutPinchHud(theme = readingTheme)
             else -> pinchTarget?.let { FontSizeHud(size = it, theme = readingTheme) }
         }
+
+        // Last of all: a picture asked for full screen is the thing the
+        // reader is looking at, and everything else in the box is what
+        // they asked to be shown it over.
+        viewedImage?.let { ImageViewer(image = it, onDismiss = { viewedImage = null }) }
     }
 
     // Letting a selection go from our own bar rather than from the page.
@@ -2645,3 +2835,31 @@ internal fun Locator.restorePoint(exact: Boolean = false) = RestorePoint(
     progression = locations.totalProgression,
     exact = exact,
 )
+
+/**
+ * What the touch on the page is doing, and what the document said was
+ * under it.
+ *
+ * Written by the pointer loop and read by the coroutines that answer for
+ * it, all on the main thread, so plain fields rather than snapshot state:
+ * none of this is drawn, and making it observable would recompose the
+ * reader on every finger that moves.
+ *
+ * [serial] counts touches, and is what makes an answer belong to one.
+ * Asking the document what is under a finger is a round trip, and a
+ * finger lifted before the answer comes back leaves a job in flight whose
+ * answer must not open a picture over whatever the reader did next.
+ */
+private class TouchProbe {
+    var serial = 0
+    var pointers = 0
+    var downAt = Offset.Zero
+    var startedAt = 0L
+    var moved = false
+    var answered = false
+    var opening = false
+    var hit: ImageAtPoint.Hit? = null
+
+    /** Whether the resource on screen has any image in it; see the probe. */
+    var resourceHasImages = false
+}

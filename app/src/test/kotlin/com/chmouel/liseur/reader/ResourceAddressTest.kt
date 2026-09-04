@@ -1,6 +1,8 @@
 package com.chmouel.liseur.reader
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -124,5 +126,35 @@ class ResourceAddressTest {
                 "pub/OPS/book.xhtml",
             ),
         )
+    }
+
+    @Test
+    fun `an image url becomes the href the publication spells it with`() {
+        assertEquals(
+            "EPUB/images/map.jpg",
+            ResourceAddress.href("https://readium_package/EPUB/images/map.jpg"),
+        )
+        assertEquals(
+            "EPUB/images/map.jpg",
+            ResourceAddress.href("https://readium_package/EPUB/images/map.jpg#top"),
+        )
+    }
+
+    @Test
+    fun `an href keeps its escapes, because it is handed back as a url`() {
+        // Comparison decodes them, so that two spellings of one filename
+        // are one resource. Reading the file does not: a url with a raw
+        // space in it does not parse.
+        assertEquals(
+            "EPUB/images/a%20map.jpg",
+            ResourceAddress.href("https://readium_package/EPUB/images/a%20map.jpg"),
+        )
+    }
+
+    @Test
+    fun `nothing addressable is no href`() {
+        assertNull(ResourceAddress.href(null))
+        assertNull(ResourceAddress.href(""))
+        assertNull(ResourceAddress.href("https://readium_package/"))
     }
 }
