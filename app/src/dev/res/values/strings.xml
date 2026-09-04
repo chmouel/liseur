@@ -1,0 +1,5 @@
+<resources>
+    <!-- The name on the launcher, so the build under test and the real
+         app are told apart before either is opened. -->
+    <string name="app_name">Liseur (dev)</string>
+</resources>
