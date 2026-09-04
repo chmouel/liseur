@@ -976,9 +976,9 @@ class LiseurSyncPositionSync(
                 return pushed
             } ?: continue
 
-            val statuses = statuses(answer)
-            for (item in batch) {
-                when (val status = statuses[item.op.opId]) {
+            val statuses = statuses(answer, batch)
+            for ((index, item) in batch.withIndex()) {
+                when (val status = statuses[index]) {
                     in ACCEPTED -> {
                         pushed++
                         forAccount(account) {
@@ -1086,9 +1086,7 @@ class LiseurSyncPositionSync(
             return PushRecovery.Retry(listOf(listOf(lone.copy(op = lone.op.copy(locatorJson = null)))))
         }
         if (rejection.errorCode == LiseurSyncRejection.LOCATOR_TOO_LARGE) {
-            val heavy = batch.firstOrNull { it.op.opId == rejection.opId }
-                ?: rejection.itemIndex?.let(batch::getOrNull)
-                ?: return PushRecovery.Ordinary
+            val heavy = batch.refused(rejection) ?: return PushRecovery.Ordinary
             // Already bare and still refused: not a size problem this
             // app can do anything about.
             if (heavy.op.locatorJson == null) return PushRecovery.Ordinary
@@ -1100,8 +1098,8 @@ class LiseurSyncPositionSync(
         if (!rejection.isUnknownWork) return PushRecovery.Ordinary
         val opId = rejection.opId ?: return PushRecovery.Ordinary
         val workId = rejection.workId ?: return PushRecovery.Ordinary
-        val stale = batch.firstOrNull { it.op.opId == opId }
-            ?.takeIf { it.op.workId == workId && it.alias.workId == workId }
+        val stale = batch.refused(rejection)
+            ?.takeIf { it.op.opId == opId && it.op.workId == workId && it.alias.workId == workId }
             ?: return PushRecovery.Ordinary
 
         if (!recovered.add(stale.bookUrl)) {
@@ -1128,6 +1126,20 @@ class LiseurSyncPositionSync(
         return PushRecovery.Retry(
             listOf(batch.mapNotNull { if (it.bookUrl == stale.bookUrl) replacement else it }),
         )
+    }
+
+    /**
+     * The op of this batch a refusal is about.
+     *
+     * The position the server named settles it, because two copies of
+     * one book derive the same op id and only the position tells them
+     * apart. An id that disagrees with the position is a malformed
+     * answer and names nothing.
+     */
+    private fun List<PendingPush>.refused(rejection: LiseurSyncRejection): PendingPush? {
+        val named = rejection.itemIndex?.let(::getOrNull)
+            ?: return firstOrNull { it.op.opId == rejection.opId }
+        return named.takeIf { rejection.opId == null || it.op.opId == rejection.opId }
     }
 
     /** What came of asking the server for a name to replace a stale one. */
@@ -1473,13 +1485,25 @@ class LiseurSyncPositionSync(
         return SessionRecovery.Retry(rest + rebuilt)
     }
 
-    private fun statuses(answer: JSONObject): Map<String, String> {
-        val results = answer.optJSONArray("results") ?: return emptyMap()
-        return (0 until results.length()).mapNotNull { index ->
-            val item = results.optJSONObject(index) ?: return@mapNotNull null
-            val id = item.optString("op_id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            id to item.optString("status")
-        }.toMap()
+    /**
+     * The server's answer for each op of [batch], by position.
+     *
+     * Positional rather than keyed by id: two copies of one book on
+     * this device are one work, so they derive the same op id, and a
+     * map would hand both of them whichever answer came last — settling
+     * a position the server refused, or moving the revision of one it
+     * took. The server returns one result per item in the order they
+     * were sent and names each one, so a result naming something else
+     * is not an answer this app can place and counts as none.
+     */
+    private fun statuses(answer: JSONObject, batch: List<PendingPush>): List<String?> {
+        val results = answer.optJSONArray("results")
+        return batch.mapIndexed { index, push ->
+            val item = results?.optJSONObject(index) ?: return@mapIndexed null
+            val id = item.optString("op_id")
+            if (id.isNotEmpty() && id != push.op.opId) return@mapIndexed null
+            item.optString("status").takeIf { it.isNotEmpty() }
+        }
     }
 
     // -- Odds and ends ----------------------------------------------------

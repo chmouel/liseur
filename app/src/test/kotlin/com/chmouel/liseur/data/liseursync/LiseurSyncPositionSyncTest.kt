@@ -1047,33 +1047,76 @@ class LiseurSyncPositionSyncTest {
         alias(workId = "w-2", bookUrl = LOCAL2)
         db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
         db.readingProgressDao().recordLocal(LOCAL2, LOCATOR, 0.5, null, "reading", NOW)
-        server.enqueue(json("""{"ops":[]}"""))
-        server.enqueue(
-            MockResponse(
-                code = 400,
-                body = """{"error":"batch too large","code":"batch_too_large","limit":1}""",
-            ),
-        )
-        // Named for both works, so the answer fits whichever op the
-        // cut-up batch sends first.
-        val both = json(
-            """{"results":[
-                {"op_id":"${SyncOps.opIdFor("device-a", "w-1", 1)}","status":"applied"},
-                {"op_id":"${SyncOps.opIdFor("device-a", "w-2", 1)}","status":"applied"}]}
-            """.trimIndent(),
-        )
-        server.enqueue(both)
-        server.enqueue(both)
+        var pushes = 0
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) return json("""{"ops":[]}""")
+                if (++pushes == 1) {
+                    return MockResponse(
+                        code = 400,
+                        body = """{"error":"batch too large","code":"batch_too_large","limit":1}""",
+                    )
+                }
+                return applied(request)
+            }
+        }
 
         assertEquals(SyncOutcome.Success, sync().syncAll(null))
 
-        val pushes = requests().filter { it.target.startsWith("/v1/ops") }
-        assertEquals(3, pushes.size)
-        assertEquals(2, JSONObject(pushes[0].body!!.utf8()).getJSONArray("ops").length())
-        assertEquals(1, JSONObject(pushes[1].body!!.utf8()).getJSONArray("ops").length())
-        assertEquals(1, JSONObject(pushes[2].body!!.utf8()).getJSONArray("ops").length())
+        val sent = requests().filter { it.target.startsWith("/v1/ops") }
+        assertEquals(3, sent.size)
+        assertEquals(2, JSONObject(sent[0].body!!.utf8()).getJSONArray("ops").length())
+        assertEquals(1, JSONObject(sent[1].body!!.utf8()).getJSONArray("ops").length())
+        assertEquals(1, JSONObject(sent[2].body!!.utf8()).getJSONArray("ops").length())
         assertEquals(1L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
         assertEquals(1L, db.syncPeerStateDao().get(LOCAL2, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `two copies of one book take their own answers, not each other's`() = runTest {
+        // Both copies are the same work at the same revision, so they
+        // derive the same op id. The server answers by position: the
+        // first is stored and the second, carrying a different place,
+        // is a conflict. Reading the answers by id gave both of them
+        // whichever came last.
+        connect()
+        db.bookDao().upsert(local())
+        db.bookDao().upsert(local().copy(url = LOCAL2, lastOpenedAt = NOW - 1))
+        alias()
+        alias(bookUrl = LOCAL2)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL2, LOCATOR, 0.5, null, "reading", NOW)
+        val opId = SyncOps.opIdFor("device-a", "w-1", 1)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            json(
+                """{"results":[
+                    {"op_id":"$opId","status":"applied"},
+                    {"op_id":"$opId","status":"conflict"}]}
+                """.trimIndent(),
+            ),
+        )
+
+        val outcome = sync().syncAll(null)
+
+        val ops = JSONObject(
+            requests().first { it.target.startsWith("/v1/ops") }.body!!.utf8(),
+        ).getJSONArray("ops")
+        assertEquals(2, ops.length())
+        // The premise: one work, one revision, so one op id for both.
+        assertEquals(opId, ops.getJSONObject(0).getString("op_id"))
+        assertEquals(opId, ops.getJSONObject(1).getString("op_id"))
+        // The copy the server took is settled and keeps its revision;
+        // the refused one is renamed so it can go again, and neither
+        // took the other's answer.
+        val settled = listOf(LOCAL, LOCAL2).filter {
+            db.syncPeerStateDao().get(it, peer())?.ackedRevision == 1L
+        }
+        assertEquals(1, settled.size)
+        val refused = listOf(LOCAL, LOCAL2).single { it !in settled }
+        assertEquals(2L, db.readingProgressDao().currentRevision(refused))
+        assertEquals(1L, db.readingProgressDao().currentRevision(settled.single()))
+        assertTrue(outcome !is SyncOutcome.Success)
     }
 
     @Test
@@ -1419,6 +1462,15 @@ class LiseurSyncPositionSyncTest {
 
     /** The one-off "where does this book stand" for a fresh name. */
     private fun seeded() = server.enqueue(json("""{"ops":[]}"""))
+
+    /** The server takes every op of the request, naming each back. */
+    private fun applied(request: RecordedRequest): MockResponse {
+        val ops = JSONObject(request.body!!.utf8()).getJSONArray("ops")
+        val results = (0 until ops.length()).joinToString(",") {
+            """{"op_id":"${ops.getJSONObject(it).getString("op_id")}","status":"applied"}"""
+        }
+        return json("""{"results":[$results]}""")
+    }
 
     /** The server takes the op — naming it back, as it must. */
     private fun accepted(workId: String = "w-1", revision: Long = 1) = server.enqueue(
