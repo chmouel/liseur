@@ -8,12 +8,14 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+        files: '^(app/|gradle/|gradlew$|gradlew\.bat$|.*\.gradle\.kts$|gradle\.properties$)'
       - id: lint
         name: Android Lint (lintDebug)
         entry: ./gradlew lintDebug --console=plain --daemon
         language: system
         pass_filenames: false
         stages: [pre-push]
+        files: '^(app/|gradle/|gradlew$|gradlew\.bat$|.*\.gradle\.kts$|gradle\.properties$)'
       # - id: assemble-release
       #   name: Release build (assembleRelease)
       #   entry: ./gradlew assembleRelease --console=plain --daemon
