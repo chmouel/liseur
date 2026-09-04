@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
@@ -22,9 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -36,6 +39,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
+
+/** Enough of the scrim to keep a caption legible over a pale picture. */
+private val CAPTION_BACKING = Color.Black.copy(alpha = 0.66f)
 
 /** A picture the reader asked to see, with the book's own caption for it. */
 data class ViewedImage(val bytes: ByteArray, val alt: String?) {
@@ -143,6 +149,28 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                     scaleY = scale
                     translationX = offsetX
                     translationY = offsetY
+                }
+                // Paper under the ink. A great many book illustrations are
+                // black line art on a transparent background — Standard
+                // Ebooks marks them `se:image.color-depth.black-on-transparent`
+                // — and on the scrim those are simply invisible. Drawn to
+                // the picture's own fitted rectangle rather than to the
+                // whole screen, so a photograph covers it completely and
+                // never shows a white border.
+                .drawBehind {
+                    if (!natural.isSpecified) return@drawBehind
+                    val (w, h) = ImageZoom.fitted(
+                        contentW = natural.width,
+                        contentH = natural.height,
+                        viewW = size.width,
+                        viewH = size.height,
+                    )
+                    if (w <= 0f || h <= 0f) return@drawBehind
+                    drawRect(
+                        color = Color.White,
+                        topLeft = Offset((size.width - w) / 2f, (size.height - h) / 2f),
+                        size = Size(w, h),
+                    )
                 },
         )
 
@@ -155,7 +183,12 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .safeDrawingPadding()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    // The caption sits over whatever the picture leaves
+                    // there, which after the paper behind a line drawing
+                    // can be white.
+                    .background(CAPTION_BACKING, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
 

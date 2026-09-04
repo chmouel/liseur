@@ -86,6 +86,15 @@ a thing to assume.
 already in ADR 20's table, and the reason point 5 exists: on a
 fixed-layout book, committing a new size would change nothing at all.
 
+**`EpubNavigatorFragment.evaluateJavascript` answers `null` on a
+fixed-layout book.** Not an error and not `"false"` — nothing at all,
+which reads as "this page has no images" and would refuse the viewer on
+every page of a book that is very often nothing but images. So the
+script is put to the web view directly, through
+`WebView.evaluateJavascript`, which the same code already has in hand
+because it needs the view's bounds to place the point anyway. Readium's
+own method is not used here.
+
 ## Design
 
 ### The rule is settled at the second finger
@@ -163,9 +172,14 @@ nothing about a fixed layout stops an image being too small.
 
 `document.elementFromPoint` where the first finger landed, walking up for
 an `<img>` or an SVG `<image>`, answered as JSON — the shape
-`WideContentFit` established. The point is CSS pixels in the web view's
-viewport, so the Compose position is offset by the web view's screen rect
-and divided by the display density.
+`WideContentFit` established.
+
+The point crosses as a **fraction of the web view**, not as a pixel
+count. A reflowable page is drawn at the display density and a fixed-layout
+page is drawn at whatever scale it takes to fit the screen, so device
+pixels over the display density are CSS pixels in one kind of book and
+not the other; the script multiplies the fraction by
+`window.innerWidth`, which is right in both.
 
 `evaluateJavascript` is asynchronous and the fingers are already moving,
 so the answer has to arrive before it is needed. Two things make that
@@ -202,6 +216,14 @@ full-screen viewer for. The markup says outright what it is. Judging an
 element by what it *is* rather than by how big it happens to be is the
 same move `FootnoteResolver` already makes for notes.
 
+The role is read off the picture **and off the few elements above it**,
+because the word that matters is often on the section rather than on the
+image: a title page's `<img>` says nothing, its `<section>` says
+`titlepage`. And it is read from `class` as well as from `epub:type`,
+because by the time the document is on screen the attribute has been
+rewritten into a class name and looking only for the attribute finds
+nothing at all.
+
 The same snippet settles the source attribute. On any screen above 1x
 the browser resolves `srcset` and displays `logo-2x.png`; reading `src`
 would hand the viewer `logo.png`, the *lower*-resolution file, which is
@@ -226,6 +248,16 @@ extracted from its existing private `path()`, so the one spelling of
 "turn a `readium_package` URL into a publication href" is shared rather
 than copied.
 
+**Paper under the ink.** A great many book illustrations are black line
+art on a transparent background — Standard Ebooks marks them
+`se:image.color-depth.black-on-transparent` — and on a black scrim those
+are not dimmed, they are gone. So a white rectangle is drawn behind the
+picture's own fitted rectangle. Behind the fitted rectangle rather than
+behind the screen, so a photograph covers it completely and never shows
+a white border; white rather than the reading theme's paper, because the
+overlay is not the page and because a transparent image in an EPUB is
+ink, not chalk.
+
 ### Long-press, and why not the web view's own
 
 Detected in the same pointer loop — one pointer, no travel, past
@@ -234,6 +266,12 @@ Detected in the same pointer loop — one pointer, no travel, past
 web view and would sit in front of text selection. The pointer is
 consumed only once the answer says image, so a long press on text still
 selects it.
+
+Consumed for the *rest of that touch*, and not only for the event that
+opened the viewer. A long press on an image is also a long press as far
+as the web view is concerned, and the web view answers one by starting a
+drag of the picture — so without the claim the viewer opens over a drag
+shadow the reader never asked for.
 
 ### What the other two gestures must not do
 

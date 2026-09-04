@@ -1,17 +1,22 @@
 package com.chmouel.liseur.reader
 
+import android.webkit.WebView
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
-import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.shared.ExperimentalReadiumApi
 
 /**
  * What image, if any, is under a point on the page.
  *
- * Injected into the book's own document, the way [WideContentFit] is,
- * because Readium 3.3.0 tells nobody about images: its `InputListener`
- * is `onTap`, `onDrag` and `onKey`, and its navigator listener knows
- * about links and jumps. The only thing that can answer "is that a
- * picture" is the document.
+ * Injected into the book's own document, because Readium 3.3.0 tells
+ * nobody about images: its `InputListener` is `onTap`, `onDrag` and
+ * `onKey`, and its navigator listener knows about links and jumps. The
+ * only thing that can answer "is that a picture" is the document.
+ *
+ * Asked of the web view directly rather than through
+ * `EpubNavigatorFragment.evaluateJavascript`, which answers null on a
+ * fixed-layout book — and a fixed-layout book is very often nothing but
+ * pictures, so that is exactly where the question matters most.
  *
  * See `docs/adr/0022-pinch-on-the-page.md`.
  */
@@ -43,18 +48,30 @@ internal object ImageAtPoint {
     const val MIN_RENDERED_PX = 48
 
     /**
-     * `epub:type` roles that name an image as furniture rather than as
+     * The words a book uses for a picture that is furniture rather than
      * something to look at.
      *
      * Size alone is not enough. The imprint page of every Standard Ebook
      * carries a publisher logo drawn around 76 CSS pixels wide — over any
      * threshold meant to exclude an ornament, and still nothing anyone
-     * wants full screen. The markup says what it is, so it is read.
+     * wants full screen. The title page is worse: its lettering is a
+     * picture the width of the column. The markup says what both are, so
+     * it is read.
+     *
+     * Read off the image and off the few elements above it, because the
+     * word that matters is often on the section rather than on the image:
+     * a title page's `<img>` says nothing, its `<section>` says
+     * `titlepage`.
      */
     private val DECORATIVE = listOf(
         "publisher-logo",
         "ornament",
         "footnote-separator",
+        "titlepage",
+        "halftitlepage",
+        "colophon",
+        "imprint",
+        "copyright-page",
     )
 
     /**
@@ -82,11 +99,39 @@ internal object ImageAtPoint {
      * the element what images it contains. Both are bounded: an unbounded
      * walk ends at `<body>`, which contains every image in the chapter.
      */
-    fun script(x: Float, y: Float): String = """
+    fun script(fx: Float, fy: Float): String = """
         (function () {
           var MIN = $MIN_RENDERED_PX;
+          // The point arrives as a fraction of the web view rather than
+          // in pixels. A fixed-layout page is drawn at whatever scale it
+          // takes to fit the screen, so device pixels divided by the
+          // display density are not CSS pixels there; a fraction of the
+          // viewport is the same fraction in either kind of book.
+          var VW = window.innerWidth || document.documentElement.clientWidth;
+          var VH = window.innerHeight || document.documentElement.clientHeight;
+          var px = $fx * VW;
+          var py = $fy * VH;
           var DECOR = ${DECORATIVE.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }};
-          var el = document.elementFromPoint($x, $y);
+          var OPS = "http://www.idpf.org/2007/ops";
+          // What the book calls this element. The epub:type attribute is
+          // rewritten into a class name by the time the document is on
+          // screen, so both spellings are read and neither is trusted to
+          // be the one that survived.
+          function roleOf(e) {
+            if (!e || !e.getAttribute) return "";
+            var ns = "";
+            try { ns = e.getAttributeNS(OPS, "type") || ""; } catch (err) {}
+            return ((e.getAttribute("epub:type") || "") + " " + ns + " " +
+                    (e.getAttribute("class") || "")).toLowerCase();
+          }
+          function decorative(e) {
+            var role = roleOf(e);
+            for (var d = 0; d < DECOR.length; d++) {
+              if (role.indexOf(DECOR[d]) !== -1) return true;
+            }
+            return false;
+          }
+          var el = document.elementFromPoint(px, py);
           var img = null;
           for (var i = 0; el && i < 4; i++) {
             if (el.tagName && (el.tagName.toLowerCase() === "img" ||
@@ -100,11 +145,8 @@ internal object ImageAtPoint {
           }
           if (!img) return null;
 
-          var role = (img.getAttribute("epub:type") ||
-                      img.getAttributeNS("http://www.idpf.org/2007/ops", "type") ||
-                      "").toLowerCase();
-          for (var d = 0; d < DECOR.length; d++) {
-            if (role.indexOf(DECOR[d]) !== -1) return null;
+          for (var up = img, j = 0; up && j < 5; up = up.parentElement, j++) {
+            if (decorative(up)) return null;
           }
 
           var box = img.getBoundingClientRect();
@@ -145,13 +187,21 @@ internal object ImageAtPoint {
     }
 
     /** True when the resource on screen has an image anywhere in it. */
-    @OptIn(ExperimentalReadiumApi::class)
-    suspend fun hasImages(navigator: EpubNavigatorFragment): Boolean =
-        runCatching { navigator.evaluateJavascript(HAS_IMAGES_SCRIPT) }
-            .getOrNull()?.trim() == "true"
+    suspend fun hasImages(web: WebView): Boolean =
+        eval(web, HAS_IMAGES_SCRIPT)?.trim() == "true"
 
-    /** The image under ([x], [y]), given in the page's own CSS pixels. */
-    @OptIn(ExperimentalReadiumApi::class)
-    suspend fun at(navigator: EpubNavigatorFragment, x: Float, y: Float): Hit? =
-        parse(runCatching { navigator.evaluateJavascript(script(x, y)) }.getOrNull())
+    /**
+     * The image under a point, given as a fraction of [web]'s own width
+     * and height rather than in pixels of either kind.
+     */
+    suspend fun at(web: WebView, fx: Float, fy: Float): Hit? = parse(eval(web, script(fx, fy)))
+
+    private suspend fun eval(web: WebView, js: String): String? =
+        suspendCancellableCoroutine { cont ->
+            try {
+                web.evaluateJavascript(js) { if (cont.isActive) cont.resume(it) }
+            } catch (e: Exception) {
+                if (cont.isActive) cont.resume(null)
+            }
+        }
 }
