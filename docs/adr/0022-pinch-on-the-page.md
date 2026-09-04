@@ -341,14 +341,23 @@ what it has not revealed, and the overlay carries a pane title.
 
 The cost of drawing it as a sibling rather than in its own window is
 that being hidden has to be *applied*, once per sibling, and a window
-gets it for free. The bookmark ribbon, the footer, the note card, the
-selection bar and the size HUD all carry it for that reason. Anything
-new added to the reading box has to carry it too; a sibling that forgets
-is a control a reader cannot see and can still reach. The trade is
-deliberate — a separate window would mean re-deriving the immersive bar
-handling this screen is careful about — but it is the fragile half of
-this decision, and the place to look first if a control ever turns up
-where it should not.
+gets it for free. The bookmark ribbon, the footer, the note card and the
+size HUD all carry it for that reason. Anything new added to the reading
+box has to carry it too; a sibling that forgets is a control a reader
+cannot see and can still reach. The trade is deliberate — a separate
+window would mean re-deriving the immersive bar handling this screen is
+careful about — but it is the fragile half of this decision, and the
+place to look first if a control ever turns up where it should not.
+
+The selection bar is the exception, and it shows what the fragility
+looks like. It is a `Popup`, so it is already a window of its own: a
+modifier on the box around it reaches neither its semantics nor its
+drawing order, and hiding it would have left a row of buttons a screen
+reader could operate — drawn over the picture besides. It is not
+composed at all while the viewer is up. The selection itself survives,
+so the bar comes back with it when the picture is dismissed. The rule
+that follows: a sibling in a window of its own has to be *removed*, not
+hidden.
 
 ### Long-press, and why not the web view's own
 

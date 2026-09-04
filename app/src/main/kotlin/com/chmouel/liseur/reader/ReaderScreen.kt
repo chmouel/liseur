@@ -2338,54 +2338,59 @@ fun ReaderScreen(
         selection = null
     }
 
-    selection?.let { active ->
-        Box(Modifier.fillMaxSize().then(behindViewer)) {
-            SelectionPopup(
-                offset = active.popupOffset(),
-                activeTint = active.existing?.tint?.let(HighlightTint::fromName),
-                actions = remember(active, dictionary) {
-                    SelectionActions(
-                        onHighlight = { tint ->
-                            onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
-                            dismissSelection()
-                        },
-                        onNote = {
-                            noteFor = active
-                            dismissSelection()
-                        },
-                        onSearch = {
-                            searchFor = active.text
-                            dismissSelection()
-                        },
-                        onLookUp = {
-                            when (dictionary.target) {
-                                DefinitionTarget.BUILT_IN -> defineWord = active.text
-                                DefinitionTarget.EXTERNAL_APP -> {
-                                    context.lookUpExternally(active.text, dictionary.baseUrl)
-                                }
+    // Not composed at all while a picture is open, rather than hidden the
+    // way the rest of the chrome is. This one is a `Popup`, which is a
+    // window of its own: a modifier on the box around it reaches neither
+    // its semantics nor its drawing order, so hiding it would leave a bar
+    // of buttons a screen reader could still operate — and draw them over
+    // the picture besides. The selection itself is untouched and comes
+    // back with the bar when the picture is dismissed.
+    selection?.takeIf { viewedImage == null }?.let { active ->
+        SelectionPopup(
+            offset = active.popupOffset(),
+            activeTint = active.existing?.tint?.let(HighlightTint::fromName),
+            actions = remember(active, dictionary) {
+                SelectionActions(
+                    onHighlight = { tint ->
+                        onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
+                        dismissSelection()
+                    },
+                    onNote = {
+                        noteFor = active
+                        dismissSelection()
+                    },
+                    onSearch = {
+                        searchFor = active.text
+                        dismissSelection()
+                    },
+                    onLookUp = {
+                        when (dictionary.target) {
+                            DefinitionTarget.BUILT_IN -> defineWord = active.text
+                            DefinitionTarget.EXTERNAL_APP -> {
+                                context.lookUpExternally(active.text, dictionary.baseUrl)
                             }
+                        }
+                        dismissSelection()
+                    },
+                    onShare = {
+                        context.shareText(active.text, publication.metadata.title)
+                        dismissSelection()
+                    },
+                    onDelete = active.existing?.let { existing ->
+                        {
+                            onAnnotationAction.remove(existing)
                             dismissSelection()
-                        },
-                        onShare = {
-                            context.shareText(active.text, publication.metadata.title)
-                            dismissSelection()
-                        },
-                        onDelete = active.existing?.let { existing ->
-                            {
-                                onAnnotationAction.remove(existing)
-                                dismissSelection()
-                            }
-                        },
-                    )
-                },
-                onDismiss = {
-                    // The bar and the selection go together: leaving the page
-                    // selected keeps the platform's handles alive and drawing
-                    // over words the reader has finished with.
-                    dismissSelection()
-                },
-            )
-        }
+                        }
+                    },
+                )
+            },
+            onDismiss = {
+                // The bar and the selection go together: leaving the page
+                // selected keeps the platform's handles alive and drawing
+                // over words the reader has finished with.
+                dismissSelection()
+            },
+        )
     }
 
     defineWord?.let { word ->
