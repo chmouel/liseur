@@ -141,6 +141,7 @@ import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FixedLayoutPinchHud
 import com.chmouel.liseur.reader.chrome.FontSizeHud
 import com.chmouel.liseur.reader.chrome.FootnoteCard
+import com.chmouel.liseur.reader.chrome.GestureClaim
 import com.chmouel.liseur.reader.chrome.ImageViewer
 import com.chmouel.liseur.reader.chrome.ViewedImage
 import com.chmouel.liseur.reader.chrome.PinchResize
@@ -1730,10 +1731,11 @@ fun ReaderScreen(
      *
      * A gesture no resize has claimed yet is not on a clock: fingers that
      * take their time arriving at a picture still get the picture. Once a
-     * resize is under way it is, because changing a gesture's meaning
-     * under fingers already moving to it is worse than getting it wrong.
+     * resize has had hold of it, it is — and that is asked of the touch
+     * rather than of `pinchStart`, which empties as soon as the pinch
+     * drops to one finger while the touch itself runs on.
      */
-    fun imageMayWin(): Boolean = pinchStart.value == null || touch.undecided()
+    fun imageMayWin(): Boolean = touch.claim.imageMayWin(SystemClock.uptimeMillis())
 
     /**
      * Asks the document what is under the finger, as the finger lands.
@@ -1864,6 +1866,7 @@ fun ReaderScreen(
                                 touch.moved = false
                                 touch.downAt = down[0].position
                                 touch.startedAt = SystemClock.uptimeMillis()
+                                touch.claim.begin(touch.startedAt)
                                 probeUnderFinger(down[0].position)
                             }
 
@@ -1883,6 +1886,7 @@ fun ReaderScreen(
                         }
                         when {
                             down.size >= 2 && pinchToResizeNow -> {
+                                touch.claim.resizeTook()
                                 val span = PinchResize.spanOf(
                                     down[0].position.x, down[0].position.y,
                                     down[1].position.x, down[1].position.y,
@@ -2070,6 +2074,7 @@ fun ReaderScreen(
                 onToggle = ::toggleBookmarkHere,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
+                    .then(behindViewer)
                     .padding(end = 12.dp),
             )
         }
@@ -2174,6 +2179,7 @@ fun ReaderScreen(
                 onCycleMode = onProgressAction.cycleFooterMode,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .then(behindViewer)
                     .padding(bottom = FooterMetrics.BOTTOM_MARGIN_DP.dp),
             )
         }
@@ -2280,32 +2286,36 @@ fun ReaderScreen(
         // the thing the reader just asked for, and the page, the pills and
         // the chrome are all what they asked to be shown it over.
         footnote?.let { note ->
-            FootnoteCard(
-                html = note.html,
-                theme = readingTheme,
-                anchorY = lastTouchY,
-                onGoToNote = {
-                    onDismissFootnote()
-                    onProgressAction.onJump()
-                    navigator?.let { nav ->
-                        val noteToken = moves.issue(
-                            from = nav.currentLocator.value.restorePoint(),
-                            to = publication.locatorFromLink(note.link)?.destination(),
-                            nowMs = SystemClock.elapsedRealtime(),
-                        )
-                        if (!nav.go(note.link, animated = false)) moves.cancel(noteToken)
-                    }
-                },
-                onDismiss = onDismissFootnote,
-            )
+            Box(Modifier.fillMaxSize().then(behindViewer)) {
+                FootnoteCard(
+                    html = note.html,
+                    theme = readingTheme,
+                    anchorY = lastTouchY,
+                    onGoToNote = {
+                        onDismissFootnote()
+                        onProgressAction.onJump()
+                        navigator?.let { nav ->
+                            val noteToken = moves.issue(
+                                from = nav.currentLocator.value.restorePoint(),
+                                to = publication.locatorFromLink(note.link)?.destination(),
+                                nowMs = SystemClock.elapsedRealtime(),
+                            )
+                            if (!nav.go(note.link, animated = false)) moves.cancel(noteToken)
+                        }
+                    },
+                    onDismiss = onDismissFootnote,
+                )
+            }
         }
 
         // Above the note guard rather than below it, because a pinch is
         // refused outright while a note is open, so the two can never be
         // on screen together.
-        when {
-            pinchRefused -> FixedLayoutPinchHud(theme = readingTheme)
-            else -> pinchTarget?.let { FontSizeHud(size = it, theme = readingTheme) }
+        Box(Modifier.fillMaxSize().then(behindViewer)) {
+            when {
+                pinchRefused -> FixedLayoutPinchHud(theme = readingTheme)
+                else -> pinchTarget?.let { FontSizeHud(size = it, theme = readingTheme) }
+            }
         }
 
         // Last of all: a picture asked for full screen is the thing the
@@ -2329,51 +2339,53 @@ fun ReaderScreen(
     }
 
     selection?.let { active ->
-        SelectionPopup(
-            offset = active.popupOffset(),
-            activeTint = active.existing?.tint?.let(HighlightTint::fromName),
-            actions = remember(active, dictionary) {
-                SelectionActions(
-                    onHighlight = { tint ->
-                        onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
-                        dismissSelection()
-                    },
-                    onNote = {
-                        noteFor = active
-                        dismissSelection()
-                    },
-                    onSearch = {
-                        searchFor = active.text
-                        dismissSelection()
-                    },
-                    onLookUp = {
-                        when (dictionary.target) {
-                            DefinitionTarget.BUILT_IN -> defineWord = active.text
-                            DefinitionTarget.EXTERNAL_APP -> {
-                                context.lookUpExternally(active.text, dictionary.baseUrl)
-                            }
-                        }
-                        dismissSelection()
-                    },
-                    onShare = {
-                        context.shareText(active.text, publication.metadata.title)
-                        dismissSelection()
-                    },
-                    onDelete = active.existing?.let { existing ->
-                        {
-                            onAnnotationAction.remove(existing)
+        Box(Modifier.fillMaxSize().then(behindViewer)) {
+            SelectionPopup(
+                offset = active.popupOffset(),
+                activeTint = active.existing?.tint?.let(HighlightTint::fromName),
+                actions = remember(active, dictionary) {
+                    SelectionActions(
+                        onHighlight = { tint ->
+                            onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
                             dismissSelection()
-                        }
-                    },
-                )
-            },
-            onDismiss = {
-                // The bar and the selection go together: leaving the page
-                // selected keeps the platform's handles alive and drawing
-                // over words the reader has finished with.
-                dismissSelection()
-            },
-        )
+                        },
+                        onNote = {
+                            noteFor = active
+                            dismissSelection()
+                        },
+                        onSearch = {
+                            searchFor = active.text
+                            dismissSelection()
+                        },
+                        onLookUp = {
+                            when (dictionary.target) {
+                                DefinitionTarget.BUILT_IN -> defineWord = active.text
+                                DefinitionTarget.EXTERNAL_APP -> {
+                                    context.lookUpExternally(active.text, dictionary.baseUrl)
+                                }
+                            }
+                            dismissSelection()
+                        },
+                        onShare = {
+                            context.shareText(active.text, publication.metadata.title)
+                            dismissSelection()
+                        },
+                        onDelete = active.existing?.let { existing ->
+                            {
+                                onAnnotationAction.remove(existing)
+                                dismissSelection()
+                            }
+                        },
+                    )
+                },
+                onDismiss = {
+                    // The bar and the selection go together: leaving the page
+                    // selected keeps the platform's handles alive and drawing
+                    // over words the reader has finished with.
+                    dismissSelection()
+                },
+            )
+        }
     }
 
     defineWord?.let { word ->
@@ -2978,16 +2990,11 @@ private class TouchProbe {
     var resourceHasImages = false
 
     /**
-     * Whether an image answer is still young enough to change what this
-     * touch means.
+     * Whether a resize has had hold of this touch at any point.
      *
-     * Only ever asked of a touch a resize has already got hold of: the
-     * budget exists so that a document which took half a second to answer
-     * cannot yank the gesture out from under fingers that have spent that
-     * half second resizing. A gesture nothing else has claimed is not on
-     * a clock — a long press is deliberately slower than this — so ask
-     * through `imageMayWin` rather than reaching for this directly.
+     * Sticky for the life of the whole sequence, and cleared only when a
+     * fresh touch begins; see [GestureClaim] for why the live pinch is
+     * the wrong thing to read.
      */
-    fun undecided(): Boolean =
-        SystemClock.uptimeMillis() - startedAt <= DECIDE_BUDGET_MS
+    val claim = GestureClaim(DECIDE_BUDGET_MS)
 }
