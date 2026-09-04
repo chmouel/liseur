@@ -95,12 +95,11 @@ class PositionSyncWorker(
                 .setInputData(Data.Builder().putString(KEY_BOOK_URL, bookUrl).build())
                 .setConstraints(onNetwork)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
-            // A closed book's place is worth seconds, not the minutes
-            // Doze can hold ordinary work for. Expedited work gets that
-            // on API 31+, where it needs no foreground service. Below
-            // that it would need a notification to run under, which a
-            // few dozen bytes of position do not justify, so older
-            // phones keep the plain job.
+            // Request prompt execution for a closed book on API 31+.
+            // WorkManager falls back to ordinary work when expedited
+            // quota is unavailable. Below that it would need a
+            // foreground notification, which a few dozen bytes of
+            // position do not justify, so older phones keep the plain job.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 request.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             }
