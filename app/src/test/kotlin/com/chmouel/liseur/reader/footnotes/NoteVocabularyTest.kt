@@ -57,4 +57,15 @@ class NoteVocabularyTest {
         assertFalse(NoteVocabulary.isNoteRef("footnote", ""))
         assertFalse(NoteVocabulary.isNoteRef("", ""))
     }
+
+    @Test
+    fun `a token list may be written across any whitespace`() {
+        // The injected script splits on `/\s+/`, and a book is free to wrap
+        // a long `epub:type` across a line. Reading only spaces here made
+        // the two disagree about the same element.
+        assertTrue(NoteVocabulary.isNote("backmatter\tfootnote", "", "div"))
+        assertTrue(NoteVocabulary.isNote("backmatter\nfootnote", "", "div"))
+        assertTrue(NoteVocabulary.isNote("", "doc-chapter\tdoc-footnote", "div"))
+        assertTrue(NoteVocabulary.isNoteRef("backmatter\nnoteref", ""))
+    }
 }

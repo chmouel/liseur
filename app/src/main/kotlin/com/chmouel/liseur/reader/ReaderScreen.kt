@@ -1042,11 +1042,17 @@ fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         if (!reflowableText) return@LaunchedEffect
         val root = nav.publicationView
-        var fitted: WebView? = null
+        var fitted: Pair<WebView, String>? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
             val web = visibleWebView(root) ?: return@collect
-            if (web === fitted) return@collect
-            fitted = web
+            // Keyed by the resource as well as by the view, for the same
+            // reason the image probe below is: the pager recycles a web
+            // view from one chapter into another, and the same instance
+            // is then a different document with its own notes to hide
+            // and its own pictures to fit.
+            val key = web to nav.currentLocator.value.href.toString()
+            if (key == fitted) return@collect
+            fitted = key
             // Which position to come back to, decided before the reflow
             // scope opens: the wait below is not a reflow, and holding
             // the scope through it would read a page the reader turned

@@ -213,7 +213,9 @@ def default_path() -> str:
 
 
 def build(path: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # A bare filename has no directory part, and `makedirs("")` raises rather
+    # than doing nothing, so the path is made absolute before it is asked.
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".part"
     # The mimetype entry has to be first and stored uncompressed, or the file
     # is not an EPUB however well-formed everything after it is.

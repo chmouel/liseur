@@ -143,7 +143,30 @@ class FootnoteLayoutTest {
     fun `revealing is remembered, or the next layout pass hides it again`() {
         val script = FootnoteLayout.revealScript("note-1")
         assertTrue(script.contains("revealed[id] = true"))
-        assertTrue(script.contains("removeAttribute(\"data-liseur-note\")"))
+        assertTrue(script.contains("removeAttribute(state.noteAttr)"))
+    }
+
+    @Test
+    fun `an id that names something on Object's prototype is not read as revealed`() {
+        // `constructor` and `toString` are legal EPUB ids, and a bare object
+        // answers for both, so the map both scripts share carries no
+        // prototype at all.
+        assertTrue(FootnoteLayout.SCRIPT.contains("Object.create(null)"))
+        assertTrue(FootnoteLayout.revealScript("n1").contains("Object.create(null)"))
+    }
+
+    @Test
+    fun `the token names the attribute rather than filling it`() {
+        // A publisher shipping `data-liseur-note` of their own must not have
+        // it overwritten, which taking the bare name would do.
+        assertTrue(FootnoteLayout.SCRIPT.contains("\"data-liseur-note-\" + tok"))
+        assertTrue(FootnoteLayout.SCRIPT.contains("\"data-liseur-mark-\" + tok"))
+    }
+
+    @Test
+    fun `a reference carrying its own chapter's path is still a local one`() {
+        assertTrue(FootnoteLayout.SCRIPT.contains("document.baseURI"))
+        assertTrue(FootnoteLayout.SCRIPT.contains("localFragment"))
     }
 
     /** The words of a `var NAME = [...]` list in the script. */
