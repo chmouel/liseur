@@ -548,10 +548,7 @@ class RemoteAccountRepository(
             stored.liseurAccountId != null && capabilities.liseurAccountId != null
         // A liseur-sync password names the account itself, so the same
         // login to the same server is the same account whatever device
-        // id the mint came back with. The device id only stands in for
-        // an account a pasted token cannot name, and it changes for
-        // honest reasons: a server that has forgotten the previous one,
-        // or one too old to be offered it at all. Reading that as a
+        // id the mint came back with. Reading a changed one as a
         // stranger threw away the cursor and the book names of someone
         // who did nothing but sign in again.
         val namedByLogin = kind == ServerKind.LISEUR_SYNC &&
@@ -562,14 +559,17 @@ class RemoteAccountRepository(
             if (stableIdentity) {
                 stored.liseurAccountId == capabilities.liseurAccountId
             } else {
+                // The device id is only a stand-in for an account the
+                // credential cannot name, and it changes for honest
+                // reasons: a server that has forgotten the one it
+                // issued, or one too old to be offered it back.
+                val sameDevice = namedByLogin ||
+                    capabilities.accountId == null ||
+                    stored.accountId == capabilities.accountId
                 stored.username == username &&
                     (stored.userId == capabilities.calibreUserId ||
                         capabilities.calibreUserId == null) &&
-                    (
-                        namedByLogin ||
-                            stored.accountId == capabilities.accountId ||
-                            capabilities.accountId == null
-                        )
+                    sameDevice
             }
         val existing = stored?.takeIf { sameAccount }
 
