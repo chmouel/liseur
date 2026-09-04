@@ -1493,15 +1493,15 @@ class LiseurSyncPositionSync(
      * map would hand both of them whichever answer came last — settling
      * a position the server refused, or moving the revision of one it
      * took. The server returns one result per item in the order they
-     * were sent and names each one, so a result naming something else
-     * is not an answer this app can place and counts as none.
+     * were sent and names each one, so a result that does not name the
+     * op at that position — or names nothing at all — is not an answer
+     * this app can place and counts as none.
      */
     private fun statuses(answer: JSONObject, batch: List<PendingPush>): List<String?> {
         val results = answer.optJSONArray("results")
         return batch.mapIndexed { index, push ->
             val item = results?.optJSONObject(index) ?: return@mapIndexed null
-            val id = item.optString("op_id")
-            if (id.isNotEmpty() && id != push.op.opId) return@mapIndexed null
+            if (item.optString("op_id") != push.op.opId) return@mapIndexed null
             item.optString("status").takeIf { it.isNotEmpty() }
         }
     }
