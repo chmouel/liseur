@@ -16,6 +16,10 @@ side.
 | Book delete    | Not possible          | Implemented         | Implemented          | Not implemented      | Not possible         |
 | Series claims  | N/A                   | N/A                 | Implemented          | N/A                  | N/A                  |
 
+For how each kind's position sync measures up against Kindle
+Whispersync, behaviour by behaviour, see
+[`adr/0023-position-sync-versus-whispersync.md`](adr/0023-position-sync-versus-whispersync.md).
+
 ## Komga
 
 **Auth:** API key (`X-API-Key` header).

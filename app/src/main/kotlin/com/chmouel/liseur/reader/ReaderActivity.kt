@@ -570,13 +570,13 @@ class ReaderActivity : FragmentActivity() {
             viewModel.onReaderPaused()
         }
         super.onPause()
-    }
-
-    override fun onStop() {
-        super.onStop()
         // Leaving the book is the moment the position is worth sending:
         // it is settled, and the reader is likely to pick up elsewhere.
-        if (target != null) viewModel.onReaderStopped()
+        // After super, so the held place the ON_PAUSE observers publish
+        // is queued ahead of the push that carries it. Asked here rather
+        // than in onStop because a process killed while paused never
+        // gets there.
+        if (target != null) viewModel.onReaderLeft()
     }
 
     /**

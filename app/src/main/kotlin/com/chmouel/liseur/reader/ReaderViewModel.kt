@@ -1050,7 +1050,18 @@ class ReaderViewModel(
         }
     }
 
-    fun onReaderStopped() {
+    /**
+     * Called once the reader has been paused and its last place written.
+     *
+     * Queues the background push behind that write. The foreground push
+     * has usually gone already on the page turn itself; this is the
+     * backstop for a push still in the air when the process is killed.
+     * It is asked at pause rather than at stop because a process killed
+     * while paused never reaches stop, and because pause is when the
+     * settled place is known: with the reader inactive no further page
+     * is written.
+     */
+    fun onReaderLeft() {
         if (!positionPublisher.closeBook(bookId)) {
             _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
         }
