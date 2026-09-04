@@ -452,6 +452,10 @@ fun ReaderScreen(
     val pinchSettledAt = remember { mutableLongStateOf(0L) }
     var pinchTarget by remember { mutableStateOf<Double?>(null) }
     var pinchRefused by remember { mutableStateOf(false) }
+    // Two fingers down on a page the document has not answered for yet.
+    // Consumed, so nothing else acts on the touch, but committing
+    // nothing, because what the gesture means is not settled (ADR 22).
+    var pinchHeld by remember { mutableStateOf(false) }
     val pinchToResizeNow by rememberUpdatedState(pinchToResize)
     val fontSizeNow by rememberUpdatedState(prefs.fontSize)
     val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
@@ -1543,7 +1547,7 @@ fun ReaderScreen(
         onPageTurnerChanged(if (nav != null) pageTurner else null)
         val listeners = nav?.let {
             val isPinching = {
-                pinchStart.value != null ||
+                pinchStart.value != null || pinchHeld ||
                     SystemClock.uptimeMillis() - pinchSettledAt.longValue < PinchResize.GUARD_MS
             }
             listOf(
@@ -1783,6 +1787,7 @@ fun ReaderScreen(
                 pinchStart.value = null
                 pinchTarget = null
                 pinchRefused = false
+                pinchHeld = false
                 showImage(hit)
             }
         }
@@ -1879,6 +1884,7 @@ fun ReaderScreen(
                                 touch.downAt = down[0].position
                                 touch.startedAt = SystemClock.uptimeMillis()
                                 touch.claim.begin(touch.startedAt)
+                                pinchHeld = false
                                 probeUnderFinger(down[0].position)
                             }
 
@@ -1897,7 +1903,23 @@ fun ReaderScreen(
                             continue
                         }
                         when {
+                            // The document has not said yet what is under
+                            // the fingers, and the budget has not run out.
+                            // Held: consumed so nothing else acts on the
+                            // touch, but starting no resize, so a lift here
+                            // commits no size to a gesture that may yet
+                            // turn out to have been aimed at a picture.
+                            // When the budget does run out the span is
+                            // measured from that moment, so the size does
+                            // not jump (ADR 22).
+                            down.size >= 2 && pinchToResizeNow && !touch.answered &&
+                                touch.claim.undecided(SystemClock.uptimeMillis()) -> {
+                                pinchHeld = true
+                                event.changes.forEach { it.consume() }
+                            }
+
                             down.size >= 2 && pinchToResizeNow -> {
+                                pinchHeld = false
                                 touch.claim.resizeTook()
                                 val span = PinchResize.spanOf(
                                     down[0].position.x, down[0].position.y,
@@ -1931,12 +1953,18 @@ fun ReaderScreen(
                                 event.changes.forEach { it.consume() }
                             }
 
-                            pinchStart.value != null -> {
-                                // One commit, one reflow, one anchor.
+                            pinchStart.value != null || pinchHeld -> {
+                                // One commit, one reflow, one anchor. A
+                                // gesture that was still undecided when the
+                                // fingers left has nothing to commit, but
+                                // it is still swallowed: its fingers were
+                                // consumed all the way, and a page turn
+                                // out of the end of one is not a tap.
                                 pinchTarget?.let { if (it != fontSizeNow) setFontSizeNow(it) }
                                 pinchStart.value = null
                                 pinchTarget = null
                                 pinchRefused = false
+                                pinchHeld = false
                                 pinchSettledAt.longValue = SystemClock.uptimeMillis()
                                 event.changes.forEach { it.consume() }
                             }

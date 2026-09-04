@@ -16,6 +16,12 @@ package com.chmouel.liseur.reader.chrome
  * take their time arriving at a picture, and a long press, are both
  * slower than the budget, and both still get the picture.
  *
+ * The same budget also decides how long a second finger waits before the
+ * gesture gives up on the document and becomes a resize. Until then the
+ * gesture is held: consumed, so nothing else acts on it, but committing
+ * nothing, so fingers that lift while the answer is still in flight
+ * change no size.
+ *
  * Kept apart from the pointer loop because the interesting case is a
  * *sequence*: a resize is forgotten the instant it drops to one finger,
  * while the touch itself runs on until the last finger leaves. Reading
@@ -42,6 +48,9 @@ class GestureClaim(private val budgetMs: Long) {
     fun resizeTook() {
         resizeHolds = true
     }
+
+    /** Whether the gesture must wait rather than commit to being a resize. */
+    fun undecided(nowMs: Long): Boolean = !resizeHolds && nowMs - startedAt <= budgetMs
 
     /** Whether an image answer may still decide what this touch means. */
     fun imageMayWin(nowMs: Long): Boolean =
