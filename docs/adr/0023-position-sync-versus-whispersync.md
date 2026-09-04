@@ -43,7 +43,7 @@ is what those two carry on their own, which is nothing.
 | Offline, then back | yes | append-only log, derived ids; a retry is byte-identical and answered `duplicate` | idempotent write of the current value; the sync token moves in the transaction that stores what it covers | idempotent write of the current value | idempotent write | — |
 | Learning what moved elsewhere | server push | cursor over `GET /v1/changes` | Kobo sync token | catalog walk, `readProgress` | one `GET` per candidate book; there is no list | — |
 | How a book is named | ASIN | SHA-256, KOReader partial-MD5, `ta:` title/author with a confirmation on a low match, `409` to merge | calibre uuid | Komga book id | partial-MD5 | — |
-| Which books | bought, or sent to Kindle | every book, including a local one once uploaded and adopted | downloaded from that calibre-web | downloaded from that Komga | downloaded server books, since a hash needs the file | — |
+| Which books | bought, or sent to Kindle | every book, including local books; upload and adoption are optional | downloaded from that calibre-web | downloaded from that Komga | downloaded server books, since a hash needs the file | — |
 | Who else sees the place | Kindle devices and apps | liseur-desktop, the web reader, KOReader through `/adapter/kosync` | Kobo devices, the calibre-web reader | Komga's reader and other Komga clients | KOReader | — |
 | One device across reconnects | yes | yes (`ServerSetup.reconnect`; liseur-sync ADR-0033) | not applicable | not applicable | not applicable | — |
 | A book open on two devices at once | last writer wins | the pull is held while the page is on screen (`OpenBooks`) and offered on the next resume | same | same | same | — |
@@ -58,7 +58,7 @@ provider does.
 reader can see is there, and three are better: the merge tells a
 deliberate reread apart from the other device having moved, rather than
 taking the furthest page; the offer is a pill rather than a question to
-answer before reading; and a sideloaded file is a first-class book. On
+answer before reading; and a sideloaded file is a first-class book without requiring upload. On
 top of that come highlights, notes, bookmarks and statistics, which
 Whispersync also has, and a book only on this phone reaching the server,
 which it does not.
