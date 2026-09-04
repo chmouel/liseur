@@ -6,6 +6,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -137,6 +138,28 @@ interface UploadRefusalDao {
 
     @Query("DELETE FROM upload_refusal WHERE account_key = :accountKey")
     suspend fun clearAccount(accountKey: String)
+
+    /**
+     * Renames an account's refusals when the account's key changes
+     * spelling. A refusal already under [to] is the same verdict from
+     * the same server and can stand; the old-key copy goes.
+     */
+    @Query(
+        """
+        DELETE FROM upload_refusal WHERE account_key = :from AND book_url IN
+            (SELECT book_url FROM upload_refusal WHERE account_key = :to)
+        """,
+    )
+    suspend fun dropShadowed(from: String, to: String)
+
+    @Query("UPDATE upload_refusal SET account_key = :to WHERE account_key = :from")
+    suspend fun rename(from: String, to: String)
+
+    @Transaction
+    suspend fun rekeyAccount(from: String, to: String) {
+        dropShadowed(from, to)
+        rename(from, to)
+    }
 }
 
 /** One refusal and the digest the book hashes to now, for comparison. */

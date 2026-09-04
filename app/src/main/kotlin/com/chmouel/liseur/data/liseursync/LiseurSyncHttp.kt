@@ -59,6 +59,9 @@ class LiseurSyncRejection(
     companion object {
         /** A batch item named a work the server no longer holds. */
         const val UNKNOWN_WORK = "unknown_work"
+
+        /** A mint asked to keep a device id no token of the account carries. */
+        const val UNKNOWN_DEVICE = "unknown_device"
     }
 }
 

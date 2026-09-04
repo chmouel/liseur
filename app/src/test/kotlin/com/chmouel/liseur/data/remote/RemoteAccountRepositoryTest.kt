@@ -3,10 +3,12 @@ package com.chmouel.liseur.data.remote
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.AnnotationSync
 import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncCredentials
 import com.chmouel.liseur.data.library.BookRemoval
@@ -444,6 +446,124 @@ class RemoteAccountRepositoryTest {
         // own log.
         assertEquals(0, db.remoteServerDao().get()!!.syncCursorSeq)
     }
+
+    /**
+     * A liseur-sync server as it stood before and after it learnt to say
+     * who the account is: the first connect reports only a device id, the
+     * next ones add `account_id`. Reconnecting keeps the device id when
+     * the repository offers it back, as a real server does.
+     */
+    private class UpgradingLiseurSync : ServerSetup {
+        var connects = 0
+        var offered: String? = null
+
+        override suspend fun connect(rawUrl: String, credentials: RemoteCredentials, allowHttp: Boolean) =
+            answer(rawUrl, keep = null)
+
+        override suspend fun reconnect(
+            rawUrl: String,
+            credentials: RemoteCredentials,
+            allowHttp: Boolean,
+            prior: PriorConnection,
+        ): SetupResult {
+            offered = prior.deviceId
+            return answer(rawUrl, keep = prior.deviceId)
+        }
+
+        private fun answer(rawUrl: String, keep: String?): SetupResult {
+            connects++
+            return SetupResult.Success(
+                ServerCapabilities(
+                    baseUrl = rawUrl,
+                    canDownload = true,
+                    accountId = keep ?: "device-$connects",
+                    displayName = "ada",
+                    liseurToken = "token-$connects",
+                    liseurAccountId = if (connects > 1) "acc-1" else null,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `reconnecting offers the stored device id back to the same server`() = runTest {
+        val setup = UpgradingLiseurSync()
+        val repository = repository(db.remoteServerDao(), setup)
+        repository.connectLiseurSync(BASE, "ada", "pw")
+
+        repository.connectLiseurSync(BASE, "ada", "pw")
+
+        assertEquals("device-1", setup.offered)
+        assertEquals("device-1", db.remoteServerDao().get()!!.accountId)
+    }
+
+    @Test
+    fun `the first server that names the account moves sync state to the new key`() = runTest {
+        // Before the server reported account ids the key was spelled with
+        // the device id. The upgrade must not read as an account switch,
+        // and every table keyed by the old spelling has to follow.
+        val setup = UpgradingLiseurSync()
+        val repository = fullRepository(db.remoteServerDao(), setup)
+        repository.connectLiseurSync(BASE, "ada", "pw")
+        val oldKey = db.remoteServerDao().get()!!.accountKey
+        assertEquals("liseursync|$BASE|device-1", oldKey)
+        db.remoteServerDao().setSyncCursor(41)
+        db.syncPeerStateDao().persistPending(
+            bookUrl = "file:///book.epub", peerId = oldKey, progression = 0.8, status = "Reading",
+            remoteUpdatedAt = 1_000, locatorJson = """{"href":"c"}""", editionSha = "sha",
+        )
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = "file:///book.epub", peerId = oldKey, workId = "w-1",
+                confidence = "high", resolvedAt = 1,
+            ),
+        )
+        db.annotationSyncDao().upsert(
+            AnnotationSync(
+                id = "a-1", peerId = oldKey, bookId = "file:///book.epub", workId = "w-1",
+                pendingKind = "write", pendingJson = """{"id":"a-1"}""",
+            ),
+        )
+        db.readingProgressDao().markDirtyFor(listOf("file:///book.epub"), oldKey)
+
+        repository.connectLiseurSync(BASE, "ada", "pw")
+
+        val stored = db.remoteServerDao().get()!!
+        val newKey = stored.accountKey
+        assertEquals("liseursync|$BASE|acc-1", newKey)
+        assertEquals(41, stored.syncCursorSeq)
+        assertEquals(0.8, db.syncPeerStateDao().get("file:///book.epub", newKey)!!.pendingProgression)
+        assertNull(db.syncPeerStateDao().get("file:///book.epub", oldKey))
+        assertEquals("w-1", db.workIdentityDao().alias("file:///book.epub", newKey)!!.workId)
+        assertEquals("""{"id":"a-1"}""", db.annotationSyncDao().get(newKey, "a-1")!!.pendingJson)
+        assertEquals(0, db.annotationSyncDao().countForPeer(oldKey))
+
+        // From here on the key is stable across token rotations.
+        repository.connectLiseurSync(BASE, "ada", "pw")
+        assertEquals(newKey, db.remoteServerDao().get()!!.accountKey)
+    }
+
+    private fun fullRepository(dao: RemoteServerDao, liseurSyncSetup: ServerSetup) = RemoteAccountRepository(
+        dao = dao,
+        bookDao = db.bookDao(),
+        progressDao = db.readingProgressDao(),
+        bookRemoval = BookRemoval(
+            db.bookDao(),
+            db.readingSessionDao(),
+            db.syncPeerStateDao(),
+            db.workIdentityDao(),
+            db.readingProgressDao(),
+            db.annotationDao(),
+            db.annotationSyncDao(),
+        ),
+        seriesExtraDao = db.seriesExtraDao(),
+        peerStateDao = db.syncPeerStateDao(),
+        identityDao = db.workIdentityDao(),
+        sessionDao = db.readingSessionDao(),
+        annotationSyncDao = db.annotationSyncDao(),
+        uploadRefusalDao = db.uploadRefusalDao(),
+        setups = mapOf(ServerKind.LISEUR_SYNC to liseurSyncSetup),
+    )
 
     private fun repository(
         dao: RemoteServerDao,

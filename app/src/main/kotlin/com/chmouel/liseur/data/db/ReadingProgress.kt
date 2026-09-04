@@ -873,6 +873,23 @@ abstract class ReadingProgressDao {
     abstract suspend fun retireAccountState()
 
     /**
+     * Renames an account everywhere a position remembers it, for the
+     * same account whose key changed spelling. Nothing about the
+     * position moves: which account agreed it, reported it or owns it
+     * is unchanged, only how that account is written.
+     */
+    @Query(
+        """
+        UPDATE reading_progress SET
+            agreed_account = CASE WHEN agreed_account = :from THEN :to ELSE agreed_account END,
+            pending_account = CASE WHEN pending_account = :from THEN :to ELSE pending_account END,
+            owner_account = CASE WHEN owner_account = :from THEN :to ELSE owner_account END
+        WHERE agreed_account = :from OR pending_account = :from OR owner_account = :from
+        """,
+    )
+    abstract suspend fun rekeyAccount(from: String, to: String)
+
+    /**
      * Marks the given books as having reading the server should be told
      * about, once the user has agreed to hand them to a new account.
      */

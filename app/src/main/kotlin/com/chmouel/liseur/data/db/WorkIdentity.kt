@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 import androidx.room.Upsert
 import com.chmouel.liseur.domain.BookFingerprint
@@ -259,4 +260,29 @@ interface WorkIdentityDao {
 
     @Query("DELETE FROM work_ambiguity WHERE peer_id = :peerId")
     suspend fun forgetPeerAmbiguities(peerId: String)
+
+    /** How many names and open questions one peer holds. */
+    @Query(
+        """
+        SELECT (SELECT COUNT(*) FROM work_alias WHERE peer_id = :peerId) +
+               (SELECT COUNT(*) FROM work_ambiguity WHERE peer_id = :peerId)
+        """,
+    )
+    suspend fun countForPeer(peerId: String): Int
+
+    @Query("UPDATE work_alias SET peer_id = :to WHERE peer_id = :from")
+    suspend fun rekeyAliases(from: String, to: String)
+
+    @Query("UPDATE work_ambiguity SET peer_id = :to WHERE peer_id = :from")
+    suspend fun rekeyAmbiguities(from: String, to: String)
+
+    /**
+     * Moves everything one peer had named under a new spelling of the
+     * same peer. Only ever called when nothing sits under [to] yet.
+     */
+    @Transaction
+    suspend fun rekeyPeer(from: String, to: String) {
+        rekeyAliases(from, to)
+        rekeyAmbiguities(from, to)
+    }
 }

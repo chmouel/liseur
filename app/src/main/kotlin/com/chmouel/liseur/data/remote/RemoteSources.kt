@@ -222,7 +222,34 @@ interface ServerSetup {
         credentials: RemoteCredentials,
         allowHttp: Boolean = false,
     ): SetupResult
+
+    /**
+     * [connect], told what the last connection to a server of this kind
+     * knew about itself.
+     *
+     * Most kinds have nothing to do with it. liseur-sync uses the device
+     * id: a token minted while reconnecting asks the server to keep it,
+     * so the phone stays one device in the op log and a position or
+     * sitting it sent before its credential lapsed is recognised as a
+     * replay rather than refused as a conflict.
+     */
+    suspend fun reconnect(
+        rawUrl: String,
+        credentials: RemoteCredentials,
+        allowHttp: Boolean,
+        prior: PriorConnection,
+    ): SetupResult = connect(rawUrl, credentials, allowHttp)
 }
+
+/**
+ * What the stored account remembered about the server it is being
+ * reconnected to. [deviceId] is offered back only to [baseUrl]: a device
+ * id is a label in one server's op log and means nothing to another.
+ */
+data class PriorConnection(
+    val baseUrl: String,
+    val deviceId: String?,
+)
 
 /** How deleting a book from the server went. */
 sealed interface ServerDeleteResult {

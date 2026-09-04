@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.liseursync
 
+import com.chmouel.liseur.data.remote.PriorConnection
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.SetupFailure
 import com.chmouel.liseur.data.remote.SetupResult
@@ -188,9 +189,85 @@ class LiseurSyncServerSetupTest {
         )
     }
 
+    @Test
+    fun `reconnecting asks the server to keep the device id`() = runTest {
+        server.enqueue(json("""{"auth_token":"hour-token"}"""))
+        server.enqueue(json("""{"token_id":"t-2","device_id":"d-1","scopes":["sync"],"secret":"s-2"}"""))
+        server.enqueue(json("""{"id":"t-2","device_id":"d-1","name":"Test phone","scopes":["sync"],"account_id":"acc-9"}"""))
+
+        val result = reconnect(RemoteCredentials.Basic("ada", "correct"), PriorConnection(base(), "d-1"))
+
+        assertEquals("d-1", (result as SetupResult.Success).capabilities.accountId)
+        server.takeRequest()
+        val minted = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals("d-1", minted.getString("device_id"))
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun `a device id the server no longer knows is dropped and the mint asked again`() = runTest {
+        server.enqueue(json("""{"auth_token":"hour-token"}"""))
+        server.enqueue(
+            MockResponse(
+                code = 400,
+                body = """{"error":"device_id names no device of this account","code":"unknown_device","device_id":"d-old"}""",
+            ),
+        )
+        server.enqueue(json("""{"token_id":"t-2","device_id":"d-new","scopes":["sync"],"secret":"s-2"}"""))
+        server.enqueue(json("""{"id":"t-2","device_id":"d-new","name":"Test phone","scopes":["sync"]}"""))
+
+        val result = reconnect(RemoteCredentials.Basic("ada", "correct"), PriorConnection(base(), "d-old"))
+
+        assertEquals("d-new", (result as SetupResult.Success).capabilities.accountId)
+        server.takeRequest()
+        assertTrue(JSONObject(server.takeRequest().body!!.utf8()).has("device_id"))
+        assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("device_id"))
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `any other refused mint is not retried`() = runTest {
+        server.enqueue(json("""{"auth_token":"hour-token"}"""))
+        server.enqueue(MockResponse(code = 400, body = """{"error":"name required"}"""))
+
+        val result = reconnect(RemoteCredentials.Basic("ada", "correct"), PriorConnection(base(), "d-1"))
+
+        assertEquals(SetupFailure.WrongServer, (result as SetupResult.Failure).reason)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `a device id is never offered to a different server`() = runTest {
+        server.enqueue(json("""{"auth_token":"hour-token"}"""))
+        server.enqueue(json("""{"token_id":"t-2","device_id":"d-x","scopes":["sync"],"secret":"s-2"}"""))
+        server.enqueue(json("""{"id":"t-2","device_id":"d-x","name":"Test phone","scopes":["sync"]}"""))
+
+        reconnect(RemoteCredentials.Basic("ada", "correct"), PriorConnection("https://elsewhere.example", "d-1"))
+
+        server.takeRequest()
+        assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("device_id"))
+    }
+
+    @Test
+    fun `an older server that ignores the field is simply a new device`() = runTest {
+        server.enqueue(json("""{"auth_token":"hour-token"}"""))
+        server.enqueue(json("""{"token_id":"t-2","device_id":"d-fresh","scopes":["sync"],"secret":"s-2"}"""))
+        server.enqueue(json("""{"id":"t-2","device_id":"d-fresh","name":"Test phone","scopes":["sync"]}"""))
+
+        val result = reconnect(RemoteCredentials.Basic("ada", "correct"), PriorConnection(base(), "d-1"))
+
+        assertEquals("d-fresh", (result as SetupResult.Success).capabilities.accountId)
+    }
+
+    private fun base() = "http://127.0.0.1:${server.port}"
+
     private suspend fun connect(credentials: RemoteCredentials): SetupResult =
         LiseurSyncServerSetup(deviceName = { "Test phone" })
-            .connect("http://127.0.0.1:${server.port}", credentials, allowHttp = false)
+            .connect(base(), credentials, allowHttp = false)
+
+    private suspend fun reconnect(credentials: RemoteCredentials, prior: PriorConnection): SetupResult =
+        LiseurSyncServerSetup(deviceName = { "Test phone" })
+            .reconnect(base(), credentials, allowHttp = false, prior = prior)
 
     private fun json(body: String) = MockResponse(code = 200, body = body)
 }

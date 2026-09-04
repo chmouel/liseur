@@ -272,4 +272,14 @@ abstract class SyncPeerStateDao {
      */
     @Query("DELETE FROM sync_peer_state WHERE peer_id = :peerId")
     abstract suspend fun forgetPeer(peerId: String)
+
+    @Query("SELECT COUNT(*) FROM sync_peer_state WHERE peer_id = :peerId")
+    abstract suspend fun countForPeer(peerId: String): Int
+
+    /**
+     * Moves one partner's agreements under a new name for the same
+     * partner. Only ever called when nothing sits under [to] yet.
+     */
+    @Query("UPDATE sync_peer_state SET peer_id = :to WHERE peer_id = :from")
+    abstract suspend fun rekeyPeer(from: String, to: String)
 }

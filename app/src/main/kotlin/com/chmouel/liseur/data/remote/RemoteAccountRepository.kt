@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.remote
 
+import android.util.Log
 import com.chmouel.liseur.data.calibre.CalibreParsing
 import com.chmouel.liseur.data.calibre.CalibreSetupClient
 import com.chmouel.liseur.data.calibre.CredentialCipher
@@ -461,7 +462,16 @@ class RemoteAccountRepository(
         allowHttp: Boolean,
     ): SetupResult {
         val setup = setups[kind] ?: return SetupResult.Failure(SetupFailure.WrongServer)
-        val result = setup.connect(url, credentials, allowHttp)
+        // What the stored account of the same kind knew about itself.
+        // Whether the address is the same is the setup's call: it is
+        // the one that normalises the typed URL.
+        val prior = dao.get()?.takeIf { it.kind == kind }
+            ?.let { PriorConnection(baseUrl = it.baseUrl, deviceId = it.liseurDeviceId) }
+        val result = if (prior != null) {
+            setup.reconnect(url, credentials, allowHttp, prior)
+        } else {
+            setup.connect(url, credentials, allowHttp)
+        }
         if (result is SetupResult.Success) store(kind, credentials, result.capabilities)
         return result
     }
@@ -591,8 +601,45 @@ class RemoteAccountRepository(
                 annotationCursorSeq = existing?.annotationCursorSeq ?: 0,
                 liseurAccountId = capabilities.liseurAccountId
                     ?: existing?.liseurAccountId,
-            ),
+            ).let { next -> if (existing != null) carryPeerState(existing, next) else next },
         )
+    }
+
+    /**
+     * Moves what the same account had agreed under its previous key to
+     * the key it will have from now on, or keeps the previous key.
+     *
+     * A liseur-sync account's key changes once: the first time a server
+     * that reports the stable account id is reconnected to, when the
+     * spelling stops being the device id. Every per-peer table is keyed
+     * by that string, and leaving the rows under the old one would
+     * strand the baselines, the work names, the cursor's meaning and
+     * every unsent annotation — the same loss as an account switch, for
+     * a reader who did nothing but reconnect.
+     *
+     * The new key has never been written, so nothing should be under it.
+     * If something is, the move is not made: the row is stored so that
+     * it keeps producing the old key, everything stays where it was and
+     * the next connect tries again. Guessing which of two rows to keep
+     * would be guessing about a reader's unsent position.
+     */
+    private suspend fun carryPeerState(existing: RemoteServer, next: RemoteServer): RemoteServer {
+        val from = existing.accountKey
+        val to = next.accountKey
+        if (existing.kind != ServerKind.LISEUR_SYNC || from == to) return next
+        val occupied = (peerStateDao?.countForPeer(to) ?: 0) +
+            (identityDao?.countForPeer(to) ?: 0) +
+            (annotationSyncDao?.countForPeer(to) ?: 0)
+        if (occupied > 0) {
+            Log.w(TAG, "Not moving sync state to a key that already has $occupied rows; keeping the old key")
+            return next.copy(liseurAccountId = existing.liseurAccountId)
+        }
+        peerStateDao?.rekeyPeer(from, to)
+        identityDao?.rekeyPeer(from, to)
+        annotationSyncDao?.rekeyPeer(from, to)
+        uploadRefusalDao?.rekeyAccount(from, to)
+        progressDao.rekeyAccount(from, to)
+        return next
     }
 
     /**
@@ -726,6 +773,8 @@ class RemoteAccountRepository(
     }
 
     private companion object {
+        const val TAG = "remote-account"
+
         /**
          * How many times a cold read will retry when the account changes
          * underneath it. A handful, because a change that keeps landing
