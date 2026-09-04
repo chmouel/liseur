@@ -25,6 +25,7 @@ class ScrollEdgeTurner(
     private val navigator: OverflowableNavigator,
     private val isScrolling: () -> Boolean,
     private val isVerticalText: () -> Boolean = { false },
+    private val isPinching: () -> Boolean = { false },
     private val onStepChapter: (forward: Boolean) -> Unit,
 ) : InputListener {
 
@@ -32,6 +33,13 @@ class ScrollEdgeTurner(
 
     override fun onDrag(event: DragEvent): Boolean {
         if (!isScrolling()) return false
+        // Two fingers converging on a scrolled page read as a drag as
+        // well, and one that reaches the end of the chapter would open
+        // the next one out from under the pinch.
+        if (isPinching()) {
+            pull.reset()
+            return false
+        }
         when (event.type) {
             DragEvent.Type.Start -> pull.reset()
 

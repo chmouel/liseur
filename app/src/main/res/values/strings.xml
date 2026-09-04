@@ -532,6 +532,8 @@
     <string name="reader_spacing_value">+%1$s</string>
     <string name="reader_spacing_customize">Set a value</string>
     <string name="reader_spacing_reset">Back to default</string>
+    <string name="reader_pinch_sample">Aa</string>
+    <string name="reader_pinch_size">Text size %1$d%%</string>
     <string name="reader_typography_fixed_layout">This book has a fixed layout: its pages are set by the publisher, so these settings do not change them.</string>
     <string name="reader_typography_not_in_cjk">Not applied in Chinese, Japanese, Korean or vertical books.</string>
     <string name="reader_typography_latin_not_in_rtl">Hyphenation and letter and word spacing are not applied in right-to-left books.</string>
@@ -592,6 +594,8 @@
     <string name="settings_tap_zones_detail">Which side of the page turns forward when you tap it. Swapped puts the forward turn under the other thumb, for holding the phone in the other hand: in most books the left of the page goes on and the right goes back, and in a book that reads right to left it is the other way about. The middle still opens the menu, the volume keys are unchanged, and a book read by scrolling has no sides to tap.</string>
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Swapped</string>
+    <string name="settings_pinch_to_resize">Pinch to resize text</string>
+    <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Turn it off if the way you hold the phone sets it off by accident. Pinching an image to enlarge it still works either way.</string>
     <string name="settings_resume">Open on the book you were reading</string>
     <string name="settings_resume_detail">Skip the library when you left off mid-book.</string>
     <string name="settings_keep_screen_on">Keep the screen on</string>

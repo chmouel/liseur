@@ -59,12 +59,18 @@ class ReaderTapZones(
     private val isChromeVisible: () -> Boolean,
     private val isScrolling: () -> Boolean = { false },
     private val isSwapped: () -> Boolean = { false },
+    private val isPinching: () -> Boolean = { false },
     private val onTurnPage: (forward: Boolean) -> Unit,
     private val onShowChrome: () -> Unit,
     private val onHideChrome: () -> Unit,
 ) : InputListener {
 
     override fun onTap(event: TapEvent): Boolean {
+        // A second finger arriving a beat after the first turns the tap
+        // into a pinch, and lifting out of a pinch releases its pointers
+        // one at a time. Neither is a tap on the page. See
+        // `docs/adr/0022-pinch-on-the-page.md`.
+        if (isPinching()) return true
         if (isChromeVisible()) {
             onHideChrome()
             return true

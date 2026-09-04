@@ -370,6 +370,7 @@ class ReaderActivity : FragmentActivity() {
                                     scrollModeFlow = viewModel.scrollMode,
                                     onScrollModeChanged = viewModel::setScrollMode,
                                     tapZonesFlow = viewModel.tapZones,
+                                    pinchToResizeFlow = viewModel.pinchToResize,
                                     // Dialogs of this activity's own,
                                     // drawn over the reader. The page
                                     // must not carry on scrolling under

@@ -809,6 +809,11 @@ class ReaderViewModel(
         .map { it.tapZones }
         .stateIn(viewModelScope, SharingStarted.Eagerly, TapZones.Default)
 
+    /** Whether a two-finger pinch on the page resizes the text, app-wide. */
+    val pinchToResize: StateFlow<Boolean> = appSettings.settings
+        .map { it.pinchToResize }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     /** Most recent position, used to persist progress and to survive recreation. */
     var lastLocator: Locator? = null
         private set

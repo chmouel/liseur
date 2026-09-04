@@ -51,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -130,7 +131,11 @@ import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
+import com.chmouel.liseur.reader.chrome.FixedLayoutPinchHud
+import com.chmouel.liseur.reader.chrome.FontSizeHud
 import com.chmouel.liseur.reader.chrome.FootnoteCard
+import com.chmouel.liseur.reader.chrome.PinchResize
+import com.chmouel.liseur.reader.chrome.PinchStart
 import com.chmouel.liseur.reader.chrome.GoToPageDialog
 import com.chmouel.liseur.reader.chrome.GoToPercentDialog
 import com.chmouel.liseur.reader.chrome.TypographySheet
@@ -313,6 +318,7 @@ fun ReaderScreen(
     scrollModeFlow: StateFlow<Boolean>,
     onScrollModeChanged: (Boolean) -> Unit,
     tapZonesFlow: StateFlow<TapZones>,
+    pinchToResizeFlow: StateFlow<Boolean>,
     // The activity draws dialogs of its own over this screen — a link
     // out of the book, a sync, an offer to send the book up — and a tap
     // on a link never reaches the tap zones, so the screen would
@@ -338,6 +344,7 @@ fun ReaderScreen(
     val scrollMode by scrollModeFlow.collectAsStateWithLifecycle()
     val tapZones by tapZonesFlow.collectAsStateWithLifecycle()
     val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
+    val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
     // Readium reads vertical text off the book rather than off the
     // reader: it cannot paginate lines that run down the page, so such a
     // book is scrolled whatever the setting says. Everything that asks
@@ -387,6 +394,28 @@ fun ReaderScreen(
      */
     var lastTouchY by remember { mutableStateOf<Float?>(null) }
     var fingerDown by remember { mutableStateOf(false) }
+    /*
+     * The pinch on the page, and what it is landing on.
+     *
+     * Nothing here is committed while the fingers move. The size the
+     * gesture is heading for is drawn over the page as a preview and
+     * written once, on the lift, because every intermediate value would
+     * be a reflow and an anchor-and-restore of a book the reader is
+     * holding still — the same reason the Size slider commits on
+     * `onValueChangeFinished` and not on every notch. See
+     * `docs/adr/0022-pinch-on-the-page.md`.
+     *
+     * [pinchStart] and [pinchSettledAt] are held as state objects rather
+     * than through `by`, because the tap zones read them from a lambda
+     * that outlives every recomposition.
+     */
+    val pinchStart = remember { mutableStateOf<PinchStart?>(null) }
+    val pinchSettledAt = remember { mutableLongStateOf(0L) }
+    var pinchTarget by remember { mutableStateOf<Double?>(null) }
+    var pinchRefused by remember { mutableStateOf(false) }
+    val pinchToResizeNow by rememberUpdatedState(pinchToResize)
+    val fontSizeNow by rememberUpdatedState(prefs.fontSize)
+    val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
     // The tracker below outlives every recomposition, so it cannot read
     // `footnote` directly — it would keep seeing whatever was true when it
     // started. This gives it a window onto the current value.
@@ -1435,12 +1464,17 @@ fun ReaderScreen(
         pageTurner.publication = publication
         onPageTurnerChanged(if (nav != null) pageTurner else null)
         val listeners = nav?.let {
+            val isPinching = {
+                pinchStart.value != null ||
+                    SystemClock.uptimeMillis() - pinchSettledAt.longValue < PinchResize.GUARD_MS
+            }
             listOf(
                 ReaderTapZones(
                     navigator = it,
                     isChromeVisible = { chromeVisibleNow },
                     isScrolling = { effectiveScrollingNow },
                     isSwapped = { swappedZonesNow },
+                    isPinching = isPinching,
                     onTurnPage = pageTurner::turn,
                     onShowChrome = { chromeVisible = true },
                     onHideChrome = { chromeVisible = false },
@@ -1449,6 +1483,7 @@ fun ReaderScreen(
                     navigator = it,
                     isScrolling = { effectiveScrollingNow },
                     isVerticalText = { it.settings.value.verticalText },
+                    isPinching = isPinching,
                     onStepChapter = { forward -> pageTurner.stepChapter(forward) },
                 ),
             ).onEach(it::addInputListener)
@@ -1557,8 +1592,49 @@ fun ReaderScreen(
                         // the card would become the new anchor and the card
                         // would jump out from under the finger scrolling it.
                         if (noteShowing) continue
-                        event.changes.firstOrNull { it.pressed }
-                            ?.let { lastTouchY = it.position.y }
+
+                        val down = event.changes.filter { it.pressed }
+                        when {
+                            down.size >= 2 && pinchToResizeNow -> {
+                                val span = PinchResize.spanOf(
+                                    down[0].position.x, down[0].position.y,
+                                    down[1].position.x, down[1].position.y,
+                                )
+                                val start = pinchStart.value ?: PinchStart(span, fontSizeNow)
+                                    .also {
+                                        pinchStart.value = it
+                                        pinchTarget = null
+                                        // A fixed-layout book places every
+                                        // page itself and Readium honours
+                                        // no font size inside one, so the
+                                        // pinch says so rather than doing
+                                        // nothing at all (ADR 20, ADR 22).
+                                        pinchRefused = !reflowableText
+                                    }
+                                if (reflowableText) {
+                                    PinchResize.targetFor(start.size, start.span, span)
+                                        ?.let { pinchTarget = it }
+                                }
+                                // Only once a second finger is down.
+                                // Consuming a lone pointer here would take
+                                // the ordinary tap away from the page, and
+                                // the ordinary tap is how the book is read.
+                                event.changes.forEach { it.consume() }
+                            }
+
+                            pinchStart.value != null -> {
+                                // One commit, one reflow, one anchor.
+                                pinchTarget?.let { if (it != fontSizeNow) setFontSizeNow(it) }
+                                pinchStart.value = null
+                                pinchTarget = null
+                                pinchRefused = false
+                                pinchSettledAt.longValue = SystemClock.uptimeMillis()
+                                event.changes.forEach { it.consume() }
+                            }
+
+                            else -> event.changes.firstOrNull { it.pressed }
+                                ?.let { lastTouchY = it.position.y }
+                        }
                     }
                 }
             },
@@ -1933,6 +2009,14 @@ fun ReaderScreen(
                 },
                 onDismiss = onDismissFootnote,
             )
+        }
+
+        // Above the note guard rather than below it, because a pinch is
+        // refused outright while a note is open, so the two can never be
+        // on screen together.
+        when {
+            pinchRefused -> FixedLayoutPinchHud(theme = readingTheme)
+            else -> pinchTarget?.let { FontSizeHud(size = it, theme = readingTheme) }
         }
     }
 
