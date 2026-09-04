@@ -134,4 +134,11 @@ interface AnnotationSyncDao {
     /** Forgets everything one server had confirmed. */
     @Query("DELETE FROM annotation_sync WHERE peer_id = :peerId")
     suspend fun forgetPeer(peerId: String)
+
+    @Query("SELECT COUNT(*) FROM annotation_sync WHERE peer_id = :peerId")
+    suspend fun countForPeer(peerId: String): Int
+
+    /** Renames one server's rows, requests in flight included. Only when nothing sits under [to]. */
+    @Query("UPDATE annotation_sync SET peer_id = :to WHERE peer_id = :from")
+    suspend fun rekeyPeer(from: String, to: String)
 }

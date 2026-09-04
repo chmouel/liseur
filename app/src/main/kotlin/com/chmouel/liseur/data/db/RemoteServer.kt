@@ -121,6 +121,19 @@ data class RemoteServer(
     val koboToken: String? get() = koboTokenCipher?.let(CredentialCipher::decrypt)
 
     /**
+     * The device id liseur-sync stamped this phone's ops and sessions
+     * with; null for every other kind.
+     *
+     * [accountId] doubles as that for liseur-sync — the column predates
+     * the stable [liseurAccountId] — and it is worth asking for by its
+     * real name, because it is offered back to the server on reconnect
+     * so the phone stays the same device in the op log.
+     */
+    @get:Ignore
+    val liseurDeviceId: String?
+        get() = accountId.takeIf { kind == ServerKind.LISEUR_SYNC }
+
+    /**
      * How to sign a request to this server, or null when the secret
      * cannot be read back — a database restored onto another phone
      * arrives with ciphertext this Keystore cannot open.

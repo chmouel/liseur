@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.liseursync
 
 import android.util.Log
+import com.chmouel.liseur.data.remote.PriorConnection
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.RemoteUrl
@@ -35,10 +36,32 @@ class LiseurSyncServerSetup(
         rawUrl: String,
         credentials: RemoteCredentials,
         allowHttp: Boolean,
+    ): SetupResult = connect(rawUrl, credentials, allowHttp, prior = null)
+
+    override suspend fun reconnect(
+        rawUrl: String,
+        credentials: RemoteCredentials,
+        allowHttp: Boolean,
+        prior: PriorConnection,
+    ): SetupResult = connect(rawUrl, credentials, allowHttp, prior)
+
+    private suspend fun connect(
+        rawUrl: String,
+        credentials: RemoteCredentials,
+        allowHttp: Boolean,
+        prior: PriorConnection?,
     ): SetupResult = withContext(Dispatchers.IO) {
         attempt(rawUrl, allowHttp) { baseUrl ->
             when (credentials) {
-                is RemoteCredentials.Basic -> signIn(baseUrl, credentials)
+                is RemoteCredentials.Basic -> signIn(
+                    baseUrl,
+                    credentials,
+                    // Only the server that issued a device id is ever
+                    // offered it back; compared after normalisation and
+                    // any drop to plain http, since that is the address
+                    // the mint goes to.
+                    keepDevice = prior?.deviceId?.takeIf { prior.baseUrl == baseUrl },
+                )
                 is RemoteCredentials.Bearer -> introspect(baseUrl, credentials)
                 // liseur-sync has no other way in; an API key is Komga's.
                 else -> throw RemoteHttpFailure(SyncFailure.Malformed)
@@ -53,8 +76,21 @@ class LiseurSyncServerSetup(
      * all it does. Nothing writes to the catalog — books reach the
      * server by being put in a folder it watches (ADR-0017) — so there
      * is no scope here that a server might refuse.
+     *
+     * [keepDevice] is the device id the previous token carried, when
+     * this is the same phone coming back to the same server. The server
+     * compares device ids when it decides whether a replayed op or
+     * session is a duplicate, so a fresh id would turn every record
+     * sent before the credential lapsed into a conflict. A server that
+     * predates the field ignores it and mints a new id; that is noticed
+     * by comparing what came back, and changes nothing else — the ids
+     * this app derives never depended on it.
      */
-    private suspend fun signIn(baseUrl: String, credentials: RemoteCredentials.Basic): ServerCapabilities {
+    private suspend fun signIn(
+        baseUrl: String,
+        credentials: RemoteCredentials.Basic,
+        keepDevice: String? = null,
+    ): ServerCapabilities {
         val login = http.post(
             LiseurSyncApi.url(baseUrl, LiseurSyncApi.LOGIN),
             credentials = null,
@@ -67,15 +103,18 @@ class LiseurSyncServerSetup(
         val session = RemoteCredentials.Bearer(auth)
         val name = deviceName()
 
-        val minted = mint(baseUrl, session, name, LiseurSyncApi.SCOPES_FULL)
+        val minted = mint(baseUrl, session, name, LiseurSyncApi.SCOPES_FULL, keepDevice)
         val token = minted.optString("secret").takeIf { it.isNotEmpty() }
             ?: throw RemoteHttpFailure(SyncFailure.Malformed)
 
         // The token is asked what it holds rather than trusting the mint
         // answer: one code path reads scopes, device and account id, and
         // what the server recorded is what governs.
-        return introspect(baseUrl, RemoteCredentials.Bearer(token))
-            .copy(displayName = credentials.username)
+        val capabilities = introspect(baseUrl, RemoteCredentials.Bearer(token))
+        if (keepDevice != null && capabilities.accountId != keepDevice) {
+            Log.i(TAG, "The server minted a new device id rather than keeping the old one")
+        }
+        return capabilities.copy(displayName = credentials.username)
     }
 
     /**
@@ -118,18 +157,42 @@ class LiseurSyncServerSetup(
         )
     }
 
+    /**
+     * Mints a token, asking for [keepDevice] when there is one.
+     *
+     * The server honours the request when any token of the account,
+     * live or not, carried that id. The one refusal with a name,
+     * `unknown_device`, means the predecessor was deleted outright: the
+     * id is gone for good, so the mint is asked again without it, and
+     * this phone becomes a new device. Any other 400 is what it always
+     * was, a mint that failed.
+     */
     private suspend fun mint(
         baseUrl: String,
         session: RemoteCredentials,
         name: String,
         scopes: List<String>,
-    ): JSONObject = http.post(
-        LiseurSyncApi.url(baseUrl, LiseurSyncApi.TOKENS),
-        session,
-        JSONObject()
+        keepDevice: String? = null,
+    ): JSONObject {
+        val body = JSONObject()
             .put("name", name)
-            .put("scopes", JSONArray().apply { scopes.forEach(::put) }),
-    )
+            .put("scopes", JSONArray().apply { scopes.forEach(::put) })
+        if (keepDevice == null) {
+            return http.post(LiseurSyncApi.url(baseUrl, LiseurSyncApi.TOKENS), session, body)
+        }
+        return try {
+            http.post(
+                LiseurSyncApi.url(baseUrl, LiseurSyncApi.TOKENS),
+                session,
+                body.put("device_id", keepDevice),
+                expected = setOf(LiseurSyncHttp.BAD_REQUEST),
+            )
+        } catch (rejection: LiseurSyncRejection) {
+            if (rejection.errorCode != LiseurSyncRejection.UNKNOWN_DEVICE) throw rejection
+            Log.i(TAG, "The server no longer knows this device id; minting as a new device")
+            mint(baseUrl, session, name, scopes)
+        }
+    }
 
     private fun scopesOf(array: JSONArray?): Set<String> =
         (0 until (array?.length() ?: 0)).mapNotNull { array?.optString(it) }.toSet()
