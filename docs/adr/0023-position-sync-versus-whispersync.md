@@ -89,10 +89,11 @@ Two small changes came out of writing this down, both provider-neutral:
 - The background backstop is queued when the reader pauses, not when
   the activity stops. A process killed while paused never reaches
   `onStop`, and pause is when the settled place is known.
-- On API 31 and later that backstop is expedited work, so Doze holds it
-  for seconds rather than minutes. Below 31 expedited work needs a
-  foreground notification, which a few dozen bytes of position do not
-  justify, so those phones keep the plain job.
+- On API 31 and later that backstop requests expedited work, so it can
+  run promptly through Doze when expedited quota is available. If the
+  quota is exhausted, WorkManager falls back to ordinary work. Below 31
+  expedited work needs a foreground notification, which a few dozen
+  bytes of position do not justify, so those phones keep the plain job.
 
 ## Consequences
 
