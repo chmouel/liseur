@@ -51,4 +51,21 @@ class GestureClaimTest {
         assertFalse(claim.claimed)
         assertTrue(claim.imageMayWin(10_000 + budget * 10))
     }
+
+    @Test
+    fun `a touch waits for the document before it becomes a resize`() {
+        val claim = GestureClaim(budgetMs = 250L)
+        claim.begin(1_000L)
+        assertTrue(claim.undecided(1_000L))
+        assertTrue(claim.undecided(1_240L))
+        assertFalse(claim.undecided(1_260L))
+    }
+
+    @Test
+    fun `a resize that has taken the touch waits for nothing`() {
+        val claim = GestureClaim(budgetMs = 250L)
+        claim.begin(1_000L)
+        claim.resizeTook()
+        assertFalse(claim.undecided(1_010L))
+    }
 }
