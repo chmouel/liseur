@@ -143,6 +143,11 @@ enum class DefinitionTarget(val id: String) {
  *   what you get back by turning it off, and what older phones always get.
  * @param volumeKeysTurnPages Volume keys page forward and back while reading.
  * @param tapZones Which side of a paginated page turns forward.
+ * @param pinchToResize A two-finger pinch on the page changes the reading
+ *   font size. On by default; it is here for a grip that produces stray
+ *   two-finger touches, since a stray resize changes how every page looks
+ *   from then on. Pinching an image to enlarge it is not covered: that one
+ *   is one visible thing, dismissed with a tap.
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param keepScreenOn The screen stays awake while a book is open. Off
  *   until asked for: it costs battery, and it overrides a device setting
@@ -175,6 +180,7 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val volumeKeysTurnPages: Boolean = true,
     val tapZones: TapZones = TapZones.Default,
+    val pinchToResize: Boolean = true,
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = false,
     val scrollMode: Boolean = false,
@@ -224,6 +230,7 @@ class AppSettingsRepository(private val context: Context) {
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
         val TAP_ZONES = stringPreferencesKey("tap_zones")
+        val PINCH_TO_RESIZE = booleanPreferencesKey("pinch_to_resize")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val SCROLL_MODE = booleanPreferencesKey("scroll_mode")
@@ -263,6 +270,7 @@ class AppSettingsRepository(private val context: Context) {
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
             volumeKeysTurnPages = p[Keys.VOLUME_KEYS] ?: true,
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
+            pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: true,
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: false,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,
@@ -308,6 +316,10 @@ class AppSettingsRepository(private val context: Context) {
 
     suspend fun setTapZones(zones: TapZones) {
         context.appSettingsStore.edit { it[Keys.TAP_ZONES] = zones.id }
+    }
+
+    suspend fun setPinchToResize(enabled: Boolean) {
+        context.appSettingsStore.edit { it[Keys.PINCH_TO_RESIZE] = enabled }
     }
 
     suspend fun setResumeLastBook(enabled: Boolean) {

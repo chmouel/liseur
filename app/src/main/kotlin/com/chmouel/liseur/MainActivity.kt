@@ -321,6 +321,7 @@ private fun LiseurApp(settings: AppSettings) {
                 vendorName = context.container.eInkDisplay.vendor,
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
                 onTapZones = { scope.launch { repository.setTapZones(it) } },
+                onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onScrollMode = { scope.launch { repository.setScrollMode(it) } },
                 onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },

@@ -69,6 +69,7 @@ fun ReadingNavigationScreen(
     vendorName: String?,
     onVolumeKeys: (Boolean) -> Unit,
     onTapZones: (TapZones) -> Unit,
+    onPinchToResize: (Boolean) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onScrollMode: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
@@ -127,6 +128,13 @@ fun ReadingNavigationScreen(
                         selected = settings.tapZones,
                         label = { stringResource(it.label) },
                         onSelected = onTapZones,
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = stringResource(R.string.settings_pinch_to_resize),
+                        subtitle = stringResource(R.string.settings_pinch_to_resize_detail),
+                        checked = settings.pinchToResize,
+                        onCheckedChange = onPinchToResize,
                     )
                     RowDivider()
                     SwitchRow(
