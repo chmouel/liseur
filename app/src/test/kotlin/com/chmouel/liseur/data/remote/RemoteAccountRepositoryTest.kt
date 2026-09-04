@@ -453,7 +453,7 @@ class RemoteAccountRepositoryTest {
      * next ones add `account_id`. Reconnecting keeps the device id when
      * the repository offers it back, as a real server does.
      */
-    private class UpgradingLiseurSync : ServerSetup {
+    private class UpgradingLiseurSync(private val keepsDevice: Boolean = true) : ServerSetup {
         var connects = 0
         var offered: String? = null
 
@@ -467,7 +467,7 @@ class RemoteAccountRepositoryTest {
             prior: PriorConnection,
         ): SetupResult {
             offered = prior.deviceId
-            return answer(rawUrl, keep = prior.deviceId)
+            return answer(rawUrl, keep = prior.deviceId.takeIf { keepsDevice })
         }
 
         private fun answer(rawUrl: String, keep: String?): SetupResult {
@@ -541,6 +541,35 @@ class RemoteAccountRepositoryTest {
         // From here on the key is stable across token rotations.
         repository.connectLiseurSync(BASE, "ada", "pw")
         assertEquals(newKey, db.remoteServerDao().get()!!.accountKey)
+    }
+
+    @Test
+    fun `signing in again keeps the account when the device id could not be kept`() = runTest {
+        // The server has forgotten the device id it once issued, or is
+        // too old to be offered one, so the mint comes back with a new
+        // one alongside the first stable account id. The reader signed
+        // in as themselves, which names the account on its own; reading
+        // this as a stranger discarded the cursor and the book names.
+        val setup = UpgradingLiseurSync(keepsDevice = false)
+        val repository = fullRepository(db.remoteServerDao(), setup)
+        repository.connectLiseurSync(BASE, "ada", "pw")
+        val oldKey = db.remoteServerDao().get()!!.accountKey
+        assertEquals("liseursync|$BASE|device-1", oldKey)
+        db.remoteServerDao().setSyncCursor(41)
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = "file:///book.epub", peerId = oldKey, workId = "w-1",
+                confidence = "high", resolvedAt = 1,
+            ),
+        )
+
+        repository.connectLiseurSync(BASE, "ada", "pw")
+
+        val stored = db.remoteServerDao().get()!!
+        assertEquals("device-2", stored.accountId)
+        assertEquals("liseursync|$BASE|acc-1", stored.accountKey)
+        assertEquals(41, stored.syncCursorSeq)
+        assertEquals("w-1", db.workIdentityDao().alias("file:///book.epub", stored.accountKey)!!.workId)
     }
 
     private fun fullRepository(dao: RemoteServerDao, liseurSyncSetup: ServerSetup) = RemoteAccountRepository(

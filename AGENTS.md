@@ -204,16 +204,23 @@ emulator.
 - A server refusal of a batch is about one item and stores nothing.
   Never mark a whole batch as sent because of it. Sessions: the named
   sitting goes into `session_refusal` for that peer and the rest go
-  again; a body too big is halved; a refusal that names nothing is
-  bisected; a code this app does not know is left pending and
-  reported. Ops: `unknown_work` re-resolves, `locator_too_large`
-  resends the op bare under the same id. `awaitingUploadTo` joins the
-  alias and the refusals *before* it limits, or unnamed books block
-  the queue.
+  again, but only for a reason the server calls permanent; a body too
+  big is halved; a refusal that names nothing is bisected; a code this
+  app does not know is left pending and reported, named item or not.
+  Ops: `unknown_work` re-resolves, `locator_too_large` resends the op
+  bare under the same id, and a batch refused for its size is cut to
+  the limit the server named — a lone op still refused goes bare, since
+  its locator is the only part with any size to it.
+  `awaitingUploadTo` joins the alias and the refusals *before* it
+  limits, or unnamed books block the queue.
 - The account key is `liseursync|<url>|<account_id>`, and it changed
   spelling once (from the device id). `carryPeerState` moves every
   peer-keyed table to the new spelling in the connect transaction; add
-  any new peer-keyed table there and to `forgetSyncPeer`.
+  any new peer-keyed table there and to `forgetSyncPeer`. A password
+  sign-in names the account by itself, so a device id that came back
+  changed — the server forgot it, or is too old to be offered it — is
+  not an account switch. Only a pasted token, which names nobody, is
+  told apart by its device id.
 - A book's name on liseur-sync is a `work_alias`. A book from its
   own catalog resolves through `POST /v1/books/{id}/resolve`. The
   server reads the identifiers off its record, so no download is needed
