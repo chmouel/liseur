@@ -311,12 +311,13 @@ leaves the reader pinching their way back to exactly 1.0 before the page
 turns properly again. The overlay is also the only place `BackHandler`
 means anything.
 
-The bytes come from `publication.get(href)?.read(0 until limit + 1)` on
-`Dispatchers.IO`, inside the suspending function that blocks, and Coil
-does the downsampling. `ResourceAddress` gains a public `href()`
-extracted from its existing private `path()`, so the one spelling of
-"turn a `readium_package` URL into a publication href" is shared rather
-than copied.
+The bytes come from `publication.get(href)` on `Dispatchers.IO`, inside
+the suspending function that blocks, read as the range described above —
+the entry's declared length where the container knows it, and `limit + 1`
+where it does not. Coil does the downsampling. `ResourceAddress` gains a
+public `href()` extracted from its existing private `path()`, so the one
+spelling of "turn a `readium_package` URL into a publication href" is
+shared rather than copied.
 
 **Paper under the ink.** A great many book illustrations are black line
 art on a transparent background — Standard Ebooks marks them
