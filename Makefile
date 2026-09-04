@@ -125,23 +125,23 @@ dev:
 	$(GRADLE) assembleDev
 
 dev-install: dev
-	$(ADB) $(ADB_TARGET) install -r '$(DEV_APK)'
+	$(ADB) install -r '$(DEV_APK)'
 
 dev-run: dev-install
-	$(ADB) $(ADB_TARGET) shell am start -n '$(DEV_ACTIVITY)'
+	$(ADB)  shell am start -n '$(DEV_ACTIVITY)'
 
 dev-uninstall:
-	$(ADB) $(ADB_TARGET) uninstall '$(DEV_PACKAGE)'
+	$(ADB)  uninstall '$(DEV_PACKAGE)'
 
 # Filtered by pid rather than by tag: the app logs under a dozen of them,
 # and the pid is the one thing that says "this build and not the other".
 dev-logcat:
-	@pid=$$($(ADB) $(ADB_TARGET) shell pidof '$(DEV_PACKAGE)' 2>/dev/null | tr -d '\r' | awk '{print $$1}'); \
+	@pid=$$($(ADB)  shell pidof '$(DEV_PACKAGE)' 2>/dev/null | tr -d '\r' | awk '{print $$1}'); \
 	if [ -z "$$pid" ]; then \
 		printf 'error: %s is not running; start it with make dev-run\n' '$(DEV_PACKAGE)' >&2; \
 		exit 1; \
 	fi; \
-	$(ADB) $(ADB_TARGET) logcat --pid="$$pid"
+	$(ADB)  logcat --pid="$$pid"
 
 screenshots:
 	./hack/screenshots
