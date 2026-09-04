@@ -1102,7 +1102,7 @@ fun ReaderScreen(
             val web = visibleWebView(root) ?: return@collect
             if (web === asked) return@collect
             asked = web
-            touch.resourceHasImages = ImageAtPoint.hasImages(nav)
+            touch.resourceHasImages = ImageAtPoint.hasImages(web)
         }
     }
 
@@ -1635,7 +1635,6 @@ fun ReaderScreen(
      */
     var boxInWindow by remember { mutableStateOf(Offset.Zero) }
     val longPressMs = LocalViewConfiguration.current.longPressTimeoutMillis
-    val pageDensity = LocalDensity.current.density
     val publicationNow by rememberUpdatedState(publication)
 
     /**
@@ -1649,6 +1648,7 @@ fun ReaderScreen(
     fun showImage(hit: ImageAtPoint.Hit) {
         if (touch.opening || viewedImage != null) return
         touch.opening = true
+        touch.claimed = true
         val serial = touch.serial
         effectScope.launch {
             try {
@@ -1684,12 +1684,17 @@ fun ReaderScreen(
             return
         }
         val web = visibleWebView(nav.publicationView) ?: run { touch.answered = true; return }
+        if (web.width <= 0 || web.height <= 0) {
+            touch.answered = true
+            return
+        }
         val origin = IntArray(2)
         web.getLocationInWindow(origin)
-        val cssX = (boxInWindow.x + position.x - origin[0]) / pageDensity
-        val cssY = (boxInWindow.y + position.y - origin[1]) / pageDensity
+        // As a fraction of the web view, not in pixels: see the script.
+        val fx = (boxInWindow.x + position.x - origin[0]) / web.width
+        val fy = (boxInWindow.y + position.y - origin[1]) / web.height
         effectScope.launch {
-            val hit = ImageAtPoint.at(nav, cssX, cssY)
+            val hit = ImageAtPoint.at(web, fx, fy)
             if (touch.serial != serial) return@launch
             touch.hit = hit
             touch.answered = true
@@ -1739,6 +1744,23 @@ fun ReaderScreen(
                         // for it to be lifted, so a reader nudging the
                         // text is not fighting the page for it.
                         fingerDown = event.changes.any { it.pressed }
+
+                        val down = event.changes.filter { it.pressed }
+                        val was = touch.pointers
+                        touch.pointers = down.size
+
+                        // A touch that opened the viewer belongs to the
+                        // viewer until it is lifted. Consuming the rest of
+                        // it is what keeps the long press that opened the
+                        // picture from also being a long press on the web
+                        // view, which answers one with a drag of the image
+                        // or a selection under an overlay nobody can see
+                        // past.
+                        if (touch.claimed) {
+                            event.changes.forEach { it.consume() }
+                            if (down.isEmpty()) touch.claimed = false
+                            continue
+                        }
                         // The card is drawn inside this box, so without this
                         // guard reading a note would move it: every touch on
                         // the card would become the new anchor and the card
@@ -1749,9 +1771,6 @@ fun ReaderScreen(
                         // it is reachable while it is up.
                         if (viewedImage != null) continue
 
-                        val down = event.changes.filter { it.pressed }
-                        val was = touch.pointers
-                        touch.pointers = down.size
                         when {
                             down.isEmpty() -> Unit
 
@@ -2859,6 +2878,16 @@ private class TouchProbe {
     var answered = false
     var opening = false
     var hit: ImageAtPoint.Hit? = null
+
+    /**
+     * Whether this touch has been taken for the viewer.
+     *
+     * A claimed touch is consumed for the rest of its life, which is what
+     * stops the same long press from also reaching the web view, where it
+     * would start a drag of the image or open a selection under a viewer
+     * the reader cannot see past.
+     */
+    var claimed = false
 
     /** Whether the resource on screen has any image in it; see the probe. */
     var resourceHasImages = false

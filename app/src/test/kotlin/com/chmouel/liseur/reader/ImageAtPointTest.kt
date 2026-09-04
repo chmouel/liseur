@@ -59,8 +59,20 @@ class ImageAtPointTest {
 
     @Test
     fun `the script carries the point it was asked about`() {
-        val script = ImageAtPoint.script(137.5f, 42f)
-        assertTrue(script.contains("elementFromPoint(137.5, 42.0)"))
+        val script = ImageAtPoint.script(0.25f, 0.5f)
+        assertTrue(script.contains("var px = 0.25 * VW"))
+        assertTrue(script.contains("var py = 0.5 * VH"))
+        assertTrue(script.contains("elementFromPoint(px, py)"))
+    }
+
+    @Test
+    fun `the point is a fraction of the viewport, not a pixel count`() {
+        // A fixed-layout page is drawn at whatever scale fits the screen,
+        // so device pixels over the display density are not CSS pixels
+        // there. A fraction is the same fraction in either kind of book.
+        val script = ImageAtPoint.script(0.5f, 0.5f)
+        assertTrue(script.contains("window.innerWidth"))
+        assertTrue(script.contains("document.documentElement.clientWidth"))
     }
 
     @Test
@@ -77,6 +89,17 @@ class ImageAtPointTest {
         val script = ImageAtPoint.script(0f, 0f)
         assertTrue(script.contains("\"publisher-logo\""))
         assertTrue(script.contains("\"ornament\""))
+    }
+
+    @Test
+    fun `an ancestor can say the picture is furniture`() {
+        // A title page's img says nothing; its section says titlepage.
+        val script = ImageAtPoint.script(0f, 0f)
+        assertTrue(script.contains("up.parentElement"))
+        assertTrue(script.contains("\"titlepage\""))
+        // The class matters as much as the attribute: epub:type is
+        // rewritten into a class by the time the document is on screen.
+        assertTrue(script.contains("getAttribute(\"class\")"))
     }
 
     @Test
