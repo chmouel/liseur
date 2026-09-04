@@ -27,13 +27,17 @@ internal object ImageAtPoint {
      * An image worth opening full screen.
      *
      * @param src The URL the page actually resolved, absolute.
-     * @param alt The book's own caption for it, if it wrote one.
+     * @param alt What the book says the picture *is*, for a screen
+     *   reader. Not a caption, whatever it reads like.
+     * @param caption The book's own visible caption, taken from a
+     *   `<figcaption>` in the figure the picture sits in, if there is one.
      * @param width Its natural width in pixels, or zero if unknown.
      * @param height Its natural height in pixels, or zero if unknown.
      */
     data class Hit(
         val src: String,
         val alt: String?,
+        val caption: String?,
         val width: Int,
         val height: Int,
     )
@@ -213,9 +217,25 @@ internal object ImageAtPoint {
           var alt = img.getAttribute("alt") || "";
           if (alt.length > MAX_ALT) alt = alt.slice(0, MAX_ALT);
 
+          // The caption the book wrote, which is not the alt text: alt
+          // says what the picture is, for someone who cannot see it, and
+          // a <figcaption> is the line printed under it for everyone.
+          // A book that has both means both, and only one of them is
+          // meant to be read.
+          var caption = "";
+          for (var f = img, g = 0; f && g < 4; f = f.parentElement, g++) {
+            if (f.tagName && f.tagName.toLowerCase() === "figure") {
+              var cap = f.querySelector ? f.querySelector("figcaption") : null;
+              if (cap) caption = (cap.textContent || "").replace(/\s+/g, " ").trim();
+              break;
+            }
+          }
+          if (caption.length > MAX_ALT) caption = caption.slice(0, MAX_ALT);
+
           return {
             src: abs,
             alt: alt,
+            caption: caption,
             width: img.naturalWidth || Math.round(box.width),
             height: img.naturalHeight || Math.round(box.height)
           };
@@ -233,13 +253,14 @@ internal object ImageAtPoint {
     fun parse(result: String?): Hit? {
         val raw = result?.trim().orEmpty()
         if (raw.isEmpty() || raw == "null") return null
-        if (raw.length > MAX_SRC_CHARS + MAX_ALT_CHARS + PARSE_SLACK_CHARS) return null
+        if (raw.length > MAX_SRC_CHARS + MAX_ALT_CHARS * 2 + PARSE_SLACK_CHARS) return null
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
         val src = json.optString("src").takeIf { it.isNotBlank() } ?: return null
         if (src.length > MAX_SRC_CHARS) return null
         return Hit(
             src = src,
             alt = json.optString("alt").takeIf { it.isNotBlank() }?.take(MAX_ALT_CHARS),
+            caption = json.optString("caption").takeIf { it.isNotBlank() }?.take(MAX_ALT_CHARS),
             width = json.optInt("width"),
             height = json.optInt("height"),
         )

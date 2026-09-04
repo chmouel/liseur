@@ -176,6 +176,15 @@ carrying the same line the typography sheet already shows, and nothing
 is committed. A pinch on an image in that book still zooms, because
 nothing about a fixed layout stops an image being too small.
 
+The refusal waits for the same dead zone the resize does. A fixed-layout
+book is the one place where a thumb and a finger resting on the page
+would otherwise put something on screen: the resize has nothing to
+commit, so a rest costs it nothing, but a refusal that fires the instant
+two fingers land pops a pill at every one-handed hold. Both halves ask
+the same question — have these fingers actually moved? — so both ask it
+through `PinchResize.moved()`, rather than one of them inferring it from
+having a target and the other not asking at all.
+
 ### Asking the page what is under the fingers, without stalling them
 
 `document.elementsFromPoint` where the first finger landed — the whole
@@ -277,7 +286,14 @@ the exact opposite of what zooming is for. The script reads
 `currentSrc` — the URL the page actually resolved — and falls back to
 `src` only when there is none.
 
-`alt` is a caption the book has already written, so the viewer shows it.
+`alt` and a caption are not the same thing, and the script reads both.
+`alt` is what an illustration *is*, written for someone who cannot see
+it; a `<figcaption>` is the line the book prints under the plate for
+everyone. Where a picture sits in a `<figure>` the viewer shows that
+figcaption, because it is what the reader would have seen on the page
+anyway, and falls back to `alt` where there is none. The two never
+merge: `contentDescription` is always `alt`, so a screen reader hears
+the description even when the printed caption is what is drawn.
 
 ### Everything the book says is a size the book chose
 
@@ -314,7 +330,19 @@ means anything.
 The bytes come from `publication.get(href)` on `Dispatchers.IO`, inside
 the suspending function that blocks, read as the range described above —
 the entry's declared length where the container knows it, and `limit + 1`
-where it does not. Coil does the downsampling. `ResourceAddress` gains a
+where it does not.
+
+**Decoded at the size the file was written, within reason.** Coil sizes
+a decode to the layout constraints it is given, which for a picture
+drawn to fit the screen means the bitmap is the screen. Zoom that to six
+times and the reader is looking at six-times-magnified screen pixels,
+not at the plate — which is the whole of what #110 asked for, missed. So
+the request asks for the original size where the page told us what that
+is and the arithmetic stays sane: width times height inside
+`MAX_DECODE_PIXELS`, which is eight million, about 32MB as ARGB_8888.
+Above that, or where the dimensions are unknown, it falls back to the
+screen-sized decode, because a blurry plate is a worse outcome than a
+crash only until the crash happens. `ResourceAddress` gains a
 public `href()` extracted from its existing private `path()`, so the one
 spelling of "turn a `readium_package` URL into a publication href" is
 shared rather than copied.
@@ -342,9 +370,10 @@ what it has not revealed, and the overlay carries a pane title.
 
 The cost of drawing it as a sibling rather than in its own window is
 that being hidden has to be *applied*, once per sibling, and a window
-gets it for free. The bookmark ribbon, the footer, the note card and the
-size HUD all carry it for that reason. Anything new added to the reading
-box has to carry it too; a sibling that forgets is a control a reader
+gets it for free. The bookmark ribbon, the footer, the note card, the
+size HUD and the endpaper all carry it for that reason. Anything new
+added to the reading box has to carry it too; a sibling that forgets is
+a control a reader
 cannot see and can still reach. The trade is deliberate — a separate
 window would mean re-deriving the immersive bar handling this screen is
 careful about — but it is the fragile half of this decision, and the

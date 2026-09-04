@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -42,17 +43,51 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.size.Size as CoilSize
 import com.chmouel.liseur.R
 
 /** Enough of the scrim to keep a caption legible over a pale picture. */
 private val CAPTION_BACKING = Color.Black.copy(alpha = 0.66f)
 
-/** A picture the reader asked to see, with the book's own caption for it. */
-data class ViewedImage(val bytes: ByteArray, val alt: String?) {
-    override fun equals(other: Any?): Boolean =
-        this === other || (other is ViewedImage && bytes === other.bytes && alt == other.alt)
+/**
+ * The largest picture decoded at its own size rather than the screen's.
+ *
+ * A decoded bitmap costs four bytes a pixel whatever the file weighs, so
+ * eight megapixels is thirty-two megabytes held for as long as the viewer
+ * is open. That is affordable, and it is roughly where book plates stop:
+ * a scan far bigger than this is a page of an atlas, and it goes back to
+ * decoding for the screen rather than risking the process.
+ */
+private const val MAX_DECODE_PIXELS = 8_000_000L
 
-    override fun hashCode(): Int = System.identityHashCode(bytes) * 31 + (alt?.hashCode() ?: 0)
+/** A picture the reader asked to see, with the book's own caption for it. */
+data class ViewedImage(
+    val bytes: ByteArray,
+    val alt: String?,
+    val caption: String?,
+    val width: Int,
+    val height: Int,
+) {
+    /**
+     * The line printed under the picture.
+     *
+     * The book's own caption where it wrote one, and the alternative text
+     * otherwise — which is a description rather than a caption, but a
+     * description of the thing on screen is still better than a blank
+     * strip, and a great many books carry nothing else.
+     */
+    val subtitle: String? get() = caption ?: alt
+
+    override fun equals(other: Any?): Boolean =
+        this === other ||
+            (
+                other is ViewedImage && bytes === other.bytes && alt == other.alt &&
+                    caption == other.caption
+                )
+
+    override fun hashCode(): Int =
+        System.identityHashCode(bytes) * 31 + (subtitle?.hashCode() ?: 0)
 }
 
 /**
@@ -82,6 +117,7 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
     // other edge.
     var natural by remember(image) { mutableStateOf(Size.Unspecified) }
     val dismissTravel = with(LocalDensity.current) { ImageZoom.DISMISS_TRAVEL_DP.dp.toPx() }
+    val context = LocalContext.current
     val viewerTitle = image.alt ?: stringResource(R.string.reader_image_viewer)
 
     fun hold() {
@@ -152,8 +188,24 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                 }
             },
     ) {
+        // Decoded at the picture's own size rather than at the size of the
+        // screen, so that zooming in reveals the plate instead of
+        // magnifying a screen-sized copy of it. A book can name any size
+        // it likes, though, and a bitmap costs four bytes a pixel however
+        // little the file weighs, so past a budget it goes back to
+        // decoding for the screen: blurred at six times is a worse
+        // picture, and a dead process is no picture at all.
+        val model = remember(image) {
+            ImageRequest.Builder(context)
+                .data(image.bytes)
+                .apply {
+                    val pixels = image.width.toLong() * image.height.toLong()
+                    if (pixels in 1..MAX_DECODE_PIXELS) size(CoilSize.ORIGINAL)
+                }
+                .build()
+        }
         AsyncImage(
-            model = image.bytes,
+            model = model,
             contentDescription = image.alt,
             contentScale = ContentScale.Fit,
             onSuccess = { natural = it.painter.intrinsicSize },
@@ -189,7 +241,7 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                 },
         )
 
-        image.alt?.let { caption ->
+        image.subtitle?.let { caption ->
             Text(
                 text = caption,
                 color = Color.White,

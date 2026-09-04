@@ -1713,7 +1713,13 @@ fun ReaderScreen(
                 // somewhere else entirely.
                 if (touch.serial != serial) return@launch
                 view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                viewedImage = ViewedImage(bytes, hit.alt)
+                viewedImage = ViewedImage(
+                    bytes = bytes,
+                    alt = hit.alt,
+                    caption = hit.caption,
+                    width = hit.width,
+                    height = hit.height,
+                )
             } finally {
                 touch.opening = false
             }
@@ -1895,16 +1901,22 @@ fun ReaderScreen(
                                     .also {
                                         pinchStart.value = it
                                         pinchTarget = null
-                                        // A fixed-layout book places every
-                                        // page itself and Readium honours
-                                        // no font size inside one, so the
-                                        // pinch says so rather than doing
-                                        // nothing at all (ADR 20, ADR 22).
-                                        pinchRefused = !reflowableText
+                                        pinchRefused = false
                                     }
                                 if (reflowableText) {
                                     pinchTarget =
                                         PinchResize.targetFor(start.size, start.span, span)
+                                } else {
+                                    // A fixed-layout book places every page
+                                    // itself and Readium honours no font
+                                    // size inside one, so the pinch says so
+                                    // rather than doing nothing at all (ADR
+                                    // 20, ADR 22) — but only once the
+                                    // fingers have travelled as far as they
+                                    // would have to on a page that can be
+                                    // resized. Resting two fingers is not a
+                                    // pinch on either kind of book.
+                                    pinchRefused = PinchResize.moved(start.span, span)
                                 }
                                 // Only once a second finger is down.
                                 // Consuming a lone pointer here would take
@@ -2031,32 +2043,34 @@ fun ReaderScreen(
         }
 
         if (showingEnd) {
-            Endpaper(
-                title = publication.metadata.title.orEmpty(),
-                author = publication.metadata.authors
-                    .joinToString(", ") { it.name }
-                    .ifBlank { null },
-                theme = readingTheme,
-                finished = continuation?.finished,
-                timeSpentMs = continuation?.timeSpentMs,
-                seriesName = continuation?.seriesName,
-                finishedVolume = continuation?.finishedVolume,
-                next = continuation?.next,
-                missingIndex = continuation?.missingIndex,
-                noNextInLibrary = continuation?.noNextInLibrary == true,
-                seriesCompletion = continuation?.seriesCompletion,
-                rtl = endpaperRtl,
-                swapped = tapZones.swapped,
-                onTurnBack = {
-                    showingEnd = false
-                    onLeftEndpaper()
-                },
-                onLibrary = {
-                    onLeftEndpaper()
-                    onBack()
-                },
-                onOpenNext = onContinueNext,
-            )
+            Box(Modifier.fillMaxSize().then(behindViewer)) {
+                Endpaper(
+                    title = publication.metadata.title.orEmpty(),
+                    author = publication.metadata.authors
+                        .joinToString(", ") { it.name }
+                        .ifBlank { null },
+                    theme = readingTheme,
+                    finished = continuation?.finished,
+                    timeSpentMs = continuation?.timeSpentMs,
+                    seriesName = continuation?.seriesName,
+                    finishedVolume = continuation?.finishedVolume,
+                    next = continuation?.next,
+                    missingIndex = continuation?.missingIndex,
+                    noNextInLibrary = continuation?.noNextInLibrary == true,
+                    seriesCompletion = continuation?.seriesCompletion,
+                    rtl = endpaperRtl,
+                    swapped = tapZones.swapped,
+                    onTurnBack = {
+                        showingEnd = false
+                        onLeftEndpaper()
+                    },
+                    onLibrary = {
+                        onLeftEndpaper()
+                        onBack()
+                    },
+                    onOpenNext = onContinueNext,
+                )
+            }
         }
 
         PageTurnOverlay(pageTurnEffect)
