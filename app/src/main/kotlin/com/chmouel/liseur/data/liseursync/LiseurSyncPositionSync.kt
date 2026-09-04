@@ -7,6 +7,8 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.db.SessionRefusal
+import com.chmouel.liseur.data.db.SessionRefusalDao
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.SyncPeerState
@@ -71,6 +73,7 @@ class LiseurSyncPositionSync(
     private val peerStateDao: SyncPeerStateDao,
     private val identityDao: WorkIdentityDao,
     private val sessionDao: ReadingSessionDao,
+    private val sessionRefusalDao: SessionRefusalDao,
     private val works: WorkResolver,
     private val deviceKey: suspend () -> String,
     private val finishedState: FinishedState,
@@ -1132,31 +1135,36 @@ class LiseurSyncPositionSync(
      * Only sessions for books this server already has a name for, and
      * only ones that know where in the book they happened; the rest
      * wait, which costs nothing because a session is a fact about the
-     * past and is no less true next run.
+     * past and is no less true next run. Both filters are in the query,
+     * so a shelf of unnamed books cannot fill the window and stand in
+     * front of everything behind it.
      *
-     * A refusal on the server's own terms — an id it already holds
-     * carrying something else, or a payload it will not parse — is
-     * marked done rather than retried. Neither will ever be accepted,
-     * and a batch that can never succeed would sit at the head of the
-     * queue forever and stop every later session behind it.
+     * The server takes a batch all or nothing, so a refusal means it
+     * stored none of it — and only ever concerns one sitting. Nothing is
+     * ever marked as sent on a refusal. Instead the batch is taken apart:
+     * a stale work name has the book resolved afresh and its sittings
+     * rebuilt; a sitting the server names as unacceptable is set aside,
+     * for this server, in `session_refusal`, and the rest go again; a
+     * body too big is halved; a refusal that names nothing is bisected
+     * until it does. Each batch that lands is marked as sent at once, so
+     * a run cut short keeps what it managed.
      *
-     * The one refusal that is recovered instead is a stale work name:
-     * the book is resolved afresh, its sessions rebuilt under the new
-     * name, and the batch retried. Nothing is marked uploaded until the
-     * server has actually taken it.
+     * Only the server's own no is treated this way. A credential
+     * refused, a server error or no answer at all end the stage as they
+     * always did, with everything still pending.
      */
     private suspend fun uploadSessions(
         account: Account,
         recovered: MutableSet<String>,
         trouble: Trouble,
     ) {
-        val sessions = sessionDao.awaitingUpload(SessionUploads.MAX_BATCH)
+        val sessions = sessionDao.awaitingUploadTo(account.peerId, SessionUploads.MAX_BATCH)
         if (sessions.isEmpty()) return
         val byBook = identityDao.aliasesFor(account.peerId)
             .filter { it.usable }
             .associateBy { it.bookUrl }
 
-        var sending = sessions.mapNotNull { session ->
+        val first = sessions.mapNotNull { session ->
             val alias = byBook[session.bookUrl] ?: return@mapNotNull null
             SessionUploads.toJson(
                 session = session,
@@ -1173,14 +1181,23 @@ class LiseurSyncPositionSync(
                 )
             }
         }
-        if (sending.isEmpty()) return
+        if (first.isEmpty()) return
 
-        var answered = false
-        while (!answered) {
+        val queue = ArrayDeque(listOf(first))
+        var requests = 0
+        while (queue.isNotEmpty()) {
             // As with the pushes: a recovery may have found the server
             // gone quiet, and going round again would only wait again.
             if (trouble.unreachable != null) return
-            answered = try {
+            // A bound on how far a batch is taken apart: bisecting a
+            // thousand down to singletons is twenty rounds at most, and
+            // a server that refuses every one is not going to change.
+            if (++requests > MAX_SESSION_REQUESTS) {
+                trouble.refused(SyncFailure.ServerError(LiseurSyncHttp.BAD_REQUEST))
+                return
+            }
+            val sending = queue.removeFirst()
+            try {
                 http.post(
                     LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.SESSIONS),
                     account.credentials,
@@ -1188,18 +1205,22 @@ class LiseurSyncPositionSync(
                         "sessions",
                         JSONArray().apply { sending.forEach { put(it.json) } },
                     ),
-                    expected = setOf(LiseurSyncHttp.BAD_REQUEST),
+                    expected = SESSION_REFUSALS,
                 )
-                true
+                forAccount(account) { sessionDao.markUploaded(sending.map { it.localId }, now()) }
             } catch (rejection: LiseurSyncRejection) {
-                when (
-                    val recovery = recoverSessions(account, sending, rejection, recovered, trouble)
-                ) {
+                when (val next = setAside(account, sending, rejection, recovered, trouble)) {
                     is SessionRecovery.Retry -> {
-                        recovery.failure?.let(trouble::refused)
-                        if (recovery.sending.isEmpty()) return
-                        sending = recovery.sending
-                        false
+                        next.failure?.let(trouble::refused)
+                        // The rebuilt or trimmed batch goes back to the
+                        // front: it is the same sittings, one question
+                        // further on.
+                        if (next.sending.isNotEmpty()) queue.addFirst(next.sending)
+                    }
+
+                    is SessionRecovery.Split -> {
+                        queue.addFirst(next.second)
+                        queue.addFirst(next.first)
                     }
 
                     SessionRecovery.Exhausted -> {
@@ -1208,41 +1229,104 @@ class LiseurSyncPositionSync(
                     }
 
                     SessionRecovery.Ordinary -> {
-                        // A refusal that names no stale work is the same
-                        // dead end as any other malformed batch.
-                        Log.i(TAG, "The server will never take these sessions; not asking again")
-                        true
+                        // Left pending and reported: a refusal this app
+                        // cannot place is not a licence to drop reading.
+                        Log.i(TAG, "The server refused a batch of sessions in a way this app cannot place")
+                        trouble.refused(failureForCode(rejection.code))
+                        return
                     }
                 }
             } catch (rejected: RemoteHttpFailure) {
-                if (!rejected.reason.isFinal()) {
-                    Log.i(TAG, "Could not send reading sessions", rejected)
-                    trouble.refused(rejected.reason)
-                    return
-                }
-                Log.i(TAG, "The server will never take these sessions; not asking again")
-                true
+                Log.i(TAG, "Could not send reading sessions", rejected)
+                trouble.refused(rejected.reason)
+                return
             } catch (e: IOException) {
                 Log.i(TAG, "Could not send reading sessions", e)
                 trouble.failed(e, reasonFor(e))
                 return
             }
         }
+    }
 
-        forAccount(account) { sessionDao.markUploaded(sending.map { it.localId }, now()) }
+    /**
+     * Decides what a refused session batch becomes.
+     *
+     * In order: a stale work name is recovered as before; a body the
+     * server will not take whole is halved; a refusal that names one
+     * sitting, by id or by position, sets that sitting aside for this
+     * server and retries the rest; one that names nothing is bisected,
+     * and a singleton it still will not place is set aside if the server
+     * called it permanent — a code this app knows, or the prose-only
+     * refusal of an older server — and otherwise left pending and
+     * reported, since a code this app has never seen is not proof the
+     * sitting is at fault.
+     */
+    private suspend fun setAside(
+        account: Account,
+        sending: List<PreparedSession>,
+        rejection: LiseurSyncRejection,
+        recovered: MutableSet<String>,
+        trouble: Trouble,
+    ): SessionRecovery {
+        if (rejection.isUnknownWork) return recoverSessions(account, sending, rejection, recovered, trouble)
+        if (rejection.code == LiseurSyncHttp.TOO_LARGE ||
+            rejection.errorCode == LiseurSyncRejection.BATCH_TOO_LARGE
+        ) {
+            return if (sending.size > 1) split(sending) else refuse(account, sending.single(), rejection)
+        }
+        val culprit = sending.firstOrNull { it.wireId == rejection.sessionId }
+            ?: rejection.itemIndex?.let(sending::getOrNull)
+        if (culprit != null) return refuse(account, culprit, rejection, rest = sending - culprit)
+        if (sending.size > 1) return split(sending)
+        val code = rejection.errorCode
+        if (code == null || code in PERMANENT_SESSION_CODES) {
+            return refuse(account, sending.single(), rejection)
+        }
+        return SessionRecovery.Ordinary
+    }
+
+    private fun split(sending: List<PreparedSession>): SessionRecovery.Split {
+        val half = sending.size / 2
+        return SessionRecovery.Split(sending.subList(0, half), sending.subList(half, sending.size))
+    }
+
+    /** Writes down that this server will not take [culprit], and moves on with [rest]. */
+    private suspend fun refuse(
+        account: Account,
+        culprit: PreparedSession,
+        rejection: LiseurSyncRejection,
+        rest: List<PreparedSession> = emptyList(),
+    ): SessionRecovery {
+        Log.i(TAG, "The server will never take session ${culprit.wireId} (${rejection.errorCode ?: rejection.code}); setting it aside")
+        forAccount(account) {
+            sessionRefusalDao.record(
+                SessionRefusal(
+                    peerId = account.peerId,
+                    sessionId = culprit.localId,
+                    wireSessionId = culprit.wireId,
+                    code = rejection.errorCode ?: rejection.code.toString(),
+                    refusedAt = now(),
+                ),
+            )
+        }
+        return SessionRecovery.Retry(rest, failure = failureForCode(rejection.code))
     }
 
     /** What came of trying to recover a rejected session batch. */
     private sealed interface SessionRecovery {
         /**
          * Retry these instead of the rejected batch; [failure] is a
-         * re-resolution that failed along the way, reported but not
-         * allowed to stop the books whose names are still good.
+         * re-resolution that failed along the way, or a sitting set
+         * aside — reported but not allowed to stop the rest.
          */
         data class Retry(val sending: List<PreparedSession>, val failure: SyncFailure? = null) :
             SessionRecovery
 
-        /** Not a refusal recovery answers; the caller fails the old way. */
+        /** Send these two halves instead, in order. */
+        data class Split(val first: List<PreparedSession>, val second: List<PreparedSession>) :
+            SessionRecovery
+
+        /** Not a refusal this app can place; the batch stays pending. */
         data object Ordinary : SessionRecovery
 
         /** This run already refreshed the book once; stop asking. */
@@ -1313,17 +1397,6 @@ class LiseurSyncPositionSync(
         }
         return SessionRecovery.Retry(rest + rebuilt)
     }
-
-    /**
-     * Whether asking again could ever produce a different answer.
-     *
-     * A malformed batch stays malformed, and an id the server already
-     * holds under a different payload will never become free. Both are
-     * settled by giving up on them rather than by trying harder.
-     */
-    private fun SyncFailure.isFinal(): Boolean =
-        this is SyncFailure.Malformed ||
-            (this is SyncFailure.ServerError && code in FINAL_CODES)
 
     private fun accepted(answer: JSONObject): Set<String> {
         val results = answer.optJSONArray("results") ?: return emptySet()
@@ -1428,8 +1501,35 @@ class LiseurSyncPositionSync(
         }
 
     private companion object {
-        /** Refusals no amount of retrying will turn into an acceptance. */
-        val FINAL_CODES = setOf(400, 409, 422)
+        /**
+         * The answers to a session batch that say something about one
+         * sitting rather than about the credential or the server.
+         */
+        val SESSION_REFUSALS = setOf(
+            LiseurSyncHttp.BAD_REQUEST,
+            LiseurSyncHttp.CONFLICT,
+            LiseurSyncHttp.TOO_LARGE,
+            LiseurSyncHttp.UNPROCESSABLE,
+        )
+
+        /**
+         * Refusal codes the server documents as permanent for that
+         * payload: the sitting will never be taken as it stands, so it
+         * is set aside rather than offered again. A code not in this set
+         * is left pending and reported.
+         */
+        val PERMANENT_SESSION_CODES = setOf(
+            "id_reused", "missing_field", "bad_time", "time_in_future",
+            "progression_out_of_range", "idle_out_of_range",
+        )
+
+        /**
+         * The most requests one session stage makes. Taking a full batch
+         * apart one bisection at a time is a few dozen at the outside;
+         * past this the server is refusing everything and the run should
+         * say so rather than keep asking.
+         */
+        const val MAX_SESSION_REQUESTS = 64
 
         const val TAG = "liseur-sync-positions"
         const val PAGE = 500

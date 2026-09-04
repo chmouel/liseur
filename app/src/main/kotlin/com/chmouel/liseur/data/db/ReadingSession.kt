@@ -180,6 +180,33 @@ interface ReadingSessionDao {
     )
     suspend fun awaitingUpload(limit: Int): List<ReadingSession>
 
+    /**
+     * [awaitingUpload], narrowed to what can actually go to one peer:
+     * sittings of a book that peer has a usable name for, and that it
+     * has not refused by name.
+     *
+     * Both conditions are in the query, before the limit, on purpose.
+     * Selecting the oldest thousand and then filtering was how a shelf
+     * of unnamed books blocked every newer sitting from ever shipping:
+     * the window filled with rows that could not be sent, and nothing
+     * behind them was looked at.
+     */
+    @Query(
+        """
+        SELECT s.* FROM reading_sessions s
+        JOIN work_alias a ON a.book_url = s.book_url AND a.peer_id = :peerId
+          AND (a.confirmed = 1 OR a.confidence = 'high')
+        WHERE s.ended_at IS NOT NULL AND s.uploaded_at IS NULL
+          AND s.start_progression IS NOT NULL AND s.end_progression IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM session_refusal r WHERE r.peer_id = :peerId AND r.session_id = s.id
+          )
+        ORDER BY s.started_at
+        LIMIT :limit
+        """,
+    )
+    suspend fun awaitingUploadTo(peerId: String, limit: Int): List<ReadingSession>
+
     @Query("UPDATE reading_sessions SET uploaded_at = :at WHERE id IN (:ids)")
     suspend fun markUploaded(ids: List<Long>, at: Long)
 

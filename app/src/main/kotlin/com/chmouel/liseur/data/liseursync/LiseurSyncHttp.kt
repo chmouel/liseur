@@ -47,6 +47,18 @@ class LiseurSyncRejection(
     val sessionId: String? get() = body?.optString("session_id")?.takeIf { it.isNotEmpty() }
 
     /**
+     * Which item of the batch the refusal is about, by position, when
+     * the server said. The id may be missing — a `missing_field` about
+     * the id itself has none to give — and the same id may appear twice
+     * in one batch, so the position is what settles it.
+     */
+    val itemIndex: Int?
+        get() = body?.takeIf { it.has("item_index") }?.optInt("item_index", -1)?.takeIf { it >= 0 }
+
+    /** The byte or item bound a size refusal was measured against, if named. */
+    val limit: Int? get() = body?.takeIf { it.has("limit") }?.optInt("limit", 0)?.takeIf { it > 0 }
+
+    /**
      * The one refusal a client recovers from: the server no longer
      * holds a work this device had a cached name for.
      *
@@ -62,6 +74,12 @@ class LiseurSyncRejection(
 
         /** A mint asked to keep a device id no token of the account carries. */
         const val UNKNOWN_DEVICE = "unknown_device"
+
+        /** More items than one request may carry; the body names the bound. */
+        const val BATCH_TOO_LARGE = "batch_too_large"
+
+        /** An op's locator over the server's byte bound; the body names it. */
+        const val LOCATOR_TOO_LARGE = "locator_too_large"
     }
 }
 
@@ -235,6 +253,9 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
 
         /** A request bigger than the server was configured to take. */
         const val TOO_LARGE = 413
+
+        /** A batch the server parsed and would not have, with no better word for why. */
+        const val UNPROCESSABLE = 422
 
         /** An annotation this server has no record of, swept or never made. */
         const val NOT_FOUND = 404
