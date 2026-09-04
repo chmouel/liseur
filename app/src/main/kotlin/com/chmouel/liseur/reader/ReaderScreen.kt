@@ -111,6 +111,7 @@ import com.chmouel.liseur.reader.annotations.shareText
 import com.chmouel.liseur.reader.annotations.toDecorations
 import com.chmouel.liseur.reader.dictionary.DefinitionSheet
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
+import com.chmouel.liseur.reader.footnotes.FootnoteLayout
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.ReadingFont
@@ -1001,10 +1002,9 @@ fun ReaderScreen(
                     // A table can be comfortable at 100% and too wide at 175%,
                     // so what fits has to be asked again once the new size has
                     // landed — and before the anchor is restored, since fitting
-                    // it moves the text once more.
-                    if (reflowableText &&
-                        WideContentFit.apply(nav) == WideContentFit.Result.CHANGED
-                    ) {
+                    // it moves the text once more. A note marker is sized in
+                    // `em` and so moves with the text for the same reason.
+                    if (reflowableText && repairPage(nav)) {
                         awaitReflowSettled(nav, before)
                     }
                     // A reader who tapped a contents entry while the
@@ -1028,7 +1028,10 @@ fun ReaderScreen(
     // Content wider than the page paints over the page after it rather than
     // being clipped, because in paginated mode the columns Readium sets
     // `overflow: visible` on are the pages themselves. Measure and constrain
-    // what actually overflows, once per resource that gets laid out.
+    // what actually overflows, once per resource that gets laid out — and in
+    // the same pass, put the book's notes back where a reading system is
+    // supposed to keep them, which is out of the page until they are asked
+    // for. See `repairPage`.
     //
     // Positions and layout passes are both only prompts to go and look, for
     // the same reasons the e-ink block above gives: a position alone misses
@@ -1100,7 +1103,7 @@ fun ReaderScreen(
             reflow.within {
                 val anchor = here?.takeIf { stillFitting() }?.let { capture(nav, it) }
                 val before = ExactLocatorAnchor.layoutSignature(nav)
-                if (WideContentFit.apply(nav) == WideContentFit.Result.CHANGED) {
+                if (repairPage(nav)) {
                     // Settled before the scope closes whether or not
                     // there is an anchor: the text the fit moved
                     // reports where it came to rest either way, and
@@ -2383,12 +2386,25 @@ fun ReaderScreen(
                         onDismissFootnote()
                         onProgressAction.onJump()
                         navigator?.let { nav ->
-                            val noteToken = moves.issue(
-                                from = nav.currentLocator.value.restorePoint(),
-                                to = publication.locatorFromLink(note.link)?.destination(),
-                                nowMs = SystemClock.elapsedRealtime(),
-                            )
-                            if (!nav.go(note.link, animated = false)) moves.cancel(noteToken)
+                            // Where the reader is now, read before the reveal
+                            // below moves anything: that is the place a jump
+                            // back is meant to return them to.
+                            val from = nav.currentLocator.value.restorePoint()
+                            val fragment = note.link.href.toString().substringAfter('#', "")
+                            effectScope.launch {
+                                // The note is hidden in the page it belongs to,
+                                // so going to it without this is going nowhere.
+                                // Revealed before the jump rather than after,
+                                // because after, the reader is already looking
+                                // at the empty place it should have been.
+                                if (fragment.isNotEmpty()) FootnoteLayout.reveal(nav, fragment)
+                                val noteToken = moves.issue(
+                                    from = from,
+                                    to = publication.locatorFromLink(note.link)?.destination(),
+                                    nowMs = SystemClock.elapsedRealtime(),
+                                )
+                                if (!nav.go(note.link, animated = false)) moves.cancel(noteToken)
+                            }
                         }
                     },
                     onDismiss = onDismissFootnote,
@@ -2744,6 +2760,25 @@ class ReaderAnnotationActions(
     val remove: (BookAnnotation) -> Unit,
     val notebookMarkdown: () -> String,
 )
+
+/**
+ * Puts right what a stylesheet alone cannot, in the document on screen.
+ *
+ * Two unrelated faults are repaired the same way — by measuring the live
+ * DOM and writing an attribute back into it — so they are asked together
+ * and answer as one: whether the page moved. Each is independent of the
+ * other and neither is allowed to hide the other's answer, because the
+ * caller uses it to decide whether the reader's place has to be put back.
+ *
+ * A refusal or a failure is not a change. The book's own
+ * Content-Security-Policy can turn either of these down, and a page that
+ * was never touched is a page that never moved.
+ */
+private suspend fun repairPage(nav: EpubNavigatorFragment): Boolean {
+    val fitted = WideContentFit.apply(nav) == WideContentFit.Result.CHANGED
+    val noted = FootnoteLayout.apply(nav) == FootnoteLayout.Result.CHANGED
+    return fitted || noted
+}
 
 /**
  * Opens the next chapter and waits for it to arrive, or says it could

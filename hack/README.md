@@ -108,6 +108,18 @@ target wrapping them. Run `make help` for the short list. See
   `./gradlew assembleDebug` (Readium's CSS is unpacked from the AAR by the
   build), so it is a check to run by hand when that script
   changes, not part of `make check`. `PORT=` picks another port.
+- `verify-footnotes`: The same kind of check for the notes in issue #152:
+  that a book's notes stay out of the page until they are asked for, and
+  that a marker drawn as an image is the size of the words around it. The
+  script comes out of `FootnoteLayout.kt`, and the cases run against
+  Readium's CJK stylesheets, which are what it picks for the book in the
+  issue and which nothing else here exercises. Same requirements and same
+  reasons for staying out of `make check`. `PORT=` picks another port.
+- `make-notes-book`: Builds the fixture book those notes are reproduced
+  with — deliberately badly behaved in the two ways the reporter's edition
+  is, and well behaved everywhere else, so a fix can be seen to leave the
+  second alone. Seeded onto the shelf by `reset-books` and `screenshots`,
+  and buildable on its own for opening by hand.
 - `icon`: Renders the adaptive launcher icon (two vector drawables)
   to a flat PNG for the F-Droid listing and the README.
 - `feature-graphic`: Renders the 1024x500 store feature graphic
