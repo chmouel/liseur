@@ -78,18 +78,19 @@ class PositionSyncWorker(
 
         /** Sends one book's position, for the moment it is closed. */
         fun pushBook(context: Context, bookUrl: String) {
-            enqueueBook(context, bookUrl, ExistingWorkPolicy.APPEND_OR_REPLACE)
+            enqueueBook(context, bookUrl, ExistingWorkPolicy.APPEND_OR_REPLACE, expedited = true)
         }
 
         /** Retries a failed foreground send without resetting existing backoff. */
         fun retryBook(context: Context, bookUrl: String) {
-            enqueueBook(context, bookUrl, ExistingWorkPolicy.KEEP)
+            enqueueBook(context, bookUrl, ExistingWorkPolicy.KEEP, expedited = false)
         }
 
         private fun enqueueBook(
             context: Context,
             bookUrl: String,
             policy: ExistingWorkPolicy,
+            expedited: Boolean,
         ) {
             val request = OneTimeWorkRequestBuilder<PositionSyncWorker>()
                 .setInputData(Data.Builder().putString(KEY_BOOK_URL, bookUrl).build())
@@ -100,7 +101,7 @@ class PositionSyncWorker(
             // quota is unavailable. Below that it would need a
             // foreground notification, which a few dozen bytes of
             // position do not justify, so older phones keep the plain job.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (expedited && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 request.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             }
             WorkManager.getInstance(context).enqueueUniqueWork(
