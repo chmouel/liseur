@@ -18,6 +18,8 @@ import java.io.File
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
@@ -969,6 +971,95 @@ class LiseurSyncPositionSyncTest {
         assertTrue(outcome is SyncOutcome.Failure)
         assertEquals("w-old", db.workIdentityDao().alias(LOCAL, peer())?.workId)
         assertEquals(0, requests().count { it.target.startsWith("/v1/works/resolve") })
+    }
+
+    @Test
+    fun `a locator the server will not take is dropped and the position sent alone`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        val opId = SyncOps.opIdFor("device-a", "w-1", 1)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            MockResponse(
+                code = 400,
+                body = """{"error":"op $opId: locator too large","code":"locator_too_large",
+                    "op_id":"$opId","item_index":0,"limit":4096}
+                """.trimIndent(),
+            ),
+        )
+        accepted()
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val pushes = requests().filter { it.target.startsWith("/v1/ops") }
+        assertEquals(2, pushes.size)
+        val first = JSONObject(pushes[0].body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+        val retried = JSONObject(pushes[1].body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+        assertTrue(first.has("locator"))
+        assertFalse(retried.has("locator"))
+        // Same id: the refused batch was never stored, so it is free.
+        assertEquals(opId, retried.getString("op_id"))
+        assertEquals(1L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `a conflict renames the position so the next run can get through`() = runTest {
+        // The server holds this id from a credential since replaced. The
+        // same id will be refused for ever; a fresh revision derives a
+        // fresh one for the same reading.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        val opId = SyncOps.opIdFor("device-a", "w-1", 1)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            json("""{"results":[{"op_id":"$opId","status":"conflict","reason":"op_id reused with a different payload"}]}"""),
+        )
+
+        val outcome = sync().syncAll(null)
+
+        // Reported, not swallowed; still dirty, under a new revision.
+        assertTrue(outcome !is SyncOutcome.Success)
+        assertEquals(2L, db.readingProgressDao().currentRevision(LOCAL))
+        assertNull(db.syncPeerStateDao().get(LOCAL, peer())?.takeIf { it.ackedRevision > 0 })
+
+        server.enqueue(json("""{"ops":[]}"""))
+        accepted(revision = 2)
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+        val retried = requests().filter { it.target.startsWith("/v1/ops") }[1]
+        val op = JSONObject(retried.body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+        assertEquals(SyncOps.opIdFor("device-a", "w-1", 2), op.getString("op_id"))
+        assertEquals(0.4, op.getDouble("progression"), 0.0)
+        assertEquals(2L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `a conflict does not touch a revision a page turn already moved`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        val opId = SyncOps.opIdFor("device-a", "w-1", 1)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"results":[{"op_id":"$opId","status":"conflict"}]}"""))
+        // The page turns while the request is in the air.
+        val original = server.dispatcher
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.target == "/v1/ops") {
+                    runBlocking { db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.5, null, "reading", NOW + 1) }
+                }
+                return original.dispatch(request)
+            }
+        }
+
+        sync().syncAll(null)
+
+        // Revision 2 is the page turn's; nothing invented a third.
+        assertEquals(2L, db.readingProgressDao().currentRevision(LOCAL))
     }
 
     @Test

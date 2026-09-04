@@ -562,6 +562,26 @@ abstract class ReadingProgressDao {
     abstract suspend fun currentRevision(bookUrl: String): Long?
 
     /**
+     * Moves a book's revision on without a page having turned, and only
+     * while it is still the revision that was sent.
+     *
+     * For a position the server has refused for good under this
+     * revision's derived id: it holds that id already, carrying
+     * something else. Sending the same id again would only be refused
+     * again, so the reading is given a fresh revision and with it a
+     * fresh id. Conditional, because a page turned since the send has
+     * already done that, and an unconditional bump would invent a
+     * revision nobody read to.
+     */
+    @Query(
+        """
+        UPDATE reading_progress SET local_revision = local_revision + 1
+        WHERE book_url = :bookUrl AND local_revision = :sentRevision
+        """,
+    )
+    abstract suspend fun renameRevision(bookUrl: String, sentRevision: Long): Int
+
+    /**
      * Takes a status the server reported on its own, leaving the position
      * alone — someone marked the book read elsewhere without opening it.
      *

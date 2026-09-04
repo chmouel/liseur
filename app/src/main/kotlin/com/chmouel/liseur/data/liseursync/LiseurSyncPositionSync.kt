@@ -969,26 +969,45 @@ class LiseurSyncPositionSync(
                 return pushed
             } ?: continue
 
-            val accepted = accepted(answer)
+            val statuses = statuses(answer)
             for (item in batch) {
-                if (item.op.opId !in accepted) {
-                    // The server refused this one on its own terms — an
-                    // id reused with a different payload. Leaving the
-                    // book dirty is right: the next run asks again with
-                    // whatever it holds then.
-                    Log.i(TAG, "The server would not take a position")
-                    continue
-                }
-                pushed++
-                forAccount(account) {
-                    peerStateDao.settle(
-                        bookUrl = item.bookUrl,
-                        peerId = account.peerId,
-                        ackedRevision = item.revision,
-                        progression = item.op.progression,
-                        status = readingStatusFor(item.op.progression).wireName,
-                        now = now(),
-                    )
+                when (val status = statuses[item.op.opId]) {
+                    in ACCEPTED -> {
+                        pushed++
+                        forAccount(account) {
+                            peerStateDao.settle(
+                                bookUrl = item.bookUrl,
+                                peerId = account.peerId,
+                                ackedRevision = item.revision,
+                                progression = item.op.progression,
+                                status = readingStatusFor(item.op.progression).wireName,
+                                now = now(),
+                            )
+                        }
+                    }
+
+                    CONFLICT -> {
+                        // The server holds this id already, carrying
+                        // something else — most often the same position
+                        // sent from a credential since replaced. It will
+                        // never take this id again, and sending the same
+                        // one next run would only be refused again. So the
+                        // revision moves on, which derives a fresh id for
+                        // the same reading; conditionally, because a page
+                        // turned since the send has done that already.
+                        Log.i(TAG, "The server holds op ${item.op.opId} with a different payload; renaming the position")
+                        forAccount(account) {
+                            progressDao.renameRevision(item.bookUrl, item.revision)
+                        }
+                        trouble.refused(SyncFailure.ServerError(LiseurSyncHttp.CONFLICT))
+                    }
+
+                    else -> {
+                        // Left dirty and said so: the next run asks again
+                        // with whatever it holds then.
+                        Log.i(TAG, "The server would not take a position: ${status ?: "no answer for it"}")
+                        trouble.refused(SyncFailure.Malformed)
+                    }
                 }
             }
         }
@@ -1008,7 +1027,8 @@ class LiseurSyncPositionSync(
     }
 
     /**
-     * Answers a batch the server refused for naming a deleted work.
+     * Answers a batch the server refused for naming a deleted work, or
+     * for one op's locator being bigger than it takes.
      *
      * Only the book the refusal names is refreshed, and only when the
      * refusal's `op_id` and `work_id` match an op this batch actually
@@ -1019,6 +1039,12 @@ class LiseurSyncPositionSync(
      * unnameable, or whose reading now points the other way, is simply
      * dropped from the retry: its position stays dirty and loses
      * nothing.
+     *
+     * A locator too large is the other refusal with a move: the server's
+     * bound is configurable and may be smaller than this app assumed.
+     * The op goes again without its locator and under the same id — the
+     * refused batch was never stored — so the other device reopens the
+     * book at a percentage rather than not at all.
      */
     private suspend fun recoverPush(
         account: Account,
@@ -1027,6 +1053,18 @@ class LiseurSyncPositionSync(
         recovered: MutableSet<String>,
         trouble: Trouble,
     ): PushRecovery {
+        if (rejection.errorCode == LiseurSyncRejection.LOCATOR_TOO_LARGE) {
+            val heavy = batch.firstOrNull { it.op.opId == rejection.opId }
+                ?: rejection.itemIndex?.let(batch::getOrNull)
+                ?: return PushRecovery.Ordinary
+            // Already bare and still refused: not a size problem this
+            // app can do anything about.
+            if (heavy.op.locatorJson == null) return PushRecovery.Ordinary
+            Log.i(TAG, "The server will not take op ${heavy.op.opId}'s locator (limit ${rejection.limit}); sending the position alone")
+            return PushRecovery.Retry(
+                batch.map { if (it === heavy) it.copy(op = it.op.copy(locatorJson = null)) else it },
+            )
+        }
         if (!rejection.isUnknownWork) return PushRecovery.Ordinary
         val opId = rejection.opId ?: return PushRecovery.Ordinary
         val workId = rejection.workId ?: return PushRecovery.Ordinary
@@ -1398,14 +1436,13 @@ class LiseurSyncPositionSync(
         return SessionRecovery.Retry(rest + rebuilt)
     }
 
-    private fun accepted(answer: JSONObject): Set<String> {
-        val results = answer.optJSONArray("results") ?: return emptySet()
+    private fun statuses(answer: JSONObject): Map<String, String> {
+        val results = answer.optJSONArray("results") ?: return emptyMap()
         return (0 until results.length()).mapNotNull { index ->
             val item = results.optJSONObject(index) ?: return@mapNotNull null
-            item.optString("op_id").takeIf {
-                it.isNotEmpty() && item.optString("status") in ACCEPTED
-            }
-        }.toSet()
+            val id = item.optString("op_id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            id to item.optString("status")
+        }.toMap()
     }
 
     // -- Odds and ends ----------------------------------------------------
@@ -1544,5 +1581,6 @@ class LiseurSyncPositionSync(
         const val LATEST_WINDOW = 20
         const val MAX_RESOLVES_PER_RUN = 25
         val ACCEPTED = setOf("applied", "duplicate")
+        const val CONFLICT = "conflict"
     }
 }
