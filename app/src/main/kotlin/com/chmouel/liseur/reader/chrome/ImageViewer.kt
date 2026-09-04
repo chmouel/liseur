@@ -49,9 +49,23 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.size.Size as CoilSize
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.ui.LocalEInk
 
 /** Enough of the scrim to keep a caption legible over a pale picture. */
 private val CAPTION_BACKING = Color.Black.copy(alpha = 0.66f)
+
+/**
+ * Somewhere to keep a gesture that is being counted and not drawn.
+ *
+ * A plain box rather than a `MutableState`, on purpose: reading a state
+ * object from the gesture callback and writing it back would recompose
+ * on every pointer change, which is the repaint the whole arrangement
+ * exists to avoid.
+ */
+private class PendingGesture {
+    var value: PendingTransform? = null
+}
 
 /**
  * The largest picture decoded at its own size rather than the screen's.
@@ -106,9 +120,16 @@ data class ViewedImage(
  * Drawn over everything on a black scrim, in Material colours rather than
  * in the reading theme: this is not the page any more, and a picture is
  * judged against black in every other viewer the reader owns.
+ *
+ * Except on electronic paper, where it is drawn on [theme]'s own paper.
+ * Driving every pixel to black and back again is the slowest and
+ * ghostiest thing such a panel does, and it would happen twice for every
+ * picture; on paper the picture is a page-sized change rather than a
+ * full inversion. The gesture is held back for the same reason and
+ * applied once on the lift.
  */
 @Composable
-fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
+fun ImageViewer(image: ViewedImage, theme: ReaderTheme, onDismiss: () -> Unit) {
     var scale by remember(image) { mutableFloatStateOf(ImageZoom.MIN_SCALE) }
     var offsetX by remember(image) { mutableFloatStateOf(0f) }
     var offsetY by remember(image) { mutableFloatStateOf(0f) }
@@ -127,6 +148,13 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
     val dismissTravel = with(LocalDensity.current) { ImageZoom.DISMISS_TRAVEL_DP.dp.toPx() }
     val context = LocalContext.current
     val viewerTitle = image.alt ?: stringResource(R.string.reader_image_viewer)
+    val onPaper = LocalEInk.current
+    // The scrim, and the one colour everything drawn over it is in.
+    val backdrop = if (onPaper) theme.background else Color.Black
+    val ink = if (onPaper) theme.foreground else Color.White
+    // Deliberately not a state object: the whole point of accumulating a
+    // gesture is that no frame of it recomposes anything.
+    val pending = remember(image) { PendingGesture() }
 
     fun hold() {
         val (w, h) = ImageZoom.fitted(
@@ -144,7 +172,7 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(backdrop)
             // Modal in the way that matters to somebody who cannot see
             // it: without this the reader's own chrome stays reachable
             // behind the picture, so a swipe lands on a control that is
@@ -179,8 +207,17 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                     },
                 )
             }
-            .pointerInput(image) {
+            .pointerInput(image, onPaper) {
                 detectTransformGestures { _, pan, zoom, _ ->
+                    // On paper the frame is counted and nothing is
+                    // written: `scale` and the translations below are
+                    // what the screen is drawn from, and each of them
+                    // costs a full repaint.
+                    if (onPaper) {
+                        val soFar = pending.value ?: PendingTransform(scale, offsetX, offsetY)
+                        pending.value = soFar.fold(zoom, pan.x, pan.y)
+                        return@detectTransformGestures
+                    }
                     val wasAtFit = ImageZoom.atFit(scale)
                     scale = ImageZoom.clampScale(scale * zoom)
                     offsetX += pan.x
@@ -202,16 +239,31 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
             }
             // `detectTransformGestures` has no gesture-end callback, and
             // the travel above needs one: distance covered by two
-            // separate drags is not a drag. Watched on the initial pass
-            // and never consumed, so the detector above still sees
-            // everything.
-            .pointerInput(image) {
+            // separate drags is not a drag. It is also where a gesture
+            // counted rather than drawn is finally applied, in one step.
+            // Never consumed, so the detector above still sees
+            // everything; the down is watched on the initial pass so
+            // that nothing beats us to it, and the release on the final
+            // one, so that the last frame of the gesture has already
+            // been folded in before it is committed.
+            .pointerInput(image, onPaper) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     do {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val event = awaitPointerEvent(PointerEventPass.Final)
                     } while (event.changes.any { it.pressed })
                     dragDown = 0f
+                    pending.value?.let { gesture ->
+                        pending.value = null
+                        if (gesture.dismisses(dismissTravel)) {
+                            onDismiss()
+                        } else {
+                            scale = gesture.scale
+                            offsetX = gesture.offsetX
+                            offsetY = gesture.offsetY
+                            hold()
+                        }
+                    }
                 }
             },
     ) {
@@ -250,9 +302,12 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                 // — and on the scrim those are simply invisible. Drawn to
                 // the picture's own fitted rectangle rather than to the
                 // whole screen, so a photograph covers it completely and
-                // never shows a white border.
+                // never shows a white border. Not needed on an e-paper
+                // panel, where the viewer is already on the reading
+                // theme's paper and the line art lands on it as it does
+                // on the page.
                 .drawBehind {
-                    if (!natural.isSpecified) return@drawBehind
+                    if (onPaper || !natural.isSpecified) return@drawBehind
                     val (w, h) = ImageZoom.fitted(
                         contentW = natural.width,
                         contentH = natural.height,
@@ -271,7 +326,7 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
         image.subtitle?.let { caption ->
             Text(
                 text = caption,
-                color = Color.White,
+                color = ink,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
@@ -280,9 +335,20 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                     .padding(horizontal = 24.dp, vertical = 16.dp)
                     // The caption sits over whatever the picture leaves
                     // there, which after the paper behind a line drawing
-                    // can be white.
-                    .background(CAPTION_BACKING, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    // can be white. That backing goes with the white
+                    // rectangle it was there for: on an e-paper panel the
+                    // caption is the theme's own ink on the theme's own
+                    // paper, and a pill around it is one more edge for
+                    // the panel to ghost.
+                    .then(
+                        if (onPaper) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .background(CAPTION_BACKING, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        },
+                    ),
             )
         }
 
@@ -296,7 +362,7 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
             Icon(
                 Icons.Filled.Close,
                 contentDescription = stringResource(R.string.close),
-                tint = Color.White,
+                tint = ink,
             )
         }
     }

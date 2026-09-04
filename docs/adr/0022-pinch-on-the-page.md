@@ -2,7 +2,8 @@
 
 Status: accepted
 GitHub issues: [#139](https://github.com/chmouel/liseur/issues/139),
-[#110](https://github.com/chmouel/liseur/issues/110)
+[#110](https://github.com/chmouel/liseur/issues/110),
+[#153](https://github.com/chmouel/liseur/issues/153)
 
 ## Context
 
@@ -446,6 +447,61 @@ is named for what it does — "Pinch to resize text" — and sits in
 Settings -> Reading & navigation beside the other rows about how the
 book is turned and held, not in Reading appearance: it is not how the
 page looks, it is what the hands do (ADR 1, ADR 9).
+
+### On electronic paper
+
+Deferred to [#153](https://github.com/chmouel/liseur/issues/153) and
+settled there. All three things the gesture does are cheap on a screen
+that repaints in sixteen milliseconds and expensive on one that does not.
+
+**The resize is refused rather than made cheaper.** Every step of a
+pinch resize reflows the book and repaints the whole page. On an LCD
+that is the preview the gesture is made of; on a panel that takes a
+tenth of a second and ghosts, the reader asks for one size and gets six
+repaints on the way to it. There is no cheaper version — the preview is
+the reflow — so on paper the gesture is simply not there, and the Size
+slider, which commits once, is what remains.
+
+It is refused on `LocalEInk` and not on `isEInkDevice()`. That matters:
+the detection is a list of manufacturer names, which is stated plainly
+in `EInk.kt` and is the reason `EInkMode` keeps a manual override rather
+than trusting itself. Reading the resolved value means a reader on a
+panel the list has never heard of, or on a phone it wrongly recognised,
+sets E-ink mode and gets the right answer to both questions at once.
+
+The issue proposed a third control for this — Auto/On/Off on the pinch
+row itself, on the `EInkMode.resolve()` pattern. It was dropped. It asks
+the reader the same question the E-ink row already asks, two rows apart,
+and the copy they would have to find is the second one. The row instead
+stays where it is, greyed out, saying why and pointing at the row that
+undoes it, and the stored preference stays the boolean it always was.
+
+**The picture commits on lift, like the page's size does.** The viewer
+drives `graphicsLayer` — `scale` and both translations — from
+`detectTransformGestures` on every pointer change, so a pinch or a pan
+is one full-screen repaint per frame for as long as the fingers are
+down. On paper the frames are folded into a `PendingTransform` instead
+and applied once when the last finger leaves. The accumulator is a plain
+box rather than a state object on purpose: a `MutableState` read and
+written from the gesture callback would recompose every frame, which is
+the repaint being avoided. Double-tap is already a single step and is
+untouched.
+
+The lift is also where the drag-to-dismiss is decided, which is a real
+loss: the picture no longer follows the finger down and then goes. It is
+the same bargain the size already makes, and the alternative — a
+throttle at some number of frames a second — still ghosts and asks
+somebody to pick a number correctly for two different panels.
+
+**The scrim gives way to the reading theme's paper.** Filling the screen
+with black and taking it away again is the slowest, ghostiest thing such
+a panel does, and it happened twice per picture. On paper the viewer
+opens on `ReaderTheme.background`, so a picture is a page-sized change
+rather than a full inversion and back. Two things go with the black: the
+white rectangle drawn behind the picture, which exists only so that
+black-on-transparent line art is visible against a black scrim, and the
+dark pill behind the caption, which exists only to survive that
+rectangle. Off paper, all of it is exactly as it was.
 
 ## Ruled out
 
