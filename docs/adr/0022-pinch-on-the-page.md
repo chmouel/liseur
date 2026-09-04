@@ -139,15 +139,23 @@ book underneath does not move.
 
 ### It snaps to the slider's own positions
 
-The eighteen positions are derived once from `ReaderPrefs.MIN_FONT_SIZE`,
-`ReaderPrefs.MAX_FONT_SIZE` and the slider's step count, in one place
-that the sheet and the gesture both read, so the two cannot drift into
-offering different sizes for the same book. Snapping also bounds how far
-a single gesture can travel and gives the pill something discrete to
-show, instead of a continuously sliding sample that never settles.
+The count lives in `ReaderPrefs` and *both* controls read it: the
+gesture derives its positions from it and the slider derives its `steps`
+from it. Not one from the other and not each from a literal, because a
+`Slider` counts the notches *between* its ends and a set of positions
+counts the ends too, so writing the same intention twice gets it wrong
+by one — and the whole point of snapping is that a book resized by the
+gesture and then nudged by the slider does not jump. Snapping also
+bounds how far a single gesture can travel and gives the pill something
+discrete to show, instead of a continuously sliding sample that never
+settles.
 
 A dead zone at the start keeps a two-finger rest — a thumb and a
-finger holding the phone — from being a resize.
+finger holding the phone — from being a resize. Fingers that spread and
+then come home again have therefore asked for nothing, and the target is
+*assigned* on every move rather than merged: a target kept from earlier
+in the gesture, because the dead zone answered with nothing this time,
+is a size the reader backed out of and would be committed on lift.
 
 ### The pill is the text, not a number
 
@@ -170,9 +178,22 @@ nothing about a fixed layout stops an image being too small.
 
 ### Asking the page what is under the fingers, without stalling them
 
-`document.elementFromPoint` where the first finger landed, walking up for
-an `<img>` or an SVG `<image>`, answered as JSON — the shape
-`WideContentFit` established.
+`document.elementsFromPoint` where the first finger landed — the whole
+stack under the point, so a picture beneath a link, a caption's wrapper
+or a transparent overlay is found without guessing which of them the
+browser will report on top. Answered as JSON, the shape `WideContentFit`
+established.
+
+Where the stack holds no picture the script falls back to walking up a
+few levels from `elementFromPoint` and looking *inside* each ancestor,
+for the book that wraps its plate in something the hit stack reports
+without reporting the plate. Anything found that way has to have the
+point inside its own bounding box. That check is not a nicety: an
+ancestor two levels up is usually the `<section>`, a `<section>`
+contains the chapter's illustration wherever in the chapter that
+illustration happens to be, and without it a pinch on a paragraph — or
+on a plate's own caption — opens a picture from three pages away instead
+of resizing the text.
 
 The point crosses as a **fraction of the web view**, not as a pixel
 count. A reflowable page is drawn at the display density and a fixed-layout
@@ -192,6 +213,22 @@ hand when the second finger arrives. Only if it is not does the gesture
 hold undecided — consumed, committing nothing — for a short budget, and
 if the budget runs out it falls into resize with the span measured from
 that moment, so the size does not jump.
+
+The probe is optimistic while it is in flight: between a page turn and
+its answer the resource is assumed to have images, because a wrong yes
+costs one script evaluation on one touch and a wrong no is the feature
+quietly not working on exactly the plate the reader has just turned to.
+It is keyed by the resource as well as by the web view, since the pager
+recycles a view from one chapter into the next.
+
+The budget is asked in one place and consulted from two — the coroutine
+that receives the answer, and the pointer loop on the next event after
+it was written down. Checked in only one of them it is no budget at all:
+the answer is stored either way, and whichever side does not check acts
+on it. And it applies only to a touch a resize has already got hold of.
+Fingers that take their time arriving at a picture are not late for
+anything; a document that took half a second to answer, while those
+fingers were already resizing, is.
 
 ### Which images count
 
@@ -233,6 +270,30 @@ the exact opposite of what zooming is for. The script reads
 
 `alt` is a caption the book has already written, so the viewer shows it.
 
+### Everything the book says is a size the book chose
+
+This reader opens whatever file it is pointed at, so the document on the
+other side of `evaluateJavascript` is not friendly by construction, and
+three things are bounded because of it. The answer's address and caption
+have ceilings, since a book can inline a plate as a `data:` URL and
+would otherwise hand back megabytes across the bridge on every touch.
+The picture itself is read as a **range** rather than whole: an archive
+entry's declared size is the archive's word for it, and a two-finger
+touch is not much to ask of a reader before it exhausts its heap. That
+range is the entry's own declared length wherever the container knows
+it, because Readium answers a range that runs off the end of a
+*compressed* entry with a decoding failure rather than clamping it — the
+useful bound and the safe one are the same number here only because the
+declaration is checked against the limit first and what comes back is
+measured again afterwards. The declaration bounds the request; it is
+never trusted for what it says arrived. And the evaluation itself
+has a timeout, because a renderer that hangs or a process that goes away
+never calls the callback at all, and the touch that asked would wait for
+it forever with its job still in flight when the next one starts.
+
+None of this is about injection. The script interpolates only numbers
+this app computed. It is about what comes back.
+
 ### The viewer is the app's page, not the book's
 
 A full-screen overlay, not an in-place zoom of the web view. An in-place
@@ -241,7 +302,7 @@ leaves the reader pinching their way back to exactly 1.0 before the page
 turns properly again. The overlay is also the only place `BackHandler`
 means anything.
 
-The bytes come from `publication.get(href)?.read()` on
+The bytes come from `publication.get(href)?.read(0 until limit + 1)` on
 `Dispatchers.IO`, inside the suspending function that blocks, and Coil
 does the downsampling. `ResourceAddress` gains a public `href()`
 extracted from its existing private `path()`, so the one spelling of
@@ -257,6 +318,17 @@ behind the screen, so a photograph covers it completely and never shows
 a white border; white rather than the reading theme's paper, because the
 overlay is not the page and because a transparent image in an EPUB is
 ink, not chalk.
+
+**Modal to a screen reader as well as to a finger.** Drawn as the last
+child of the reading box rather than in a window of its own, so that it
+inherits the reader's immersive bars instead of fighting them — and so
+nothing under it is reachable by touch, because the pointer loop stops
+there. A screen reader is not steered by the pointer loop. Left alone it
+walks past the picture into a chapter and a row of controls that are not
+on screen, which is worse than useless: it is a control the reader can
+operate and cannot see. So the page and the chrome are hidden from
+accessibility while the viewer is up, the way `Endpaper` already hides
+what it has not revealed, and the overlay carries a pane title.
 
 ### Long-press, and why not the web view's own
 
@@ -311,7 +383,7 @@ the gesture is an addition, not a replacement.
 with scroll mode, and is not the gesture readers reach for.
 
 **Double-tap cycling through preset sizes.** Double-tap is wanted
-elsewhere, and cycling suits a three-way choice, not eighteen steps.
+elsewhere, and cycling suits a three-way choice, not nineteen steps.
 
 **A per-book pinch preference.** The gesture is about the hand, not the
 book. Per-book typography stays where it is.
@@ -333,7 +405,15 @@ picture-heavy page where the hit test has not answered yet.
 
 The minimum size will be wrong for somebody's book in one direction or
 the other, and the decorative vocabulary only knows the roles it has
-been told about.
+been told about. The ceiling on how large a picture may be will be
+wrong for somebody's book too — a genuine 20MB plate is refused in
+silence, which is the price of not being able to tell one from a hostile
+archive entry before reading it.
+
+Requiring the point to fall inside the picture's own box costs the case
+where a book draws a plate under something opaque that the hit stack
+does not report. Nobody has one; a pinch on a paragraph opening an
+illustration from elsewhere in the chapter is not hypothetical at all.
 
 Readium's swallowing of multi-touch is behaviour, not contract. A
 toolkit upgrade is a thing to re-test.
@@ -342,5 +422,6 @@ toolkit upgrade is a thing to re-test.
 `reader/chrome/FontSizeHud.kt`, `reader/chrome/ImageViewer.kt`,
 `reader/ImageAtPoint.kt`, `reader/ResourceAddress.kt`,
 `reader/chrome/ReaderTapZones.kt`, `reader/chrome/ScrollEdgeTurner.kt`,
-`reader/ReaderViewModel.kt`, `data/settings/AppSettings.kt`,
+`reader/ReaderViewModel.kt`, `data/settings/ReaderPrefs.kt`,
+`data/settings/AppSettings.kt`, `ui/reading/ReadingAppearanceControls.kt`,
 `ui/settings/ReadingNavigationScreen.kt`.

@@ -446,7 +446,7 @@ fun ReadingFontSizeSlider(value: Double, enabled: Boolean, onChanged: (Double) -
                 onValueChange = { sliderValue = it },
                 onValueChangeFinished = { onChanged(sliderValue.toDouble()) },
                 valueRange = ReaderPrefs.MIN_FONT_SIZE.toFloat()..ReaderPrefs.MAX_FONT_SIZE.toFloat(),
-                steps = 17,
+                steps = ReaderPrefs.FONT_SIZE_SLIDER_STEPS,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 12.dp),

@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -251,6 +252,18 @@ private const val DECIDE_BUDGET_MS = 250L
 
 /** How often the long press looks to see whether the answer has landed. */
 private const val ANSWER_POLL_MS = 20L
+
+/**
+ * The most of a book a picture is allowed to be, before it is refused.
+ *
+ * A reader opens whatever file it is handed, and an archive entry's
+ * declared size is the file's word for it. Without a ceiling a book can
+ * name an illustration large enough to take the heap with it, and a
+ * two-finger touch on a page is all it would take to set that off. The
+ * figure matches the one covers are read under; no illustration a
+ * publisher meant anybody to look at is anywhere near it.
+ */
+private const val MAX_IMAGE_BYTES = 16L * 1024 * 1024
 
 // How often a book scrolled by hand is looked in on, and so the most a
 // place kept for the pause can be behind the reader. The same interval
@@ -1097,12 +1110,29 @@ fun ReaderScreen(
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
         val root = nav.publicationView
-        var asked: WebView? = null
+        var withImages: Pair<WebView, String>? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
             val web = visibleWebView(root) ?: return@collect
-            if (web === asked) return@collect
-            asked = web
-            touch.resourceHasImages = ImageAtPoint.hasImages(web)
+            // Keyed by the resource as well as by the view, because the
+            // pager recycles a web view from one chapter into another and
+            // the same instance is then a different document.
+            val key = web to nav.currentLocator.value.href.toString()
+            if (key == withImages) return@collect
+            // Willing to ask until told otherwise. A wrong yes costs one
+            // script evaluation on a touch; a wrong no is the feature
+            // quietly not working, and the gap between a page turn and
+            // this answer is exactly where a reader lands on a plate.
+            touch.resourceHasImages = true
+            val has = ImageAtPoint.hasImages(web)
+            touch.resourceHasImages = has
+            // Only a yes is remembered. A no is either the truth about a
+            // page of plain text or a document that had not finished
+            // loading when it was asked, and from here the two look the
+            // same — so a no is asked again the next time the page moves.
+            // That costs one trivial script per turn, off the touch path,
+            // which is where the cost mattered; a remembered no costs the
+            // whole feature on the chapter it was wrong about.
+            withImages = if (has) key else null
         }
     }
 
@@ -1654,9 +1684,30 @@ fun ReaderScreen(
             try {
                 val href = ResourceAddress.href(hit.src) ?: return@launch
                 val url = Url(href) ?: return@launch
+                // Read a range rather than the whole entry, because the
+                // entry's size is the book's word against the heap: this
+                // reader opens whatever file it is pointed at, and a ZIP
+                // can name a hundred megabytes as easily as one.
+                //
+                // The range is the entry's own length where the container
+                // knows it, because Readium refuses a range that runs off
+                // the end of a compressed entry rather than clamping it.
+                // The declared length is still only the book's word, so
+                // it bounds the range and never the trust: nothing over
+                // the limit is asked for, and what comes back is measured
+                // before it is used.
                 val bytes = withContext(Dispatchers.IO) {
-                    publicationNow.get(url)?.use { it.read().getOrNull() }
-                } ?: return@launch
+                    publicationNow.get(url)?.use {
+                        val declared = it.length().getOrNull()
+                        if (declared != null && declared > MAX_IMAGE_BYTES) {
+                            null
+                        } else {
+                            it.read(0 until (declared ?: (MAX_IMAGE_BYTES + 1))).getOrNull()
+                        }
+                    }
+                }
+                if (bytes == null) return@launch
+                if (bytes.size > MAX_IMAGE_BYTES) return@launch
                 // The touch that asked may be long over, and the reader
                 // somewhere else entirely.
                 if (touch.serial != serial) return@launch
@@ -1667,6 +1718,22 @@ fun ReaderScreen(
             }
         }
     }
+
+    /**
+     * Whether an image under the fingers may still take the gesture.
+     *
+     * The one place that is decided, because it is asked from two: the
+     * coroutine that receives the document's answer, and the pointer loop
+     * on the next event after it was written down. Asked in only one of
+     * them the budget is no budget at all — the reply is stored, and the
+     * next finger movement acts on it regardless.
+     *
+     * A gesture no resize has claimed yet is not on a clock: fingers that
+     * take their time arriving at a picture still get the picture. Once a
+     * resize is under way it is, because changing a gesture's meaning
+     * under fingers already moving to it is worse than getting it wrong.
+     */
+    fun imageMayWin(): Boolean = pinchStart.value == null || touch.undecided()
 
     /**
      * Asks the document what is under the finger, as the finger lands.
@@ -1704,8 +1771,7 @@ fun ReaderScreen(
             // is still young: changing a gesture's meaning under fingers
             // that have been moving for half a second is worse than
             // getting it wrong.
-            val late = SystemClock.uptimeMillis() - touch.startedAt > DECIDE_BUDGET_MS
-            if (hit != null && touch.pointers >= 2 && !late) {
+            if (hit != null && touch.pointers >= 2 && imageMayWin()) {
                 pinchStart.value = null
                 pinchTarget = null
                 pinchRefused = false
@@ -1728,6 +1794,19 @@ fun ReaderScreen(
             touch.hit?.let(::showImage)
         }
     }
+
+    /**
+     * What the page and the chrome become while a picture is full screen.
+     *
+     * The viewer is drawn as the last child of the same box rather than
+     * in a window of its own, so nothing under it is reachable by touch
+     * — the pointer loop stops there. A screen reader is not steered by
+     * the pointer loop, and without this it walks straight past the
+     * picture into a chapter and a row of controls that are not on
+     * screen. See `docs/adr/0022-pinch-on-the-page.md`.
+     */
+    val behindViewer =
+        if (viewedImage != null) Modifier.semantics { hideFromAccessibility() } else Modifier
 
     Box(
         Modifier
@@ -1792,8 +1871,12 @@ fun ReaderScreen(
                                 touch.moved = true
                         }
                         // What is under the fingers decides which gesture
-                        // this is, and holds until they lift.
-                        if (down.size >= 2 && touch.hit != null) {
+                        // this is, and holds until they lift. Asked here
+                        // as well as where the answer lands: an answer
+                        // that came too late to take a running resize is
+                        // written down all the same, and without this the
+                        // next movement would act on it anyway.
+                        if (down.size >= 2 && touch.hit != null && imageMayWin()) {
                             touch.hit?.let(::showImage)
                             event.changes.forEach { it.consume() }
                             continue
@@ -1816,8 +1899,8 @@ fun ReaderScreen(
                                         pinchRefused = !reflowableText
                                     }
                                 if (reflowableText) {
-                                    PinchResize.targetFor(start.size, start.span, span)
-                                        ?.let { pinchTarget = it }
+                                    pinchTarget =
+                                        PinchResize.targetFor(start.size, start.span, span)
                                 }
                                 // Only once a second finger is down.
                                 // Consuming a lone pointer here would take
@@ -1922,6 +2005,7 @@ fun ReaderScreen(
             AndroidFragment<EpubNavigatorFragment>(
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(behindViewer)
                     .then(
                         if (pageContainerScrolls) {
                             Modifier.windowInsetsPadding(
@@ -1999,6 +2083,7 @@ fun ReaderScreen(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .then(behindViewer)
                 .navigationBarsPadding(),
         ) {
             if (!showingEnd) {
@@ -2113,7 +2198,7 @@ fun ReaderScreen(
             visible = chromeVisible && !showingEnd,
             enter = chromeEnter,
             exit = chromeExit,
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier.align(Alignment.TopCenter).then(behindViewer),
         ) {
             TopAppBar(
                 title = {
@@ -2891,4 +2976,18 @@ private class TouchProbe {
 
     /** Whether the resource on screen has any image in it; see the probe. */
     var resourceHasImages = false
+
+    /**
+     * Whether an image answer is still young enough to change what this
+     * touch means.
+     *
+     * Only ever asked of a touch a resize has already got hold of: the
+     * budget exists so that a document which took half a second to answer
+     * cannot yank the gesture out from under fingers that have spent that
+     * half second resizing. A gesture nothing else has claimed is not on
+     * a clock — a long press is deliberately slower than this — so ask
+     * through `imageMayWin` rather than reaching for this directly.
+     */
+    fun undecided(): Boolean =
+        SystemClock.uptimeMillis() - startedAt <= DECIDE_BUDGET_MS
 }

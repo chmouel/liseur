@@ -21,11 +21,11 @@ object PinchResize {
     /**
      * How many sizes the slider offers: its `steps` plus the two ends.
      *
-     * The slider is declared with `steps = 17` in
-     * `ui/reading/ReadingAppearanceControls.kt`, which Material reads as
-     * seventeen notches *between* the ends.
+     * Taken from [ReaderPrefs.FONT_SIZE_POSITIONS] rather than counted
+     * again here, because the whole point of snapping is that the
+     * gesture and the slider land on the *same* sizes.
      */
-    const val POSITIONS = 18
+    const val POSITIONS = ReaderPrefs.FONT_SIZE_POSITIONS
 
     /**
      * How far the fingers must travel before the gesture is a resize.

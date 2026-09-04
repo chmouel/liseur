@@ -597,6 +597,19 @@ data class ReaderPrefs(
     companion object {
         const val MIN_FONT_SIZE = 0.6
         const val MAX_FONT_SIZE = 2.5
+
+        /**
+         * How many sizes the reader can actually choose between.
+         *
+         * The Size slider and the pinch gesture must land on the same
+         * values or a book resized by one and then nudged by the other
+         * jumps, so the count lives here and both read it. A `Slider`
+         * counts the notches *between* its ends, hence the two.
+         *
+         * @see FONT_SIZE_SLIDER_STEPS
+         */
+        const val FONT_SIZE_POSITIONS = 19
+        const val FONT_SIZE_SLIDER_STEPS = FONT_SIZE_POSITIONS - 2
     }
 }
 

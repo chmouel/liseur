@@ -34,6 +34,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -78,6 +82,7 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
     // other edge.
     var natural by remember(image) { mutableStateOf(Size.Unspecified) }
     val dismissTravel = with(LocalDensity.current) { ImageZoom.DISMISS_TRAVEL_DP.dp.toPx() }
+    val viewerTitle = image.alt ?: stringResource(R.string.reader_image_viewer)
 
     fun hold() {
         val (w, h) = ImageZoom.fitted(
@@ -96,6 +101,16 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // Modal in the way that matters to somebody who cannot see
+            // it: without this the reader's own chrome stays reachable
+            // behind the picture, so a swipe lands on a control that is
+            // not on screen. Nothing under the viewer is addressable
+            // while it is up, which is already true for touch.
+            .semantics {
+                isTraversalGroup = true
+                traversalIndex = -1f
+                paneTitle = viewerTitle
+            }
             .onSizeChanged { viewport = it }
             .pointerInput(image) {
                 detectTapGestures(

@@ -533,6 +533,7 @@
     <string name="reader_spacing_customize">Set a value</string>
     <string name="reader_spacing_reset">Back to default</string>
     <string name="reader_pinch_sample">Aa</string>
+    <string name="reader_image_viewer">Image</string>
     <string name="reader_pinch_size">Text size %1$d%%</string>
     <string name="reader_typography_fixed_layout">This book has a fixed layout: its pages are set by the publisher, so these settings do not change them.</string>
     <string name="reader_typography_not_in_cjk">Not applied in Chinese, Japanese, Korean or vertical books.</string>

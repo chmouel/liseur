@@ -25,6 +25,33 @@ class PinchResizeTest {
         }
     }
 
+    /**
+     * The gesture and the Size slider have to offer the *same* sizes, or
+     * a book resized by one and then nudged by the other jumps. A
+     * `Slider` counts the notches between its ends, so its `steps` is two
+     * fewer than the number of sizes it can actually be left on.
+     */
+    @Test
+    fun `the pinch lands on the sizes the slider offers`() {
+        assertEquals(ReaderPrefs.FONT_SIZE_POSITIONS, PinchResize.POSITIONS)
+        assertEquals(PinchResize.POSITIONS - 2, ReaderPrefs.FONT_SIZE_SLIDER_STEPS)
+    }
+
+    /**
+     * Fingers that spread and then come home again have asked for
+     * nothing. The answer has to be `null` rather than the last target,
+     * because the caller assigns it: a `null` that was merged instead of
+     * assigned would commit whatever the gesture passed through on the
+     * way out.
+     */
+    @Test
+    fun `coming back to the starting span asks for nothing`() {
+        val start = PinchResize.sizeAt(6)
+        assertTrue(PinchResize.targetFor(start, 200f, 320f) != null)
+        assertNull(PinchResize.targetFor(start, 200f, 200f))
+        assertNull(PinchResize.targetFor(start, 200f, 206f))
+    }
+
     @Test
     fun `a size between two positions snaps to the nearer`() {
         val below = PinchResize.sizeAt(4)
