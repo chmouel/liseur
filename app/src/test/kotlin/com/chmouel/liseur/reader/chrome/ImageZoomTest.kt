@@ -61,4 +61,32 @@ class ImageZoomTest {
         assertEquals(1000f to 800f, ImageZoom.fitted(0f, 0f, 1000f, 800f))
         assertEquals(0f to 0f, ImageZoom.fitted(100f, 100f, 0f, 0f))
     }
+
+    /**
+     * A picture at fit is clamped back to centre after every frame, so
+     * the travel that dismisses it cannot be read off its own offset:
+     * one frame of a drag is never 96dp.
+     */
+    @Test
+    fun `a downward drag accumulates across frames`() {
+        var travelled = 0f
+        repeat(20) { travelled = ImageZoom.dragTravel(travelled, 15f) }
+        assertEquals(300f, travelled, 0.01f)
+    }
+
+    @Test
+    fun `travelling back up takes the drag off again`() {
+        var travelled = ImageZoom.dragTravel(0f, 100f)
+        travelled = ImageZoom.dragTravel(travelled, -40f)
+        assertEquals(60f, travelled, 0.01f)
+    }
+
+    @Test
+    fun `a drag that starts upwards is not a debt to pay back`() {
+        var travelled = 0f
+        repeat(5) { travelled = ImageZoom.dragTravel(travelled, -50f) }
+        assertEquals(0f, travelled, 0.01f)
+        travelled = ImageZoom.dragTravel(travelled, 30f)
+        assertEquals(30f, travelled, 0.01f)
+    }
 }

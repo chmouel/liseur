@@ -1799,6 +1799,12 @@ fun ReaderScreen(
                 waited += ANSWER_POLL_MS
             }
             if (touch.serial != serial || touch.moved || touch.pointers != 1) return@launch
+            // A resize that took this touch keeps it. Without this, a
+            // quick pinch held by a still first finger ends with that
+            // finger alone and unmoved, which is exactly what a long
+            // press looks like — so the size would commit and the
+            // picture would open on top of it.
+            if (!imageMayWin()) return@launch
             touch.hit?.let(::showImage)
         }
     }
