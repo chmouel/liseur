@@ -1120,6 +1120,23 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `an answer that names no position settles none`() = runTest {
+        // Every result the server sends names its op. One that does not
+        // cannot be placed, so the position stays pending and goes
+        // again rather than being written off as accepted.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"results":[{"status":"applied"}]}"""))
+
+        sync().syncAll(null)
+
+        assertEquals(null, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+    }
+
+    @Test
     fun `a lone position too big for the server goes without its locator`() = runTest {
         // A body past the byte bound is a 413 with no code to it. The
         // locator is the only part of an op with any size, so it is

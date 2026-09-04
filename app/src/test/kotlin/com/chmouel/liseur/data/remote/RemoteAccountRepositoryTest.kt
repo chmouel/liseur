@@ -6,8 +6,10 @@ import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.AnnotationSync
 import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.db.SessionRefusal
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncCredentials
@@ -524,6 +526,18 @@ class RemoteAccountRepositoryTest {
                 pendingKind = "write", pendingJson = """{"id":"a-1"}""",
             ),
         )
+        val sessionId = db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = "file:///book.epub", startedAt = 1, endedAt = 2,
+                lastCheckpointAt = 2, durationMs = 1,
+            ),
+        )
+        db.sessionRefusalDao().record(
+            SessionRefusal(
+                peerId = oldKey, sessionId = sessionId, wireSessionId = "s-7",
+                code = "id_reused", refusedAt = 1,
+            ),
+        )
         db.readingProgressDao().markDirtyFor(listOf("file:///book.epub"), oldKey)
 
         repository.connectLiseurSync(BASE, "ada", "pw")
@@ -537,6 +551,10 @@ class RemoteAccountRepositoryTest {
         assertEquals("w-1", db.workIdentityDao().alias("file:///book.epub", newKey)!!.workId)
         assertEquals("""{"id":"a-1"}""", db.annotationSyncDao().get(newKey, "a-1")!!.pendingJson)
         assertEquals(0, db.annotationSyncDao().countForPeer(oldKey))
+        // The sittings this server refused follow too, or it is offered
+        // every one of them again under the new key.
+        assertEquals(listOf("s-7"), db.sessionRefusalDao().forPeer(newKey).map { it.wireSessionId })
+        assertEquals(0, db.sessionRefusalDao().countForPeer(oldKey))
 
         // From here on the key is stable across token rotations.
         repository.connectLiseurSync(BASE, "ada", "pw")
@@ -591,6 +609,7 @@ class RemoteAccountRepositoryTest {
         sessionDao = db.readingSessionDao(),
         annotationSyncDao = db.annotationSyncDao(),
         uploadRefusalDao = db.uploadRefusalDao(),
+        sessionRefusalDao = db.sessionRefusalDao(),
         setups = mapOf(ServerKind.LISEUR_SYNC to liseurSyncSetup),
     )
 
