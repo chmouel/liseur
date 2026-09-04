@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import android.app.Activity
+import android.graphics.BitmapFactory
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -461,6 +462,11 @@ fun ReaderScreen(
     val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
     val touch = remember { TouchProbe() }
     var viewedImage by remember { mutableStateOf<ViewedImage?>(null) }
+    // True from the moment a picture is claimed to the moment it is on
+    // screen. The bytes take a read of an archive entry to arrive, and
+    // the fingers have usually left by then: without this the book turns
+    // or scrolls on in the gap before the overlay covers it.
+    var openingImage by remember { mutableStateOf(false) }
     // The tracker below outlives every recomposition, so it cannot read
     // `footnote` directly — it would keep seeing whatever was true when it
     // started. This gives it a window onto the current value.
@@ -719,6 +725,8 @@ fun ReaderScreen(
     val showingEndNow by rememberUpdatedState(showingEnd)
     var endpaperRtl by remember { mutableStateOf(false) }
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
+    val viewedImageNow by rememberUpdatedState(viewedImage)
+    val openingImageNow by rememberUpdatedState(openingImage)
     val pageTurner = remember {
         PageTurner(
             effect = pageTurnEffect,
@@ -737,6 +745,9 @@ fun ReaderScreen(
             isScrolling = { effectiveScrollingNow },
             isVerticalText = { navigatorNow?.settings?.value?.verticalText == true },
             showingEnd = { showingEndNow },
+            // A picture over the page takes the book out of reach of
+            // every way of turning it, keys and volume included.
+            isSuspended = { viewedImageNow != null || openingImageNow },
             onReachedEnd = {
                 endpaperRtl = navigatorNow?.overflow?.value?.readingProgression ==
                     ReadingProgression.RTL
@@ -1240,6 +1251,12 @@ fun ReaderScreen(
         defineWord == null &&
         jumpBack == null &&
         catchUp == null &&
+        // A picture over the page is modal to a finger and to a screen
+        // reader; it has to be modal to the clock as well, or the book
+        // scrolls on underneath it and the reader comes back somewhere
+        // they never asked to be.
+        viewedImage == null &&
+        !openingImage &&
         !blockedByDialog
 
     // Arming is a decision taken in a sheet, and the page it applies to
@@ -1683,6 +1700,7 @@ fun ReaderScreen(
     fun showImage(hit: ImageAtPoint.Hit) {
         if (touch.opening || viewedImage != null) return
         touch.opening = true
+        openingImage = true
         touch.claimed = true
         val serial = touch.serial
         effectScope.launch {
@@ -1716,16 +1734,28 @@ fun ReaderScreen(
                 // The touch that asked may be long over, and the reader
                 // somewhere else entirely.
                 if (touch.serial != serial) return@launch
+                // The size the *file* says, not the size the document
+                // reported. `naturalWidth` is corrected for a `srcset`
+                // descriptor and an SVG's fallback is only the box it is
+                // drawn in, so a document can name a picture far smaller
+                // than it decodes to and walk a huge raster straight past
+                // the pixel budget. Reading the header allocates nothing.
+                val (decodedW, decodedH) = withContext(Dispatchers.Default) {
+                    val header = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, header)
+                    header.outWidth to header.outHeight
+                }
                 view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                 viewedImage = ViewedImage(
                     bytes = bytes,
                     alt = hit.alt,
                     caption = hit.caption,
-                    width = hit.width,
-                    height = hit.height,
+                    width = decodedW,
+                    height = decodedH,
                 )
             } finally {
                 touch.opening = false
+                openingImage = false
             }
         }
     }

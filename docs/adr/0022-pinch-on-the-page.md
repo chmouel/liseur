@@ -342,7 +342,15 @@ is and the arithmetic stays sane: width times height inside
 `MAX_DECODE_PIXELS`, which is eight million, about 32MB as ARGB_8888.
 Above that, or where the dimensions are unknown, it falls back to the
 screen-sized decode, because a blurry plate is a worse outcome than a
-crash only until the crash happens. `ResourceAddress` gains a
+crash only until the crash happens.
+
+Those dimensions come from the *file*, not from the document. The
+document's `naturalWidth` is corrected for a `srcset` descriptor and an
+SVG's fallback is only the box the picture is drawn in, so a book can
+name a plate far smaller than it decodes to and walk a huge raster past
+the budget. The header is read on its own, with `inJustDecodeBounds`,
+which allocates nothing — the same move `LocalLibraryRepository` makes
+before decoding a cover, and for the same reason. `ResourceAddress` gains a
 public `href()` extracted from its existing private `path()`, so the one
 spelling of "turn a `readium_package` URL into a publication href" is
 shared rather than copied.

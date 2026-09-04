@@ -103,6 +103,17 @@ class PageTurner(
     private val isScrolling: () -> Boolean = { false },
     private val isVerticalText: () -> Boolean = { false },
     private val showingEnd: () -> Boolean = { false },
+    /**
+     * Whether the book is behind something and must not be turned.
+     *
+     * Asked of every entry point rather than of every caller, because a
+     * turn arrives from a tap zone, an edge drag, a keyboard and a
+     * volume key, and a modal overlay is modal to all four or to none of
+     * them. A key press is still swallowed: the reader is looking at
+     * something else, and a book turning behind it is worse than a key
+     * that did nothing.
+     */
+    private val isSuspended: () -> Boolean = { false },
     private val onReachedEnd: () -> Unit = {},
     private val onLeaveEnd: () -> Unit = {},
     /**
@@ -144,6 +155,7 @@ class PageTurner(
     private var probeGeneration = 0L
 
     fun turn(forward: Boolean) {
+        if (isSuspended()) return
         if (showingEnd() || pendingEnd) {
             if (!forward && showingEnd()) onLeaveEnd()
             return
@@ -352,6 +364,7 @@ class PageTurner(
      * one that answered when this locator was made.
      */
     fun stepChapter(forward: Boolean): Boolean {
+        if (isSuspended()) return false
         if (showingEnd() || pendingEnd) {
             if (!forward && showingEnd()) onLeaveEnd()
             return false
