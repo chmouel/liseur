@@ -230,6 +230,15 @@ Fingers that take their time arriving at a picture are not late for
 anything; a document that took half a second to answer, while those
 fingers were already resizing, is.
 
+"Has got hold of" is remembered on the touch, not read off the live
+pinch. A pinch is forgotten the instant it drops to one finger, but the
+touch runs on until the last finger leaves — so reading the live pinch
+would make a resize that ran long count as unclaimed again the moment a
+finger lifted, and a replacement finger landing then would open the
+picture the *first* finger had been over, minutes of travel ago. The
+flag is set when a resize takes the gesture and cleared only when a
+genuinely new touch begins.
+
 ### Which images count
 
 Two filters, because either alone gets it wrong.
@@ -329,6 +338,17 @@ on screen, which is worse than useless: it is a control the reader can
 operate and cannot see. So the page and the chrome are hidden from
 accessibility while the viewer is up, the way `Endpaper` already hides
 what it has not revealed, and the overlay carries a pane title.
+
+The cost of drawing it as a sibling rather than in its own window is
+that being hidden has to be *applied*, once per sibling, and a window
+gets it for free. The bookmark ribbon, the footer, the note card, the
+selection bar and the size HUD all carry it for that reason. Anything
+new added to the reading box has to carry it too; a sibling that forgets
+is a control a reader cannot see and can still reach. The trade is
+deliberate — a separate window would mean re-deriving the immersive bar
+handling this screen is careful about — but it is the fragile half of
+this decision, and the place to look first if a control ever turns up
+where it should not.
 
 ### Long-press, and why not the web view's own
 
