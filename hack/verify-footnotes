@@ -1,0 +1,461 @@
+#!/usr/bin/env bash
+#
+# Checks that a book's notes stay out of the page until they are asked for,
+# and that a note marker drawn as an image is the size of the words around it
+# (issue #152).
+#
+# Like hack/verify-wide-content, none of what the fix has to get right can be
+# seen from the JVM: whether an aside is actually hidden once Readium's own
+# stylesheets are in front of it, whether a 200-pixel glyph comes down to one
+# line, whether a chapter of endnotes survives untouched. So the script is
+# lifted out of FootnoteLayout.kt — the same text the app ships, never a copy
+# — and run against Readium's real stylesheets in headless Chrome, in a frame
+# the size of a phone.
+#
+# The CJK sheets are the default here because that is what Readium picks for
+# the book in the issue, and because they are the variant nothing else
+# exercises.
+#
+# One limit worth knowing: the harness loads each case through `srcdoc`, so
+# the documents are parsed as HTML. A book served as XHTML puts `epub:type`
+# in a namespace instead, which is why the script asks for it both ways and
+# why FootnoteLayoutTest checks that it still does.
+#
+# There is no Chrome on the CI runners, so this is a check to run by hand
+# when the script changes, not part of `make check`.
+
+set -euo pipefail
+
+readonly SOURCE="app/src/main/kotlin/com/chmouel/liseur/reader/footnotes/FootnoteLayout.kt"
+readonly ASSETS="app/build/intermediates/assets/debug/mergeDebugAssets/readium/readium-css"
+readonly PORT="${PORT:-8792}"
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+cd "$(git rev-parse --show-toplevel)"
+
+browser=""
+for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        browser=$candidate
+        break
+    fi
+done
+[[ -n $browser ]] || die "no chrome or chromium on PATH"
+
+command -v python3 >/dev/null 2>&1 || die "python3 is needed to serve the harness"
+
+# Readium's stylesheets arrive from the navigator AAR and are only unpacked
+# once something has been built.
+[[ -d $ASSETS ]] || die "$ASSETS is missing — run ./gradlew assembleDebug first"
+
+work=$(mktemp -d)
+server=""
+cleanup() {
+    # Under `set -e` a kill that loses the race would abort the trap and
+    # leave the temporary tree behind.
+    if [[ -n $server ]]; then
+        kill "$server" 2>/dev/null || true
+        wait "$server" 2>/dev/null || true
+    fi
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+cp -r "$ASSETS" "$work/readium-css"
+mkdir -p "$work/cases"
+
+# Both scripts come out of the Kotlin, so the harness can never pass against
+# a copy that has drifted from what the app runs. The reveal script is a
+# template with the fragment interpolated into it; the interpolation is
+# replaced by a placeholder the harness fills in per case.
+python3 - "$SOURCE" "$work/notes.js" "$work/reveal.js" <<'PY'
+import re, sys
+src = open(sys.argv[1]).read()
+
+match = re.search(r'const val SCRIPT: String = """(.*?)"""', src, re.S)
+if not match:
+    sys.exit("could not find SCRIPT in " + sys.argv[1])
+open(sys.argv[2], "w").write(match.group(1))
+
+match = re.search(
+    r'fun revealScript\(fragment: String\): String =\s*"""(.*?)"""', src, re.S
+)
+if not match:
+    sys.exit("could not find revealScript in " + sys.argv[1])
+template = match.group(1)
+if "${jsString(fragment)}" not in template:
+    sys.exit("revealScript no longer quotes its fragment")
+open(sys.argv[3], "w").write(template.replace("${jsString(fragment)}", "__ID__"))
+PY
+
+# A 200px glyph, which is roughly what the book in the issue ships and about
+# twelve times the height of the line it sits in.
+marker=$(python3 -c '
+import base64
+svg = ("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"200\">"
+       "<circle cx=\"100\" cy=\"100\" r=\"95\" fill=\"#654321\"/></svg>")
+print("data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode())
+')
+
+emit() { sed "s|__MARKER__|$marker|g" >"$work/cases/$1"; }
+
+# The reporter's chapter: the note is an aside at the top of the document,
+# read before the sentence it glosses, and the marker is an image.
+emit inline-note.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh" xml:lang="zh">
+<head><title>t</title></head><body>
+<h1>引言</h1>
+<aside epub:type="footnote" id="n1"><p id="note-body">宾夕法尼亚州东北部城市，宾州的主要城市之一。——译者</p></aside>
+<p id="probe">宾夕法尼亚州的老福格镇有8000人口，位于斯克兰顿市<a epub:type="noteref" href="#n1" id="ref"><img id="marker" src="__MARKER__" alt="注"/></a>以南几十公里的地方。</p>
+<p>到2020年1月，即使是周三周四，也有不少人前来消费。</p>
+</body></html>
+EOF
+
+# The same thing said in the ARIA vocabulary, which plenty of converted books
+# use instead of the EPUB one.
+emit aria-note.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh" xml:lang="zh">
+<head><title>t</title></head><body>
+<div role="doc-footnote" id="n1"><p>The note, written where nobody wants to read it.</p></div>
+<p id="probe">A sentence that needs a gloss<a role="doc-noteref" href="#n1"><img id="marker" src="__MARKER__" alt="note"/></a> and then carries on.</p>
+</body></html>
+EOF
+
+# A chapter of endnotes: referenced from the chapters it serves, never from
+# itself, apart from the backlinks. Nothing here may be hidden.
+emit endnotes.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><title>t</title></head><body>
+<h1>Notes</h1>
+<aside epub:type="endnote" id="n1"><p>The first note, which somebody meant to be read. <a href="#ref1">↩</a></p></aside>
+<aside epub:type="endnote" id="n2"><p>The second note, likewise. <a href="#ref2">↩</a></p></aside>
+<aside epub:type="endnote" id="n3"><p>And a third, for good measure. <a href="#ref3">↩</a></p></aside>
+</body></html>
+EOF
+
+# The same chapter with a contents list at the top, so every note *is*
+# referenced from its own document. The majority guard is the only thing
+# standing between this page and being blank.
+emit endnotes-listed.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><title>t</title></head><body>
+<h1>Notes</h1>
+<ol><li><a href="#n1">1</a></li><li><a href="#n2">2</a></li><li><a href="#n3">3</a></li></ol>
+<aside epub:type="endnote" id="n1"><p>The first note, which somebody meant to be read, at some length so that it weighs more than the list pointing at it.</p></aside>
+<aside epub:type="endnote" id="n2"><p>The second note, likewise long enough to matter to the weighing, because a note nobody can see is a note nobody can read.</p></aside>
+<aside epub:type="endnote" id="n3"><p>And a third, for good measure, also of a length that a reader would recognise as the substance of the page.</p></aside>
+</body></html>
+EOF
+
+# An aside that is not a note at all. Nothing links to it, so nothing happens
+# to it — which is the entire reason the rule is written the way it is.
+emit pull-quote.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><title>t</title></head><body>
+<p>Some prose before the pull quote, long enough to be the bulk of the page by any measure at all.</p>
+<aside id="quote"><p>"A sentence the designer wanted in the margin."</p></aside>
+<p>And some prose after it, also long enough to count, so the page is mostly its own text.</p>
+</body></html>
+EOF
+
+# A marker pointing at a note in another file, which is how most EPUB 3 books
+# do it. There is nothing to hide here; the image still has to come down.
+emit cross-document.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><title>t</title></head><body>
+<p id="probe">A sentence<a epub:type="noteref" href="endnotes.xhtml#n1"><img id="marker" src="__MARKER__" alt="1"/></a> and its continuation.</p>
+</body></html>
+EOF
+
+# A plain cross-reference. Not a note by any spelling, so the image inside it
+# is the author's illustration and must be left at the size they chose.
+emit cross-reference.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><title>t</title></head><body>
+<section id="n1"><h2>Chapter Two</h2><p>An ordinary chapter, linked to from an ordinary link.</p></section>
+<p id="probe">See <a href="#n1"><img id="marker" src="__MARKER__" alt="chapter two"/></a> for more.</p>
+</body></html>
+EOF
+
+# A publisher who happens to have picked our names for their own markup. Their
+# aside is nobody's note — nothing links to it — so it must come through
+# untouched, and their attribute value must not be what hides it.
+emit publisher-markers.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head><title>t</title><style id="liseur-note-css">.liseur-note{color:#333}</style></head><body>
+<aside id="theirs" class="liseur-note" data-liseur-note="theirs"><p>Their aside, with their attribute on it.</p></aside>
+<aside epub:type="footnote" id="n1"><p>A real note.</p></aside>
+<p id="probe">Prose that is the bulk of the page, and rather more of it besides, so that the weighing of notes against text comes out the way a reader would expect it to and nothing is spared on a technicality. <a epub:type="noteref" href="#n1">1</a></p>
+<p>A second paragraph, for the same reason: the page has to be mostly its own words before any of this means anything at all.</p>
+</body></html>
+EOF
+
+cat >"$work/index.html" <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>running</title>
+<style>body{margin:0;font:12px monospace}#f{border:0;width:412px;height:820px}</style>
+</head><body>
+<iframe id="f"></iframe><pre id="out"></pre>
+<script>
+var NOTES = null, REVEAL = null;
+var results = [];
+function log(ok, name, detail) {
+  results.push((ok ? "PASS " : "FAIL ") + name + (detail ? "  [" + detail + "]" : ""));
+}
+function frame(caseName, fontSize, variant) {
+  return fetch("cases/" + caseName).then(function (r) { return r.text(); }).then(function (src) {
+    var base = "../readium-css/" + (variant || "cjk-horizontal") + "/";
+    var vars = "--USER__fontSize:" + fontSize + "%;--USER__view:readium-paged-on;";
+    var head =
+      '<link rel="stylesheet" href="' + base + 'ReadiumCSS-before.css"/>' +
+      '<style>:root,:root > body{overflow:visible !important}html,body{height:100%}</style>';
+    var tail = '<link rel="stylesheet" href="' + base + 'ReadiumCSS-after.css"/>';
+    src = src.replace("</head>", head + tail + "</head>")
+             .replace("<body>", '<body style="' + vars + '">');
+    src = src.replace(/<html([^>]*)>/, '<html$1 style="' + vars + '">');
+    var f = document.getElementById("f");
+    return new Promise(function (res) {
+      f.onload = function () { setTimeout(function () { res(f.contentWindow); }, 60); };
+      f.srcdoc = src;
+    });
+  });
+}
+function run(win) { return win.eval(NOTES); }
+function reveal(win, id) { return win.eval(REVEAL.replace("__ID__", JSON.stringify(id))); }
+function shown(win, sel) {
+  var el = win.document.querySelector(sel);
+  if (!el) return null;
+  return win.getComputedStyle(el).display !== "none";
+}
+function marker(win) {
+  var el = win.document.getElementById("marker");
+  if (!el) return null;
+  var line = parseFloat(win.getComputedStyle(el.parentElement).fontSize);
+  return { h: Math.round(el.getBoundingClientRect().height),
+           w: Math.round(el.getBoundingClientRect().width),
+           em: Math.round(line) };
+}
+function dom(win) { return win.document.body.innerHTML; }
+
+var TESTS = [];
+
+TESTS.push(function () {
+  return frame("inline-note.xhtml", 100).then(function (w) {
+    var before = marker(w), wasShown = shown(w, "#n1");
+    var r = run(w);
+    var after = marker(w);
+    log(wasShown, "the note really is in the page to begin with");
+    log(before.h > 100, "the marker really is oversized to begin with", before.h + "px");
+    log(r === "changed", "the pass reports the page moved", "got " + r);
+    log(!shown(w, "#n1"), "the referenced note is out of the page");
+    log(after.h <= after.em * 1.3, "the marker comes down to the line",
+        before.h + "px -> " + after.h + "px, line " + after.em + "px");
+    log(after.w > 0 && Math.abs(after.w - after.h) <= 2,
+        "the marker keeps its shape", after.w + "x" + after.h);
+  });
+});
+
+[100, 175].forEach(function (fs) {
+  TESTS.push(function () {
+    return frame("inline-note.xhtml", fs).then(function (w) {
+      run(w);
+      var m = marker(w);
+      log(m.h <= m.em * 1.3 && m.h > 0, "the marker follows the type size at " + fs + "%",
+          m.h + "px against a " + m.em + "px line");
+    });
+  });
+});
+
+TESTS.push(function () {
+  return frame("aria-note.xhtml", 100).then(function (w) {
+    run(w);
+    var m = marker(w);
+    log(!shown(w, "#n1"), "an aria note is hidden too");
+    log(m.h <= m.em * 1.3, "an aria marker comes down too", m.h + "px");
+  });
+});
+
+TESTS.push(function () {
+  return frame("endnotes.xhtml", 100).then(function (w) {
+    var r = run(w);
+    log(shown(w, "#n1") && shown(w, "#n2") && shown(w, "#n3"),
+        "a chapter of endnotes is left alone", "result " + r);
+  });
+});
+
+TESTS.push(function () {
+  return frame("endnotes-listed.xhtml", 100).then(function (w) {
+    run(w);
+    log(shown(w, "#n1") && shown(w, "#n2") && shown(w, "#n3"),
+        "a chapter that is mostly notes is left alone even when it links to them");
+  });
+});
+
+TESTS.push(function () {
+  return frame("pull-quote.xhtml", 100).then(function (w) {
+    run(w);
+    log(shown(w, "#quote"), "an aside nobody links to is not a note");
+  });
+});
+
+TESTS.push(function () {
+  return frame("cross-document.xhtml", 100).then(function (w) {
+    var before = marker(w);
+    run(w);
+    var after = marker(w);
+    log(after.h <= after.em * 1.3, "a marker for a note in another file comes down",
+        before.h + "px -> " + after.h + "px");
+  });
+});
+
+TESTS.push(function () {
+  return frame("cross-reference.xhtml", 100).then(function (w) {
+    var before = marker(w);
+    run(w);
+    var after = marker(w);
+    log(shown(w, "#n1"), "a chapter linked to is not a note");
+    log(after.h === before.h, "an illustration in a cross-reference keeps its size",
+        before.h + "px -> " + after.h + "px");
+  });
+});
+
+TESTS.push(function () {
+  return frame("inline-note.xhtml", 100).then(function (w) {
+    var r1 = run(w);
+    var afterRun1 = dom(w);
+    var installed = !!w.__liseurNotes && !!w.__liseurNotes.styleEl;
+    var r2 = run(w);
+    log(r1 === "changed", "run 1 reports changed", "got " + r1);
+    log(installed, "run 1 installs the stylesheet");
+    log(r2 === "stable", "run 2 reports stable", "got " + r2);
+    log(dom(w) === afterRun1, "run 2 leaves the dom as run 1 left it");
+  });
+});
+
+TESTS.push(function () {
+  return frame("endnotes.xhtml", 100).then(function (w) {
+    run(w);
+    log(run(w) === "stable", "an untouched page settles to stable");
+  });
+});
+
+TESTS.push(function () {
+  return frame("inline-note.xhtml", 100).then(function (w) {
+    run(w);
+    var hidden = !shown(w, "#n1");
+    var answer = reveal(w, "n1");
+    var back = shown(w, "#n1");
+    var r = run(w);
+    log(hidden, "hidden before the reader asked for it");
+    log(answer === "revealed", "the reveal says it found the note", "got " + answer);
+    log(back, "the note is on the page once it has been asked for");
+    log(shown(w, "#n1"), "and a later pass does not take it away again", "result " + r);
+  });
+});
+
+TESTS.push(function () {
+  return frame("inline-note.xhtml", 100).then(function (w) {
+    run(w);
+    log(reveal(w, "nothing-of-the-sort") === "absent",
+        "a fragment that is not there is reported, not assumed");
+  });
+});
+
+TESTS.push(function () {
+  return frame("publisher-markers.xhtml", 100).then(function (w) {
+    var r = run(w);
+    var theirs = w.document.getElementById("theirs");
+    log(!!w.__liseurNotes.styleEl, "installs despite an author id=liseur-note-css");
+    log(theirs.className === "liseur-note", "author classes untouched", theirs.className);
+    log(theirs.getAttribute("data-liseur-note") === "theirs",
+        "the author's own data-liseur-note value is left alone",
+        "attr " + theirs.getAttribute("data-liseur-note"));
+    log(w.getComputedStyle(theirs).display !== "none",
+        "and their aside is not hidden by their own attribute");
+    log(!shown(w, "#n1"), "while the note that really is one still goes",
+        "result " + r);
+  });
+});
+
+TESTS.push(function () {
+  return frame("inline-note.xhtml", 100, "").then(function (w) {
+    run(w);
+    log(!shown(w, "#n1"), "the default stylesheets behave the same way");
+  });
+});
+
+Promise.all([
+  fetch("notes.js").then(function (r) { return r.text(); }),
+  fetch("reveal.js").then(function (r) { return r.text(); })
+]).then(function (sources) {
+  NOTES = sources[0];
+  REVEAL = sources[1];
+  return TESTS.reduce(function (p, t) { return p.then(t); }, Promise.resolve());
+}).then(function () {
+  var failed = results.filter(function (r) { return r.indexOf("FAIL") === 0; }).length;
+  document.getElementById("out").textContent = results.join("\n");
+  document.title = failed === 0 ? "ALL PASS" : failed + " FAILED";
+}).catch(function (e) {
+  document.getElementById("out").textContent = "harness error: " + (e && e.stack || e);
+  document.title = "HARNESS ERROR";
+});
+</script></body></html>
+EOF
+
+(cd "$work" && exec python3 -m http.server "$PORT" >/dev/null 2>&1) &
+server=$!
+
+# Wait for the server rather than guessing at it, and make it prove the tree
+# it is serving is this one: a stale server left on the port would answer
+# every request with someone else's script, and every assertion below would
+# then be about the wrong thing.
+ready=false
+for _ in $(seq 1 50); do
+    status=0
+    python3 - "$PORT" "$work/notes.js" <<'PY' || status=$?
+import sys, urllib.request
+port, path = sys.argv[1], sys.argv[2]
+try:
+    served = urllib.request.urlopen("http://127.0.0.1:%s/notes.js" % port, timeout=1).read()
+except Exception:
+    sys.exit(1)
+sys.exit(0 if served == open(path, "rb").read() else 2)
+PY
+    case $status in
+        0)
+            ready=true
+            break
+            ;;
+        2)
+            die "port $PORT is serving another tree; try PORT=… "
+            ;;
+    esac
+    kill -0 "$server" 2>/dev/null ||
+        die "could not serve the harness on port $PORT; something else is using it (try PORT=…)"
+    sleep 0.2
+done
+$ready || die "the harness server never came up on port $PORT"
+
+"$browser" --headless=new --disable-gpu --no-sandbox \
+    --virtual-time-budget=20000 \
+    --user-data-dir="$work/chrome" \
+    --dump-dom "http://127.0.0.1:$PORT/index.html" \
+    >"$work/dump.html" 2>/dev/null
+
+python3 - "$work/dump.html" <<'PY'
+import html, re, sys
+page = open(sys.argv[1]).read()
+title = re.search(r"<title>(.*?)</title>", page, re.S)
+out = re.search(r'<pre id="out">(.*?)</pre>', page, re.S)
+title = title.group(1) if title else "?"
+print(html.unescape(out.group(1)) if out else "(the harness produced no output)")
+print()
+print(title)
+sys.exit(0 if title == "ALL PASS" else 1)
+PY

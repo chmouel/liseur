@@ -29,12 +29,6 @@ import org.jsoup.safety.Safelist
  */
 object FootnoteResolver {
 
-    /** `epub:type` words that name a note. */
-    private val NOTE_TYPES = setOf("footnote", "endnote", "rearnote", "note")
-
-    /** ARIA roles that name a note. */
-    private val NOTE_ROLES = setOf("doc-footnote", "doc-endnote")
-
     /**
      * The note identified by [fragment] in [html], or null if there is none.
      *
@@ -58,17 +52,19 @@ object FootnoteResolver {
     /**
      * Whether [element] is a note rather than somewhere the reader asked to go.
      *
-     * The element's children are not consulted: a chapter that happens to
-     * contain a note is not a note, and a note nested in a section is found
-     * by its id, never by looking down.
+     * The vocabulary itself lives in [NoteVocabulary], because the stylesheet
+     * injected into the page has to reach the same verdict about the same
+     * element; see there for why.
      */
     private fun isNote(element: Element): Boolean {
         // Jsoup lowercases attribute names but keeps the namespace prefix, so
         // the EPUB attribute survives as `epub:type`. `type` alone is the
         // shape it takes once a sanitiser has flattened the namespace.
         val epubType = element.attr("epub:type").ifEmpty { element.attr("type") }
-        if (epubType.split(' ').any { it.substringAfterLast(':') in NOTE_TYPES }) return true
-        if (element.attr("role").split(' ').any { it in NOTE_ROLES }) return true
-        return element.normalName() == "aside"
+        return NoteVocabulary.isNote(
+            epubType = epubType,
+            role = element.attr("role"),
+            tagName = element.normalName(),
+        )
     }
 }

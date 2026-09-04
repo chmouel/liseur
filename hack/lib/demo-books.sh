@@ -198,7 +198,19 @@ fetch_books() {
     fi
     mv "$file.part" "$file"
   done
+
+  # And one book nobody published: a reproducer for the notes in issue #152,
+  # which the shelf above cannot provide because Standard Ebooks mark their
+  # notes up correctly. Rebuilt every time, so a change to the fixture is on
+  # the device the next time the shelf is seeded.
+  note "building the notes fixture"
+  "$REPO_ROOT/hack/make-notes-book" "$CACHE_DIR/liseur_notes-fixture.epub" >/dev/null ||
+    die "could not build the notes fixture book"
 }
+
+# What the shelf should hold once it has been scanned: the downloaded books
+# and the fixture built alongside them.
+expected_books() { echo $((${#DEMO_BOOKS[@]} + 1)); }
 
 push_books() {
   adb shell mkdir -p "$DEVICE_BOOKS"
@@ -206,7 +218,7 @@ push_books() {
   for file in "$CACHE_DIR"/*.epub; do
     adb push "$file" "$DEVICE_BOOKS/" >/dev/null
   done
-  note "${#DEMO_BOOKS[@]} books in $DEVICE_BOOKS"
+  note "$(expected_books) books in $DEVICE_BOOKS"
 }
 
 # Grant the folder through the real picker, because there is no other way
@@ -246,11 +258,12 @@ grant_folder() {
   # which does nothing and loses the folder.
   tap_on "ALLOW" exact
   note "waiting for the shelf to fill"
-  local waited=0 count=0
+  local waited=0 count=0 wanted
+  wanted=$(expected_books)
   while ((waited < 90)); do
     count=$(adb shell "run-as $APP_ID sqlite3 /data/data/$APP_ID/databases/liseur.db \
             'select count(*) from books;'" 2>/dev/null | tr -d '\r')
-    ((count >= ${#DEMO_BOOKS[@]})) && break
+    ((count >= wanted)) && break
     sleep 5
     waited=$((waited + 5))
   done

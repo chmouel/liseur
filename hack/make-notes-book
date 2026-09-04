@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""Builds the notes fixture book (issue #152).
+
+A reproducer, not a demo. The shelf of Standard Ebooks that `make reset`
+seeds is beautifully made, which is exactly why none of it reproduces this:
+those books mark their notes up the way a reading system expects, and the
+bug is about the ones that do not.
+
+So this book is written to be badly behaved in the two specific ways the
+reporter's edition is, and well behaved everywhere else, so that a fix can
+be seen to work on the first without touching the second:
+
+  * chapter one puts a translator's note in an `<aside epub:type="footnote">`
+    at the top of the document, before the paragraph that refers to it, and
+    marks the reference with a 200-pixel image;
+  * chapter two does the same in the ARIA vocabulary, and adds an aside that
+    is a pull quote rather than a note, which nothing links to;
+  * the endnotes chapter is a chapter somebody meant to be read, with a
+    contents list at the top pointing at every note in it, which is the
+    shape that a careless rule blanks entirely.
+
+Chinese, because that is the book in the issue and because it sends Readium
+down its CJK stylesheets, which nothing else here exercises.
+
+    hack/make-notes-book [PATH]
+
+Writes to tmp/books/liseur_notes-fixture.epub by default.
+"""
+
+import os
+import subprocess
+import sys
+import zipfile
+
+TITLE = "注释与脚注（Notes fixture）"
+AUTHOR = "Liseur"
+# Fixed, so that rebuilding the book does not make the library treat it as a
+# different one and lose whatever position was on it.
+BOOK_ID = "urn:uuid:9f2a1c34-5f7e-4a51-9a2e-liseur-notes-152"
+
+MARKER_SVG = """<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="94" fill="#6d5a4a"/>
+  <text x="100" y="136" font-size="120" text-anchor="middle" fill="#f4ece2"
+        font-family="serif">注</text>
+</svg>
+"""
+
+# Deliberately says nothing about the marker's size. A publisher who sized it
+# would have hidden the bug, and the point of this book is not to.
+CSS = """@charset "utf-8";
+body { margin: 0 5%; line-height: 1.6; }
+h1 { text-align: center; margin: 2em 0 1em; }
+p { text-indent: 2em; margin: 0.6em 0; }
+aside p { text-indent: 0; }
+ol { padding-left: 2em; }
+"""
+
+CONTAINER = """<?xml version="1.0" encoding="utf-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="EPUB/package.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+"""
+
+PACKAGE = f"""<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" xml:lang="zh"
+         unique-identifier="pub-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="pub-id">{BOOK_ID}</dc:identifier>
+    <dc:title>{TITLE}</dc:title>
+    <dc:creator>{AUTHOR}</dc:creator>
+    <dc:language>zh</dc:language>
+    <dc:description>A reproducer for issue #152: notes in the page and a marker drawn at its natural size.</dc:description>
+    <meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="css" href="style.css" media-type="text/css"/>
+    <item id="marker" href="zhu.svg" media-type="image/svg+xml"/>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="notes" href="notes.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+    <itemref idref="notes"/>
+  </spine>
+</package>
+"""
+
+NAV = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"
+      lang="zh" xml:lang="zh">
+<head><meta charset="utf-8"/><title>目录</title></head>
+<body>
+<nav epub:type="toc" id="toc">
+  <h1>目录</h1>
+  <ol>
+    <li><a href="ch1.xhtml">引言</a></li>
+    <li><a href="ch2.xhtml">第二章</a></li>
+    <li><a href="notes.xhtml">注释</a></li>
+  </ol>
+</nav>
+</body>
+</html>
+"""
+
+# The reporter's chapter. The note is above the text it belongs to, and the
+# marker is an image with no size on it.
+CH1 = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"
+      lang="zh" xml:lang="zh">
+<head><meta charset="utf-8"/><title>引言</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<h1>引言</h1>
+<aside epub:type="footnote" id="n1">
+  <p>宾夕法尼亚州东北部城市，宾州的主要城市之一。——译者</p>
+</aside>
+<aside epub:type="footnote" id="n2">
+  <p>一种以慢火炖煮的家常菜，在当地餐馆几乎家家都有。——译者</p>
+</aside>
+<p>宾夕法尼亚州的老福格镇有8000人口，位于斯克兰顿市<a epub:type="noteref"
+   href="#n1" id="ref1"><img src="zhu.svg" alt="注"/></a>以南几十公里的地方，
+   人们大多在附近的仓库和医院上班。</p>
+<p>三十四岁的库苏马诺身体健壮，他从上小学的时候开始学着做饭。妻子尼娜比他小两岁，
+   十六岁就开始在餐厅干活了。店里最受欢迎的一道菜<a epub:type="noteref"
+   href="#n2" id="ref2"><img src="zhu.svg" alt="注"/></a>从开张那天卖到现在。</p>
+<p>到2020年1月，即使是周三周四，也有不少人前来消费，这种好日子一直持续到2月。
+   那年的情人节恰好是星期五，那天晚上可能是这家餐厅开业七年多来生意最好的周五之夜。</p>
+</body>
+</html>
+"""
+
+# The same fault in the ARIA vocabulary, plus an aside that is not a note at
+# all and must come through the fix untouched.
+CH2 = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"
+      lang="zh" xml:lang="zh">
+<head><meta charset="utf-8"/><title>第二章</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<h1>第二章</h1>
+<div role="doc-footnote" id="a1">
+  <p>指1929年开始的经济大萧条。——译者</p>
+</div>
+<p>那家店开在镇上唯一一条主街的尽头，招牌是父辈留下来的。他们经历过那段最难的日子
+   <a role="doc-noteref" href="#a1"><img src="zhu.svg" alt="注"/></a>，
+   也熬过了后来的每一次。</p>
+<aside id="pull-quote">
+  <p>“我们不是在做生意，我们是在喂饱邻居。”</p>
+</aside>
+<p>这句话被印在菜单的背面，客人一边等菜一边把它读上好几遍。多年以后，镇上的人还记得
+   这家店在停业那天贴出的告示，和告示下面摆着的一小束花。</p>
+<p>后面还有一段文字，好让这一章不只是注释和引文，读起来像真正的一章。这一段没有任何
+   注释，也没有任何链接，它就是正文本身。</p>
+</body>
+</html>
+"""
+
+# A chapter of endnotes that somebody meant to be read, with a contents list
+# pointing at every note in it. A rule that hides whatever is linked to would
+# leave this page blank.
+NOTES = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"
+      lang="zh" xml:lang="zh">
+<head><meta charset="utf-8"/><title>注释</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+<h1>注释</h1>
+<ol>
+  <li><a href="#e1">关于镇名的由来</a></li>
+  <li><a href="#e2">关于那条主街</a></li>
+  <li><a href="#e3">关于那束花</a></li>
+</ol>
+<aside epub:type="endnote" id="e1">
+  <p>镇名来自十九世纪末在此定居的一户人家，他们的姓氏后来成了整片山谷的名字，
+     至今仍写在镇公所门口的铜牌上。</p>
+</aside>
+<aside epub:type="endnote" id="e2">
+  <p>主街原本是一条运煤的土路，铺上石板是1911年的事，镇志里保留着当年的账目，
+     连每一车石头的价钱都记得清清楚楚。</p>
+</aside>
+<aside epub:type="endnote" id="e3">
+  <p>花是隔壁花店送的，店主在告示贴出来的第二天早上放在门口，没有留下名字，
+     后来是别人认出了包花的纸。</p>
+</aside>
+</body>
+</html>
+"""
+
+FILES = {
+    "META-INF/container.xml": CONTAINER,
+    "EPUB/package.opf": PACKAGE,
+    "EPUB/nav.xhtml": NAV,
+    "EPUB/style.css": CSS,
+    "EPUB/zhu.svg": MARKER_SVG,
+    "EPUB/ch1.xhtml": CH1,
+    "EPUB/ch2.xhtml": CH2,
+    "EPUB/notes.xhtml": NOTES,
+}
+
+
+def default_path() -> str:
+    root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return os.path.join(root, "tmp", "books", "liseur_notes-fixture.epub")
+
+
+def build(path: str) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".part"
+    # The mimetype entry has to be first and stored uncompressed, or the file
+    # is not an EPUB however well-formed everything after it is.
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as book:
+        book.writestr(
+            zipfile.ZipInfo("mimetype"), "application/epub+zip",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        for name, text in FILES.items():
+            book.writestr(name, text)
+    os.replace(tmp, path)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 2:
+        sys.exit(__doc__)
+    target = sys.argv[1] if len(sys.argv) == 2 else default_path()
+    build(target)
+    print(target)

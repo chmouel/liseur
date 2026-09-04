@@ -76,4 +76,4 @@ push_books
 step "Granting the folder"
 grant_folder
 
-printf '\nDone. %s books on the shelf.\n' "${#DEMO_BOOKS[@]}"
+printf '\nDone. %s books on the shelf.\n' "$(expected_books)"
