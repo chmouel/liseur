@@ -457,7 +457,15 @@ fun ReaderScreen(
     // Consumed, so nothing else acts on the touch, but committing
     // nothing, because what the gesture means is not settled (ADR 22).
     var pinchHeld by remember { mutableStateOf(false) }
-    val pinchToResizeNow by rememberUpdatedState(pinchToResize)
+    // Off on electronic paper, whatever the setting says. Every step of
+    // a pinch resize reflows the book and repaints the page, and a panel
+    // that takes a tenth of a second to do that turns one requested size
+    // into a strobe of six on the way to it. Read from [LocalEInk] and
+    // not from `isEInkDevice()`, so that the reader who is on a panel we
+    // failed to recognise — or not on one we wrongly did — gets the
+    // gesture back by setting E-ink mode themselves. That is the only
+    // reason the mode keeps a manual override (ADR 22).
+    val pinchToResizeNow by rememberUpdatedState(pinchToResize && !LocalEInk.current)
     val fontSizeNow by rememberUpdatedState(prefs.fontSize)
     val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
     val touch = remember { TouchProbe() }
@@ -2399,7 +2407,9 @@ fun ReaderScreen(
         // Last of all: a picture asked for full screen is the thing the
         // reader is looking at, and everything else in the box is what
         // they asked to be shown it over.
-        viewedImage?.let { ImageViewer(image = it, onDismiss = { viewedImage = null }) }
+        viewedImage?.let {
+            ImageViewer(image = it, theme = readingTheme, onDismiss = { viewedImage = null })
+        }
     }
 
     // Letting a selection go from our own bar rather than from the page.

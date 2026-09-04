@@ -130,11 +130,25 @@ fun ReadingNavigationScreen(
                         onSelected = onTapZones,
                     )
                     RowDivider()
+                    // The switch stays visible rather than disappearing
+                    // on e-paper: a row that is simply gone reads as a
+                    // setting the app never had, and this one is off for
+                    // a reason worth giving. The way back is the E-ink
+                    // row in the group below, which is on the same
+                    // screen.
+                    val pinchOffForEInk = LocalEInk.current
                     SwitchRow(
                         title = stringResource(R.string.settings_pinch_to_resize),
-                        subtitle = stringResource(R.string.settings_pinch_to_resize_detail),
-                        checked = settings.pinchToResize,
+                        subtitle = stringResource(
+                            if (pinchOffForEInk) {
+                                R.string.settings_pinch_to_resize_eink
+                            } else {
+                                R.string.settings_pinch_to_resize_detail
+                            },
+                        ),
+                        checked = settings.pinchToResize && !pinchOffForEInk,
                         onCheckedChange = onPinchToResize,
+                        enabled = !pinchOffForEInk,
                     )
                     RowDivider()
                     SwitchRow(

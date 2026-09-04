@@ -82,3 +82,55 @@ object ImageZoom {
         return contentW * ratio to contentH * ratio
     }
 }
+
+/**
+ * A pinch or a pan that is being counted rather than drawn.
+ *
+ * On electronic paper the viewer does not follow the fingers: writing
+ * `scale` and the two translations on every pointer change is one
+ * full-screen repaint per frame, and a panel that takes a tenth of a
+ * second to repaint answers a two-second gesture with a smear. So the
+ * gesture is accumulated here and applied once when the last finger
+ * leaves — the same commit-on-lift bargain [PinchResize] already makes
+ * for the page. See `docs/adr/0022-pinch-on-the-page.md`.
+ *
+ * The fields are what the viewer will be set to, not the movement since
+ * the last frame: [fold] starts from where the picture already is, so
+ * the value is always a complete answer and the lift has nothing to
+ * work out.
+ *
+ * Nothing is clamped to the viewport on the way through, only on the
+ * way out, because the bounds depend on a drawn size that moves with
+ * the scale. A gesture that runs past the edge and comes back therefore
+ * banks the overshoot, which on a screen showing none of this is not
+ * something the reader can be pushing against.
+ */
+data class PendingTransform(
+    val scale: Float,
+    val offsetX: Float,
+    val offsetY: Float,
+    val travelDown: Float = 0f,
+) {
+    /**
+     * This gesture with one more frame of [zoom] and pan folded into it.
+     *
+     * The downward travel is counted only while the picture is at fit on
+     * both sides of the frame, exactly as the drawn path counts it: a
+     * drag on a zoomed-in plate is how the reader reads the far corner
+     * of it, not how they put it away.
+     */
+    fun fold(zoom: Float, panX: Float, panY: Float): PendingTransform {
+        val next = ImageZoom.clampScale(scale * zoom)
+        val stayedAtFit = ImageZoom.atFit(scale) && ImageZoom.atFit(next)
+        return PendingTransform(
+            scale = next,
+            offsetX = offsetX + panX,
+            offsetY = offsetY + panY,
+            travelDown = if (stayedAtFit) ImageZoom.dragTravel(travelDown, panY) else 0f,
+        )
+    }
+
+    /** Whether the gesture asked, by dragging [travel] downwards, to be done. */
+    fun dismisses(travel: Float): Boolean = travelDown > travel
+}
+

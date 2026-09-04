@@ -90,3 +90,71 @@ class ImageZoomTest {
         assertEquals(30f, travelled, 0.01f)
     }
 }
+
+/**
+ * The gesture that is counted rather than drawn, on electronic paper.
+ *
+ * The arithmetic tested here is the whole of what a pinch does on such a
+ * panel: nothing is written to the screen until the last of it, so a
+ * mistake in the accumulation is a picture that jumps somewhere the
+ * fingers never went.
+ */
+class PendingTransformTest {
+
+    private fun start(scale: Float = ImageZoom.MIN_SCALE) =
+        PendingTransform(scale = scale, offsetX = 0f, offsetY = 0f)
+
+    @Test
+    fun `a pinch out and back again commits nothing`() {
+        val done = start(2f).fold(1.5f, 0f, 0f).fold(1f / 1.5f, 0f, 0f)
+        assertEquals(2f, done.scale, 1e-4f)
+    }
+
+    @Test
+    fun `pan accumulates across the frames of one gesture`() {
+        var gesture = start(3f)
+        repeat(10) { gesture = gesture.fold(1f, 4f, -2f) }
+        assertEquals(40f, gesture.offsetX, 0.01f)
+        assertEquals(-20f, gesture.offsetY, 0.01f)
+    }
+
+    @Test
+    fun `the committed scale is held inside the same bounds as the drawn one`() {
+        var gesture = start()
+        repeat(20) { gesture = gesture.fold(2f, 0f, 0f) }
+        assertEquals(ImageZoom.MAX_SCALE, gesture.scale, 1e-4f)
+        repeat(40) { gesture = gesture.fold(0.5f, 0f, 0f) }
+        assertEquals(ImageZoom.MIN_SCALE, gesture.scale, 1e-4f)
+    }
+
+    @Test
+    fun `a long drag down on a fitted picture asks to be put away`() {
+        var gesture = start()
+        repeat(10) { gesture = gesture.fold(1f, 0f, 20f) }
+        assertTrue(gesture.dismisses(96f))
+    }
+
+    @Test
+    fun `a hand that wanders down and comes back has asked for nothing`() {
+        var gesture = start()
+        repeat(10) { gesture = gesture.fold(1f, 0f, 20f) }
+        repeat(10) { gesture = gesture.fold(1f, 0f, -20f) }
+        assertFalse(gesture.dismisses(96f))
+    }
+
+    @Test
+    fun `dragging a zoomed-in picture reads the corner rather than dismissing`() {
+        var gesture = start(3f)
+        repeat(10) { gesture = gesture.fold(1f, 0f, 20f) }
+        assertEquals(0f, gesture.travelDown, 0.01f)
+        assertFalse(gesture.dismisses(96f))
+    }
+
+    @Test
+    fun `zooming in mid-drag takes the travel off again`() {
+        var gesture = start()
+        repeat(10) { gesture = gesture.fold(1f, 0f, 20f) }
+        gesture = gesture.fold(2f, 0f, 20f)
+        assertEquals(0f, gesture.travelDown, 0.01f)
+    }
+}
