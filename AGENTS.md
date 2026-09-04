@@ -35,6 +35,24 @@ make stop                            # stop the selected emulator
 make shutdown                        # shut down the selected emulator
 ```
 
+For trying a change on a phone that already has the real app on it,
+there is a second build with its own package name:
+
+```bash
+make dev                             # build the side-by-side APK
+make dev-install                     # install it beside the real app
+make dev-run                         # install it and launch it
+make dev-uninstall                   # remove it
+make dev-logcat                      # tail its logs
+```
+
+It is the debug build in every respect but two: it is
+`com.chmouel.liseur.dev`, and it says "Liseur (dev)" under a differently
+tinted icon. The package name is the point — it gets its own database,
+its own settings and its own folder grant, so it cannot reach the
+installed app's library, and it opens empty the first time. `release` is
+untouched by all of this, so F-Droid's rebuild is unaffected.
+
 The default AVD is `liseur_phone_api36`. Override it when needed:
 
 ```bash
@@ -61,6 +79,12 @@ uninstall the app, clear its storage, or write to its database on a
 real device without asking first.** A reading position, a highlight and
 a half-finished note are not reproducible, and an unlucky
 `adb install -r` takes them.
+
+`make dev-install` is the way to put a change on a phone without asking
+that question: it carries its own package name, so it lands next to the
+real app instead of over it. It is still an install on somebody's
+device, so it is still worth saying you are about to do it — but nothing
+it does can reach the library that matters.
 
 When several devices are attached, always pass `-s` / `SERIAL=` rather
 than letting `adb` choose. `adb devices` reports emulators as

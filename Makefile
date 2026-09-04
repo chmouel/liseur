@@ -12,7 +12,16 @@ PACKAGE := com.chmouel.liseur
 ACTIVITY := $(PACKAGE)/.MainActivity
 DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
 
-.PHONY: help build debug release bundle test lint check verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status
+# The side-by-side build, for trying a change on a phone that already has
+# the real app on it. The component name is spelled out rather than
+# abbreviated to `.MainActivity`, because that shorthand is relative to
+# the application id and the dev build's no longer matches the namespace
+# the class lives in.
+DEV_PACKAGE := $(PACKAGE).dev
+DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
+DEV_APK := app/build/outputs/apk/dev/app-dev.apk
+
+.PHONY: help build debug release bundle test lint check verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status dev dev-install dev-run dev-uninstall dev-logcat
 
 help:
 	@printf '%s\n' \
@@ -32,6 +41,11 @@ help:
 		'make run-bg            Start the emulator, install, and launch without scrcpy' \
 		'make reset             Reinstall the app, wipe its storage, and reseed a demo library' \
 		'make clean             Remove build outputs' \
+		'make dev               Build the side-by-side APK ($(DEV_PACKAGE))' \
+		'make dev-install       Build and install it beside the real app' \
+		'make dev-run           Install it and launch it' \
+		'make dev-uninstall     Remove it' \
+		'make dev-logcat        Tail its logs' \
 		'make screenshots       Capture the UI screenshots' \
 		'make icon              Generate the store icon' \
 		'make feature-graphic   Generate the store feature graphic' \
@@ -101,6 +115,33 @@ run: run-bg
 
 reset: run-bg
 	./hack/reset-books -s $(SERIAL)
+
+# The side-by-side build. Everything above installs over whatever carries
+# the production package name, which on a phone is somebody's library; the
+# targets below carry their own package name and cannot reach it. The
+# device is still chosen with SERIAL= like everywhere else, and still
+# defaults to the emulator.
+dev:
+	$(GRADLE) assembleDev
+
+dev-install: dev
+	$(ADB) $(ADB_TARGET) install -r '$(DEV_APK)'
+
+dev-run: dev-install
+	$(ADB) $(ADB_TARGET) shell am start -n '$(DEV_ACTIVITY)'
+
+dev-uninstall:
+	$(ADB) $(ADB_TARGET) uninstall '$(DEV_PACKAGE)'
+
+# Filtered by pid rather than by tag: the app logs under a dozen of them,
+# and the pid is the one thing that says "this build and not the other".
+dev-logcat:
+	@pid=$$($(ADB) $(ADB_TARGET) shell pidof '$(DEV_PACKAGE)' 2>/dev/null | tr -d '\r' | awk '{print $$1}'); \
+	if [ -z "$$pid" ]; then \
+		printf 'error: %s is not running; start it with make dev-run\n' '$(DEV_PACKAGE)' >&2; \
+		exit 1; \
+	fi; \
+	$(ADB) $(ADB_TARGET) logcat --pid="$$pid"
 
 screenshots:
 	./hack/screenshots

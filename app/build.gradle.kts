@@ -79,6 +79,26 @@ android {
         debug {
             isMinifyEnabled = false
         }
+        // A build that installs *beside* the real app rather than over
+        // it. The debug build carries the production applicationId, so
+        // pushing a work in progress to a phone replaces a library —
+        // reading positions, highlights, notes — that cannot be rebuilt.
+        // The suffix gives this one its own package name, and with it
+        // its own database, DataStore and SAF grant, so the installed
+        // app is never touched.
+        //
+        // Only the id and the label differ: it is the debug build in
+        // every other respect, debug-signed and unminified, so what is
+        // tested here behaves the way `make run` behaves on the
+        // emulator. `release` is deliberately not its base — F-Droid
+        // rebuilds that one byte for byte, and nothing here should be
+        // able to reach it.
+        create("dev") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            isMinifyEnabled = false
+        }
     }
 
     compileOptions {

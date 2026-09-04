@@ -18,7 +18,7 @@ Manager package list).
 ./gradlew bundleRelease    # minified release AAB, for Google Play only
 ```
 
-Output APKs land in `app/build/outputs/apk/{debug,release}/`, and the
+Output APKs land in `app/build/outputs/apk/{debug,dev,release}/`, and the
 bundle in `app/build/outputs/bundle/release/`.
 
 The debug build is signed with the standard Android debug key, so
@@ -26,6 +26,52 @@ The debug build is signed with the standard Android debug key, so
 sideloading. The release build is unsigned by default so the project
 builds out of the box on any machine/CI; see below if you want a signed
 release build.
+
+### The dev build, for testing on a phone you use
+
+The debug build carries the production `applicationId`, so installing it
+on a phone that already has Liseur on it *replaces* Liseur. The library
+that goes with it — reading positions, highlights, notes, sessions —
+does not come back.
+
+The `dev` build type exists so that does not have to happen:
+
+```bash
+make dev             # ./gradlew assembleDev
+make dev-install     # adb install -r, beside the real app
+make dev-run         # install and launch
+make dev-uninstall
+make dev-logcat      # logcat filtered to its pid
+```
+
+It is the debug build with two differences, both deliberate:
+
+- `applicationId` is `com.chmouel.liseur.dev`. Android keys an app's
+  storage off that, so the dev build gets its own Room database, its own
+  DataStore and its own SAF grant. It cannot read or damage the real
+  app's library, and the first thing it will ask for is a folder,
+  because it genuinely has none. Connecting a server is likewise a fresh
+  connection, with its own device key.
+- The launcher name is "Liseur (dev)" and the icon field is retinted, so
+  the two are told apart before either is opened. That is the whole of
+  `app/src/dev/res/`.
+
+The APK lands in `app/build/outputs/apk/dev/app-dev.apk`, debug-signed
+like `app-debug.apk`.
+
+`release` is not involved anywhere in this, which is the point: F-Droid
+rebuilds that build type byte for byte from the tag, and nothing here
+changes what it produces. `debug` is not involved either, so
+`make install`, `make run`, `make reset`, `hack/screenshots`,
+`hack/e2e-*` and the scenarios under `tests/` keep the package name they
+hardcode and go on working against the emulator unchanged.
+
+One thing to watch if you drive it by hand: `adb shell am start -n
+com.chmouel.liseur.dev/.MainActivity` does *not* work. The `.Class`
+shorthand is relative to the application id, and the dev build's no
+longer matches the namespace the class lives in, so the component has to
+be spelled `com.chmouel.liseur.dev/com.chmouel.liseur.MainActivity`.
+The Makefile already does.
 
 ### Signing a release build (optional)
 

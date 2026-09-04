@@ -1,0 +1,7 @@
+<resources>
+    <!-- The field behind the launcher and splash artwork, in a colour
+         the real app never wears. The two icons sit next to each other
+         on the launcher, and a name under an identical mark is not a
+         difference you notice before tapping the wrong one. -->
+    <color name="logo_field">#B7D5E4</color>
+</resources>
