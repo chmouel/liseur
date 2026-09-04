@@ -782,6 +782,37 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a sitting refused for a reason this app does not know stays pending`() = runTest {
+        // Naming the item is not proof it is at fault. A code this app
+        // has never seen may well be temporary, so the sitting is left
+        // where it is rather than set aside for good.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val good = closedSession(from = 0.1, to = 0.4)
+        val named = closedSession(from = 0.4, to = 0.5)
+        val namedWire = SessionUploads.sessionIdFor("device-a", named)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            MockResponse(
+                code = 400,
+                body = """{"error":"session $namedWire: the shelf is full for now",
+                    "code":"quota_exhausted","session_id":"$namedWire","item_index":1}
+                """.trimIndent(),
+            ),
+        )
+
+        val outcome = sync().syncAll(null)
+
+        // Nothing sent, nothing set aside, and said so.
+        assertEquals(1, requests().count { it.target.startsWith("/v1/sessions") })
+        assertTrue(db.sessionRefusalDao().forPeer(peer()).isEmpty())
+        assertNull(db.readingSessionDao().get(good)?.uploadedAt)
+        assertNull(db.readingSessionDao().get(named)?.uploadedAt)
+        assertTrue(outcome !is SyncOutcome.Success)
+    }
+
+    @Test
     fun `a refusal that names no item is bisected down to the one it means`() = runTest {
         // An older server refuses in prose. Bisecting finds the sitting
         // without ever marking a good one as sent.
@@ -1002,6 +1033,90 @@ class LiseurSyncPositionSyncTest {
         // Same id: the refused batch was never stored, so it is free.
         assertEquals(opId, retried.getString("op_id"))
         assertEquals(1L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `a positions batch the server will not take whole is cut up`() = runTest {
+        // The server's item limit is configurable and may sit below the
+        // 500 this app sends. Before, the identical batch went again
+        // every run and neither position ever landed.
+        connect()
+        db.bookDao().upsert(local())
+        db.bookDao().upsert(local().copy(url = LOCAL2, lastOpenedAt = NOW - 1))
+        alias()
+        alias(workId = "w-2", bookUrl = LOCAL2)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL2, LOCATOR, 0.5, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            MockResponse(
+                code = 400,
+                body = """{"error":"batch too large","code":"batch_too_large","limit":1}""",
+            ),
+        )
+        // Named for both works, so the answer fits whichever op the
+        // cut-up batch sends first.
+        val both = json(
+            """{"results":[
+                {"op_id":"${SyncOps.opIdFor("device-a", "w-1", 1)}","status":"applied"},
+                {"op_id":"${SyncOps.opIdFor("device-a", "w-2", 1)}","status":"applied"}]}
+            """.trimIndent(),
+        )
+        server.enqueue(both)
+        server.enqueue(both)
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val pushes = requests().filter { it.target.startsWith("/v1/ops") }
+        assertEquals(3, pushes.size)
+        assertEquals(2, JSONObject(pushes[0].body!!.utf8()).getJSONArray("ops").length())
+        assertEquals(1, JSONObject(pushes[1].body!!.utf8()).getJSONArray("ops").length())
+        assertEquals(1, JSONObject(pushes[2].body!!.utf8()).getJSONArray("ops").length())
+        assertEquals(1L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+        assertEquals(1L, db.syncPeerStateDao().get(LOCAL2, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `a lone position too big for the server goes without its locator`() = runTest {
+        // A body past the byte bound is a 413 with no code to it. The
+        // locator is the only part of an op with any size, so it is
+        // what goes.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        val opId = SyncOps.opIdFor("device-a", "w-1", 1)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 413, body = """{"error":"request body too large"}"""))
+        accepted()
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val pushes = requests().filter { it.target.startsWith("/v1/ops") }
+        assertEquals(2, pushes.size)
+        val retried = JSONObject(pushes[1].body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+        assertFalse(retried.has("locator"))
+        assertEquals(opId, retried.getString("op_id"))
+        assertEquals(1L, db.syncPeerStateDao().get(LOCAL, peer())?.ackedRevision)
+    }
+
+    @Test
+    fun `a position refused even bare is reported rather than asked for ever`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        val tooBig = MockResponse(code = 413, body = """{"error":"request body too large"}""")
+        server.enqueue(tooBig) // with its locator
+        server.enqueue(tooBig) // and without
+
+        assertTrue(sync().syncAll(null) !is SyncOutcome.Success)
+
+        // It stops there rather than going round again: nothing else in
+        // an op can be made smaller.
+        assertEquals(2, requests().count { it.target.startsWith("/v1/ops") })
+        assertNull(db.syncPeerStateDao().get(LOCAL, peer())?.takeIf { it.ackedRevision > 0 })
     }
 
     @Test

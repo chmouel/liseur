@@ -926,11 +926,19 @@ class LiseurSyncPositionSync(
     ): Int {
         var pushed = 0
         val queue = ArrayDeque(pushes.chunked(SyncOps.MAX_BATCH))
+        var requests = 0
         while (queue.isNotEmpty()) {
             // A recovery in the middle of this may have discovered the
             // server has gone quiet. Retrying then costs another whole
             // connect timeout and learns nothing.
             if (trouble.unreachable != null) return pushed
+            // The same bound the sessions have, and for the same
+            // reason: taking a batch apart is a few rounds, and a
+            // server refusing every piece of it will not relent.
+            if (++requests > MAX_PUSH_REQUESTS) {
+                trouble.refused(SyncFailure.ServerError(LiseurSyncHttp.BAD_REQUEST))
+                return pushed
+            }
             val batch = queue.removeFirst()
             // A null answer means a recovery rebuilt the batch and it
             // goes back on the queue: nothing from the rejected request
@@ -943,12 +951,17 @@ class LiseurSyncPositionSync(
                         "ops",
                         JSONArray().apply { batch.forEach { put(SyncOps.toJson(it.op)) } },
                     ),
-                    expected = setOf(LiseurSyncHttp.BAD_REQUEST),
+                    expected = PUSH_REFUSALS,
                 )
             } catch (rejection: LiseurSyncRejection) {
                 when (val recovery = recoverPush(account, batch, rejection, recovered, trouble)) {
                     is PushRecovery.Retry -> {
                         if (recovery.batch.isNotEmpty()) queue.addFirst(recovery.batch)
+                        null
+                    }
+
+                    is PushRecovery.Requeue -> {
+                        recovery.batches.reversed().forEach(queue::addFirst)
                         null
                     }
 
@@ -1019,6 +1032,9 @@ class LiseurSyncPositionSync(
         /** Retry these instead of the rejected batch. */
         data class Retry(val batch: List<PendingPush>) : PushRecovery
 
+        /** Send these in place of the rejected batch, in order. */
+        data class Requeue(val batches: List<List<PendingPush>>) : PushRecovery
+
         /** Not a refusal recovery answers; the caller fails the old way. */
         data object Ordinary : PushRecovery
 
@@ -1045,6 +1061,14 @@ class LiseurSyncPositionSync(
      * The op goes again without its locator and under the same id — the
      * refused batch was never stored — so the other device reopens the
      * book at a percentage rather than not at all.
+     *
+     * A batch refused for its size is the third. The server's item
+     * limit and its byte bound are both configurable and either may sit
+     * below what this app sends, so the batch is cut — to the limit the
+     * server named, or in half when it named none — and the pieces go
+     * in its place. A lone op the server still will not take whole is
+     * carrying its locator, which is the only part of an op with any
+     * size to it, so it goes bare like a named locator refusal.
      */
     private suspend fun recoverPush(
         account: Account,
@@ -1053,6 +1077,21 @@ class LiseurSyncPositionSync(
         recovered: MutableSet<String>,
         trouble: Trouble,
     ): PushRecovery {
+        if (rejection.code == LiseurSyncHttp.TOO_LARGE ||
+            rejection.errorCode == LiseurSyncRejection.BATCH_TOO_LARGE
+        ) {
+            if (batch.size > 1) {
+                val room = rejection.limit?.takeIf { it < batch.size } ?: (batch.size / 2)
+                Log.i(TAG, "The server will not take ${batch.size} positions at once; sending ${room.coerceAtLeast(1)} at a time")
+                return PushRecovery.Requeue(batch.chunked(room.coerceAtLeast(1)))
+            }
+            val lone = batch.single()
+            // Nothing else in an op has any size to it, so a lone op
+            // still refused bare is a bound this app cannot get under.
+            if (lone.op.locatorJson == null) return PushRecovery.Ordinary
+            Log.i(TAG, "The server will not take op ${lone.op.opId} whole; sending the position alone")
+            return PushRecovery.Retry(listOf(lone.copy(op = lone.op.copy(locatorJson = null))))
+        }
         if (rejection.errorCode == LiseurSyncRejection.LOCATOR_TOO_LARGE) {
             val heavy = batch.firstOrNull { it.op.opId == rejection.opId }
                 ?: rejection.itemIndex?.let(batch::getOrNull)
@@ -1292,8 +1331,9 @@ class LiseurSyncPositionSync(
      * In order: a stale work name is recovered as before; a body the
      * server will not take whole is halved; a refusal that names one
      * sitting, by id or by position, sets that sitting aside for this
-     * server and retries the rest; one that names nothing is bisected,
-     * and a singleton it still will not place is set aside if the server
+     * server and retries the rest, but only for a reason the server
+     * calls permanent; one that names nothing is bisected, and a
+     * singleton it still will not place is set aside if the server
      * called it permanent — a code this app knows, or the prose-only
      * refusal of an older server — and otherwise left pending and
      * reported, since a code this app has never seen is not proof the
@@ -1312,14 +1352,21 @@ class LiseurSyncPositionSync(
         ) {
             return if (sending.size > 1) split(sending) else refuse(account, sending.single(), rejection)
         }
+        val code = rejection.errorCode
+        // A code this app has never seen is not proof the sitting it
+        // names is at fault, so naming one is not enough to set it
+        // aside for ever: the reason has to be one the server documents
+        // as permanent, or the prose-only refusal of a server too old to
+        // give a code.
+        val permanent = code == null || code in PERMANENT_SESSION_CODES
         val culprit = sending.firstOrNull { it.wireId == rejection.sessionId }
             ?: rejection.itemIndex?.let(sending::getOrNull)
-        if (culprit != null) return refuse(account, culprit, rejection, rest = sending - culprit)
-        if (sending.size > 1) return split(sending)
-        val code = rejection.errorCode
-        if (code == null || code in PERMANENT_SESSION_CODES) {
-            return refuse(account, sending.single(), rejection)
+        if (culprit != null) {
+            if (!permanent) return SessionRecovery.Ordinary
+            return refuse(account, culprit, rejection, rest = sending - culprit)
         }
+        if (sending.size > 1) return split(sending)
+        if (permanent) return refuse(account, sending.single(), rejection)
         return SessionRecovery.Ordinary
     }
 
@@ -1548,6 +1595,23 @@ class LiseurSyncPositionSync(
             LiseurSyncHttp.TOO_LARGE,
             LiseurSyncHttp.UNPROCESSABLE,
         )
+
+        /**
+         * The answers to a positions batch that say something about the
+         * batch or one op in it rather than about the credential or the
+         * server. A body over the byte bound is a 413 with no code, so
+         * it has to be expected as well as the named 400s.
+         */
+        val PUSH_REFUSALS = setOf(
+            LiseurSyncHttp.BAD_REQUEST,
+            LiseurSyncHttp.TOO_LARGE,
+        )
+
+        /**
+         * The most requests one positions stage makes, for the same
+         * reason as [MAX_SESSION_REQUESTS].
+         */
+        const val MAX_PUSH_REQUESTS = 64
 
         /**
          * Refusal codes the server documents as permanent for that
