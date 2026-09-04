@@ -18,22 +18,41 @@ jobs:
           bash -n hack/release hack/verify-fdroid-tags hack/test-fdroid-tags
           hack/test-fdroid-tags
 
+      - name: Check for Android/Gradle changes
+        id: changes
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            android:
+              - 'app/**'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - '*.gradle.kts'
+              - 'gradle.properties'
+              - '.github/workflows/build.yml'
+
       - name: Set up JDK 17
+        if: steps.changes.outputs.android == 'true'
         uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
+        if: steps.changes.outputs.android == 'true'
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
       - name: Unit tests
+        if: steps.changes.outputs.android == 'true'
         run: ./gradlew testDebugUnitTest --console=plain
 
       - name: Lint
+        if: steps.changes.outputs.android == 'true'
         run: ./gradlew lintDebug --console=plain
 
       - name: Assemble debug APK
+        if: steps.changes.outputs.android == 'true'
         run: ./gradlew assembleDebug --console=plain
 
       # The release build is the one people install, and it is the only
@@ -42,16 +61,18 @@ jobs:
       # evening a tag is cut. Unsigned without a keystore, which is fine:
       # the point is that it builds and shrinks.
       - name: Assemble release APK
+        if: steps.changes.outputs.android == 'true'
         run: ./gradlew assembleRelease --console=plain
 
       - name: Upload debug APK
+        if: steps.changes.outputs.android == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: liseur-debug-apk
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload test/lint reports
-        if: always()
+        if: always() && steps.changes.outputs.android == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: reports
