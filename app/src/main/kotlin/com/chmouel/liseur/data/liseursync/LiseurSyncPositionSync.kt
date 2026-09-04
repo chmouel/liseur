@@ -932,10 +932,7 @@ class LiseurSyncPositionSync(
             // server has gone quiet. Retrying then costs another whole
             // connect timeout and learns nothing.
             if (trouble.unreachable != null) return pushed
-            // The same bound the sessions have, and for the same
-            // reason: taking a batch apart is a few rounds, and a
-            // server refusing every piece of it will not relent.
-            if (++requests > MAX_PUSH_REQUESTS) {
+            if (++requests > MAX_BATCH_REQUESTS) {
                 trouble.refused(SyncFailure.ServerError(LiseurSyncHttp.BAD_REQUEST))
                 return pushed
             }
@@ -956,12 +953,9 @@ class LiseurSyncPositionSync(
             } catch (rejection: LiseurSyncRejection) {
                 when (val recovery = recoverPush(account, batch, rejection, recovered, trouble)) {
                     is PushRecovery.Retry -> {
-                        if (recovery.batch.isNotEmpty()) queue.addFirst(recovery.batch)
-                        null
-                    }
-
-                    is PushRecovery.Requeue -> {
-                        recovery.batches.reversed().forEach(queue::addFirst)
+                        recovery.batches.reversed()
+                            .filter { it.isNotEmpty() }
+                            .forEach(queue::addFirst)
                         null
                     }
 
@@ -1029,11 +1023,8 @@ class LiseurSyncPositionSync(
 
     /** What came of trying to recover a rejected ops batch. */
     private sealed interface PushRecovery {
-        /** Retry these instead of the rejected batch. */
-        data class Retry(val batch: List<PendingPush>) : PushRecovery
-
         /** Send these in place of the rejected batch, in order. */
-        data class Requeue(val batches: List<List<PendingPush>>) : PushRecovery
+        data class Retry(val batches: List<List<PendingPush>>) : PushRecovery
 
         /** Not a refusal recovery answers; the caller fails the old way. */
         data object Ordinary : PushRecovery
@@ -1081,16 +1072,18 @@ class LiseurSyncPositionSync(
             rejection.errorCode == LiseurSyncRejection.BATCH_TOO_LARGE
         ) {
             if (batch.size > 1) {
+                // The named limit is always positive, and half of a
+                // batch of two or more is at least one.
                 val room = rejection.limit?.takeIf { it < batch.size } ?: (batch.size / 2)
-                Log.i(TAG, "The server will not take ${batch.size} positions at once; sending ${room.coerceAtLeast(1)} at a time")
-                return PushRecovery.Requeue(batch.chunked(room.coerceAtLeast(1)))
+                Log.i(TAG, "The server will not take ${batch.size} positions at once; sending $room at a time")
+                return PushRecovery.Retry(batch.chunked(room))
             }
             val lone = batch.single()
             // Nothing else in an op has any size to it, so a lone op
             // still refused bare is a bound this app cannot get under.
             if (lone.op.locatorJson == null) return PushRecovery.Ordinary
             Log.i(TAG, "The server will not take op ${lone.op.opId} whole; sending the position alone")
-            return PushRecovery.Retry(listOf(lone.copy(op = lone.op.copy(locatorJson = null))))
+            return PushRecovery.Retry(listOf(listOf(lone.copy(op = lone.op.copy(locatorJson = null)))))
         }
         if (rejection.errorCode == LiseurSyncRejection.LOCATOR_TOO_LARGE) {
             val heavy = batch.firstOrNull { it.op.opId == rejection.opId }
@@ -1101,7 +1094,7 @@ class LiseurSyncPositionSync(
             if (heavy.op.locatorJson == null) return PushRecovery.Ordinary
             Log.i(TAG, "The server will not take op ${heavy.op.opId}'s locator (limit ${rejection.limit}); sending the position alone")
             return PushRecovery.Retry(
-                batch.map { if (it === heavy) it.copy(op = it.op.copy(locatorJson = null)) else it },
+                listOf(batch.map { if (it === heavy) it.copy(op = it.op.copy(locatorJson = null)) else it }),
             )
         }
         if (!rejection.isUnknownWork) return PushRecovery.Ordinary
@@ -1133,7 +1126,7 @@ class LiseurSyncPositionSync(
             IdentityRefresh.Unnameable -> null
         }
         return PushRecovery.Retry(
-            batch.mapNotNull { if (it.bookUrl == stale.bookUrl) replacement else it },
+            listOf(batch.mapNotNull { if (it.bookUrl == stale.bookUrl) replacement else it }),
         )
     }
 
@@ -1266,10 +1259,7 @@ class LiseurSyncPositionSync(
             // As with the pushes: a recovery may have found the server
             // gone quiet, and going round again would only wait again.
             if (trouble.unreachable != null) return
-            // A bound on how far a batch is taken apart: bisecting a
-            // thousand down to singletons is twenty rounds at most, and
-            // a server that refuses every one is not going to change.
-            if (++requests > MAX_SESSION_REQUESTS) {
+            if (++requests > MAX_BATCH_REQUESTS) {
                 trouble.refused(SyncFailure.ServerError(LiseurSyncHttp.BAD_REQUEST))
                 return
             }
@@ -1608,12 +1598,6 @@ class LiseurSyncPositionSync(
         )
 
         /**
-         * The most requests one positions stage makes, for the same
-         * reason as [MAX_SESSION_REQUESTS].
-         */
-        const val MAX_PUSH_REQUESTS = 64
-
-        /**
          * Refusal codes the server documents as permanent for that
          * payload: the sitting will never be taken as it stands, so it
          * is set aside rather than offered again. A code not in this set
@@ -1625,12 +1609,12 @@ class LiseurSyncPositionSync(
         )
 
         /**
-         * The most requests one session stage makes. Taking a full batch
-         * apart one bisection at a time is a few dozen at the outside;
-         * past this the server is refusing everything and the run should
-         * say so rather than keep asking.
+         * The most requests one positions or sessions stage makes.
+         * Taking a full batch apart one cut at a time is a few dozen at
+         * the outside; past this the server is refusing everything and
+         * the run should say so rather than keep asking.
          */
-        const val MAX_SESSION_REQUESTS = 64
+        const val MAX_BATCH_REQUESTS = 64
 
         const val TAG = "liseur-sync-positions"
         const val PAGE = 500
