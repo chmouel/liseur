@@ -411,8 +411,13 @@ class LiseurSyncPositionSyncTest {
         sync().syncAll(null)
 
         // Retrying forever would park it at the head of the queue and
-        // stop every later session behind it.
-        assertNotNull(db.readingSessionDao().get(session)?.uploadedAt)
+        // stop every later session behind it. But it was not sent, so it
+        // is not marked as sent: it is set aside for this server.
+        assertNull(db.readingSessionDao().get(session)?.uploadedAt)
+        assertEquals(listOf(session), db.sessionRefusalDao().forPeer(peer()).map { it.sessionId })
+        server.enqueue(json("""{"ops":[]}"""))
+        sync().syncAll(null)
+        assertEquals(1, requests().count { it.target.startsWith("/v1/sessions") })
     }
 
     @Test
@@ -731,6 +736,138 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a refused sitting is set aside by name and the rest still go`() = runTest {
+        // The regression: a 409 for one session used to mark the whole
+        // batch as sent, and the other sittings were never heard of again.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val good = closedSession(from = 0.1, to = 0.4)
+        val bad = closedSession(from = 0.4, to = 0.5)
+        val other = closedSession(from = 0.5, to = 0.6)
+        val badWire = SessionUploads.sessionIdFor("device-a", bad)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            MockResponse(
+                code = 409,
+                body = """{"error":"session $badWire: session_id reused with a different payload",
+                    "code":"id_reused","session_id":"$badWire","item_index":1}
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(json("""{"accepted":2}"""))
+
+        val outcome = sync().syncAll(null)
+
+        val sent = requests().filter { it.target.startsWith("/v1/sessions") }
+        assertEquals(2, sent.size)
+        val retried = JSONObject(sent[1].body!!.utf8()).getJSONArray("sessions")
+        assertEquals(2, retried.length())
+        assertNotNull(db.readingSessionDao().get(good)?.uploadedAt)
+        assertNotNull(db.readingSessionDao().get(other)?.uploadedAt)
+        // Not sent, not pretended to be: set aside for this server only.
+        assertNull(db.readingSessionDao().get(bad)?.uploadedAt)
+        val refusals = db.sessionRefusalDao().forPeer(peer())
+        assertEquals(listOf(bad), refusals.map { it.sessionId })
+        assertEquals("id_reused", refusals.single().code)
+        // Reported, not swallowed.
+        assertTrue(outcome !is SyncOutcome.Success)
+
+        // The next run does not offer it again.
+        server.enqueue(json("""{"ops":[]}"""))
+        sync().syncAll(null)
+        assertEquals(2, requests().count { it.target.startsWith("/v1/sessions") })
+    }
+
+    @Test
+    fun `a refusal that names no item is bisected down to the one it means`() = runTest {
+        // An older server refuses in prose. Bisecting finds the sitting
+        // without ever marking a good one as sent.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val a = closedSession(from = 0.1, to = 0.2)
+        val b = closedSession(from = 0.2, to = 0.3)
+        val c = closedSession(from = 0.3, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        val prose = MockResponse(code = 400, body = """{"error":"session b: idle_ms out of range"}""")
+        server.enqueue(prose) // [a, b, c]
+        server.enqueue(json("""{"accepted":1}""")) // [a]
+        server.enqueue(prose) // [b, c]
+        server.enqueue(prose) // [b]
+        server.enqueue(json("""{"accepted":1}""")) // [c]
+
+        sync().syncAll(null)
+
+        assertNotNull(db.readingSessionDao().get(a)?.uploadedAt)
+        assertNull(db.readingSessionDao().get(b)?.uploadedAt)
+        assertNotNull(db.readingSessionDao().get(c)?.uploadedAt)
+        assertEquals(listOf(b), db.sessionRefusalDao().forPeer(peer()).map { it.sessionId })
+    }
+
+    @Test
+    fun `a body too big is halved rather than refused`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val a = closedSession(from = 0.1, to = 0.2)
+        val b = closedSession(from = 0.2, to = 0.3)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 413, body = """{"error":"request body too large"}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        assertNotNull(db.readingSessionDao().get(a)?.uploadedAt)
+        assertNotNull(db.readingSessionDao().get(b)?.uploadedAt)
+        assertTrue(db.sessionRefusalDao().forPeer(peer()).isEmpty())
+    }
+
+    @Test
+    fun `a code this app does not know leaves the sitting pending`() = runTest {
+        // Not proof the sitting is at fault; reported, kept, tried again.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val a = closedSession(from = 0.1, to = 0.2)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(
+            MockResponse(code = 400, body = """{"error":"something new","code":"a_rule_from_the_future"}"""),
+        )
+
+        val outcome = sync().syncAll(null)
+
+        assertNull(db.readingSessionDao().get(a)?.uploadedAt)
+        assertTrue(db.sessionRefusalDao().forPeer(peer()).isEmpty())
+        assertTrue(outcome !is SyncOutcome.Success)
+    }
+
+    @Test
+    fun `unnamed books do not stand in front of sittings that can be sent`() = runTest {
+        // The head-of-line block: a thousand old sittings of a book the
+        // server has no name for used to fill the window and hide newer
+        // ones behind them.
+        connect()
+        db.bookDao().upsert(local())
+        db.bookDao().upsert(local().copy(url = LOCAL2, title = "Unnamed"))
+        alias()
+        repeat(SessionUploads.MAX_BATCH) { closedSession(from = 0.1, to = 0.2, bookUrl = LOCAL2) }
+        val sendable = closedSession(from = 0.3, to = 0.4)
+        // The server can only guess at the other book, so it has no
+        // usable name here and its sittings wait.
+        server.enqueue(json("""{"work_id":"w-2","confidence":"low","created":false}"""))
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        assertNotNull(db.readingSessionDao().get(sendable)?.uploadedAt)
+        val sent = requests().filter { it.target.startsWith("/v1/sessions") }
+        assertEquals(1, JSONObject(sent.single().body!!.utf8()).getJSONArray("sessions").length())
+    }
+
+    @Test
     fun `two stale books in one batch recover one at a time`() = runTest {
         connect()
         db.bookDao().upsert(local())
@@ -1007,6 +1144,7 @@ class LiseurSyncPositionSyncTest {
             peerStateDao = db.syncPeerStateDao(),
             identityDao = db.workIdentityDao(),
             sessionDao = db.readingSessionDao(),
+            sessionRefusalDao = db.sessionRefusalDao(),
             works = WorkResolver(
                 dao = db.workIdentityDao(),
                 fingerprints = BookFingerprintStore(context, db.workIdentityDao()) { NOW },
@@ -1092,6 +1230,7 @@ class LiseurSyncPositionSyncTest {
         deviceId: String? = null,
         bookUrl: String = LOCAL,
         editionSha: String? = null,
+        confirmed: Boolean = true,
     ) =
         db.workIdentityDao().upsert(
             com.chmouel.liseur.data.db.WorkAlias(
@@ -1099,7 +1238,7 @@ class LiseurSyncPositionSyncTest {
                 peerId = peer(deviceId),
                 workId = workId,
                 confidence = confidence,
-                confirmed = true,
+                confirmed = confirmed,
                 seeded = seeded,
                 editionSha = editionSha,
                 resolvedAt = NOW,
@@ -1153,11 +1292,11 @@ class LiseurSyncPositionSyncTest {
 
     private val seen = mutableListOf<RecordedRequest>()
 
-    private suspend fun closedSession(from: Double, to: Double): Long {
+    private suspend fun closedSession(from: Double, to: Double, bookUrl: String = LOCAL): Long {
         val dao = db.readingSessionDao()
         val id = dao.insert(
             com.chmouel.liseur.data.db.ReadingSession(
-                bookUrl = LOCAL,
+                bookUrl = bookUrl,
                 startedAt = NOW,
                 lastCheckpointAt = NOW,
             ),

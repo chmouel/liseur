@@ -177,6 +177,7 @@ class AppContainer(context: Context) {
         sessionDao = database.readingSessionDao(),
         annotationSyncDao = database.annotationSyncDao(),
         uploadRefusalDao = database.uploadRefusalDao(),
+        sessionRefusalDao = database.sessionRefusalDao(),
         // Declared later in this file, so it is reached through the
         // lambda rather than held: the pairing is only ever touched
         // after a connection has landed, never while one is being built.
@@ -293,6 +294,7 @@ class AppContainer(context: Context) {
         peerStateDao = database.syncPeerStateDao(),
         identityDao = database.workIdentityDao(),
         sessionDao = database.readingSessionDao(),
+        sessionRefusalDao = database.sessionRefusalDao(),
         works = workResolver,
         deviceKey = { deviceIdentity.current().id },
         finishedState = finishedState,

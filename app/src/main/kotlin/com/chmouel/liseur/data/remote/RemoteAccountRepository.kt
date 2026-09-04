@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.AnnotationSyncDao
 import com.chmouel.liseur.data.db.UploadRefusalDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.SeriesExtraDao
+import com.chmouel.liseur.data.db.SessionRefusalDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.RemoteServer
@@ -66,6 +67,12 @@ class RemoteAccountRepository(
      * reader who has just switched accounts should be offered it.
      */
     private val uploadRefusalDao: UploadRefusalDao? = null,
+    /**
+     * Sittings a server said it would never take (one server's verdict,
+     * so it goes with the account). Null in tests that do not exercise a
+     * liseur-sync account.
+     */
+    private val sessionRefusalDao: SessionRefusalDao? = null,
     /**
      * The KOReader pairing, which a connection may drop, replace or
      * leave alone.
@@ -629,7 +636,8 @@ class RemoteAccountRepository(
         if (existing.kind != ServerKind.LISEUR_SYNC || from == to) return next
         val occupied = (peerStateDao?.countForPeer(to) ?: 0) +
             (identityDao?.countForPeer(to) ?: 0) +
-            (annotationSyncDao?.countForPeer(to) ?: 0)
+            (annotationSyncDao?.countForPeer(to) ?: 0) +
+            (sessionRefusalDao?.countForPeer(to) ?: 0)
         if (occupied > 0) {
             Log.w(TAG, "Not moving sync state to a key that already has $occupied rows; keeping the old key")
             return next.copy(liseurAccountId = existing.liseurAccountId)
@@ -638,6 +646,7 @@ class RemoteAccountRepository(
         identityDao?.rekeyPeer(from, to)
         annotationSyncDao?.rekeyPeer(from, to)
         uploadRefusalDao?.rekeyAccount(from, to)
+        sessionRefusalDao?.rekeyPeer(from, to)
         progressDao.rekeyAccount(from, to)
         return next
     }
@@ -770,6 +779,7 @@ class RemoteAccountRepository(
         annotationSyncDao?.forgetPeer(server.accountKey)
         dao.setAnnotationCursor(0)
         sessionDao?.forgetUploads()
+        sessionRefusalDao?.clearPeer(server.accountKey)
     }
 
     private companion object {

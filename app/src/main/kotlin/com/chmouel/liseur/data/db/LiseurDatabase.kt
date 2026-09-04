@@ -26,8 +26,9 @@ import androidx.sqlite.execSQL
         AnnotationSync::class,
         KosyncPeer::class,
         UploadRefusal::class,
+        SessionRefusal::class,
     ],
-    version = 46,
+    version = 47,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -48,6 +49,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookReadingModeDao(): BookReadingModeDao
     abstract fun seriesExtraDao(): SeriesExtraDao
     abstract fun uploadRefusalDao(): UploadRefusalDao
+    abstract fun sessionRefusalDao(): SessionRefusalDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1225,6 +1227,34 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds the record of sittings one server refused by name, so a
+         * refused batch sets aside the one sitting it was about instead
+         * of marking the whole batch as sent.
+         */
+        val MIGRATION_46_47 = object : Migration(46, 47) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `session_refusal` (
+                        `peer_id` TEXT NOT NULL,
+                        `session_id` INTEGER NOT NULL,
+                        `wire_session_id` TEXT NOT NULL,
+                        `code` TEXT,
+                        `refused_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`peer_id`, `session_id`),
+                        FOREIGN KEY(`session_id`) REFERENCES `reading_sessions`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_session_refusal_session_id` " +
+                        "ON `session_refusal` (`session_id`)",
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1271,6 +1301,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_43_44,
             MIGRATION_44_45,
             MIGRATION_45_46,
+            MIGRATION_46_47,
         )
     }
 }
