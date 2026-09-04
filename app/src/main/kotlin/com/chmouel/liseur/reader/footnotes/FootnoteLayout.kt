@@ -2,6 +2,7 @@ package com.chmouel.liseur.reader.footnotes
 
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Keeping a book's notes out of the page they were written for.
@@ -49,11 +50,12 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  *
  * ### Ownership
  *
- * The attribute carries a token minted per document rather than a fixed
- * class or id. A publisher is free to ship `data-liseur-note` on their own
- * markup, and stripping it from their page — or letting it suppress our own
- * work — would be our bug, not theirs. Only attributes carrying this
- * document's token are ever read or removed.
+ * The attribute's *name* carries a token minted per document, rather than a
+ * fixed name marked in its value. A publisher is free to ship
+ * `data-liseur-note` on their own markup: taking the name and writing our
+ * token into it would overwrite theirs on any element we also wanted to
+ * hide, and lose it for good when the reader revealed the note. A name they
+ * cannot have guessed is never read, never written over and never stripped.
  */
 internal object FootnoteLayout {
 
@@ -99,8 +101,6 @@ internal object FootnoteLayout {
      */
     const val SCRIPT: String = """
         (function () {
-          var NOTE_ATTR = "data-liseur-note";
-          var MARK_ATTR = "data-liseur-mark";
           var NOTE_TYPES = ["footnote", "endnote", "rearnote", "note"];
           var NOTE_ROLES = ["doc-footnote", "doc-endnote"];
           var NOTE_TAG = "aside";
@@ -112,7 +112,18 @@ internal object FootnoteLayout {
           var state = window.__liseurNotes || (window.__liseurNotes = {});
           var tok = state.token ||
                     (state.token = "n" + Math.random().toString(36).slice(2, 10));
-          var revealed = state.revealed || (state.revealed = {});
+          // The token is part of the attribute's *name*, not its value. A
+          // publisher who ships `data-liseur-note` of their own is then
+          // never read from, never written over and never stripped, which
+          // taking the name and marking ourselves in the value could not
+          // promise: the element we wanted to hide might be theirs.
+          var NOTE_ATTR = state.noteAttr ||
+                          (state.noteAttr = "data-liseur-note-" + tok);
+          var MARK_ATTR = state.markAttr ||
+                          (state.markAttr = "data-liseur-mark-" + tok);
+          // A bare object answers for `constructor` and `toString`, which
+          // are legal ids, and would report a note revealed that never was.
+          var revealed = state.revealed || (state.revealed = Object.create(null));
           var installed = false;
 
           // Served as XHTML the attribute is namespaced and `getAttribute`
@@ -156,12 +167,34 @@ internal object FootnoteLayout {
             return String(el.textContent || "").replace(/\s+/g, "").length;
           }
 
+          // A book writes a reference to a note in its own chapter either as
+          // "#n1" or as "ch1.xhtml#n1", and both name the same element.
+          // Reading only the first spelling left the second kind of book
+          // exactly as broken as before, so the href is resolved against the
+          // document's own address and counted as local when everything but
+          // the fragment agrees.
+          function localFragment(anchor) {
+            var href = anchor.getAttribute("href") || "";
+            if (!href) return "";
+            if (href.charAt(0) === "#") return href.slice(1);
+            try {
+              var there = new URL(href, document.baseURI);
+              var here = new URL(document.baseURI);
+              if (there.origin !== here.origin) return "";
+              if (there.pathname !== here.pathname) return "";
+              if (there.search !== here.search) return "";
+              return there.hash.slice(1);
+            } catch (e) {
+              return "";
+            }
+          }
+
           // The attribute is set from a list rather than toggled in place, so
           // a note that stops qualifying — because the reader asked to see
           // it, because the document was rewritten under us — is released
           // rather than left hidden forever.
           function sync(attr, wanted) {
-            var previous = document.querySelectorAll('[' + attr + '="' + tok + '"]');
+            var previous = document.querySelectorAll('[' + attr + ']');
             var dirty = false, i;
             for (i = 0; i < previous.length; i++) {
               if (wanted.indexOf(previous[i]) < 0) {
@@ -170,8 +203,8 @@ internal object FootnoteLayout {
               }
             }
             for (i = 0; i < wanted.length; i++) {
-              if (wanted[i].getAttribute(attr) !== tok) {
-                wanted[i].setAttribute(attr, tok);
+              if (!wanted[i].hasAttribute(attr)) {
+                wanted[i].setAttribute(attr, "");
                 dirty = true;
               }
             }
@@ -181,8 +214,8 @@ internal object FootnoteLayout {
           if (!state.styleEl || !state.styleEl.isConnected) {
             var css = document.createElement("style");
             css.textContent =
-              '[' + NOTE_ATTR + '="' + tok + '"]{display:none!important}' +
-              '[' + MARK_ATTR + '="' + tok + '"]{' +
+              '[' + NOTE_ATTR + ']{display:none!important}' +
+              '[' + MARK_ATTR + ']{' +
                 'height:1em!important;width:auto!important;' +
                 'max-height:1.2em!important;max-width:4em!important;' +
                 'min-height:0!important;min-width:0!important;' +
@@ -198,10 +231,9 @@ internal object FootnoteLayout {
           var notes = [], marks = [], i, j;
           for (i = 0; i < anchors.length; i++) {
             var anchor = anchors[i];
-            var href = anchor.getAttribute("href") || "";
+            var id = localFragment(anchor);
             var note = null;
-            if (href.charAt(0) === "#" && href.length > 1) {
-              var id = href.slice(1);
+            if (id) {
               try { id = decodeURIComponent(id); } catch (e) { /* keep it raw */ }
               var target = document.getElementById(id);
               // An anchor inside a note is a backlink, or one note citing
@@ -254,7 +286,7 @@ internal object FootnoteLayout {
         (function () {
           var id = ${jsString(fragment)};
           var state = window.__liseurNotes || (window.__liseurNotes = {});
-          var revealed = state.revealed || (state.revealed = {});
+          var revealed = state.revealed || (state.revealed = Object.create(null));
           revealed[id] = true;
           var el = document.getElementById(id);
           if (!el) {
@@ -264,7 +296,10 @@ internal object FootnoteLayout {
           // Keyed on the element's own id as well as on the spelling the
           // link used, because that is what the pass above reads back.
           revealed[el.getAttribute("id")] = true;
-          el.removeAttribute("data-liseur-note");
+          // The attribute's name carries this document's token, so it is
+          // read back from the same place the pass above wrote it. Nothing
+          // has been hidden yet if that pass has not run.
+          if (state.noteAttr) el.removeAttribute(state.noteAttr);
           return "revealed";
         })();
         """.trimIndent()
@@ -305,14 +340,29 @@ internal object FootnoteLayout {
 
     @OptIn(ExperimentalReadiumApi::class)
     internal suspend fun apply(navigator: EpubNavigatorFragment): Result =
-        parse(runCatching { navigator.evaluateJavascript(SCRIPT) }.getOrNull())
+        parse(evaluate(navigator, SCRIPT))
 
     /** Reveals [fragment], returning whether the page may have moved. */
     @OptIn(ExperimentalReadiumApi::class)
     internal suspend fun reveal(navigator: EpubNavigatorFragment, fragment: String): Boolean {
-        val answer = runCatching {
-            navigator.evaluateJavascript(revealScript(fragment))
-        }.getOrNull()
+        val answer = evaluate(navigator, revealScript(fragment))
         return answer?.trim()?.removeSurrounding("\"")?.trim() == "revealed"
     }
+
+    /**
+     * [script] in the book's page, or null if the page would not run it.
+     *
+     * A cancellation is not a failed evaluation, and swallowing it here
+     * would be the worst kind of quiet: the caller carries on to navigate a
+     * navigator whose screen has already gone.
+     */
+    @OptIn(ExperimentalReadiumApi::class)
+    private suspend fun evaluate(navigator: EpubNavigatorFragment, script: String): String? =
+        try {
+            navigator.evaluateJavascript(script)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (refused: Exception) {
+            null
+        }
 }

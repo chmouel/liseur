@@ -183,17 +183,34 @@ emit cross-reference.xhtml <<'EOF'
 </body></html>
 EOF
 
-# A publisher who happens to have picked our names for their own markup. Their
-# aside is nobody's note — nothing links to it — so it must come through
-# untouched, and their attribute value must not be what hides it.
+# A publisher who happens to have picked our names for their own markup. One
+# of their asides is nobody's note — nothing links to it — so it must come
+# through untouched. The other is a real note, referenced from the text and
+# hidden: their attribute on it must survive being hidden and revealed, which
+# marking ourselves in that attribute's value could not manage.
 emit publisher-markers.xhtml <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head><title>t</title><style id="liseur-note-css">.liseur-note{color:#333}</style></head><body>
 <aside id="theirs" class="liseur-note" data-liseur-note="theirs"><p>Their aside, with their attribute on it.</p></aside>
-<aside epub:type="footnote" id="n1"><p>A real note.</p></aside>
+<aside epub:type="footnote" id="n1" data-liseur-note="also-theirs"><p>A real note.</p></aside>
 <p id="probe">Prose that is the bulk of the page, and rather more of it besides, so that the weighing of notes against text comes out the way a reader would expect it to and nothing is spared on a technicality. <a epub:type="noteref" href="#n1">1</a></p>
 <p>A second paragraph, for the same reason: the page has to be mostly its own words before any of this means anything at all.</p>
+</body></html>
+EOF
+
+# A book that writes its own chapter's name into the reference, which is just
+# as legal as a bare fragment and much more common. The base makes the frame's
+# address a real one, so the script has something to resolve against; it names
+# the case's own directory, so the stylesheet links above it still resolve.
+emit path-note.xhtml <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head><title>t</title><base href="cases/ch1.xhtml"/></head><body>
+<aside epub:type="footnote" id="n1"><p>A note referred to by the chapter's own name.</p></aside>
+<aside epub:type="footnote" id="n2"><p>A note in another chapter's spelling, which is not ours to hide.</p></aside>
+<p id="probe">Prose enough to outweigh the notes, and then some more of it, so the page is its own words before any of this counts for anything at all. <a epub:type="noteref" href="ch1.xhtml#n1">1</a> and <a epub:type="noteref" href="ch2.xhtml#n2">2</a>.</p>
+<p>A second paragraph, for the same reason, carrying no references of any kind.</p>
 </body></html>
 EOF
 
@@ -210,7 +227,11 @@ function log(ok, name, detail) {
 }
 function frame(caseName, fontSize, variant) {
   return fetch("cases/" + caseName).then(function (r) { return r.text(); }).then(function (src) {
-    var base = "../readium-css/" + (variant || "cjk-horizontal") + "/";
+    // Readium keeps its default sheets at the root of the bundle and each
+    // variant in a directory of its own, so "" names the defaults and is a
+    // real answer here rather than a missing one.
+    var dir = variant === undefined ? "cjk-horizontal" : variant;
+    var base = "../readium-css/" + (dir ? dir + "/" : "");
     var vars = "--USER__fontSize:" + fontSize + "%;--USER__view:readium-paged-on;";
     var head =
       '<link rel="stylesheet" href="' + base + 'ReadiumCSS-before.css"/>' +
@@ -371,6 +392,7 @@ TESTS.push(function () {
   return frame("publisher-markers.xhtml", 100).then(function (w) {
     var r = run(w);
     var theirs = w.document.getElementById("theirs");
+    var note = w.document.getElementById("n1");
     log(!!w.__liseurNotes.styleEl, "installs despite an author id=liseur-note-css");
     log(theirs.className === "liseur-note", "author classes untouched", theirs.className);
     log(theirs.getAttribute("data-liseur-note") === "theirs",
@@ -380,6 +402,23 @@ TESTS.push(function () {
         "and their aside is not hidden by their own attribute");
     log(!shown(w, "#n1"), "while the note that really is one still goes",
         "result " + r);
+    log(note.getAttribute("data-liseur-note") === "also-theirs",
+        "their attribute survives on a note we did hide",
+        "attr " + note.getAttribute("data-liseur-note"));
+    reveal(w, "n1");
+    log(shown(w, "#n1"), "the note comes back when it is asked for");
+    log(note.getAttribute("data-liseur-note") === "also-theirs",
+        "and their attribute is still theirs afterwards",
+        "attr " + note.getAttribute("data-liseur-note"));
+  });
+});
+
+TESTS.push(function () {
+  return frame("path-note.xhtml", 100).then(function (w) {
+    var r = run(w);
+    log(!shown(w, "#n1"), "a note named through its own chapter's path is hidden",
+        "result " + r);
+    log(shown(w, "#n2"), "a note named through another chapter's path is not");
   });
 });
 

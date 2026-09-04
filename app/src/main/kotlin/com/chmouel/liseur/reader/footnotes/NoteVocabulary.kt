@@ -51,10 +51,14 @@ internal object NoteVocabulary {
     /**
      * Whether [attribute] names any of [vocabulary].
      *
-     * The value is a space-separated list, and each word may carry a
-     * namespace prefix the sanitiser never flattened, so only what follows
-     * the last colon is compared.
+     * The value is a whitespace-separated list — a book is free to write it
+     * across a tab or a newline, and the injected script's `/\s+/` reads it
+     * that way — and each word may carry a namespace prefix the sanitiser
+     * never flattened, so only what follows the last colon is compared.
      */
     private fun names(attribute: String, vocabulary: Set<String>): Boolean =
-        attribute.split(' ').any { it.substringAfterLast(':') in vocabulary }
+        attribute.split(WHITESPACE).any { it.substringAfterLast(':') in vocabulary }
+
+    /** What the script's `/\s+/` splits on, spelled the same way here. */
+    private val WHITESPACE = Regex("\\s+")
 }
