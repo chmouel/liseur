@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -124,5 +125,23 @@ class PinchResizeTest {
     fun `the gap between two fingers is the distance between them`() {
         assertEquals(5f, PinchResize.spanOf(0f, 0f, 3f, 4f), 1e-4f)
         assertEquals(0f, PinchResize.spanOf(7f, 9f, 7f, 9f), 1e-4f)
+    }
+
+    @Test
+    fun `resting two fingers has not moved them`() {
+        assertFalse(PinchResize.moved(startSpan = 300f, currentSpan = 300f))
+        assertFalse(PinchResize.moved(startSpan = 300f, currentSpan = 310f))
+    }
+
+    @Test
+    fun `a real pinch has`() {
+        assertTrue(PinchResize.moved(startSpan = 300f, currentSpan = 400f))
+        assertTrue(PinchResize.moved(startSpan = 400f, currentSpan = 300f))
+    }
+
+    @Test
+    fun `fingers too close together to divide by have not moved`() {
+        assertFalse(PinchResize.moved(startSpan = 1f, currentSpan = 500f))
+        assertFalse(PinchResize.moved(startSpan = 300f, currentSpan = 0f))
     }
 }

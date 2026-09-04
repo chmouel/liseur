@@ -63,11 +63,11 @@ object PinchResize {
      * The size a pinch has landed on, or null while it has landed on
      * nothing.
      *
-     * Null means "do not commit and do not show a preview": either the
-     * fingers have not left the dead zone yet, or the span is too small
-     * to divide by. It is not the same as landing back on [startSize],
-     * which is a real answer and worth drawing, because a reader who
-     * pinches too far and comes back deserves to see that they are home.
+     * Null means "do not commit and do not show a preview". That covers
+     * the whole dead zone, including fingers back at exactly the span
+     * they started from: a pinch that has gone out and come home has
+     * nothing to say, and saying it would leave a panel on screen after
+     * a gesture that changed nothing.
      *
      * The ratio is applied to the size the *gesture* started from rather
      * than to the size the last frame produced, so the value cannot walk
@@ -75,10 +75,21 @@ object PinchResize {
      * size back where it began.
      */
     fun targetFor(startSize: Double, startSpan: Float, currentSpan: Float): Double? {
-        if (startSpan < MIN_START_SPAN || currentSpan <= 0f) return null
-        val ratio = currentSpan / startSpan
-        if (abs(ratio - 1.0) < DEAD_ZONE) return null
-        return snap(startSize * ratio)
+        if (!moved(startSpan, currentSpan)) return null
+        return snap(startSize * (currentSpan / startSpan))
+    }
+
+    /**
+     * Whether the fingers have travelled far enough to have meant it.
+     *
+     * The dead zone, asked on its own so that a book which cannot be
+     * resized can wait for the same travel before saying so. Without it,
+     * resting two fingers on a fixed-layout page raises the refusal at
+     * once, while the same rest on an ordinary page does nothing at all.
+     */
+    fun moved(startSpan: Float, currentSpan: Float): Boolean {
+        if (startSpan < MIN_START_SPAN || currentSpan <= 0f) return false
+        return abs(currentSpan / startSpan - 1.0) >= DEAD_ZONE
     }
 
     /** How far apart two fingers are. */

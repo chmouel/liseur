@@ -139,7 +139,7 @@ class ImageAtPointTest {
 
     @Test
     fun `an answer far larger than the script can produce is refused`() {
-        val alt = "x".repeat(5_000)
+        val alt = "x".repeat(6_000)
         assertNull(
             ImageAtPoint.parse(
                 """{"src":"http://h/i.png","alt":"$alt","width":9,"height":9}""",
@@ -154,5 +154,31 @@ class ImageAtPointTest {
             """{"src":"http://h/i.png","alt":"$alt","width":9,"height":9}""",
         )
         assertEquals(alt, hit?.alt)
+    }
+
+    @Test
+    fun `the book's own caption is preferred to its alternative text`() {
+        val hit = ImageAtPoint.parse(
+            """{"src":"http://h/i.png","alt":"A photograph of a ship.",""" +
+                """"caption":"Plate IV. The Hispaniola.","width":9,"height":9}""",
+        )
+        assertEquals("Plate IV. The Hispaniola.", hit?.caption)
+        assertEquals("A photograph of a ship.", hit?.alt)
+    }
+
+    @Test
+    fun `a picture with no figure of its own still describes itself`() {
+        val hit = ImageAtPoint.parse(
+            """{"src":"http://h/i.png","alt":"A map.","caption":"","width":9,"height":9}""",
+        )
+        assertNull(hit?.caption)
+        assertEquals("A map.", hit?.alt)
+    }
+
+    @Test
+    fun `the script reads a figcaption out of the figure the picture sits in`() {
+        val js = ImageAtPoint.script(0.5f, 0.5f)
+        assertTrue(js.contains("figcaption"))
+        assertTrue(js.contains("\"figure\""))
     }
 }
