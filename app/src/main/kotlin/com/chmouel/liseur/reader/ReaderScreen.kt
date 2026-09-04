@@ -457,12 +457,14 @@ fun ReaderScreen(
     // Consumed, so nothing else acts on the touch, but committing
     // nothing, because what the gesture means is not settled (ADR 22).
     var pinchHeld by remember { mutableStateOf(false) }
-    // Off on electronic paper, whatever the setting says. Every step of
-    // a pinch resize reflows the book and repaints the page, and a panel
-    // that takes a tenth of a second to do that turns one requested size
-    // into a strobe of six on the way to it. Read from [LocalEInk] and
+    // Off on electronic paper, whatever the setting says. The size
+    // itself commits once on lift, but the way a reader lands on one is
+    // by watching the preview pill grow as the fingers move, and a small
+    // region redrawn many times a second is what such a panel is worst
+    // at. A pinch without a usable preview is aiming blind, and every
+    // attempt costs a full-page reflow to see. Read from [LocalEInk] and
     // not from `isEInkDevice()`, so that the reader who is on a panel we
-    // failed to recognise — or not on one we wrongly did — gets the
+    // failed to recognise, or not on one we wrongly did, gets the
     // gesture back by setting E-ink mode themselves. That is the only
     // reason the mode keeps a manual override (ADR 22).
     val pinchToResizeNow by rememberUpdatedState(pinchToResize && !LocalEInk.current)
