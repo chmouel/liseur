@@ -597,7 +597,7 @@
     <string name="tap_zones_swapped">Swapped</string>
     <string name="settings_pinch_to_resize">Pinch to resize text</string>
     <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Turn it off if the way you hold the phone sets it off by accident. Pinching an image to enlarge it still works either way.</string>
-    <string name="settings_pinch_to_resize_eink">Off on electronic paper: every step of the pinch reflows the book and repaints the whole page, so one change of size arrives after several. Pinching an image to enlarge it still works. Turn E-ink screen off below if this is not that kind of screen.</string>
+    <string name="settings_pinch_to_resize_eink">Off on electronic paper. The pinch works by showing you the size while your fingers move, and a preview that redraws many times a second is what such a screen handles worst. Without it you would be aiming blind, and every attempt costs a full repaint of the page, so the Size slider does the job better. Pinching an image to enlarge it still works. Turn E-ink screen off below if this is not that kind of screen.</string>
     <string name="settings_resume">Open on the book you were reading</string>
     <string name="settings_resume_detail">Skip the library when you left off mid-book.</string>
     <string name="settings_keep_screen_on">Keep the screen on</string>

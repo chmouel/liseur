@@ -334,21 +334,21 @@ fun ImageViewer(image: ViewedImage, theme: ReaderTheme, onDismiss: () -> Unit) {
                     .safeDrawingPadding()
                     .padding(horizontal = 24.dp, vertical = 16.dp)
                     // The caption sits over whatever the picture leaves
-                    // there, which after the paper behind a line drawing
-                    // can be white. That backing goes with the white
-                    // rectangle it was there for: on an e-paper panel the
-                    // caption is the theme's own ink on the theme's own
-                    // paper, and a pill around it is one more edge for
-                    // the panel to ghost.
+                    // there, and a photograph tall enough to reach the
+                    // bottom leaves the photograph, so it needs something
+                    // opaque behind it on any backdrop. On paper that is
+                    // the theme's own paper, square and shadowless: a
+                    // translucent pill would have to be composited against
+                    // the picture, and a rounded edge is one more thing
+                    // for the panel to ghost.
                     .then(
                         if (onPaper) {
-                            Modifier
+                            Modifier.background(backdrop)
                         } else {
-                            Modifier
-                                .background(CAPTION_BACKING, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                            Modifier.background(CAPTION_BACKING, RoundedCornerShape(8.dp))
                         },
-                    ),
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
 
