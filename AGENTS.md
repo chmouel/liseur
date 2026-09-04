@@ -195,7 +195,25 @@ emulator.
   (`UUIDv3(deviceKey|…)`) and every payload field comes from stored
   state rather than the clock, so a retry is byte-identical and the
   server answers `duplicate`. Do not introduce a random id or a
-  `pending_ops` table.
+  `pending_ops` table. The server compares its own `device_id` too, so
+  a reconnect offers the stored one back (`ServerSetup.reconnect`) and
+  the phone stays one device; a pasted token cannot, and its replays
+  may come back `conflict`, which is answered by moving the book's
+  revision on (`renameRevision`, conditional on the sent revision) so
+  the same reading goes out under a fresh id.
+- A server refusal of a batch is about one item and stores nothing.
+  Never mark a whole batch as sent because of it. Sessions: the named
+  sitting goes into `session_refusal` for that peer and the rest go
+  again; a body too big is halved; a refusal that names nothing is
+  bisected; a code this app does not know is left pending and
+  reported. Ops: `unknown_work` re-resolves, `locator_too_large`
+  resends the op bare under the same id. `awaitingUploadTo` joins the
+  alias and the refusals *before* it limits, or unnamed books block
+  the queue.
+- The account key is `liseursync|<url>|<account_id>`, and it changed
+  spelling once (from the device id). `carryPeerState` moves every
+  peer-keyed table to the new spelling in the connect transaction; add
+  any new peer-keyed table there and to `forgetSyncPeer`.
 - A book's name on liseur-sync is a `work_alias`. A book from its
   own catalog resolves through `POST /v1/books/{id}/resolve`. The
   server reads the identifiers off its record, so no download is needed
