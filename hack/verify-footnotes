@@ -360,6 +360,23 @@ TESTS.push(function () {
 });
 
 TESTS.push(function () {
+  return frame("inline-note.xhtml", 100).then(function (w) {
+    var r1 = run(w);
+    // A stylesheet the page refuses is still an element and still in the
+    // head; what it never gets is a `sheet`. That is what the pass has to
+    // keep asking about, or the second one marks notes nothing can hide.
+    Object.defineProperty(w.__liseurNotes.styleEl, "sheet", { get: function () { return null; } });
+    var marked = w.document.querySelectorAll("[" + w.__liseurNotes.noteAttr + "]").length;
+    var r2 = run(w);
+    var stillMarked = w.document.querySelectorAll("[" + w.__liseurNotes.noteAttr + "]").length;
+    log(r1 === "changed", "run 1 reports changed", "got " + r1);
+    log(r2 === "blocked", "a refused stylesheet is still a refusal on a later run", "got " + r2);
+    log(stillMarked === marked, "and a refused run writes nothing new",
+        marked + " -> " + stillMarked);
+  });
+});
+
+TESTS.push(function () {
   return frame("endnotes.xhtml", 100).then(function (w) {
     run(w);
     log(run(w) === "stable", "an untouched page settles to stable");
