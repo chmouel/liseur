@@ -36,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -56,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
@@ -180,11 +182,7 @@ fun ContentsScreen(
                         actionIconContentColor = theme.foreground,
                     ),
                 )
-                TabRow(
-                    selectedTabIndex = tab.ordinal,
-                    containerColor = theme.background,
-                    contentColor = theme.foreground,
-                ) {
+                val tabs: @Composable () -> Unit = {
                     ContentsTab.entries.forEach { entry ->
                         Tab(
                             selected = tab == entry,
@@ -194,11 +192,34 @@ fun ContentsScreen(
                             text = {
                                 Text(
                                     text = stringResource(entry.labelRes),
-                                    style = MaterialTheme.typography.labelLarge,
+                                    style = MaterialTheme.typography.labelSmall,
                                     maxLines = 1,
                                 )
                             },
                         )
+                    }
+                }
+                // Four equal tabs fit side by side at the normal font size,
+                // with the labels kept small so "Bookmarks" is not clipped.
+                // Once the reader enlarges the system font there is no
+                // compact style that keeps them all, so the row scrolls
+                // instead of truncating words.
+                if (LocalDensity.current.fontScale <= 1f) {
+                    TabRow(
+                        selectedTabIndex = tab.ordinal,
+                        containerColor = theme.background,
+                        contentColor = theme.foreground,
+                    ) {
+                        tabs()
+                    }
+                } else {
+                    ScrollableTabRow(
+                        selectedTabIndex = tab.ordinal,
+                        containerColor = theme.background,
+                        contentColor = theme.foreground,
+                        edgePadding = 0.dp,
+                    ) {
+                        tabs()
                     }
                 }
             }
