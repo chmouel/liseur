@@ -2390,20 +2390,42 @@ fun ReaderScreen(
                     anchorY = lastTouchY,
                     onGoToNote = {
                         onDismissFootnote()
-                        onProgressAction.onJump()
                         navigator?.let { nav ->
                             // Where the reader is now, read before the reveal
                             // below moves anything: that is the place a jump
                             // back is meant to return them to.
-                            val from = nav.currentLocator.value.restorePoint()
+                            val here = nav.currentLocator.value
+                            val from = here.restorePoint()
                             val fragment = note.link.href.toString().substringAfter('#', "")
                             effectScope.launch {
-                                // The note is hidden in the page it belongs to,
-                                // so going to it without this is going nowhere.
-                                // Revealed before the jump rather than after,
-                                // because after, the reader is already looking
-                                // at the empty place it should have been.
-                                if (fragment.isNotEmpty()) FootnoteLayout.reveal(nav, fragment)
+                                // The note is hidden in the page it belongs
+                                // to, so going to it without this is going
+                                // nowhere. Revealed before the jump rather
+                                // than after, because after, the reader is
+                                // already looking at the empty place it
+                                // should have been.
+                                //
+                                // Putting a block back into the page moves
+                                // every block after it, so the reveal is held
+                                // in the reflow scope and settled inside it.
+                                // Outside, that movement is the navigator
+                                // announcing pages nobody turned.
+                                if (fragment.isNotEmpty()) {
+                                    reflow.within {
+                                        val before = ExactLocatorAnchor.layoutSignature(nav)
+                                        if (FootnoteLayout.reveal(nav, fragment)) {
+                                            awaitReflowSettled(nav, before)
+                                        }
+                                    }
+                                }
+                                // Armed only now, and from the place read
+                                // above. The marker is single use, so a
+                                // reveal that announced anything would have
+                                // spent it on the text moving and left the
+                                // jump itself to be recorded as reading: a
+                                // distance nobody read, taught to the pace
+                                // estimator and published as progress.
+                                onProgressAction.jumpFrom(here)
                                 val noteToken = moves.issue(
                                     from = from,
                                     to = publication.locatorFromLink(note.link)?.destination(),
@@ -2779,10 +2801,15 @@ class ReaderAnnotationActions(
  * A refusal or a failure is not a change. The book's own
  * Content-Security-Policy can turn either of these down, and a page that
  * was never touched is a page that never moved.
+ *
+ * A note the navigator's own position names is kept: that fragment is
+ * where the reader is being put, and hiding it would take the ground out
+ * from under them.
  */
 private suspend fun repairPage(nav: EpubNavigatorFragment): Boolean {
     val fitted = WideContentFit.apply(nav) == WideContentFit.Result.CHANGED
-    val noted = FootnoteLayout.apply(nav) == FootnoteLayout.Result.CHANGED
+    val here = nav.currentLocator.value.locations.fragments
+    val noted = FootnoteLayout.apply(nav, here) == FootnoteLayout.Result.CHANGED
     return fitted || noted
 }
 
@@ -2869,7 +2896,7 @@ class ReaderPrefsActions(
 class ReaderProgressActions(
     val cycleFooterMode: () -> Unit,
     val setFooterMode: (FooterMode) -> Unit,
-    val onJump: () -> Unit,
+    val jumpFrom: (Locator?) -> Unit,
     val dismissJumpBack: () -> Unit,
     val acceptCatchUp: () -> Unit,
     val dismissCatchUp: () -> Unit,
@@ -2884,7 +2911,10 @@ class ReaderProgressActions(
     val locatorAtOrBeforeProgression: (Double) -> Locator?,
     val prepareLocator: (Locator) -> Locator,
     val onApproximateResume: () -> Unit,
-)
+) {
+    /** The reader is jumping away from wherever they are now. */
+    fun onJump() = jumpFrom(null)
+}
 
 /**
  * Syncing this one book on purpose, from the Navigate screen.

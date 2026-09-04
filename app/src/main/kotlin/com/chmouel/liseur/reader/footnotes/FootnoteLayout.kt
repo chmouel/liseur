@@ -224,8 +224,13 @@ internal object FootnoteLayout {
             document.head.appendChild(css);
             state.styleEl = css;
             installed = true;
-            if (!css.sheet) return "blocked";
           }
+          // A stylesheet the book's Content-Security-Policy turned down is
+          // still an element and still connected, so asking only on the
+          // pass that installed it means every later pass sails through and
+          // starts marking notes that nothing can hide — reporting the page
+          // moved when it cannot have. The question belongs on every pass.
+          if (!state.styleEl.sheet) return "blocked";
 
           var anchors = document.getElementsByTagName("a");
           var notes = [], marks = [], i, j;
@@ -338,9 +343,28 @@ internal object FootnoteLayout {
         }
     }
 
+    /**
+     * Hides this document's notes, sizes its markers, and answers whether
+     * the page may have moved.
+     *
+     * [keep] names notes the reader is being sent to, or has already been
+     * sent to, and which must therefore survive this pass. The exemption
+     * the card's "go to note" writes lives on the document's `window` and
+     * dies with the document, so a reader who reopens the book at a
+     * position inside a revealed note, or who arrives at one from search or
+     * the table of contents, would otherwise watch it be hidden out from
+     * under the place they were being restored to.
+     */
     @OptIn(ExperimentalReadiumApi::class)
-    internal suspend fun apply(navigator: EpubNavigatorFragment): Result =
-        parse(evaluate(navigator, SCRIPT))
+    internal suspend fun apply(
+        navigator: EpubNavigatorFragment,
+        keep: List<String> = emptyList(),
+    ): Result {
+        for (fragment in keep) {
+            if (fragment.isNotEmpty()) evaluate(navigator, revealScript(fragment))
+        }
+        return parse(evaluate(navigator, SCRIPT))
+    }
 
     /** Reveals [fragment], returning whether the page may have moved. */
     @OptIn(ExperimentalReadiumApi::class)

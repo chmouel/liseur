@@ -1172,15 +1172,30 @@ class ReaderViewModel(
         _catchUp.value = null
     }
 
-    /** Called before jumping, so the reader can come back in one tap. */
-    fun onJump() {
-        val from = lastLocator ?: return
+    /**
+     * Called before jumping, so the reader can come back in one tap.
+     *
+     * [from] is the place to offer them back, for a caller that has to do
+     * something to the page before it can navigate: by the time it does,
+     * the layout has moved and the last position on hand is no longer the
+     * one the reader was looking at. Everyone else passes nothing and gets
+     * exactly that last position.
+     */
+    fun onJump(from: Locator? = null) {
+        val given = from?.let(::prepareLocator)
+        val place = given ?: lastLocator ?: return
         val progress = _progress.value
         // The jump itself is not reading, and neither is finding your
         // way back, so it must not affect the speed estimate.
         speed.forgetLastPosition()
         pendingPositionEvent = NavigatorPositionEvent.LOCAL_JUMP
-        _jumpBack.value = JumpBack(locator = from, position = progress?.position)
+        _jumpBack.value = JumpBack(
+            locator = place,
+            // Resolved from the given place rather than read off the
+            // progress on hand, which counted the page as it is now.
+            position = given?.let { bookPositions?.resolve(it)?.position }
+                ?: progress?.position,
+        )
         jumpBackTimer?.cancel()
         jumpBackTimer = viewModelScope.launch {
             delay(JUMP_BACK_TIMEOUT_MS)

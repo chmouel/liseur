@@ -100,7 +100,12 @@ class FootnoteLayoutTest {
 
     @Test
     fun `a stylesheet the book's policy refused is reported rather than assumed`() {
-        assertTrue(FootnoteLayout.SCRIPT.contains("if (!css.sheet) return \"blocked\""))
+        assertTrue(FootnoteLayout.SCRIPT.contains("if (!state.styleEl.sheet) return \"blocked\""))
+        // Asked of the stored element rather than the one just made, and so
+        // asked on every pass: a refused stylesheet stays connected, and a
+        // later pass that only checked at installation would mark notes
+        // that nothing can hide and report the page moved.
+        assertFalse(FootnoteLayout.SCRIPT.contains("if (!css.sheet)"))
     }
 
     @Test
