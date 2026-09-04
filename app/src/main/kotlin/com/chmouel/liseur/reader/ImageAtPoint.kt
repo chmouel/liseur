@@ -3,6 +3,7 @@ package com.chmouel.liseur.reader
 import android.webkit.WebView
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /**
@@ -77,12 +78,37 @@ internal object ImageAtPoint {
     /**
      * Whether this resource has any image at all.
      *
-     * Asked once per resource and remembered, because the answer is no
-     * for most pages of most books, and a no means no script runs when
-     * the reader puts two fingers on the page.
+     * Asked once per resource, because the answer is no for most pages of
+     * most books, and a no means no script runs when the reader puts two
+     * fingers on the page. Only a *yes* is remembered: see the caller.
      */
     const val HAS_IMAGES_SCRIPT: String =
         "(document.images.length > 0 || !!document.querySelector('svg image'))"
+
+    /**
+     * The longest an address and a caption are allowed to be.
+     *
+     * The document is the book's, so everything it says comes back as
+     * something a file chose. A book that inlines a plate as a `data:`
+     * URL, or writes a novel into an `alt`, would otherwise hand back a
+     * string of that size across the bridge on every touch. Both figures
+     * are far above anything a real address or a real caption reaches.
+     */
+    private const val MAX_SRC_CHARS = 4096
+    private const val MAX_ALT_CHARS = 512
+
+    /** Room for the JSON around the two strings the script may return. */
+    private const val PARSE_SLACK_CHARS = 256
+
+    /**
+     * The longest the document is given to answer.
+     *
+     * A renderer that hangs, or a process that goes away without saying
+     * so, never calls the callback at all — and the touch that asked
+     * would then wait for ever, with its job still in flight when the
+     * next one starts.
+     */
+    private const val EVAL_TIMEOUT_MS = 1500L
 
     /**
      * The hit test itself.
@@ -93,15 +119,20 @@ internal object ImageAtPoint {
      * `src` would open a *lower*-resolution copy of the picture the
      * reader is looking at, which is the exact opposite of the point.
      *
-     * `elementFromPoint` answers with the topmost element, which over a
-     * picture is often a link or a `<figure>`'s own text node rather than
-     * the image, so it walks up a few levels and then, failing that, asks
-     * the element what images it contains. Both are bounded: an unbounded
-     * walk ends at `<body>`, which contains every image in the chapter.
+     * `elementsFromPoint` gives the whole stack under the point, so a
+     * picture beneath a link, a caption's wrapper or a transparent
+     * overlay is found without guessing which of them the browser calls
+     * topmost. Failing that it walks up a few levels and looks *inside*
+     * each ancestor — and anything found that way has to have the point
+     * inside its own box, because an ancestor two levels up is usually
+     * the `<section>`, and a `<section>` contains the chapter's plate
+     * wherever in the chapter that plate happens to be.
      */
     fun script(fx: Float, fy: Float): String = """
         (function () {
           var MIN = $MIN_RENDERED_PX;
+          var MAX_SRC = $MAX_SRC_CHARS;
+          var MAX_ALT = $MAX_ALT_CHARS;
           // The point arrives as a fraction of the web view rather than
           // in pixels. A fixed-layout page is drawn at whatever scale it
           // takes to fit the screen, so device pixels divided by the
@@ -131,16 +162,35 @@ internal object ImageAtPoint {
             }
             return false;
           }
-          var el = document.elementFromPoint(px, py);
+          function isImage(e) {
+            if (!e || !e.tagName) return false;
+            var t = e.tagName.toLowerCase();
+            return t === "img" || t === "image";
+          }
+          // Whether the picture is actually under the finger. Without
+          // this a pinch on a paragraph, or on a plate's own caption,
+          // finds whatever illustration happens to live elsewhere in the
+          // same <section> and opens that instead of resizing the text.
+          function covers(e, x, y) {
+            if (!isImage(e)) return false;
+            var r = e.getBoundingClientRect();
+            return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+          }
           var img = null;
-          for (var i = 0; el && i < 4; i++) {
-            if (el.tagName && (el.tagName.toLowerCase() === "img" ||
-                               el.tagName.toLowerCase() === "image")) {
-              img = el;
-              break;
+          var stack = [];
+          try {
+            if (document.elementsFromPoint) stack = document.elementsFromPoint(px, py) || [];
+          } catch (e) {}
+          for (var s = 0; s < stack.length && s < 8; s++) {
+            if (isImage(stack[s])) { img = stack[s]; break; }
+          }
+          var el = document.elementFromPoint(px, py);
+          for (var i = 0; !img && el && i < 4; i++) {
+            if (isImage(el)) { img = el; break; }
+            var inner = el.querySelectorAll ? el.querySelectorAll("img, svg image") : [];
+            for (var k = 0; k < inner.length && k < 16; k++) {
+              if (covers(inner[k], px, py)) { img = inner[k]; break; }
             }
-            var inner = el.querySelector ? el.querySelector("img, svg image") : null;
-            if (inner) { img = inner; break; }
             el = el.parentElement;
           }
           if (!img) return null;
@@ -158,10 +208,14 @@ internal object ImageAtPoint {
           if (typeof src !== "string" || !src) return null;
           var abs = src;
           try { abs = new URL(src, document.baseURI).href; } catch (e) {}
+          if (abs.length > MAX_SRC) return null;
+
+          var alt = img.getAttribute("alt") || "";
+          if (alt.length > MAX_ALT) alt = alt.slice(0, MAX_ALT);
 
           return {
             src: abs,
-            alt: img.getAttribute("alt") || "",
+            alt: alt,
             width: img.naturalWidth || Math.round(box.width),
             height: img.naturalHeight || Math.round(box.height)
           };
@@ -172,15 +226,20 @@ internal object ImageAtPoint {
      * `evaluateJavascript` hands back the JSON encoding of the value, so
      * an object arrives as an object and a miss arrives as the four
      * characters `null`.
+     *
+     * The script caps what it returns, so anything longer than those caps
+     * did not come from the script and is refused before it is parsed.
      */
     fun parse(result: String?): Hit? {
         val raw = result?.trim().orEmpty()
         if (raw.isEmpty() || raw == "null") return null
+        if (raw.length > MAX_SRC_CHARS + MAX_ALT_CHARS + PARSE_SLACK_CHARS) return null
         val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
         val src = json.optString("src").takeIf { it.isNotBlank() } ?: return null
+        if (src.length > MAX_SRC_CHARS) return null
         return Hit(
             src = src,
-            alt = json.optString("alt").takeIf { it.isNotBlank() },
+            alt = json.optString("alt").takeIf { it.isNotBlank() }?.take(MAX_ALT_CHARS),
             width = json.optInt("width"),
             height = json.optInt("height"),
         )
@@ -197,11 +256,13 @@ internal object ImageAtPoint {
     suspend fun at(web: WebView, fx: Float, fy: Float): Hit? = parse(eval(web, script(fx, fy)))
 
     private suspend fun eval(web: WebView, js: String): String? =
-        suspendCancellableCoroutine { cont ->
-            try {
-                web.evaluateJavascript(js) { if (cont.isActive) cont.resume(it) }
-            } catch (e: Exception) {
-                if (cont.isActive) cont.resume(null)
+        withTimeoutOrNull(EVAL_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                try {
+                    web.evaluateJavascript(js) { if (cont.isActive) cont.resume(it) }
+                } catch (e: Exception) {
+                    if (cont.isActive) cont.resume(null)
+                }
             }
         }
 }

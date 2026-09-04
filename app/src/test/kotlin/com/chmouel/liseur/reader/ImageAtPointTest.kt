@@ -108,4 +108,51 @@ class ImageAtPointTest {
         // the chapter, so every tap would find one.
         assertTrue(ImageAtPoint.script(0f, 0f).contains("i < 4"))
     }
+
+    /**
+     * The guard that keeps a pinch on a paragraph from opening whatever
+     * illustration happens to live elsewhere in the same section.
+     */
+    @Test
+    fun `an image found by searching a container must be under the point`() {
+        val script = ImageAtPoint.script(0.5f, 0.5f)
+        assertTrue(script.contains("function covers("))
+        assertTrue(script.contains("covers(inner[k], px, py)"))
+        assertTrue(script.contains("x >= r.left && x <= r.right && y >= r.top && y <= r.bottom"))
+    }
+
+    /** The whole stack under the point, not a guess at what is on top. */
+    @Test
+    fun `the script reads the hit stack before it walks`() {
+        assertTrue(ImageAtPoint.script(0f, 0f).contains("elementsFromPoint(px, py)"))
+    }
+
+    /**
+     * The document belongs to the book, so everything it hands back is a
+     * length a file chose. An inlined `data:` plate runs to megabytes.
+     */
+    @Test
+    fun `an absurd answer is refused rather than parsed`() {
+        val src = "data:image/png;base64," + "A".repeat(200_000)
+        assertNull(ImageAtPoint.parse("""{"src":"$src","alt":"","width":9,"height":9}"""))
+    }
+
+    @Test
+    fun `an answer far larger than the script can produce is refused`() {
+        val alt = "x".repeat(5_000)
+        assertNull(
+            ImageAtPoint.parse(
+                """{"src":"http://h/i.png","alt":"$alt","width":9,"height":9}""",
+            ),
+        )
+    }
+
+    @Test
+    fun `a long but plausible caption survives`() {
+        val alt = "x".repeat(400)
+        val hit = ImageAtPoint.parse(
+            """{"src":"http://h/i.png","alt":"$alt","width":9,"height":9}""",
+        )
+        assertEquals(alt, hit?.alt)
+    }
 }
