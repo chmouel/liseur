@@ -2,6 +2,8 @@ package com.chmouel.liseur.reader.chrome
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
@@ -29,6 +31,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -116,6 +119,11 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
     // reader drag the letterbox into view and lose the picture off the
     // other edge.
     var natural by remember(image) { mutableStateOf(Size.Unspecified) }
+    // Counted apart from `offsetY`, which is clamped to nothing at fit
+    // because a fitted picture has nowhere to pan to. Adding the pan to
+    // an offset that is about to be zeroed again measures one frame of
+    // travel rather than a drag, and one frame is never far enough.
+    var dragDown by remember(image) { mutableFloatStateOf(0f) }
     val dismissTravel = with(LocalDensity.current) { ImageZoom.DISMISS_TRAVEL_DP.dp.toPx() }
     val context = LocalContext.current
     val viewerTitle = image.alt ?: stringResource(R.string.reader_image_viewer)
@@ -181,10 +189,29 @@ fun ImageViewer(image: ViewedImage, onDismiss: () -> Unit) {
                     // go, so it means put it away. Downwards only: it is
                     // the direction every other viewer uses, and it does
                     // not collide with the sideways pan of a wide plate.
-                    if (wasAtFit && ImageZoom.atFit(scale) && offsetY > dismissTravel) {
-                        onDismiss()
+                    // Travel back up takes it off again, so a hand that
+                    // wanders down and comes back has not asked.
+                    if (wasAtFit && ImageZoom.atFit(scale)) {
+                        dragDown = ImageZoom.dragTravel(dragDown, pan.y)
+                        if (dragDown > dismissTravel) onDismiss()
+                    } else {
+                        dragDown = 0f
                     }
                     hold()
+                }
+            }
+            // `detectTransformGestures` has no gesture-end callback, and
+            // the travel above needs one: distance covered by two
+            // separate drags is not a drag. Watched on the initial pass
+            // and never consumed, so the detector above still sees
+            // everything.
+            .pointerInput(image) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                    } while (event.changes.any { it.pressed })
+                    dragDown = 0f
                 }
             },
     ) {

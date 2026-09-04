@@ -30,6 +30,20 @@ object ImageZoom {
 
     fun clampScale(scale: Float): Float = scale.coerceIn(MIN_SCALE, MAX_SCALE)
 
+    /**
+     * The travel a downward drag has accumulated, given [travelled] so
+     * far and one frame's [panY].
+     *
+     * Counted here rather than read off the picture's own offset, because
+     * a picture at fit is clamped back to centre after every frame and
+     * so never accumulates anything. Travel back up cancels travel down,
+     * so a hand that wanders and returns has asked for nothing, and it
+     * never goes negative — a drag that started upwards should not need
+     * to be paid back before a later downward one counts.
+     */
+    fun dragTravel(travelled: Float, panY: Float): Float =
+        (travelled + panY).coerceAtLeast(0f)
+
     /** True when [scale] is close enough to fit that a drag means dismiss. */
     fun atFit(scale: Float): Boolean = scale <= MIN_SCALE + FIT_EPSILON
 

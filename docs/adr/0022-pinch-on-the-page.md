@@ -347,8 +347,7 @@ public `href()` extracted from its existing private `path()`, so the one
 spelling of "turn a `readium_package` URL into a publication href" is
 shared rather than copied.
 
-**Paper under the ink.** A great many book illustrations are black line
-art on a transparent background — Standard Ebooks marks them
+**Paper under the ink.** A great many book illustrations are black lineart on a transparent background — Standard Ebooks marks them
 `se:image.color-depth.black-on-transparent` — and on a black scrim those
 are not dimmed, they are gone. So a white rectangle is drawn behind the
 picture's own fitted rectangle. Behind the fitted rectangle rather than
@@ -356,6 +355,15 @@ behind the screen, so a photograph covers it completely and never shows
 a white border; white rather than the reading theme's paper, because the
 overlay is not the page and because a transparent image in an EPUB is
 ink, not chalk.
+
+**Dragging it away is counted, not measured.** A picture at fit has
+nowhere to pan to, so its offset is clamped back to centre after every
+frame — which means the offset can never accumulate the 96dp that means
+"put this away", and reading the dismissal off it measures a single
+frame of a drag instead of the drag. The travel is therefore kept
+separately, added up across the gesture and reset when every finger
+leaves, so distance covered by two unrelated drags is not a drag. Travel
+back up cancels travel down, and the count never goes negative.
 
 **Modal to a screen reader as well as to a finger.** Drawn as the last
 child of the reading box rather than in a window of its own, so that it
@@ -403,6 +411,13 @@ opened the viewer. A long press on an image is also a long press as far
 as the web view is concerned, and the web view answers one by starting a
 drag of the picture — so without the claim the viewer opens over a drag
 shadow the reader never asked for.
+
+"One pointer, no travel" is not on its own enough to tell a long press
+from the tail of a pinch. A first finger that stays still while a second
+one resizes and then lifts leaves exactly one pointer, unmoved — so the
+long press has to ask the same question the late answer does, whether a
+resize has taken this touch, or a quick pinch commits a size and then
+opens a picture on top of it.
 
 ### What the other two gestures must not do
 
