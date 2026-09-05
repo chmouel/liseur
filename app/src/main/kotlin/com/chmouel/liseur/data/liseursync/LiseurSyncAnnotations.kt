@@ -95,8 +95,13 @@ class LiseurSyncAnnotations(
         var unreachable: SyncFailure? = null
         val reresolve = mutableMapOf<String, String>()
         var hasMore = false
+        // A 429 is answered, so it never sets [unreachable], but letting
+        // the pass run on regardless would still send its remaining
+        // feed pages and reconcile requests into a server that just
+        // asked it to slow down.
+        private var rateLimited = false
         val stopped: Boolean
-            get() = unreachable != null || failure == SyncFailure.Unauthorised ||
+            get() = unreachable != null || rateLimited || failure == SyncFailure.Unauthorised ||
                 failure == SyncFailure.Forbidden || failure == SyncFailure.InsecureTransport
 
         fun failed(cause: IOException, reason: SyncFailure) {
@@ -105,6 +110,7 @@ class LiseurSyncAnnotations(
                     (reason == SyncFailure.Forbidden || reason == SyncFailure.InsecureTransport))
             ) failure = reason
             if (!cause.serverAnswered()) unreachable = unreachable ?: reason
+            if (reason is SyncFailure.ServerError && reason.code == 429) rateLimited = true
         }
 
         fun outcome() = Outcome(pulled, pushed, failure, unreachable, reresolve, hasMore)

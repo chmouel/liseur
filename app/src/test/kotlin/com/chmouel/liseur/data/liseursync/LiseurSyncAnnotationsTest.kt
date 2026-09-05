@@ -1261,6 +1261,24 @@ class LiseurSyncAnnotationsTest {
     }
 
     @Test
+    fun `a rate-limited feed stops the pass instead of reconciling on`() = runTest {
+        // 429 is answered, so it is not "unreachable" — but running on
+        // regardless would still spend the reconcile budget against a
+        // server that just asked this device to slow down.
+        connect()
+        alias()
+        reconciled()
+        db.annotationDao().upsert(mark(note = "edited offline", updatedAt = MICROS + 5))
+        db.annotationSyncDao().upsert(syncRow(rev = 3, acked = "stale"))
+        server.enqueue(MockResponse(code = 429))
+
+        sync()
+
+        assertTrue(requests().none { it.target == "/v1/works/$WORK/annotations" })
+        assertEquals(0, pushes())
+    }
+
+    @Test
     fun `a pass that outlives its account stops talking to the server`() = runTest {
         // Refusing to store the answer is too late: the request is the
         // side effect. A device that has been unpaired must not go on
