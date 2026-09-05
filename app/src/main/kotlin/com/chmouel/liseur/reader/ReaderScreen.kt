@@ -625,7 +625,7 @@ fun ReaderScreen(
 
     onProgressAction.prepareCatchUp = {
         if (!effectiveScrolling) {
-            false
+            true
         } else {
             navigatorNow?.let { nav ->
                 val since = heldPlace.mark()
