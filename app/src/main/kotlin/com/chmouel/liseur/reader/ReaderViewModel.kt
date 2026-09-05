@@ -1169,8 +1169,8 @@ class ReaderViewModel(
     }
 
     /** Takes the offer: the further position wins, and the page turns. */
-    fun acceptCatchUp() {
-        val offer = _catchUp.value ?: return
+    fun acceptCatchUp(offered: CatchUp? = _catchUp.value) {
+        val offer = offered ?: return
         val acceptedFrom = lastLocator
         _catchUp.value = null
         viewModelScope.launch {

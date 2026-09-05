@@ -2231,7 +2231,7 @@ fun ReaderScreen(
                             onCatchUp = {
                                 effectScope.launch {
                                     onProgressAction.prepareCatchUp()
-                                    onProgressAction.acceptCatchUp()
+                                    onProgressAction.acceptCatchUp(offer)
                                 }
                             },
                             onDismiss = onProgressAction.dismissCatchUp,
@@ -2916,7 +2916,7 @@ class ReaderProgressActions(
     val setFooterMode: (FooterMode) -> Unit,
     val jumpFrom: (Locator?) -> Unit,
     val dismissJumpBack: () -> Unit,
-    val acceptCatchUp: () -> Unit,
+    val acceptCatchUp: (ReaderViewModel.CatchUp?) -> Unit,
     var prepareCatchUp: suspend () -> Unit = {},
     val dismissCatchUp: () -> Unit,
     val chapterTicks: () -> List<Float>,
