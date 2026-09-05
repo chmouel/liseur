@@ -92,15 +92,25 @@ class BookPositions(
     }
 
     /**
-     * A conservative synthetic locator which never starts after [progression].
-     * Used when an exact text quote is unavailable or belongs to another edition.
+     * An approximate resource locator at [progression], using the inverse of
+     * [resolve]. Flooring the synthetic position alone can send most of a
+     * two-position chapter back to its first paragraph.
      */
     fun locatorAtOrBeforeProgression(progression: Double): Locator? {
         if (!isUsable) return null
-        if (totalPositions == 1) return locators.first()
-        val coordinate = 1.0 + progression.coerceIn(0.0, 1.0) * (totalPositions - 1)
+        val bounded = progression.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.0
+        val coordinate = 1.0 + bounded * (totalPositions - 1)
         val position = floor(coordinate).toInt().coerceIn(1, totalPositions)
-        return locatorAt(position)
+        val resource = resources.lastOrNull { it.firstPosition <= coordinate }
+            ?: return locatorAt(position)
+        return resource.positions.first().copy(
+            locations = Locator.Locations(
+                progression = if (totalPositions == 1) bounded else resource.progressionAt(coordinate),
+                position = position,
+                totalProgression = bounded,
+            ),
+            text = Locator.Text(),
+        )
     }
 
     private fun progressAtCoordinate(coordinate: Double): StableBookProgress {
@@ -173,6 +183,17 @@ class BookPositions(
             if (width <= 0.0) return upper.second
             val fraction = (progression - lower.first) / width
             return lower.second + (upper.second - lower.second) * fraction
+        }
+
+        fun progressionAt(coordinate: Double): Double {
+            val upperIndex = anchors.indexOfFirst { it.second >= coordinate }
+            if (upperIndex < 0) return anchors.last().first
+            if (upperIndex == 0) return anchors.first().first
+            val lower = anchors[upperIndex - 1]
+            val upper = anchors[upperIndex]
+            val width = upper.second - lower.second
+            if (width <= 0.0) return lower.first
+            return lower.first + (upper.first - lower.first) * (coordinate - lower.second) / width
         }
     }
 

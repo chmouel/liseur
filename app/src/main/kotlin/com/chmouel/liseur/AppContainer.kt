@@ -36,6 +36,7 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
+import com.chmouel.liseur.data.liseursync.LiseurSyncLive
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import com.chmouel.liseur.data.liseursync.LiseurSyncSeriesClient
@@ -44,6 +45,9 @@ import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncPositionSync
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
+import com.chmouel.liseur.data.remote.LiveIdentity
+import com.chmouel.liseur.data.remote.LiveRefresh
+import com.chmouel.liseur.data.remote.LiveTopic
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
@@ -53,6 +57,7 @@ import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.settings.SessionStateRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.LatestPositionSync
+import com.chmouel.liseur.sync.LiveSyncConnector
 import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.ui.eink.EInkDisplay
@@ -66,6 +71,8 @@ import org.readium.r2.streamer.parser.DefaultPublicationParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Manual composition root: shared Readium services and app-wide
@@ -143,6 +150,7 @@ class AppContainer(context: Context) {
         context = context.applicationContext,
         annotationDao = database.annotationDao(),
         bookDao = database.bookDao(),
+        requestBookSync = ::requestBookSync,
     )
 
     /** The one answer to whether a book is read, shared by everything that asks. */
@@ -362,6 +370,24 @@ class AppContainer(context: Context) {
         uploaders = mapOf(
             ServerKind.LISEUR_SYNC to LiseurSyncUploadClient(),
         ),
+        live = mapOf(
+            ServerKind.LISEUR_SYNC to LiseurSyncLive(
+                refreshTopics = { identity, topics ->
+                    val readingTopics = topics - LiveTopic.INSIGHTS
+                    val result = if (readingTopics.isEmpty()) {
+                        LiveRefresh()
+                    } else {
+                        liseurSync.refresh(identity, readingTopics)
+                    }
+                    if (LiveTopic.INSIGHTS in topics &&
+                        database.remoteServerDao().get()?.let(LiveIdentity::from) == identity
+                    ) {
+                        _insightInvalidations.value += 1
+                        result.copy(completed = result.completed + LiveTopic.INSIGHTS)
+                    } else result
+                },
+            ),
+        ),
     )
 
     /**
@@ -383,6 +409,24 @@ class AppContainer(context: Context) {
         request = { positionSync.request(SyncScope.Book(it)) },
         scheduleRetry = { PositionSyncWorker.retryBook(context.applicationContext, it) },
         onError = { message, error -> Log.e("position-sync", message, error) },
+    )
+
+    fun requestBookSync(bookId: String) = latestPositionSync.signal(bookId)
+
+    private val _insightInvalidations = MutableStateFlow(0L)
+    val insightInvalidations = _insightInvalidations.asStateFlow()
+
+    val liveSync = LiveSyncConnector(
+        scope = applicationScope,
+        accounts = database.remoteServerDao().observe(),
+        sourceFor = { remoteRouter.liveFor(it.kind) },
+        coordinator = positionSync,
+        requestBook = ::requestBookSync,
+        reportFailure = { identity, reason ->
+            if (database.remoteServerDao().get()?.let(LiveIdentity::from) == identity) {
+                syncReporting.report(com.chmouel.liseur.data.remote.PositionSyncStatus.Failed(reason))
+            }
+        },
     )
 
     val readingPositions = ReadingPositionPublisher(

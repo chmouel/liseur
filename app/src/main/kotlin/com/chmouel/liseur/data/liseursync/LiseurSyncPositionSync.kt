@@ -18,6 +18,9 @@ import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.failureForCode
 import com.chmouel.liseur.data.remote.PositionSync
+import com.chmouel.liseur.data.remote.LiveIdentity
+import com.chmouel.liseur.data.remote.LiveRefresh
+import com.chmouel.liseur.data.remote.LiveTopic
 import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.RemoteCredentials
@@ -95,6 +98,57 @@ class LiseurSyncPositionSync(
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = run(book = null)
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)
+
+    /** Topic reads never name files, upload sessions, or claim a full sync. */
+    suspend fun refresh(identity: LiveIdentity, topics: Set<LiveTopic>): LiveRefresh {
+        val server = server()?.takeIf { LiveIdentity.from(it) == identity } ?: return LiveRefresh()
+        val account = account() ?: return LiveRefresh()
+        if (serverDao.get()?.let(LiveIdentity::from) != identity ||
+            account.accountKey != identity.account || account.credentials != server.credentials
+        ) return LiveRefresh()
+        val completed = mutableSetOf<LiveTopic>()
+        val owed = mutableSetOf<String>()
+        val failures = mutableMapOf<LiveTopic, SyncFailure>()
+        if (LiveTopic.POSITIONS in topics) {
+            val trouble = Trouble()
+            val caughtUp = pull(account, trouble)
+            trouble.first?.let { failures[LiveTopic.POSITIONS] = it }
+            if (trouble.first == SyncFailure.Unauthorised) {
+                return LiveRefresh(completed, owed, failures)
+            }
+            val aliases = if (trouble.first?.worthRetrying == false) {
+                emptyList()
+            } else {
+                identityDao.aliasesFor(account.peerId).filter { it.usable }
+            }
+            for (alias in aliases) {
+                val book = bookDao.getByUrl(alias.bookUrl) ?: continue
+                // An alias can be confirmed after an earlier page skipped it.
+                // Leave that seed to a book run instead of hashing or naming here.
+                if (!alias.seeded) owed += book.url
+                if (reconcile(account, book to alias) is Reconciled.Owed) owed += book.url
+            }
+            if (caughtUp && trouble.first == null) completed += LiveTopic.POSITIONS
+        }
+        if (LiveTopic.ANNOTATIONS in topics && serverDao.get()?.let(LiveIdentity::from) == identity) {
+            val outcome = annotations?.sync(
+                LiseurSyncAnnotations.Peer(
+                    account.baseUrl, account.credentials, account.peerId,
+                    account.accountKey, server.annotationCursorSeq,
+                ),
+                book = null,
+            )
+            outcome?.reresolve?.forEach { (book, stale) ->
+                forAccount(account) { identityDao.deleteAliasIfStale(book, account.peerId, stale) }
+                owed += book
+            }
+            outcome?.failure?.let { failures[LiveTopic.ANNOTATIONS] = it }
+            if (outcome == null || (outcome.failure == null && !outcome.hasMore)) {
+                completed += LiveTopic.ANNOTATIONS
+            }
+        }
+        return LiveRefresh(completed, owed, failures)
+    }
 
     override suspend fun canSync(bookUrl: String): Boolean {
         val account = account() ?: return false
@@ -673,10 +727,11 @@ class LiseurSyncPositionSync(
      * reading nobody will ever see again, and unlike everything else
      * here it cannot be asked for a second time.
      */
-    private suspend fun pull(account: Account, trouble: Trouble) {
+    private suspend fun pull(account: Account, trouble: Trouble): Boolean {
         var cursor = account.cursorSeq
         var guard = MAX_PAGES
         while (guard-- > 0) {
+            if (!sameAccount(account)) return false
             val page = try {
                 http.get(
                     LiseurSyncApi.changes(account.baseUrl, since = cursor, limit = PAGE),
@@ -688,7 +743,7 @@ class LiseurSyncPositionSync(
             } catch (e: IOException) {
                 Log.i(TAG, "Could not read what changed", e)
                 trouble.failed(e, reasonFor(e))
-                return
+                return false
             }
 
             val items = feed(page.optJSONArray("ops"))
@@ -698,12 +753,13 @@ class LiseurSyncPositionSync(
             apply(account, items.mapNotNull(SyncFeedItem::op), next)
             cursor = next
 
-            if (!page.optBoolean("has_more", false)) return
+            if (!page.optBoolean("has_more", false)) return true
         }
         // A server that always says there is more would otherwise keep
         // this run going forever. Stopping is safe: the cursor is
         // durable and the next run carries on from it.
         Log.i(TAG, "Stopped reading changes after $MAX_PAGES pages")
+        return false
     }
 
     /**
@@ -715,33 +771,35 @@ class LiseurSyncPositionSync(
      * partial history. The snapshot is the newest position per book and
      * per device, which is exactly the baseline to start again from.
      */
-    private suspend fun resync(account: Account, trouble: Trouble) {
+    private suspend fun resync(account: Account, trouble: Trouble): Boolean {
         Log.i(TAG, "The cursor fell behind the server's horizon; starting from a snapshot")
         val snapshot = try {
             http.get(LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.HEADS), account.credentials)
         } catch (e: IOException) {
             trouble.failed(e, reasonFor(e))
-            return
+            return false
         }
         apply(
             account,
             feed(snapshot.optJSONArray("ops")).mapNotNull(SyncFeedItem::op),
             snapshot.optLong("snapshot_seq"),
         )
+        return true
     }
 
     /** Lands a page and moves the cursor, together or not at all. */
     private suspend fun apply(account: Account, ops: List<SyncOp>, cursor: Long) {
-        val byWork = identityDao.aliasesFor(account.peerId).associateBy { it.workId }
         inTransaction {
-            if (serverDao.get()?.accountKey != account.accountKey) return@inTransaction
+            if (!sameAccount(account)) return@inTransaction
+            val byWork = identityDao.aliasesFor(account.peerId).filter { it.usable }.groupBy { it.workId }
             val newestByWork = ops
                 .filterNot { it.deviceId != null && it.deviceId == account.deviceId }
                 .groupBy(SyncOp::workId)
                 .mapNotNull { (_, candidates) -> candidates.maxByOrNull(SyncOp::seq) }
             for (op in newestByWork) {
-                val bookUrl = byWork[op.workId]?.takeIf { it.usable }?.bookUrl ?: continue
-                land(account, bookUrl, op)
+                for (alias in byWork[op.workId].orEmpty()) {
+                    land(account, alias.bookUrl, op)
+                }
             }
             serverDao.setSyncCursor(cursor)
         }
@@ -1546,9 +1604,13 @@ class LiseurSyncPositionSync(
      */
     private suspend fun forAccount(account: Account, work: suspend () -> Unit) {
         inTransaction {
-            if (serverDao.get()?.accountKey == account.accountKey) work()
+            if (sameAccount(account)) work()
         }
     }
+
+    private suspend fun sameAccount(account: Account): Boolean = serverDao.get()?.let {
+        it.accountKey == account.accountKey && it.credentials == account.credentials
+    } == true
 
     /**
      * What to call a failure that stopped one request.

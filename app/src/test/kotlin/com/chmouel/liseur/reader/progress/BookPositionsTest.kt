@@ -160,6 +160,66 @@ class BookPositionsTest {
         assertEquals(5, book.locatorAtOrBeforeProgression(1.0)?.locations?.position)
     }
 
+    @Test
+    fun `approximate resume within two synthetic positions does not return chapter start`() {
+        val book = positions(
+            listOf(
+                listOf(
+                    locator("chapter.xhtml", 0.0, 1),
+                    locator("chapter.xhtml", 0.5, 2),
+                ),
+            ),
+        )
+        val target = book.locatorAtOrBeforeProgression(0.85)!!
+        assertEquals(0.425, target.locations.progression!!, 0.0001)
+        assertEquals(0.85, book.resolve(target)!!.progression, 0.0001)
+        assertEquals(0.85, target.locations.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `approximate resume interpolates within the chosen resource and crosses boundaries`() {
+        val book = positions(
+            listOf(
+                listOf(
+                    locator("one.xhtml", 0.0, 1),
+                    locator("one.xhtml", 0.5, 2),
+                ),
+                listOf(
+                    locator("two.xhtml", 0.0, 3),
+                    locator("two.xhtml", 0.6, 4),
+                ),
+            ),
+        )
+        for (progression in listOf(0.0, 0.2, 0.5, 2.0 / 3, 0.85, 1.0)) {
+            val target = book.locatorAtOrBeforeProgression(progression)!!
+            assertEquals(progression, book.resolve(target)!!.progression, 0.0001)
+        }
+        assertEquals(
+            "https://example.com/two.xhtml",
+            book.locatorAtOrBeforeProgression(2.0 / 3)!!.href.toString(),
+        )
+        assertEquals(0.0, book.locatorAtOrBeforeProgression(2.0 / 3)!!.locations.progression!!, 0.0)
+    }
+
+    @Test
+    fun `approximate resume retains duplicate resource disambiguation`() {
+        val book = positions(
+            listOf(
+                listOf(locator("same.xhtml", 0.0, 1), locator("same.xhtml", 0.5, 2)),
+                listOf(locator("same.xhtml", 0.0, 3), locator("same.xhtml", 0.5, 4)),
+            ),
+        )
+        val target = book.locatorAtOrBeforeProgression(0.85)!!
+        assertEquals(3, target.locations.position)
+        assertEquals(0.85, book.resolve(target)!!.progression, 0.0001)
+    }
+
+    @Test
+    fun `a single position still carries a usable resource progression for resume`() {
+        val book = positions(listOf(listOf(locator("short.xhtml", 0.0, 1))))
+        assertEquals(0.85, book.locatorAtOrBeforeProgression(0.85)!!.locations.progression!!, 0.0)
+    }
+
     /**
      * The reason a scrolled book has to measure its own distance before
      * saving a place. Readium's `findFirstVisibleLocator` names a place

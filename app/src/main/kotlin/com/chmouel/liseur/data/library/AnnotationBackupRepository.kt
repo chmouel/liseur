@@ -73,6 +73,7 @@ class AnnotationBackupRepository(
     private val context: Context,
     private val annotationDao: BookAnnotationDao,
     private val bookDao: BookDao,
+    private val requestBookSync: (String) -> Unit = {},
 ) {
     /** What an export would carry, for saying so before asking where. */
     suspend fun exportPreview(): BackupSummary = withContext(Dispatchers.IO) {
@@ -162,7 +163,13 @@ class AnnotationBackupRepository(
         }
         if (incoming.isEmpty()) return@withContext BackupResult.Imported(added = 0, alreadyHere = 0)
 
-        val added = annotationDao.insertMissing(incoming).count { it != -1L }
+        val inserted = annotationDao.insertMissing(incoming)
+        val added = inserted.count { it != -1L }
+        incoming.zip(inserted)
+            .filter { (_, rowId) -> rowId != -1L }
+            .map { (mark, _) -> mark.bookId }
+            .distinct()
+            .forEach(requestBookSync)
         BackupResult.Imported(added = added, alreadyHere = incoming.size - added)
     }
 }

@@ -1,6 +1,9 @@
 package com.chmouel.liseur.sync
 
 import com.chmouel.liseur.data.remote.PositionSync
+import com.chmouel.liseur.data.remote.LiveIdentity
+import com.chmouel.liseur.data.remote.LiveRefresh
+import com.chmouel.liseur.data.remote.LiveTopic
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.SyncFingerprint
@@ -62,6 +65,56 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
 
     private var inFlight: Running? = null
     private val queued = mutableMapOf<SyncScope, CompletableDeferred<SyncOutcome>>()
+    private var liveIdentity: LiveIdentity? = null
+    private var liveAccountGeneration = 0L
+    private var liveGeneration = 0L
+    private val pendingTopics = mutableMapOf<LiveTopic, Long>()
+
+    suspend fun liveAccount(identity: LiveIdentity?) = state.withLock {
+        if (liveIdentity != identity) {
+            liveIdentity = identity
+            liveAccountGeneration++
+            liveGeneration++
+            pendingTopics.clear()
+        }
+    }
+
+    suspend fun invalidate(identity: LiveIdentity, topics: Set<LiveTopic>) = state.withLock {
+        if (liveIdentity == identity) {
+            val generation = ++liveGeneration
+            topics.forEach { pendingTopics[it] = generation }
+        }
+    }
+
+    suspend fun hasLiveWork(identity: LiveIdentity, excluding: Set<LiveTopic> = emptySet()): Boolean = state.withLock {
+        liveIdentity == identity && pendingTopics.keys.any { it !in excluding }
+    }
+
+    /** A completion only pays the notifications captured before this turn. */
+    suspend fun refreshLive(
+        identity: LiveIdentity,
+        excluding: Set<LiveTopic> = emptySet(),
+        refresh: suspend (LiveIdentity, Set<LiveTopic>) -> LiveRefresh,
+    ): LiveRefresh = turn.withLock {
+        val (generation, captured) = state.withLock {
+            liveAccountGeneration to if (liveIdentity != identity) {
+                emptyMap()
+            } else {
+                pendingTopics.filterKeys { it !in excluding }
+            }
+        }
+        if (captured.isEmpty()) return@withLock LiveRefresh()
+        val result = refresh(identity, captured.keys)
+        state.withLock {
+            if (liveIdentity != identity || liveAccountGeneration != generation) {
+                return@withLock LiveRefresh()
+            }
+            result.completed.forEach { topic ->
+                if (pendingTopics[topic] == captured[topic]) pendingTopics.remove(topic)
+            }
+            result
+        }
+    }
 
     private class Running(
         val scope: SyncScope,

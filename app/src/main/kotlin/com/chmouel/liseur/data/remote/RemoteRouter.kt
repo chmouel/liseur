@@ -27,6 +27,7 @@ class RemoteRouter(
      * never offered for that kind, the same rule [deleters] follows.
      */
     private val uploaders: Map<ServerKind, BookUploader> = emptyMap(),
+    private val live: Map<ServerKind, LiveChanges> = emptyMap(),
 ) {
     private suspend fun kind(): ServerKind? = serverDao.get()?.kind
 
@@ -47,6 +48,10 @@ class RemoteRouter(
     fun filesFor(kind: ServerKind): FileSource? = files[kind]
 
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
+
+    suspend fun live(): LiveChanges? = kind()?.let(live::get)
+
+    fun liveFor(kind: ServerKind): LiveChanges? = live[kind]
 
     /** The deleter for a server already in hand, when the kind has one. */
     fun deleterFor(kind: ServerKind): BookDeleter? = deleters[kind]

@@ -31,6 +31,10 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -49,6 +53,44 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReadingStatsViewModelTest {
+
+    @Test
+    fun `live insight notifications refresh only while collected and catch up on reentry`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val invalidations = MutableStateFlow(0L)
+            var samples = 0
+            val model = ReadingStatsViewModel(
+                sessionDao = db.readingSessionDao(),
+                bookDao = db.bookDao(),
+                progressDao = db.readingProgressDao(),
+                now = { samples++; today.atStartOfDay(it) },
+                liveInvalidations = invalidations,
+            )
+            models.put("live-insights", model)
+            val initial = samples
+            invalidations.value++
+            runCurrent()
+            assertEquals(initial, samples)
+            var visible = launch { model.observeLiveInsights() }
+            runCurrent()
+            assertEquals(initial + 1, samples)
+            invalidations.value++
+            runCurrent()
+            assertEquals(initial + 2, samples)
+            visible.cancelAndJoin()
+            invalidations.value++
+            runCurrent()
+            assertEquals(initial + 2, samples)
+            visible = launch { model.observeLiveInsights() }
+            runCurrent()
+            assertEquals(initial + 3, samples)
+            visible.cancelAndJoin()
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
 
     private lateinit var db: LiseurDatabase
     private lateinit var models: ViewModelStore

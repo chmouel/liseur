@@ -54,6 +54,12 @@ and a sync server that know nothing about each other still add up to a
 library that follows you. What each server can and cannot do is in
 [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
+With a recent liseur-sync server, positions and annotations refresh while
+Liseur is open; statistics refresh when their screen is visible. A remote
+position never turns the page under you. Returning to the reader offers
+the further place, and accepting takes the exact position you were shown.
+Older servers keep the existing scheduled and on-open sync.
+
 No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
 servers and dictionary sources you configure. See the
 [privacy policy](https://chmouel.github.io/liseur/PRIVACY).

@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalLocale
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -222,7 +223,7 @@ private fun LiseurApp(settings: AppSettings) {
             // from here, where the locale is observable state.
             val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
             LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
-            LaunchedEffect(model) { model.refreshServerInsights() }
+            LiveStatsEffect(model)
             val statsState by model.state.collectAsStateWithLifecycle()
             ReadingStatsScreen(
                 state = statsState,
@@ -257,7 +258,7 @@ private fun LiseurApp(settings: AppSettings) {
                 )
                 val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
                 LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
-                LaunchedEffect(model, target.bookUrl) { model.refreshServerInsights() }
+                LiveStatsEffect(model)
                 val bookStatsState by remember(model, target.bookUrl) { model.forBook(target.bookUrl) }
                     .collectAsStateWithLifecycle()
                 val serverInsights by remember(model, target.bookUrl) {
@@ -500,6 +501,16 @@ private fun rememberAnnotationBackup(): AnnotationBackupUi {
 /** Opening a link must never take the app down with it. */
 private fun android.content.Context.openLink(uri: Uri) {
     runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+}
+
+@Composable
+private fun LiveStatsEffect(model: ReadingStatsViewModel) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(model, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            model.observeLiveInsights()
+        }
+    }
 }
 
 @Composable
