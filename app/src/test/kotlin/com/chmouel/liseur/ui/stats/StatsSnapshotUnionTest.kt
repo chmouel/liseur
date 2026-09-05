@@ -85,6 +85,18 @@ class StatsSnapshotUnionTest {
         assertNull(uniteSnapshot(local, books, emptyMap(), snapshot.copy(overlapSessions = 5)))
     }
 
+    @Test
+    fun `combined headline omits pace the snapshot cannot merge`() {
+        val local = readingStats(
+            listOf(SessionSpan("book", at, 20 * 60_000, at, uploaded = false)),
+            books, zone, today,
+        )
+        val withPace = snapshot(overlapMinutes = 0.0)
+            .copy(summary = InsightsSummary(90.0, 4, 10, progressionPerHour = 0.5))
+        val result = uniteSnapshot(local, books, emptyMap(), withPace)!!
+        assertNull(result.headline.progressionPerHour)
+    }
+
     private fun snapshot(overlapMinutes: Double): SnapshotTotals = SnapshotTotals(
         summary = InsightsSummary(90.0, 4, 10),
         books = WorkTotals(

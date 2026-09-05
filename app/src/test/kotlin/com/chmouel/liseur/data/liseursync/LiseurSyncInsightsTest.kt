@@ -191,6 +191,28 @@ class LiseurSyncInsightsTest {
     }
 
     /**
+     * `Instant.parse` accepts timestamps far outside the range
+     * `toEpochMilli()` can represent, which throws `ArithmeticException`.
+     * That must be caught like any other malformed value, not propagate
+     * as an uncaught exception out of the parser.
+     */
+    @Test
+    fun `a work timestamp outside the epoch-millisecond range does not throw`() = runTest {
+        connect()
+        alias()
+        server.enqueue(
+            ok(
+                """{"from":"2026-08-10","to":"2026-08-11","works":[""" +
+                    """{"work_id":"w-1","sessions":8,""" +
+                    """"total_active_minutes":106.25,""" +
+                    """"last_read_at":"+999999999-12-31T23:59:59Z"}]}""",
+            ),
+        )
+
+        assertNull(insights().allBooks(today = TODAY))
+    }
+
+    /**
      * The rows below the headline are asked about the days the headline
      * describes. While they were not, the total on top counted thirty
      * days and the list beneath it counted a lifetime, under one label.

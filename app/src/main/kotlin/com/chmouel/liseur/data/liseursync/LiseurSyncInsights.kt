@@ -432,4 +432,6 @@ internal fun parseWorkInsights(answer: JSONObject): WorkInsights? = try {
     null
 } catch (_: java.time.DateTimeException) {
     null
+} catch (_: ArithmeticException) {
+    null
 }

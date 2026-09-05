@@ -62,7 +62,12 @@ internal fun uniteSnapshot(
         merged,
         StatsHeadline(
             total, sessions, snapshot.combinedStreak,
-            snapshot.summary.progressionPerHour ?: local.progressionPerHour,
+            // The snapshot doesn't supply progression/time overlap, so its
+            // pace describes only server-counted sessions. Reporting it
+            // beside a total that also adds captured local-only reading
+            // would mislabel the combined figure. Omit pace here until the
+            // snapshot can merge it too.
+            progressionPerHour = null,
         ),
     )
 }
