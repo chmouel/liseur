@@ -38,6 +38,7 @@ class LiveSyncConnector(
 ) {
     private val active = MutableStateFlow(false)
     private val lifecycleGeneration = AtomicLong(0)
+    private val lifecycleLock = Any()
     private var stopping: Job? = null
 
     init {
@@ -55,17 +56,27 @@ class LiveSyncConnector(
     }
 
     fun foreground() {
-        lifecycleGeneration.incrementAndGet()
-        stopping?.cancel()
-        active.value = true
+        synchronized(lifecycleLock) {
+            lifecycleGeneration.incrementAndGet()
+            stopping?.cancel()
+            stopping = null
+            active.value = true
+        }
     }
 
     fun background() {
-        val generation = lifecycleGeneration.incrementAndGet()
-        stopping?.cancel()
-        stopping = scope.launch {
-            delay(graceMillis)
-            if (lifecycleGeneration.get() == generation) active.value = false
+        synchronized(lifecycleLock) {
+            val generation = lifecycleGeneration.incrementAndGet()
+            stopping?.cancel()
+            stopping = scope.launch {
+                delay(graceMillis)
+                synchronized(lifecycleLock) {
+                    if (lifecycleGeneration.get() == generation) {
+                        active.value = false
+                        stopping = null
+                    }
+                }
+            }
         }
     }
 
