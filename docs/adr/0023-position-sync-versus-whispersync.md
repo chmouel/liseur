@@ -41,7 +41,7 @@ is what those two carry on their own, which is nothing.
 | Highlights, notes, bookmarks | yes | yes (ADR-0011) | no | no | no | no |
 | Reading statistics across devices | totals only | yes (ADR-0021) | no | no | no | no |
 | Offline, then back | yes | append-only log, derived ids; a retry is byte-identical and answered `duplicate` | idempotent write of the current value; the sync token moves in the transaction that stores what it covers | idempotent write of the current value | idempotent write | — |
-| Learning what moved elsewhere | server push | cursor over `GET /v1/changes` | Kobo sync token | catalog walk, `readProgress` | one `GET` per candidate book; there is no list | — |
+| Learning what moved elsewhere | server push | foreground invalidations trigger reads through the `GET /v1/changes` cursor | Kobo sync token | catalog walk, `readProgress` | one `GET` per candidate book; there is no list | — |
 | How a book is named | ASIN | SHA-256, KOReader partial-MD5, `ta:` title/author with a confirmation on a low match, `409` to merge | calibre uuid | Komga book id | partial-MD5 | — |
 | Which books | bought, or sent to Kindle | every book, including local books; upload and adoption are optional | downloaded from that calibre-web | downloaded from that Komga | downloaded server books, since a hash needs the file | — |
 | Who else sees the place | Kindle devices and apps | liseur-desktop, the web reader, KOReader through `/adapter/kosync` | Kobo devices, the calibre-web reader | Komga's reader and other Komga clients | KOReader | — |
@@ -63,11 +63,42 @@ top of that come highlights, notes, bookmarks and statistics, which
 Whispersync also has, and a book only on this phone reaching the server,
 which it does not.
 
-Two things are not there and are said plainly. There is no server push:
-a change made elsewhere is learnt on the next open, resume, or hourly
-run. Kindle behaves the same way for positions in practice, so no reader
-notices, but it is a difference. And the guarantee is only as good as
-every client: the web reader and liseur-desktop must push on the same
+While the app is foregrounded, liseur-sync's `GET /v1/events` sends
+topic-only invalidations. Position refresh reads the existing durable
+feed, recovers an expired cursor through the snapshot, and reconciles
+known aliases. It leaves naming, seeding and outgoing positions to
+book-scoped sync requests outside the coordinator's turn. Annotation
+refresh runs the complete settle/pull/reconcile/push/delete pass.
+Statistics invalidations refresh only a visible statistics route.
+Neither topic starts a full library sync or imports remote sessions.
+
+The stream stays connected for a 15-second background grace period.
+Its 60-second idle read timeout tolerates the server's 20-second comment
+heartbeats, and a raw-source bound rejects frames above 64 KiB before
+the SSE parser accumulates them. Reconnects back off with jitter;
+HTTP 429 also honours `Retry-After`. HTTP 401 stops for the current
+connection session without trying to mint a token: Android does not
+store the login password. HTTP 403, 404 and 501 also stop the stream
+and its live refresh retries until a later foreground or account boundary.
+Ordinary sync remains
+available against servers without the endpoint.
+
+Feed refreshes retain their failure classifications. Authentication failures
+stop the live session and use the existing sync error reporting. A refused
+topic stays paused until a credential or foreground boundary, even if more
+events name it; other topics can continue. Transient refresh failures use
+exponential backoff with jitter.
+
+Every connection starts with an invalidation. The coordinator retains
+topics received during a run, and retries failed reads without waiting
+for another event. Account, endpoint, provider and credential changes
+cancel the old connection and discard its queued work; cursor and sync
+timestamp writes do not restart it. An open book keeps its page.
+Catch-up appears on resume only, with acceptance bound to the original
+preview, local revision, account and peer.
+
+The cross-client guarantee is only as good as every client:
+the web reader and liseur-desktop must push on the same
 occasions and merge by the same rule, and nothing yet proves end to end
 that two of them converge. That proof, not another feature, is what
 would justify the sentence in the README.

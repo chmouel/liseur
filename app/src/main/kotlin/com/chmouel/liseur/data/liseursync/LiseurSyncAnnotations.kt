@@ -85,6 +85,7 @@ class LiseurSyncAnnotations(
         val failure: SyncFailure? = null,
         val unreachable: SyncFailure? = null,
         val reresolve: Map<String, String> = emptyMap(),
+        val hasMore: Boolean = false,
     )
 
     private class Progress {
@@ -93,13 +94,20 @@ class LiseurSyncAnnotations(
         var failure: SyncFailure? = null
         var unreachable: SyncFailure? = null
         val reresolve = mutableMapOf<String, String>()
+        var hasMore = false
+        val stopped: Boolean
+            get() = unreachable != null || failure == SyncFailure.Unauthorised ||
+                failure == SyncFailure.Forbidden || failure == SyncFailure.InsecureTransport
 
         fun failed(cause: IOException, reason: SyncFailure) {
-            failure = failure ?: reason
+            if (failure == null || reason == SyncFailure.Unauthorised ||
+                (failure != SyncFailure.Unauthorised &&
+                    (reason == SyncFailure.Forbidden || reason == SyncFailure.InsecureTransport))
+            ) failure = reason
             if (!cause.serverAnswered()) unreachable = unreachable ?: reason
         }
 
-        fun outcome() = Outcome(pulled, pushed, failure, unreachable, reresolve)
+        fun outcome() = Outcome(pulled, pushed, failure, unreachable, reresolve, hasMore)
     }
 
     /**
@@ -121,17 +129,17 @@ class LiseurSyncAnnotations(
         }
 
         settle(peer, aliases, progress)
-        if (progress.unreachable != null) return progress.outcome()
+        if (progress.stopped) return progress.outcome()
 
         pull(peer, aliases, progress)
-        if (progress.unreachable != null) return progress.outcome()
+        if (progress.stopped) return progress.outcome()
 
         val scope = if (book == null) aliases else aliases.filter { it.bookUrl == book }
         val agreed = reconcile(peer, scope, aliases, progress)
-        if (progress.unreachable != null) return progress.outcome()
+        if (progress.stopped) return progress.outcome()
 
         push(peer, scope, aliases, agreed, progress)
-        if (progress.unreachable != null) return progress.outcome()
+        if (progress.stopped) return progress.outcome()
 
         deletes(peer, scope, aliases, progress)
         return progress.outcome()
@@ -212,6 +220,7 @@ class LiseurSyncAnnotations(
             if (!page.optBoolean("has_more", false)) return
         }
         Log.i(TAG, "Stopped reading annotation changes after $MAX_PAGES pages")
+        progress.hasMore = true
     }
 
     /** Writes a page and moves the cursor, together or not at all. */
@@ -223,7 +232,7 @@ class LiseurSyncAnnotations(
         progress: Progress,
     ) {
         inTransaction {
-            if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+            if (!stillOurs(peer)) return@inTransaction
             // The feed is state, not history, so a record edited twice
             // mid-page arrives twice; the newest is the one that counts
             // and the rest are noise. Newest by seq, like everywhere
@@ -373,7 +382,7 @@ class LiseurSyncAnnotations(
                 continue
             }
             if (budget-- <= 0) continue
-            if (progress.unreachable != null) break
+            if (progress.stopped) break
             if (!stillOurs(peer)) break
 
             val asked = syncDao.forWork(peer.peerId, alias.workId)
@@ -486,7 +495,7 @@ class LiseurSyncAnnotations(
         progress: Progress,
     ) {
         inTransaction {
-            if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+            if (!stillOurs(peer)) return@inTransaction
             for (record in live) {
                 if (land(peer, record, aliases)) progress.pulled++
             }
@@ -575,7 +584,7 @@ class LiseurSyncAnnotations(
             // Written before the call, so that a process killed between
             // the two wakes up owing a replay rather than owing nothing.
             inTransaction {
-                if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+                if (!stillOurs(peer)) return@inTransaction
                 syncDao.upsertAll(marked)
             }
 
@@ -650,7 +659,7 @@ class LiseurSyncAnnotations(
             Answer.BatchRefused -> {
                 if (batch.size == 1) {
                     inTransaction {
-                        if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+                        if (!stillOurs(peer)) return@inTransaction
                         val row = stillAsking(peer, batch[0]) ?: return@inTransaction
                         syncDao.upsert(row.clearPending(rejected = row.pendingFingerprint))
                     }
@@ -682,7 +691,7 @@ class LiseurSyncAnnotations(
         val byId = rows.associateBy { it.id }
         var settled = 0
         inTransaction {
-            if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+            if (!stillOurs(peer)) return@inTransaction
             for (i in 0 until results.length()) {
                 val result = results.optJSONObject(i) ?: continue
                 val sent = byId[result.optString("id")] ?: continue
@@ -919,7 +928,7 @@ class LiseurSyncAnnotations(
                 pendingFingerprint = null,
             )
             inTransaction {
-                if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+                if (!stillOurs(peer)) return@inTransaction
                 syncDao.upsert(marked)
             }
             sendDelete(peer, marked, row.rev, aliases, progress)
@@ -952,7 +961,7 @@ class LiseurSyncAnnotations(
         val tombstone = answer.optLong("rev", rev)
         val seq = answer.optLong("seq", row.seq)
         inTransaction {
-            if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+            if (!stillOurs(peer)) return@inTransaction
             val current = stillAsking(peer, row) ?: return@inTransaction
             if (annotationDao.byId(row.id) == null) {
                 syncDao.deleteById(peer.peerId, row.id)
@@ -984,7 +993,7 @@ class LiseurSyncAnnotations(
         aliases: List<WorkAlias>,
     ) {
         inTransaction {
-            if (serverDao.get()?.accountKey != peer.accountKey) return@inTransaction
+            if (!stillOurs(peer)) return@inTransaction
             val row = stillAsking(peer, row) ?: return@inTransaction
             when (refused.code) {
                 // Never stored, or its tombstone has been swept. Either
@@ -1051,7 +1060,9 @@ class LiseurSyncAnnotations(
      * answer is too late; the request is the side effect.
      */
     private suspend fun stillOurs(peer: Peer): Boolean =
-        serverDao.get()?.accountKey == peer.accountKey
+        serverDao.get()?.let {
+            it.accountKey == peer.accountKey && it.credentials == peer.credentials
+        } == true
 
     private suspend fun stillAsking(peer: Peer, sent: AnnotationSync): AnnotationSync? =
         syncDao.get(peer.peerId, sent.id)?.takeIf { it.sameRequestAs(sent) }

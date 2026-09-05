@@ -212,6 +212,7 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
     implementation(libs.androidx.work.runtime.ktx)
 
     implementation(libs.coil.compose)

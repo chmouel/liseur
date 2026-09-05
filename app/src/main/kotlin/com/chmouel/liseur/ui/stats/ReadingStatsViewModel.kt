@@ -10,6 +10,7 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
@@ -41,6 +42,9 @@ import java.util.Locale
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -128,7 +132,30 @@ class ReadingStatsViewModel(
     private val zone: () -> ZoneId = ZoneId::systemDefault,
     private val now: (ZoneId) -> ZonedDateTime = ZonedDateTime::now,
     initialWeekStart: DayOfWeek = localeWeekStart(Locale.getDefault()),
+    private val liveInvalidations: Flow<Long> = flowOf(0L),
+    private val liveAccounts: Flow<LiveIdentity?> = flowOf(null),
+    private val currentAccount: suspend () -> LiveIdentity? = { null },
 ) : ViewModel() {
+
+    /** Collected only by the visible route, and refreshed again on entry. */
+    suspend fun observeLiveInsights() {
+        try {
+            combine(liveInvalidations, liveAccounts.distinctUntilChanged()) { tick, account ->
+                tick to account
+            }.collect { (_, account) ->
+                if (account != shownAccount) {
+                    shownAccount = account
+                    forgetServerAnswers()
+                }
+                refreshServerInsights()
+            }
+        } finally {
+            generation++
+            refresh?.cancel()
+        }
+    }
+
+    private var shownAccount: LiveIdentity? = null
 
     /**
      * Everything that decides which question the screen is asking.
@@ -309,11 +336,14 @@ class ReadingStatsViewModel(
         val token = ++generation
         refresh?.cancel()
         refresh = viewModelScope.launch {
+            val account = currentAccount()
             val end = window.today
             val week = window.weekStart
             launch {
                 val summary = source.summary(window.range, end, week)
-                if (token == generation) _acrossDevices.value = Answered(window, summary)
+                if (token == generation && currentAccount() == account) {
+                    _acrossDevices.value = Answered(window, summary)
+                }
             }
             launch {
                 val calendar = source.calendar(
@@ -323,11 +353,15 @@ class ReadingStatsViewModel(
                     ),
                     to = end,
                 )
-                if (token == generation) _recentAcrossDevices.value = Answered(window, calendar)
+                if (token == generation && currentAccount() == account) {
+                    _recentAcrossDevices.value = Answered(window, calendar)
+                }
             }
             launch {
                 val books = source.allBooks(window.range, end, week)
-                if (token == generation) _booksAcrossDevices.value = Answered(window, books)
+                if (token == generation && currentAccount() == account) {
+                    _booksAcrossDevices.value = Answered(window, books)
+                }
             }
         }
     }
@@ -842,6 +876,11 @@ class ReadingStatsViewModel(
                     bookDao = container.database.bookDao(),
                     progressDao = container.database.readingProgressDao(),
                     insights = container.syncInsights,
+                    liveInvalidations = container.insightInvalidations,
+                    liveAccounts = container.remoteAccount.server.map { it?.let(LiveIdentity::from) },
+                    currentAccount = {
+                        container.database.remoteServerDao().get()?.let(LiveIdentity::from)
+                    },
                     settings = container.appSettings,
                 )
             }

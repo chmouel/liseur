@@ -37,9 +37,16 @@ request currently in flight.
 `annotation_sync(id, peer_id)` holds what the server confirmed:
 `rev`, `seq`, and a content fingerprint, alongside the exact bytes of
 any request in the air. Outbound work is the diff between the live
-`annotations` table and that fingerprint, so no DAO method and no call
-site had to learn about sync: a mark becomes syncable by being in the
-table, and importing a backup is a batch of creates for free.
+`annotations` table and that fingerprint. After a local edit or deletion
+commits, the reader signals the existing coalesced book sync. Backup
+imports signal each book with newly inserted marks once. These explicit
+signals avoid observing Room writes from a pull and feeding them back
+into another sync.
+
+Foreground live annotation invalidations use this same complete pass,
+under the position coordinator's turn, without the position, naming or
+session-upload stages. Settle and pull remain account-wide even when a
+local edit requested a single book.
 
 Freshness is ordered by `seq`, never by `rev`. A rev counts writes to
 one mark and restarts at 1 when the server recreates an id whose

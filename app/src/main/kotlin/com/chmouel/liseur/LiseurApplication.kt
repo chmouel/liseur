@@ -60,6 +60,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
+                    container.liveSync.foreground()
                     val now = System.currentTimeMillis()
                     if (now - lastForegroundSyncAt < FOREGROUND_SYNC_DEBOUNCE_MS) return
                     lastForegroundSyncAt = now
@@ -76,6 +77,10 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                         if (!due) return@launch
                         runCatching { container.positionSync.request(SyncScope.Full, now) }
                     }
+                }
+
+                override fun onStop(owner: LifecycleOwner) {
+                    container.liveSync.background()
                 }
             },
         )

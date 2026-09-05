@@ -14,6 +14,8 @@ import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.ResolveOutcome
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.data.remote.LiveIdentity
+import com.chmouel.liseur.data.remote.LiveTopic
 import java.io.File
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
@@ -1401,7 +1403,158 @@ class LiseurSyncPositionSyncTest {
     }
 
     // -- Scaffolding ------------------------------------------------------
-    private fun sync(online: Boolean = true): LiseurSyncPositionSync {
+    @Test
+    fun `live positions only read deltas and do not claim a full sync`() = runTest {
+        connect(cursor = 4)
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"ops":[${op(5, 0.7)}],"has_more":false}"""))
+        val result = sync().refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.POSITIONS),
+        )
+        assertEquals(setOf(LiveTopic.POSITIONS), result.completed)
+        assertEquals(0.7, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+        assertEquals(5L, db.remoteServerDao().get()!!.syncCursorSeq)
+        assertNull(db.remoteServerDao().get()!!.positionSyncedAt)
+        assertEquals(listOf("/v1/changes?since=4&limit=500"), requests().map { it.target })
+    }
+
+    @Test
+    fun `live positions preserve the open page and its exact pending offer`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "edition")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.2, null, "reading", NOW)
+        val revision = db.readingProgressDao().get(LOCAL)!!.localRevision
+        db.readingProgressDao().openBooks.enter(LOCAL)
+        try {
+            server.enqueue(json("""{"ops":[${op(1, 0.8, locatorJson = exactLocator("new"), editionSha = "edition")}]}"""))
+            sync().refresh(LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.POSITIONS))
+            assertEquals(revision, db.readingProgressDao().get(LOCAL)!!.localRevision)
+            assertEquals(0.2, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+            assertEquals(0.8, db.syncPeerStateDao().get(LOCAL, peer())!!.pendingProgression!!, 0.0)
+            assertTrue(sync().preservedConflict(LOCAL, null)!!.remoteLocatorJson!!.contains("new"))
+            assertEquals(1, server.requestCount)
+        } finally {
+            db.readingProgressDao().openBooks.leave(LOCAL)
+        }
+    }
+
+    @Test
+    fun `live positions leave outgoing reading and unseeded aliases to a book run`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(seeded = false)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[]}"""))
+        val result = sync().refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.POSITIONS),
+        )
+        assertEquals(setOf(LOCAL), result.owedBooks)
+        assertFalse(db.workIdentityDao().alias(LOCAL, peer())!!.seeded)
+        assertEquals(1, server.requestCount)
+        assertTrue(requests().single().target.startsWith("/v1/changes"))
+    }
+
+    @Test
+    fun `live position cursor compaction recovers through heads only`() = runTest {
+        connect(cursor = 1)
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(MockResponse(code = 410, body = "{}"))
+        server.enqueue(json("""{"ops":[${op(8, 0.8)}],"snapshot_seq":8}"""))
+        val result = sync().refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.POSITIONS),
+        )
+        assertEquals(setOf(LiveTopic.POSITIONS), result.completed)
+        assertEquals(8L, db.remoteServerDao().get()!!.syncCursorSeq)
+        assertEquals(listOf("/v1/changes?since=1&limit=500", "/v1/heads"), requests().map { it.target })
+    }
+
+    @Test
+    fun `live topic does not complete when page budget is exhausted`() = runTest {
+        connect()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) =
+                json("""{"ops":[],"high_water":${server.requestCount},"has_more":true}""")
+        }
+        val result = sync().refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.POSITIONS),
+        )
+        assertTrue(result.completed.isEmpty())
+        assertTrue(db.remoteServerDao().get()!!.syncCursorSeq > 0)
+        assertNull(db.remoteServerDao().get()!!.positionSyncedAt)
+    }
+
+    @Test
+    fun `insights and annotations topics do not run the position publisher`() = runTest {
+        connect()
+        sync().refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!),
+            setOf(LiveTopic.INSIGHTS, LiveTopic.ANNOTATIONS),
+        )
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `annotation invalidation uses the annotation feed and reconcile without positions`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"annotations":[],"high_water":7}"""))
+        server.enqueue(json("""{"annotations":[]}"""))
+        val result = sync(withAnnotations = true).refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.ANNOTATIONS),
+        )
+        assertEquals(setOf(LiveTopic.ANNOTATIONS), result.completed)
+        assertEquals(7L, db.remoteServerDao().get()!!.annotationCursorSeq)
+        assertEquals(0L, db.remoteServerDao().get()!!.syncCursorSeq)
+        assertNull(db.remoteServerDao().get()!!.positionSyncedAt)
+        val paths = requests().map { it.target }
+        assertEquals(2, paths.size)
+        assertTrue(paths[0].startsWith("/v1/annotations/changes?"))
+        assertEquals("/v1/works/w-1/annotations", paths[1])
+    }
+
+    @Test
+    fun `rotated credential refuses an old refresh before any network call`() = runTest {
+        connect()
+        val account = db.remoteServerDao().get()!!
+        db.remoteServerDao().upsert(account.copy(liseurTokenCipher = CredentialCipher.encrypt("new-token")))
+        assertTrue(sync().refresh(LiveIdentity.from(account), setOf(LiveTopic.POSITIONS)).completed.isEmpty())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `live refresh preserves auth refusal and skips later topic requests`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(MockResponse(code = 401, body = "{}"))
+        val result = sync(withAnnotations = true).refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!),
+            setOf(LiveTopic.POSITIONS, LiveTopic.ANNOTATIONS),
+        )
+        assertEquals(mapOf(LiveTopic.POSITIONS to SyncFailure.Unauthorised), result.failures)
+        assertTrue(result.completed.isEmpty())
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `live annotations preserve capability refusal without retrying later phases`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(MockResponse(code = 403, body = "{}"))
+        val result = sync(withAnnotations = true).refresh(
+            LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.ANNOTATIONS),
+        )
+        assertEquals(mapOf(LiveTopic.ANNOTATIONS to SyncFailure.Forbidden), result.failures)
+        assertTrue(result.completed.isEmpty())
+        assertEquals(1, server.requestCount)
+    }
+
+    private fun sync(online: Boolean = true, withAnnotations: Boolean = false): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
             serverDao = db.remoteServerDao(),
@@ -1419,6 +1572,13 @@ class LiseurSyncPositionSyncTest {
             deviceKey = { "device-a" },
             finishedState = FinishedState(db.bookDao(), db.readingProgressDao()),
             networkAvailability = { online },
+            annotations = if (withAnnotations) LiseurSyncAnnotations(
+                serverDao = db.remoteServerDao(),
+                annotationDao = db.annotationDao(),
+                syncDao = db.annotationSyncDao(),
+                identityDao = db.workIdentityDao(),
+                now = { NOW },
+            ) else null,
             now = { NOW },
         )
     }

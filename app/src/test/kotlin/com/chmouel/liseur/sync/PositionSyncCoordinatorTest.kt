@@ -31,6 +31,83 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PositionSyncCoordinatorTest {
+    private val liveIdentity = com.chmouel.liseur.data.remote.LiveIdentity(
+        "account", "http://localhost", com.chmouel.liseur.data.remote.ServerKind.LISEUR_SYNC,
+        "cipher", "device",
+    )
+
+    @Test
+    fun `later events stay owed and failed topics retry without another event`() = runTest {
+        val coordinator = PositionSyncCoordinator(FakeSync())
+        val position = com.chmouel.liseur.data.remote.LiveTopic.POSITIONS
+        val annotations = com.chmouel.liseur.data.remote.LiveTopic.ANNOTATIONS
+        coordinator.liveAccount(liveIdentity)
+        coordinator.invalidate(liveIdentity, setOf(position, annotations))
+        val gate = CompletableDeferred<Unit>()
+        val first = async {
+            coordinator.refreshLive(liveIdentity) { _, topics ->
+                assertEquals(setOf(position, annotations), topics)
+                gate.await()
+                com.chmouel.liseur.data.remote.LiveRefresh(setOf(position))
+            }
+        }
+        runCurrent()
+        coordinator.invalidate(liveIdentity, setOf(position))
+        gate.complete(Unit)
+        first.await()
+        assertTrue(coordinator.hasLiveWork(liveIdentity))
+        coordinator.refreshLive(liveIdentity) { _, topics ->
+            assertEquals(setOf(position, annotations), topics)
+            com.chmouel.liseur.data.remote.LiveRefresh(topics)
+        }
+        assertTrue(!coordinator.hasLiveWork(liveIdentity))
+    }
+
+    @Test
+    fun `refresh waits for ordinary sync and never invokes syncAll itself`() = runTest {
+        val sync = FakeSync().apply { gate = CompletableDeferred() }
+        val coordinator = PositionSyncCoordinator(sync)
+        val ordinary = async { coordinator.request(SyncScope.Book("book")) }
+        runCurrent()
+        coordinator.liveAccount(liveIdentity)
+        coordinator.invalidate(liveIdentity, setOf(com.chmouel.liseur.data.remote.LiveTopic.INSIGHTS))
+        var refreshed = false
+        val live = async {
+            coordinator.refreshLive(liveIdentity) { _, topics ->
+                refreshed = true
+                com.chmouel.liseur.data.remote.LiveRefresh(topics)
+            }
+        }
+        runCurrent()
+        assertTrue(!refreshed)
+        sync.gate!!.complete(Unit)
+        ordinary.await()
+        live.await()
+        assertTrue(refreshed)
+        assertEquals(listOf(SyncScope.Book("book")), sync.started)
+    }
+
+    @Test
+    fun `an old account run cannot pay a new account or return book work`() = runTest {
+        val coordinator = PositionSyncCoordinator(FakeSync())
+        val topic = com.chmouel.liseur.data.remote.LiveTopic.POSITIONS
+        coordinator.liveAccount(liveIdentity)
+        coordinator.invalidate(liveIdentity, setOf(topic))
+        val gate = CompletableDeferred<Unit>()
+        val run = async {
+            coordinator.refreshLive(liveIdentity) { _, topics ->
+                gate.await()
+                com.chmouel.liseur.data.remote.LiveRefresh(topics, setOf("old-book"))
+            }
+        }
+        runCurrent()
+        coordinator.liveAccount(null)
+        coordinator.liveAccount(liveIdentity)
+        coordinator.invalidate(liveIdentity, setOf(topic))
+        gate.complete(Unit)
+        assertTrue(run.await().owedBooks.isEmpty())
+        assertTrue(coordinator.hasLiveWork(liveIdentity))
+    }
 
     /**
      * A sync that does nothing until it is told to, so a test can hold a

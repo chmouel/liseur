@@ -316,6 +316,17 @@ emulator.
   position, annotation and session hangs off, and only `remote_uuid` and
   `download_href` are written (`BookDao.linkToRemote`). Never rewrite
   `books.url` to the server's spelling: the reader's place goes with it.
+- Live notifications are topic-only hints routed through `data/remote/`.
+  Keep their foreground connection separate from the full-sync debounce,
+  with a short background grace period. Connection identity includes the
+  account and credentials, never feed cursors or sync timestamps.
+  Topic refresh shares `PositionSyncCoordinator`'s turn lock; an event
+  arriving during a refresh remains owed. Never call `syncAll()` for an
+  invalidation or bypass the existing cursor and annotation reconciliation
+  rules. Signal local annotation edits after commit, not by observing
+  every Room mutation. An incoming position must not turn an open book's
+  page or show a new catch-up offer until resume; acceptance uses the
+  original preview's account, peer, fingerprint and local revision.
 - Blocking network calls move to `Dispatchers.IO` inside the client that
   blocks, not in the caller. A `suspend` signature reads as a promise
   that the thread is safe, and a repository reached from a

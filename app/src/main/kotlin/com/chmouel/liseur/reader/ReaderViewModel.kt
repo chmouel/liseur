@@ -142,6 +142,7 @@ class ReaderViewModel(
     private val remoteAccount: RemoteAccountRepository,
     private val userFonts: UserFontRepository,
     sessionManager: ReadingSessionManager,
+    private val requestBookSync: (String) -> Unit = {},
 ) : ViewModel() {
 
     /**
@@ -354,7 +355,17 @@ class ReaderViewModel(
         val excerpt: String?,
         val remoteAt: Long?,
         val confidence: ResumeConfidence,
-    )
+        val preview: SyncPreview,
+    ) {
+        internal suspend fun resolve(bookId: String, coordinator: PositionSyncCoordinator): ResolveOutcome =
+            coordinator.resolve(
+                bookUrl = bookId,
+                takeRemote = true,
+                atRevision = preview.localRevision ?: 0,
+                expecting = preview.fingerprint(),
+                peerId = preview.peerId,
+            )
+    }
 
     private val _catchUp = MutableStateFlow<CatchUp?>(null)
 
@@ -720,15 +731,14 @@ class ReaderViewModel(
         }
     }
 
-    /** Navigates to the exact adopted locator, or conservatively before its percentage. */
+    /** Navigates to the position that was offered, not a later database snapshot. */
     private suspend fun goToRemotePosition(preview: SyncPreview) {
         val positions = positionsFor(publication ?: return)
-        val stored = progressDao.get(bookId) ?: return
-        val exact = runCatching { Locator.fromJSON(JSONObject(stored.locatorJson)) }
-            .getOrNull()
+        val exact = preview.remoteLocatorJson
+            ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
             ?.takeIf(ExactLocatorAnchor::isExact)
         val target = exact
-            ?: stored.totalProgression?.let(positions::locatorAtOrBeforeProgression)
+            ?: preview.remote?.let(positions::locatorAtOrBeforeProgression)
             ?: return
         onJump()
         _jumpBack.value = _jumpBack.value?.copy(
@@ -1018,6 +1028,7 @@ class ReaderViewModel(
         // even when its stable resource position has not moved. Keep the
         // display current, but do not turn that layout detail into reading.
         if (samePosition || !effectiveEvent.persists) return
+        _catchUp.value = null
         val totalProgression = stable?.progression ?: return
         if (effectiveEvent.teachesPace) {
             val sample = speed.record(
@@ -1121,9 +1132,13 @@ class ReaderViewModel(
     private fun maybeOfferCatchUp() {
         if (catchUpChecking || publication == null) return
         catchUpChecking = true
+        _catchUp.value = null
+        val offeredFrom = lastLocator
         viewModelScope.launch {
             try {
+                if (!positionPublisher.flush(bookId)) return@launch
                 val outcome = positionSync.preview(bookId)
+                if (!readerActive || lastLocator != offeredFrom) return@launch
                 val preview = (outcome as? PreviewOutcome.Ready)?.preview ?: return@launch
                 val there = preview.remote ?: return@launch
                 val here = preview.local
@@ -1145,6 +1160,7 @@ class ReaderViewModel(
                     excerpt = preview.excerpt,
                     remoteAt = preview.remoteAt,
                     confidence = preview.confidence,
+                    preview = preview,
                 )
             } finally {
                 catchUpChecking = false
@@ -1155,25 +1171,15 @@ class ReaderViewModel(
     /** Takes the offer: the further position wins, and the page turns. */
     fun acceptCatchUp() {
         val offer = _catchUp.value ?: return
+        val acceptedFrom = lastLocator
         _catchUp.value = null
         viewModelScope.launch {
-            val outcome = positionSync.resolve(
-                bookId,
-                takeRemote = true,
-                atRevision = progressDao.currentRevision(bookId) ?: 0,
-            )
+            if (!positionPublisher.flush(bookId) || lastLocator != acceptedFrom) return@launch
+            val outcome = offer.resolve(bookId, positionSync)
             // Anything but a clean adoption leaves the book where it is;
             // the offer will simply be made again if it still stands.
-            if (outcome != ResolveOutcome.Done) return@launch
-            goToRemotePosition(
-                SyncPreview(
-                    local = null,
-                    remote = offer.progression,
-                    remoteAt = offer.remoteAt,
-                    excerpt = offer.excerpt,
-                    confidence = offer.confidence,
-                ),
-            )
+            if (outcome != ResolveOutcome.Done || lastLocator != acceptedFrom) return@launch
+            goToRemotePosition(offer.preview)
         }
     }
 
@@ -1450,7 +1456,7 @@ class ReaderViewModel(
         val locator = lastLocator ?: return
         val existing = bookmarkForCurrentPage()
         if (existing != null) {
-            viewModelScope.launch { annotationDao.delete(existing) }
+            remove(existing)
         } else {
             save(annotation(locator, AnnotationKind.BOOKMARK))
         }
@@ -1479,7 +1485,10 @@ class ReaderViewModel(
     }
 
     fun remove(annotation: BookAnnotation) {
-        viewModelScope.launch { annotationDao.delete(annotation) }
+        viewModelScope.launch {
+            annotationDao.delete(annotation)
+            requestBookSync(annotation.bookId)
+        }
     }
 
     /** The notebook as Markdown, ready to be shared. */
@@ -1502,7 +1511,10 @@ class ReaderViewModel(
      */
     private fun save(annotation: BookAnnotation) {
         val stamped = annotation.copy(updatedAt = System.currentTimeMillis() * 1000)
-        viewModelScope.launch { annotationDao.upsert(stamped) }
+        viewModelScope.launch {
+            annotationDao.upsert(stamped)
+            requestBookSync(stamped.bookId)
+        }
     }
 
     private fun annotation(locator: Locator, kind: AnnotationKind): BookAnnotation {
@@ -1717,6 +1729,7 @@ class ReaderViewModel(
                     remoteAccount = container.remoteAccount,
                     userFonts = container.userFonts,
                     sessionManager = container.readingSessions,
+                    requestBookSync = container::requestBookSync,
                 )
             }
         }

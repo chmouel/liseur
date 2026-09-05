@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncFailure
@@ -347,7 +348,13 @@ class LiseurSyncInsights(
         url: String,
     ): JSONObject {
         try {
+            if (serverDao.get()?.let(LiveIdentity::from) != LiveIdentity.from(account)) {
+                throw IOException("Statistics account changed")
+            }
             val answer = http.get(url, credentials)
+            if (serverDao.get()?.let(LiveIdentity::from) != LiveIdentity.from(account)) {
+                throw IOException("Statistics account changed")
+            }
             if (!account.canReadInsights) record(account, allowed = true)
             return answer
         } catch (e: RemoteHttpFailure) {
