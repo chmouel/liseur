@@ -16,6 +16,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.WeekFields
 import org.json.JSONObject
+import org.json.JSONException
 
 /**
  * Reading added up across every device, as the server sees it.
@@ -140,10 +141,14 @@ class LiseurSyncInsights(
             fetch(account, credentials, LiseurSyncApi.insightsSummary(account.baseUrl, from, to))
         } ?: return null
         if (!answer.covers(from, to)) return null
+        val minutes = answer.optDouble("total_active_minutes", 0.0)
+        val sessions = answer.nonnegativeCount("sessions") ?: return null
+        val streak = answer.nonnegativeCount("streak_days") ?: return null
+        if (!minutes.validMinutes()) return null
         return InsightsSummary(
-            activeMinutes = answer.optDouble("total_active_minutes", 0.0),
-            sessions = answer.optInt("sessions"),
-            streakDays = answer.optInt("streak_days"),
+            activeMinutes = minutes,
+            sessions = sessions,
+            streakDays = streak,
             progressionPerHour = answer.optDouble("speed_prog_per_hour")
                 .takeIf { it.isFinite() && it > 0 },
         ).takeIf { it.sessions > 0 || it.activeMinutes > 0 }
@@ -164,7 +169,7 @@ class LiseurSyncInsights(
         val answer = ask("No statistics for this book") {
             fetch(account, credentials, LiseurSyncApi.workInsights(account.baseUrl, alias.workId))
         } ?: return null
-        return parseWork(answer)?.takeIf { it.sessions > 0 || it.etaSeconds != null }
+        return parseWorkInsights(answer)?.takeIf { it.sessions > 0 || it.etaSeconds != null }
     }
 
     /**
@@ -204,13 +209,14 @@ class LiseurSyncInsights(
             answers.flatMap { answer ->
                 val days = answer.getJSONArray("days")
                 (0 until days.length()).mapNotNull { index ->
-                    val day = days.optJSONObject(index) ?: return@mapNotNull null
+                    val day = days.getJSONObject(index)
                     val date = LocalDate.parse(day.getString("date"))
                     if (date.isBefore(from) || date.isAfter(to)) return@mapNotNull null
                     InsightDay(
                         date = date,
                         activeMinutes = day.optDouble("minutes", 0.0)
-                            .takeIf { it.isFinite() && it >= 0 } ?: 0.0,
+                            .takeIf { it.validMinutes() }
+                            ?: throw JSONException("Invalid calendar minutes"),
                     )
                 }
             }
@@ -262,9 +268,10 @@ class LiseurSyncInsights(
             val known = mutableMapOf<String, WorkInsights>()
             val elsewhere = mutableListOf<WorkInsights>()
             for (index in 0 until works.length()) {
-                val item = works.optJSONObject(index) ?: continue
+                val item = works.getJSONObject(index)
                 val workId = item.getString("work_id")
-                val insight = parseWork(item)?.copy(workId = workId) ?: continue
+                val insight = parseWorkInsights(item)?.copy(workId = workId)
+                    ?: throw JSONException("Invalid work statistics")
                 val here = byWork[workId].orEmpty()
                 if (here.isEmpty()) {
                     if (insight.title.isNotEmpty()) elsewhere += insight
@@ -278,27 +285,6 @@ class LiseurSyncInsights(
             null
         }
     }
-
-    private fun parseWork(answer: JSONObject): WorkInsights? = runCatching {
-        WorkInsights(
-            sessions = answer.optInt("sessions"),
-            activeMinutes = answer.optDouble("total_active_minutes", 0.0)
-                .takeIf { it.isFinite() && it >= 0 } ?: 0.0,
-            etaSeconds = if (answer.isNull("eta_seconds")) {
-                null
-            } else {
-                answer.optDouble("eta_seconds").takeIf { it.isFinite() && it > 0 }
-            },
-            lastReadAt = answer.optString("last_read_at")
-                .takeIf { it.isNotEmpty() }
-                ?.let { Instant.parse(it).toEpochMilli() },
-            title = answer.optString("title"),
-            author = answer.optString("author").takeIf { it.isNotEmpty() },
-            currentProgression = answer.optDouble("current_progression")
-                .takeIf { it.isFinite() && it > 0.0 }
-                ?.coerceAtMost(1.0),
-        )
-    }.getOrNull()
 
     /**
      * Runs one request and writes down what its answer proved about the
@@ -419,3 +405,31 @@ private fun JSONObject.covers(from: LocalDate?, to: LocalDate): Boolean =
     } else {
         optString("from") == from.toString() && optString("to") == to.toString()
     }
+
+internal fun Double.validMinutes(): Boolean =
+    isFinite() && this >= 0 && this < Long.MAX_VALUE.toDouble() / 60_000.0
+
+internal fun JSONObject.nonnegativeCount(name: String): Int? {
+    val value = optDouble(name, 0.0)
+    return value.takeIf { it.isFinite() && it >= 0 && it <= Int.MAX_VALUE && it % 1.0 == 0.0 }
+        ?.toInt()
+}
+
+internal fun parseWorkInsights(answer: JSONObject): WorkInsights? = try {
+    WorkInsights(
+        sessions = answer.nonnegativeCount("sessions") ?: throw JSONException("Invalid session count"),
+        activeMinutes = answer.optDouble("total_active_minutes", 0.0)
+            .takeIf { it.validMinutes() } ?: throw JSONException("Invalid work minutes"),
+        etaSeconds = answer.optDouble("eta_seconds").takeIf { it.isFinite() && it > 0 },
+        lastReadAt = answer.optString("last_read_at").takeIf { it.isNotEmpty() }
+            ?.let { Instant.parse(it).toEpochMilli() },
+        title = answer.optString("title"),
+        author = answer.optString("author").takeIf { it.isNotEmpty() },
+        currentProgression = answer.optDouble("current_progression")
+            .takeIf { it.isFinite() && it > 0.0 }?.coerceAtMost(1.0),
+    )
+} catch (_: JSONException) {
+    null
+} catch (_: java.time.DateTimeException) {
+    null
+}

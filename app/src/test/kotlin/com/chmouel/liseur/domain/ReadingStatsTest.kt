@@ -30,7 +30,9 @@ class ReadingStatsTest {
     fun `nothing read is empty, not a screen of zeroes`() {
         val stats = readingStats(emptyList(), emptyMap(), zone, today)
         assertTrue(stats.isEmpty)
-        assertEquals(ReadingStats.Empty, stats)
+        assertEquals(ReadingStats.Empty.copy(recent = stats.recent), stats)
+        assertEquals(today, stats.recent.last().date)
+        assertTrue(stats.recent.all { it.totalMs == 0L })
     }
 
     @Test

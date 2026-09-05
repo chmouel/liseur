@@ -36,6 +36,7 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
+import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
 import com.chmouel.liseur.data.liseursync.LiseurSyncLive
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
@@ -186,6 +187,7 @@ class AppContainer(context: Context) {
         annotationSyncDao = database.annotationSyncDao(),
         uploadRefusalDao = database.uploadRefusalDao(),
         sessionRefusalDao = database.sessionRefusalDao(),
+        sessionTransmissionDao = database.sessionTransmissionDao(),
         // Declared later in this file, so it is reached through the
         // lambda rather than held: the pairing is only ever touched
         // after a connection has landed, never while one is being built.
@@ -303,6 +305,8 @@ class AppContainer(context: Context) {
         identityDao = database.workIdentityDao(),
         sessionDao = database.readingSessionDao(),
         sessionRefusalDao = database.sessionRefusalDao(),
+        sessionTransmissionDao = database.sessionTransmissionDao(),
+        supportsMeasuredSessions = { syncSnapshots.supportsMeasuredSessions() },
         works = workResolver,
         deviceKey = { deviceIdentity.current().id },
         finishedState = finishedState,
@@ -458,6 +462,11 @@ class AppContainer(context: Context) {
     val syncInsights = LiseurSyncInsights(
         serverDao = database.remoteServerDao(),
         identityDao = database.workIdentityDao(),
+    )
+
+    val syncSnapshots = LiseurSyncSnapshots(
+        database.remoteServerDao(), database.readingSessionDao(),
+        database.sessionTransmissionDao(), database.workIdentityDao(),
     )
 
     /**

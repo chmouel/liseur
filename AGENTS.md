@@ -231,9 +231,10 @@ emulator.
   than deleted, or the next run asks again.
 - Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
-  must stand on its own. The two sources are merged by maximum and never
-  by sum (the server's count already contains this device's uploads),
-  and an answer to a window other than the one on screen is refused. See
+  must stand on its own. Cross-device figures require a coherent snapshot:
+  server + captured local - actual server overlap. Upload flags prove
+  neither presence nor absence in a cached server answer. Legacy or
+  incomplete proof uses the existing local-only provenance. See
   `docs/adr/0021-cross-device-reading-statistics.md`.
 - Annotations are the exception to that rule, because they are mutable
   and deletable: an id derived from current content stops being

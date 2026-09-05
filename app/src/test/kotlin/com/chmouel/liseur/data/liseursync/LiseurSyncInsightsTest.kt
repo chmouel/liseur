@@ -68,6 +68,19 @@ class LiseurSyncInsightsTest {
     }
 
     @Test
+    fun `non finite negative and overflowing summary values are refused`() = runTest {
+        connect()
+        for (minutes in listOf("\"NaN\"", "\"Infinity\"", "-1", "1e300")) {
+            server.enqueue(ok("""{"range_days":0,"sessions":1,"total_active_minutes":$minutes}"""))
+            assertNull(insights().summary(StatsRange.ALL_TIME, TODAY))
+        }
+        for (count in listOf("-1", "2147483648", "1.5", "\"NaN\"")) {
+            server.enqueue(ok("""{"range_days":0,"sessions":$count,"total_active_minutes":20}"""))
+            assertNull(insights().summary(StatsRange.ALL_TIME, TODAY))
+        }
+    }
+
+    @Test
     fun `an estimate the server declined to make is not invented`() = runTest {
         connect()
         alias()

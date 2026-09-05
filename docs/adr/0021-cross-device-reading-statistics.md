@@ -23,12 +23,11 @@ the problem.
 
 Four things are, and they compound.
 
-The merge takes the larger of the two figures, never their sum, because
-the server's count already contains this device's uploads and adding
-them would pay twice. It is the right rule, and it makes the server
-invisible: for a reader with one device the two numbers are within a few
-unsynced minutes of each other, so the headline is the same whether the
-request succeeded, failed, or was never made.
+The original merge took the larger figure because the server already
+contained uploaded local sessions. That avoided some duplication but
+lost reading that only one source knew about. Adding pending uploads
+later exposed the acknowledgement races addressed in the accounting
+amendment below.
 
 The list beneath it is bounded by the local shelf. Per-book aggregates
 arrive keyed by the server's `work_id` and are mapped onto local book
@@ -60,7 +59,8 @@ Server statistics stay decoration, and the rules that make them safe
 stand as they are:
 
 Both sides are asked about the same window, and an answer to a different
-one is refused. The two are merged by maximum and never by sum. A
+one is refused. Exact overlap proof is required for a cross-device merge
+(see the accounting amendment below). A
 failure produces no error state; the local figures are a complete
 screen on their own. The period-over-period comparison stays local on
 both sides, for the reasons ADR-0018 gives: a relationship only holds
@@ -99,10 +99,108 @@ is the end is decided by the same threshold position sync applies when
 the same reading arrives as a peer's position, so the two cannot
 disagree about one book.
 
-Two things are deliberately not decided here. The timezone difference
-between the server's day buckets, which follow the account's configured
-zone, and this device's, which follow the phone's, is left for its own
-change. And nothing here alters how sessions reach the server.
+The accounting amendment below specifies the shared timezone and the
+evidence needed to combine uploaded sessions.
+
+## Accounting amendment
+
+An upload acknowledgement cannot establish whether a cached server
+answer contains a sitting. The server may have accepted a request whose
+reply was lost, or a successful upload may be newer than the cached
+answer. Adding pending time double-counts the first case and loses
+reading in the second. Maximum alone also loses reading that only one
+source knows about.
+
+The required union is `server + captured local - actual server overlap`.
+All three quantities must describe one immutable set of local candidates
+and one coherent server snapshot. Overlap uses the duration the server
+actually counted: if an old upload stored ten wall-clock minutes for
+thirty measured minutes, subtract ten when adding the local thirty.
+Acknowledgement-only updates cannot change the result.
+
+Use the account timezone for an exact merge, with each sitting assigned
+whole to its ending day. Use the phone timezone for local-only statistics.
+Keep both comparison periods local in the phone timezone, even when the
+dashboard uses the account timezone, and preserve their shared wall-clock
+cutoff.
+Compute streaks from the union of positive-activity days, including days
+outside the selected totals range.
+
+Legacy aggregate endpoints provide no overlap proof. Until a supported,
+complete snapshot can be obtained, the dashboard shows `THIS_DEVICE`;
+it does not publish independently fetched summary, works and calendar
+answers as an exact cross-device result. Missing calendar chunks,
+incompatible historical attribution, malformed numbers and oversized
+evidence require the same fallback.
+
+Room version 48 adds `session_transmission`, keyed by peer and local
+session id. Before a first request, persist the selected payload and the
+server device identity. Replay its stored bytes, even after an alias
+changes. Only a structured atomic `unknown_work` refusal permits replacing
+the rejected work identity. Rekey and forget this table with the account.
+
+A same-account reconnect can change the server's device id. Retried
+payloads and session ids remain unchanged. A reply confirms the current
+device only when `accepted` equals the entire batch size: the server
+checks device identity for duplicates, including archived ones. In the
+account transaction, update the confirmed device conditionally on the
+original payload and previous device, together with `uploaded_at`.
+Lost replies and conflicts retain the original evidence. If the current
+device is unknown, clear only that peer's device proof; do not mark other
+peers or the local history unknown.
+
+Existing sessions are marked `legacy_evidence_unknown`: the previous
+client did not retain attempted identities, so an upgrade cannot
+reconstruct proof from today's alias or device key. Forgetting that
+evidence also marks the remaining history unknown. New sessions can
+select measured `active_ms` only after capability negotiation; legacy
+attempts retain their original wire format and deterministic id.
+
+Calendars contain every date in their selected interval, including an
+empty today. All-time requests start at retained activity rather than an
+application release date and require nonoverlapping chunks of at most
+4,000 inclusive days with matching server revision proof. The screen
+uses its sampled date, resamples on resume, and invalidates a changed
+day or timezone without periodic HTTP polling. Full-history reductions
+run on the default dispatcher and long heatmaps compose weeks lazily.
+
+`LiseurSyncSnapshots` discovers version 1 through
+`GET /v1/insights/capabilities`, then sends the captured candidates and
+all-history active days to `POST /v1/insights/snapshot`. Version 1 defines
+all-time ranges; the client also honors `all_time:false` when supplied.
+The client requires attribution version 2 and validates the reply against
+the stored account id. If discovery also supplies an authenticated
+`account_id`, it must agree with the stored id when one exists, and can
+identify an older connection that has not stored one. Without either
+identity, statistics stay local. Discovery does not rekey account state.
+Candidates include every transmitted local sitting contributing to the
+selected totals range. Older sittings still supply active-day evidence
+for the streak, but their payloads do not consume that range's candidate
+budget. Unknown legacy transmission identity only blocks a range to
+which that sitting contributes.
+Every page must echo the snapshot id, account timezone, today, selected
+bounds and `calendar_from`/`calendar_to`, and carry the same decimal-string
+`stats_revision`. Summary, works, overlap and earliest-activity metadata
+must also agree between pages. Sparse day totals must cover the complete
+selected duration once all pages have arrived.
+
+The client obeys `max_candidates` and optional `max_body_bytes` and
+`max_local_active_days`. Without the optional limits it allows at most
+1 MiB of UTF-8 request data and 25,000 active days; its hard upper bounds
+are 4 MiB, 10,000 candidates and 25,000 active days. Histories beyond
+366,000 calendar days or 128
+calendar requests also use local-only statistics. These are resource
+refusals: neither path clips
+candidates or presents a partial chart. Unknown pre-upgrade transmission
+history and incompatible retained server rollups remain local-only.
+
+The upload path reads `session_active_ms` from `GET /v1/token` before
+selecting a new payload. That endpoint also serves sync-only tokens;
+the dashboard capabilities endpoint requires `read-insights`. A
+statistics refusal therefore does not prevent measured-time uploads.
+Discovering support later never changes an
+existing transmission. `active_out_of_range` is a named permanent
+session refusal, handled without discarding other sittings in its batch.
 
 ## Design
 
@@ -119,11 +217,16 @@ said, true on any body and false on a 403, guarded on the account being
 the one the question was asked of. Offline, a server too old and a
 malformed body prove nothing about the token and change nothing.
 
-`LiseurSyncInsights` keeps returning null on every failure. Provenance
-is a separate question from the figures and is answered separately:
-whether an answer arrived for the window on screen, which the view model
-already knows, since refusing a stale one is exactly what
-`forWindow` does. Nothing in the merge needs to change to know it.
+`LiseurSyncSnapshots` returns no decoration when proof fails. The view
+model publishes `ALL_DEVICES` only for a complete snapshot whose local
+session content, transmissions, aliases and account still match.
+Transmission evidence is checked after the response and before
+publication. A subsequent upload cannot change that already-proved
+server snapshot, so it keeps the cached total, as do acknowledgement-only
+updates. Range changes cancel
+the previous generation; replies also recheck generation after suspended
+database reads. Cached display state expires when observation stops, so
+reopening the screen cannot replay another account's figures.
 
 The per-book merge already groups server works by `work_id` before
 mapping them onto local URLs, which is what stops one file counted under
@@ -159,6 +262,9 @@ a screen that has to work with the network off.
 `data/liseursync/LiseurSyncInsights.kt`, `data/remote/RemoteSources.kt`,
 `data/remote/RemoteAccountRepository.kt`, `data/db/RemoteServer.kt`,
 `data/db/LiseurDatabase.kt`, `domain/ReadingStats.kt`,
+`data/db/SessionTransmission.kt`, `data/liseursync/LiseurSyncSnapshots.kt`,
+`data/liseursync/StatisticsCapabilities.kt`, `domain/StatsUnion.kt`,
+`ui/stats/StatsSnapshotUnion.kt`,
 `ui/stats/ReadingStatsViewModel.kt`, `ui/stats/ReadingStatsScreen.kt`,
 `ui/settings/ServerAccountScreen.kt`, `res/values/strings.xml`.
 
