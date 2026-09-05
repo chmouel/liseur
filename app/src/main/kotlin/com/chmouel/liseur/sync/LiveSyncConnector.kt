@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.LiveTopic
 import com.chmouel.liseur.data.remote.SyncFailure
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +37,7 @@ class LiveSyncConnector(
     private val reportFailure: suspend (LiveIdentity, SyncFailure) -> Unit = { _, _ -> },
 ) {
     private val active = MutableStateFlow(false)
+    private val lifecycleGeneration = AtomicLong(0)
     private var stopping: Job? = null
 
     init {
@@ -53,15 +55,17 @@ class LiveSyncConnector(
     }
 
     fun foreground() {
+        lifecycleGeneration.incrementAndGet()
         stopping?.cancel()
         active.value = true
     }
 
     fun background() {
+        val generation = lifecycleGeneration.incrementAndGet()
         stopping?.cancel()
         stopping = scope.launch {
             delay(graceMillis)
-            active.value = false
+            if (lifecycleGeneration.get() == generation) active.value = false
         }
     }
 

@@ -150,29 +150,29 @@ class LiseurSyncLiveTest {
                 }.exceptionOrNull() is LiveStreamFailure,
             )
         }
+    }
 
-        @Test
-        fun `gzip expansion is bounded before parsing the event`() = runBlocking {
-            MockWebServer().use { server ->
-                server.start(InetAddress.getLoopbackAddress(), 0)
-                val compressed = Buffer()
-                GzipSink(compressed).buffer().use {
-                    it.writeUtf8("event: invalidate\ndata: {\"topics\":[\"positions\"],\"padding\":\"")
-                    it.writeUtf8("x".repeat(100_000))
-                    it.writeUtf8("\"}\n\n")
-                }
-                assertTrue(compressed.size < 1_000)
-                server.enqueue(
-                    MockResponse.Builder().addHeader("Content-Type", "text/event-stream")
-                        .addHeader("Content-Encoding", "gzip").body(compressed).build(),
-                )
-                val live = LiseurSyncLive({ _, _ -> LiveRefresh() })
-                assertTrue(
-                    runCatching {
-                        withTimeout(3_000) { live.stream(server.url("/").toString(), TOKEN).first() }
-                    }.exceptionOrNull() is LiveStreamFailure,
-                )
+    @Test
+    fun `gzip expansion is bounded before parsing the event`() = runBlocking {
+        MockWebServer().use { server ->
+            server.start(InetAddress.getLoopbackAddress(), 0)
+            val compressed = Buffer()
+            GzipSink(compressed).buffer().use {
+                it.writeUtf8("event: invalidate\ndata: {\"topics\":[\"positions\"],\"padding\":\"")
+                it.writeUtf8("x".repeat(100_000))
+                it.writeUtf8("\"}\n\n")
             }
+            assertTrue(compressed.size < 1_000)
+            server.enqueue(
+                MockResponse.Builder().addHeader("Content-Type", "text/event-stream")
+                    .addHeader("Content-Encoding", "gzip").body(compressed).build(),
+            )
+            val live = LiseurSyncLive({ _, _ -> LiveRefresh() })
+            assertTrue(
+                runCatching {
+                    withTimeout(3_000) { live.stream(server.url("/").toString(), TOKEN).first() }
+                }.exceptionOrNull() is LiveStreamFailure,
+            )
         }
     }
 
