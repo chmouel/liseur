@@ -267,6 +267,7 @@ interface PositionSync {
         bookUrl: String,
         atRevision: Long,
         peerId: String? = null,
+        expectedAccountKey: String? = null,
     ): ResolveOutcome
 
     /** Keeps what is on this device, for the partner named by [peerId]. */

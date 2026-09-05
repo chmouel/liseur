@@ -208,6 +208,7 @@ class KomgaSyncRepository(
         bookUrl: String,
         atRevision: Long,
         peerId: String?,
+        expectedAccountKey: String?,
     ): ResolveOutcome {
         val server = serverDao.get() ?: return ResolveOutcome.Done
         val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done

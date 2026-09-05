@@ -98,8 +98,11 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
         bookUrl: String,
         atRevision: Long,
         peerId: String?,
+        expectedAccountKey: String?,
     ): ResolveOutcome =
-        resolve(bookUrl, peerId) { it.takeRemotePosition(bookUrl, atRevision) }
+        resolve(bookUrl, peerId) {
+            it.takeRemotePosition(bookUrl, atRevision, expectedAccountKey = expectedAccountKey)
+        }
 
     override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
         resolve(bookUrl, peerId) { it.keepLocalPosition(bookUrl) }

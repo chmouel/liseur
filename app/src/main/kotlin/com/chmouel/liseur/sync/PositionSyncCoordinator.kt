@@ -254,7 +254,12 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
             if (now == null || !expecting.matches(now)) return@withLock ResolveOutcome.Superseded
         }
         if (takeRemote) {
-            sync.takeRemotePosition(bookUrl, atRevision, peerId)
+            sync.takeRemotePosition(
+                bookUrl,
+                atRevision,
+                peerId,
+                expectedAccountKey = expecting?.accountKey,
+            )
         } else {
             sync.keepLocalPosition(bookUrl, peerId)
         }

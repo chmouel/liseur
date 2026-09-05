@@ -53,6 +53,7 @@ class CompositePositionSyncTest {
             bookUrl: String,
             atRevision: Long,
             peerId: String?,
+            expectedAccountKey: String?,
         ): ResolveOutcome {
             resolved++
             return resolveOutcome

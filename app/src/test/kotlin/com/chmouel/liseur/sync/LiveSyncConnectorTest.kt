@@ -262,7 +262,12 @@ class LiveSyncConnectorTest {
         override suspend fun canSync(bookUrl: String) = false
         override suspend fun previewBook(bookUrl: String) = PreviewOutcome.NotSynced
         override suspend fun preservedConflict(bookUrl: String, peerId: String?) = null
-        override suspend fun takeRemotePosition(bookUrl: String, atRevision: Long, peerId: String?) =
+        override suspend fun takeRemotePosition(
+            bookUrl: String,
+            atRevision: Long,
+            peerId: String?,
+            expectedAccountKey: String?,
+        ) =
             ResolveOutcome.Done
         override suspend fun keepLocalPosition(bookUrl: String, peerId: String?) = ResolveOutcome.Done
         override suspend fun refreshUnresolved() = Unit
