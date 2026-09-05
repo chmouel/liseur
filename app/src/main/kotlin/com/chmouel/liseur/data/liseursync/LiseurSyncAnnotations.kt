@@ -173,7 +173,7 @@ class LiseurSyncAnnotations(
         }
 
         for (row in pending.filter { it.pendingKind == AnnotationSync.PENDING_DELETE }) {
-            if (progress.unreachable != null) return
+            if (progress.stopped) return
             // Re-read: the pending set was taken at the top of the pass,
             // and settling the writes above took network time in which
             // this row may have been answered, dropped or replaced.
@@ -570,7 +570,7 @@ class LiseurSyncAnnotations(
         if (items.isEmpty()) return
 
         for (batch in items.chunked(AnnotationWire.MAX_BATCH)) {
-            if (progress.unreachable != null) return
+            if (progress.stopped) return
             val marked = batch.map { (row, item) ->
                 row.copy(
                     bookId = row.bookId,
@@ -900,7 +900,7 @@ class LiseurSyncAnnotations(
             .filter { annotationDao.byId(it.id) == null }
 
         for (row in rows) {
-            if (progress.unreachable != null) return
+            if (progress.stopped) return
             if (row.rev < 1) {
                 // Possibly created and never acknowledged; `rev=0` is a
                 // 400, so there is nothing to send. Reconciling the work
