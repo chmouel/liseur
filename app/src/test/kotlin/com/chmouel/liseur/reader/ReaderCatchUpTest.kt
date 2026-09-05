@@ -44,6 +44,7 @@ class ReaderCatchUpTest {
             bookUrl: String,
             atRevision: Long,
             peerId: String?,
+            expectedAccountKey: String?,
         ): ResolveOutcome {
             adoptions += atRevision
             return if (revision == atRevision) ResolveOutcome.Done else ResolveOutcome.Superseded

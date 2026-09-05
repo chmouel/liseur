@@ -262,8 +262,12 @@ class LiseurSyncPositionSync(
         bookUrl: String,
         atRevision: Long,
         peerId: String?,
+        expectedAccountKey: String?,
     ): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
+        if (expectedAccountKey != null && account.accountKey != expectedAccountKey) {
+            return ResolveOutcome.Superseded
+        }
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
         val progression = state.pendingProgression ?: return ResolveOutcome.Done
 
@@ -272,8 +276,11 @@ class LiseurSyncPositionSync(
         val locator = state.exactLocatorFor(alias)
 
         var applied = false
+        var accountMatches = false
         val status = ReadingStatus.fromWire(state.pendingStatus)
         inTransaction {
+            if (!sameAccount(account)) return@inTransaction
+            accountMatches = true
             applied = progressDao.applyPeerPull(
                 bookUrl = bookUrl,
                 expectedRevision = atRevision,
@@ -294,6 +301,7 @@ class LiseurSyncPositionSync(
                 )
             }
         }
+        if (!accountMatches) return ResolveOutcome.Superseded
         if (!applied) return ResolveOutcome.Superseded
         finishedState.refreshFromProgress(bookUrl)
         return ResolveOutcome.Done

@@ -159,6 +159,7 @@ class PositionSyncCoordinatorTest {
             bookUrl: String,
             atRevision: Long,
             peerId: String?,
+            expectedAccountKey: String?,
         ): ResolveOutcome {
             resolved += bookUrl to true
             peersResolved += peerId

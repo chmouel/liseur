@@ -176,6 +176,7 @@ class KosyncPositionSync(
         bookUrl: String,
         atRevision: Long,
         peerId: String?,
+        expectedAccountKey: String?,
     ): ResolveOutcome {
         val account = account() ?: return ResolveOutcome.Done
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
