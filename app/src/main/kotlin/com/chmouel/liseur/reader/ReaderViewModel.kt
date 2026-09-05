@@ -828,6 +828,15 @@ class ReaderViewModel(
     var lastLocator: Locator? = null
         private set
 
+    /**
+     * Advances only on persisted local reading movement — never on a
+     * non-persisting reflow or lifecycle callback, which can replace
+     * [lastLocator] with a structurally different locator for the same
+     * page. Catch-up guards compare this instead of [lastLocator] so
+     * such a callback cannot masquerade as the reader having moved.
+     */
+    private var readingGeneration = 0L
+
     init {
         viewModelScope.launch {
             positionPublisher.failures.collect { failedBook ->
@@ -1028,6 +1037,7 @@ class ReaderViewModel(
         // even when its stable resource position has not moved. Keep the
         // display current, but do not turn that layout detail into reading.
         if (samePosition || !effectiveEvent.persists) return
+        readingGeneration++
         _catchUp.value = null
         val totalProgression = stable?.progression ?: return
         if (effectiveEvent.teachesPace) {
@@ -1133,12 +1143,12 @@ class ReaderViewModel(
         if (catchUpChecking || publication == null) return
         catchUpChecking = true
         _catchUp.value = null
-        val offeredFrom = lastLocator
+        val offeredGeneration = readingGeneration
         viewModelScope.launch {
             try {
                 if (!positionPublisher.flush(bookId)) return@launch
                 val outcome = positionSync.preview(bookId)
-                if (!readerActive || lastLocator != offeredFrom) return@launch
+                if (!readerActive || readingGeneration != offeredGeneration) return@launch
                 val preview = (outcome as? PreviewOutcome.Ready)?.preview ?: return@launch
                 val there = preview.remote ?: return@launch
                 val here = preview.local
@@ -1171,14 +1181,14 @@ class ReaderViewModel(
     /** Takes the offer: the further position wins, and the page turns. */
     fun acceptCatchUp(offered: CatchUp? = _catchUp.value) {
         val offer = offered ?: return
-        val acceptedFrom = lastLocator
+        val acceptedGeneration = readingGeneration
         _catchUp.value = null
         viewModelScope.launch {
-            if (!positionPublisher.flush(bookId) || lastLocator != acceptedFrom) return@launch
+            if (!positionPublisher.flush(bookId) || readingGeneration != acceptedGeneration) return@launch
             val outcome = offer.resolve(bookId, positionSync)
             // Anything but a clean adoption leaves the book where it is;
             // the offer will simply be made again if it still stands.
-            if (outcome != ResolveOutcome.Done || lastLocator != acceptedFrom) return@launch
+            if (outcome != ResolveOutcome.Done || readingGeneration != acceptedGeneration) return@launch
             goToRemotePosition(offer.preview)
         }
     }
