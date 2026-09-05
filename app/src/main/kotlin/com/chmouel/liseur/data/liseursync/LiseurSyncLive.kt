@@ -10,6 +10,7 @@ import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttp
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -65,6 +66,7 @@ internal class BoundedEventSource(source: Source, private val limit: Long = 64 *
                 afterCr = false
                 continue
             }
+
             afterCr = false
             if (++frameBytes > limit) throw IOException("Live frame exceeds $limit bytes")
             if (byte == 10 || byte == 13) {
@@ -73,6 +75,34 @@ internal class BoundedEventSource(source: Source, private val limit: Long = 64 *
                 afterCr = byte == 13
             } else {
                 lineBytes++
+            }
+        }
+
+        sink.write(chunk, read)
+        return read
+    }
+}
+
+internal class RetryAdviceSource(
+    source: Source,
+    private val retryMillis: AtomicLong,
+) : ForwardingSource(source) {
+    private val line = StringBuilder()
+
+    override fun read(sink: Buffer, byteCount: Long): Long {
+        val chunk = Buffer()
+        val read = super.read(chunk, byteCount)
+        if (read <= 0) return read
+        for (index in 0 until read) {
+            val byte = chunk[index].toInt()
+            if (byte == '\n'.code || byte == '\r'.code) {
+                val value = line.toString().removePrefix("retry:").trim().toLongOrNull()
+                if (line.startsWith("retry:") && value != null && value >= 0) {
+                    retryMillis.set(value)
+                }
+                line.setLength(0)
+            } else if (line.length < 32) {
+                line.append(byte.toChar())
             }
         }
         sink.write(chunk, read)
@@ -93,7 +123,8 @@ class LiseurSyncLive(
             // Application interceptors see the decompressed body. Bounding
             // a network interceptor's gzip bytes leaves inflated frames unbounded.
             val body = response.body
-            val bounded = BoundedEventSource(body.source()).buffer()
+            val retryMillis = chain.request().tag(AtomicLong::class.java) ?: AtomicLong(-1)
+            val bounded = RetryAdviceSource(BoundedEventSource(body.source()), retryMillis).buffer()
             response.newBuilder().body(object : ResponseBody() {
                 override fun contentType() = body.contentType()
                 override fun contentLength() = body.contentLength()
@@ -112,10 +143,12 @@ class LiseurSyncLive(
         if (credentials == null) return@flow
         val wake = Channel<Unit>(Channel.CONFLATED)
         val pending = mutableSetOf<LiveTopic>()
+        val retryMillis = AtomicLong(-1)
         val request = Request.Builder()
             .url(LiseurSyncApi.url(baseUrl, "/v1/events"))
             .header("Accept", "text/event-stream")
             .also { credentials.signInto(it) }
+            .tag(AtomicLong::class.java, retryMillis)
             .build()
         val source = EventSources.createFactory(client).newEventSource(request, object : EventSourceListener() {
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
@@ -126,11 +159,17 @@ class LiseurSyncLive(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                wake.close(LiveStreamFailure())
+                wake.close(LiveStreamFailure(retryMillis = retryMillis.get().takeIf { it >= 0 }))
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                wake.close(LiveStreamFailure(response?.code, response?.header("Retry-After")))
+                wake.close(
+                    LiveStreamFailure(
+                        response?.code,
+                        response?.header("Retry-After"),
+                        retryMillis.get().takeIf { it >= 0 },
+                    ),
+                )
             }
         })
         try {

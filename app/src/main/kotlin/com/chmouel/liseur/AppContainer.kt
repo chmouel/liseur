@@ -419,7 +419,9 @@ class AppContainer(context: Context) {
     val liveSync = LiveSyncConnector(
         scope = applicationScope,
         accounts = database.remoteServerDao().observe(),
-        sourceFor = { remoteRouter.liveFor(it.kind) },
+        sourceFor = { server ->
+            remoteRouter.liveFor(server.kind).takeIf { server.credentials != null }
+        },
         coordinator = positionSync,
         requestBook = ::requestBookSync,
         reportFailure = { identity, reason ->
