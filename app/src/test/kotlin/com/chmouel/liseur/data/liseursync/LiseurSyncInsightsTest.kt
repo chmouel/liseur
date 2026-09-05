@@ -68,6 +68,19 @@ class LiseurSyncInsightsTest {
     }
 
     @Test
+    fun `non finite negative and overflowing summary values are refused`() = runTest {
+        connect()
+        for (minutes in listOf("\"NaN\"", "\"Infinity\"", "-1", "1e300")) {
+            server.enqueue(ok("""{"range_days":0,"sessions":1,"total_active_minutes":$minutes}"""))
+            assertNull(insights().summary(StatsRange.ALL_TIME, TODAY))
+        }
+        for (count in listOf("-1", "2147483648", "1.5", "\"NaN\"")) {
+            server.enqueue(ok("""{"range_days":0,"sessions":$count,"total_active_minutes":20}"""))
+            assertNull(insights().summary(StatsRange.ALL_TIME, TODAY))
+        }
+    }
+
+    @Test
     fun `an estimate the server declined to make is not invented`() = runTest {
         connect()
         alias()
@@ -175,6 +188,28 @@ class LiseurSyncInsightsTest {
             "/v1/insights/works?from=2026-08-10&to=2026-08-11",
             server.takeRequest().target,
         )
+    }
+
+    /**
+     * `Instant.parse` accepts timestamps far outside the range
+     * `toEpochMilli()` can represent, which throws `ArithmeticException`.
+     * That must be caught like any other malformed value, not propagate
+     * as an uncaught exception out of the parser.
+     */
+    @Test
+    fun `a work timestamp outside the epoch-millisecond range does not throw`() = runTest {
+        connect()
+        alias()
+        server.enqueue(
+            ok(
+                """{"from":"2026-08-10","to":"2026-08-11","works":[""" +
+                    """{"work_id":"w-1","sessions":8,""" +
+                    """"total_active_minutes":106.25,""" +
+                    """"last_read_at":"+999999999-12-31T23:59:59Z"}]}""",
+            ),
+        )
+
+        assertNull(insights().allBooks(today = TODAY))
     }
 
     /**

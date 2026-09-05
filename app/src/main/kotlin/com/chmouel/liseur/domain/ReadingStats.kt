@@ -28,11 +28,8 @@ data class BookReadingStats(
     val author: String?,
     val totalMs: Long,
     /**
-     * The part of [totalMs] that no server has been told about yet.
-     *
-     * A server's total can only ever describe what reached it, so a
-     * figure that is meant to hold both has to add this back on. See
-     * [SessionSpan.uploaded].
+     * Local time not yet acknowledged by a server. This is bookkeeping,
+     * not evidence that a cached server snapshot excludes it.
      */
     val pendingMs: Long = 0,
     val lastReadAt: Long,
@@ -136,11 +133,10 @@ data class SessionSpan(
     /**
      * Whether this sitting has been sent to a sync server.
      *
-     * What it is for is arithmetic, not bookkeeping: a server's total
-     * counts the sittings it was given, this device's counts all of
-     * them, and neither is the whole picture when some are still
-     * queued. Knowing which are queued is what lets the two be added
-     * rather than merely compared.
+     * This is acknowledgement bookkeeping only. A lost reply can leave
+     * an accepted sitting unacknowledged, and a cached server snapshot
+     * can predate a successful upload. Exact merges use transmission
+     * evidence rather than this flag.
      *
      * A sitting with no progression on it is never uploaded at all, so
      * it stays pending for good — which is right, because no server can
@@ -218,7 +214,10 @@ fun readingStats(
         val day = session.day(zone)
         !day.isAfter(today) && (start == null || !day.isBefore(start))
     }
-    if (counted.isEmpty()) return ReadingStats.Empty.copy(streakDays = streak)
+    if (counted.isEmpty()) return ReadingStats.Empty.copy(
+        streakDays = streak,
+        recent = dailySeries(emptyList(), zone, today, range, weekStart),
+    )
 
     val stats = counted.groupBy { it.bookUrl }.map { (url, spans) ->
         val book = books[url]
@@ -308,19 +307,7 @@ private fun dailySeries(
  * cannot contradict each other about the same reader.
  */
 private fun streakDays(sessions: List<SessionSpan>, zone: ZoneId, today: LocalDate): Int {
-    if (sessions.isEmpty()) return 0
-    val active = sessions.mapTo(mutableSetOf()) { it.day(zone) }
-    var day = today
-    if (day !in active) {
-        day = day.minusDays(1)
-        if (day !in active) return 0
-    }
-    var streak = 0
-    while (day in active) {
-        streak++
-        day = day.minusDays(1)
-    }
-    return streak
+    return activeDayStreak(sessions.mapTo(mutableSetOf()) { it.day(zone) }, today)
 }
 
 /**
@@ -349,6 +336,7 @@ private fun progressionPerHour(sessions: List<SessionSpan>): Double? {
     for (span in sessions) {
         val from = span.startProgression ?: continue
         val to = span.endProgression ?: continue
+        if (!from.isFinite() || !to.isFinite()) continue
         millis += span.durationMs
         val delta = to - from
         if (delta > 0) advance += delta

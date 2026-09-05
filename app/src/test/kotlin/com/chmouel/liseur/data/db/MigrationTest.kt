@@ -1009,10 +1009,33 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `preexisting sessions have explicitly unknown transmission evidence`() {
+        helper.createDatabase(TEST_DB, 47).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO reading_sessions
+                    (id, book_url, started_at, ended_at, last_checkpoint_at, duration_ms)
+                VALUES (1, 'file:///book', 1, 2, 2, 1)
+                """.trimIndent(),
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT legacy_evidence_unknown FROM reading_sessions WHERE id = 1").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(1, it.getInt(0))
+            }
+            db.query("SELECT COUNT(*) FROM session_transmission").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 47
+        const val LATEST = 48
     }
 }
