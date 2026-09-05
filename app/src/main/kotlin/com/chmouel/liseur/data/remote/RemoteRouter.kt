@@ -108,7 +108,7 @@ class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
             atRevision,
             peerId,
             expectedAccountKey,
-        ) ?: ResolveOutcome.Done
+        ) ?: if (expectedAccountKey != null) ResolveOutcome.Superseded else ResolveOutcome.Done
 
     override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
         router.positionSync()?.keepLocalPosition(bookUrl) ?: ResolveOutcome.Done
