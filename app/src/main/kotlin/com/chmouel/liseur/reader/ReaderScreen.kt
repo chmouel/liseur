@@ -624,15 +624,17 @@ fun ReaderScreen(
     }
 
     onProgressAction.prepareCatchUp = {
-        if (effectiveScrolling) {
+        if (!effectiveScrolling) {
+            false
+        } else {
             navigatorNow?.let { nav ->
                 val since = heldPlace.mark()
                 scrolledPlace(nav)?.let {
-                    if (heldPlace.hold(it, since)) {
-                        onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
-                    }
-                }
-            }
+                    if (!heldPlace.hold(it, since)) return@let false
+                    onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                    true
+                } ?: false
+            } ?: false
         }
     }
 
@@ -2230,8 +2232,9 @@ fun ReaderScreen(
                             theme = readingTheme,
                             onCatchUp = {
                                 effectScope.launch {
-                                    onProgressAction.prepareCatchUp()
-                                    onProgressAction.acceptCatchUp(offer)
+                                    if (onProgressAction.prepareCatchUp()) {
+                                        onProgressAction.acceptCatchUp(offer)
+                                    }
                                 }
                             },
                             onDismiss = onProgressAction.dismissCatchUp,
@@ -2917,7 +2920,7 @@ class ReaderProgressActions(
     val jumpFrom: (Locator?) -> Unit,
     val dismissJumpBack: () -> Unit,
     val acceptCatchUp: (ReaderViewModel.CatchUp?) -> Unit,
-    var prepareCatchUp: suspend () -> Unit = {},
+    var prepareCatchUp: suspend () -> Boolean = { true },
     val dismissCatchUp: () -> Unit,
     val chapterTicks: () -> List<Float>,
     val chapterTitleAtPosition: (Int) -> String?,
