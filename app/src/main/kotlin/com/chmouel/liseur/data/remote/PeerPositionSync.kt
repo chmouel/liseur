@@ -100,7 +100,7 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
         peerId: String?,
         expectedAccountKey: String?,
     ): ResolveOutcome =
-        resolve(bookUrl, peerId) {
+        resolve(bookUrl, peerId, expectedAccountKey) {
             it.takeRemotePosition(bookUrl, atRevision, expectedAccountKey = expectedAccountKey)
         }
 
@@ -142,10 +142,13 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
     private suspend fun resolve(
         bookUrl: String,
         peerId: String?,
+        expectedAccountKey: String? = null,
         act: suspend (PeerPositionSync) -> ResolveOutcome,
     ): ResolveOutcome {
         val holders = holders(peerId).filter { it.preservedConflict(bookUrl) != null }
-        if (holders.isEmpty()) return ResolveOutcome.Done
+        if (holders.isEmpty()) {
+            return if (expectedAccountKey != null) ResolveOutcome.Superseded else ResolveOutcome.Done
+        }
         return holders
             .map { act(it) }
             .fold(ResolveOutcome.Done as ResolveOutcome) { worst, outcome ->

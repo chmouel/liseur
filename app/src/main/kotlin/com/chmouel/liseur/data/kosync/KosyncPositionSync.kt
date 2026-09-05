@@ -178,12 +178,30 @@ class KosyncPositionSync(
         peerId: String?,
         expectedAccountKey: String?,
     ): ResolveOutcome {
-        val account = account() ?: return ResolveOutcome.Done
-        val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
-        val progression = state.pendingProgression ?: return ResolveOutcome.Done
+        val account = account() ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
+        if (expectedAccountKey != null && account.peerId != expectedAccountKey) {
+            return ResolveOutcome.Superseded
+        }
+        val state = peerStateDao.get(bookUrl, account.peerId) ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
+        val progression = state.pendingProgression ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
         val status = ReadingStatus.fromWire(state.pendingStatus)
         var applied = false
+        var accountMatches = false
         inTransaction {
+            if (kosyncDao.get()?.accountKey != account.peerId) return@inTransaction
+            accountMatches = true
             applied = progressDao.applyPeerPull(
                 bookUrl = bookUrl,
                 expectedRevision = atRevision,
@@ -203,6 +221,7 @@ class KosyncPositionSync(
                 )
             }
         }
+        if (!accountMatches) return ResolveOutcome.Superseded
         if (!applied) return ResolveOutcome.Superseded
         finishedState.refreshFromProgress(bookUrl)
         return ResolveOutcome.Done

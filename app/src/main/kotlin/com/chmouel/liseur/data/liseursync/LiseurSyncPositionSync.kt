@@ -264,12 +264,24 @@ class LiseurSyncPositionSync(
         peerId: String?,
         expectedAccountKey: String?,
     ): ResolveOutcome {
-        val account = account() ?: return ResolveOutcome.Done
+        val account = account() ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
         if (expectedAccountKey != null && account.accountKey != expectedAccountKey) {
             return ResolveOutcome.Superseded
         }
-        val state = peerStateDao.get(bookUrl, account.peerId) ?: return ResolveOutcome.Done
-        val progression = state.pendingProgression ?: return ResolveOutcome.Done
+        val state = peerStateDao.get(bookUrl, account.peerId) ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
+        val progression = state.pendingProgression ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
 
         val alias = bookDao.getByUrl(bookUrl)
             ?.let { works.cached(it, account.peerId) }

@@ -189,18 +189,35 @@ class KoboSyncRepository(
         peerId: String?,
         expectedAccountKey: String?,
     ): ResolveOutcome {
-        val server = serverDao.get() ?: return ResolveOutcome.Done
-        val stored = progressDao.get(bookUrl) ?: return ResolveOutcome.Done
-        val progression = stored.pendingProgression ?: return ResolveOutcome.Done
-        val applied = progressDao.applyPull(
-            bookUrl = bookUrl,
-            expectedRevision = atRevision,
-            progression = progression,
-            status = ReadingStatus.fromWire(stored.pendingStatus).wireName,
-            account = server.accountKey,
-            remoteUpdatedAt = stored.pendingUpdatedAt,
-            now = System.currentTimeMillis(),
-        )
+        val server = serverDao.get() ?: return if (expectedAccountKey != null) {
+            ResolveOutcome.Superseded
+        } else {
+            ResolveOutcome.Done
+        }
+        if (expectedAccountKey != null && server.accountKey != expectedAccountKey) {
+            return ResolveOutcome.Superseded
+        }
+        var applied = false
+        var accountMatches = false
+        inTransaction {
+            val current = serverDao.get()
+            if (current?.accountKey != server.accountKey || current.koboToken != server.koboToken) {
+                return@inTransaction
+            }
+            val stored = progressDao.get(bookUrl) ?: return@inTransaction
+            val progression = stored.pendingProgression ?: return@inTransaction
+            accountMatches = true
+            applied = progressDao.applyPull(
+                bookUrl = bookUrl,
+                expectedRevision = atRevision,
+                progression = progression,
+                status = ReadingStatus.fromWire(stored.pendingStatus).wireName,
+                account = server.accountKey,
+                remoteUpdatedAt = stored.pendingUpdatedAt,
+                now = System.currentTimeMillis(),
+            )
+        }
+        if (!accountMatches) return ResolveOutcome.Superseded
         if (!applied) return ResolveOutcome.Superseded
         finishedState.refreshFromProgress(bookUrl)
         return ResolveOutcome.Done
