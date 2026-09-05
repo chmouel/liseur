@@ -539,6 +539,9 @@ class RemoteAccountRepositoryTest {
             ),
         )
         db.readingProgressDao().markDirtyFor(listOf("file:///book.epub"), oldKey)
+        db.sessionTransmissionDao().insert(
+            com.chmouel.liseur.data.db.SessionTransmission(oldKey, sessionId, "device-1", """{"session_id":"s-7"}"""),
+        )
 
         repository.connectLiseurSync(BASE, "ada", "pw")
 
@@ -555,10 +558,15 @@ class RemoteAccountRepositoryTest {
         // every one of them again under the new key.
         assertEquals(listOf("s-7"), db.sessionRefusalDao().forPeer(newKey).map { it.wireSessionId })
         assertEquals(0, db.sessionRefusalDao().countForPeer(oldKey))
+        assertEquals("""{"session_id":"s-7"}""", db.sessionTransmissionDao().get(newKey, sessionId)!!.payload)
+        assertEquals(0, db.sessionTransmissionDao().countForPeer(oldKey))
 
         // From here on the key is stable across token rotations.
         repository.connectLiseurSync(BASE, "ada", "pw")
         assertEquals(newKey, db.remoteServerDao().get()!!.accountKey)
+        repository.disconnect()
+        assertEquals(0, db.sessionTransmissionDao().countForPeer(newKey))
+        assertTrue(db.readingSessionDao().get(sessionId)!!.legacyEvidenceUnknown)
     }
 
     @Test
@@ -610,8 +618,39 @@ class RemoteAccountRepositoryTest {
         annotationSyncDao = db.annotationSyncDao(),
         uploadRefusalDao = db.uploadRefusalDao(),
         sessionRefusalDao = db.sessionRefusalDao(),
+        sessionTransmissionDao = db.sessionTransmissionDao(),
         setups = mapOf(ServerKind.LISEUR_SYNC to liseurSyncSetup),
     )
+
+    @Test
+    fun `forgetting unreadable account clears transmission evidence and retains unknown local history`() = runTest {
+        val repository = fullRepository(db.remoteServerDao(), UpgradingLiseurSync())
+        repository.connectLiseurSync(BASE, "ada", "pw")
+        val peer = db.remoteServerDao().get()!!.accountKey
+        val id = db.readingSessionDao().insert(
+            ReadingSession(bookUrl = "file:///book", startedAt = 1, endedAt = 2, lastCheckpointAt = 2, durationMs = 1),
+        )
+        db.sessionTransmissionDao().insert(com.chmouel.liseur.data.db.SessionTransmission(peer, id, "device", "{}"))
+        CredentialCipher.keyForTesting = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+        assertTrue(repository.forgetUnreadableAccount())
+        assertEquals(0, db.sessionTransmissionDao().countForPeer(peer))
+        assertTrue(db.readingSessionDao().get(id)!!.legacyEvidenceUnknown)
+    }
+
+    @Test
+    fun `a destination occupied only by transmission evidence is not overwritten during rekey`() = runTest {
+        val repository = fullRepository(db.remoteServerDao(), UpgradingLiseurSync())
+        repository.connectLiseurSync(BASE, "ada", "pw")
+        val original = db.remoteServerDao().get()!!.accountKey
+        val destination = "liseursync|$BASE|acc-1"
+        val id = db.readingSessionDao().insert(
+            ReadingSession(bookUrl = "file:///book", startedAt = 1, endedAt = 2, lastCheckpointAt = 2, durationMs = 1),
+        )
+        db.sessionTransmissionDao().insert(com.chmouel.liseur.data.db.SessionTransmission(destination, id, "device", "{}"))
+        repository.connectLiseurSync(BASE, "ada", "pw")
+        assertEquals(original, db.remoteServerDao().get()!!.accountKey)
+        assertEquals("{}", db.sessionTransmissionDao().get(destination, id)!!.payload)
+    }
 
     private fun repository(
         dao: RemoteServerDao,

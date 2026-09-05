@@ -1,7 +1,6 @@
 package com.chmouel.liseur.ui.stats
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +9,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,13 +57,14 @@ internal fun ReadingHeatmap(days: List<ReadingDay>, modifier: Modifier = Modifie
     // labels down the side are a lie.
     val leading = ((days.first().date.dayOfWeek.value - firstDayOfWeek.value) + DAYS_IN_WEEK) %
         DAYS_IN_WEEK
-    val cells: List<ReadingDay?> = List(leading) { null } + days
-    val weeks = cells.chunked(DAYS_IN_WEEK)
-    val busiest = days.maxOfOrNull { it.totalMs }?.coerceAtLeast(1) ?: 1
+    val weeks = remember(days, leading) {
+        (List<ReadingDay?>(leading) { null } + days).chunked(DAYS_IN_WEEK)
+    }
+    val busiest = remember(days) { days.maxOf { it.totalMs }.coerceAtLeast(1) }
     // A column is captioned when its first real day opens a month the
     // column before it did not, which puts the name where the month
     // starts rather than at a fixed interval that drifts off it.
-    val months = weeks.map { week -> week.firstNotNullOfOrNull { it }?.date }
+    val months = remember(weeks, locale) { weeks.map { week -> week.firstNotNullOfOrNull { it }?.date }
         .runningFold<java.time.LocalDate?, Pair<java.time.Month?, String>>(null to "") { previous, date ->
             when {
                 date == null -> previous.first to ""
@@ -70,12 +73,12 @@ internal fun ReadingHeatmap(days: List<ReadingDay>, modifier: Modifier = Modifie
             }
         }
         .drop(1)
-        .map { it.second }
-    val scroll = rememberScrollState()
+        .map { it.second } }
+    val scroll = rememberLazyListState()
     // A span of months opens at its far end. The reader came to see how
     // this week went, and a grid that starts a year ago hides that
     // behind a gesture nothing on the screen suggests.
-    LaunchedEffect(weeks.size) { scroll.scrollTo(scroll.maxValue) }
+    LaunchedEffect(weeks.size) { scroll.scrollToItem(weeks.lastIndex) }
 
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
@@ -93,14 +96,15 @@ internal fun ReadingHeatmap(days: List<ReadingDay>, modifier: Modifier = Modifie
                 )
             }
         }
-        Row(
+        LazyRow(
             // A year does not fit across a phone. Scrolled rather than
             // shrunk, because a square small enough to fit is a square
             // too small to tell apart from its neighbour.
-            modifier = Modifier.horizontalScroll(scroll),
+            state = scroll,
+            modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(CELL_GAP),
         ) {
-            weeks.forEachIndexed { index, week ->
+            itemsIndexed(weeks, key = { _, week -> week.firstNotNullOf { it?.date }.toEpochDay() }) { index, week ->
                 Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
                     Text(
                         text = months[index],

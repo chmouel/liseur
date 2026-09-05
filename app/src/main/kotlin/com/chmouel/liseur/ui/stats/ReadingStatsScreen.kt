@@ -186,7 +186,7 @@ fun ReadingStatsScreen(
                     ProvenanceLine(ready.provenance)
                 }
                 item {
-                    ActivityCard(stats = stats, range = ready.range)
+                    ActivityCard(stats = stats, range = ready.range, today = ready.today)
                 }
                 if (stats.books.isNotEmpty()) {
                     item {
@@ -460,9 +460,9 @@ private fun BentoTile(
  * can see is false.
  */
 @Composable
-private fun ActivityCard(stats: ReadingStats, range: StatsRange) {
+private fun ActivityCard(stats: ReadingStats, range: StatsRange, today: LocalDate) {
     val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
-    val daily = range.suitsDailyBars(LocalDate.now(), weekStart)
+    val daily = range.suitsDailyBars(today, weekStart)
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,

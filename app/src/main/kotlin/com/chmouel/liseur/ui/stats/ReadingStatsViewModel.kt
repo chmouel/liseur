@@ -10,10 +10,15 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.db.ReadingSession
+import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.InsightsSummary
-import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
+import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
+import com.chmouel.liseur.data.liseursync.CompleteStatsSnapshot
+import com.chmouel.liseur.data.liseursync.statsSessions
+import com.chmouel.liseur.data.liseursync.statsAliases
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.data.liseursync.WorkTotals
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -41,13 +46,17 @@ import java.time.ZonedDateTime
 import java.util.Locale
 import kotlin.math.roundToLong
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -61,6 +70,8 @@ sealed interface ReadingStatsUiState {
         val headline: StatsHeadline,
         val range: StatsRange,
         val provenance: StatsProvenance = StatsProvenance.THIS_DEVICE,
+        val today: LocalDate = stats.recent.lastOrNull()?.date ?: LocalDate.now(),
+        val snapshotId: String? = null,
     ) : ReadingStatsUiState
 }
 
@@ -84,11 +95,8 @@ enum class StatsProvenance {
 /**
  * The one set of figures the screen leads with, merged across devices.
  *
- * The server's count is the same reading seen on every device, so where
- * it answers for the same span it is the superset and it wins; this
- * device's own sessions are part of it, so summing the two would count
- * them twice. When the server has nothing — offline, or no statistics
- * token — the local figures stand in.
+ * A complete snapshot contributes server + captured local - actual
+ * server overlap. Without that proof, these figures count this device.
  *
  * [comparison] is null for a span with no previous period to measure
  * against, which is only "all time".
@@ -112,9 +120,10 @@ sealed interface BookReadingStatsUiState {
  * What the reading dashboard shows.
  *
  * Local sums are recomputed from the sessions each time rather than kept
- * as a running total anywhere. When liseur-sync answers, its calendar and
- * per-book aggregates replace the matching local slices because they
- * already contain this device's uploads as well as every other device's.
+ * as a running total anywhere. A supported liseur-sync snapshot supplies
+ * one coherent set of aggregates and actual overlap with captured local
+ * sessions. All dashboard figures use that generation or fall back
+ * together. Comparisons remain local in the phone timezone.
  *
  * Both sources are asked about the same [StatsRange], which is the whole
  * point of the range living in one place: while the server was pinned to
@@ -123,10 +132,9 @@ sealed interface BookReadingStatsUiState {
  * reader's total shrink.
  */
 class ReadingStatsViewModel(
-    sessionDao: ReadingSessionDao,
+    private val sessionDao: ReadingSessionDao,
     bookDao: BookDao,
     progressDao: ReadingProgressDao,
-    private val insights: LiseurSyncInsights? = null,
     private val settings: AppSettingsRepository? = null,
     initialRange: StatsRange = StatsRange.Default,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
@@ -134,20 +142,29 @@ class ReadingStatsViewModel(
     initialWeekStart: DayOfWeek = localeWeekStart(Locale.getDefault()),
     private val liveInvalidations: Flow<Long> = flowOf(0L),
     private val liveAccounts: Flow<LiveIdentity?> = flowOf(null),
-    private val currentAccount: suspend () -> LiveIdentity? = { null },
+    private val snapshotSource: LiseurSyncSnapshots? = null,
+    private val aliases: Flow<List<WorkAlias>> = flowOf(emptyList()),
 ) : ViewModel() {
 
     /** Collected only by the visible route, and refreshed again on entry. */
     suspend fun observeLiveInsights() {
         try {
-            combine(liveInvalidations, liveAccounts.distinctUntilChanged()) { tick, account ->
-                tick to account
-            }.collect { (_, account) ->
-                if (account != shownAccount) {
-                    shownAccount = account
-                    forgetServerAnswers()
+            coroutineScope {
+                launch {
+                    while (isActive) {
+                        delay(60_000)
+                        resampleClock()
+                    }
                 }
-                refreshServerInsights()
+                combine(liveInvalidations, liveAccounts.distinctUntilChanged()) { tick, account ->
+                    tick to account
+                }.collect { (_, account) ->
+                    if (account != shownAccount) {
+                        shownAccount = account
+                        forgetServerAnswers()
+                    }
+                    refreshServerInsights()
+                }
             }
         } finally {
             generation++
@@ -232,20 +249,7 @@ class ReadingStatsViewModel(
     private var generation = 0L
     private var refresh: Job? = null
 
-    private val _acrossDevices = MutableStateFlow<Answered<InsightsSummary?>?>(null)
-    private val _recentAcrossDevices = MutableStateFlow<Answered<List<InsightDay>?>?>(null)
-    private val _booksAcrossDevices = MutableStateFlow<Answered<WorkTotals?>?>(null)
-
-    /**
-     * The same reading, counted on every device rather than this one.
-     *
-     * Folded into the headline rather than shown beside it: the reader
-     * does not care which machine did the reading, and two figures that
-     * answer the same question differently are a doubt, not a feature.
-     */
-    private val acrossDevices = _acrossDevices.asStateFlow()
-    private val recentAcrossDevices = _recentAcrossDevices.asStateFlow()
-    private val booksAcrossDevices = _booksAcrossDevices.asStateFlow()
+    private val _snapshot = MutableStateFlow<Answered<CompleteStatsSnapshot>?>(null)
 
     init {
         settings?.let { store ->
@@ -301,9 +305,7 @@ class ReadingStatsViewModel(
     }
 
     private fun forgetServerAnswers() {
-        _acrossDevices.value = null
-        _recentAcrossDevices.value = null
-        _booksAcrossDevices.value = null
+        _snapshot.value = null
     }
 
     /**
@@ -326,43 +328,43 @@ class ReadingStatsViewModel(
      * would look wrong.
      */
     fun refreshServerInsights() {
+        resampleClock()
+        val token = ++generation
+        refresh?.cancel()
+        forgetServerAnswers()
+        val source = snapshotSource ?: return
+        val window = _window.value
+        refresh = viewModelScope.launch {
+            val context = source.discover() ?: return@launch
+            val at = now(context.capabilities.timezone)
+            val result = source.read(
+                context, sessionDao.allOnce(), window.range, at.toLocalDate(), window.weekStart,
+            ) ?: return@launch
+            resampleClock()
+            if (source.isCurrent(result) && token == generation &&
+                _window.value.asked() == window.asked() && now(result.zone).toLocalDate() == result.today
+            ) {
+                _snapshot.value = Answered(window, result)
+            }
+        }
+    }
+
+    fun clockChanged() = resampleClock()
+
+    private fun resampleClock() {
         val zone = zone()
         val at = now(zone)
+        val old = _window.value
         _window.update {
             it.copy(zone = zone, today = at.toLocalDate(), timeOfDay = at.toLocalTime())
         }
-        val window = _window.value
-        val source = insights ?: return
-        val token = ++generation
-        refresh?.cancel()
-        refresh = viewModelScope.launch {
-            val account = currentAccount()
-            val end = window.today
-            val week = window.weekStart
-            launch {
-                val summary = source.summary(window.range, end, week)
-                if (token == generation && currentAccount() == account) {
-                    _acrossDevices.value = Answered(window, summary)
-                }
-            }
-            launch {
-                val calendar = source.calendar(
-                    from = window.range.startDate(end, week) ?: maxOf(
-                        EARLIEST_PLAUSIBLE_DAY,
-                        end.minusDays(CALENDAR_HORIZON_DAYS),
-                    ),
-                    to = end,
-                )
-                if (token == generation && currentAccount() == account) {
-                    _recentAcrossDevices.value = Answered(window, calendar)
-                }
-            }
-            launch {
-                val books = source.allBooks(window.range, end, week)
-                if (token == generation && currentAccount() == account) {
-                    _booksAcrossDevices.value = Answered(window, books)
-                }
-            }
+        val remoteDayChanged = _snapshot.value?.value?.let {
+            now(it.zone).toLocalDate() != it.today
+        } == true
+        if (old.asked() != _window.value.asked() || remoteDayChanged) {
+            generation++
+            refresh?.cancel()
+            forgetServerAnswers()
         }
     }
 
@@ -380,15 +382,19 @@ class ReadingStatsViewModel(
      * superseded day until the next reply arrived.
      */
     fun serverEstimateFor(bookUrl: String): StateFlow<WorkInsights?> =
-        combine(booksAcrossDevices, _window) { answered, window ->
-            answered.forWindow(window)?.byBookUrl?.get(bookUrl)
+        combine(_snapshot, state) { answered, ready ->
+            answered?.value?.takeIf {
+                ready is ReadingStatsUiState.Ready && ready.snapshotId == it.snapshotId
+            }?.totals?.books?.byBookUrl?.get(bookUrl)
         }.stateIn(
             viewModelScope,
-            SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS, replayExpirationMillis = 0),
             null,
         )
 
     private data class LocalStats(
+        val sessions: List<ReadingSession>,
+        val sessionSpans: List<SessionSpan>,
         val stats: ReadingStats,
         val books: Map<String, StatsBook>,
         /**
@@ -454,7 +460,7 @@ class ReadingStatsViewModel(
                 bookUrl = it.bookUrl,
                 startedAt = it.startedAt,
                 durationMs = it.durationMs,
-                lastReadAt = it.lastCheckpointAt,
+                lastReadAt = it.endedAt ?: it.lastCheckpointAt,
                 uploaded = it.uploadedAt != null,
                 startProgression = it.startProgression,
                 endProgression = it.endProgression,
@@ -463,6 +469,8 @@ class ReadingStatsViewModel(
         val comparison = window.range
             .comparison(window.today, window.weekStart, window.timeOfDay)
         LocalStats(
+            sessions = statsSessions(sessions),
+            sessionSpans = spans,
             stats = readingStats(
                 sessions = spans,
                 books = statsBooks,
@@ -485,42 +493,54 @@ class ReadingStatsViewModel(
                 ?.let { readingTotals(spans, window.zone, it.previous, it.through).totalMs }
                 ?: 0L,
         )
-    }
+    }.flowOn(Dispatchers.Default)
+
+    private val aliasIdentities = aliases.map { rows ->
+        rows.groupBy { it.peerId }.mapValues { (_, values) -> statsAliases(values) }
+    }.distinctUntilChanged()
 
     val state: StateFlow<ReadingStatsUiState> = combine(
         local,
-        acrossDevices,
-        recentAcrossDevices,
-        booksAcrossDevices,
-    ) { local, server, recent, serverBooks ->
+        _snapshot,
+        aliasIdentities,
+        liveAccounts.distinctUntilChanged(),
+    ) { local, answer, names, account ->
 
         val window = local.window
-        val summary = server.forWindow(window)
-        val recentDays = recent.forWindow(window)
-        val bookTotals = serverBooks.forWindow(window)
-        val merged = mergeDashboard(
-            local.stats,
-            local.books,
-            recentDays,
-            bookTotals,
-            local.firstReadAtByUrl,
-        )
+        val snapshot = answer.forWindow(window)?.takeIf {
+            account == LiveIdentity.from(it.context.account) &&
+                // Transmission evidence was checked after the response, before
+                // publication. A later upload cannot change that server snapshot.
+                it.captured.sessions == local.sessions &&
+                it.aliases == names[it.peer].orEmpty()
+        }
+        val united = snapshot?.let {
+            val inAccountZone = readingStats(
+                local.sessionSpans, local.books, it.zone, it.today, window.range, window.weekStart,
+            )
+            uniteSnapshot(inAccountZone, local.books, local.firstReadAtByUrl, it.totals)
+        }
+        val comparison = local.spans?.let {
+            compareReading(it.period, local.currentMs, local.previousMs)
+        }
         ReadingStatsUiState.Ready(
-            stats = merged,
-            headline = mergeHeadline(
-                merged = merged,
+            stats = united?.stats ?: local.stats,
+            headline = united?.headline?.copy(comparison = comparison) ?: mergeHeadline(
+                merged = local.stats,
                 local = local.stats,
-                server = summary,
+                server = null,
                 spans = local.spans,
                 currentMs = local.currentMs,
                 previousMs = local.previousMs,
             ),
             range = window.range,
-            provenance = provenanceOf(summary, recentDays, bookTotals),
+            provenance = if (united != null) StatsProvenance.ALL_DEVICES else StatsProvenance.THIS_DEVICE,
+            today = if (united != null) snapshot?.today ?: window.today else window.today,
+            snapshotId = if (united != null) snapshot?.snapshotId else null,
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         viewModelScope,
-        SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+        SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS, replayExpirationMillis = 0),
         ReadingStatsUiState.Loading,
     )
 
@@ -539,33 +559,13 @@ class ReadingStatsViewModel(
             }
         }.stateIn(
             viewModelScope,
-            SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+            SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS, replayExpirationMillis = 0),
             BookReadingStatsUiState.Loading,
         )
 
     companion object {
         /** Long enough to survive a rotation without recomputing. */
         private const val STOP_TIMEOUT_MS = 5_000L
-
-        /**
-         * Where "all time" starts when asking a server for a calendar.
-         *
-         * The app did not exist before this, so no session can predate
-         * it, and it spares the server a query back to 1970.
-         */
-        internal val EARLIEST_PLAUSIBLE_DAY: LocalDate = LocalDate.of(2024, 1, 1)
-
-        /**
-         * The longest calendar anyone is asked for.
-         *
-         * A fixed first day walks steadily further from today, and a
-         * server that refuses spans past some horizon would eventually
-         * refuse every "all time" request — a heatmap that works until
-         * one particular year and then quietly stops. Ten rolling years
-         * is far more than the app's own history and stays under any
-         * plausible limit for good.
-         */
-        private const val CALENDAR_HORIZON_DAYS = 3650L
 
         /**
          * Which devices the figures on screen counted.
@@ -764,11 +764,9 @@ class ReadingStatsViewModel(
                 val serverMs = insight.activeMinutes.minutesAsMillis()
                 val localMs = rows.sumOf { it.totalMs }
                 val pendingMs = rows.sumOf { it.pendingMs }
-                val lastReadAt = maxOf(
-                    insight.lastReadAt ?: 0L,
-                    rows.maxOfOrNull { it.lastReadAt } ?: 0L,
-                )
-                if (lastReadAt <= 0L) return@forEach
+                val lastReadAt = listOfNotNull(
+                    insight.lastReadAt, rows.maxOfOrNull { it.lastReadAt },
+                ).maxOrNull() ?: return@forEach
                 if (serverMs <= 0L && rows.isEmpty()) return@forEach
                 urls.forEach { mergedBooks.remove(it) }
                 mergedBooks[canonical] = BookReadingStats(
@@ -841,7 +839,11 @@ class ReadingStatsViewModel(
                 // app yesterday has a whole year the server can describe
                 // and this device cannot, and a series built only from
                 // local days would draw it blank.
-                val dates = (localByDate.keys + minutesByDate.keys).sorted()
+                val supplied = localByDate.keys + minutesByDate.keys
+                val first = supplied.minOrNull()
+                val last = local.recent.lastOrNull()?.date ?: supplied.maxOrNull()
+                val dates = if (first == null || last == null) emptyList() else
+                    generateSequence(first) { it.plusDays(1).takeUnless { day -> day > last } }.toList()
                 dates.map { date ->
                     val day = localByDate[date] ?: ReadingDay(date, 0)
                     // A day the server has not heard about yet is a day
@@ -875,12 +877,10 @@ class ReadingStatsViewModel(
                     sessionDao = container.database.readingSessionDao(),
                     bookDao = container.database.bookDao(),
                     progressDao = container.database.readingProgressDao(),
-                    insights = container.syncInsights,
+                    snapshotSource = container.syncSnapshots,
+                    aliases = container.database.workIdentityDao().observeAliases(),
                     liveInvalidations = container.insightInvalidations,
                     liveAccounts = container.remoteAccount.server.map { it?.let(LiveIdentity::from) },
-                    currentAccount = {
-                        container.database.remoteServerDao().get()?.let(LiveIdentity::from)
-                    },
                     settings = container.appSettings,
                 )
             }
@@ -895,4 +895,5 @@ class ReadingStatsViewModel(
  * a headline and the rows under it cannot differ by the seconds one of
  * them threw away.
  */
-internal fun Double.minutesAsMillis(): Long = (this * 60_000).roundToLong()
+internal fun Double.minutesAsMillis(): Long =
+    if (!isFinite() || this < 0) 0 else (this * 60_000).roundToLong()

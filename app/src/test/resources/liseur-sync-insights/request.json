@@ -1,0 +1,21 @@
+{
+  "calendar_from": "2026-09-05",
+  "calendar_to": "2026-09-05",
+  "candidates": [
+    {
+      "active_ms": 1800000,
+      "device_id": "4fbd6f89e41b8b66",
+      "end_progression": 0.2,
+      "ended_at": "2026-09-05T18:31:42Z",
+      "idle_ms": 0,
+      "session_id": "wire-measured-30-minutes",
+      "start_progression": 0.1,
+      "started_at": "2026-09-05T18:21:42Z",
+      "work_id": "snapshot-work"
+    }
+  ],
+  "local_active_days": [],
+  "range": "all",
+  "snapshot_id": "local-generation-7",
+  "timezone": "UTC"
+}

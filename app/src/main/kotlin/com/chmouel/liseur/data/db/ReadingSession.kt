@@ -69,6 +69,9 @@ data class ReadingSession(
     @ColumnInfo(name = "idle_ms") val idleMs: Long? = null,
     /** When this session was accepted by the sync server, if ever. */
     @ColumnInfo(name = "uploaded_at") val uploadedAt: Long? = null,
+    /** Earlier app versions may have attempted this sitting without retaining its identity. */
+    @ColumnInfo(name = "legacy_evidence_unknown", defaultValue = "0")
+    val legacyEvidenceUnknown: Boolean = false,
 ) {
     val isOpen: Boolean get() = endedAt == null
 }
@@ -151,6 +154,9 @@ interface ReadingSessionDao {
     @Query("SELECT * FROM reading_sessions ORDER BY started_at DESC")
     fun observeAll(): Flow<List<ReadingSession>>
 
+    @Query("SELECT * FROM reading_sessions ORDER BY id")
+    suspend fun allOnce(): List<ReadingSession>
+
     /** Local reading time for one book, including its current open session. */
     @Query(
         """
@@ -219,6 +225,9 @@ interface ReadingSessionDao {
      */
     @Query("UPDATE reading_sessions SET uploaded_at = NULL")
     suspend fun forgetUploads()
+
+    @Query("UPDATE reading_sessions SET legacy_evidence_unknown = 1")
+    suspend fun forgetTransmissionEvidence()
 
     @Query("SELECT COUNT(*) FROM reading_sessions WHERE book_url = :bookUrl")
     suspend fun countForBook(bookUrl: String): Int

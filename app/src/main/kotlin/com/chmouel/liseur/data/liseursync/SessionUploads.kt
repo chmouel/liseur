@@ -34,11 +34,13 @@ object SessionUploads {
         deviceKey: String,
         workId: String,
         editionSha: String?,
+        measuredTime: Boolean = false,
     ): JSONObject? {
         val started = session.startedAt
         val ended = session.endedAt ?: return null
         val start = session.startProgression ?: return null
         val end = session.endProgression ?: return null
+        if (!start.isFinite() || !end.isFinite()) return null
         return JSONObject().apply {
             put("session_id", sessionIdFor(deviceKey, session.id))
             put("work_id", workId)
@@ -71,6 +73,9 @@ object SessionUploads {
             // book left open on the sofa with the screen on, and
             // guessing at that would be worse than admitting it.
             put("idle_ms", session.idleMs ?: 0L)
+            if (measuredTime && !session.legacyEvidenceUnknown) {
+                put("active_ms", session.durationMs)
+            }
         }
     }
 }

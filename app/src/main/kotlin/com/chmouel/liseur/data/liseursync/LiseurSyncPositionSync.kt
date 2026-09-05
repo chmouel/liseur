@@ -77,6 +77,8 @@ class LiseurSyncPositionSync(
     private val identityDao: WorkIdentityDao,
     private val sessionDao: ReadingSessionDao,
     private val sessionRefusalDao: SessionRefusalDao,
+    private val sessionTransmissionDao: com.chmouel.liseur.data.db.SessionTransmissionDao? = null,
+    private val supportsMeasuredSessions: suspend () -> Boolean = { false },
     private val works: WorkResolver,
     private val deviceKey: suspend () -> String,
     private val finishedState: FinishedState,
@@ -1287,6 +1289,8 @@ class LiseurSyncPositionSync(
         val bookUrl: String,
         val workId: String,
         val json: JSONObject,
+        val payload: String = json.toString(),
+        val transmission: com.chmouel.liseur.data.db.SessionTransmission? = null,
     )
 
     /**
@@ -1323,21 +1327,41 @@ class LiseurSyncPositionSync(
         val byBook = identityDao.aliasesFor(account.peerId)
             .filter { it.usable }
             .associateBy { it.bookUrl }
+        val retainedIds = sessionTransmissionDao?.forPeer(account.peerId).orEmpty().mapTo(mutableSetOf()) { it.sessionId }
+        val measured = sessionTransmissionDao != null &&
+            sessions.any { !it.legacyEvidenceUnknown && it.id !in retainedIds } &&
+            sameAccount(account) && supportsMeasuredSessions()
 
         val first = sessions.mapNotNull { session ->
             val alias = byBook[session.bookUrl] ?: return@mapNotNull null
-            SessionUploads.toJson(
+            val stored = sessionTransmissionDao?.get(account.peerId, session.id)
+            val payload = stored?.payload ?: SessionUploads.toJson(
                 session = session,
                 deviceKey = account.deviceKey,
                 workId = alias.workId,
                 editionSha = alias.editionSha,
-            )?.let {
+                measuredTime = measured,
+            )?.toString() ?: return@mapNotNull null
+            if (stored == null) {
+                forAccount(account) {
+                    sessionTransmissionDao?.insert(
+                        com.chmouel.liseur.data.db.SessionTransmission(
+                            account.peerId, session.id, account.deviceId.orEmpty(), payload,
+                        ),
+                    )
+                }
+            }
+            val retained = sessionTransmissionDao?.get(account.peerId, session.id)
+            val retainedPayload = retained?.payload ?: payload
+            JSONObject(retainedPayload).let {
                 PreparedSession(
                     localId = session.id,
-                    wireId = SessionUploads.sessionIdFor(account.deviceKey, session.id),
+                    wireId = it.getString("session_id"),
                     bookUrl = session.bookUrl,
-                    workId = alias.workId,
+                    workId = it.getString("work_id"),
                     json = it,
+                    payload = retainedPayload,
+                    transmission = retained,
                 )
             }
         }
@@ -1355,16 +1379,36 @@ class LiseurSyncPositionSync(
             }
             val sending = queue.removeFirst()
             try {
-                http.post(
+                if (!sameAccount(account)) return
+                val answer = http.postRaw(
                     LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.SESSIONS),
                     account.credentials,
-                    JSONObject().put(
-                        "sessions",
-                        JSONArray().apply { sending.forEach { put(it.json) } },
-                    ),
+                    sending.joinToString(prefix = "{\"sessions\":[", postfix = "]}") { it.payload },
                     expected = SESSION_REFUSALS,
                 )
-                forAccount(account) { sessionDao.markUploaded(sending.map { it.localId }, now()) }
+                if (answer.nonnegativeCount("accepted") != sending.size) {
+                    Log.i(TAG, "The server did not acknowledge the complete session batch")
+                    trouble.refused(SyncFailure.Malformed)
+                    return
+                }
+                forAccount(account) {
+                    val acknowledged = mutableListOf<Long>()
+                    for (entry in sending) {
+                        val evidence = entry.transmission
+                        if (sessionTransmissionDao != null &&
+                            (evidence == null || sessionTransmissionDao.confirmDevice(
+                                account.peerId, entry.localId, evidence.deviceId, entry.payload,
+                                account.deviceId.orEmpty(),
+                            ) != 1)
+                        ) {
+                            Log.i(TAG, "Session transmission changed while its acknowledgement was in flight")
+                            trouble.refused(SyncFailure.StaleIdentity)
+                            continue
+                        }
+                        acknowledged += entry.localId
+                    }
+                    if (acknowledged.isNotEmpty()) sessionDao.markUploaded(acknowledged, now())
+                }
             } catch (rejection: LiseurSyncRejection) {
                 when (val next = setAside(account, sending, rejection, recovered, trouble)) {
                     is SessionRecovery.Retry -> {
@@ -1552,13 +1596,26 @@ class LiseurSyncPositionSync(
                 IdentityRefresh.Unnameable -> return SessionRecovery.Retry(rest)
             }
         val rebuilt = sending.filter { it.bookUrl == culprit.bookUrl }.mapNotNull { entry ->
-            val session = sessionDao.get(entry.localId) ?: return@mapNotNull null
-            SessionUploads.toJson(
-                session = session,
-                deviceKey = account.deviceKey,
-                workId = refreshed.alias.workId,
-                editionSha = refreshed.alias.editionSha,
-            )?.let { entry.copy(workId = refreshed.alias.workId, json = it) }
+            val replacement = JSONObject(entry.json.toString()).apply {
+                put("work_id", refreshed.alias.workId)
+                remove("edition_sha")
+                refreshed.alias.editionSha?.let { put("edition_sha", it) }
+            }
+            forAccount(account) {
+                sessionTransmissionDao?.replaceRejected(
+                    account.peerId, entry.localId, entry.payload, replacement.toString(),
+                )
+            }
+            val retained = sessionTransmissionDao?.get(account.peerId, entry.localId)
+            if (sessionTransmissionDao != null && retained?.payload != replacement.toString()) {
+                Log.i(TAG, "Session transmission changed during stale-work recovery")
+                trouble.refused(SyncFailure.StaleIdentity)
+                return@mapNotNull null
+            }
+            entry.copy(
+                workId = refreshed.alias.workId, json = replacement, payload = replacement.toString(),
+                transmission = retained,
+            )
         }
         return SessionRecovery.Retry(rest + rebuilt)
     }
@@ -1629,7 +1686,8 @@ class LiseurSyncPositionSync(
     }
 
     private suspend fun sameAccount(account: Account): Boolean = serverDao.get()?.let {
-        it.accountKey == account.accountKey && it.credentials == account.credentials
+        it.accountKey == account.accountKey && it.credentials == account.credentials &&
+            it.accountId == account.deviceId
     } == true
 
     /**
@@ -1711,7 +1769,7 @@ class LiseurSyncPositionSync(
          */
         val PERMANENT_SESSION_CODES = setOf(
             "id_reused", "missing_field", "bad_time", "time_in_future",
-            "progression_out_of_range", "idle_out_of_range",
+            "progression_out_of_range", "idle_out_of_range", "active_out_of_range",
         )
 
         /**

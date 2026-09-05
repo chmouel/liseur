@@ -73,6 +73,7 @@ class RemoteAccountRepository(
      * liseur-sync account.
      */
     private val sessionRefusalDao: SessionRefusalDao? = null,
+    private val sessionTransmissionDao: com.chmouel.liseur.data.db.SessionTransmissionDao? = null,
     /**
      * The KOReader pairing, which a connection may drop, replace or
      * leave alone.
@@ -651,7 +652,8 @@ class RemoteAccountRepository(
         val occupied = (peerStateDao?.countForPeer(to) ?: 0) +
             (identityDao?.countForPeer(to) ?: 0) +
             (annotationSyncDao?.countForPeer(to) ?: 0) +
-            (sessionRefusalDao?.countForPeer(to) ?: 0)
+            (sessionRefusalDao?.countForPeer(to) ?: 0) +
+            (sessionTransmissionDao?.countForPeer(to) ?: 0)
         if (occupied > 0) {
             Log.w(TAG, "Not moving sync state to a key that already has $occupied rows; keeping the old key")
             return next.copy(liseurAccountId = existing.liseurAccountId)
@@ -661,6 +663,7 @@ class RemoteAccountRepository(
         annotationSyncDao?.rekeyPeer(from, to)
         uploadRefusalDao?.rekeyAccount(from, to)
         sessionRefusalDao?.rekeyPeer(from, to)
+        sessionTransmissionDao?.rekeyPeer(from, to)
         progressDao.rekeyAccount(from, to)
         return next
     }
@@ -793,6 +796,8 @@ class RemoteAccountRepository(
         annotationSyncDao?.forgetPeer(server.accountKey)
         dao.setAnnotationCursor(0)
         sessionDao?.forgetUploads()
+        sessionDao?.forgetTransmissionEvidence()
+        sessionTransmissionDao?.clearPeer(server.accountKey)
         sessionRefusalDao?.clearPeer(server.accountKey)
     }
 

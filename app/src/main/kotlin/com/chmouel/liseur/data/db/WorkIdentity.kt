@@ -177,6 +177,9 @@ interface WorkIdentityDao {
     @Query("SELECT * FROM work_alias WHERE peer_id = :peerId")
     suspend fun aliasesFor(peerId: String): List<WorkAlias>
 
+    @Query("SELECT * FROM work_alias")
+    fun observeAliases(): Flow<List<WorkAlias>>
+
     @Upsert
     suspend fun upsert(alias: WorkAlias)
 

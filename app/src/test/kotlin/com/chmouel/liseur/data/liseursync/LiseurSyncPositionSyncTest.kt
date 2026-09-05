@@ -1,11 +1,13 @@
 package com.chmouel.liseur.data.liseursync
 
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.SessionTransmission
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState
@@ -717,6 +719,222 @@ class LiseurSyncPositionSyncTest {
         // The idempotency key derives from the local row, not the work.
         assertEquals(wireId, retried.getString("session_id"))
         assertNotNull(db.readingSessionDao().get(session)?.uploadedAt)
+    }
+
+    @Test
+    fun `an attempted session replays its stored bytes after an alias changes`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(workId = "w-old")
+        val id = closedSession(from = 0.1, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 500, body = """{"error":"reply lost"}"""))
+        sync().syncAll(null)
+        val stored = db.sessionTransmissionDao().get(peer(), id)!!
+        assertNull(db.readingSessionDao().get(id)!!.uploadedAt)
+        alias(workId = "w-new")
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+        sync(measured = true).syncAll(null)
+        val requests = requests().filter { it.target.startsWith("/v1/sessions") }
+        assertEquals(2, requests.size)
+        val first = requests[0].body!!.utf8()
+        assertEquals(first, requests[1].body!!.utf8())
+        assertEquals("{\"sessions\":[${stored.payload}]}", first)
+        assertEquals(stored, db.sessionTransmissionDao().get(peer(), id))
+    }
+
+    @Test
+    fun `negotiated measured session payload is persisted before its request`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val id = closedSession(from = 0.1, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+        assertEquals(SyncOutcome.Success, sync(measured = true).syncAll(null))
+        val request = requests().single { it.target.startsWith("/v1/sessions") }
+        val stored = db.sessionTransmissionDao().get(peer(), id)!!
+        assertEquals(60_000, JSONObject(stored.payload).getLong("active_ms"))
+        assertEquals("{\"sessions\":[${stored.payload}]}", request.body!!.utf8())
+    }
+
+    @Test
+    fun `new negotiation preserves absent and explicit-null legacy payloads in a mixed batch`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val legacy = closedSession(from = 0.1, to = 0.2)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 500, body = """{"error":"reply lost"}"""))
+        sync().syncAll(null)
+        val legacyPayload = db.sessionTransmissionDao().get(peer(), legacy)!!.payload
+
+        val explicitNull = closedSession(from = 0.2, to = 0.3)
+        val name = db.workIdentityDao().alias(LOCAL, peer())!!
+        val nullPayload = SessionUploads.toJson(
+            db.readingSessionDao().get(explicitNull)!!, "device-a", name.workId, name.editionSha,
+        )!!.put("active_ms", JSONObject.NULL).toString()
+        db.sessionTransmissionDao().insert(
+            com.chmouel.liseur.data.db.SessionTransmission(peer(), explicitNull, "legacy-device", nullPayload),
+        )
+        val fresh = closedSession(from = 0.3, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":3}"""))
+        assertEquals(SyncOutcome.Success, sync(measured = true).syncAll(null))
+
+        val body = requests().last { it.target.startsWith("/v1/sessions") }.body!!.utf8()
+        assertTrue(body.contains(legacyPayload))
+        assertTrue(body.contains(nullPayload))
+        assertEquals(legacyPayload, db.sessionTransmissionDao().get(peer(), legacy)!!.payload)
+        assertEquals(nullPayload, db.sessionTransmissionDao().get(peer(), explicitNull)!!.payload)
+        val sent = JSONObject(body).getJSONArray("sessions")
+        val byId = (0 until sent.length()).map(sent::getJSONObject).associateBy { it.getString("session_id") }
+        assertFalse(byId.getValue(SessionUploads.sessionIdFor("device-a", legacy)).has("active_ms"))
+        assertTrue(byId.getValue(SessionUploads.sessionIdFor("device-a", explicitNull)).isNull("active_ms"))
+        assertEquals(60_000, byId.getValue(SessionUploads.sessionIdFor("device-a", fresh)).getLong("active_ms"))
+    }
+
+    @Test
+    fun `active_out_of_range permanently isolates only the named sitting`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val bad = db.readingSessionDao().insert(
+            com.chmouel.liseur.data.db.ReadingSession(
+                bookUrl = LOCAL, startedAt = NOW, endedAt = NOW + 60_000,
+                lastCheckpointAt = NOW + 60_000, durationMs = 9_007_199_254_740_992L,
+                startProgression = 0.1, endProgression = 0.2, idleMs = 0,
+            ),
+        )
+        val good = closedSession(from = 0.2, to = 0.3)
+        val wire = SessionUploads.sessionIdFor("device-a", bad)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(
+            code = 400,
+            body = """{"code":"active_out_of_range","session_id":"$wire","error":"active_ms out of range"}""",
+        ))
+        server.enqueue(json("""{"accepted":1}"""))
+        assertTrue(sync(measured = true).syncAll(null) !is SyncOutcome.Success)
+        assertNull(db.readingSessionDao().get(bad)!!.uploadedAt)
+        assertNotNull(db.readingSessionDao().get(good)!!.uploadedAt)
+        assertEquals("active_out_of_range", db.sessionRefusalDao().forPeer(peer()).single().code)
+        val retry = requests().last { it.target.startsWith("/v1/sessions") }.body!!.utf8()
+        assertEquals(1, JSONObject(retry).getJSONArray("sessions").length())
+    }
+
+    @Test
+    fun `a new device is recorded only after a complete ACK of the retained payload`() = runTest {
+        val attempted = attemptedOnDeviceA()
+        reconnectOnDeviceB()
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 500, body = """{"error":"reply lost"}"""))
+        sync(measured = true).syncAll(null)
+        assertEquals(attempted, db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId))
+        assertNull(db.readingSessionDao().get(attempted.sessionId)!!.uploadedAt)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/sessions")) return json("""{"ops":[]}""")
+                runBlocking {
+                    assertEquals(attempted, db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId))
+                }
+                return json("""{"accepted":1}""")
+            }
+        }
+        assertEquals(SyncOutcome.Success, sync(measured = true).syncAll(null))
+        assertEquals(
+            attempted.copy(deviceId = "server-b"),
+            db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId),
+        )
+        assertNotNull(db.readingSessionDao().get(attempted.sessionId)!!.uploadedAt)
+        requests().filter { it.target.startsWith("/v1/sessions") }.forEach {
+            assertEquals("{\"sessions\":[${attempted.payload}]}", it.body!!.utf8())
+        }
+    }
+
+    @Test
+    fun `a prior device acceptance conflict retains the original transmission evidence`() = runTest {
+        val attempted = attemptedOnDeviceA()
+        reconnectOnDeviceB()
+        val wire = JSONObject(attempted.payload).getString("session_id")
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(
+            code = 409, body = """{"code":"id_reused","session_id":"$wire","error":"different device"}""",
+        ))
+        assertTrue(sync(measured = true).syncAll(null) !is SyncOutcome.Success)
+        assertEquals(attempted, db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId))
+        assertNull(db.readingSessionDao().get(attempted.sessionId)!!.uploadedAt)
+        assertEquals("id_reused", db.sessionRefusalDao().forPeer(attempted.peerId).single().code)
+    }
+
+    @Test
+    fun `an incomplete ACK cannot confirm a new device or mark a sitting uploaded`() = runTest {
+        val attempted = attemptedOnDeviceA()
+        reconnectOnDeviceB()
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":0}"""))
+        assertTrue(sync(measured = true).syncAll(null) !is SyncOutcome.Success)
+        assertEquals(attempted, db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId))
+        assertNull(db.readingSessionDao().get(attempted.sessionId)!!.uploadedAt)
+    }
+
+    @Test
+    fun `ACK cannot overwrite transmission evidence changed while the request was in flight`() = runTest {
+        val attempted = attemptedOnDeviceA()
+        reconnectOnDeviceB()
+        val replacement = JSONObject(attempted.payload).put("idle_ms", 1L).toString()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/sessions")) return json("""{"ops":[]}""")
+                runBlocking {
+                    db.sessionTransmissionDao().replaceRejected(
+                        attempted.peerId, attempted.sessionId, attempted.payload, replacement,
+                    )
+                }
+                return json("""{"accepted":1}""")
+            }
+        }
+        assertTrue(sync().syncAll(null) !is SyncOutcome.Success)
+        assertEquals(
+            attempted.copy(payload = replacement),
+            db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId),
+        )
+        assertNull(db.readingSessionDao().get(attempted.sessionId)!!.uploadedAt)
+    }
+
+    @Test
+    fun `late ACK cannot confirm a device after the connected device changes again`() = runTest {
+        val attempted = attemptedOnDeviceA()
+        reconnectOnDeviceB()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/sessions")) return json("""{"ops":[]}""")
+                runBlocking {
+                    val account = db.remoteServerDao().get()!!
+                    db.remoteServerDao().upsert(account.copy(accountId = "server-c"))
+                }
+                return json("""{"accepted":1}""")
+            }
+        }
+        sync().syncAll(null)
+        assertEquals(attempted, db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId))
+        assertNull(db.readingSessionDao().get(attempted.sessionId)!!.uploadedAt)
+    }
+
+    @Test
+    fun `an ACK without a known device marks only this peer evidence unknown`() = runTest {
+        val attempted = attemptedOnDeviceA()
+        val other = attempted.copy(peerId = "other-peer", deviceId = "other-device")
+        db.sessionTransmissionDao().insert(other)
+        reconnectOnDeviceB()
+        db.remoteServerDao().upsert(db.remoteServerDao().get()!!.copy(accountId = null))
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(json("""{"accepted":1}"""))
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+        assertEquals("", db.sessionTransmissionDao().get(attempted.peerId, attempted.sessionId)!!.deviceId)
+        assertEquals(other, db.sessionTransmissionDao().get(other.peerId, other.sessionId))
+        assertFalse(db.readingSessionDao().get(attempted.sessionId)!!.legacyEvidenceUnknown)
     }
 
     @Test
@@ -1554,7 +1772,26 @@ class LiseurSyncPositionSyncTest {
         assertEquals(1, server.requestCount)
     }
 
-    private fun sync(online: Boolean = true, withAnnotations: Boolean = false): LiseurSyncPositionSync {
+    private suspend fun attemptedOnDeviceA(): SessionTransmission {
+        connect(deviceId = "server-a", stableAccountId = "account")
+        db.bookDao().upsert(local())
+        val account = db.remoteServerDao().get()!!
+        alias(peerId = account.accountKey)
+        val id = closedSession(from = 0.1, to = 0.4)
+        server.enqueue(json("""{"ops":[]}"""))
+        server.enqueue(MockResponse(code = 500, body = """{"error":"reply lost"}"""))
+        sync().syncAll(null)
+        return db.sessionTransmissionDao().get(account.accountKey, id)!!
+    }
+
+    private suspend fun reconnectOnDeviceB() {
+        val account = db.remoteServerDao().get()!!
+        db.remoteServerDao().upsert(account.copy(
+            accountId = "server-b", liseurTokenCipher = CredentialCipher.encrypt("device-b-secret"),
+        ))
+    }
+
+    private fun sync(online: Boolean = true, withAnnotations: Boolean = false, measured: Boolean = false): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
             serverDao = db.remoteServerDao(),
@@ -1564,6 +1801,8 @@ class LiseurSyncPositionSyncTest {
             identityDao = db.workIdentityDao(),
             sessionDao = db.readingSessionDao(),
             sessionRefusalDao = db.sessionRefusalDao(),
+            sessionTransmissionDao = db.sessionTransmissionDao(),
+            supportsMeasuredSessions = { measured },
             works = WorkResolver(
                 dao = db.workIdentityDao(),
                 fingerprints = BookFingerprintStore(context, db.workIdentityDao()) { NOW },
@@ -1580,6 +1819,7 @@ class LiseurSyncPositionSyncTest {
                 now = { NOW },
             ) else null,
             now = { NOW },
+            inTransaction = { work -> db.withTransaction { work() } },
         )
     }
 
@@ -1592,6 +1832,7 @@ class LiseurSyncPositionSyncTest {
         cursor: Long = 0,
         deviceId: String? = null,
         baseUrl: String = "http://127.0.0.1:${server.port}",
+        stableAccountId: String? = null,
     ) {
         db.remoteServerDao().upsert(
             RemoteServer(
@@ -1609,6 +1850,7 @@ class LiseurSyncPositionSyncTest {
                 positionSyncedAt = null,
                 syncToken = null,
                 liseurTokenCipher = CredentialCipher.encrypt("device-secret"),
+                liseurAccountId = stableAccountId,
                 syncCursorSeq = cursor,
             ),
         )
@@ -1666,11 +1908,12 @@ class LiseurSyncPositionSyncTest {
         bookUrl: String = LOCAL,
         editionSha: String? = null,
         confirmed: Boolean = true,
+        peerId: String = peer(deviceId),
     ) =
         db.workIdentityDao().upsert(
             com.chmouel.liseur.data.db.WorkAlias(
                 bookUrl = bookUrl,
-                peerId = peer(deviceId),
+                peerId = peerId,
                 workId = workId,
                 confidence = confidence,
                 confirmed = confirmed,
