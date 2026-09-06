@@ -77,16 +77,14 @@ enum class StatsRange(val id: String) {
             ChronoUnit.DAYS.between(it, today).toInt() + 1
         }
 
-    /**
-     * Whether the span is short enough to read as a row of daily bars.
-     *
-     * Past this a bar per day is a picket fence nobody can read a
-     * weekday off, and the heatmap takes over. A week is always bars and
-     * a year never is; a month is bars right up to its thirty-first day,
-     * which is what [MAX_BAR_DAYS] is sized for.
-     */
-    fun suitsDailyBars(today: LocalDate, weekStart: DayOfWeek): Boolean =
-        (days(today, weekStart) ?: Int.MAX_VALUE) <= MAX_BAR_DAYS
+    /** The calendar unit used to summarise this span in the activity chart. */
+    val chartPeriod: StatsChartPeriod
+        get() = when (this) {
+            THIS_WEEK -> StatsChartPeriod.DAY
+            THIS_MONTH -> StatsChartPeriod.WEEK
+            THIS_YEAR -> StatsChartPeriod.MONTH
+            ALL_TIME -> StatsChartPeriod.YEAR
+        }
 
     /**
      * This span and the matching elapsed portion of the period before it.
@@ -144,9 +142,6 @@ enum class StatsRange(val id: String) {
     companion object {
         val Default = THIS_WEEK
 
-        /** As many bars as fit across a phone without becoming hatching. */
-        const val MAX_BAR_DAYS = 31
-
         /**
          * Spans that were once offered and are still on readers' disks.
          *
@@ -177,6 +172,9 @@ data class DateSpan(val from: LocalDate, val to: LocalDate)
 
 /** Which calendar period a comparison is against. */
 enum class ComparisonPeriod { WEEK, MONTH, YEAR }
+
+/** The unit represented by one activity-chart bar. */
+enum class StatsChartPeriod { DAY, WEEK, MONTH, YEAR }
 
 /**
  * A span and the one it is measured against.
