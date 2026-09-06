@@ -701,7 +701,6 @@
     <string name="reading_stats_total">Time spent reading</string>
     <string name="reading_stats_books_read">Books read from</string>
     <string name="reading_stats_books_finished">Books finished</string>
-    <string name="reading_stats_recent">This week</string>
     <string name="reading_stats_by_book">By book</string>
     <string name="reading_stats_from_this_device">Counting this device only</string>
     <string name="reading_stats_from_all_devices">Counting all your devices</string>
@@ -709,7 +708,6 @@
     <string name="reading_stats_empty_title">Nothing recorded yet.</string>
     <string name="reading_stats_empty_detail">Liseur starts counting from the moment you open a book. Reading you did before this arrived is not here, because there is no honest way to work out how long it took.</string>
     <string name="reading_stats_book_empty">You have not read any of this one yet.</string>
-    <string name="reading_stats_no_reading_day">Nothing read on %1$s</string>
     <string name="reading_stats_last_read">Last read %1$s</string>
     <string name="reading_stats_last_read_label">Last read</string>
     <string name="reading_stats_started_label">Started</string>
@@ -718,7 +716,8 @@
     <string name="reading_stats_reading_for_one_day">1 day</string>
     <string name="reading_stats_week_total">%1$s this week</string>
     <string name="reading_stats_progress">%1$d%% through</string>
-    <string name="reading_stats_day_read">%1$s on %2$s</string>
+    <string name="reading_stats_period_read">%1$s during %2$s</string>
+    <string name="reading_stats_no_reading_period">Nothing read during %1$s</string>
     <string name="reading_stats_this_week">This week, on every device</string>
     <string name="reading_stats_this_week_local">This week</string>
     <string name="reading_stats_this_month">This month, on every device</string>
@@ -747,6 +746,10 @@
     <string name="reading_stats_range_this_month">This month</string>
     <string name="reading_stats_range_this_year">This year</string>
     <string name="reading_stats_range_all">All time</string>
+    <string name="reading_stats_by_day">Day by day</string>
+    <string name="reading_stats_by_week">Week by week</string>
+    <string name="reading_stats_by_month">Month by month</string>
+    <string name="reading_stats_by_year">Year by year</string>
     <string name="reading_stats_calendar">Day by day</string>
     <string name="reading_stats_pace">Pace</string>
     <string name="reading_stats_pace_value">%1$d%%/h</string>

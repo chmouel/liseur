@@ -64,18 +64,6 @@ class StatsRangeTest {
     }
 
     @Test
-    fun `a partial week is always short enough to draw as bars`() {
-        for (offset in 0L..6L) {
-            assertTrue(
-                StatsRange.THIS_WEEK.suitsDailyBars(
-                    LocalDate.of(2026, 8, 3).plusDays(offset),
-                    DayOfWeek.MONDAY,
-                ),
-            )
-        }
-    }
-
-    @Test
     fun `the calendar spans ignore the locale except for the week`() {
         for (weekStart in DayOfWeek.entries) {
             assertEquals(
@@ -91,14 +79,11 @@ class StatsRangeTest {
     }
 
     @Test
-    fun `a month is drawn as bars right up to its last day`() {
-        // Thirty-one days is what MAX_BAR_DAYS is sized for. A month that
-        // fell back to the heatmap on the 31st would change shape once a
-        // quarter for no reason the reader could see.
-        val lastOfMarch = LocalDate.of(2026, 3, 31)
-        assertEquals(31, StatsRange.THIS_MONTH.days(lastOfMarch, DayOfWeek.MONDAY))
-        assertTrue(StatsRange.THIS_MONTH.suitsDailyBars(lastOfMarch, DayOfWeek.MONDAY))
-        assertTrue(!StatsRange.THIS_YEAR.suitsDailyBars(lastOfMarch, DayOfWeek.MONDAY))
+    fun `each range uses the calendar unit beneath it`() {
+        assertEquals(StatsChartPeriod.DAY, StatsRange.THIS_WEEK.chartPeriod)
+        assertEquals(StatsChartPeriod.WEEK, StatsRange.THIS_MONTH.chartPeriod)
+        assertEquals(StatsChartPeriod.MONTH, StatsRange.THIS_YEAR.chartPeriod)
+        assertEquals(StatsChartPeriod.YEAR, StatsRange.ALL_TIME.chartPeriod)
     }
 
     @Test

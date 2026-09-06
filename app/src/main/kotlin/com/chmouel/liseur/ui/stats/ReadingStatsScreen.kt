@@ -82,9 +82,12 @@ import com.chmouel.liseur.domain.ComparisonPeriod
 import com.chmouel.liseur.domain.ComparisonScope
 import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
+import com.chmouel.liseur.domain.ReadingPeriod
 import com.chmouel.liseur.domain.ReadingStats
+import com.chmouel.liseur.domain.StatsChartPeriod
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.localeWeekStart
+import com.chmouel.liseur.domain.readingPeriods
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
@@ -187,7 +190,12 @@ fun ReadingStatsScreen(
                     ProvenanceLine(ready.provenance)
                 }
                 item {
-                    ActivityCard(stats = stats, range = ready.range, today = ready.today)
+                    ActivityCard(stats = stats, range = ready.range)
+                }
+                if (ready.range != StatsRange.THIS_WEEK) {
+                    item {
+                        DailyActivityCard(stats.recent)
+                    }
                 }
                 if (stats.books.isNotEmpty()) {
                     item {
@@ -454,25 +462,23 @@ private fun BentoTile(
 /**
  * The chart, in a card with its own heading.
  *
- * Bars while a day is still a readable unit, a grid once it is not.
- * Both draw the same days; only the span the reader asked for decides
- * which can be read. "This week" is only true when it is one — thirty
- * bars under that heading is the screen telling the reader something it
- * can see is false.
+ * Each range uses the calendar unit beneath it: days in a week, weeks
+ * in a month, months in a year and years over all time. The separate
+ * heatmap below keeps the daily shape of longer spans available.
  */
 @Composable
-private fun ActivityCard(stats: ReadingStats, range: StatsRange, today: LocalDate) {
-    val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
-    val daily = range.suitsDailyBars(today, weekStart)
+private fun ActivityCard(stats: ReadingStats, range: StatsRange) {
+    val periods = readingPeriods(
+        days = stats.recent,
+        range = range,
+        weekStart = localeWeekStart(LocalLocale.current.platformLocale),
+    )
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            // Narrower at the sides than at the top and bottom: every dp
-            // taken off the width here comes out of the bars, and a
-            // month of them has none to spare.
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
         ) {
             Row(
@@ -482,20 +488,14 @@ private fun ActivityCard(stats: ReadingStats, range: StatsRange, today: LocalDat
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(
-                        if (daily && range == StatsRange.THIS_WEEK) {
-                            R.string.reading_stats_recent
-                        } else {
-                            R.string.reading_stats_calendar
-                        },
-                    ),
+                    text = stringResource(range.chartHeading),
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
                 // The week's own sum, next to its heading, so the chart
                 // can be read without adding seven bars in one's head.
-                if (daily && range == StatsRange.THIS_WEEK) {
+                if (range == StatsRange.THIS_WEEK) {
                     val weekMs = stats.recent.sumOf { it.totalMs }
                     if (weekMs > 0) {
                         Surface(
@@ -518,66 +518,65 @@ private fun ActivityCard(stats: ReadingStats, range: StatsRange, today: LocalDat
                 }
             }
             Spacer(Modifier.height(16.dp))
-            if (daily) {
-                WeekBars(stats.recent)
-            } else {
-                ReadingHeatmap(stats.recent)
-            }
+            PeriodBars(periods, range.chartPeriod)
+        }
+    }
+}
+
+/** The daily calendar retained alongside the range-sized summary bars. */
+@Composable
+private fun DailyActivityCard(days: List<ReadingDay>) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp)) {
+            Text(
+                text = stringResource(R.string.reading_stats_calendar),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            ReadingHeatmap(days)
         }
     }
 }
 
 /**
- * A short span of reading, one bar a day.
+ * A range of reading summarised in calendar-sized bars.
  *
  * Bars rather than a line: a week is too few days for a line to mean
  * anything, and a bar of nothing reads correctly as a day with no
  * reading in it, which a line would smooth over.
  *
- * At a week or less, each bar with reading on it carries its own
- * figure, because "how long on Tuesday" is the question the chart
- * exists to answer and a height alone answers it only relatively. Past
- * a week there is no room for figures, and the heights go back to
- * speaking for themselves.
+ * When seven or fewer bars are present, each one carries its own figure.
  *
- * Today's bar is drawn in full and the rest a shade quieter — not as a
- * grade, but as a cursor: the eye needs to know which bar it is living
- * in before it can count backwards. The longest day is still not
- * singled out; the height already says which day was the longest.
- *
- * The gap between bars narrows as they multiply, because the bars are
- * weighted and the gaps are not: thirty-one fixed 8dp gaps eat almost
- * the whole width of a phone and leave hatching where the chart was.
- *
- * Only some of the bars are captioned once there are more than a
- * week of them. Three letters under a column a few millimetres wide
- * wrap to one letter a line, which is not a label but a puzzle; a
- * caption every seventh bar names the same weekday down the chart and
- * lets the reader count from it.
+ * The last bar is drawn in full and the rest a shade quieter, marking
+ * the calendar period currently in progress.
  */
 @Composable
-private fun WeekBars(days: List<ReadingDay>) {
-    val busiest = days.maxOfOrNull { it.totalMs }?.coerceAtLeast(1) ?: 1
+private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
+    val busiest = periods.maxOfOrNull { it.totalMs }?.coerceAtLeast(1) ?: 1
     // Read as observable state, so the letters change with the language
     // rather than staying in whatever it was when the screen was built.
     val locale = LocalLocale.current.platformLocale
-    // Counted back from the end so the last bar — today — is always one
-    // of the captioned ones.
-    val lastIndex = days.lastIndex
-    val everyBar = days.size <= DAYS_IN_WEEK
+    val lastIndex = periods.lastIndex
+    val showAmounts = periods.size <= DAYS_IN_WEEK
     // Gradients dither into stripes on an e-ink panel; flat ink reads.
     val eInk = LocalEInk.current
     val gap = when {
-        days.size <= DAYS_IN_WEEK -> 8.dp
-        days.size <= DAYS_IN_WEEK * 2 -> 5.dp
-        days.size <= DAYS_IN_WEEK * 3 -> 3.dp
+        periods.size <= DAYS_IN_WEEK -> 8.dp
+        periods.size <= DAYS_IN_WEEK * 2 -> 5.dp
+        periods.size <= DAYS_IN_WEEK * 3 -> 3.dp
         else -> 2.dp
     }
-    // A 6dp radius on a bar 6dp wide is a lozenge, not a bar.
-    val corner = if (days.size <= DAYS_IN_WEEK) 6.dp else 2.dp
+    val corner = if (periods.size <= DAYS_IN_WEEK) 6.dp else 2.dp
     // The figures above the bars need headroom of their own, or the
     // tallest bar pushes its label out of the card.
-    val chartHeight = if (everyBar) 150.dp else 130.dp
+    val chartHeight = if (showAmounts) 150.dp else 130.dp
+    val dateFormat = lastReadFormat()
 
     Row(
         modifier = Modifier
@@ -586,27 +585,27 @@ private fun WeekBars(days: List<ReadingDay>) {
         horizontalArrangement = Arrangement.spacedBy(gap),
         verticalAlignment = Alignment.Bottom,
     ) {
-        days.forEachIndexed { index, day ->
-            val captioned = everyBar || (lastIndex - index) % DAYS_IN_WEEK == 0
-            val isToday = index == lastIndex
-            val amount = readingDuration(day.totalMs)
-            val weekday = day.date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
-            val barHeight = if (day.totalMs > 0) {
-                (92.dp * (day.totalMs.toFloat() / busiest)).coerceAtLeast(8.dp)
+        periods.forEachIndexed { index, period ->
+            val isCurrent = index == lastIndex
+            val amount = readingDuration(period.totalMs)
+            val label = period.shortLabel(unit, locale)
+            val spokenPeriod = period.spokenLabel(unit, locale, dateFormat)
+            val barHeight = if (period.totalMs > 0) {
+                (92.dp * (period.totalMs.toFloat() / busiest)).coerceAtLeast(8.dp)
             } else {
                 4.dp
             }
-            val spoken = if (day.totalMs > 0) {
-                stringResource(R.string.reading_stats_day_read, amount, weekday)
+            val spoken = if (period.totalMs > 0) {
+                stringResource(R.string.reading_stats_period_read, amount, spokenPeriod)
             } else {
-                stringResource(R.string.reading_stats_no_reading_day, weekday)
+                stringResource(R.string.reading_stats_no_reading_period, spokenPeriod)
             }
             val primary = MaterialTheme.colorScheme.primary
             val barBrush = when {
-                day.totalMs <= 0 -> SolidColor(MaterialTheme.colorScheme.surfaceContainerHighest)
-                eInk || isToday -> SolidColor(primary)
-                // Yesterday and before fade towards their base, so the
-                // week reads as a shape with today at its leading edge.
+                period.totalMs <= 0 -> SolidColor(MaterialTheme.colorScheme.surfaceContainerHighest)
+                eInk || isCurrent -> SolidColor(primary)
+                // Earlier periods fade towards their base, leaving the
+                // current calendar period as the visual cursor.
                 else -> Brush.verticalGradient(
                     listOf(primary.copy(alpha = 0.8f), primary.copy(alpha = 0.45f)),
                 )
@@ -621,13 +620,13 @@ private fun WeekBars(days: List<ReadingDay>) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Bottom,
             ) {
-                if (everyBar) {
+                if (showAmounts) {
                     Text(
-                        text = compactDuration(day.totalMs).orEmpty(),
+                        text = compactDuration(period.totalMs).orEmpty(),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
                         ),
-                        color = if (isToday) {
+                        color = if (isCurrent) {
                             MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -650,11 +649,11 @@ private fun WeekBars(days: List<ReadingDay>) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = if (captioned) weekday else "",
+                    text = label,
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = if (isToday && everyBar) FontWeight.Bold else FontWeight.Normal,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                     ),
-                    color = if (isToday && everyBar) {
+                    color = if (isCurrent) {
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -666,6 +665,41 @@ private fun WeekBars(days: List<ReadingDay>) {
             }
         }
     }
+}
+
+private val StatsRange.chartHeading: Int
+    get() = when (chartPeriod) {
+        StatsChartPeriod.DAY -> R.string.reading_stats_by_day
+        StatsChartPeriod.WEEK -> R.string.reading_stats_by_week
+        StatsChartPeriod.MONTH -> R.string.reading_stats_by_month
+        StatsChartPeriod.YEAR -> R.string.reading_stats_by_year
+    }
+
+private fun ReadingPeriod.shortLabel(unit: StatsChartPeriod, locale: java.util.Locale): String =
+    when (unit) {
+        StatsChartPeriod.DAY -> from.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
+        StatsChartPeriod.WEEK -> if (from == to) {
+            from.dayOfMonth.toString()
+        } else {
+            "${from.dayOfMonth}\u2013${to.dayOfMonth}"
+        }
+        StatsChartPeriod.MONTH -> from.month.getDisplayName(TextStyle.SHORT, locale)
+        StatsChartPeriod.YEAR -> from.year.toString()
+    }
+
+private fun ReadingPeriod.spokenLabel(
+    unit: StatsChartPeriod,
+    locale: java.util.Locale,
+    dateFormat: DateTimeFormatter,
+): String = when (unit) {
+    StatsChartPeriod.DAY -> from.format(dateFormat)
+    StatsChartPeriod.WEEK -> if (from == to) {
+        from.format(dateFormat)
+    } else {
+        "${from.format(dateFormat)} \u2013 ${to.format(dateFormat)}"
+    }
+    StatsChartPeriod.MONTH -> from.month.getDisplayName(TextStyle.FULL, locale) + " " + from.year
+    StatsChartPeriod.YEAR -> from.year.toString()
 }
 
 /** Days in a week, and so the spacing of the bar chart's captions. */
