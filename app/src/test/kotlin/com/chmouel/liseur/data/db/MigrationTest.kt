@@ -1032,10 +1032,104 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `imported reading keeps the time it was read, and local reading does not move`() {
+        // Both pull paths write updated_at and synced_at with the same
+        // instant; a page turn here moves only updated_at. That is what
+        // tells an imported position from one read on this device, and
+        // only the imported one may be refiled under the other device's
+        // clock.
+        helper.createDatabase(TEST_DB, 48).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO reading_progress
+                    (book_url, locator_json, total_progression, updated_at, synced_at,
+                     remote_updated_at, local_revision, acked_revision)
+                VALUES ('liseur-sync:imported', '{}', 0.5, 5000, 5000, 1000, 1, 1)
+                """.trimIndent(),
+            )
+            // Read here after the last pull: updated_at moved on its own.
+            old.execSQL(
+                """
+                INSERT INTO reading_progress
+                    (book_url, locator_json, total_progression, updated_at, synced_at,
+                     remote_updated_at, local_revision, acked_revision)
+                VALUES ('liseur-sync:read-here', '{}', 0.5, 9000, 5000, 1000, 2, 1)
+                """.trimIndent(),
+            )
+            // A peer whose clock runs ahead of ours is not to be trusted
+            // over our own record of when we wrote the row down.
+            old.execSQL(
+                """
+                INSERT INTO reading_progress
+                    (book_url, locator_json, total_progression, updated_at, synced_at,
+                     remote_updated_at, local_revision, acked_revision)
+                VALUES ('liseur-sync:clock-ahead', '{}', 0.5, 5000, 5000, 9999, 1, 1)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query(
+                "SELECT book_url, read_at FROM reading_progress ORDER BY book_url",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("liseur-sync:clock-ahead", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+
+                assertTrue(cursor.moveToNext())
+                assertEquals("liseur-sync:imported", cursor.getString(0))
+                assertEquals(1000L, cursor.getLong(1))
+
+                assertTrue(cursor.moveToNext())
+                assertEquals("liseur-sync:read-here", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+            }
+        }
+    }
+
+    @Test
+    fun `a position whose provenance was erased keeps the shelf it has`() {
+        // The backfill repairs what it can prove and leaves the rest
+        // exactly as it is. Guessing would be worse than the bug.
+        helper.createDatabase(TEST_DB, 48).use { old ->
+            // Dropping an account clears synced_at on every row, so
+            // there is no equality left to test against.
+            old.execSQL(
+                """
+                INSERT INTO reading_progress
+                    (book_url, locator_json, total_progression, updated_at, synced_at,
+                     remote_updated_at, local_revision, acked_revision)
+                VALUES ('liseur-sync:retired', '{}', 0.5, 5000, NULL, 1000, 1, 1)
+                """.trimIndent(),
+            )
+            // Somebody marked this read elsewhere without opening it,
+            // which moved remote_updated_at past updated_at while
+            // leaving the position where it was. The time a button was
+            // pressed is not the time anybody read anything.
+            old.execSQL(
+                """
+                INSERT INTO reading_progress
+                    (book_url, locator_json, total_progression, updated_at, synced_at,
+                     remote_updated_at, local_revision, acked_revision)
+                VALUES ('liseur-sync:status-only', '{}', 0.5, 5000, 5000, 7000, 1, 1)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query(
+                "SELECT book_url FROM reading_progress WHERE read_at IS NOT NULL",
+            ).use { cursor ->
+                assertEquals(0, cursor.count)
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 48
+        const val LATEST = 49
     }
 }
