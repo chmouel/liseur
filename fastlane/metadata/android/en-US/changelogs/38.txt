@@ -1,0 +1,1 @@
+You can now pinch or hold images to view them full screen, pinch the page to change text size, and choose between sliding, lifting, or instant page turns. Footnotes remain hidden until requested. Reading positions now sync live across devices, statistics combine accurately into calendar period charts, and bookmarks can be toggled directly from the top menu bar.
