@@ -344,7 +344,7 @@ A release candidate is the same build, signed with the same release key,
 put where a handful of people can install it before the final release:
 
 ```bash
-hack/release --rc             # the next patch: v0.15.0-rc.1, then .2
+hack/release --rc             # the next patch, numbered -rc.1, then .2
 hack/release --rc 0.16.0      # a version you are working towards
 hack/release --no-play --rc   # skip Google Play testing tracks
 ```
