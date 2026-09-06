@@ -42,6 +42,8 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.reader.annotations.HighlightPalette
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingBrightnessSlider
 import com.chmouel.liseur.ui.reading.ReadingFontDropdown
@@ -49,6 +51,7 @@ import com.chmouel.liseur.ui.reading.readingFamily
 import com.chmouel.liseur.ui.reading.rememberFontLibrary
 import com.chmouel.liseur.ui.reading.ReadingFontSizeSlider
 import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
+import com.chmouel.liseur.ui.reading.ReadingHighlightPaletteControls
 import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
@@ -89,6 +92,9 @@ fun ReadingAppearanceScreen(
     onBrightness: (Float?) -> Unit,
     onColumnMode: (ColumnMode) -> Unit,
     onFooterMode: (FooterMode) -> Unit,
+    highlightPalette: HighlightPalette,
+    onHighlightTintToggled: (HighlightTint) -> Unit,
+    onHighlightDefaultTint: (HighlightTint) -> Unit,
     fineTypography: FineTypographyActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -189,6 +195,11 @@ fun ReadingAppearanceScreen(
                     ReadingFooterModeDropdown(
                         selected = prefs.footerMode,
                         onSelected = onFooterMode,
+                    )
+                    ReadingHighlightPaletteControls(
+                        palette = highlightPalette,
+                        onTintToggled = onHighlightTintToggled,
+                        onDefaultChanged = onHighlightDefaultTint,
                     )
                 }
             }

@@ -5,12 +5,16 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.reader.annotations.HighlightPalette
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -174,6 +178,8 @@ enum class DefinitionTarget(val id: String) {
  * @param dictionaryBaseUrl The site definitions are fetched from. Any
  *   Wiktionary works, so a reader can pick their own language's edition or
  *   a mirror instead of the default.
+ * @param highlightPalette Which colours the bar over a selected passage
+ *   offers, and which one a mark made without picking gets.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -195,6 +201,7 @@ data class AppSettings(
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
     val statsRange: StatsRange = StatsRange.Default,
+    val highlightPalette: HighlightPalette = HighlightPalette(),
 )
 
 /**
@@ -247,6 +254,8 @@ class AppSettingsRepository(private val context: Context) {
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
         val UPLOAD_POLICY = stringPreferencesKey("upload_policy")
         val STATS_RANGE = stringPreferencesKey("stats_range")
+        val HIGHLIGHT_TINTS = stringSetPreferencesKey("highlight_tints_offered")
+        val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
     }
 
     /**
@@ -289,6 +298,10 @@ class AppSettingsRepository(private val context: Context) {
                 ?: DictionaryUrl.DEFAULT_BASE_URL,
             uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
             statsRange = StatsRange.fromId(p[Keys.STATS_RANGE]),
+            highlightPalette = HighlightPalette.of(
+                offeredNames = p[Keys.HIGHLIGHT_TINTS],
+                defaultName = p[Keys.HIGHLIGHT_TINT_DEFAULT],
+            ),
         )
     }
 
@@ -397,5 +410,31 @@ class AppSettingsRepository(private val context: Context) {
     suspend fun setDictionaryBaseUrl(url: String) {
         val normalised = DictionaryUrl.normalise(url) ?: DictionaryUrl.DEFAULT_BASE_URL
         context.appSettingsStore.edit { it[Keys.DICTIONARY_BASE_URL] = normalised }
+    }
+
+    /**
+     * Offers [tint] when it was not offered, and stops offering it when
+     * it was.
+     *
+     * The toggle happens inside the edit, against the set that is
+     * actually stored, as `editLibraryFilters` does: two swatches tapped
+     * faster than DataStore writes would otherwise both be worked out
+     * from the same stale set, and the second would undo the first.
+     *
+     * The empty set is a legal answer, and a different one from never
+     * having chosen: the bar then offers a plain Highlight in the
+     * default colour instead of chips. Only names this build knows are
+     * written, so nothing can be stored that has no swatch to untick it
+     * with.
+     */
+    suspend fun toggleHighlightTint(tint: HighlightTint) {
+        context.appSettingsStore.edit { p ->
+            val next = HighlightPalette.of(p[Keys.HIGHLIGHT_TINTS], null).toggled(tint)
+            p[Keys.HIGHLIGHT_TINTS] = next.offered.map { it.name }.toSet()
+        }
+    }
+
+    suspend fun setHighlightDefaultTint(tint: HighlightTint) {
+        context.appSettingsStore.edit { it[Keys.HIGHLIGHT_TINT_DEFAULT] = tint.name }
     }
 }

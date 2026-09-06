@@ -380,6 +380,13 @@
     <string name="annotation_tint_pink">Highlight in pink</string>
     <string name="annotation_tint_purple">Highlight in purple</string>
     <string name="annotation_tint_orange">Highlight in orange</string>
+    <string name="annotation_highlight">Highlight</string>
+    <string name="colour_yellow">Yellow</string>
+    <string name="colour_green">Green</string>
+    <string name="colour_blue">Blue</string>
+    <string name="colour_pink">Pink</string>
+    <string name="colour_purple">Purple</string>
+    <string name="colour_orange">Orange</string>
     <string name="annotation_note">Note</string>
     <string name="annotation_note_title">Note</string>
     <string name="annotation_note_hint">What did this make you think?</string>
@@ -514,6 +521,16 @@
     <string name="reader_page_turn_style_lift_detail">The page you finished lifts off the one underneath, the way a sheet of paper comes off a stack.</string>
     <string name="reader_page_turn_style_slide_detail">Both pages travel together, the way they do when you drag the page across with a finger.</string>
     <string name="reader_page_turn_style_none_detail">The next page is simply there. This is what an e-ink screen gets whichever of the three is chosen.</string>
+
+    <!-- The colours offered when a passage is marked. -->
+    <string name="reader_highlight_colours">Available colours</string>
+    <string name="reader_highlight_colours_help">Tap a colour to offer it when you mark a passage. Hold one to make it the default, which is %1$s: notes get it, and so does a highlight made without picking.</string>
+    <string name="reader_highlight_colours_none">No colours are offered, so marking a passage highlights it in %1$s. Tap a colour to bring the choice back.</string>
+    <string name="reader_highlight_state_offered">Offered</string>
+    <string name="reader_highlight_state_offered_default">Offered, and the default</string>
+    <string name="reader_highlight_state_hidden">Not offered</string>
+    <string name="reader_highlight_state_hidden_default">Not offered, but the default</string>
+    <string name="reader_highlight_make_default">Make it the default</string>
 
     <!-- Fine typography: alignment, hyphenation, weight and spacing. -->
     <string name="reader_text_align">Alignment</string>

@@ -371,6 +371,11 @@ class ReaderActivity : FragmentActivity() {
                                     onScrollModeChanged = viewModel::setScrollMode,
                                     tapZonesFlow = viewModel.tapZones,
                                     pinchToResizeFlow = viewModel.pinchToResize,
+                                    highlightPaletteFlow = viewModel.highlightPalette,
+                                    onHighlightTintToggled =
+                                        viewModel::toggleHighlightTint,
+                                    onHighlightDefaultTintChanged =
+                                        viewModel::setHighlightDefaultTint,
                                     // Dialogs of this activity's own,
                                     // drawn over the reader. The page
                                     // must not carry on scrolling under

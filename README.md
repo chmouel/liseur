@@ -35,8 +35,9 @@ boundaries.
 
 A footer shows time remaining in the chapter. Highlights, margin notes,
 bookmarks, and dictionary lookups are inline; book-level notes live in the
-notebook. Footnotes open as a card over the page rather than sending you to
-the back of the book.
+notebook. Marking a passage offers three colours, and you tick which of
+the six you want along with the colour new marks use. Footnotes open as a
+card over the page rather than sending you to the back of the book.
 
 The library is one shelf whatever the source: local folders, calibre-web,
 Komga, liseur-sync, Grimmory, or any OPDS catalog. Series are grouped into stacks tracking

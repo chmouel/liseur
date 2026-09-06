@@ -50,12 +50,19 @@ class SelectionActions(
  * It is placed just above the selection where there is room and just below
  * it otherwise, so it never covers the words being acted on — the one thing
  * that makes an in-page menu feel wrong.
+ *
+ * [palette] is how much of the bar is colours. It is the reader's to
+ * set, because six chips and five actions over the passage they are
+ * trying to look at is more bar than passage on a phone. When it offers
+ * none, a plain Highlight takes their place: a bar with no way to mark
+ * a passage would be a regression wearing a setting's clothes.
  */
 @Composable
 fun SelectionPopup(
     offset: IntOffset,
     actions: SelectionActions,
     activeTint: HighlightTint?,
+    palette: HighlightPalette,
     onDismiss: () -> Unit,
 ) {
     Popup(
@@ -85,11 +92,18 @@ fun SelectionPopup(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                HighlightTint.entries.forEach { tint ->
+                val chips = palette.chipsFor(activeTint)
+                chips.forEach { tint ->
                     TintChip(
                         tint = tint,
                         selected = tint == activeTint,
                         onClick = { actions.onHighlight(tint) },
+                    )
+                }
+                if (palette.isEmpty) {
+                    PopupAction(
+                        label = stringResource(R.string.annotation_highlight),
+                        onClick = { actions.onHighlight(palette.default) },
                     )
                 }
                 PopupAction(

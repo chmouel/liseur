@@ -63,6 +63,7 @@ import com.chmouel.liseur.domain.seriesIdForExtras
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.isSamePassage
 import com.chmouel.liseur.domain.exportNotebookMarkdown
+import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.markedPassage
@@ -825,6 +826,18 @@ class ReaderViewModel(
         .map { it.pinchToResize }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    /**
+     * The colours a passage may be marked in, app-wide.
+     *
+     * Read eagerly because a mark can be made before anything has
+     * collected it — the bar is drawn from the reader's first selection
+     * — and because [annotation] and [addNote] take the default colour
+     * from its value rather than from a constant.
+     */
+    val highlightPalette: StateFlow<HighlightPalette> = appSettings.settings
+        .map { it.highlightPalette }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, HighlightPalette())
+
     /** Most recent position, used to persist progress and to survive recreation. */
     var lastLocator: Locator? = null
         private set
@@ -1419,7 +1432,7 @@ class ReaderViewModel(
             annotation(locator, AnnotationKind.NOTE).copy(
                 id = existing?.id ?: UUID.randomUUID().toString(),
                 note = note,
-                tint = existing?.tint ?: HighlightTint.DEFAULT.name,
+                tint = existing?.tint ?: highlightPalette.value.default.name,
                 createdAt = existing?.createdAt ?: System.currentTimeMillis(),
             ),
         )
@@ -1538,7 +1551,11 @@ class ReaderViewModel(
             kind = kind.name,
             locatorJson = locator.toJSON().toString(),
             text = locator.text.highlight?.takeIf { it.isNotBlank() },
-            tint = if (kind == AnnotationKind.BOOKMARK) null else HighlightTint.DEFAULT.name,
+            tint = if (kind == AnnotationKind.BOOKMARK) {
+                null
+            } else {
+                highlightPalette.value.default.name
+            },
             chapter = position?.let { chapterTitleAtPosition(it) } ?: locator.title,
             position = position,
             totalProgression = progression,
@@ -1653,6 +1670,14 @@ class ReaderViewModel(
 
     fun setColumnMode(mode: ColumnMode) =
         viewModelScope.launch { prefsRepo.setColumnMode(mode) }
+
+    /** Offers a colour on the bar, or stops offering it, app-wide. */
+    fun toggleHighlightTint(tint: HighlightTint) =
+        viewModelScope.launch { appSettings.toggleHighlightTint(tint) }
+
+    /** Which colour a mark made without picking one comes out in. */
+    fun setHighlightDefaultTint(tint: HighlightTint) =
+        viewModelScope.launch { appSettings.setHighlightDefaultTint(tint) }
 
     fun setAutoScrollSpeed(step: Float) =
         viewModelScope.launch { prefsRepo.setAutoScrollSpeed(step) }
