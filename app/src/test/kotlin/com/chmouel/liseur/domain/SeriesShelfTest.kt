@@ -93,13 +93,28 @@ class SeriesShelfTest {
 
     @Test
     fun `equal volume titles use permanent identity independently of input order`() {
-        val first = book("Same title", url = "https://example.test/a", index = 1.0)
-        val second = book("Same title", url = "https://example.test/b", index = 1.0)
+        val first = book(
+            "Same title",
+            url = "https://example.test/a",
+            index = 1.0,
+            series = "The Series",
+            author = "Alice",
+        )
+        val second = book(
+            "Same title",
+            url = "https://example.test/b",
+            index = 1.0,
+            series = "the series",
+            author = "Bob",
+        )
+        val shelf = listOf(second, first).groupedIntoSeries().single()
 
         assertEquals(
             listOf(first.url, second.url),
-            listOf(second, first).groupedIntoSeries().single().volumes.map { it.book.url },
+            shelf.volumes.map { it.book.url },
         )
+        assertEquals("The Series", shelf.name)
+        assertEquals("Alice", shelf.author)
     }
 
     @Test

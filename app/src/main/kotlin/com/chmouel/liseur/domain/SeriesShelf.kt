@@ -122,13 +122,14 @@ fun List<Book>.groupedIntoSeries(
         .groupBy { seriesKey(it.seriesName) }
         .filterKeys { it.isNotEmpty() }
         .map { (key, books) ->
-            val volumes = books
+            val orderedBooks = books.sortedBy { it.url }
+            val volumes = orderedBooks
                 .map { SeriesVolume(it, progressions[it.url]) }
                 .sortedWith(byVolume)
             SeriesShelf(
                 key = key,
-                name = commonest(books.mapNotNull { it.seriesName }) ?: key,
-                author = commonest(books.mapNotNull { it.displayAuthor }),
+                name = commonest(orderedBooks.mapNotNull { it.seriesName }) ?: key,
+                author = commonest(orderedBooks.mapNotNull { it.displayAuthor }),
                 volumes = volumes,
                 nextUp = volumes.firstOrNull { it.inProgress }
                     ?: volumes.firstOrNull { !it.finished },
