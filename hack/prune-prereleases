@@ -74,8 +74,7 @@ obsolete=$(printf '%s' "$release_pages" | jq -r '
             tag: $tag,
             base: $parsed.base,
             series: $parsed.series,
-            iteration: ($parsed.iteration | tonumber),
-            prerelease: .prerelease
+            iteration: ($parsed.iteration | tonumber)
           }
       ] as $prereleases
     | (
@@ -83,7 +82,7 @@ obsolete=$(printf '%s' "$release_pages" | jq -r '
         +
         [
           $prereleases
-          | map(select(.series == "rc" and .prerelease == true))
+          | map(select(.series == "rc"))
           | group_by(.base)[]
           | sort_by(.iteration)
           | .[0:-1][]

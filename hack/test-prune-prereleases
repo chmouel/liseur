@@ -34,6 +34,7 @@ cat > "$fixture" <<'EOF'
   {"tag_name":"v0.15.0-rc.1","prerelease":true},
   {"tag_name":"v0.14.0-rc.2","prerelease":true},
   {"tag_name":"v0.14.0-rc.1","prerelease":true},
+  {"tag_name":"v0.14.0-rc.0","prerelease":false},
   {"tag_name":"v0.15.0-test.4","prerelease":true},
   {"tag_name":"v0.14.0-test.2","prerelease":true},
   {"tag_name":"v0.15.0","prerelease":false},
@@ -54,6 +55,7 @@ actual=$(sed -nE 's/^release delete ([^ ]+) --repo example\/liseur --yes$/\1/p' 
     "$calls" | sort)
 expected=$(printf '%s\n' \
     v0.14.0-rc.1 \
+    v0.14.0-rc.0 \
     v0.14.0-test.2 \
     v0.15.0-rc.1 \
     v0.15.0-rc.2 \
