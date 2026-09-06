@@ -405,6 +405,7 @@ class AppContainer(context: Context) {
         CompositePositionSync(
             listOf(RoutedPositionSync(remoteRouter), kosyncSync),
         ),
+        carryOn = { PositionSyncWorker.continueBootstrap(context.applicationContext) },
     )
 
     private val latestPositionSync = LatestPositionSync(

@@ -67,6 +67,14 @@ object LiseurSyncApi {
     fun positions(baseUrl: String, workId: String, limit: Int): String =
         url(baseUrl, "/v1/works/$workId/positions?limit=$limit")
 
+    /**
+     * The newest position the account holds for each of its works.
+     *
+     * The resync route, which is also the cheapest way to tell a device
+     * that has just named a whole library where every book stands.
+     */
+    fun heads(baseUrl: String): String = url(baseUrl, HEADS)
+
     /** One page of the annotation feed, tombstones included (ADR-0028). */
     fun annotationChanges(baseUrl: String, since: Long, limit: Int): String =
         url(baseUrl, "$ANNOTATIONS/changes?since=$since&limit=$limit")

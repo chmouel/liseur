@@ -1901,6 +1901,437 @@ class LiseurSyncPositionSyncTest {
         ),
     )
 
+    @Test
+    fun `a fresh device names its whole catalog in one run and asks once where it stands`() =
+        runTest {
+            // The shelf arriving in batches is what made a refresh
+            // reshuffle it. Every book here came from the server's own
+            // catalog, so naming one costs a request and nothing else —
+            // there is no file to open — and there is no reason to
+            // ration them.
+            connect()
+            val catalog = (1..4).map { "liseur-sync:book-$it" }
+            catalog.forEachIndexed { index, url ->
+                db.bookDao().upsert(
+                    local().copy(
+                        url = url,
+                        title = "Book ${index + 1}",
+                        localUri = null,
+                        lastOpenedAt = null,
+                    ),
+                )
+            }
+            catalog.indices.forEach { resolved(workId = "w-${it + 1}") }
+            // One answer for the lot, rather than one question per book.
+            server.enqueue(
+                json(
+                    """{"ops":[
+                        {"op_id":"h-1","work_id":"w-1","seq":1,"progression":0.1,
+                         "client_ts":"${SyncOps.formatTime(NOW - 4_000)}"},
+                        {"op_id":"h-3","work_id":"w-3","seq":3,"progression":0.9,
+                         "client_ts":"${SyncOps.formatTime(NOW - 1_000)}"}
+                    ],"snapshot_seq":3}
+                    """.trimIndent(),
+                ),
+            )
+            server.enqueue(json("""{"ops":[],"has_more":false,"high_water":3}"""))
+
+            assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+            // Every book named, in the one run.
+            catalog.forEach {
+                assertNotNull(db.workIdentityDao().alias(it, peer())?.workId)
+            }
+            assertEquals(1, requests().count { it.target.startsWith("/v1/heads") })
+            assertTrue(requests().none { it.target.contains("/positions") })
+            // And every one of them told where it stands, including the
+            // books the server had never heard of.
+            catalog.forEach {
+                assertTrue(db.workIdentityDao().alias(it, peer())!!.seeded)
+            }
+            assertEquals(0.1, db.readingProgressDao().get("liseur-sync:book-1")!!.totalProgression!!, 1e-9)
+            assertEquals(0.9, db.readingProgressDao().get("liseur-sync:book-3")!!.totalProgression!!, 1e-9)
+            assertNull(db.readingProgressDao().get("liseur-sync:book-2")?.totalProgression)
+        }
+
+    @Test
+    fun `history imported in one run keeps the order it was read in`() = runTest {
+        connect()
+        // Two books read a minute and a half apart on another device,
+        // both arriving here in the same batch.
+        val catalog = listOf("liseur-sync:book-a", "liseur-sync:book-b")
+        catalog.forEach { url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, localUri = null, lastOpenedAt = null))
+        }
+        resolved(workId = "w-1")
+        resolved(workId = "w-2")
+        server.enqueue(
+            json(
+                """{"ops":[
+                    {"op_id":"h-1","work_id":"w-1","seq":1,"progression":0.1,
+                     "client_ts":"${SyncOps.formatTime(NOW - 90_000)}"},
+                    {"op_id":"h-2","work_id":"w-2","seq":2,"progression":0.2,
+                     "client_ts":"${SyncOps.formatTime(NOW - 1_000)}"}
+                ],"snapshot_seq":2}
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(json("""{"ops":[],"has_more":false,"high_water":2}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val readAt = db.readingProgressDao().readAtOnce().associate { it.bookUrl to it.readAt }
+        val whenRead = mapOf("w-1" to NOW - 90_000, "w-2" to NOW - 1_000)
+        catalog.forEach { url ->
+            val workId = db.workIdentityDao().alias(url, peer())!!.workId
+            assertEquals(whenRead.getValue(workId), readAt.getValue(url))
+        }
+        // Not, as it used to be, the moment this device happened to hear
+        // about either of them.
+        assertTrue(readAt.values.none { it == NOW })
+    }
+
+    @Test
+    fun `a run that could not name everything asks for another one`() = runTest {
+        connect()
+        // Local files, which are the ones a run rations: naming each
+        // means reading it off the disk to hash it. More of them than
+        // any sensible budget, so the run has to leave some over.
+        val urls = (1..200).map { "content://sd/book-$it.epub" }
+        urls.forEach { url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, lastOpenedAt = null))
+        }
+        var named = 0
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.startsWith("/v1/works/resolve") ->
+                    json("""{"work_id":"w-${named++}","confidence":"high","created":true}""")
+                request.target.startsWith("/v1/heads") -> json("""{"ops":[],"snapshot_seq":0}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        // Nothing went wrong, and there are still books with no name.
+        assertEquals(SyncOutcome.Incomplete, sync().syncAll(null))
+
+        val got = urls.count { db.workIdentityDao().alias(it, peer()) != null }
+        assertTrue(got > 0)
+        assertTrue(got < urls.size)
+    }
+
+    @Test
+    fun `books left waiting to be told where they stand ask for another run`() = runTest {
+        connect()
+        // Named already, but never seeded — and a server too old to
+        // answer /v1/heads, so they have to be asked one at a time and
+        // the run cannot get through them all. The delta pull will not
+        // rescue them: its cursor passed those answers long ago.
+        val urls = (1..60).map { "liseur-sync:book-$it" }
+        urls.forEachIndexed { index, url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, localUri = null))
+            alias(workId = "w-$index", seeded = false, bookUrl = url)
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.startsWith("/v1/heads") ->
+                    MockResponse.Builder().code(404).body("""{"error":"unknown"}""").build()
+                request.target.contains("/positions") -> json("""{"ops":[]}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        assertEquals(SyncOutcome.Incomplete, sync().syncAll(null))
+
+        val seeded = urls.count { db.workIdentityDao().alias(it, peer())!!.seeded }
+        assertTrue(seeded > 0)
+        assertTrue(seeded < urls.size)
+    }
+
+    @Test
+    fun `one book the server will never accept does not strand the rest`() = runTest {
+        connect()
+        // A stale entry among many. Nothing is going to come of asking
+        // about it again, but the books behind it still have no name,
+        // and a refusal that ends the whole bootstrap is how they stay
+        // that way.
+        val urls = (1..60).map { "liseur-sync:book-$it" }
+        urls.forEachIndexed { index, url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, localUri = null))
+            alias(workId = "w-$index", seeded = false, bookUrl = url)
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.startsWith("/v1/heads") ->
+                    MockResponse.Builder().code(404).body("""{"error":"unknown"}""").build()
+                request.target.contains("/works/w-0/") ->
+                    MockResponse.Builder().code(404).body("""{"error":"unknown_work"}""").build()
+                request.target.contains("/positions") -> json("""{"ops":[]}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        assertEquals(SyncOutcome.Incomplete, sync().syncAll(null))
+
+        assertTrue(urls.any { db.workIdentityDao().alias(it, peer())!!.seeded })
+    }
+
+    @Test
+    fun `a refusal that might pass later stays a failure`() = runTest {
+        connect()
+        // The same shape as the run above, but with a refusal a retry
+        // could get past. That retry will pick the shortfall up along
+        // with everything else, so the run has to keep saying it
+        // failed rather than quietly asking to be carried on instead.
+        val urls = (1..60).map { "liseur-sync:book-$it" }
+        urls.forEachIndexed { index, url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, localUri = null))
+            alias(workId = "w-$index", seeded = false, bookUrl = url)
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.startsWith("/v1/heads") ->
+                    MockResponse.Builder().code(404).body("""{"error":"unknown"}""").build()
+                request.target.contains("/works/w-0/") ->
+                    MockResponse.Builder().code(503).body("""{"error":"busy"}""").build()
+                request.target.contains("/positions") -> json("""{"ops":[]}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.ServerError(503)), sync().syncAll(null))
+    }
+
+    @Test
+    fun `a book the server cannot tell apart is only ever asked about once`() = runTest {
+        connect()
+        // More books than a run will hash, every one of which the
+        // server matches to two works. Raising those questions is
+        // getting somewhere the first time. Raising the same ones again
+        // is not, and if it counted the run would keep asking to be
+        // carried on for as long as the phone was on, without the book
+        // left over ever being reached.
+        val urls = (1..30).map { "content://sd/muddle-$it.epub" }
+        urls.forEach { url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, lastOpenedAt = null))
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.contains("/resolve") ->
+                    MockResponse.Builder().code(409)
+                        .body("""{"error":"ambiguous","works":["w-1","w-2"]}""").build()
+                request.target.startsWith("/v1/heads") -> json("""{"ops":[],"snapshot_seq":0}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        assertEquals(SyncOutcome.Incomplete, sync().syncAll(null))
+        val raised = db.workIdentityDao().ambiguityCount(peer())
+        assertTrue(raised > 0)
+        assertTrue(raised < urls.size)
+
+        // The books left over are reached by the run that follows,
+        // because a question already on file goes to the back of the
+        // queue rather than being asked again ahead of them.
+        assertEquals(SyncOutcome.Incomplete, sync().syncAll(null))
+        assertEquals(urls.size, db.workIdentityDao().ambiguityCount(peer()))
+
+        // Nothing new to say, so nothing to carry on for — even though
+        // there are still books with no name.
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+        assertEquals(urls.size, db.workIdentityDao().ambiguityCount(peer()))
+    }
+
+    @Test
+    fun `paying a book's outstanding debt to the server counts as getting somewhere`() = runTest {
+        connect()
+        // Books whose questions are already on file, so re-asking them
+        // is not progress, and enough of them to use up the run.
+        val muddled = (1..30).map { "content://sd/muddle-$it.epub" }
+        muddled.forEach { url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, lastOpenedAt = null))
+            db.workIdentityDao().upsert(
+                com.chmouel.liseur.data.db.WorkAmbiguity(
+                    bookUrl = url,
+                    peerId = peer(),
+                    workIds = "w-1\nw-2",
+                    noticedAt = NOW,
+                ),
+            )
+        }
+        // And one named book that still owes the server its catalog id,
+        // which one request settles for good.
+        val owing = "liseur-sync:owing"
+        db.bookDao().upsert(local().copy(url = owing, title = owing, localUri = null))
+        alias(workId = "w-9", bookUrl = owing)
+        db.workIdentityDao().upsert(
+            db.workIdentityDao().alias(owing, peer())!!.copy(sourceSent = false),
+        )
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.contains("/books/") && request.target.endsWith("/resolve") ->
+                    json("""{"work_id":"w-9","confidence":"high","created":false}""")
+                request.target.contains("/resolve") ->
+                    MockResponse.Builder().code(409)
+                        .body("""{"error":"ambiguous","works":["w-1","w-2"]}""").build()
+                request.target.startsWith("/v1/heads") -> json("""{"ops":[],"snapshot_seq":0}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        // The debt is paid, books are still waiting, so another run is
+        // asked for — even though nothing was newly named.
+        assertEquals(SyncOutcome.Incomplete, sync().syncAll(null))
+        assertTrue(db.workIdentityDao().alias(owing, peer())!!.sourceSent)
+
+        // Paid once. The next run has nothing to show for itself.
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+    }
+
+    @Test
+    fun `a question already on file does not starve a book nobody has asked about`() = runTest {
+        connect()
+        // Enough books the server cannot place to use up a run's whole
+        // budget for hashing files, each with its question already
+        // filed. Their titles sort first, so before this was fixed the
+        // run spent itself re-asking them...
+        val muddled = (1..25).map { "content://sd/aaa-$it.epub" }
+        muddled.forEach { url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, lastOpenedAt = null))
+            db.workIdentityDao().upsert(
+                com.chmouel.liseur.data.db.WorkAmbiguity(
+                    bookUrl = url,
+                    peerId = peer(),
+                    workIds = "w-1\nw-2",
+                    noticedAt = NOW,
+                ),
+            )
+        }
+        // ...and the books behind them were never reached at all.
+        val unasked = (1..5).map { "content://sd/zzz-$it.epub" }
+        unasked.forEach { url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, lastOpenedAt = null))
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.contains("/resolve") ->
+                    MockResponse.Builder().code(409)
+                        .body("""{"error":"ambiguous","works":["w-1","w-2"]}""").build()
+                request.target.startsWith("/v1/heads") -> json("""{"ops":[],"snapshot_seq":0}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        sync().syncAll(null)
+
+        // Every book has now had its question asked, which is only true
+        // if the ones nobody had asked about went first.
+        assertEquals(
+            muddled.size + unasked.size,
+            db.workIdentityDao().ambiguityCount(peer()),
+        )
+    }
+
+    @Test
+    fun `a head nobody can read sends the book back to ask for itself`() = runTest {
+        connect()
+        // Two books named in one run. The account's heads answer holds
+        // the newest record per work, and one of them is unreadable —
+        // an older op behind it still has a position this device can
+        // use, and only the per-book route can see that far back.
+        val catalog = (1..2).map { "liseur-sync:book-$it" }
+        catalog.forEachIndexed { index, url ->
+            db.bookDao().upsert(
+                local().copy(
+                    url = url,
+                    title = "Book ${index + 1}",
+                    localUri = null,
+                    lastOpenedAt = null,
+                ),
+            )
+        }
+        catalog.indices.forEach { resolved(workId = "w-${it + 1}") }
+        server.enqueue(
+            json(
+                """{"ops":[
+                    {"op_id":"h-1","work_id":"w-1","seq":1,"progression":0.1,
+                     "client_ts":"${SyncOps.formatTime(NOW - 4_000)}"},
+                    {"op_id":"h-2","work_id":"w-2","seq":9,"progression":null,
+                     "client_ts":"${SyncOps.formatTime(NOW - 1_000)}"}
+                ],"snapshot_seq":9}
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(
+            json(
+                """{"ops":[
+                    {"op_id":"o-2","work_id":"w-2","seq":8,"progression":0.5,
+                     "client_ts":"${SyncOps.formatTime(NOW - 2_000)}"}
+                ]}
+                """.trimIndent(),
+            ),
+        )
+        server.enqueue(json("""{"ops":[],"has_more":false,"high_water":9}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        // The readable head landed from the batch, and the unreadable
+        // one sent its book to the window behind it rather than being
+        // sealed over with an empty answer.
+        assertEquals(0.1, db.readingProgressDao().get("liseur-sync:book-1")!!.totalProgression!!, 1e-9)
+        assertEquals(0.5, db.readingProgressDao().get("liseur-sync:book-2")!!.totalProgression!!, 1e-9)
+        assertTrue(requests().any { it.target.startsWith("/v1/works/w-2/positions") })
+        assertTrue(requests().none { it.target.startsWith("/v1/works/w-1/positions") })
+        catalog.forEach { assertTrue(db.workIdentityDao().alias(it, peer())!!.seeded) }
+    }
+
+    @Test
+    fun `a name too weak to use is a question already asked`() = runTest {
+        connect()
+        // Books the server named but was not sure enough of to use, so
+        // each is a question waiting on the reader. Asking again could
+        // settle one — another device may have named it since — but not
+        // ahead of a book nobody has asked about at all.
+        val weak = (1..25).map { "content://sd/aaa-$it.epub" }
+        weak.forEachIndexed { index, url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, lastOpenedAt = null))
+            alias(
+                workId = "w-weak-$index",
+                bookUrl = url,
+                confidence = "low",
+                confirmed = false,
+                seeded = true,
+            )
+        }
+        val unasked = (1..5).map { "content://sd/zzz-$it.epub" }
+        unasked.forEach { url ->
+            db.bookDao().upsert(local().copy(url = url, title = url, lastOpenedAt = null))
+        }
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.contains("/resolve") ->
+                    json("""{"work_id":"w-new","confidence":"low","created":true}""")
+                request.target.startsWith("/v1/heads") -> json("""{"ops":[],"snapshot_seq":0}""")
+                else -> json("""{"ops":[],"has_more":false,"high_water":0}""")
+            }
+        }
+
+        sync().syncAll(null)
+
+        // The books nobody had asked about were reached, which is only
+        // true if the weak names went behind them.
+        unasked.forEach { assertNotNull(db.workIdentityDao().alias(it, peer())) }
+    }
+
+    @Test
+    fun `a run with nothing left to name is simply done`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"ops":[],"has_more":false,"high_water":0}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+    }
+
     private suspend fun alias(
         workId: String = "w-1",
         seeded: Boolean = true,

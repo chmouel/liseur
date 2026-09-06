@@ -113,6 +113,111 @@ class PositionSyncCoordinatorTest {
      * A sync that does nothing until it is told to, so a test can hold a
      * run open and make a second request arrive in the middle of it.
      */
+    @Test
+    fun `a run with more to do asks to be carried on, whoever asked for it`() = runTest {
+        // Connecting an account from Settings has as much right to
+        // finish itself as pulling to refresh does, and neither of them
+        // is the worker. So the carrying on lives here rather than in
+        // any one caller.
+        val sync = FakeSync()
+        sync.outcome = SyncOutcome.Incomplete
+        var carried = 0
+        val coordinator = PositionSyncCoordinator(sync, carryOn = { carried++ })
+
+        assertEquals(SyncOutcome.Incomplete, coordinator.request(SyncScope.Full))
+        advanceUntilIdle()
+
+        assertEquals(1, carried)
+    }
+
+    @Test
+    fun `a run that is done does not ask to be carried on`() = runTest {
+        val sync = FakeSync()
+        var carried = 0
+        val coordinator = PositionSyncCoordinator(sync, carryOn = { carried++ })
+
+        coordinator.request(SyncScope.Full)
+        advanceUntilIdle()
+
+        assertEquals(0, carried)
+    }
+
+    @Test
+    fun `carrying on gives up rather than running for ever`() = runTest {
+        // The run only asks when it got somewhere and still owes work,
+        // so it should stop by itself. If it ever does not, this is
+        // what stops a sync every fifteen seconds for as long as the
+        // phone is on.
+        val sync = FakeSync()
+        sync.outcome = SyncOutcome.Incomplete
+        var carried = 0
+        val coordinator = PositionSyncCoordinator(sync, carryOn = { carried++ })
+
+        repeat(200) {
+            coordinator.request(
+                SyncScope.Full,
+                requestedAt = System.currentTimeMillis() + it,
+                carryingOn = true,
+            )
+            advanceUntilIdle()
+        }
+
+        assertTrue(carried in 1..50)
+    }
+
+    @Test
+    fun `somebody asking for a sync themselves starts the count over`() = runTest {
+        // The cap is a guard against a run that keeps asking for itself.
+        // A reader pulling to refresh long after such a chain gave up is
+        // not spending somebody else's budget.
+        val sync = FakeSync()
+        sync.outcome = SyncOutcome.Incomplete
+        var carried = 0
+        val coordinator = PositionSyncCoordinator(sync, carryOn = { carried++ })
+        repeat(200) {
+            coordinator.request(
+                SyncScope.Full,
+                requestedAt = System.currentTimeMillis() + it,
+                carryingOn = true,
+            )
+            advanceUntilIdle()
+        }
+        val spent = carried
+
+        coordinator.request(SyncScope.Full, requestedAt = System.currentTimeMillis() + 1_000)
+        advanceUntilIdle()
+
+        assertEquals(spent + 1, carried)
+    }
+
+    @Test
+    fun `a run that finishes clears the way for the next connection to catch up`() = runTest {
+        val sync = FakeSync()
+        var carried = 0
+        val coordinator = PositionSyncCoordinator(sync, carryOn = { carried++ })
+        sync.outcome = SyncOutcome.Incomplete
+        repeat(200) {
+            coordinator.request(
+                SyncScope.Full,
+                requestedAt = System.currentTimeMillis() + it,
+                carryingOn = true,
+            )
+            advanceUntilIdle()
+        }
+        val spent = carried
+
+        // Somebody connects a second account later on. The tally that
+        // stopped the last one must not be what stops this one.
+        sync.outcome = SyncOutcome.Success
+        coordinator.request(SyncScope.Full, requestedAt = System.currentTimeMillis() + 1_000)
+        advanceUntilIdle()
+        sync.outcome = SyncOutcome.Incomplete
+        coordinator.request(SyncScope.Full, requestedAt = System.currentTimeMillis() + 2_000)
+        advanceUntilIdle()
+
+        assertEquals(spent + 1, carried)
+    }
+
     private class FakeSync : PositionSync {
         val started = mutableListOf<SyncScope>()
         var gate: CompletableDeferred<Unit>? = null

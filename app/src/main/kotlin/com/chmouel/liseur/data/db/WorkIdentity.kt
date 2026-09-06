@@ -223,6 +223,17 @@ interface WorkIdentityDao {
     @Upsert
     suspend fun upsert(ambiguity: WorkAmbiguity)
 
+    /**
+     * The books this server could not tell apart from another.
+     *
+     * A naming pass reads these so that a question already on file is
+     * not mistaken for one it has just raised: an ambiguity is filed on
+     * its own rather than as an alias, so without this a book the server
+     * cannot place looks unasked about on every single run.
+     */
+    @Query("SELECT * FROM work_ambiguity WHERE peer_id = :peerId")
+    suspend fun ambiguitiesFor(peerId: String): List<WorkAmbiguity>
+
     @Query("SELECT COUNT(*) FROM work_ambiguity WHERE peer_id = :peerId")
     suspend fun ambiguityCount(peerId: String): Int
 

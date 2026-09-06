@@ -49,7 +49,20 @@ sealed interface SyncScope {
  * Two identical requests waiting at the same time share one run, because
  * otherwise they would do the same work twice in a row.
  */
-class PositionSyncCoordinator(private val sync: PositionSync) {
+class PositionSyncCoordinator(
+    private val sync: PositionSync,
+    /**
+     * Asks for another run, for a connection that got somewhere and
+     * still has work it knows how to do.
+     *
+     * Here rather than at the call sites because a fresh connection is
+     * synced from half a dozen of them — app start, pull to refresh,
+     * connecting an account, Settings' sync now — and every one of them
+     * would otherwise have to remember to carry on, which one of them
+     * eventually would not.
+     */
+    private val carryOn: () -> Unit = {},
+) {
 
     /** Re-counts unsettled disagreements without starting a run. */
     suspend fun refreshUnresolved() = sync.refreshUnresolved()
@@ -59,6 +72,21 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
 
     /** Held for the duration of a run, so only one happens at a time. */
     private val turn = Mutex()
+
+    /**
+     * How many runs in a row have asked to be carried on.
+     *
+     * A run only asks when it got somewhere and still owes work, so in
+     * principle the chain stops itself. This is the backstop for the day
+     * that reasoning is wrong somewhere: a mistake in the accounting
+     * would otherwise be a sync every fifteen seconds for as long as the
+     * phone is on, which is somebody's battery and somebody's data.
+     * Reaching the cap leaves the rest to the next app start or refresh,
+     * exactly as it was before any of this existed — and either of those
+     * starts the count over, since the cap is a guard against a run that
+     * keeps asking for itself, not a limit on how much a reader may sync.
+     */
+    private var carriedOn = 0
 
     /** Guards the bookkeeping below, and is never held across a sync. */
     private val state = Mutex()
@@ -116,6 +144,10 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
         }
     }
 
+    private companion object {
+        const val MAX_CARRY_ONS = 25
+    }
+
     private class Running(
         val scope: SyncScope,
         val startedAt: Long,
@@ -134,11 +166,16 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
      * going leaves its snapshot behind, since that run is doing its own
      * fetching and is already known to have started late enough to
      * answer honestly.
+     *
+     * [carryingOn] marks the follow-up a previous run asked for. Only
+     * those count against the cap on consecutive carry-ons: anything
+     * else is somebody asking for a sync, and the chain starts over.
      */
     suspend fun request(
         scope: SyncScope,
         requestedAt: Long = System.currentTimeMillis(),
         snapshot: SyncSnapshot? = null,
+        carryingOn: Boolean = false,
     ): SyncOutcome {
         val joinable = state.withLock {
             inFlight?.takeIf { canSatisfy(it, scope, requestedAt) }?.result
@@ -164,7 +201,7 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
             // work happens changes; only the job does, which is what keeps
             // the run alive after the caller has walked away.
             CoroutineScope(currentCoroutineContext() + Job()).launch {
-                lead(scope, snapshot, slot)
+                lead(scope, snapshot, slot, carryingOn)
             }
         }
         return slot.await()
@@ -175,12 +212,14 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
         scope: SyncScope,
         snapshot: SyncSnapshot?,
         slot: CompletableDeferred<SyncOutcome>,
+        carryingOn: Boolean = false,
     ) {
         try {
             turn.withLock {
                 state.withLock {
                     queued.remove(scope)
                     inFlight = Running(scope, System.currentTimeMillis(), slot)
+                    if (!carryingOn) carriedOn = 0
                 }
                 val outcome = try {
                     when (scope) {
@@ -194,6 +233,11 @@ class PositionSyncCoordinator(private val sync: PositionSync) {
                 }
                 clearInFlight(slot)
                 slot.complete(outcome)
+                if (outcome != SyncOutcome.Incomplete) {
+                    carriedOn = 0
+                } else if (carriedOn++ < MAX_CARRY_ONS) {
+                    carryOn()
+                }
             }
         } catch (e: CancellationException) {
             // Only reachable if the run itself is stopped, which now takes

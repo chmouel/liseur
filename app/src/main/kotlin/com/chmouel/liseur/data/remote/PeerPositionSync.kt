@@ -177,6 +177,17 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
      * has to keep saying so. One peer succeeding does not make a
      * failure elsewhere go away: it makes the run partial, which is
      * retried while still leaving what did settle settled.
+     *
+     * A peer with more to fetch has to be heard over one that is
+     * finished, or a connection still finding its feet would look
+     * complete because the peer beside it had nothing to do. A failure
+     * worth retrying wins over it: that retry covers the shortfall too.
+     * One that is not worth retrying does not, and must not — the
+     * outcome decides nothing else for such a reason, since a partial
+     * run that will not be retried and a run carrying on both end the
+     * worker without a backoff, and letting it through would leave a
+     * fresh connection half-named for as long as some unrelated
+     * account stayed locked out.
      */
     private fun fold(outcomes: List<SyncOutcome>): SyncOutcome {
         if (outcomes.isEmpty()) return SyncOutcome.NotApplicable
@@ -187,11 +198,22 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
                 else -> null
             }
         }
-        val anySuccess = outcomes.any { it == SyncOutcome.Success || it is SyncOutcome.Partial }
+        val anyIncomplete = outcomes.any { it == SyncOutcome.Incomplete }
+        val anySuccess = outcomes.any {
+            it == SyncOutcome.Success || it == SyncOutcome.Incomplete || it is SyncOutcome.Partial
+        }
+        val retryable = outcomes.any {
+            it is SyncOutcome.Failure && it.reason.worthRetrying ||
+                it is SyncOutcome.Partial && it.reason.worthRetrying
+        }
         return when {
-            reason == null ->
-                if (anySuccess) SyncOutcome.Success else SyncOutcome.NotApplicable
+            reason == null -> when {
+                anyIncomplete -> SyncOutcome.Incomplete
+                anySuccess -> SyncOutcome.Success
+                else -> SyncOutcome.NotApplicable
+            }
 
+            anyIncomplete && !retryable -> SyncOutcome.Incomplete
             anySuccess -> SyncOutcome.Partial(reason)
             else -> SyncOutcome.Failure(reason)
         }

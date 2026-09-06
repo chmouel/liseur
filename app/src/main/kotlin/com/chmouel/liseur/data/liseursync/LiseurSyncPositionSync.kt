@@ -451,7 +451,8 @@ class LiseurSyncPositionSync(
 
         // Names first: an op is about a work id, so a book with no name
         // can neither receive what arrived nor send what is owed.
-        val aliases = name(account, books, single = book != null, trouble)
+        val named = name(account, books, single = book != null, trouble)
+        val aliases = named.aliases
 
         /**
          * Gives up when the server has stopped answering.
@@ -539,14 +540,24 @@ class LiseurSyncPositionSync(
         return if (firstFailure == null) {
             forAccount(account) { serverDao.setPositionSyncedAt(at) }
             reporting.report(PositionSyncStatus.Synced(at))
-            SyncOutcome.Success
+            named.outcome()
         } else {
             Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
             reporting.report(PositionSyncStatus.Failed(firstFailure))
-            if (pulled > 0 || pushed > 0 || marked > 0) {
-                SyncOutcome.Partial(firstFailure)
-            } else {
-                SyncOutcome.Failure(firstFailure)
+            when {
+                // A refusal that will still be a refusal in an hour
+                // must not take the rest of the library down with it.
+                // One stale book among six hundred is exactly the
+                // shape of this: nothing is going to come of retrying
+                // it, and the other five hundred and ninety-nine are
+                // still owed a name. The reader has already been told
+                // what failed — that is the report just above, not the
+                // outcome — so carrying on costs them nothing.
+                !firstFailure.worthRetrying && named.owing > 0 && named.done > 0 ->
+                    SyncOutcome.Incomplete
+
+                pulled > 0 || pushed > 0 || marked > 0 -> SyncOutcome.Partial(firstFailure)
+                else -> SyncOutcome.Failure(firstFailure)
             }
         }
     }
@@ -629,21 +640,46 @@ class LiseurSyncPositionSync(
     /**
      * Makes sure the books of interest have a name on this server.
      *
-     * Resolving costs a request and, the first time, reading the whole
-     * file to hash it. So a full run resolves only a handful of unnamed
-     * books each time, newest reading first, and the rest catch up over
-     * the following runs — whereas asking about one book on purpose
-     * resolves that book whatever it costs, because somebody is waiting.
+     * Resolving costs a request, and for a book this server does not
+     * catalog it also costs reading the whole file to hash it. So the
+     * two are rationed apart: a full run hashes only a handful of files,
+     * newest reading first, and the rest catch up over the following
+     * runs — while a book the server already holds is named freely,
+     * since the server reads the identifiers off its own record and
+     * nothing here has to be opened.
+     *
+     * That distinction is what lets a fresh device finish. Every book on
+     * one connected to liseur-sync came from its catalog, and rationing
+     * those to a handful a run is what made the shelf arrive in batches.
+     *
+     * Asking about one book on purpose resolves that book whatever it
+     * costs, because somebody is waiting.
      */
     private suspend fun name(
         account: Account,
         books: List<Book>,
         single: Boolean,
         trouble: Trouble,
-    ): List<Pair<Book, WorkAlias>> {
+    ): Named {
         val known = identityDao.aliasesFor(account.peerId).associateBy { it.bookUrl }
+        // A book whose question is already on file. That question may be
+        // filed on its own, as an ambiguity, or as a name the server was
+        // not sure enough of to use — either way the reader has already
+        // been asked, and asking again is not getting anywhere.
+        val asked = buildSet {
+            identityDao.ambiguitiesFor(account.peerId).mapTo(this) { it.bookUrl }
+            known.values.filter { it.awaitingAnswer }.mapTo(this) { it.bookUrl }
+        }
         val out = mutableListOf<Pair<Book, WorkAlias>>()
-        var budget = if (single) books.size else MAX_RESOLVES_PER_RUN
+        // Books that have just been given a name and have yet to be told
+        // where they stand. Collected rather than asked about one at a
+        // time: on a fresh device that is every book in the library, and
+        // one request can answer for all of them.
+        val owed = mutableListOf<Pair<Book, WorkAlias>>()
+        var files = if (single) books.size else MAX_FILE_RESOLVES_PER_RUN
+        var catalogued = if (single) books.size else MAX_CATALOG_RESOLVES_PER_RUN
+        var deferred = 0
+        var fresh = 0
 
         /** Notes why something could not be had, and whether it was the network. */
         fun note(cause: IOException?) {
@@ -651,7 +687,37 @@ class LiseurSyncPositionSync(
             trouble.failed(cause, reason)
         }
 
-        val ordered = books.sortedByDescending { it.lastOpenedAt ?: 0 }
+        /**
+         * Whether there is still room to ask about [book], spending it
+         * if so. Which purse it comes out of is the file's: hashing one
+         * is the cost worth rationing, and a catalog book has none.
+         */
+        fun afford(book: Book): Boolean {
+            val catalog = works.catalogIdOf(book) != null
+            val left = if (catalog) catalogued else files
+            if (left <= 0) {
+                deferred++
+                return false
+            }
+            if (catalog) catalogued-- else files--
+            return true
+        }
+
+        // Newest reading first, wherever it was done. Before there was a
+        // read time to sort on this used the last time the book was
+        // opened here, which on a fresh device is null for every book —
+        // so the promise of "newest first" was really title order.
+        val readAt = progressDao.readAtOnce().associate { it.bookUrl to it.readAt }
+        // A book the server has already failed to place goes last. It
+        // is still worth asking about — another device may have named
+        // it since — but not out of the same purse as a book nobody has
+        // asked about at all, or a library with more open questions than
+        // budget would spend every run repeating them and never reach
+        // the books behind them.
+        val ordered = books.sortedWith(
+            compareBy<Book> { it.url in asked }
+                .thenByDescending { maxOf(readAt[it.url] ?: 0, it.lastOpenedAt ?: 0) },
+        )
         for (candidate in ordered) {
             if (trouble.unreachable != null) break
             val cached = known[candidate.url]
@@ -662,12 +728,18 @@ class LiseurSyncPositionSync(
                 // can match on the catalog entry instead of asking the
                 // reader. Failing is fine: the cached name still works,
                 // and the debt stands until it is paid.
-                if (works.owesSource(cached, candidate) && budget > 0) {
-                    budget--
+                if (works.owesSource(cached, candidate) && afford(candidate)) {
                     val refreshed =
                         works.resolve(candidate, account.peerId, account.baseUrl, account.credentials)
                     if (refreshed is WorkResolution.Named) {
                         alias = refreshed.alias
+                        // Paying that debt is getting somewhere, and it
+                        // can only be paid once: the next run finds
+                        // nothing owed and asks nothing. A re-resolve
+                        // that left the debt standing is not, or a
+                        // server that keeps saying no would look like
+                        // progress for ever.
+                        if (!works.owesSource(alias, candidate)) fresh++
                     } else {
                         note((refreshed as? WorkResolution.Unresolved)?.cause)
                     }
@@ -677,35 +749,217 @@ class LiseurSyncPositionSync(
                 // a doubtful match confirmed by hand — still owes
                 // it: whatever the server heard before the name was
                 // usable is behind the cursor.
-                if (!alias.seeded && budget > 0 && trouble.unreachable == null) {
-                    budget--
-                    note(seed(account, candidate, alias))
-                }
+                if (!alias.seeded) owed += candidate to alias
                 continue
             }
             // A guess the file or the catalog id could settle is worth
             // asking about again; any other unusable alias has asked
             // its question and waits for the answer.
             if (cached != null && !works.retryable(cached, candidate)) continue
-            if (budget <= 0) continue
-            budget--
+            if (!afford(candidate)) continue
             when (
                 val resolved =
                     works.resolve(candidate, account.peerId, account.baseUrl, account.credentials)
             ) {
                 is WorkResolution.Named -> {
                     out += candidate to resolved.alias
+                    fresh++
                     // Everything that happened to this book before it had
-                    // a name is behind the cursor, so it is asked for
-                    // once, directly.
-                    note(seed(account, candidate, resolved.alias))
+                    // a name is behind the cursor, so it has to be asked
+                    // for outright rather than waited for.
+                    owed += candidate to resolved.alias
                 }
 
-                is WorkResolution.NeedsConfirming, is WorkResolution.Ambiguous -> Unit
+                // Not a name, but an answer, and one that is written
+                // down — as an alias awaiting confirmation, or as an
+                // ambiguity: the reader is now being asked about this
+                // book rather than nothing being known about it. That
+                // counts as getting somewhere the *first* time it
+                // happens and never again. A question this run merely
+                // repeated leaves the next run facing exactly what this
+                // one faced, and calling that progress is how a chain
+                // of runs would never end.
+                is WorkResolution.NeedsConfirming, is WorkResolution.Ambiguous ->
+                    if (cached == null && candidate.url !in asked) fresh++
                 is WorkResolution.Unresolved -> note(resolved.cause)
             }
         }
-        return out
+        val seeded = seedAll(account, owed, single, trouble)
+        return Named(
+            aliases = out,
+            done = fresh + seeded.done,
+            owing = deferred + seeded.owing,
+        )
+    }
+
+    /**
+     * What a naming pass managed, and what it left for the next one.
+     *
+     * Together these are what let a fresh connection finish by itself.
+     * [owing] is what is still to do — a book with no name, or one named
+     * but not yet told where it stands; either leaves the shelf
+     * incomplete. [done] is what this run actually got through, and
+     * requiring it is what makes the chain stop: a run that achieved
+     * nothing would only achieve nothing again, however much is owed.
+     *
+     * Both count work finished rather than work attempted, so a step
+     * that keeps failing cannot pass for progress.
+     */
+    private data class Named(
+        val aliases: List<Pair<Book, WorkAlias>>,
+        val done: Int,
+        val owing: Int,
+    ) {
+        /**
+         * Whether a run that went well has reason to ask for another.
+         *
+         * Both halves matter. Something owed without anything done
+         * would be a run repeating itself for as long as the phone is
+         * on; something done without anything owed is simply finished.
+         */
+        fun outcome(): SyncOutcome =
+            if (owing > 0 && done > 0) SyncOutcome.Incomplete else SyncOutcome.Success
+    }
+
+    /** What a seeding pass got through, and what it left owed. */
+    private data class Seeded(val done: Int, val owing: Int)
+
+    /** What the account's heads answered, and what it answered unreadably. */
+    private data class Heads(
+        val newest: Map<String, SyncOp>,
+        val unreadable: Set<String>,
+    )
+
+    /**
+     * Tells every newly named book where it stands.
+     *
+     * `GET /v1/heads` answers for the whole account at once — the newest
+     * position per work — which is exactly the shape of this question
+     * when a fresh device has just named its entire library. Asking per
+     * book instead would be one request each, and the run would be
+     * rationed all over again by a limit that was only ever about
+     * hashing files.
+     *
+     * The cursor is deliberately not moved. A seed is not a pull: the
+     * snapshot the heads were read from says nothing about the pages
+     * this device has reconciled, and the cursor only ever advances in
+     * the transaction that writes the page it covers.
+     *
+     * Falling back to the per-book route matters for a server too old to
+     * have heads and for the single-book run, where one answer is all
+     * that is wanted and somebody is waiting for it.
+     */
+    private suspend fun seedAll(
+        account: Account,
+        owed: List<Pair<Book, WorkAlias>>,
+        single: Boolean,
+        trouble: Trouble,
+    ): Seeded {
+        if (owed.isEmpty()) return Seeded(done = 0, owing = 0)
+        if (trouble.unreachable != null) return Seeded(done = 0, owing = owed.size)
+
+        if (!single && owed.size > 1) {
+            val heads = try {
+                headOps(account)
+            } catch (e: IOException) {
+                Log.i(TAG, "Could not read the account's heads; seeding one by one", e)
+                // Not handed to Trouble as a failure: the per-book route
+                // below is about to ask the same question, and its
+                // answer is the one worth reporting.
+                null
+            }
+            if (heads != null) {
+                // A work whose newest record could not be read is asked
+                // about on its own below. Heads carries only the newest,
+                // and an older op behind an unreadable one may still
+                // hold a position this device can use — which is the
+                // window the per-book route already scans. Sealing an
+                // empty answer over one of those would lose a reading
+                // that was there to be had, and `markSeeded` is not
+                // asked twice.
+                val (doubtful, plain) = owed.partition { (_, alias) ->
+                    alias.workId in heads.unreadable
+                }
+                forAccount(account) {
+                    for ((book, alias) in plain) {
+                        heads.newest[alias.workId]?.let { land(account, book.url, it) }
+                        // An empty answer is still an answer, exactly as
+                        // it is for a single seed: the server has heard
+                        // nothing about this work.
+                        identityDao.markSeeded(book.url, account.peerId)
+                    }
+                }
+                if (doubtful.isEmpty()) return Seeded(done = owed.size, owing = 0)
+                val rest = seedEach(account, doubtful, single, trouble)
+                return Seeded(done = plain.size + rest.done, owing = rest.owing)
+            }
+        }
+
+        return seedEach(account, owed, single, trouble)
+    }
+
+    /**
+     * Tells newly named books where they stand, one request each.
+     *
+     * The route for a server too old to have heads, for the single-book
+     * run where somebody is waiting on one answer, and for the work
+     * whose head came back unreadable — that last one because this asks
+     * for a window of ops rather than only the newest, and so can find
+     * a position behind a record this device cannot read.
+     */
+    private suspend fun seedEach(
+        account: Account,
+        owed: List<Pair<Book, WorkAlias>>,
+        single: Boolean,
+        trouble: Trouble,
+    ): Seeded {
+        // One at a time, and rationed, because each is a request. What
+        // is left over is owed rather than forgotten: a book that has a
+        // name but has never asked where it stands will not find out
+        // from the delta pull, whose cursor has long since passed the
+        // answer.
+        var done = 0
+        var budget = if (single) owed.size else MAX_SEEDS_PER_RUN
+        for ((index, entry) in owed.withIndex()) {
+            val (book, alias) = entry
+            if (trouble.unreachable != null || budget-- <= 0) {
+                return Seeded(done = done, owing = owed.size - index)
+            }
+            val failure = seed(account, book, alias)
+            if (failure == null) done++ else trouble.failed(failure, reasonFor(failure))
+        }
+        return Seeded(done = done, owing = owed.size - done)
+    }
+
+    /**
+     * The newest position the account holds for each of its works, and
+     * the works whose newest record could not be read.
+     *
+     * Those are kept apart rather than dropped. Heads answers with the
+     * newest op per work and device, so a work whose head is unreadable
+     * has nothing left in this answer to fall back on, and treating it
+     * as "the server has heard nothing" would seal an empty seed over a
+     * position an older op still holds.
+     */
+    private suspend fun headOps(account: Account): Heads {
+        val array = http.get(LiseurSyncApi.heads(account.baseUrl), account.credentials)
+            .optJSONArray("ops")
+        val newest = mutableMapOf<String, SyncOp>()
+        val unreadable = mutableSetOf<String>()
+        for (index in 0 until (array?.length() ?: 0)) {
+            val json = array?.optJSONObject(index) ?: continue
+            val op = SyncOps.fromJson(json)
+            if (op == null) {
+                // The work is named at the top of the record, so which
+                // book to ask about again is known even when the
+                // position inside it is not.
+                json.optString("work_id").takeIf { it.isNotEmpty() }?.let(unreadable::add)
+                continue
+            }
+            val held = newest[op.workId]
+            if (held == null || op.seq > held.seq) newest[op.workId] = op
+        }
+        return Heads(newest = newest, unreadable = unreadable)
     }
 
     /**
@@ -1791,7 +2045,34 @@ class LiseurSyncPositionSync(
          * top of a good one, not an attempt to reconstruct history.
          */
         const val LATEST_WINDOW = 20
-        const val MAX_RESOLVES_PER_RUN = 25
+
+        /**
+         * How many files one run will open and hash to name their books.
+         *
+         * The cost being rationed is reading a whole book off the disk,
+         * not the request that follows it.
+         */
+        const val MAX_FILE_RESOLVES_PER_RUN = 25
+
+        /**
+         * How many books this server already catalogs one run will name.
+         *
+         * Far higher, because the server reads the identifiers off its
+         * own record and nothing here is opened: the cost is one small
+         * request each. High enough that an ordinary library is named in
+         * a single run, which is what stops a fresh device receiving its
+         * shelf in batches — and still a limit, so a library of tens of
+         * thousands does not turn one refresh into an afternoon.
+         */
+        const val MAX_CATALOG_RESOLVES_PER_RUN = 500
+
+        /**
+         * How many books one run will ask about individually when the
+         * whole-account route is unavailable. Only the fallback path
+         * spends this; a server with `/v1/heads` answers for every book
+         * at once.
+         */
+        const val MAX_SEEDS_PER_RUN = 25
         val ACCEPTED = setOf("applied", "duplicate")
         const val CONFLICT = "conflict"
     }
