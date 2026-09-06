@@ -196,7 +196,7 @@ class LiseurSyncSnapshots(
                 proof = candidatesFor(null)
             }
             var candidates = proof
-                ?: return@optional refuse("more evidence than one request may carry")
+                ?: return@optional refuse("could not prepare complete snapshot evidence")
             val firstLocalDay = days.firstOrNull()
             val initialFrom = maxOf(
                 from ?: firstLocalDay ?: today,
