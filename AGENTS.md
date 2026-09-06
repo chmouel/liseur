@@ -308,6 +308,19 @@ emulator.
   `RemoteAccountRepository.forgetSyncPeer()`, never at a call site.
   Disconnecting, switching accounts and `forgetUnreadableAccount()` all
   go through that one door.
+- `HighlightPalette` holds which colours the selection bar offers (any
+  subset of the six, yellow/green/blue by default) and which one an
+  unpicked mark gets. It is presentation only: all six `HighlightTint`
+  names stay legal in the database and in both directions on the wire,
+  because the enum matches liseur-sync's palette. Never filter a stored
+  tint through the palette or rewrite one that has fallen outside it —
+  `chipsFor()` appends the selected mark's own colour precisely so
+  recolouring it stays possible. An empty set means the bar offers a
+  plain Highlight in the default colour, never no way to mark a passage,
+  and it is stored: an *absent* set is a reader who never chose and gets
+  the three, an *empty* one is a reader who chose none. The default is
+  not required to be offered, since notes and that plain Highlight need
+  it either way. See `docs/adr/0026-a-configurable-highlight-palette.md`.
 - A book only on this device can be sent to liseur-sync, where the
   server allows it: `BookUploader`, `ServerCapabilities.canUpload` (read
   from the `library-upload` scope) and `BookUploadWorker`, whose unique

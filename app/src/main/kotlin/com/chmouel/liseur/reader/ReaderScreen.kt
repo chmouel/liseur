@@ -100,6 +100,7 @@ import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.reader.annotations.BookmarkRibbon
 import com.chmouel.liseur.reader.annotations.DECORATION_GROUP
+import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.NoteDialog
 import com.chmouel.liseur.reader.annotations.SelectionActions
@@ -362,6 +363,9 @@ fun ReaderScreen(
     onScrollModeChanged: (Boolean) -> Unit,
     tapZonesFlow: StateFlow<TapZones>,
     pinchToResizeFlow: StateFlow<Boolean>,
+    highlightPaletteFlow: StateFlow<HighlightPalette>,
+    onHighlightTintToggled: (HighlightTint) -> Unit,
+    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
     // The activity draws dialogs of its own over this screen — a link
     // out of the book, a sync, an offer to send the book up — and a tap
     // on a link never reaches the tap zones, so the screen would
@@ -388,6 +392,7 @@ fun ReaderScreen(
     val tapZones by tapZonesFlow.collectAsStateWithLifecycle()
     val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
     val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
+    val highlightPalette by highlightPaletteFlow.collectAsStateWithLifecycle()
     // Readium reads vertical text off the book rather than off the
     // reader: it cannot paginate lines that run down the page, so such a
     // book is scrolled whatever the setting says. Everything that asks
@@ -2564,6 +2569,7 @@ fun ReaderScreen(
         SelectionPopup(
             offset = active.popupOffset(),
             activeTint = active.existing?.tint?.let(HighlightTint::fromName),
+            palette = highlightPalette,
             actions = remember(active, dictionary) {
                 SelectionActions(
                     onHighlight = { tint ->
@@ -2690,6 +2696,9 @@ fun ReaderScreen(
             onColumnModeChanged = onPrefsAction.setColumnMode,
             onFooterModeChanged = onProgressAction.setFooterMode,
             onPageTurnStyleChanged = onPrefsAction.setPageTurnStyle,
+            highlightPalette = highlightPalette,
+            onHighlightTintToggled = onHighlightTintToggled,
+            onHighlightDefaultTintChanged = onHighlightDefaultTintChanged,
             onAutoScrollChanged = { autoScrollArmed = it },
             onAutoScrollSpeedChanged = onPrefsAction.setAutoScrollSpeed,
             onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,

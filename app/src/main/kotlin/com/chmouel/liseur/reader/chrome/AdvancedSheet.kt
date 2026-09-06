@@ -31,12 +31,15 @@ import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReadingCss
+import com.chmouel.liseur.reader.annotations.HighlightPalette
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.FixedLayoutNotice
 import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
 import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
+import com.chmouel.liseur.ui.reading.ReadingHighlightPaletteControls
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
 import com.chmouel.liseur.ui.reading.ReadingSectionLabel
@@ -52,9 +55,10 @@ import com.chmouel.liseur.ui.windowWidth
  * typography, and dismissing that lands back on the page.
  *
  * What it holds is what a reader sets once, if ever: the shape of the
- * text block, what the footer says, how a page gets out of the way when
- * it is turned, whether the page moves on its own, and whether any of
- * it is this book's alone. The rest of what belongs here — finer
+ * text block, what the footer says, which colours a passage may be
+ * marked in, how a page gets out of the way when it is turned, whether
+ * the page moves on its own, and whether any of it is this book's
+ * alone. The rest of what belongs here — finer
  * typography, read-aloud, imported fonts — arrives with its own issue,
  * and the shape of the sheet is the point: five rows, or ten, it is the
  * same sheet and the reader learns it once.
@@ -91,6 +95,9 @@ fun AdvancedSheet(
     onColumnModeChanged: (ColumnMode) -> Unit,
     onFooterModeChanged: (FooterMode) -> Unit,
     onPageTurnStyleChanged: (PageTurnStyle) -> Unit,
+    highlightPalette: HighlightPalette,
+    onHighlightTintToggled: (HighlightTint) -> Unit,
+    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
     onAutoScrollChanged: (Boolean) -> Unit,
     onAutoScrollSpeedChanged: (Float) -> Unit,
     onTypographyIsOwnChanged: (Boolean) -> Unit,
@@ -129,6 +136,14 @@ fun AdvancedSheet(
             ReadingFooterModeDropdown(
                 selected = prefs.footerMode,
                 onSelected = onFooterModeChanged,
+            )
+            // Not about the page but about what is done to it, so it
+            // sits after everything that shapes the text and before the
+            // motion rows.
+            ReadingHighlightPaletteControls(
+                palette = highlightPalette,
+                onTintToggled = onHighlightTintToggled,
+                onDefaultChanged = onHighlightDefaultTintChanged,
             )
             // Nothing lifts off the screen when the text is scrolled, so
             // there is no page whose motion this could describe.
