@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -92,7 +94,6 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
-import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
@@ -564,6 +565,7 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
     val locale = LocalLocale.current.platformLocale
     val lastIndex = periods.lastIndex
     val showAmounts = periods.size <= DAYS_IN_WEEK
+    val scrollable = periods.size > DAYS_IN_WEEK
     // Gradients dither into stripes on an e-ink panel; flat ink reads.
     val eInk = LocalEInk.current
     val gap = when {
@@ -577,11 +579,13 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
     // tallest bar pushes its label out of the card.
     val chartHeight = if (showAmounts) 150.dp else 130.dp
     val dateFormat = lastReadFormat()
+    val scrollState = rememberScrollState()
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(chartHeight),
+            .height(chartHeight)
+            .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
         horizontalArrangement = Arrangement.spacedBy(gap),
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -612,7 +616,7 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
             }
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .then(if (scrollable) Modifier.width(40.dp) else Modifier.weight(1f))
                     .fillMaxHeight()
                     // The bar and its letter are one fact, and read out
                     // separately they are two thirds of a sentence.
