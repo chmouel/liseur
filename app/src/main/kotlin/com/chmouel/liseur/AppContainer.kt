@@ -467,6 +467,7 @@ class AppContainer(context: Context) {
     val syncSnapshots = LiseurSyncSnapshots(
         database.remoteServerDao(), database.readingSessionDao(),
         database.sessionTransmissionDao(), database.workIdentityDao(),
+        deviceKey = { deviceIdentity.current().id },
     )
 
     /**

@@ -62,6 +62,7 @@ class LiseurSyncSnapshotsTest {
     private var changeToken: (JSONObject) -> Unit = {}
     private var capabilitiesCode = 200
     private var duringRequest: suspend (JSONObject) -> Unit = {}
+    private val deviceKey = "this-device"
 
     @Before
     fun open() = runBlocking {
@@ -151,14 +152,64 @@ class LiseurSyncSnapshotsTest {
     }
 
     @Test
-    fun `pre-upgrade attempted identity is never reconstructed as proof`() = runTest {
-        sitting(unknown = true)
-        assertNull(read())
-        assertTrue(requests.isEmpty())
+    fun `a sitting of unknown standing is offered so the server can rule on it`() = runTest {
+        val id = sitting(unknown = true)
+        assertNotNull(read())
+        val candidate = requests.single().getJSONArray("candidates").getJSONObject(0)
+        // Rebuilt from the row, byte for byte what the upload would have
+        // been, so the server recognises its own copy if it has one.
+        assertEquals(SessionUploads.sessionIdFor(deviceKey, id), candidate.getString("session_id"))
+        assertEquals(
+            JSONObject(SessionUploads.toJson(db.readingSessionDao().get(id)!!, deviceKey, "work", null)!!.toString())
+                .put("device_id", "device").toString(),
+            candidate.toString(),
+        )
     }
 
     @Test
-    fun `out-of-window legacy sessions contribute active days but need no overlap proof`() = runTest {
+    fun `a sitting of unknown standing is offered even when nothing acknowledged it`() = runTest {
+        // An upload whose answer was lost leaves no acknowledgement, and
+        // a disconnected account clears the ones that were there, so the
+        // absence of one proves nothing and cannot excuse counting it here.
+        val id = sitting(unknown = true)
+        assertEquals(null, db.readingSessionDao().get(id)!!.uploadedAt)
+        assertNotNull(read())
+        assertEquals(1, requests.single().getJSONArray("candidates").length())
+    }
+
+    @Test
+    fun `a sitting of unknown standing that cannot be described again is not counted alone`() = runTest {
+        sitting(unknown = true)
+        db.workIdentityDao().forgetPeerAliases(account.accountKey)
+        assertNull(read())
+    }
+
+    @Test
+    fun `a sitting of unknown standing is not offered under a nameless device`() = runTest {
+        sitting(unknown = true)
+        db.remoteServerDao().upsert(account.copy(accountId = null))
+        assertNull(read())
+    }
+
+    @Test
+    fun `a pre-upgrade sitting sent since the upgrade is offered as it was sent`() = runTest {
+        val id = sitting(unknown = true)
+        val retained = transmit(id)
+        db.readingSessionDao().markUploaded(listOf(id), 42)
+        assertNotNull(read())
+        val candidates = requests.single().getJSONArray("candidates")
+        assertEquals(1, candidates.length())
+        // The retained bytes win over a rebuild: they are what the
+        // server was actually told.
+        assertEquals("device-original", candidates.getJSONObject(0).getString("device_id"))
+        assertEquals(
+            JSONObject(retained.payload).put("device_id", "device-original").toString(),
+            candidates.getJSONObject(0).toString(),
+        )
+    }
+
+    @Test
+    fun `out-of-window legacy sessions contribute active days and are proved over all time`() = runTest {
         val id = sitting(unknown = true)
         val old = db.readingSessionDao().get(id)!!
         db.readingSessionDao().deleteForBook("book")
@@ -170,7 +221,11 @@ class LiseurSyncSnapshotsTest {
         assertNotNull(read())
         assertEquals(1, requests.single().getJSONArray("candidates").length())
         assertEquals(2, requests.single().getJSONArray("local_active_days").length())
-        assertNull(read(StatsRange.ALL_TIME))
+        // Over all time the older sitting is in the window too, and its
+        // standing is unknown, so it is offered rather than assumed.
+        requests.clear()
+        assertNotNull(read(StatsRange.ALL_TIME))
+        assertEquals(2, requests.first().getJSONArray("candidates").length())
     }
 
     @Test
@@ -483,6 +538,47 @@ class LiseurSyncSnapshotsTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
+    fun `a sitting the server already holds is not counted twice in the union`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        try {
+            // Thirty minutes here, of unknown standing; ninety on the
+            // server, which the server says already includes this one.
+            sitting(unknown = true)
+            changeResponse = {
+                it.put("overlap", JSONObject().apply {
+                    put("total_active_minutes", 30)
+                    put("sessions", 1)
+                    put("works", JSONArray().put(
+                        JSONObject("""{"work_id":"work","total_active_minutes":30,"sessions":1}"""),
+                    ))
+                    put("days", JSONArray().put(day(today, 30, 1)))
+                })
+            }
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_MONTH, zone = { zone },
+                now = { today.atTime(1, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                aliases = db.workIdentityDao().observeAliases(),
+                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+            )
+            models.put("owned", model)
+            model.refreshServerInsights()
+            val ready = model.state.first {
+                it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.ALL_DEVICES
+            } as ReadingStatsUiState.Ready
+            assertEquals(90 * 60_000L, ready.headline.totalMs)
+            assertEquals(90 * 60_000L, ready.stats.books.single().totalMs)
+            assertEquals(90 * 60_000L, ready.stats.recent.sumOf { it.totalMs })
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
     fun `superseded range generation cannot publish its late snapshot`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val models = ViewModelStore()
@@ -518,6 +614,7 @@ class LiseurSyncSnapshotsTest {
 
     private fun client() = LiseurSyncSnapshots(
         db.remoteServerDao(), db.readingSessionDao(), db.sessionTransmissionDao(), db.workIdentityDao(),
+        deviceKey = { deviceKey },
     )
 
     private suspend fun read(range: StatsRange = StatsRange.THIS_MONTH): CompleteStatsSnapshot? {
@@ -539,7 +636,7 @@ class LiseurSyncSnapshotsTest {
     }
 
     private suspend fun transmit(id: Long, deviceId: String = "device-original"): SessionTransmission {
-        val payload = SessionUploads.toJson(db.readingSessionDao().get(id)!!, "original-key", "work", null)!!
+        val payload = SessionUploads.toJson(db.readingSessionDao().get(id)!!, deviceKey, "work", null)!!
         return SessionTransmission(account.accountKey, id, deviceId, payload.toString()).also {
             db.sessionTransmissionDao().insert(it)
         }
