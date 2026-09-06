@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.OverflowableNavigator
@@ -83,10 +84,12 @@ fun PageTurnOverlay(state: PageTurnEffectState, modifier: Modifier = Modifier) {
 }
 
 /**
- * Performs page turns for taps and volume keys. When the animation
- * preference is on and the effect is available, the turn uses the
- * sliding snapshot; otherwise it falls back to the navigator's plain
- * slide, or an instant jump when animations are disabled.
+ * Performs page turns for taps and volume keys. Which of the three
+ * motions a turn uses is [style]'s answer: the lifted snapshot, the
+ * navigator's own slide, or no motion at all. The lifted one still
+ * falls back to the plain slide when the snapshot cannot be taken —
+ * the chrome is up, a turn is already running, the view has no size
+ * yet.
  *
  * A scrolled book is a different movement altogether, and [isScrolling]
  * says so: see [scrollScreenful].
@@ -98,7 +101,7 @@ fun PageTurnOverlay(state: PageTurnEffectState, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalReadiumApi::class)
 class PageTurner(
     private val effect: PageTurnEffectState,
-    private val isAnimated: () -> Boolean,
+    private val style: () -> PageTurnStyle,
     private val isEffectSuppressed: () -> Boolean,
     private val isScrolling: () -> Boolean = { false },
     private val isVerticalText: () -> Boolean = { false },
@@ -187,9 +190,19 @@ class PageTurner(
     }
 
     private fun turnPaginated(nav: OverflowableNavigator, forward: Boolean, token: Int) {
-        if (!isAnimated()) {
-            navigate(nav, forward, animated = false, token = token)
-            return
+        when (style()) {
+            PageTurnStyle.NONE -> {
+                navigate(nav, forward, animated = false, token = token)
+                return
+            }
+            // The navigator's own move, which is the one a drag across
+            // the page already performs. Nothing is photographed, so
+            // none of the reasons the lifted page falls back apply.
+            PageTurnStyle.SLIDE -> {
+                navigate(nav, forward, animated = true, token = token)
+                return
+            }
+            PageTurnStyle.LIFT -> Unit
         }
         val win = window
         val view = nav.publicationView
@@ -214,6 +227,11 @@ class PageTurner(
      * The extra turn after the last line: lift the last page off and
      * leave the endpaper underneath, the same motion every other turn
      * already makes.
+     *
+     * Only under [PageTurnStyle.LIFT]. The endpaper is drawn over the
+     * book rather than navigated to, so there is no move for the
+     * navigator's own slide to animate; under the other two styles the
+     * endpaper simply arrives.
      */
     private fun revealEnd() {
         if (showingEnd() || pendingEnd) return
@@ -225,7 +243,7 @@ class PageTurner(
             pendingEnd = false
             onReachedEnd()
         }
-        if (nav == null || win == null || view == null || !isAnimated() ||
+        if (nav == null || win == null || view == null || style() != PageTurnStyle.LIFT ||
             isEffectSuppressed() || effect.isRunning ||
             view.width <= 0 || view.height <= 0
         ) {
@@ -337,7 +355,10 @@ class PageTurner(
         }
         val script = scrollScreenfulScript(
             forward = forward,
-            smooth = isAnimated(),
+            // A scrolled book has no page to lift off, so the only
+            // question it can answer is whether the movement glides or
+            // jumps: both of the moving styles glide.
+            smooth = style() != PageTurnStyle.NONE,
             vertical = isVerticalText(),
         )
         web.evaluateJavascript(script) { result ->

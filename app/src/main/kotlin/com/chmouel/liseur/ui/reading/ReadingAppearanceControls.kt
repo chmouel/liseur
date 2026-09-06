@@ -35,7 +35,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ColumnMode
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -576,22 +576,55 @@ fun ReadingLayoutControls(
     }
 }
 
+/**
+ * How a tapped page gets out of the way, in the three motions it can
+ * make.
+ *
+ * A segmented row rather than a switch because the answer stopped being
+ * yes or no: a reader who wanted the seamless slide a finger drag gives
+ * had no way to ask for it on a tap (#156). What the names describe is
+ * the movement, not the machinery behind it — the reader is choosing
+ * between a page being lifted, a page sliding across, and a page simply
+ * being the next one.
+ */
 @Composable
-fun ReadingPageTurnAnimationToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onChanged(!enabled) },
-    ) {
+fun ReadingPageTurnStyleControl(
+    selected: PageTurnStyle,
+    onSelected: (PageTurnStyle) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        ReadingSectionLabel(stringResource(R.string.reader_page_turn_style))
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            val options = PageTurnStyle.entries
+            options.forEachIndexed { index, style ->
+                SegmentedButton(
+                    selected = selected == style,
+                    onClick = { onSelected(style) },
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                ) { Text(stringResource(style.label)) }
+            }
+        }
         Text(
-            text = stringResource(R.string.reader_page_turn_animation),
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
+            text = stringResource(selected.detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Switch(checked = enabled, onCheckedChange = onChanged)
     }
 }
+
+private val PageTurnStyle.label: Int
+    get() = when (this) {
+        PageTurnStyle.LIFT -> R.string.reader_page_turn_style_lift
+        PageTurnStyle.SLIDE -> R.string.reader_page_turn_style_slide
+        PageTurnStyle.NONE -> R.string.reader_page_turn_style_none
+    }
+
+private val PageTurnStyle.detail: Int
+    get() = when (this) {
+        PageTurnStyle.LIFT -> R.string.reader_page_turn_style_lift_detail
+        PageTurnStyle.SLIDE -> R.string.reader_page_turn_style_slide_detail
+        PageTurnStyle.NONE -> R.string.reader_page_turn_style_none_detail
+    }
 
 internal fun ReaderFont.composeFamily(assets: android.content.res.AssetManager): FontFamily? =
     when (this) {

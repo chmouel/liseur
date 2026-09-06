@@ -237,6 +237,36 @@ enum class ColumnMode(val id: String, val displayName: String) {
 }
 
 /**
+ * How a tapped page gets out of the way.
+ *
+ * [LIFT] is the one the app was built around: the page that is leaving
+ * is photographed, the book jumps underneath it, and the photograph
+ * slides off with a shadow along its edge, the way a sheet of paper is
+ * lifted off a stack.
+ *
+ * [SLIDE] is the navigator's own move, which is the motion a finger
+ * already gets by dragging the page across — the two pages travel
+ * together, and nothing is lifted off anything. Asked for in #156 by a
+ * reader who wanted that seamless slide on a tap, not only on a drag.
+ *
+ * [NONE] is the page simply being the next one. It is what electronic
+ * paper gets whatever is set here, because a photograph dragged across
+ * such a screen arrives as a trail of half-erased pages.
+ */
+enum class PageTurnStyle(val id: String) {
+    LIFT("lift"),
+    SLIDE("slide"),
+    NONE("none"),
+    ;
+
+    companion object {
+        val Default = LIFT
+
+        fun fromId(id: String?): PageTurnStyle = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/**
  * Which notch the auto-scroll slider sits on, as it is stored.
  *
  * The bounds live here rather than beside the scrolling loop because
@@ -559,7 +589,7 @@ private fun isRtlLanguage(language: String?): Boolean {
  * @param lineHeight Line height multiplier (1.0–2.0), null keeps publisher styles.
  * @param pageMargins Page margin multiplier (0.5–2.0), null keeps publisher styles.
  * @param brightness Screen brightness override 0.0–1.0, null follows the system.
- * @param pageTurnAnimation Slide animation when turning pages; instant jump when off.
+ * @param pageTurnStyle How a tapped page gets out of the way.
  * @param footerMode What the reading footer shows.
  * @param columnMode How many columns of text a wide page is broken into.
  * @param autoScrollSpeed Which notch the auto-scroll slider sits on, from
@@ -583,7 +613,7 @@ data class ReaderPrefs(
     val lineHeight: Double? = null,
     val pageMargins: Double? = null,
     val brightness: Float? = null,
-    val pageTurnAnimation: Boolean = true,
+    val pageTurnStyle: PageTurnStyle = PageTurnStyle.Default,
     val footerMode: FooterMode = FooterMode.Default,
     val columnMode: ColumnMode = ColumnMode.Default,
     val autoScrollSpeed: Float = AutoScrollPreference.DEFAULT_STEP,

@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -79,6 +82,57 @@ internal fun SettingsGroup(
     }
     Card(Modifier.fillMaxWidth()) {
         Column(content = content)
+    }
+}
+
+/**
+ * A section that arrives closed, for the settings a reader sets once if
+ * ever.
+ *
+ * The reader's own sheet learned this first: the short list stays short
+ * and everything rarer lives a tap further in
+ * (`docs/adr/0001-advanced-reading-menu.md`). A settings screen has the
+ * same problem, and the same answer — except that here the tap opens a
+ * section in place rather than a second sheet, so what was hidden is
+ * still on the screen it belongs to.
+ *
+ * Whether it is open is the screen's own state and is deliberately not
+ * remembered anywhere: a section that stays open is no longer an
+ * advanced section, only a long one.
+ */
+@Composable
+internal fun SettingsExpandableGroup(
+    title: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                role = Role.Button,
+                onClick = { onExpandedChange(!expanded) },
+            )
+            .padding(top = 24.dp, bottom = 8.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 4.dp).size(20.dp),
+        )
+    }
+    AnimatedVisibility(visible = expanded) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(content = content)
+        }
     }
 }
 

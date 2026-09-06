@@ -388,7 +388,7 @@ class ReaderActivity : FragmentActivity() {
                                             setLineHeight = viewModel::setLineHeight,
                                             setPageMargins = viewModel::setPageMargins,
                                             setBrightness = viewModel::setBrightness,
-                                            setPageTurnAnimation = viewModel::setPageTurnAnimation,
+                                            setPageTurnStyle = viewModel::setPageTurnStyle,
                                             setColumnMode = viewModel::setColumnMode,
                                             setAutoScrollSpeed = viewModel::setAutoScrollSpeed,
                                             setTypographyIsOwn = viewModel::setTypographyIsOwn,

@@ -448,6 +448,15 @@ Settings -> Reading & navigation beside the other rows about how the
 book is turned and held, not in Reading appearance: it is not how the
 page looks, it is what the hands do (ADR 1, ADR 9).
 
+Amended after the release candidates: the switch starts **off**, and it
+now sits inside that screen's Advanced section. The failure it guards
+against is silent and cumulative — a resize nobody meant is not noticed
+until every book looks wrong — and a gesture that undiscoverable is a
+poor thing to have on by default. The Size slider is still there for
+everyone; the pinch is for the reader who went looking for it. The
+setting had only ever shipped in release candidates, so the default was
+changed without a migration.
+
 ### On electronic paper
 
 Deferred to [#153](https://github.com/chmouel/liseur/issues/153) and
