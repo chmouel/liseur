@@ -28,8 +28,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.chmouel.liseur.R
 
 /**
  * The rows the settings screens are built out of.
@@ -107,6 +111,9 @@ internal fun SettingsExpandableGroup(
     onExpandedChange: (Boolean) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val state = stringResource(
+        if (expanded) R.string.settings_section_expanded else R.string.settings_section_collapsed,
+    )
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -115,6 +122,7 @@ internal fun SettingsExpandableGroup(
                 role = Role.Button,
                 onClick = { onExpandedChange(!expanded) },
             )
+            .semantics(mergeDescendants = true) { stateDescription = state }
             .padding(top = 24.dp, bottom = 8.dp),
     ) {
         Text(

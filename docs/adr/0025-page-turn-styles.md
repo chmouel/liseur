@@ -85,10 +85,15 @@ have the page follow their finger — and **Slide**, which is that
 tracking, is one tap away.
 
 The claim is decided once, on the first move past the touch slop, and
-only for a drag that sets off across the page. A second finger hands the
-gesture back, so a pinch is untouched, as is a selection being stretched
-and a scrolled book being scrolled; a fixed-layout page, which is dragged
-to look around rather than to turn, is left to Readium entirely.
+only for a drag that sets off across the page. That decision then stands
+for the rest of the gesture: a drag that set off downwards stays the web
+view's however it curves later, because taking it over halfway through
+would cancel a touch the web view is already acting on. A second finger
+settles it the same way, so a pinch is untouched, as is a selection being
+stretched and a scrolled book being scrolled. A fixed-layout page, which
+is dragged to look around rather than to turn, is left to Readium
+entirely, and so is anything dragged while the chrome is up, where a
+sideways drag belongs to the progress scrubber.
 
 Storage is a new `page_turn_style` key. When it is absent the old
 `page_turn_animation` boolean is read once — `false` means **None** — so
