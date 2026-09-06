@@ -102,8 +102,8 @@ internal fun Book.recentAt(readAt: Long?): Long {
  *
  * [reversed] flips whichever direction the order reads in naturally:
  * newest first for dates, A to Z for names. Every order finishes on the
- * title, so two books that are otherwise equal keep the same places
- * between launches instead of swapping about.
+ * title and permanent book identity, so two books that are otherwise
+ * equal keep the same places between launches instead of swapping about.
  *
  * A book with no author files last whichever way round the list is: an
  * unknown author is not a name, and pretending it sorts before A only
@@ -114,7 +114,7 @@ fun List<Book>.arrangedBy(
     reversed: Boolean = false,
     readAt: Map<String, Long> = emptyMap(),
 ): List<Book> {
-    val byTitle = compareBy<Book> { sortKey(it.title) }
+    val byTitle = compareBy<Book>({ sortKey(it.title) }, { it.url })
 
     val comparator = when (sort) {
         LibrarySort.RECENT -> compareBy<Book> { it.recentRank(readAt[it.url]) }
@@ -138,19 +138,13 @@ fun List<Book>.arrangedBy(
             .then(byTitle)
 
         LibrarySort.SERIES -> {
-            val bySeries = compareBy<Book> { seriesKey(it.seriesName) }
+            val bySeriesName = compareBy<Book> { seriesKey(it.seriesName) }
+            val ordered = (if (reversed) bySeriesName.reversed() else bySeriesName)
                 // Within a series the numbers are the order, and
                 // reversing the shelf must not read a series backwards:
                 // book 3 before book 2 is not a useful view of anything.
                 .thenBy { it.seriesIndex == null }
                 .thenBy { it.seriesIndex ?: 0.0 }
-            val ordered = if (reversed) {
-                compareByDescending<Book> { seriesKey(it.seriesName) }
-                    .thenBy { it.seriesIndex == null }
-                    .thenBy { it.seriesIndex ?: 0.0 }
-            } else {
-                bySeries
-            }
             compareBy<Book> { if (it.seriesName.isNullOrBlank()) 1 else 0 }
                 .then(ordered)
                 .then(byTitle)

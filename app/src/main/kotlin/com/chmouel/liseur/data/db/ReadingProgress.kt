@@ -279,31 +279,6 @@ abstract class ReadingProgressDao {
         }
     }
 
-    /**
-     * Compatibility overload for callers that do not measure v2 pace.
-     *
-     * [readingSpeed] is deliberately ignored: it belongs to the biased v1
-     * estimator and must not seed the replacement.
-     */
-    suspend fun recordLocal(
-        bookUrl: String,
-        locatorJson: String,
-        progression: Double?,
-        @Suppress("UNUSED_PARAMETER") readingSpeed: Double?,
-        status: String?,
-        updatedAt: Long,
-    ) = recordLocal(
-        bookUrl = bookUrl,
-        locatorJson = locatorJson,
-        progression = progression,
-        readingSecondsPerPosition = null,
-        readingPaceSamples = null,
-        readingPaceElapsedMs = null,
-        readingPaceEvidence = null,
-        status = status,
-        updatedAt = updatedAt,
-    )
-
     // -- The pending remote state, and the feed's durability ---------------
 
     /**

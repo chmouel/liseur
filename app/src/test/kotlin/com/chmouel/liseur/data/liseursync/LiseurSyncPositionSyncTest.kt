@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.SessionTransmission
+import com.chmouel.liseur.data.db.recordLocal
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState

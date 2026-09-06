@@ -9,7 +9,7 @@ for user-facing goals.
 ## Build, test, lint
 
 Always use the wrapper (`./gradlew`), never a system-wide `gradle`.
-The project is pinned to Gradle 9.6.1 via `gradle/wrapper/`.
+Use the Gradle version pinned in `gradle/wrapper/gradle-wrapper.properties`.
 
 ```bash
 ./gradlew assembleDebug              # unsigned debug APK -> app/build/outputs/apk/debug/

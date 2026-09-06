@@ -114,6 +114,31 @@ class LibraryShelfTest {
     }
 
     @Test
+    fun `a newer downloaded volume does not outrank an older reading volume`() {
+        val books = listOf(
+            book("Other reading", lastOpenedAt = 500),
+            book(
+                "Started",
+                series = "The Expanse",
+                index = 1.0,
+                addedAt = 10,
+                lastOpenedAt = 100,
+            ),
+            book("Downloaded", series = "The Expanse", index = 2.0, addedAt = 900),
+        )
+        val shelf = shelves(books)
+
+        assertEquals(
+            listOf("Other reading", "The Expanse"),
+            mixedShelf(books, shelf, LibrarySort.RECENT).names(),
+        )
+        assertEquals(
+            listOf("The Expanse", "Other reading"),
+            mixedShelf(books, shelf, LibrarySort.RECENT, reversed = true).names(),
+        )
+    }
+
+    @Test
     fun `added order dates a pile by its newest volume`() {
         val books = listOf(
             book("Anna Karenina", addedAt = 500),

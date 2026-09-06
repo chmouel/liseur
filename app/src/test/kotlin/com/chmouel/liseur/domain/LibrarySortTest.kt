@@ -9,13 +9,14 @@ class LibrarySortTest {
 
     private fun book(
         title: String,
+        url: String = "https://example.test/$title",
         author: String? = null,
         addedAt: Long = 0,
         lastOpenedAt: Long? = null,
         downloadedAt: Long? = null,
         state: DownloadState = DownloadState.REMOTE,
     ) = Book(
-        url = "https://example.test/$title",
+        url = url,
         title = title,
         author = author,
         coverPath = null,
@@ -127,6 +128,22 @@ class LibrarySortTest {
         val again = books.shuffled().arrangedBy(LibrarySort.ADDED).titles()
         assertEquals(listOf("Alpha", "Beta", "Gamma"), once)
         assertEquals(once, again)
+    }
+
+    @Test
+    fun `identical titles use permanent identity independently of input order`() {
+        val first = book("Same title", url = "https://example.test/a", addedAt = 5)
+        val second = book("Same title", url = "https://example.test/b", addedAt = 5)
+
+        for (sort in LibrarySort.entries) {
+            val expected = listOf(first.url, second.url)
+            assertEquals(expected, listOf(first, second).arrangedBy(sort).map { it.url })
+            assertEquals(expected, listOf(second, first).arrangedBy(sort).map { it.url })
+        }
+        assertEquals(
+            listOf(second.url, first.url),
+            listOf(first, second).arrangedBy(LibrarySort.TITLE, reversed = true).map { it.url },
+        )
     }
 
     @Test
@@ -253,6 +270,20 @@ class LibrarySortTest {
         assertEquals(
             listOf("Dune Messiah", "Companion"),
             books.arrangedBy(LibrarySort.SERIES, reversed = false).titles(),
+        )
+    }
+
+    @Test
+    fun `equal and fractional series numbers keep title order`() {
+        val books = listOf(
+            inSeries("Second edition", "Dune", 1.5),
+            inSeries("First edition", "Dune", 1.5),
+            inSeries("Volume one", "Dune", 1.0),
+        )
+
+        assertEquals(
+            listOf("Volume one", "First edition", "Second edition"),
+            books.arrangedBy(LibrarySort.SERIES, reversed = true).titles(),
         )
     }
 }
