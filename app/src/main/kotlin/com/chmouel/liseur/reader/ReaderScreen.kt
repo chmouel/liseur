@@ -114,6 +114,7 @@ import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.reader.footnotes.FootnoteLayout
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ColumnMode
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.readingCssFor
@@ -126,6 +127,7 @@ import com.chmouel.liseur.reader.chrome.AdvancedSheet
 import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
 import com.chmouel.liseur.reader.chrome.AutoScrollTicker
 import com.chmouel.liseur.reader.chrome.JumpBackPill
+import com.chmouel.liseur.reader.chrome.PageTurnDrag
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
 import com.chmouel.liseur.reader.chrome.PageTurner
@@ -400,6 +402,7 @@ fun ReaderScreen(
     val reflowableText = remember(publication) {
         publication.metadata.layout != Layout.FIXED
     }
+    val reflowableTextNow by rememberUpdatedState(reflowableText)
     // The chrome's answer, and the container's, which are not the same
     // one and must not be merged: see [chromeScrolls]/[containerScrolls].
     val effectiveScrolling = chromeScrolls(reflowableText, scrollMode, verticalText)
@@ -753,16 +756,19 @@ fun ReaderScreen(
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
     val viewedImageNow by rememberUpdatedState(viewedImage)
     val openingImageNow by rememberUpdatedState(openingImage)
+    // The sliding page is a snapshot dragged across the screen, which is
+    // the one thing electronic paper cannot draw: it arrives as a trail
+    // of half-erased pages. The instant jump is what e-paper wants
+    // anyway, and it overrules whatever is set here rather than being
+    // one more thing to set. Taps and drags read the style from here, so
+    // the two ways of turning a page cannot disagree about it.
+    val turnStyle: () -> PageTurnStyle = {
+        if (eInkNow) PageTurnStyle.NONE else prefsFlow.value.pageTurnStyle
+    }
     val pageTurner = remember {
         PageTurner(
             effect = pageTurnEffect,
-            // The sliding page is a snapshot dragged across the screen,
-            // which is the one thing electronic paper cannot draw: it
-            // arrives as a trail of half-erased pages. The instant jump
-            // the preference already had is what e-paper wants anyway.
-            // A scrolled book has no page to lift off, and reads the same
-            // answer as whether its scrolling glides or jumps.
-            isAnimated = { prefsFlow.value.pageTurnAnimation && !eInkNow },
+            style = turnStyle,
             isEffectSuppressed = { chromeVisibleNow },
             // Vertical text is scrolled whatever the setting says, so
             // this is the derived answer and not the preference: a
@@ -793,6 +799,33 @@ fun ReaderScreen(
                 )
             },
             onMoveDropped = moves::cancel,
+        )
+    }
+
+    // Two fingers on the page are never a page turn, and lifting out of
+    // a pinch leaves one of them behind for a moment. Shared with the
+    // tap zones, which refuse a tap for the same reason (ADR 22).
+    val isPinching = {
+        pinchStart.value != null || pinchHeld ||
+            SystemClock.uptimeMillis() - pinchSettledAt.longValue < PinchResize.GUARD_MS
+    }
+    val pageTurnDrag = remember {
+        PageTurnDrag(
+            style = turnStyle,
+            canTurn = {
+                // A scrolled book has no page to turn and a
+                // fixed-layout one is dragged to look around, not to
+                // turn. A picture over the page takes the book out of
+                // reach, as it does for every other way of turning it.
+                !effectiveScrollingNow && reflowableTextNow &&
+                    !isPinching() && selection == null &&
+                    viewedImageNow == null && !openingImageNow
+            },
+            isRtl = {
+                navigatorNow?.overflow?.value?.readingProgression == ReadingProgression.RTL
+            },
+            density = { view.resources.displayMetrics.density },
+            onTurnPage = pageTurner::turn,
         )
     }
 
@@ -1597,10 +1630,6 @@ fun ReaderScreen(
         pageTurner.publication = publication
         onPageTurnerChanged(if (nav != null) pageTurner else null)
         val listeners = nav?.let {
-            val isPinching = {
-                pinchStart.value != null || pinchHeld ||
-                    SystemClock.uptimeMillis() - pinchSettledAt.longValue < PinchResize.GUARD_MS
-            }
             listOf(
                 ReaderTapZones(
                     navigator = it,
@@ -1949,11 +1978,35 @@ fun ReaderScreen(
                                 touch.startedAt = SystemClock.uptimeMillis()
                                 touch.claim.begin(touch.startedAt)
                                 pinchHeld = false
+                                pageTurnDrag.reset()
                                 probeUnderFinger(down[0].position)
                             }
 
                             (down[0].position - touch.downAt).getDistance() > slop ->
                                 touch.moved = true
+                        }
+                        /*
+                         * A sideways drag under Lift or None is a page
+                         * turn in the style the reader chose, and it is
+                         * taken here because there is nowhere else to
+                         * take it: the columns are moved by the web
+                         * view's own native gesture code, which neither
+                         * the page's scripts nor the navigator can call
+                         * off. Consuming the touch is what stops them,
+                         * the way the image viewer stops the long press
+                         * that opened it from also reaching the page.
+                         */
+                        if (down.isEmpty()) {
+                            if (pageTurnDrag.release()) {
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
+                        } else if (touch.moved) {
+                            val travelled = down[0].position - touch.downAt
+                            if (pageTurnDrag.offer(down.size, travelled.x, travelled.y)) {
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
                         }
                         // What is under the fingers decides which gesture
                         // this is, and holds until they lift. Asked here
@@ -2629,7 +2682,7 @@ fun ReaderScreen(
             onPageMarginsChanged = onPrefsAction.setPageMargins,
             onColumnModeChanged = onPrefsAction.setColumnMode,
             onFooterModeChanged = onProgressAction.setFooterMode,
-            onPageTurnAnimationChanged = onPrefsAction.setPageTurnAnimation,
+            onPageTurnStyleChanged = onPrefsAction.setPageTurnStyle,
             onAutoScrollChanged = { autoScrollArmed = it },
             onAutoScrollSpeedChanged = onPrefsAction.setAutoScrollSpeed,
             onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
@@ -2906,7 +2959,7 @@ class ReaderPrefsActions(
     val setLineHeight: (Double?) -> Unit,
     val setPageMargins: (Double?) -> Unit,
     val setBrightness: (Float?) -> Unit,
-    val setPageTurnAnimation: (Boolean) -> Unit,
+    val setPageTurnStyle: (PageTurnStyle) -> Unit,
     val setColumnMode: (ColumnMode) -> Unit,
     val setAutoScrollSpeed: (Float) -> Unit,
     val setTypographyIsOwn: (Boolean) -> Unit,

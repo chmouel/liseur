@@ -323,10 +323,12 @@ private fun LiseurApp(settings: AppSettings) {
             BackHandler { back() }
             ReadingNavigationScreen(
                 settings = settings,
+                pageTurnStyle = readerPrefs.pageTurnStyle,
                 vendorName = context.container.eInkDisplay.vendor,
                 onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
                 onTapZones = { scope.launch { repository.setTapZones(it) } },
                 onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
+                onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onScrollMode = { scope.launch { repository.setScrollMode(it) } },
                 onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
@@ -360,9 +362,6 @@ private fun LiseurApp(settings: AppSettings) {
                 onBrightness = { scope.launch { readerPreferences.setBrightness(it) } },
                 onColumnMode = { scope.launch { readerPreferences.setColumnMode(it) } },
                 onFooterMode = { scope.launch { readerPreferences.setFooterMode(it) } },
-                onPageTurnAnimation = {
-                    scope.launch { readerPreferences.setPageTurnAnimation(it) }
-                },
                 fineTypography = FineTypographyActions(
                     onTextAlignChanged = { scope.launch { readerPreferences.setTextAlign(it) } },
                     onHyphensChanged = { scope.launch { readerPreferences.setHyphens(it) } },

@@ -507,7 +507,13 @@
     <string name="reader_columns_auto">Auto</string>
     <string name="reader_columns_one">1</string>
     <string name="reader_columns_two">2</string>
-    <string name="reader_page_turn_animation">Page turn animation</string>
+    <string name="reader_page_turn_style">Page turn</string>
+    <string name="reader_page_turn_style_lift">Lift</string>
+    <string name="reader_page_turn_style_slide">Slide</string>
+    <string name="reader_page_turn_style_none">None</string>
+    <string name="reader_page_turn_style_lift_detail">The page you finished lifts off the one underneath, the way a sheet of paper comes off a stack.</string>
+    <string name="reader_page_turn_style_slide_detail">Both pages travel together, the way they do when you drag the page across with a finger.</string>
+    <string name="reader_page_turn_style_none_detail">The next page is simply there. This is what an e-ink screen gets whichever of the three is chosen.</string>
 
     <!-- Fine typography: alignment, hyphenation, weight and spacing. -->
     <string name="reader_text_align">Alignment</string>
@@ -589,6 +595,7 @@
     <string name="settings_reading_navigation_paged">Paged. Page-turn sides: %1$s</string>
     <string name="settings_reading_navigation_scrolling">Read by scrolling.</string>
     <string name="settings_screen">Screen</string>
+    <string name="settings_advanced">Advanced</string>
     <string name="settings_volume_keys">Volume keys turn pages</string>
     <string name="settings_volume_keys_detail">Volume down goes forward, volume up goes back.</string>
     <string name="settings_tap_zones">Page-turn sides</string>
@@ -596,8 +603,8 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Swapped</string>
     <string name="settings_pinch_to_resize">Pinch to resize text</string>
-    <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Turn it off if the way you hold the phone sets it off by accident. Pinching an image to enlarge it still works either way.</string>
-    <string name="settings_pinch_to_resize_eink">Off on electronic paper. The pinch works by showing you the size while your fingers move, and a preview that redraws many times a second is what such a screen handles worst. Without it you would be aiming blind, and every attempt costs a full repaint of the page, so the Size slider does the job better. Pinching an image to enlarge it still works. Turn E-ink screen off below if this is not that kind of screen.</string>
+    <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Off until you ask for it, because a grip that produces stray two-finger touches resizes the text of every book by accident. Pinching an image to enlarge it still works either way.</string>
+    <string name="settings_pinch_to_resize_eink">Off on electronic paper. The pinch works by showing you the size while your fingers move, and a preview that redraws many times a second is what such a screen handles worst. Without it you would be aiming blind, and every attempt costs a full repaint of the page, so the Size slider does the job better. Pinching an image to enlarge it still works. Turn E-ink screen off above if this is not that kind of screen.</string>
     <string name="settings_resume">Open on the book you were reading</string>
     <string name="settings_resume_detail">Skip the library when you left off mid-book.</string>
     <string name="settings_keep_screen_on">Keep the screen on</string>

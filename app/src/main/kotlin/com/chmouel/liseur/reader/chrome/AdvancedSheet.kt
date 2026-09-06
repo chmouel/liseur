@@ -28,6 +28,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
@@ -37,7 +38,7 @@ import com.chmouel.liseur.ui.reading.FixedLayoutNotice
 import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
 import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
-import com.chmouel.liseur.ui.reading.ReadingPageTurnAnimationToggle
+import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
 import com.chmouel.liseur.ui.reading.ReadingSectionLabel
 import com.chmouel.liseur.ui.windowWidth
 
@@ -51,12 +52,12 @@ import com.chmouel.liseur.ui.windowWidth
  * typography, and dismissing that lands back on the page.
  *
  * What it holds is what a reader sets once, if ever: the shape of the
- * text block, what the footer says, whether pages turn with an
- * animation, whether the page moves on its own, and whether any of it is
- * this book's alone. The rest of what belongs here — finer typography,
- * read-aloud, imported fonts — arrives with its own issue, and the shape
- * of the sheet is the point: five rows, or ten, it is the same sheet and
- * the reader learns it once.
+ * text block, what the footer says, how a page gets out of the way when
+ * it is turned, whether the page moves on its own, and whether any of
+ * it is this book's alone. The rest of what belongs here — finer
+ * typography, read-aloud, imported fonts — arrives with its own issue,
+ * and the shape of the sheet is the point: five rows, or ten, it is the
+ * same sheet and the reader learns it once.
  *
  * [scrolling] is whether the text runs rather than turns, which is not
  * only the reader's own choice: vertical text is laid out that way
@@ -69,7 +70,7 @@ import com.chmouel.liseur.ui.windowWidth
  * [readingCss] is what this book can honour. A fixed-layout book greys
  * the line spacing, the margins and the columns along with the fine
  * typography rows, under the one line at the top. The footer, the
- * page-turn animation and "just this book" are Liseur's own and know
+ * page turn and "just this book" are Liseur's own and know
  * nothing about layout, so they stay live. See
  * `docs/adr/0020-fixed-layout-reading-settings.md`.
  *
@@ -89,7 +90,7 @@ fun AdvancedSheet(
     onPageMarginsChanged: (Double?) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
     onFooterModeChanged: (FooterMode) -> Unit,
-    onPageTurnAnimationChanged: (Boolean) -> Unit,
+    onPageTurnStyleChanged: (PageTurnStyle) -> Unit,
     onAutoScrollChanged: (Boolean) -> Unit,
     onAutoScrollSpeedChanged: (Float) -> Unit,
     onTypographyIsOwnChanged: (Boolean) -> Unit,
@@ -130,11 +131,11 @@ fun AdvancedSheet(
                 onSelected = onFooterModeChanged,
             )
             // Nothing lifts off the screen when the text is scrolled, so
-            // the animation has no page to describe.
+            // there is no page whose motion this could describe.
             if (!scrolling) {
-                ReadingPageTurnAnimationToggle(
-                    enabled = prefs.pageTurnAnimation,
-                    onChanged = onPageTurnAnimationChanged,
+                ReadingPageTurnStyleControl(
+                    selected = prefs.pageTurnStyle,
+                    onSelected = onPageTurnStyleChanged,
                 )
             }
             if (scrolling) {

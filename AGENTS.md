@@ -338,11 +338,28 @@ emulator.
   (`reader/chrome/AdvancedSheet.kt`), and directly on Settings -> Reading
   appearance if it is about how the page *looks*, or on Settings ->
   Reading & navigation (`ui/settings/ReadingNavigationScreen.kt`) if it
-  is about how the book is turned, held or looked up. Neither settings
-  screen has an Advanced section to collapse a row behind. The
-  typography sheet is the short list a reader changes often (theme,
-  size, brightness, font, and how the book is read), and it only grows
-  for a setting that genuinely belongs there. Make that case in the pull
-  request; the default is Advanced. It grew to eleven controls once, one
-  reasonable row at a time. See `docs/adr/0001-advanced-reading-menu.md`.
+  is about how the book is turned, held or looked up. Reading &
+  navigation has its own Advanced section at the bottom
+  (`SettingsExpandableGroup`), closed on arrival, for the rows a reader
+  sets once if ever — the page turn, the page-turn sides, pinch to
+  resize. Reading appearance has none. The typography sheet is the short
+  list a reader changes often (theme, size, brightness, font, and how
+  the book is read), and it only grows for a setting that genuinely
+  belongs there. Make that case in the pull request; the default is
+  Advanced. It grew to eleven controls once, one reasonable row at a
+  time. See `docs/adr/0001-advanced-reading-menu.md`.
+- How a page turns is one setting with three answers
+  (`PageTurnStyle`: lift, slide, none), not a boolean. `PageTurner`
+  already performed all three motions; it is told which by `style()`,
+  and electronic paper overrules the reader's choice with `NONE` in that
+  one lambda rather than anywhere else. The endpaper is drawn over the
+  book rather than navigated to, so only `LIFT` animates its arrival.
+  A sideways drag answers to the same setting: `PageTurnDrag` claims it
+  under `LIFT` and `NONE` and routes it through the same
+  `PageTurner.turn` a tap uses, leaving `SLIDE` to Readium, which is
+  what that motion already is. `R2WebView` moves the columns in its own
+  native gesture code, which a JavaScript `preventDefault()` cannot
+  stop, so the drag is claimed and consumed in `ReaderScreen`'s
+  `PointerEventPass.Initial` loop instead — the same route the image
+  viewer uses.
 - Bundled fonts must be under open licenses (OFL): Literata et al.

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.db
 
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.data.settings.ReaderFontWeight
 import com.chmouel.liseur.data.settings.ReadingFont
@@ -27,7 +28,7 @@ class BookTypographyTest {
         lineHeight = 1.4,
         pageMargins = 1.0,
         brightness = 0.3f,
-        pageTurnAnimation = false,
+        pageTurnStyle = PageTurnStyle.NONE,
         footerMode = FooterMode.SMART,
     )
 
@@ -58,7 +59,7 @@ class BookTypographyTest {
         val effective = shared.withTypographyOf(own)
         assertEquals(ReaderThemeChoice.DARK, effective.themeChoice)
         assertEquals(0.3f, effective.brightness!!, 0f)
-        assertEquals(false, effective.pageTurnAnimation)
+        assertEquals(PageTurnStyle.NONE, effective.pageTurnStyle)
         assertEquals(FooterMode.SMART, effective.footerMode)
     }
 

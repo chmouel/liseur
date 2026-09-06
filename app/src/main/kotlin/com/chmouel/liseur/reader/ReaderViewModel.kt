@@ -50,6 +50,7 @@ import com.chmouel.liseur.sync.SyncScope
 import com.chmouel.liseur.sync.PositionUpdate
 import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.data.settings.ColumnMode
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderFontWeight
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTextAlign
@@ -1624,8 +1625,8 @@ class ReaderViewModel(
 
     fun setBrightness(value: Float?) = viewModelScope.launch { prefsRepo.setBrightness(value) }
 
-    fun setPageTurnAnimation(enabled: Boolean) =
-        viewModelScope.launch { prefsRepo.setPageTurnAnimation(enabled) }
+    fun setPageTurnStyle(style: PageTurnStyle) =
+        viewModelScope.launch { prefsRepo.setPageTurnStyle(style) }
 
     /**
      * Answers the screen question for this book alone.

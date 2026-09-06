@@ -53,7 +53,6 @@ import com.chmouel.liseur.ui.reading.previewFontWeight
 import com.chmouel.liseur.ui.reading.previewLetterSpacing
 import com.chmouel.liseur.ui.reading.previewParagraphGapSp
 import com.chmouel.liseur.ui.reading.previewTextAlign
-import com.chmouel.liseur.ui.reading.ReadingPageTurnAnimationToggle
 import com.chmouel.liseur.ui.reading.ReadingSectionLabel
 import com.chmouel.liseur.ui.reading.ReadingThemeRow
 import com.chmouel.liseur.ui.reading.composeFamily
@@ -84,7 +83,6 @@ fun ReadingAppearanceScreen(
     onBrightness: (Float?) -> Unit,
     onColumnMode: (ColumnMode) -> Unit,
     onFooterMode: (FooterMode) -> Unit,
-    onPageTurnAnimation: (Boolean) -> Unit,
     fineTypography: FineTypographyActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -171,10 +169,6 @@ fun ReadingAppearanceScreen(
                 ReadingFooterModeDropdown(
                     selected = prefs.footerMode,
                     onSelected = onFooterMode,
-                )
-                ReadingPageTurnAnimationToggle(
-                    enabled = prefs.pageTurnAnimation,
-                    onChanged = onPageTurnAnimation,
                 )
                 Text(
                     text = stringResource(R.string.settings_reading_appearance_detail),

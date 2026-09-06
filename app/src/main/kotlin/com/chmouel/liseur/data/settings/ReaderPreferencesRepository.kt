@@ -34,7 +34,14 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
         val LINE_HEIGHT = doublePreferencesKey("line_height")
         val PAGE_MARGINS = doublePreferencesKey("page_margins")
         val BRIGHTNESS = floatPreferencesKey("brightness")
-        val PAGE_TURN_ANIMATION = booleanPreferencesKey("page_turn_animation")
+        val PAGE_TURN_STYLE = stringPreferencesKey("page_turn_style")
+
+        /**
+         * What the page turn was before it had three answers, kept only
+         * to be read: off meant the instant jump, and a reader who chose
+         * that should not find the page lifting again after an update.
+         */
+        val LEGACY_PAGE_TURN_ANIMATION = booleanPreferencesKey("page_turn_animation")
         val FOOTER_MODE = stringPreferencesKey("footer_mode")
         val COLUMN_MODE = stringPreferencesKey("column_mode")
         val AUTO_SCROLL_SPEED = floatPreferencesKey("auto_scroll_speed")
@@ -59,7 +66,10 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
             lineHeight = p[Keys.LINE_HEIGHT],
             pageMargins = p[Keys.PAGE_MARGINS],
             brightness = p[Keys.BRIGHTNESS],
-            pageTurnAnimation = p[Keys.PAGE_TURN_ANIMATION] ?: true,
+            pageTurnStyle = pageTurnStyleFrom(
+                stored = p[Keys.PAGE_TURN_STYLE],
+                legacyAnimation = p[Keys.LEGACY_PAGE_TURN_ANIMATION],
+            ),
             footerMode = FooterMode.fromId(p[Keys.FOOTER_MODE]),
             columnMode = ColumnMode.fromId(p[Keys.COLUMN_MODE]),
             autoScrollSpeed = p[Keys.AUTO_SCROLL_SPEED] ?: AutoScrollPreference.DEFAULT_STEP,
@@ -98,8 +108,8 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
         }
     }
 
-    suspend fun setPageTurnAnimation(enabled: Boolean) {
-        store.edit { it[Keys.PAGE_TURN_ANIMATION] = enabled }
+    suspend fun setPageTurnStyle(style: PageTurnStyle) {
+        store.edit { it[Keys.PAGE_TURN_STYLE] = style.id }
     }
 
     suspend fun setFooterMode(mode: FooterMode) {
@@ -152,4 +162,21 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
             if (value == null) it.remove(key) else it[key] = value
         }
     }
+}
+
+/**
+ * The stored page turn, reading a store written before it had three
+ * answers.
+ *
+ * [stored] wins whenever it is there, including when it names something
+ * this version does not know — [PageTurnStyle.fromId] answers that with
+ * the default, and falling through to the old boolean instead would let
+ * a setting from a newer version be quietly rewritten by a much older
+ * one. [legacyAnimation] only ever said yes or no, and no meant the
+ * instant jump.
+ */
+internal fun pageTurnStyleFrom(stored: String?, legacyAnimation: Boolean?): PageTurnStyle = when {
+    stored != null -> PageTurnStyle.fromId(stored)
+    legacyAnimation == false -> PageTurnStyle.NONE
+    else -> PageTurnStyle.Default
 }

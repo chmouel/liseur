@@ -66,6 +66,31 @@ class ReaderPreferencesRepositoryTest {
     }
 
     @Test
+    fun `the page turn is written under its own key`() = runTest {
+        val data = store()
+        val repo = ReaderPreferencesRepository(data)
+        repo.setPageTurnStyle(PageTurnStyle.SLIDE)
+
+        assertEquals("slide", data.data.first()[stringPreferencesKey("page_turn_style")])
+        assertEquals(PageTurnStyle.SLIDE, repo.prefs.first().pageTurnStyle)
+    }
+
+    @Test
+    fun `a store from before the page turn had three answers keeps its own`() = runTest {
+        // Written by a build that only knew the boolean. Off meant the
+        // instant jump, and a reader who chose that should not find the
+        // page lifting again after an update.
+        val data = store()
+        data.edit { it[booleanPreferencesKey("page_turn_animation")] = false }
+
+        val repo = ReaderPreferencesRepository(data)
+        assertEquals(PageTurnStyle.NONE, repo.prefs.first().pageTurnStyle)
+
+        repo.setPageTurnStyle(PageTurnStyle.LIFT)
+        assertEquals(PageTurnStyle.LIFT, repo.prefs.first().pageTurnStyle)
+    }
+
+    @Test
     fun `no two settings share a key`() = runTest {
         // Six new keys of two types, written one at a time and read back
         // raw: a swapped pair passes every test that goes through the

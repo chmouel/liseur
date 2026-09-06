@@ -43,12 +43,14 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.WiktionaryEditions
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
 import com.chmouel.liseur.ui.windowWidth
 
 /**
@@ -66,10 +68,12 @@ import com.chmouel.liseur.ui.windowWidth
 @Composable
 fun ReadingNavigationScreen(
     settings: AppSettings,
+    pageTurnStyle: PageTurnStyle,
     vendorName: String?,
     onVolumeKeys: (Boolean) -> Unit,
     onTapZones: (TapZones) -> Unit,
     onPinchToResize: (Boolean) -> Unit,
+    onPageTurnStyle: (PageTurnStyle) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onScrollMode: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
@@ -119,36 +123,6 @@ fun ReadingNavigationScreen(
                         subtitle = stringResource(R.string.settings_volume_keys_detail),
                         checked = settings.volumeKeysTurnPages,
                         onCheckedChange = onVolumeKeys,
-                    )
-                    RowDivider()
-                    ChipRow(
-                        title = stringResource(R.string.settings_tap_zones),
-                        subtitle = stringResource(R.string.settings_tap_zones_detail),
-                        options = TapZones.entries,
-                        selected = settings.tapZones,
-                        label = { stringResource(it.label) },
-                        onSelected = onTapZones,
-                    )
-                    RowDivider()
-                    // The switch stays visible rather than disappearing
-                    // on e-paper: a row that is simply gone reads as a
-                    // setting the app never had, and this one is off for
-                    // a reason worth giving. The way back is the E-ink
-                    // row in the group below, which is on the same
-                    // screen.
-                    val pinchOffForEInk = LocalEInk.current
-                    SwitchRow(
-                        title = stringResource(R.string.settings_pinch_to_resize),
-                        subtitle = stringResource(
-                            if (pinchOffForEInk) {
-                                R.string.settings_pinch_to_resize_eink
-                            } else {
-                                R.string.settings_pinch_to_resize_detail
-                            },
-                        ),
-                        checked = settings.pinchToResize && !pinchOffForEInk,
-                        onCheckedChange = onPinchToResize,
-                        enabled = !pinchOffForEInk,
                     )
                     RowDivider()
                     SwitchRow(
@@ -234,8 +208,64 @@ fun ReadingNavigationScreen(
                         }
                     }
                 }
+
+                var advancedOpen by remember { mutableStateOf(false) }
+                SettingsExpandableGroup(
+                    title = stringResource(R.string.settings_advanced),
+                    expanded = advancedOpen,
+                    onExpandedChange = { advancedOpen = it },
+                ) {
+                    PageTurnStyleRow(selected = pageTurnStyle, onSelected = onPageTurnStyle)
+                    RowDivider()
+                    ChipRow(
+                        title = stringResource(R.string.settings_tap_zones),
+                        subtitle = stringResource(R.string.settings_tap_zones_detail),
+                        options = TapZones.entries,
+                        selected = settings.tapZones,
+                        label = { stringResource(it.label) },
+                        onSelected = onTapZones,
+                    )
+                    RowDivider()
+                    // The switch stays visible rather than disappearing
+                    // on e-paper: a row that is simply gone reads as a
+                    // setting the app never had, and this one is off for
+                    // a reason worth giving. The way back is the E-ink
+                    // row in the Screen group above, which is on the
+                    // same screen.
+                    val pinchOffForEInk = LocalEInk.current
+                    SwitchRow(
+                        title = stringResource(R.string.settings_pinch_to_resize),
+                        subtitle = stringResource(
+                            if (pinchOffForEInk) {
+                                R.string.settings_pinch_to_resize_eink
+                            } else {
+                                R.string.settings_pinch_to_resize_detail
+                            },
+                        ),
+                        checked = settings.pinchToResize && !pinchOffForEInk,
+                        onCheckedChange = onPinchToResize,
+                        enabled = !pinchOffForEInk,
+                    )
+                }
             }
         }
+    }
+}
+
+/**
+ * How a tapped page gets out of the way, on the settings screen.
+ *
+ * The same control the reader's Advanced sheet shows, wrapped so it sits
+ * on the axis the rows around it use: the title where a headline would
+ * be, the choice where supporting text would go, as [ChipRow] does.
+ */
+@Composable
+private fun PageTurnStyleRow(
+    selected: PageTurnStyle,
+    onSelected: (PageTurnStyle) -> Unit,
+) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        ReadingPageTurnStyleControl(selected = selected, onSelected = onSelected)
     }
 }
 
