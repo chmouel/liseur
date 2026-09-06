@@ -151,8 +151,14 @@ class LiseurSyncSnapshots(
                 val payload = if (transmission != null) {
                     transmission.payload
                 } else {
-                    val alias = aliasByUrl[session.bookUrl]
-                        ?: return@optional refuse("a sitting of unknown standing is of a book with no name here")
+                    // A book with no usable name on this peer could
+                    // never have been sent: the upload query joins the
+                    // very same aliases, so it has never once selected
+                    // this sitting. Refusing the whole period over it
+                    // would strand every reader with a sideloaded book
+                    // the server could not name confidently, which is
+                    // the failure this change exists to end.
+                    val alias = aliasByUrl[session.bookUrl] ?: continue
                     SessionUploads.toJson(session, key, alias.workId, alias.editionSha)?.toString()
                         ?: return@optional refuse("a sitting of unknown standing cannot be described again")
                 }
