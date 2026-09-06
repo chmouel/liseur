@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectableGroup
@@ -32,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 
@@ -111,6 +113,67 @@ internal fun SettingsExpandableGroup(
     onExpandedChange: (Boolean) -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    ExpandableHeader(
+        title = title,
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+        topPadding = 24.dp,
+    )
+    AnimatedVisibility(visible = expanded) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(content = content)
+        }
+    }
+}
+
+/**
+ * The same section, for a screen built out of controls rather than rows.
+ *
+ * Reading appearance is sliders, swatches and dropdowns laid straight
+ * down a spaced column, not [ListItem]s stacked in a card, so
+ * [SettingsExpandableGroup]'s rounded card would box a handful of
+ * controls that are not rows and give them an edge nothing above them
+ * has. The header is the one from there, unchanged — the reader is
+ * opening the same kind of thing either way — and only what it opens
+ * differs.
+ *
+ * The top padding is smaller because the column this sits in already
+ * spaces its children apart, where the card variant's does not.
+ */
+@Composable
+internal fun SettingsExpandableSection(
+    title: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column {
+        ExpandableHeader(
+            title = title,
+            expanded = expanded,
+            onExpandedChange = onExpandedChange,
+            topPadding = 4.dp,
+        )
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                content = content,
+            )
+        }
+    }
+}
+
+/**
+ * The title and the chevron that open either kind of section, so the two
+ * cannot come to look or announce themselves differently.
+ */
+@Composable
+private fun ExpandableHeader(
+    title: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    topPadding: Dp,
+) {
     val state = stringResource(
         if (expanded) R.string.settings_section_expanded else R.string.settings_section_collapsed,
     )
@@ -123,7 +186,12 @@ internal fun SettingsExpandableGroup(
                 onClick = { onExpandedChange(!expanded) },
             )
             .semantics(mergeDescendants = true) { stateDescription = state }
-            .padding(top = 24.dp, bottom = 8.dp),
+            // A label and a chevron come to about 32dp between them,
+            // and the column's own spacing sits outside what the
+            // header will accept a tap in. The card variant already
+            // clears this from its own padding and is unmoved by it.
+            .heightIn(min = 48.dp)
+            .padding(top = topPadding, bottom = 8.dp),
     ) {
         Text(
             text = title,
@@ -136,11 +204,6 @@ internal fun SettingsExpandableGroup(
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(start = 4.dp).size(20.dp),
         )
-    }
-    AnimatedVisibility(visible = expanded) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(content = content)
-        }
     }
 }
 

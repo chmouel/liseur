@@ -22,6 +22,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,7 +72,9 @@ import com.chmouel.liseur.ui.windowWidth
  *
  * The preview at the top is the point of having this here rather than a
  * row of sentences: with no page behind them, these settings need
- * something to be true of.
+ * something to be true of. It stays above the Advanced section and goes
+ * on answering to what is inside it, so opening that is not a step away
+ * from the only page there is to look at.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,37 +150,47 @@ fun ReadingAppearanceScreen(
                     onImport = fontLibrary.pick,
                     onRemove = fontLibrary.remove,
                 )
-                ReadingLayoutControls(
-                    lineHeight = prefs.lineHeight,
-                    pageMargins = prefs.pageMargins,
-                    columnMode = prefs.columnMode,
-                    // The sheet hides this in a scrolled book, where
-                    // columns don't apply. There is no book here to
-                    // check, so the preference is always offered; the
-                    // reader surface decides whether to honor it.
-                    showColumns = true,
-                    enabled = true,
-                    onLineHeightChanged = onLineHeight,
-                    onPageMarginsChanged = onPageMargins,
-                    onColumnModeChanged = onColumnMode,
-                )
-                // No book is open here, so nothing is disabled and the
-                // wording names the writing systems a setting applies
-                // to rather than claiming anything about one book.
-                ReadingFineTypographyControls(
-                    prefs = prefs,
-                    css = ReadingCss.Unknown,
-                    actions = fineTypography,
-                )
-                ReadingFooterModeDropdown(
-                    selected = prefs.footerMode,
-                    onSelected = onFooterMode,
-                )
                 Text(
                     text = stringResource(R.string.settings_reading_appearance_detail),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Last, and closed, the way the "Aa" sheet's Advanced row
+                // is: the same settings should not be everyday on one
+                // surface and buried on the other.
+                var advancedOpen by remember { mutableStateOf(false) }
+                SettingsExpandableSection(
+                    title = stringResource(R.string.settings_advanced),
+                    expanded = advancedOpen,
+                    onExpandedChange = { advancedOpen = it },
+                ) {
+                    ReadingLayoutControls(
+                        lineHeight = prefs.lineHeight,
+                        pageMargins = prefs.pageMargins,
+                        columnMode = prefs.columnMode,
+                        // The sheet hides this in a scrolled book, where
+                        // columns don't apply. There is no book here to
+                        // check, so the preference is always offered; the
+                        // reader surface decides whether to honor it.
+                        showColumns = true,
+                        enabled = true,
+                        onLineHeightChanged = onLineHeight,
+                        onPageMarginsChanged = onPageMargins,
+                        onColumnModeChanged = onColumnMode,
+                    )
+                    // No book is open here, so nothing is disabled and the
+                    // wording names the writing systems a setting applies
+                    // to rather than claiming anything about one book.
+                    ReadingFineTypographyControls(
+                        prefs = prefs,
+                        css = ReadingCss.Unknown,
+                        actions = fineTypography,
+                    )
+                    ReadingFooterModeDropdown(
+                        selected = prefs.footerMode,
+                        onSelected = onFooterMode,
+                    )
+                }
             }
         }
     }
