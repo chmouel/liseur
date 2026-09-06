@@ -448,6 +448,8 @@ private fun SessionSpan.countedBy(cutoff: Long): Long {
 /** Which way a period went against the one before it. */
 enum class ComparisonDirection { MORE, LESS, SAME }
 
+enum class ComparisonScope { THIS_DEVICE, ALL_DEVICES }
+
 /**
  * How this period's reading compares with the last one's.
  *
@@ -460,6 +462,7 @@ data class ReadingComparison(
     val period: ComparisonPeriod,
     val direction: ComparisonDirection,
     val percent: Int?,
+    val scope: ComparisonScope = ComparisonScope.THIS_DEVICE,
 )
 
 /**

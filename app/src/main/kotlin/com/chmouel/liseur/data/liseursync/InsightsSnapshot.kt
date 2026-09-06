@@ -3,7 +3,10 @@ package com.chmouel.liseur.data.liseursync
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.SessionTransmission
 import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.domain.ComparisonPeriod
+import com.chmouel.liseur.domain.DateSpan
 import java.time.LocalDate
+import java.time.LocalTime
 
 /** Acknowledgements are bookkeeping, not a change to the captured reading. */
 internal fun statsSessions(sessions: List<ReadingSession>): List<ReadingSession> =
@@ -36,4 +39,16 @@ data class SnapshotTotals(
     val overlapBooks: Map<String, Pair<Double, Int>>,
     val overlapDays: Map<LocalDate, Double>,
     val combinedStreak: Int,
+    val comparison: SnapshotComparison? = null,
+)
+
+data class SnapshotComparison(
+    val period: ComparisonPeriod,
+    val current: DateSpan,
+    val previous: DateSpan,
+    val through: LocalTime,
+    val currentMinutes: Double,
+    val previousMinutes: Double,
+    val overlapCurrentMinutes: Double,
+    val overlapPreviousMinutes: Double,
 )

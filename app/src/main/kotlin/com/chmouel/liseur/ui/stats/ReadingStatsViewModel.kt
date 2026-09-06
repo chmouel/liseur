@@ -23,6 +23,7 @@ import com.chmouel.liseur.data.liseursync.WorkTotals
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonSpans
+import com.chmouel.liseur.domain.ComparisonScope
 import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
@@ -37,6 +38,7 @@ import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.domain.readingStats
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.readingTotals
+import com.chmouel.liseur.domain.unionMinutes
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -122,7 +124,8 @@ sealed interface BookReadingStatsUiState {
  * as a running total anywhere. A supported liseur-sync snapshot supplies
  * one coherent set of aggregates and actual overlap with captured local
  * sessions. All dashboard figures use that generation or fall back
- * together. Comparisons remain local in the phone timezone.
+ * together. A supported snapshot also supplies the comparison in the
+ * account timezone; otherwise the comparison remains local.
  *
  * Both sources are asked about the same [StatsRange], which is the whole
  * point of the range living in one place: while the server was pinned to
@@ -150,9 +153,15 @@ class ReadingStatsViewModel(
         try {
             coroutineScope {
                 launch {
+                    var elapsed = 0L
                     while (isActive) {
-                        delay(60_000)
+                        delay(CLOCK_SAMPLE_MS)
                         resampleClock()
+                        elapsed += CLOCK_SAMPLE_MS
+                        if (elapsed >= COMPARISON_REFRESH_MS) {
+                            elapsed = 0L
+                            refreshServerInsights()
+                        }
                     }
                 }
                 combine(liveInvalidations, liveAccounts.distinctUntilChanged()) { tick, account ->
@@ -338,12 +347,20 @@ class ReadingStatsViewModel(
             val at = now(context.capabilities.timezone)
             val result = source.read(
                 context, sessionDao.allOnce(), window.range, at.toLocalDate(), window.weekStart,
+                at.toLocalTime(),
             ) ?: return@launch
             resampleClock()
             if (source.isCurrent(result) && token == generation &&
                 _window.value.asked() == window.asked() && now(result.zone).toLocalDate() == result.today
             ) {
-                _snapshot.value = Answered(window, result)
+                val publish = if (result.totals.comparison != null &&
+                    !source.isComparisonCurrent(result)
+                ) {
+                    result.copy(totals = result.totals.copy(comparison = null))
+                } else {
+                    result
+                }
+                _snapshot.value = Answered(window, publish)
             }
         }
     }
@@ -519,8 +536,32 @@ class ReadingStatsViewModel(
             )
             uniteSnapshot(inAccountZone, local.books, local.firstReadAtByUrl, it.totals)
         }
-        val comparison = local.spans?.let {
+        val localComparison = local.spans?.let {
             compareReading(it.period, local.currentMs, local.previousMs)
+        }
+        val comparison = if (united != null) {
+            snapshot?.totals?.comparison?.let { remote ->
+                val localCurrent = readingTotals(
+                    local.sessionSpans, snapshot.zone, remote.current, remote.through,
+                ).totalMs
+                val localPrevious = readingTotals(
+                    local.sessionSpans, snapshot.zone, remote.previous, remote.through,
+                ).totalMs
+                val current = unionMinutes(
+                    remote.currentMinutes, localCurrent, remote.overlapCurrentMinutes,
+                )
+                val previous = unionMinutes(
+                    remote.previousMinutes, localPrevious, remote.overlapPreviousMinutes,
+                )
+                if (current != null && previous != null) {
+                    compareReading(remote.period, current, previous)
+                        .copy(scope = ComparisonScope.ALL_DEVICES)
+                } else {
+                    null
+                }
+            } ?: localComparison
+        } else {
+            localComparison
         }
         ReadingStatsUiState.Ready(
             stats = united?.stats ?: local.stats,
@@ -564,6 +605,8 @@ class ReadingStatsViewModel(
     companion object {
         /** Long enough to survive a rotation without recomputing. */
         private const val STOP_TIMEOUT_MS = 5_000L
+        private const val CLOCK_SAMPLE_MS = 60_000L
+        private const val COMPARISON_REFRESH_MS = 5 * 60_000L
 
         /**
          * Folds the server's aggregates into the local ones, never

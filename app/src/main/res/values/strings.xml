@@ -732,6 +732,10 @@
     <string name="reading_stats_compare_less">%1$d%% less than %2$s, on this device</string>
     <string name="reading_stats_compare_more_than">More than %1$s, on this device</string>
     <string name="reading_stats_compare_same">Same as %1$s, on this device</string>
+    <string name="reading_stats_compare_more_all">%1$d%% more than %2$s</string>
+    <string name="reading_stats_compare_less_all">%1$d%% less than %2$s</string>
+    <string name="reading_stats_compare_more_than_all">More than %1$s</string>
+    <string name="reading_stats_compare_same_all">Same as %1$s</string>
     <string name="reading_stats_period_week">last week</string>
     <string name="reading_stats_period_month">last month</string>
     <string name="reading_stats_period_year">last year</string>
