@@ -184,6 +184,31 @@ emulator.
   exact spot. All three go
   through `domain/ReadingStateMerge.kt`; write conflict rules there, once,
   not per provider.
+- A position carries two times and they are not interchangeable.
+  `updated_at` is when *this* device wrote the row, and it goes out as
+  an op's `client_ts` and as kosync's `timestamp`, so it is part of a
+  derived op id — do not repurpose it. `read_at` is when the reading
+  happened, on whatever device did it: a pull takes it from the remote
+  time (clamped to now, since it is a peer's clock), a page turn here
+  takes the local one. The Recent shelf and Continue Reading order by
+  `COALESCE(read_at, updated_at)`. Importing old state must reproduce
+  the other device's order, never invent one from arrival times. A row
+  with neither a progression nor a locator records no reading and must
+  report none. See `docs/adr/0026-imported-reading-keeps-its-own-time.md`.
+- Naming a book is rationed by what naming costs, not by a single
+  number: resolving from file hashes opens the file, resolving a
+  catalog book is one request. A run that leaves books unnamed or
+  unseeded returns `SyncOutcome.Incomplete`, and
+  `PositionSyncCoordinator` carries it on — there, not at any call
+  site, since a fresh connection is synced from app start, a refresh,
+  connecting an account and Settings alike. Only a run that made
+  *durable* progress may ask for another, or the chain never ends:
+  re-asking a question this device already has an answer to is not
+  progress. A refusal worth retrying keeps the run a failure, because
+  its retry covers the shortfall too; one that is not must not strand
+  the rest of the library. Several books to seed are seeded from one
+  `GET /v1/heads`, which is a seed and not a pull: it must not move the
+  cursor.
 - One server is connected at a time. Anything provider-shaped belongs
   behind a `data/remote/` contract, not in a `when (kind)` at the call
   site.

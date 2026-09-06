@@ -124,6 +124,57 @@ class CompositePositionSyncTest {
     }
 
     @Test
+    fun `a peer with more to fetch is heard over one that is finished`() = runTest {
+        // A phone still naming its library, next to a server with
+        // nothing to do. Calling this success leaves the shelf half
+        // built and nothing scheduled to finish it.
+        val settling = FakePeer("settling", outcome = SyncOutcome.Incomplete)
+        val idle = FakePeer("idle", outcome = SyncOutcome.NotApplicable)
+
+        assertEquals(SyncOutcome.Incomplete, composite(settling, idle).syncAll())
+        assertEquals(SyncOutcome.Incomplete, composite(idle, settling).syncAll())
+    }
+
+    @Test
+    fun `a peer with more to fetch is heard over one that is done`() = runTest {
+        val settling = FakePeer("settling", outcome = SyncOutcome.Incomplete)
+        val done = FakePeer("done", outcome = SyncOutcome.Success)
+
+        assertEquals(SyncOutcome.Incomplete, composite(done, settling).syncAll())
+    }
+
+    @Test
+    fun `a failure beside a peer with more to fetch is still a failure`() = runTest {
+        // The retry that follows covers the shortfall too, and a
+        // failure has to keep being one or nothing is retried at all.
+        val settling = FakePeer("settling", outcome = SyncOutcome.Incomplete)
+        val bad = FakePeer("bad", outcome = SyncOutcome.Failure(SyncFailure.Offline))
+
+        assertEquals(SyncOutcome.Partial(SyncFailure.Offline), composite(settling, bad).syncAll())
+    }
+
+    @Test
+    fun `a peer locked out for good does not strand one still naming its library`() = runTest {
+        // Nothing is retried for a reason that will be refused just as
+        // firmly in an hour, so reporting this as partial would only
+        // stop the phone beside it from finishing — for as long as the
+        // other account stayed locked out.
+        val settling = FakePeer("settling", outcome = SyncOutcome.Incomplete)
+        val refused = FakePeer("refused", outcome = SyncOutcome.Failure(SyncFailure.Unauthorised))
+
+        assertEquals(SyncOutcome.Incomplete, composite(settling, refused).syncAll())
+        assertEquals(SyncOutcome.Incomplete, composite(refused, settling).syncAll())
+    }
+
+    @Test
+    fun `a failure worth retrying still wins over a peer with more to fetch`() = runTest {
+        val settling = FakePeer("settling", outcome = SyncOutcome.Incomplete)
+        val flaky = FakePeer("flaky", outcome = SyncOutcome.Partial(SyncFailure.Timeout))
+
+        assertEquals(SyncOutcome.Partial(SyncFailure.Timeout), composite(settling, flaky).syncAll())
+    }
+
+    @Test
     fun `no peers at all is not applicable rather than success`() = runTest {
         assertEquals(SyncOutcome.NotApplicable, CompositePositionSync(emptyList()).syncAll())
     }

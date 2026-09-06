@@ -36,7 +36,7 @@ class PositionSyncWorker(
         // keeps the common case off the network for longer than it needs.
         val scope = bookUrl?.let { SyncScope.Book(it) } ?: SyncScope.Full
 
-        return when (val outcome = coordinator.request(scope)) {
+        return when (val outcome = coordinator.request(scope, carryingOn = isBootstrap())) {
             // Retry schedules a backed-off run, so it is only for things
             // that might work later. A phone with no calibre-web account
             // has nothing to sync now and will have nothing in an hour,
@@ -51,22 +51,84 @@ class PositionSyncWorker(
             is SyncOutcome.Partial ->
                 if (outcome.reason.worthRetrying) Result.retry() else Result.failure()
 
-            SyncOutcome.Success, SyncOutcome.NotApplicable -> Result.success()
+            // The follow-up is not scheduled here. Every way of asking
+            // for a sync goes through the coordinator, and only one of
+            // them is this worker, so the coordinator is where carrying
+            // on belongs — a connection made from Settings has just as
+            // much right to finish itself as one made from a refresh.
+            //
+            // Not a retry either way: a retry is backed off and shares
+            // the failure's escalating delay, and the whole point here
+            // is to carry on promptly.
+            SyncOutcome.Incomplete,
+            SyncOutcome.Success,
+            SyncOutcome.NotApplicable,
+            -> Result.success()
         }
     }
 
+    /**
+     * Whether this run is the follow-up a previous one asked for.
+     *
+     * Only those count against the cap on consecutive carry-ons, so a
+     * reader who refreshes after a long chain has stopped is not held to
+     * a budget somebody else's bootstrap spent.
+     */
+    private fun isBootstrap(): Boolean = inputData.getBoolean(KEY_CARRYING_ON, false)
+
     companion object {
         const val KEY_BOOK_URL = "book_url"
+        private const val KEY_CARRYING_ON = "carrying_on"
         private const val FULL_SYNC = "position-sync"
         private const val PERIODIC_SYNC = "position-sync-periodic"
+
+        /**
+         * The follow-up run for a connection still finding its feet.
+         *
+         * Its own unique name, so that chaining a bootstrap neither
+         * disturbs a book's own queued sync nor inherits the exponential
+         * backoff that belongs to failures.
+         */
+        private const val BOOTSTRAP_SYNC = "position-sync-bootstrap"
+
+        /**
+         * How long to wait before carrying on with a connection that has
+         * more books to name.
+         *
+         * Long enough not to read as a tight loop against the server,
+         * short enough that a reader who has just connected an account
+         * watches the shelf fill rather than going away and coming back.
+         */
+        private const val BOOTSTRAP_DELAY_SECONDS = 15L
 
         private val onNetwork = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
+        /**
+         * Carries on with a connection that has more books to name.
+         *
+         * Appended rather than kept, because the run asking for this is
+         * very often the previous follow-up: WorkManager would see its
+         * own name still running and drop the request, and a library
+         * needing three passes would stop after two. Appending queues
+         * the next pass behind the one asking for it, and the chain ends
+         * when a run stops reporting a shortfall.
+         */
+        fun continueBootstrap(context: Context) {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                BOOTSTRAP_SYNC,
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                OneTimeWorkRequestBuilder<PositionSyncWorker>()
+                    .setConstraints(onNetwork)
+                    .setInputData(Data.Builder().putBoolean(KEY_CARRYING_ON, true).build())
+                    .setInitialDelay(BOOTSTRAP_DELAY_SECONDS, TimeUnit.SECONDS)
+                    .build(),
+            )
+        }
+
         /** Sends one book's position, for the moment it is closed. */
-        fun pushBook(context: Context, bookUrl: String) {
-            enqueueBook(context, bookUrl, ExistingWorkPolicy.APPEND_OR_REPLACE, expedited = true)
+        fun pushBook(context: Context, bookUrl: String) {            enqueueBook(context, bookUrl, ExistingWorkPolicy.APPEND_OR_REPLACE, expedited = true)
         }
 
         /** Retries a failed foreground send without resetting existing backoff. */

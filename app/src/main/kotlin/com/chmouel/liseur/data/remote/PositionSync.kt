@@ -27,6 +27,21 @@ sealed interface SyncOutcome {
     data object Success : SyncOutcome
 
     /**
+     * Everything the run asked for worked, and there is more to fetch.
+     *
+     * A device connecting to an account for the first time has to give
+     * every book in the library a name on the server before it can be
+     * synced, and a run will only do so many at a time. Saying so is
+     * what lets another run be scheduled straight away, so the shelf
+     * settles by itself instead of arriving in batches for as long as
+     * the reader keeps pulling to refresh.
+     *
+     * Nothing went wrong, so this is not a failure and must not be
+     * reported as one.
+     */
+    data object Incomplete : SyncOutcome
+
+    /**
      * Some books settled and some did not. The ones that did not are
      * still marked as having reading the server has not seen, so the next
      * run picks them up. Reported apart from success so a retry is
