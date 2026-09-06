@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.recordLocal
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.PositionSyncStatus

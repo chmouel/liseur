@@ -245,7 +245,7 @@ class SeriesShelfTest {
     }
 }
 
-class NextInSeriesTest {
+class SeriesContinuationTest {
 
     private fun book(
         title: String,
@@ -273,7 +273,7 @@ class NextInSeriesTest {
         val one = book("One", index = 1.0, finishedAt = 1)
         val library = listOf(one, book("Three", index = 3.0), book("Two", index = 2.0))
 
-        assertEquals("Two", nextInSeries(one, library)?.title)
+        assertEquals("Two", seriesContinuation(one, library).next?.title)
     }
 
     @Test
@@ -289,19 +289,19 @@ class NextInSeriesTest {
     @Test
     fun `a book with no series has nothing next`() {
         val alone = book("Dune", series = null, finishedAt = 1)
-        assertNull(nextInSeries(alone, listOf(alone, book("Two", index = 2.0))))
+        assertNull(seriesContinuation(alone, listOf(alone, book("Two", index = 2.0))).next)
     }
 
     @Test
     fun `a book with no number has nothing next`() {
         val vague = book("Companion", finishedAt = 1)
-        assertNull(nextInSeries(vague, listOf(vague, book("Two", index = 2.0))))
+        assertNull(seriesContinuation(vague, listOf(vague, book("Two", index = 2.0))).next)
     }
 
     @Test
     fun `the last volume has nothing next`() {
         val last = book("Two", index = 2.0, finishedAt = 1)
-        assertNull(nextInSeries(last, listOf(book("One", index = 1.0), last)))
+        assertNull(seriesContinuation(last, listOf(book("One", index = 1.0), last)).next)
     }
 
     @Test
@@ -309,7 +309,7 @@ class NextInSeriesTest {
         val one = book("One", index = 1.0, finishedAt = 1)
         val library = listOf(one, book("Two", index = 2.0, finishedAt = 2), book("Three", index = 3.0))
 
-        assertEquals("Three", nextInSeries(one, library)?.title)
+        assertEquals("Three", seriesContinuation(one, library).next?.title)
     }
 
     @Test
@@ -327,7 +327,7 @@ class NextInSeriesTest {
             seriesName = "Wheel of Time",
             seriesIndex = 2.0,
         )
-        assertEquals("Two", nextInSeries(one, listOf(one, two))?.title)
+        assertEquals("Two", seriesContinuation(one, listOf(one, two)).next?.title)
     }
 
     @Test
@@ -347,15 +347,12 @@ class NextInSeriesTest {
     }
 
     @Test
-    fun `an in-progress volume is the next one to continue`() {
+    fun `an unfinished later volume is eligible`() {
         val one = book("One", index = 1.0, finishedAt = 1)
         val two = book("Two", index = 2.0)
         val library = listOf(one, two, book("Three", index = 3.0))
 
-        assertEquals(
-            "Two",
-            nextInSeries(one, library, progressions = mapOf(two.url to 0.3))?.title,
-        )
+        assertEquals("Two", seriesContinuation(one, library).next?.title)
     }
 
     @Test
@@ -363,7 +360,7 @@ class NextInSeriesTest {
         val one = book("One", index = 1.0, finishedAt = 1)
         val library = listOf(one, book("Two", index = 2.0, archivedAt = 9))
 
-        assertNull(nextInSeries(one, library))
+        assertNull(seriesContinuation(one, library).next)
     }
 
     @Test
@@ -371,7 +368,7 @@ class NextInSeriesTest {
         val one = book("One", index = 1.0, finishedAt = 1)
         val library = listOf(one, book("Dune Messiah", series = "Dune", index = 2.0))
 
-        assertNull(nextInSeries(one, library))
+        assertNull(seriesContinuation(one, library).next)
     }
 
     /**
@@ -395,7 +392,7 @@ class NextInSeriesTest {
         val seven = book("Seven", index = 7.0, finishedAt = 1)
         val library = listOf(seven, book("Novella", index = 7.5), book("Eight", index = 8.0))
 
-        assertEquals("Novella", nextInSeries(seven, library)?.title)
+        assertEquals("Novella", seriesContinuation(seven, library).next?.title)
     }
 
     @Test
@@ -403,7 +400,7 @@ class NextInSeriesTest {
         val novella = book("Novella", index = 7.5, finishedAt = 1)
         val library = listOf(book("Seven", index = 7.0), novella, book("Eight", index = 8.0))
 
-        assertEquals("Eight", nextInSeries(novella, library)?.title)
+        assertEquals("Eight", seriesContinuation(novella, library).next?.title)
         assertNull(seriesContinuation(novella, library).missingIndex)
     }
 

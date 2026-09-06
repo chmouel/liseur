@@ -31,8 +31,6 @@ class RemoteRouter(
 ) {
     private suspend fun kind(): ServerKind? = serverDao.get()?.kind
 
-    suspend fun catalog(): CatalogSource? = kind()?.let(catalogs::get)
-
     /**
      * The catalog for a server already in hand.
      *
@@ -42,14 +40,10 @@ class RemoteRouter(
      */
     fun catalogFor(kind: ServerKind): CatalogSource? = catalogs[kind]
 
-    suspend fun files(): FileSource? = kind()?.let(files::get)
-
     /** The downloader for a server already in hand. See [catalogFor]. */
     fun filesFor(kind: ServerKind): FileSource? = files[kind]
 
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
-
-    suspend fun live(): LiveChanges? = kind()?.let(live::get)
 
     fun liveFor(kind: ServerKind): LiveChanges? = live[kind]
 

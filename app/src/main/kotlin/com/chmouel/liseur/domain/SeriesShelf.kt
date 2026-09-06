@@ -188,28 +188,6 @@ data class SeriesContinuation(
 )
 
 /**
- * The book to offer once one is finished: the next volume along that
- * is in the library and has not been read.
- *
- * A volume already begun is still the next volume — continuing a series
- * means picking up where that book was left, not skipping it. Finished
- * and archived volumes are stepped over. A hole in the numbering is
- * reported separately as [SeriesContinuation.missingIndex] rather than
- * blocking the offer: #3 is still the next book in the library when #2
- * is not there.
- *
- * Null for anything uncertain: a book with no series, one with no
- * number, or nothing later on the shelf that can be opened. Whether the
- * file is on the device is not this function's business.
- */
-@Suppress("UNUSED_PARAMETER")
-fun nextInSeries(
-    finished: Book,
-    library: List<Book>,
-    progressions: Map<String, Double> = emptyMap(),
-): Book? = seriesContinuation(finished, library).next
-
-/**
  * The missing volume immediately after [finished], and the first later
  * volume in the library that can still be read.
  *
@@ -310,11 +288,11 @@ fun List<SeriesShelf>.arrangedBy(
 }
 
 /** Best availability/reading rank held by any volume on the shelf. */
-private fun SeriesShelf.recentRank(readAt: Map<String, Long>): Int =
+internal fun SeriesShelf.recentRank(readAt: Map<String, Long>): Int =
     volumes.minOfOrNull { volume -> volume.book.recentRank(readAt[volume.book.url]) } ?: 2
 
 /** Most recent timestamp among the volumes in the shelf's best rank. */
-private fun SeriesShelf.recentAt(readAt: Map<String, Long>): Long {
+internal fun SeriesShelf.recentAt(readAt: Map<String, Long>): Long {
     val rank = recentRank(readAt)
     return volumes.asSequence()
         .filter { volume -> volume.book.recentRank(readAt[volume.book.url]) == rank }

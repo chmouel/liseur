@@ -70,19 +70,12 @@ private fun ShelfEntry.authorName(): String? = when (this) {
  */
 private fun ShelfEntry.recentRank(readAt: Map<String, Long>): Int = when (this) {
     is ShelfEntry.Single -> book.recentRank(readAt[book.url])
-    is ShelfEntry.Pile ->
-        shelf.volumes.minOfOrNull { it.book.recentRank(readAt[it.book.url]) } ?: 2
+    is ShelfEntry.Pile -> shelf.recentRank(readAt)
 }
 
 private fun ShelfEntry.recentAt(readAt: Map<String, Long>): Long = when (this) {
     is ShelfEntry.Single -> book.recentAt(readAt[book.url])
-    is ShelfEntry.Pile -> {
-        val rank = recentRank(readAt)
-        shelf.volumes.asSequence()
-            .filter { it.book.recentRank(readAt[it.book.url]) == rank }
-            .maxOfOrNull { it.book.recentAt(readAt[it.book.url]) }
-            ?: 0L
-    }
+    is ShelfEntry.Pile -> shelf.recentAt(readAt)
 }
 
 /** A pile joined the library when its newest volume did. */
@@ -140,11 +133,7 @@ private fun entryComparator(
             // plain shelf has always had it. Reversing reads the series
             // back to front but never a series' own volumes backwards.
             val bySeries = compareBy<ShelfEntry> { it.seriesSortKey() }
-            val ordered = if (reversed) {
-                compareByDescending<ShelfEntry> { it.seriesSortKey() }
-            } else {
-                bySeries
-            }
+            val ordered = if (reversed) bySeries.reversed() else bySeries
             compareBy<ShelfEntry> { if (it.seriesSortKey().isEmpty()) 1 else 0 }
                 .then(ordered)
                 .thenBy { (it as? ShelfEntry.Single)?.book?.seriesIndex == null }
