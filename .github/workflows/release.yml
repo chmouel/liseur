@@ -131,8 +131,9 @@ jobs:
               printf 'installs over a copy that came from F-Droid, and F-Droid\n'
               printf 'updates over it once the next real release reaches it.\n\n'
               if [[ "$PLAY_REQUESTED" == true ]]; then
-                printf 'It is on Google Play testing tracks (Internal/Testing) and\n'
-                printf 'GitHub prerelease, but not on F-Droid or Google Play production.\n\n'
+                printf 'The workflow will also try to put it on Google Play testing\n'
+                printf 'tracks (Internal/Testing). It is not sent to F-Droid or\n'
+                printf 'Google Play production.\n\n'
               else
                 printf 'It is a GitHub prerelease, but is not on F-Droid or Google Play.\n\n'
               fi
