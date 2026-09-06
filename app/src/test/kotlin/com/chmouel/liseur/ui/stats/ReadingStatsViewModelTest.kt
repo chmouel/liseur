@@ -10,14 +10,11 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.liseursync.InsightDay
-import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.data.liseursync.WorkTotals
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonPeriod
-import com.chmouel.liseur.domain.ComparisonSpans
-import com.chmouel.liseur.domain.DateSpan
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.StatsBook
@@ -135,7 +132,9 @@ class ReadingStatsViewModelTest {
         try {
             val url = "calibre:one"
             db.bookDao().upsert(book(url))
-            db.readingSessionDao().insert(session(url, today, 60_000))
+            db.readingSessionDao().insert(
+                session(url, today, 60_000).copy(startProgression = 0.1, endProgression = 0.11),
+            )
             val model = model()
 
             val loaded = model.state.first { it is ReadingStatsUiState.Ready }
@@ -146,6 +145,8 @@ class ReadingStatsViewModelTest {
             // This device can count both perfectly well.
             assertEquals(1, loaded.headline.sessions)
             assertEquals(1, loaded.headline.streakDays)
+            assertEquals(0.6, loaded.headline.progressionPerHour!!, 1e-9)
+            assertEquals(StatsProvenance.THIS_DEVICE, loaded.provenance)
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -240,106 +241,6 @@ class ReadingStatsViewModelTest {
             models.clear()
             Dispatchers.resetMain()
         }
-    }
-
-    @Test
-    fun `the server's count wins over the local one and is never summed`() {
-        val local = localStats(totalMs = 60_000)
-        val server = InsightsSummary(
-            activeMinutes = 500.0,
-            sessions = 12,
-            streakDays = 4,
-        )
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            server = server,
-        )
-
-        // 500 minutes from the server, not 501 from adding the local one.
-        assertEquals(TimeUnit.MINUTES.toMillis(500), headline.totalMs)
-        assertEquals(4, headline.streakDays)
-        assertEquals(12, headline.sessions)
-    }
-
-    @Test
-    fun `a server behind on uploads cannot shrink what this device counted`() {
-        // The reader read for an hour ten minutes ago; the upload worker
-        // has not run yet, so the server has only forty minutes of it.
-        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60)).copy(
-            sessions = 3,
-            streakDays = 9,
-        )
-        val server = InsightsSummary(
-            activeMinutes = 40.0,
-            sessions = 2,
-            streakDays = 8,
-        )
-
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            server = server,
-        )
-
-        assertEquals(TimeUnit.MINUTES.toMillis(60), headline.totalMs)
-        assertEquals(3, headline.sessions)
-        assertEquals(9, headline.streakDays)
-    }
-
-    @Test
-    fun `the headline is never smaller than the rows beneath it`() {
-        // A book read only on another device cannot appear as a row, so
-        // the server's total legitimately exceeds their sum.
-        val merged = localStats(totalMs = TimeUnit.MINUTES.toMillis(10))
-        val server = InsightsSummary(
-            activeMinutes = 90.0,
-            sessions = 5,
-            streakDays = 2,
-        )
-
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = merged,
-            local = merged,
-            server = server,
-        )
-
-        assertTrue(headline.totalMs >= merged.totalMs)
-        assertEquals(TimeUnit.MINUTES.toMillis(90), headline.totalMs)
-    }
-
-    @Test
-    fun `with no server the merge keeps this device's own figures`() {
-        val local = localStats(totalMs = 90_000).copy(
-            sessions = 4,
-            streakDays = 3,
-            progressionPerHour = 0.2,
-        )
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            server = null,
-        )
-        assertEquals(90_000L, headline.totalMs)
-        assertEquals(4, headline.sessions)
-        assertEquals(3, headline.streakDays)
-        assertEquals(0.2, headline.progressionPerHour!!, 1e-9)
-    }
-
-    @Test
-    fun `pace falls back to this device when the server reports none`() {
-        val local = localStats(totalMs = 90_000).copy(progressionPerHour = 0.15)
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            server = InsightsSummary(
-                activeMinutes = 2.0,
-                sessions = 1,
-                streakDays = 1,
-                progressionPerHour = null,
-            ),
-        )
-        assertEquals(0.15, headline.progressionPerHour!!, 1e-9)
     }
 
     @Test
@@ -485,13 +386,6 @@ class ReadingStatsViewModelTest {
         val known = mapOf(
             "book" to StatsBook("book", "A book", "An author", 0.5, finished = false),
         )
-        val server = InsightsSummary(
-            activeMinutes = 100.0,
-            sessions = 10,
-            streakDays = 0,
-            progressionPerHour = null,
-        )
-
         val merged = ReadingStatsViewModel.mergeDashboard(
             local = local,
             knownBooks = known,
@@ -511,10 +405,6 @@ class ReadingStatsViewModelTest {
         )
 
         assertEquals(11, merged.books.single().sessions)
-        assertEquals(
-            11,
-            ReadingStatsViewModel.mergeHeadline(merged, local, server).sessions,
-        )
     }
 
     /**
@@ -726,39 +616,6 @@ class ReadingStatsViewModelTest {
         assertEquals(30 * 60_000L, row.totalMs)
         assertEquals(false, row.isLocal)
         assertEquals(30 * 60_000L, merged.totalMs)
-    }
-
-    /**
-     * The screen has always been one device's or every device's and
-     * never said which, so the same blank meant "you are offline", "your
-     * token cannot ask" and "the server agreed" (ADR-0021). An answer to
-     * the question on screen is what makes it all of them; no answer at
-     * all is this device, whatever the reason.
-     */
-    @Test
-    fun `provenance follows whether an answer arrived, not whether a server exists`() {
-        assertEquals(
-            StatsProvenance.THIS_DEVICE,
-            ReadingStatsViewModel.provenanceOf(null, null, null),
-        )
-        assertEquals(
-            StatsProvenance.ALL_DEVICES,
-            ReadingStatsViewModel.provenanceOf(
-                InsightsSummary(activeMinutes = 10.0, sessions = 1, streakDays = 1),
-                null,
-                null,
-            ),
-        )
-        // The headline can have nothing to report for a span the list and
-        // the chart still answered for. That is still every device.
-        assertEquals(
-            StatsProvenance.ALL_DEVICES,
-            ReadingStatsViewModel.provenanceOf(null, emptyList(), null),
-        )
-        assertEquals(
-            StatsProvenance.ALL_DEVICES,
-            ReadingStatsViewModel.provenanceOf(null, null, WorkTotals.Empty),
-        )
     }
 
     /**
@@ -1204,129 +1061,6 @@ class ReadingStatsViewModelTest {
             Dispatchers.resetMain()
         }
     }
-
-    // ---- The two sides of the comparison ----------------------------
-
-    /**
-     * The comparison is this device's own reading, on both sides.
-     *
-     * The headline over it counts every device; the sentence under it
-     * cannot, because a summary aggregates whole days and neither side
-     * ends on one. Adding a server's whole days to this device's part
-     * day would either double-count the overlap between the server's
-     * calendar and this one's, or drop the gap between them, and would
-     * count one population on one side if a single request failed.
-     */
-    @Test
-    fun `the comparison ignores the server the headline is merged with`() {
-        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            // A second device read four hours this one never saw.
-            server = InsightsSummary(activeMinutes = 240.0, sessions = 9, streakDays = 4),
-            spans = spans,
-            currentMs = TimeUnit.MINUTES.toMillis(60),
-            previousMs = TimeUnit.MINUTES.toMillis(30),
-        )
-
-        // The figure above counts the other device.
-        assertEquals(TimeUnit.MINUTES.toMillis(240), headline.totalMs)
-        // The sentence below compares like with like: sixty against thirty.
-        assertEquals(ComparisonDirection.MORE, headline.comparison!!.direction)
-        assertEquals(100, headline.comparison!!.percent)
-    }
-
-    /**
-     * A baseline of nothing leaves the direction without a figure.
-     *
-     * There is nothing to divide by, and "infinitely more than last
-     * week" is not a sentence to put under a reading total.
-     */
-    @Test
-    fun `a baseline of nothing reads as no percentage at all`() {
-        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            server = null,
-            spans = spans,
-            currentMs = TimeUnit.MINUTES.toMillis(60),
-            previousMs = 0,
-        )
-
-        assertEquals(ComparisonDirection.MORE, headline.comparison!!.direction)
-        assertNull(headline.comparison!!.percent)
-    }
-
-    /**
-     * The headline's own figure is never one side of the comparison.
-     *
-     * On the first day of a period the two sides are a few hours each,
-     * and the difference between counting one device and counting them
-     * all is the whole sentence. A reader whose laptop did the reading
-     * would be told they had read six times more than a period in which
-     * they had in fact read exactly as much.
-     */
-    @Test
-    fun `the first day of a period compares two halves counted alike`() {
-        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(10))
-        val firstDay = ComparisonSpans(
-            period = ComparisonPeriod.MONTH,
-            current = DateSpan(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 1)),
-            previous = DateSpan(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 1)),
-            through = LocalTime.NOON,
-        )
-
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            // An hour today, fifty minutes of it on a device this one
-            // cannot see; the same hour on the first of last month.
-            server = InsightsSummary(activeMinutes = 60.0, sessions = 3, streakDays = 1),
-            spans = firstDay,
-            currentMs = TimeUnit.MINUTES.toMillis(10),
-            previousMs = TimeUnit.MINUTES.toMillis(10),
-        )
-
-        // The headline still says what every device read.
-        assertEquals(TimeUnit.MINUTES.toMillis(60), headline.totalMs)
-        // The sentence says the reader is level, which they are, and a
-        // level reader is given no figure to read into.
-        assertEquals(ComparisonDirection.SAME, headline.comparison!!.direction)
-        assertNull(headline.comparison!!.percent)
-    }
-
-    /** With no spans there is no comparison, whatever was counted. */
-    @Test
-    fun `a span with nothing before it keeps no comparison`() {
-        val local = localStats(totalMs = TimeUnit.MINUTES.toMillis(60))
-        val headline = ReadingStatsViewModel.mergeHeadline(
-            merged = local,
-            local = local,
-            server = null,
-            spans = null,
-            currentMs = TimeUnit.MINUTES.toMillis(60),
-            previousMs = TimeUnit.MINUTES.toMillis(30),
-        )
-
-        assertNull(headline.comparison)
-    }
-
-    private val spans = ComparisonSpans(
-        period = ComparisonPeriod.WEEK,
-        current = DateSpan(LocalDate.of(2026, 8, 3), LocalDate.of(2026, 8, 9)),
-        previous = DateSpan(LocalDate.of(2026, 7, 27), LocalDate.of(2026, 8, 2)),
-        through = LocalTime.MAX,
-    )
-
-    private fun localStats(totalMs: Long) = ReadingStats(
-        totalMs = totalMs,
-        booksRead = 1,
-        booksFinished = 0,
-        books = emptyList(),
-        recent = emptyList(),
-    )
 
     private fun session(
         url: String,

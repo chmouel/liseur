@@ -178,9 +178,6 @@ class LiseurSyncSnapshots(
                 candidateWorks += work
                 candidates.put(json.put("device_id", device))
             }
-            if (candidates.length() > capabilities.maxCandidates) {
-                return@optional refuse("more candidates than the server will accept")
-            }
             val captured = CapturedStatsSessions(
                 recorded, evidence.filter { it.sessionId in contributingIds }, contributingIds.toSet(),
             )
