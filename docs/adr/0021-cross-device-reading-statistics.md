@@ -186,11 +186,17 @@ device key, and the work alias, and because the only field ever added to
 that payload, `active_ms`, is deliberately withheld from a sitting whose
 evidence is unknown.
 
-A rebuild therefore needs a work alias and a device id. Without either,
-the sitting cannot be offered and cannot be assumed absent, so the merge
-is refused rather than counted. A blank device key is refused for the
-same reason: it would derive ids the server cannot recognise, and every
-sitting would be silently counted twice.
+A rebuild therefore needs a work alias and a device id. A book with no
+usable alias on this peer is the one exception, and it needs no rebuild
+at all: the upload query joins the very same usable aliases, so such a
+sitting has never once been selected to be sent and the server cannot be
+holding it. It is counted here and the period carries on. Refusing over
+it would strand every reader with a sideloaded book the server could not
+name confidently, which is the failure this rule exists to end. Without a
+device id the sitting can be neither offered nor assumed absent, so the
+merge is refused rather than counted. A blank device key is refused for
+the same reason: it would derive ids the server cannot recognise, and
+every sitting would be silently counted twice.
 
 Calendars contain every date in their selected interval, including an
 empty today. All-time requests start at retained activity rather than an

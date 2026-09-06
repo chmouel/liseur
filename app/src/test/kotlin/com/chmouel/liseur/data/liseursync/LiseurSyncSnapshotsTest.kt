@@ -178,10 +178,15 @@ class LiseurSyncSnapshotsTest {
     }
 
     @Test
-    fun `a sitting of unknown standing that cannot be described again is not counted alone`() = runTest {
+    fun `a sitting of unknown standing of a book with no usable name is counted here`() = runTest {
+        // The upload query joins the same usable aliases, so a book
+        // without one was never once selected to be sent and the server
+        // cannot be holding it. Refusing the whole period over it was
+        // the very failure this rule exists to end.
         sitting(unknown = true)
         db.workIdentityDao().forgetPeerAliases(account.accountKey)
-        assertNull(read())
+        assertNotNull(read())
+        assertEquals(0, requests.single().getJSONArray("candidates").length())
     }
 
     @Test
