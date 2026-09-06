@@ -48,6 +48,7 @@ class LiseurSyncSnapshots(
     private val sessionDao: ReadingSessionDao,
     private val transmissionDao: SessionTransmissionDao,
     private val identityDao: WorkIdentityDao,
+    private val deviceKey: suspend () -> String,
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
 ) {
     /** Duration support is available to sync-only tokens, unlike dashboard insights. */
@@ -64,7 +65,8 @@ class LiseurSyncSnapshots(
 
     suspend fun discover(): StatisticsContext? = optional {
         val account = serverDao.get()?.takeIf { it.kind == ServerKind.LISEUR_SYNC } ?: return@optional null
-        val credentials = account.credentials ?: return@optional null
+        val credentials = account.credentials
+            ?: return@optional refuse("the account has no key to ask with")
         if (!sameAccount(account)) return@optional null
         val json = try {
             http.get(LiseurSyncApi.url(account.baseUrl, CAPABILITIES), credentials)
@@ -74,10 +76,11 @@ class LiseurSyncSnapshots(
         }
         if (!sameAccount(account)) return@optional null
         if (!account.canReadInsights) serverDao.setCanReadInsights(true, account.liseurTokenCipher)
-        val capabilities = StatisticsCapabilities.parse(json) ?: return@optional null
+        val capabilities = StatisticsCapabilities.parse(json)
+            ?: return@optional refuse("the server did not say what statistics it can answer")
         if (capabilities.accountId != null && account.liseurAccountId != null &&
             account.liseurAccountId != capabilities.accountId
-        ) return@optional null
+        ) return@optional refuse("the server answered about a different account")
         StatisticsContext(account, capabilities)
     }
 
@@ -92,13 +95,23 @@ class LiseurSyncSnapshots(
             val account = context.account
             val capabilities = context.capabilities
             if (!sameAccount(account)) return@optional null
-            if ((capabilities.accountId ?: account.liseurAccountId).isNullOrBlank()) return@optional null
-            if (range == StatsRange.ALL_TIME && !capabilities.allTime) return@optional null
+            if ((capabilities.accountId ?: account.liseurAccountId).isNullOrBlank()) {
+                return@optional refuse("the account has no identity to check a reply against")
+            }
+            if (range == StatsRange.ALL_TIME && !capabilities.allTime) {
+                return@optional refuse("the server does not answer about all time")
+            }
+            // A sitting is named on the server by a key derived from
+            // this, so a blank one would quietly rebuild candidates the
+            // server cannot recognise and have it count them twice.
+            val key = deviceKey().takeIf { it.isNotBlank() }
+                ?: return@optional refuse("this device has no identity to name its own reading by")
             val from = range.startDate(today, weekStart)
             val recorded = statsSessions(sessions)
             val evidence = transmissionDao.forPeer(account.accountKey)
             val aliases = statsAliases(identityDao.aliasesFor(account.accountKey))
             val bySession = evidence.associateBy { it.sessionId }
+            val aliasByUrl = aliases.associateBy { it.bookUrl }
             val candidates = JSONArray()
             val candidateWorks = mutableSetOf<String>()
             val contributingIds = mutableSetOf<Long>()
@@ -110,22 +123,58 @@ class LiseurSyncSnapshots(
                 val day = Instant.ofEpochMilli(session.endedAt ?: session.lastCheckpointAt)
                     .atZone(capabilities.timezone).toLocalDate()
                 if (day <= today) days += day
-                if (days.size > capabilities.maxLocalActiveDays) return@optional null
+                if (days.size > capabilities.maxLocalActiveDays) {
+                    return@optional refuse("more reading days than the server will accept")
+                }
                 if (day > today || (from != null && day < from)) continue
                 if (session.endedAt == null || session.startProgression == null || session.endProgression == null) continue
                 contributingIds += session.id
-                if (session.legacyEvidenceUnknown) return@optional null
-                val transmission = bySession[session.id] ?: continue
-                if (transmission.deviceId.isEmpty()) return@optional null
-                candidateBytes += transmission.payload.toByteArray(Charsets.UTF_8).size
-                if (candidates.length() >= capabilities.maxCandidates || candidateBytes > capabilities.maxBodyBytes) return@optional null
-                val payload = JSONObject(transmission.payload)
-                val work = payload.getString("work_id")
-                if (workByUrl[session.bookUrl] != work) return@optional null
+                val transmission = bySession[session.id]
+                if (transmission == null && !session.legacyEvidenceUnknown) {
+                    // Nothing was ever offered for this sitting, and the
+                    // absence is trustworthy: since the evidence table
+                    // existed a request has been written down before it
+                    // is sent, so no server can be holding this. This
+                    // device's own figure is the whole of it.
+                    continue
+                }
+                // A sitting with no retained request may still be on the
+                // server: it was sent before that table existed, or the
+                // record of it was dropped when an account was
+                // disconnected. Neither the acknowledgement nor its
+                // absence settles that, so rebuild what would have been
+                // sent and let the server say. It answers on identity
+                // first, so a sitting it has never seen is ignored and
+                // counted here, one it holds is named in the overlap and
+                // counted once, and a rebuild it disagrees with is
+                // refused outright rather than guessed at (ADR-0021).
+                val payload = if (transmission != null) {
+                    transmission.payload
+                } else {
+                    val alias = aliasByUrl[session.bookUrl]
+                        ?: return@optional refuse("a sitting of unknown standing is of a book with no name here")
+                    SessionUploads.toJson(session, key, alias.workId, alias.editionSha)?.toString()
+                        ?: return@optional refuse("a sitting of unknown standing cannot be described again")
+                }
+                val device = transmission?.deviceId ?: account.accountId.orEmpty()
+                if (device.isEmpty()) {
+                    return@optional refuse("a sitting to account for names no device")
+                }
+                candidateBytes += payload.toByteArray(Charsets.UTF_8).size
+                if (candidates.length() >= capabilities.maxCandidates || candidateBytes > capabilities.maxBodyBytes) {
+                    return@optional refuse("more evidence than one request may carry")
+                }
+                val json = JSONObject(payload)
+                val work = json.getString("work_id")
+                if (workByUrl[session.bookUrl] != work) {
+                    return@optional refuse("a book was resolved to a different work since it was sent")
+                }
                 candidateWorks += work
-                candidates.put(payload.put("device_id", transmission.deviceId))
+                candidates.put(json.put("device_id", device))
             }
-            if (candidates.length() > capabilities.maxCandidates) return@optional null
+            if (candidates.length() > capabilities.maxCandidates) {
+                return@optional refuse("more candidates than the server will accept")
+            }
             val captured = CapturedStatsSessions(
                 recorded, evidence.filter { it.sessionId in contributingIds }, contributingIds.toSet(),
             )
@@ -149,7 +198,9 @@ class LiseurSyncSnapshots(
                 body.put("calendar_from", start.toString()).put("calendar_to", end.toString())
                 val raw = body.toString()
                 // Refuse the complete proof rather than silently dropping candidates or days.
-                if (raw.toByteArray(Charsets.UTF_8).size > capabilities.maxBodyBytes) return null
+                if (raw.toByteArray(Charsets.UTF_8).size > capabilities.maxBodyBytes) {
+                    return refuse("the evidence is larger than one request may carry")
+                }
                 if (!sameAccount(account)) return null
                 val response = try {
                     http.postRaw(
@@ -167,14 +218,14 @@ class LiseurSyncSnapshots(
             val first = page(initialFrom, today) ?: return@optional null
             val historyStart = from ?: listOfNotNull(first.firstActivity, firstLocalDay).minOrNull() ?: today
             if (historyStart > today || today.toEpochDay() - historyStart.toEpochDay() > MAX_CALENDAR_DAYS) {
-                return@optional null
+                return@optional refuse("a longer history than this screen will chart")
             }
             val calendar = first.totals.days.toMutableList()
             val overlapDays = first.totals.overlapDays.toMutableMap()
             if (historyStart < initialFrom) {
                 val missing = initialFrom.toEpochDay() - historyStart.toEpochDay()
                 if ((missing + capabilities.maxCalendarDays - 1) / capabilities.maxCalendarDays + 1 > MAX_CALENDAR_PAGES) {
-                    return@optional null
+                    return@optional refuse("more calendar requests than this screen will make")
                 }
                 for ((start, end) in calendarChunks(
                     historyStart, initialFrom.minusDays(1), capabilities.maxCalendarDays.toLong(),
@@ -183,7 +234,7 @@ class LiseurSyncSnapshots(
                     if (next.revision != first.revision || next.firstActivity != first.firstActivity ||
                         next.totals.copy(days = emptyList(), overlapDays = emptyMap()) !=
                         first.totals.copy(days = emptyList(), overlapDays = emptyMap())
-                    ) return@optional null
+                    ) return@optional refuse("the server's figures moved between calendar pages")
                     calendar += next.totals.days
                     overlapDays += next.totals.overlapDays
                 }
@@ -192,14 +243,14 @@ class LiseurSyncSnapshots(
             val byDay = calendar.associateBy { it.date }
             if (!sameMinutes(calendar.map { it.activeMinutes }, first.totals.summary.activeMinutes) ||
                 !sameMinutes(overlapDays.values, first.totals.overlapMinutes)
-            ) return@optional null
+            ) return@optional refuse("the server's calendar does not add up to its own total")
             val dense = generateSequence(historyStart) { it.plusDays(1).takeUnless { day -> day > today } }
                 .map { byDay[it] ?: InsightDay(it, 0.0) }.toList()
             val result = CompleteStatsSnapshot(
                 context, id, first.revision, today, captured, aliases,
                 first.totals.copy(days = dense, overlapDays = overlapDays),
             )
-            result.takeIf { isCurrent(it) }
+            result.takeIf { isCurrent(it) } ?: refuse("the reading moved while the server was answering")
         }
     }
 
@@ -212,6 +263,20 @@ class LiseurSyncSnapshots(
 
     private suspend fun sameAccount(account: RemoteServer): Boolean =
         serverDao.get()?.let(LiveIdentity::from) == LiveIdentity.from(account)
+
+    /**
+     * Gives up on the proof, and says why.
+     *
+     * The screen is unchanged by this — it shows what this device counted
+     * and says so — but a refusal that named nothing left the one reader
+     * who wanted to know why looking at a blank. Every one of these is a
+     * fact about evidence rather than an error, so it goes to the log and
+     * nowhere near the reader.
+     */
+    private fun <T> refuse(reason: String): T? {
+        Log.i(TAG, "Statistics count this device alone: $reason")
+        return null
+    }
 
     private data class Page(val revision: String, val firstActivity: LocalDate?, val totals: SnapshotTotals)
 
@@ -228,69 +293,81 @@ class LiseurSyncSnapshots(
         candidateCount: Int,
     ): Page? {
         val expectedAccount = (context.capabilities.accountId ?: context.account.liseurAccountId)
-            ?.takeIf { it.isNotBlank() } ?: return null
+            ?.takeIf { it.isNotBlank() } ?: return refuse("the account has no identity to check a reply against")
+        if (json.opt("complete") != true) {
+            // The one refusal the server explains itself: it names which
+            // piece of evidence it could not place.
+            return refuse(
+                "the server could not place this device's evidence" +
+                    json.optString("incomplete_reason").takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty(),
+            )
+        }
         if (json.nonnegativeCount("version") != 1 || json.nonnegativeCount("attribution_version") != 2 ||
-            json.opt("complete") != true ||
             json.opt("account_id") != expectedAccount ||
             json.optString("timezone") != context.capabilities.timezone.id ||
             json.optString("snapshot_id") != id || json.optString("today") != today.toString() ||
             json.optString("calendar_from") != calendarFrom.toString() ||
             json.optString("calendar_to") != calendarTo.toString()
-        ) return null
+        ) return refuse("the server answered about a different snapshot")
         if (from == null) {
-            if (!json.has("range_days") || json.nonnegativeCount("range_days") != 0) return null
-        } else if (json.optString("from") != from.toString() || json.optString("to") != today.toString()) return null
+            if (!json.has("range_days") || json.nonnegativeCount("range_days") != 0) {
+                return refuse("the server answered about a span with a beginning")
+            }
+        } else if (json.optString("from") != from.toString() || json.optString("to") != today.toString()) {
+            return refuse("the server answered about a different span")
+        }
         val revision = (json.opt("stats_revision") as? String)
-            ?.takeIf { it.isNotEmpty() && it.all { ch -> ch in '0'..'9' } && it.toLongOrNull() != null } ?: return null
-        if (!json.has("first_activity_day")) return null
+            ?.takeIf { it.isNotEmpty() && it.all { ch -> ch in '0'..'9' } && it.toLongOrNull() != null }
+            ?: return refuse("the server named no usable revision")
+        if (!json.has("first_activity_day")) return refuse("the server did not say when its history begins")
         val first = if (json.isNull("first_activity_day")) null else LocalDate.parse(json.getString("first_activity_day"))
-        if (first != null && first > today) return null
+        if (first != null && first > today) return refuse(INCOHERENT)
         val summary = json.getJSONObject("summary")
         val top = InsightsSummary(
             summary.minutes("total_active_minutes"), summary.count("sessions"), summary.count("streak_days"),
             summary.optDouble("speed_prog_per_hour").takeIf { it.isFinite() && it > 0 },
         )
-        if (top.activeMinutes > 0 && first == null) return null
+        if (top.activeMinutes > 0 && first == null) return refuse(INCOHERENT)
         val works = linkedMapOf<String, WorkInsights>()
         val array = json.getJSONArray("works")
         for (index in 0 until array.length()) {
             val item = array.getJSONObject(index)
-            val work = item.getString("work_id").takeIf { it.isNotEmpty() } ?: return null
-            val insight = parseWorkInsights(item)?.copy(workId = work) ?: return null
-            if (insight.activeMinutes > 0 && insight.lastReadAt == null) return null
-            if (works.put(work, insight) != null) return null
+            val work = item.getString("work_id").takeIf { it.isNotEmpty() } ?: return refuse(INCOHERENT)
+            val insight = parseWorkInsights(item)?.copy(workId = work) ?: return refuse(INCOHERENT)
+            if (insight.activeMinutes > 0 && insight.lastReadAt == null) return refuse(INCOHERENT)
+            if (works.put(work, insight) != null) return refuse(INCOHERENT)
         }
         val known = workByUrl.mapNotNull { (url, work) -> works[work]?.let { url to it } }.toMap()
         if (!sameMinutes(works.values.map { it.activeMinutes }, top.activeMinutes) ||
             works.values.sumOf { it.sessions.toLong() } != top.sessions.toLong()
-        ) return null
+        ) return refuse(INCOHERENT)
         val elsewhere = works.values.filter { it.workId !in workByUrl.values }
-        val days = parseDays(json.getJSONArray("days"), calendarFrom, calendarTo) ?: return null
+        val days = parseDays(json.getJSONArray("days"), calendarFrom, calendarTo) ?: return refuse(INCOHERENT)
         val overlap = json.getJSONObject("overlap")
         val overlapMinutes = overlap.minutes("total_active_minutes")
         val overlapSessions = overlap.count("sessions")
         if (exceedsMinutes(overlapMinutes, top.activeMinutes) || overlapSessions > top.sessions ||
             overlapSessions > candidateCount
-        ) return null
+        ) return refuse(INCOHERENT)
         val overlapWorks = linkedMapOf<String, Pair<Double, Int>>()
         val matches = overlap.getJSONArray("works")
         for (index in 0 until matches.length()) {
             val item = matches.getJSONObject(index)
             val work = item.getString("work_id")
-            if (work !in candidateWorks) return null
+            if (work !in candidateWorks) return refuse(INCOHERENT)
             val amount = item.minutes("total_active_minutes")
             val count = item.count("sessions")
-            val full = works[work] ?: return null
+            val full = works[work] ?: return refuse(INCOHERENT)
             if (exceedsMinutes(amount, full.activeMinutes) || count > full.sessions ||
                 overlapWorks.put(work, amount to count) != null
-            ) return null
+            ) return refuse(INCOHERENT)
         }
         if (!sameMinutes(overlapWorks.values.map { it.first }, overlapMinutes) ||
             overlapWorks.values.sumOf { it.second.toLong() } != overlapSessions.toLong()
-        ) return null
-        val matchedDays = parseDays(overlap.getJSONArray("days"), calendarFrom, calendarTo) ?: return null
+        ) return refuse(INCOHERENT)
+        val matchedDays = parseDays(overlap.getJSONArray("days"), calendarFrom, calendarTo) ?: return refuse(INCOHERENT)
         val fullDays = days.associateBy { it.date }
-        if (matchedDays.any { exceedsMinutes(it.activeMinutes, fullDays[it.date]?.activeMinutes ?: 0.0) }) return null
+        if (matchedDays.any { exceedsMinutes(it.activeMinutes, fullDays[it.date]?.activeMinutes ?: 0.0) }) return refuse(INCOHERENT)
         // Normalize only the accepted sub-millisecond excess. Otherwise integer
         // rounding could turn that noise into a negative residual in the union.
         return Page(
@@ -357,6 +434,8 @@ class LiseurSyncSnapshots(
         const val TAG = "liseur-sync-insights"
         const val CAPABILITIES = "/v1/insights/capabilities"
         const val SNAPSHOT = "/v1/insights/snapshot"
+        /** One reason for the whole family of "the server's figures disagree with themselves". */
+        const val INCOHERENT = "the server's figures do not add up to each other"
         // A resource refusal, not a truncated chart: unusually large histories remain local.
         const val MAX_CALENDAR_DAYS = 366_000L
         const val MAX_CALENDAR_PAGES = 128

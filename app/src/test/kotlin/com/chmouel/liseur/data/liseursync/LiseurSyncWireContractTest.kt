@@ -91,6 +91,7 @@ class LiseurSyncWireContractTest {
                 )
                 val client = LiseurSyncSnapshots(
                     db.remoteServerDao(), db.readingSessionDao(), db.sessionTransmissionDao(), db.workIdentityDao(),
+                    deviceKey = { "wire-contract-device" },
                 )
                 val context = requireNotNull(client.discover()) { "Actual server capabilities were rejected" }
                 val result = requireNotNull(client.read(

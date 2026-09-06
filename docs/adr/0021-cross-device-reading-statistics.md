@@ -156,6 +156,42 @@ evidence also marks the remaining history unknown. New sessions can
 select measured `active_ms` only after capability negotiation; legacy
 attempts retain their original wire format and deterministic id.
 
+A sitting without retained evidence is not by itself a reason to abandon
+the merge, and treating it as one left every upgraded install counting
+one device for as long as the selected range reached back past the
+upgrade — for all time, permanently. What decides it is whether this
+peer can already hold the sitting, and only two answers to that are
+sound:
+
+- No evidence and the evidence for this sitting is *known*: nothing was
+  ever offered here. An upload writes its retained request before the
+  sitting leaves, so the absence is proof of absence. This device's
+  figure is the whole of it.
+- Evidence unknown: the sitting may be on the server. It predates the
+  evidence table, or `forgetSyncPeer` dropped the record when an account
+  was disconnected. An acknowledgement does not settle this either way:
+  an upload whose answer was lost never recorded one, and disconnecting
+  clears the ones that were there while the server keeps the sittings.
+  So the sitting is rebuilt as it would have been sent and offered as a
+  candidate, and the server rules on it.
+
+Letting the server rule is safe because it answers on identity first. A
+candidate whose `session_id` it has never seen is ignored and stays
+`complete`, so a sitting that was genuinely never sent is counted here.
+One it holds is matched and named in the overlap, so it is counted once.
+A rebuild it disagrees with is refused as `candidate_payload_mismatch`,
+and this app falls back to local-only rather than guessing. The rebuild
+is exact because the payload is a pure function of the stored row, the
+device key, and the work alias, and because the only field ever added to
+that payload, `active_ms`, is deliberately withheld from a sitting whose
+evidence is unknown.
+
+A rebuild therefore needs a work alias and a device id. Without either,
+the sitting cannot be offered and cannot be assumed absent, so the merge
+is refused rather than counted. A blank device key is refused for the
+same reason: it would derive ids the server cannot recognise, and every
+sitting would be silently counted twice.
+
 Calendars contain every date in their selected interval, including an
 empty today. All-time requests start at retained activity rather than an
 application release date and require nonoverlapping chunks of at most
@@ -176,8 +212,8 @@ identity, statistics stay local. Discovery does not rekey account state.
 Candidates include every transmitted local sitting contributing to the
 selected totals range. Older sittings still supply active-day evidence
 for the streak, but their payloads do not consume that range's candidate
-budget. Unknown legacy transmission identity only blocks a range to
-which that sitting contributes.
+budget. A sitting whose evidence is unknown is rebuilt and offered for
+the range it contributes to, and nothing else.
 Every page must echo the snapshot id, account timezone, today, selected
 bounds and `calendar_from`/`calendar_to`, and carry the same decimal-string
 `stats_revision`. Summary, works, overlap and earliest-activity metadata
@@ -191,8 +227,9 @@ are 4 MiB, 10,000 candidates and 25,000 active days. Histories beyond
 366,000 calendar days or 128
 calendar requests also use local-only statistics. These are resource
 refusals: neither path clips
-candidates or presents a partial chart. Unknown pre-upgrade transmission
-history and incompatible retained server rollups remain local-only.
+candidates or presents a partial chart. Incompatible retained server
+rollups remain local-only, as does a sitting of unknown standing that
+cannot be rebuilt or that the server says it recorded differently.
 
 The upload path reads `session_active_ms` from `GET /v1/token` before
 selecting a new payload. That endpoint also serves sync-only tokens;
