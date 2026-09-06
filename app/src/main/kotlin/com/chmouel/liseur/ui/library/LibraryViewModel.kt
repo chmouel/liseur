@@ -533,7 +533,7 @@ class LibraryViewModel(
             val settings = baseValues[6] as AppSettings
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
-            val readAt = readAtList.associate { it.bookUrl to it.updatedAt }
+            val readAt = readAtList.associate { it.bookUrl to it.readAt }
             @Suppress("UNCHECKED_CAST")
             val progressionList = baseValues[8] as List<BookProgression>
             val progressions = progressionList

@@ -49,6 +49,20 @@ data class ReadingProgress(
     val readingPaceEvidence: Double = 0.0,
     /** When this device last touched the position. */
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /**
+     * When the reading this position records actually happened, on
+     * whichever device did it. Null when nothing better than
+     * [updatedAt] is known.
+     *
+     * [updatedAt] is when this device last wrote the row, which for a
+     * position taken from a server is when it heard about the reading
+     * rather than when the reading happened. Ordering a shelf by that
+     * files a year of imported history under "just now", and files it
+     * again in a different order the next time a batch arrives. So a
+     * pull records the other device's own timestamp here, and the shelf
+     * reads this.
+     */
+    @ColumnInfo(name = "read_at") val readAt: Long? = null,
     /** Reading status as calibre-web's Kobo sync understands it. */
     @ColumnInfo(name = "status") val status: String? = null,
     /** When this position was last agreed with the server, if ever. */
@@ -103,7 +117,7 @@ data class ReadingProgress(
 /** When a book was last read, on this device or another one. */
 data class BookReadAt(
     @ColumnInfo(name = "book_url") val bookUrl: String,
-    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "read_at") val readAt: Long,
 )
 
 /** How far through a book the reader is, if anything is known. */
@@ -151,9 +165,36 @@ abstract class ReadingProgressDao {
      * When each book was last read. The position is written both by
      * turning a page here and by taking one from the server, so this is
      * the last time a book was read anywhere, not just on this device.
+     *
+     * It is the reading's own time, not the time this device wrote it
+     * down: a position pulled from another phone keeps the timestamp
+     * that phone recorded, so importing old reading reproduces the
+     * order it was read in instead of inventing one from the moment the
+     * sync happened to run.
+     *
+     * A row with neither a progression nor a locator is left out. Such a
+     * row records no reading — it is made to exist by a pull that then
+     * declined to apply, or by a remote state waiting to be settled —
+     * and reporting one would tell the shelf the book is being read.
      */
-    @Query("SELECT book_url, updated_at FROM reading_progress")
+    @Query(
+        """
+        SELECT book_url, COALESCE(read_at, updated_at) AS read_at
+        FROM reading_progress
+        WHERE total_progression IS NOT NULL OR locator_json != '{}'
+        """,
+    )
     abstract fun observeReadAt(): kotlinx.coroutines.flow.Flow<List<BookReadAt>>
+
+    /** [observeReadAt], asked once, for deciding what to sync first. */
+    @Query(
+        """
+        SELECT book_url, COALESCE(read_at, updated_at) AS read_at
+        FROM reading_progress
+        WHERE total_progression IS NOT NULL OR locator_json != '{}'
+        """,
+    )
+    abstract suspend fun readAtOnce(): List<BookReadAt>
 
     /**
      * How far through each book the reader is, watched.
@@ -198,6 +239,7 @@ abstract class ReadingProgressDao {
             reading_pace_evidence =
                 COALESCE(:readingPaceEvidence, reading_pace_evidence),
             updated_at = :updatedAt,
+            read_at = :updatedAt,
             status = :status,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl
@@ -221,12 +263,12 @@ abstract class ReadingProgressDao {
             book_url, locator_json, total_progression, reading_speed,
             reading_seconds_per_position, reading_pace_samples,
             reading_pace_elapsed_ms, reading_pace_evidence,
-            updated_at, status, synced_at, local_revision, acked_revision
+            updated_at, read_at, status, synced_at, local_revision, acked_revision
         )
         VALUES (:bookUrl, :locatorJson, :progression, NULL,
                 :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
                 COALESCE(:readingPaceElapsedMs, 0), COALESCE(:readingPaceEvidence, 0),
-                :updatedAt, :status, NULL, 1, 0)
+                :updatedAt, :updatedAt, :status, NULL, 1, 0)
         """,
     )
     abstract suspend fun insertLocal(
@@ -418,6 +460,7 @@ abstract class ReadingProgressDao {
             account = account,
             remoteUpdatedAt = remoteUpdatedAt,
             now = now,
+            readAt = readAtFor(remoteUpdatedAt, now),
             locatorJson = locatorJson,
         )
         if (applied > 0) clearPending(bookUrl)
@@ -431,6 +474,7 @@ abstract class ReadingProgressDao {
             locator_json = COALESCE(:locatorJson, '{}'),
             status = :status,
             updated_at = :now,
+            read_at = :readAt,
             synced_at = :now,
             remote_updated_at = :remoteUpdatedAt,
             agreed_progression = :progression,
@@ -450,6 +494,7 @@ abstract class ReadingProgressDao {
         account: String,
         remoteUpdatedAt: Long?,
         now: Long,
+        readAt: Long,
         locatorJson: String?,
     ): Int
 
@@ -699,6 +744,7 @@ abstract class ReadingProgressDao {
             progression = progression,
             status = status,
             now = now,
+            readAt = readAtFor(remoteUpdatedAt, now),
             locatorJson = locatorJson,
             remoteUpdatedAt = remoteUpdatedAt,
         ) > 0
@@ -722,6 +768,7 @@ abstract class ReadingProgressDao {
             locator_json = COALESCE(:locatorJson, '{}'),
             status = :status,
             updated_at = :now,
+            read_at = :readAt,
             synced_at = :now,
             remote_updated_at = :remoteUpdatedAt,
             local_revision = local_revision + 1
@@ -734,6 +781,7 @@ abstract class ReadingProgressDao {
         progression: Double,
         status: String,
         now: Long,
+        readAt: Long,
         locatorJson: String?,
         remoteUpdatedAt: Long?,
     ): Int
@@ -907,3 +955,20 @@ abstract class ReadingProgressDao {
     )
     abstract suspend fun ownedByOther(account: String): List<ReadingProgress>
 }
+
+/**
+ * The moment the reading being adopted happened, as well as it can be
+ * known.
+ *
+ * A server reports when the reading was recorded on the device that did
+ * it, and that is what the shelf wants: importing a year of history must
+ * reproduce the other device's order rather than file everything under
+ * the minute the sync ran. Nothing better exists when the server says
+ * nothing, so the local clock stands in.
+ *
+ * Clamped to [now] because the timestamp is another device's wall clock.
+ * One running fast would otherwise pin a book to the top of the shelf
+ * until it caught up.
+ */
+internal fun readAtFor(remoteUpdatedAt: Long?, now: Long): Long =
+    remoteUpdatedAt?.takeIf { it > 0 }?.coerceAtMost(now) ?: now

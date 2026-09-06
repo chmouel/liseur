@@ -29,7 +29,7 @@ import androidx.sqlite.execSQL
         SessionRefusal::class,
         SessionTransmission::class,
     ],
-    version = 48,
+    version = 49,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1282,6 +1282,61 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Tells the moment a book was read from the moment this device
+         * heard about it.
+         *
+         * `updated_at` still means what it always did — when this device
+         * last wrote the row — but the shelf used to order by it, and a
+         * pull writes it with the local clock. So importing a year of
+         * reading from another phone filed every book as read just now,
+         * and the next batch to arrive shuffled them all again.
+         *
+         * The backfill can tell the two apart because both pull paths
+         * set `synced_at` and `updated_at` to the same instant in one
+         * statement, while a page turn here moves only `updated_at` and
+         * an acknowledgement moves only `synced_at`. Equality therefore
+         * holds exactly for a row whose position last came from a pull,
+         * which is the row carrying an import timestamp. Anything else
+         * keeps a null `read_at` and falls back to `updated_at`, which
+         * for those rows is the truth already.
+         *
+         * Deliberately conservative: it repairs only what it can prove.
+         * Two kinds of pulled row are left alone rather than guessed at,
+         * because the evidence for them is gone.
+         *
+         * `retireAccountState` clears `synced_at` on every row when an
+         * account is dropped, so a device that has switched accounts has
+         * no equality left to test and keeps the shelf it has. And
+         * `setStatusOnly` — someone marking a book read elsewhere
+         * without opening it — moves `remote_updated_at` past
+         * `updated_at` without touching the position, which the
+         * `remote_updated_at <= updated_at` guard then rejects. Filing
+         * such a row under the time somebody pressed a button is worse
+         * than leaving it where it is.
+         *
+         * Both cases keep exactly today's behaviour, and both correct
+         * themselves the next time the book is read or its position
+         * pulled again. The alternative is inventing a reading time out
+         * of a timestamp that does not record one.
+         */
+        val MIGRATION_48_49 = object : Migration(48, 49) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN read_at INTEGER")
+                connection.execSQL(
+                    """
+                    UPDATE reading_progress
+                    SET read_at = remote_updated_at
+                    WHERE remote_updated_at IS NOT NULL
+                      AND remote_updated_at > 0
+                      AND remote_updated_at <= updated_at
+                      AND synced_at IS NOT NULL
+                      AND synced_at = updated_at
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1330,6 +1385,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_45_46,
             MIGRATION_46_47,
             MIGRATION_47_48,
+            MIGRATION_48_49,
         )
     }
 }

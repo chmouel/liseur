@@ -241,6 +241,11 @@ interface BookDao {
      * The book to carry on with: the one read most recently anywhere,
      * not merely the one opened last on this device. Reading arriving
      * from another phone counts, which is the whole point of syncing it.
+     *
+     * "Most recently" is when the reading happened, not when this device
+     * heard about it, so a fresh install that has just imported a whole
+     * history offers the book that was actually left open rather than
+     * whichever one the sync mentioned last.
      */
     @Query(MOST_RECENT)
     fun observeMostRecent(): Flow<Book?>
@@ -862,7 +867,7 @@ interface BookDao {
               )
             ORDER BY MAX(
                 COALESCE(books.last_opened_at, 0),
-                COALESCE(reading_progress.updated_at, 0)
+                COALESCE(reading_progress.read_at, reading_progress.updated_at, 0)
             ) DESC
             LIMIT 1
         """
