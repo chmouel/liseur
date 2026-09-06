@@ -817,7 +817,9 @@ fun ReaderScreen(
                 // fixed-layout one is dragged to look around, not to
                 // turn. A picture over the page takes the book out of
                 // reach, as it does for every other way of turning it.
-                !effectiveScrollingNow && reflowableTextNow &&
+                // Chrome up means the scrubber is on the page, and a
+                // drag across it is a seek, not a turn.
+                !chromeVisibleNow && !effectiveScrollingNow && reflowableTextNow &&
                     !isPinching() && selection == null &&
                     viewedImageNow == null && !openingImageNow
             },

@@ -596,6 +596,8 @@
     <string name="settings_reading_navigation_scrolling">Read by scrolling.</string>
     <string name="settings_screen">Screen</string>
     <string name="settings_advanced">Advanced</string>
+    <string name="settings_section_expanded">Expanded</string>
+    <string name="settings_section_collapsed">Collapsed</string>
     <string name="settings_volume_keys">Volume keys turn pages</string>
     <string name="settings_volume_keys_detail">Volume down goes forward, volume up goes back.</string>
     <string name="settings_tap_zones">Page-turn sides</string>

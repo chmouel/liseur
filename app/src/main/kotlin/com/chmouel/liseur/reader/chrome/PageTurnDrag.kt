@@ -35,6 +35,7 @@ class PageTurnDrag(
     private val onTurnPage: (forward: Boolean) -> Unit,
 ) {
 
+    private var decided = false
     private var claimed = false
     private var travel = 0f
 
@@ -47,13 +48,21 @@ class PageTurnDrag(
      * Only worth asking once the finger has passed the touch slop: below
      * it a drag has no direction to read, and the web view has not begun
      * to move the columns either.
+     *
+     * The answer is decided once and then kept until [reset]. A gesture
+     * that set off downwards is the web view's for as long as it lasts,
+     * however it curves later, and a second finger settles it for good:
+     * taking a gesture over halfway through would cancel a touch the web
+     * view is already acting on, and turn a page nobody asked to turn.
      */
     fun offer(pointers: Int, dx: Float, dy: Float): Boolean {
         if (pointers != 1) {
+            decided = true
             claimed = false
             return false
         }
-        if (!claimed) {
+        if (!decided) {
+            decided = true
             claimed = style() != PageTurnStyle.SLIDE && canTurn() && sideways(dx, dy)
         }
         if (claimed) travel = dx
@@ -76,6 +85,7 @@ class PageTurnDrag(
 
     /** Forgets a gesture: a fresh touch owes nothing to the last one. */
     fun reset() {
+        decided = false
         claimed = false
         travel = 0f
     }

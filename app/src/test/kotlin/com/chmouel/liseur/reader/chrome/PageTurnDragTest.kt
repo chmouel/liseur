@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -39,4 +40,78 @@ class PageTurnDragTest {
         assertEquals(false, PageTurnDrag.forward(travel = -60f, threshold = 48f, rtl = true))
         assertEquals(true, PageTurnDrag.forward(travel = 60f, threshold = 48f, rtl = true))
     }
+
+    @Test
+    fun `a sideways swipe past the threshold turns one page`() {
+        val turns = mutableListOf<Boolean>()
+        val drag = drag(turns)
+        assertTrue(drag.offer(pointers = 1, dx = -30f, dy = 2f))
+        assertTrue(drag.offer(pointers = 1, dx = -200f, dy = 6f))
+        assertTrue(drag.release())
+        assertEquals(listOf(true), turns)
+    }
+
+    @Test
+    fun `a gesture that set off down the page is never claimed later`() {
+        val turns = mutableListOf<Boolean>()
+        val drag = drag(turns)
+        assertFalse(drag.offer(pointers = 1, dx = 2f, dy = -40f))
+        // The finger curves until it has gone further across than down.
+        assertFalse(drag.offer(pointers = 1, dx = -200f, dy = -60f))
+        assertFalse(drag.release())
+        assertTrue(turns.isEmpty())
+    }
+
+    @Test
+    fun `a second finger settles the gesture for good`() {
+        val turns = mutableListOf<Boolean>()
+        val drag = drag(turns)
+        assertTrue(drag.offer(pointers = 1, dx = -200f, dy = 4f))
+        assertFalse(drag.offer(pointers = 2, dx = -200f, dy = 4f))
+        // One finger leaves, the other keeps moving across the page.
+        assertFalse(drag.offer(pointers = 1, dx = -300f, dy = 4f))
+        assertFalse(drag.release())
+        assertTrue(turns.isEmpty())
+    }
+
+    @Test
+    fun `a fresh touch starts over`() {
+        val turns = mutableListOf<Boolean>()
+        val drag = drag(turns)
+        assertFalse(drag.offer(pointers = 2, dx = -200f, dy = 4f))
+        drag.reset()
+        assertTrue(drag.offer(pointers = 1, dx = -200f, dy = 4f))
+        assertTrue(drag.release())
+        assertEquals(listOf(true), turns)
+    }
+
+    @Test
+    fun `the slide is left to the navigator`() {
+        val turns = mutableListOf<Boolean>()
+        val drag = drag(turns, style = PageTurnStyle.SLIDE)
+        assertFalse(drag.offer(pointers = 1, dx = -200f, dy = 4f))
+        assertFalse(drag.release())
+        assertTrue(turns.isEmpty())
+    }
+
+    @Test
+    fun `a page that cannot be turned is left alone`() {
+        val turns = mutableListOf<Boolean>()
+        val drag = drag(turns, canTurn = false)
+        assertFalse(drag.offer(pointers = 1, dx = -200f, dy = 4f))
+        assertFalse(drag.release())
+        assertTrue(turns.isEmpty())
+    }
+
+    private fun drag(
+        turns: MutableList<Boolean>,
+        style: PageTurnStyle = PageTurnStyle.LIFT,
+        canTurn: Boolean = true,
+    ) = PageTurnDrag(
+        style = { style },
+        canTurn = { canTurn },
+        isRtl = { false },
+        density = { 1f },
+        onTurnPage = { turns += it },
+    )
 }
