@@ -207,9 +207,68 @@ persisted grant, so a stale grant does not reproduce the failure there.
 The fallback in `LocalLibraryRepository.addFolder` and the message that
 goes with it are for the devices where it does.
 
-## Releasing
+### Why the reading stats say "Counting this device only"
 
-`hack/release` does the whole thing: bump `versionCode` and
+The dashboard combines every device that has signed in to liseur-sync,
+but only when the merge can be *proved* exact. When it cannot, the
+screen silently shows what this device counted and says so. That is
+deliberate: ADR-0021 would rather report a smaller true number than a
+plausible wrong one, and a reader is never shown an error about it.
+
+The reason is written to the log instead, so the answer is one command
+away:
+
+```bash
+adb logcat -s liseur-sync-insights
+```
+
+Every refusal prints `Statistics count this device alone: <reason>`.
+The reasons are prose, not codes, and name the exact thing that could
+not be established, from the account having no identity to check a
+reply against, through a book resolved to a different work since it was
+sent, to a reason the server itself gave.
+
+The one worth recognising is `the server could not place this device's
+evidence (candidate_payload_mismatch)`. It means this app rebuilt the
+description of a sitting and the server disagreed with its own stored
+copy. In practice that means the device identity behind those uploads
+changed, since the server folds the device id into the fingerprint it
+compares. A reconnect with a password keeps the stored device id and is
+fine; a pasted token names nobody and gets a fresh one.
+
+Some background on why any of this needs rebuilding. Sessions have been
+uploaded since v0.6.0, but the table that retains the exact bytes of
+each request only arrived with the dashboard. Every sitting older than
+that is of unknown standing: the upload flag does not settle it either,
+because disconnecting an account clears the flags while the server
+keeps the sessions. So the sitting is described again from the stored
+row and offered as a candidate, and the server rules on it. That
+rebuild is byte-identical to the original because the payload is a pure
+function of the row, and the only field added since, `active_ms`, is
+withheld from exactly these sittings.
+
+Two cases are settled without asking. A sitting recorded since the
+evidence table existed and never sent is counted here, because a
+request is always written down before it goes out. A sitting of a book
+the server has no confident name for is also counted here, because
+sending reading up requires such a name and the upload query joins on
+it, so that sitting has never once been selected.
+
+Reproducing the upgraded state on an emulator is the quickest way to
+exercise all of this: flag the sittings, drop their retained requests
+and clear their upload flags.
+
+```bash
+adb shell "run-as com.chmouel.liseur sqlite3 databases/liseur.db \
+  'UPDATE reading_sessions SET legacy_evidence_unknown = 1, uploaded_at = NULL; \
+   DELETE FROM session_transmission;'"
+```
+
+The screen should still read "Counting all your devices", and the
+sitting count should equal this device's own, not that plus the
+server's. Never do this on a phone somebody reads on.
+
+## Releasing
 `versionName`, write the F-Droid changelog, run the tests, lint and a
 release build, commit, tag and push, publish the GitHub release, and
 update the F-Droid submission.
