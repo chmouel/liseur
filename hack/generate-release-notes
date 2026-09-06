@@ -2,8 +2,8 @@
 
 # Writes the GitHub release notes for a tag, by asking Gemini to turn the
 # commits since the previous tag into something a reader would want to
-# read. Falls back to the F-Droid changelog when there is no API key or
-# the request fails, so a release is never held up by this.
+# read. Retries transient API failures, then falls back to the F-Droid
+# changelog when there is no API key or generation still fails.
 #
 # The F-Droid changelog stays the canonical short summary: it is capped
 # at 500 characters and written by hand. These notes are the long form.
@@ -19,10 +19,10 @@ readonly MODEL="gemini-3.6-flash"
 # one of them is re-sized here, in pixels. Only the width is set: the
 # height follows, and a phone screenshot stays a phone screenshot.
 readonly SCREENSHOT_WIDTH=320
-# Roughly the point where the prompt stops being worth the tokens. The
-# commit messages carry the meaning in this repository; the diffstat is
-# only there for scale.
-readonly MAX_PROMPT_BYTES=120000
+# Keep the source material compact enough for a reliable generation request.
+readonly MAX_PROMPT_BYTES=100000
+readonly MAX_GENERATION_ATTEMPTS=4
+readonly RETRY_DELAY_SECONDS=5
 
 workdir=""
 
@@ -112,7 +112,9 @@ language and already say what changed and why, so trust them over the
 file names:
 
 EOF
-        git log --no-color --stat --pretty='--- %s%n%b' "$range"
+        # File diffs add noise and consume most of the prompt without helping
+        # the model describe the reader-visible change.
+        git log --no-color --pretty='--- %s%n%b' "$range"
 
         if jq -e 'length > 0' "$pull_requests" >/dev/null; then
             cat <<'EOF'
@@ -129,14 +131,8 @@ EOF
         fi
     } > "$prompt"
 
-    if [[ $(wc -c < "$prompt") -gt $MAX_PROMPT_BYTES ]]; then
-        local trimmed
-        trimmed=$(mktemp -p "$workdir")
-        head -c "$MAX_PROMPT_BYTES" "$prompt" > "$trimmed"
-        printf '\n[truncated]\n' >> "$trimmed"
-        mv "$trimmed" "$prompt"
-    fi
-
+    local rules
+    rules=$(mktemp -p "$workdir")
     {
         cat <<'EOF'
 
@@ -175,7 +171,22 @@ EOF
 
 Output only Markdown, with no code fences around it.
 EOF
-    } >> "$prompt"
+    } > "$rules"
+
+    local prompt_bytes rules_bytes available trimmed
+    prompt_bytes=$(wc -c < "$prompt")
+    rules_bytes=$(wc -c < "$rules")
+    if (( prompt_bytes + rules_bytes > MAX_PROMPT_BYTES )); then
+        available=$((MAX_PROMPT_BYTES - rules_bytes - 16))
+        (( available > 0 )) || die "release-notes prompt rules exceed the size limit"
+        trimmed=$(mktemp -p "$workdir")
+        head -c "$available" "$prompt" > "$trimmed"
+        printf '\n[truncated]\n' >> "$trimmed"
+        cat "$rules" >> "$trimmed"
+        mv "$trimmed" "$prompt"
+    else
+        cat "$rules" >> "$prompt"
+    fi
 }
 
 # Puts every screenshot at one size, whatever the model copied out of the
@@ -195,7 +206,7 @@ normalize_screenshots() {
 
 generate() {
     local prompt=$1 output=$2
-    local request response
+    local request response attempt status delay
 
     request=$(mktemp -p "$workdir")
     response=$(mktemp -p "$workdir")
@@ -203,14 +214,42 @@ generate() {
     jq -n --rawfile prompt "$prompt" \
         '{contents: [{parts: [{text: $prompt}]}]}' > "$request"
 
-    curl -fsS --max-time 120 \
-        "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent" \
-        -H "Content-Type: application/json" \
-        -H "x-goog-api-key: $GEMINI_API_KEY" \
-        -X POST -d @"$request" > "$response" || return 1
+    for ((attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++)); do
+        if ! status=$(curl -sS --max-time 120 \
+            --write-out '%{http_code}' --output "$response" \
+            "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent" \
+            -H "Content-Type: application/json" \
+            -H "x-goog-api-key: $GEMINI_API_KEY" \
+            -X POST -d @"$request"); then
+            status=000
+        fi
 
-    jq -er '.candidates[0].content.parts | map(.text // "") | join("")
-        | select(length > 0)' "$response" > "$output" || return 1
+        case "$status" in
+        2??)
+            if jq -er '.candidates[0].content.parts | map(.text // "") | join("")
+                | select(length > 0)' "$response" > "$output"; then
+                return 0
+            fi
+            printf 'Gemini returned an invalid successful response.\n' >&2
+            return 1
+            ;;
+        408 | 425 | 429 | 500 | 502 | 503 | 504 | 000)
+            if (( attempt == MAX_GENERATION_ATTEMPTS )); then
+                printf 'Gemini request failed after %d attempts (HTTP %s).\n' \
+                    "$attempt" "$status" >&2
+                return 1
+            fi
+            delay=$((RETRY_DELAY_SECONDS * 2 ** (attempt - 1)))
+            printf 'Gemini returned HTTP %s; retrying in %ss (attempt %d/%d).\n' \
+                "$status" "$delay" "$((attempt + 1))" "$MAX_GENERATION_ATTEMPTS" >&2
+            sleep "$delay"
+            ;;
+        *)
+            printf 'Gemini request failed with HTTP %s.\n' "$status" >&2
+            return 1
+            ;;
+        esac
+    done
 }
 
 main() {

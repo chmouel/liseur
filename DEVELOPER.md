@@ -630,6 +630,9 @@ Without `GEMINI_API_KEY`, or if the request fails, the generated notes
 fall back to the hand-written changelog, so a release is never held up
 by this. The key comes from `pass` under `google/gemini-api` and is
 uploaded to the release environment by `hack/release --sync-secrets`.
+The generator keeps the prompt compact by omitting commit diffstats and
+retries transient Gemini or network failures with bounded backoff before
+using that fallback.
 
 The notes can be rewritten after the fact: the body of a release stays
 editable even though its tag and assets do not:
