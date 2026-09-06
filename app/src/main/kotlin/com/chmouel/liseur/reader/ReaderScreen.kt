@@ -2003,7 +2003,12 @@ fun ReaderScreen(
                                 event.changes.forEach { it.consume() }
                                 continue
                             }
-                        } else if (touch.moved) {
+                        } else if (down.size > 1 || touch.moved) {
+                            // Asked while a second finger is down even if
+                            // nothing has moved yet: that finger settles
+                            // the gesture, and one that lands and leaves
+                            // without travelling would otherwise never be
+                            // seen at all.
                             val travelled = down[0].position - touch.downAt
                             if (pageTurnDrag.offer(down.size, travelled.x, travelled.y)) {
                                 event.changes.forEach { it.consume() }
