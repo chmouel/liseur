@@ -51,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -580,6 +581,9 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
     val chartHeight = if (showAmounts) 150.dp else 130.dp
     val dateFormat = lastReadFormat()
     val scrollState = rememberScrollState()
+    LaunchedEffect(periods, scrollable) {
+        if (scrollable) scrollState.scrollTo(scrollState.maxValue)
+    }
 
     Row(
         modifier = Modifier
