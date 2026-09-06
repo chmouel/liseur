@@ -82,14 +82,13 @@ cannot be empty. The rows that do not apply still hide themselves:
 auto-scroll only in a scrolled book, the page-turn animation only in a
 paginated one, columns only when there is width for two.
 
-Settings -> Reading appearance shows five of the six without a book (the
-just-this-book toggle needs a book to set apart, and there is none
-here) and not behind a collapsed section: that screen has nothing else
-competing for room, so there is no empty-sheet problem to avoid, and a
-reader who came looking for the margins should not have to open
-anything to find them. The typography sheet still collapses them, being
-the surface that stays Kindle-simple; the settings screen just lists
-them.
+Settings -> Reading appearance shows four of the six without a book,
+and behind an Advanced section of its own, closed on arrival. The
+just-this-book toggle needs a book to set apart and there is none here;
+the page-turn animation is on Reading & navigation, under the Advanced
+section there. It listed the four flat at first, on the argument that a
+screen with nothing else competing for room has no empty-sheet problem
+to avoid; that argument lost. See the second update below.
 
 New reading settings default to Advanced. `AGENTS.md` carries that as a
 convention, so the next reasonable row has to argue its way onto the
@@ -109,3 +108,37 @@ rows that only some devices show, so it moved behind a single row into
 section with it. Reading appearance is unchanged and still holds how
 the page looks; the tap-zone chip row named above is now on the new
 screen. `AGENTS.md` names both destinations.
+
+## Second update
+
+Reading appearance now collapses its advanced settings too, reversing
+the paragraph above that said it should not.
+
+The argument for listing them flat was about room, and room was never
+the problem. The problem is that the appearance settings the two
+surfaces share were sorted into everyday and rare with a book open, and
+not sorted at all without one, so a reader who learned the sheet
+learned nothing about the screen. Two ways into the same preferences
+that disagree about which of them are everyday teach the reader that
+the distinction is arbitrary — and if it is arbitrary, the sheet has no
+reason to keep hiding anything.
+
+So the screen takes the sheet's shape: the preview, the theme, the
+size, the light and the face at the top, and line spacing, margins,
+columns, the fine typography and the footer behind **Advanced** at the
+bottom, closed on every arrival. The preview stays above it and goes on
+answering to what is inside, so opening Advanced is not a step away
+from the only page there is to look at.
+
+Reading & navigation already had such a section, in a rounded card of
+`ListItem` rows. Reading appearance is sliders, swatches and dropdowns
+down a spaced column, so it gets `SettingsExpandableSection`: the same
+header, announced the same way, without the card that would box
+controls that are not rows.
+
+The convention that follows is the one `AGENTS.md` now carries: a
+setting that appears on both surfaces is everyday on both or advanced
+on both. Placing such a row on one of them is placing it on the other.
+
+*Where:* `ui/settings/ReadingAppearanceScreen.kt`,
+`ui/settings/SettingsRows.kt`.

@@ -335,16 +335,22 @@ emulator.
 - Reader settings map to Readium `EpubPreferences`; reading themes
   (Light/Sepia/Dark/Black) are decoupled from the app's Material theme.
 - A new reading setting goes in the Advanced sheet
-  (`reader/chrome/AdvancedSheet.kt`), and directly on Settings -> Reading
+  (`reader/chrome/AdvancedSheet.kt`), and on Settings -> Reading
   appearance if it is about how the page *looks*, or on Settings ->
   Reading & navigation (`ui/settings/ReadingNavigationScreen.kt`) if it
-  is about how the book is turned, held or looked up. Reading &
-  navigation has its own Advanced section at the bottom
-  (`SettingsExpandableGroup`), closed on arrival, for the rows a reader
-  sets once if ever — the page turn, the page-turn sides, pinch to
-  resize. Reading appearance has none. The typography sheet is the short
-  list a reader changes often (theme, size, brightness, font, and how
-  the book is read), and it only grows for a setting that genuinely
+  is about how the book is turned, held or looked up. Both screens end
+  in an Advanced section, closed on arrival, for the rows a reader sets
+  once if ever: Reading & navigation's holds the page turn, the
+  page-turn sides and pinch to resize (`SettingsExpandableGroup`, a
+  card of `ListItem` rows), Reading appearance's holds the appearance
+  settings the Advanced sheet also keeps behind Advanced — line
+  spacing, margins, columns, the fine typography and the footer
+  (`SettingsExpandableSection`, no card, because that screen is
+  controls rather than rows). A setting shown on both surfaces is
+  everyday on both or advanced on both; they must not disagree. The
+  typography sheet is the
+  short list a reader changes often (theme, size, brightness, font, and
+  how the book is read), and it only grows for a setting that genuinely
   belongs there. Make that case in the pull request; the default is
   Advanced. It grew to eleven controls once, one reasonable row at a
   time. See `docs/adr/0001-advanced-reading-menu.md`.
