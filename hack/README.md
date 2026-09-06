@@ -67,9 +67,16 @@ target wrapping them. Run `make help` for the short list. See
 - `install-release`: Builds the release APK, signs it with the
   release key from `pass`, and installs it on a device picked via `fzf`.
 - `release`: Runs the release process: bumps `versionCode`/
-  `versionName`, checks that F-Droid will see final tags but not test tags,
+  `versionName`, checks that F-Droid will see final tags but not RC tags,
   tags, builds, publishes the GitHub release, and submits the F-Droid
-  update. See `DEVELOPER.md` for the full workflow and flags.
+  update. `--rc` publishes only to a GitHub prerelease and Google Play's
+  testing tracks. See `DEVELOPER.md` for the full workflow and flags.
+- `prune-prereleases`: Deletes every legacy `vX.Y.Z-test.N` GitHub release
+  page and all but the newest `vX.Y.Z-rc.N` page for each target version.
+  It never deletes tags. The release workflow runs it after publishing an
+  RC.
+- `test-prune-prereleases`: Runs the deterministic mocked-GitHub tests for
+  prerelease retention. It is part of `make check` and CI.
 - `verify-fdroid-tags`: Reads the live F-Droid metadata and fails closed
   unless a plain `vX.Y.Z` tag is discoverable and the supplied non-final tags
   are not. The release script runs it before pushing or submitting a tag.
