@@ -12,6 +12,7 @@ class SeriesShelfTest {
 
     private fun book(
         title: String,
+        url: String = "https://example.test/$title",
         series: String? = "Wheel of Time",
         index: Double? = null,
         author: String? = "Robert Jordan",
@@ -19,7 +20,7 @@ class SeriesShelfTest {
         archivedAt: Long? = null,
         state: DownloadState = DownloadState.DOWNLOADED,
     ) = Book(
-        url = "https://example.test/$title",
+        url = url,
         title = title,
         author = author,
         coverPath = null,
@@ -87,6 +88,17 @@ class SeriesShelfTest {
         assertEquals(
             listOf("One", "One and a half", "Two", "Companion"),
             shelves.single().volumes.map { it.book.title },
+        )
+    }
+
+    @Test
+    fun `equal volume titles use permanent identity independently of input order`() {
+        val first = book("Same title", url = "https://example.test/a", index = 1.0)
+        val second = book("Same title", url = "https://example.test/b", index = 1.0)
+
+        assertEquals(
+            listOf(first.url, second.url),
+            listOf(second, first).groupedIntoSeries().single().volumes.map { it.book.url },
         )
     }
 

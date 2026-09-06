@@ -105,6 +105,7 @@ private val byVolume: Comparator<SeriesVolume> =
     compareBy<SeriesVolume> { it.index == null }
         .thenBy { it.index ?: 0.0 }
         .thenBy { sortKey(it.book.title) }
+        .thenBy { it.book.url }
 
 /**
  * Gathers books into the series they belong to.
