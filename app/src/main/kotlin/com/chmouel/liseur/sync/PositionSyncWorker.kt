@@ -64,18 +64,6 @@ class PositionSyncWorker(
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        /** Reconciles every book. Used at app start and by the pull to refresh. */
-        fun syncNow(context: Context) {
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                FULL_SYNC,
-                ExistingWorkPolicy.KEEP,
-                OneTimeWorkRequestBuilder<PositionSyncWorker>()
-                    .setConstraints(onNetwork)
-                    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
-                    .build(),
-            )
-        }
-
         /** Sends one book's position, for the moment it is closed. */
         fun pushBook(context: Context, bookUrl: String) {
             enqueueBook(context, bookUrl, ExistingWorkPolicy.APPEND_OR_REPLACE, expedited = true)

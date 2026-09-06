@@ -69,11 +69,6 @@ data class EndpaperContinuation(
     val noNextInLibrary: Boolean = false,
 )
 
-internal fun shouldOfferEndpaperContinuation(
-    finished: Boolean,
-    endpaperReached: Boolean,
-): Boolean = finished && endpaperReached
-
 internal fun nextVolumeAvailability(
     openableUrl: String?,
     downloadState: DownloadState,
@@ -98,30 +93,19 @@ internal fun endpaperContinuation(
     current: Book,
     library: List<Book>,
     progressions: Map<String, Double>,
-    dismissed: Boolean,
     endpaperReached: Boolean,
     downloads: Map<String, DownloadSnapshot>,
     canDownload: Boolean,
     extras: SeriesExtras?,
     timeSpentMs: Long = 0,
 ): EndpaperContinuation? {
-    if (!shouldOfferEndpaperContinuation(current.finished, endpaperReached)) return null
+    if (!current.finished || !endpaperReached) return null
     val seriesName = current.seriesName?.takeIf { it.isNotBlank() }
     val finishedVolume = seriesName?.let { seriesIndexLabel(current.seriesIndex) }
     val shelf = library.groupedIntoSeries(progressions).firstOrNull {
         seriesKey(it.name) == seriesKey(current.seriesName)
     }
     val completion = shelf?.let { seriesCompletion(it, extras) } ?: SeriesCompletion.IN_PROGRESS
-    if (dismissed) {
-        return EndpaperContinuation(
-            next = null,
-            seriesCompletion = SeriesCompletion.IN_PROGRESS,
-            finished = current,
-            timeSpentMs = timeSpentMs.takeIf { it >= MIN_ENDPAPER_TIME_MS },
-            seriesName = seriesName,
-            finishedVolume = finishedVolume,
-        )
-    }
     val offer = seriesContinuation(current, library, extras)
     val nextUp = offer.next?.let { nextBook ->
         val snapshot = downloads[nextBook.url]

@@ -204,20 +204,6 @@ class KosyncAccountRepository(
         dao.delete()
     }
 
-    /**
-     * Forgets a partner whose key can no longer be read back — a
-     * database restored onto another phone arrives with ciphertext this
-     * Keystore cannot open, and asking for the password again is better
-     * than looking connected while every request quietly fails.
-     */
-    suspend fun forgetUnreadable(): Boolean {
-        val peer = dao.get() ?: return false
-        if (peer.credentials != null) return false
-        forget(peer)
-        dao.delete()
-        return true
-    }
-
     private suspend fun forget(peer: KosyncPeer) {
         peerStateDao.forgetPeer(peer.accountKey)
         reporting.forget(PeerPositionSync.KOSYNC)

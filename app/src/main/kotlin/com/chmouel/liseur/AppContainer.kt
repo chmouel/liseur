@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.AndroidNetworkAvailability
-import com.chmouel.liseur.data.ConnectionsState
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogClient
 import com.chmouel.liseur.data.calibre.CalibreFileSource
@@ -468,13 +467,6 @@ class AppContainer(context: Context) {
         database.remoteServerDao(), database.readingSessionDao(),
         database.sessionTransmissionDao(), database.workIdentityDao(),
         deviceKey = { deviceIdentity.current().id },
-    )
-
-    /**
-     * Which server is connected, for settings to show at a glance.
-     */
-    val connections = ConnectionsState(
-        catalog = remoteAccount.server,
     )
 
     val remoteCatalog = RemoteCatalogRepository(

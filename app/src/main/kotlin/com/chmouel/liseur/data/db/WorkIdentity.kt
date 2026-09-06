@@ -223,9 +223,6 @@ interface WorkIdentityDao {
     @Upsert
     suspend fun upsert(ambiguity: WorkAmbiguity)
 
-    @Query("SELECT * FROM work_ambiguity WHERE peer_id = :peerId")
-    suspend fun ambiguitiesFor(peerId: String): List<WorkAmbiguity>
-
     @Query("SELECT COUNT(*) FROM work_ambiguity WHERE peer_id = :peerId")
     suspend fun ambiguityCount(peerId: String): Int
 

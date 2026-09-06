@@ -94,8 +94,6 @@
     <string name="series_source_folder">Series from the watched folder</string>
     <string name="series_source_shared">Series corrected by the library admin</string>
     <string name="series_source_personal">Your personal series claim</string>
-    <string name="next_in_series">Next: %1$s</string>
-    <string name="next_in_series_numbered">Next: #%1$s %2$s</string>
     <string name="clear">Clear</string>
     <string name="continue_reading">Continue reading</string>
     <string name="empty_library_title">Your library is empty</string>
@@ -149,7 +147,6 @@
     </plurals>
     <string name="jump_back">Back</string>
     <string name="jump_back_to_page">Back to page %d</string>
-    <string name="position_synced_from_device">Synced from another device</string>
     <string name="catch_up">Continue where you left off elsewhere</string>
     <string name="catch_up_to_page">Continue to page %d</string>
     <string name="catch_up_near_page">Continue near page %d</string>
@@ -202,7 +199,6 @@
     <string name="server_tagline_grimmory">A self-hosted library for your ebooks</string>
     <string name="server_tagline_liseur_sync">Your books on every device — even books only on this phone</string>
     <string name="server_tagline_custom">Any OPDS catalog, any KOReader sync server, or both</string>
-    <string name="server_section_server">Server</string>
     <string name="server_section_sync">Reading positions</string>
     <string name="server_api_key">API key</string>
     <string name="server_api_key_help">In Komga, open your account settings and create an API key. Pasting the whole page address is fine — Liseur finds the server from it.</string>
@@ -301,7 +297,6 @@
     <string name="downloads_not_allowed">Your account can\'t download books. Ask the server\'s admin to allow downloads for you.</string>
     <string name="download_book">Download</string>
     <string name="cancel_download">Cancel download</string>
-    <string name="remove_download">Remove download</string>
     <string name="server_credentials_lost">Sign in to your book server again.</string>
 
     <string name="download_all">Download all books</string>
@@ -595,7 +590,6 @@
     <string name="reader_typography_own_on">Font, size, line spacing and margins stay with this book. Alignment, hyphenation, weight and letter, word and paragraph spacing are shared with every book.</string>
     <string name="reader_typography_own_off">Font, size, line spacing and margins are shared with every book.</string>
     <string name="reader_advanced">Advanced</string>
-    <string name="reader_hide_advanced">Hide advanced</string>
     <string name="reader_auto_scroll">Scroll the page for me</string>
     <string name="reader_auto_scroll_detail">The page carries itself along, and the screen stays awake. Touch it to stop, touch it again to carry on.</string>
     <string name="reader_auto_scroll_speed">Scrolling speed</string>
@@ -734,7 +728,6 @@
     <string name="reading_stats_empty_title">Nothing recorded yet.</string>
     <string name="reading_stats_empty_detail">Liseur starts counting from the moment you open a book. Reading you did before this arrived is not here, because there is no honest way to work out how long it took.</string>
     <string name="reading_stats_book_empty">You have not read any of this one yet.</string>
-    <string name="reading_stats_last_read">Last read %1$s</string>
     <string name="reading_stats_last_read_label">Last read</string>
     <string name="reading_stats_started_label">Started</string>
     <string name="reading_stats_reading_for_label">Reading for</string>
@@ -779,7 +772,6 @@
     <string name="reading_stats_calendar">Day by day</string>
     <string name="reading_stats_pace">Pace</string>
     <string name="reading_stats_pace_value">%1$d%%/h</string>
-    <string name="reading_stats_pace_detail">About %1$d%% of a book an hour</string>
     <string name="reading_stats_book_sessions">Read in %1$d sittings</string>
     <string name="reading_stats_book_sessions_one">Read in one sitting</string>
     <string name="reading_stats_heatmap_day">%1$s on %2$s</string>

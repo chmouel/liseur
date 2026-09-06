@@ -221,11 +221,9 @@ class ReaderViewModel(
      * Raised when the last page has been turned: the next volume, if
      * there is one, and how the series itself reads if there is not.
      *
-     * Dismissing the next volume is remembered for as long as this book
-     * is open. Turning back off the endpaper withdraws the offer without
-     * undoing that the book is finished.
+     * Turning back off the endpaper withdraws the offer without undoing
+     * that the book is finished.
      */
-    private val dismissedNextUp = MutableStateFlow(false)
     private val endpaperReached = MutableStateFlow(false)
     private val continueAfterDownload = MutableStateFlow(false)
     private val _seriesExtras = MutableStateFlow<SeriesExtras?>(null)
@@ -248,16 +246,14 @@ class ReaderViewModel(
             // next: the reader put it away.
             bookDao.observeAll().map { books -> books.filterNot { it.hidden } },
             progressDao.observeProgressions(),
-            dismissedNextUp,
             endpaperReached,
             downloads.progress,
-        ) { books, progressions, dismissed, endpaper, running ->
+        ) { books, progressions, endpaper, running ->
             ContinuationInputs(
                 books = books,
                 progressions = progressions
                     .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
                     .toMap(),
-                dismissed = dismissed,
                 endpaperReached = endpaper,
                 downloads = running.mapValues { (_, progress) ->
                     DownloadSnapshot(
@@ -277,7 +273,6 @@ class ReaderViewModel(
             current = current,
             library = inputs.books,
             progressions = inputs.progressions,
-            dismissed = inputs.dismissed,
             endpaperReached = inputs.endpaperReached,
             downloads = inputs.downloads,
             canDownload = allowed,
@@ -300,13 +295,6 @@ class ReaderViewModel(
      */
     fun onLeftEndpaper() {
         endpaperReached.value = false
-        continueAfterDownload.value = false
-        _pendingOpen.value = null
-    }
-
-    /** The offer was declined. Either way it is done with. */
-    fun dismissNextUp() {
-        dismissedNextUp.value = true
         continueAfterDownload.value = false
         _pendingOpen.value = null
     }
@@ -345,7 +333,6 @@ class ReaderViewModel(
     private data class ContinuationInputs(
         val books: List<Book>,
         val progressions: Map<String, Double>,
-        val dismissed: Boolean,
         val endpaperReached: Boolean,
         val downloads: Map<String, DownloadSnapshot>,
     )

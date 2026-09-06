@@ -199,9 +199,6 @@ object LiseurSyncApi {
                 java.net.URLEncoder.encode(scope, "UTF-8"),
         )
 
-    fun bookCover(baseUrl: String, bookId: String): String =
-        url(baseUrl, "/v1/books/$bookId/cover")
-
     /**
      * Insights for one span, named by its first and last day.
      *

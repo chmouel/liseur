@@ -52,7 +52,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
-import com.chmouel.liseur.data.ConnectionsState
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.library.Inspection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
@@ -60,6 +60,7 @@ import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.label
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.flow.Flow
 
 private const val LISEUR_SYNC_REPO_URL = "https://github.com/chmouel/liseur-sync"
 
@@ -78,7 +79,7 @@ fun SettingsScreen(
     onOpenReadingNavigation: () -> Unit,
     onOpenHiddenBooks: () -> Unit,
     backup: AnnotationBackupUi,
-    connections: ConnectionsState,
+    server: Flow<RemoteServer?>,
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -208,7 +209,7 @@ fun SettingsScreen(
                     onHelp = { showLibraryHelp.value = true },
                     helpDescription = stringResource(R.string.settings_library_help_title),
                 ) {
-                    val catalog by connections.catalog.collectAsStateWithLifecycle(null)
+                    val catalog by server.collectAsStateWithLifecycle(null)
                     ConnectionRow(
                         icon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
                         title = stringResource(R.string.server_account),

@@ -103,11 +103,6 @@ class LocalLibraryRepository(
         scanFolder(treeUri)
     }
 
-    suspend fun removeFolder(url: String) = importLock.withLock {
-        folderDao.delete(url)
-        bookRemoval.deleteByUrls(bookDao.urlsForSource(url))
-    }
-
     /**
      * Takes a book off the shelf and leaves its file alone.
      *

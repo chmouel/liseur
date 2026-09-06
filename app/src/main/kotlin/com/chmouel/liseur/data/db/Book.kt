@@ -886,7 +886,4 @@ interface LibraryFolderDao {
 
     @Upsert
     suspend fun upsert(folder: LibraryFolder)
-
-    @Query("DELETE FROM library_folders WHERE url = :url")
-    suspend fun delete(url: String)
 }
