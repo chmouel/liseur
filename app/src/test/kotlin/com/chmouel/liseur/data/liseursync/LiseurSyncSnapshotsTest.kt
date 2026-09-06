@@ -14,6 +14,7 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.ComparisonDirection
+import com.chmouel.liseur.domain.ComparisonScope
 import com.chmouel.liseur.ui.stats.ReadingStatsUiState
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.stats.StatsProvenance
@@ -121,6 +122,76 @@ class LiseurSyncSnapshotsTest {
         assertEquals(90.0, result.totals.summary.activeMinutes, 0.0)
         assertEquals(today, result.totals.days.last().date)
         assertEquals(11, result.totals.combinedStreak)
+    }
+
+    @Test
+    fun `snapshot asks for and accepts one coherent comparison`() = runTest {
+        changeCapabilities = { it.put("comparison", true) }
+        val result = read()!!
+        val requested = requests.single().getJSONObject("comparison")
+        assertEquals("2026-09-01", requested.getString("current_from"))
+        assertEquals("2026-08-01", requested.getString("previous_from"))
+        assertEquals("23:59:59.999", requested.getString("through"))
+        assertEquals(60.0, result.totals.comparison!!.currentMinutes, 0.0)
+        assertEquals(120.0, result.totals.comparison!!.previousMinutes, 0.0)
+    }
+
+    @Test
+    fun `old server keeps the local comparison request unchanged`() = runTest {
+        val result = read()!!
+        assertFalse(requests.single().has("comparison"))
+        assertNull(result.totals.comparison)
+    }
+
+    @Test
+    fun `malformed optional comparison does not discard the headline`() = runTest {
+        changeCapabilities = { it.put("comparison", true) }
+        changeResponse = { it.getJSONObject("comparison").put("through", "not-a-time") }
+        val result = read()
+        assertNotNull(result)
+        assertNull(result!!.totals.comparison)
+        assertEquals(90.0, result.totals.summary.activeMinutes, 0.0)
+    }
+
+    @Test
+    fun `baseline evidence is included so uploaded reading is not counted twice`() = runTest {
+        changeCapabilities = { it.put("comparison", true) }
+        val id = sitting(unknown = true)
+        val old = db.readingSessionDao().get(id)!!
+        db.readingSessionDao().deleteForBook("book")
+        val baseline = today.minusMonths(1).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        val baselineId = db.readingSessionDao().insert(
+            old.copy(id = 0, startedAt = baseline - 600_000, endedAt = baseline, lastCheckpointAt = baseline),
+        )
+        transmit(baselineId)
+
+        assertNotNull(read())
+        assertEquals(1, requests.single().getJSONArray("candidates").length())
+    }
+
+    @Test
+    fun `baseline evidence changing in flight preserves the headline only`() = runTest {
+        changeCapabilities = { it.put("comparison", true) }
+        sitting()
+        val id = sitting(unknown = true)
+        val old = db.readingSessionDao().get(id)!!
+        db.readingSessionDao().deleteForBook("book")
+        sitting()
+        val baseline = today.minusMonths(1).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        val baselineId = db.readingSessionDao().insert(
+            old.copy(id = 0, startedAt = baseline - 600_000, endedAt = baseline, lastCheckpointAt = baseline),
+        )
+        duringRequest = { transmit(baselineId) }
+
+        val client = client()
+        val context = client.discover()!!
+        val result = client.read(
+            context, db.readingSessionDao().allOnce(), StatsRange.THIS_MONTH,
+            today, DayOfWeek.MONDAY,
+        )
+        assertNotNull(result)
+        assertTrue(client.isCurrent(result!!))
+        assertFalse(client.isComparisonCurrent(result))
     }
 
     @Test
@@ -560,6 +631,7 @@ class LiseurSyncSnapshotsTest {
                     put("days", JSONArray().put(day(today, 30, 1)))
                 })
             }
+
             val model = ReadingStatsViewModel(
                 db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
                 initialRange = StatsRange.THIS_MONTH, zone = { zone },
@@ -576,6 +648,37 @@ class LiseurSyncSnapshotsTest {
             assertEquals(90 * 60_000L, ready.headline.totalMs)
             assertEquals(90 * 60_000L, ready.stats.books.single().totalMs)
             assertEquals(90 * 60_000L, ready.stats.recent.sumOf { it.totalMs })
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `comparison counts every device and subtracts local overlap`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        try {
+            changeCapabilities = { it.put("comparison", true) }
+            val id = sitting(unknown = true)
+            transmit(id)
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_MONTH, zone = { zone },
+                now = { today.atTime(13, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                aliases = db.workIdentityDao().observeAliases(),
+                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+            )
+            models.put("comparison", model)
+            model.refreshServerInsights()
+            val ready = model.state.first {
+                it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.ALL_DEVICES
+            } as ReadingStatsUiState.Ready
+            assertEquals(ComparisonScope.ALL_DEVICES, ready.headline.comparison!!.scope)
+            assertEquals(ComparisonDirection.LESS, ready.headline.comparison!!.direction)
+            assertEquals(50, ready.headline.comparison!!.percent)
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -676,7 +779,20 @@ class LiseurSyncSnapshotsTest {
                     if (hasOverlap) put(JSONObject("""{"work_id":"work","total_active_minutes":10,"sessions":1}"""))
                 })
                 put("days", JSONArray().apply { if (hasOverlap && today in start..end) put(day(today, 10, 1)) })
+                if (request.has("comparison")) {
+                    put("comparison", JSONObject().apply {
+                        put("current_active_minutes", if (hasOverlap) 30 else 0)
+                        put("previous_active_minutes", 0)
+                    })
+                }
             })
+            if (request.has("comparison")) {
+                val comparison = request.getJSONObject("comparison")
+                put("comparison", JSONObject(comparison.toString()).apply {
+                    put("current_active_minutes", 60)
+                    put("previous_active_minutes", 120)
+                })
+            }
             put("combined_streak_days", 11)
         }
         return response

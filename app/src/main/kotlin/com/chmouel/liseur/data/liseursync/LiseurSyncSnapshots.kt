@@ -11,6 +11,8 @@ import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.domain.ComparisonSpans
+import com.chmouel.liseur.domain.DateSpan
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.calendarChunks
 import java.io.IOException
@@ -18,7 +20,10 @@ import java.time.DateTimeException
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +40,7 @@ internal data class CompleteStatsSnapshot(
     val revision: String,
     val today: LocalDate,
     val captured: CapturedStatsSessions,
+    val comparisonCaptured: CapturedStatsSessions?,
     val aliases: List<StatsAlias>,
     val totals: SnapshotTotals,
 ) {
@@ -90,6 +96,7 @@ class LiseurSyncSnapshots(
         range: StatsRange,
         today: LocalDate,
         weekStart: DayOfWeek,
+        through: LocalTime = LocalTime.MAX,
     ): CompleteStatsSnapshot? = withContext(Dispatchers.Default) {
         optional {
             val account = context.account
@@ -107,15 +114,16 @@ class LiseurSyncSnapshots(
             val key = deviceKey().takeIf { it.isNotBlank() }
                 ?: return@optional refuse("this device has no identity to name its own reading by")
             val from = range.startDate(today, weekStart)
+            var comparison = if (capabilities.comparison) {
+                range.comparison(today, weekStart, through.truncatedTo(ChronoUnit.MILLIS))
+            } else {
+                null
+            }
             val recorded = statsSessions(sessions)
             val evidence = transmissionDao.forPeer(account.accountKey)
             val aliases = statsAliases(identityDao.aliasesFor(account.accountKey))
             val bySession = evidence.associateBy { it.sessionId }
             val aliasByUrl = aliases.associateBy { it.bookUrl }
-            val candidates = JSONArray()
-            val candidateWorks = mutableSetOf<String>()
-            val contributingIds = mutableSetOf<Long>()
-            var candidateBytes = 0L
             val days = sortedSetOf<LocalDate>()
             val workByUrl = aliases.associate { it.bookUrl to it.workId }
             for (session in recorded) {
@@ -126,76 +134,120 @@ class LiseurSyncSnapshots(
                 if (days.size > capabilities.maxLocalActiveDays) {
                     return@optional refuse("more reading days than the server will accept")
                 }
-                if (day > today || (from != null && day < from)) continue
-                if (session.endedAt == null || session.startProgression == null || session.endProgression == null) continue
-                contributingIds += session.id
-                val transmission = bySession[session.id]
-                if (transmission == null && !session.legacyEvidenceUnknown) {
-                    // Nothing was ever offered for this sitting, and the
-                    // absence is trustworthy: since the evidence table
-                    // existed a request has been written down before it
-                    // is sent, so no server can be holding this. This
-                    // device's own figure is the whole of it.
-                    continue
-                }
-                // A sitting with no retained request may still be on the
-                // server: it was sent before that table existed, or the
-                // record of it was dropped when an account was
-                // disconnected. Neither the acknowledgement nor its
-                // absence settles that, so rebuild what would have been
-                // sent and let the server say. It answers on identity
-                // first, so a sitting it has never seen is ignored and
-                // counted here, one it holds is named in the overlap and
-                // counted once, and a rebuild it disagrees with is
-                // refused outright rather than guessed at (ADR-0021).
-                val payload = if (transmission != null) {
-                    transmission.payload
-                } else {
-                    // A book with no usable name on this peer could
-                    // never have been sent: the upload query joins the
-                    // very same aliases, so it has never once selected
-                    // this sitting. Refusing the whole period over it
-                    // would strand every reader with a sideloaded book
-                    // the server could not name confidently, which is
-                    // the failure this change exists to end.
-                    val alias = aliasByUrl[session.bookUrl] ?: continue
-                    SessionUploads.toJson(session, key, alias.workId, alias.editionSha)?.toString()
-                        ?: return@optional refuse("a sitting of unknown standing cannot be described again")
-                }
-                val device = transmission?.deviceId ?: account.accountId.orEmpty()
-                if (device.isEmpty()) {
-                    return@optional refuse("a sitting to account for names no device")
-                }
-                candidateBytes += payload.toByteArray(Charsets.UTF_8).size
-                if (candidates.length() >= capabilities.maxCandidates || candidateBytes > capabilities.maxBodyBytes) {
-                    return@optional refuse("more evidence than one request may carry")
-                }
-                val json = JSONObject(payload)
-                val work = json.getString("work_id")
-                if (workByUrl[session.bookUrl] != work) {
-                    return@optional refuse("a book was resolved to a different work since it was sent")
-                }
-                candidateWorks += work
-                candidates.put(json.put("device_id", device))
             }
-            val captured = CapturedStatsSessions(
-                recorded, evidence.filter { it.sessionId in contributingIds }, contributingIds.toSet(),
+            fun ReadingSession.inComparison(spans: ComparisonSpans): Boolean {
+                val ended = endedAt ?: return false
+                return listOf(spans.current, spans.previous).any { span ->
+                    val start = span.from.atStartOfDay(capabilities.timezone).toInstant().toEpochMilli()
+                    val cutoff = span.to.atTime(spans.through).atZone(capabilities.timezone)
+                        .toInstant().toEpochMilli()
+                    ended >= start && startedAt < cutoff
+                }
+            }
+            data class Candidates(
+                val json: JSONArray,
+                val works: Set<String>,
+                val sessionIds: Set<Long>,
+                val headlineSessionIds: Set<Long>,
             )
+            fun candidatesFor(spans: ComparisonSpans?): Candidates? {
+                val result = JSONArray()
+                val candidateWorks = mutableSetOf<String>()
+                val contributingIds = mutableSetOf<Long>()
+                val headlineIds = mutableSetOf<Long>()
+                var candidateBytes = 0L
+                for (session in recorded) {
+                    if (session.durationMs <= 0) continue
+                    val day = Instant.ofEpochMilli(session.endedAt ?: session.lastCheckpointAt)
+                        .atZone(capabilities.timezone).toLocalDate()
+                    val inHeadline = day <= today && (from == null || day >= from)
+                    if (!inHeadline && (spans == null || !session.inComparison(spans))) continue
+                    if (session.endedAt == null ||
+                        session.startProgression == null || session.endProgression == null
+                    ) continue
+                    contributingIds += session.id
+                    if (inHeadline) headlineIds += session.id
+                    val transmission = bySession[session.id]
+                    if (transmission == null && !session.legacyEvidenceUnknown) continue
+                    val payload = if (transmission != null) {
+                        transmission.payload
+                    } else {
+                        val alias = aliasByUrl[session.bookUrl] ?: continue
+                        SessionUploads.toJson(session, key, alias.workId, alias.editionSha)?.toString()
+                            ?: return null
+                    }
+                    val device = transmission?.deviceId ?: account.accountId.orEmpty()
+                    if (device.isEmpty()) return null
+                    candidateBytes += payload.toByteArray(Charsets.UTF_8).size
+                    if (result.length() >= capabilities.maxCandidates ||
+                        candidateBytes > capabilities.maxBodyBytes
+                    ) return null
+                    val json = JSONObject(payload)
+                    val work = json.getString("work_id")
+                    if (workByUrl[session.bookUrl] != work) return null
+                    candidateWorks += work
+                    result.put(json.put("device_id", device))
+                }
+                return Candidates(result, candidateWorks, contributingIds, headlineIds)
+            }
+            var proof = candidatesFor(comparison)
+            if (proof == null && comparison != null) {
+                comparison = null
+                proof = candidatesFor(null)
+            }
+            var candidates = proof
+                ?: return@optional refuse("more evidence than one request may carry")
             val firstLocalDay = days.firstOrNull()
             val initialFrom = maxOf(
                 from ?: firstLocalDay ?: today,
                 today.minusDays(capabilities.maxCalendarDays.toLong() - 1),
             )
             val id = UUID.randomUUID().toString()
-            val body = JSONObject().apply {
+            fun requestBody(): JSONObject = JSONObject().apply {
                 put("snapshot_id", id)
                 put("timezone", capabilities.timezone.id)
                 if (from == null) put("range", "all") else {
                     put("from", from.toString())
                     put("to", today.toString())
                 }
-                put("candidates", candidates)
+                comparison?.let { spans ->
+                    put("comparison", JSONObject().apply {
+                        put("current_from", spans.current.from.toString())
+                        put("current_to", spans.current.to.toString())
+                        put("previous_from", spans.previous.from.toString())
+                        put("previous_to", spans.previous.to.toString())
+                        put("through", spans.through.format(COMPARISON_TIME))
+                    })
+                }
+                put("candidates", candidates.json)
                 put("local_active_days", JSONArray(days.map(LocalDate::toString)))
+            }
+            var body = requestBody().apply {
+                put("calendar_from", initialFrom.toString())
+                put("calendar_to", today.toString())
+            }
+            if (body.toString().toByteArray(Charsets.UTF_8).size > capabilities.maxBodyBytes &&
+                comparison != null
+            ) {
+                comparison = null
+                candidates = candidatesFor(null)
+                    ?: return@optional refuse("more evidence than one request may carry")
+                body = requestBody().apply {
+                    put("calendar_from", initialFrom.toString())
+                    put("calendar_to", today.toString())
+                }
+            }
+            val captured = CapturedStatsSessions(
+                recorded,
+                evidence.filter { it.sessionId in candidates.headlineSessionIds },
+                candidates.headlineSessionIds,
+            )
+            val comparisonCaptured = comparison?.let {
+                CapturedStatsSessions(
+                    recorded,
+                    evidence.filter { row -> row.sessionId in candidates.sessionIds },
+                    candidates.sessionIds,
+                )
             }
             suspend fun page(start: LocalDate, end: LocalDate): Page? {
                 body.put("calendar_from", start.toString()).put("calendar_to", end.toString())
@@ -216,7 +268,10 @@ class LiseurSyncSnapshots(
                     throw e
                 }
                 if (!sameAccount(account)) return null
-                return parsePage(response, context, id, from, today, start, end, workByUrl, candidateWorks, candidates.length())
+                return parsePage(
+                    response, context, id, from, today, start, end, workByUrl,
+                    candidates.works, candidates.json.length(), comparison,
+                )
             }
             val first = page(initialFrom, today) ?: return@optional null
             val historyStart = from ?: listOfNotNull(first.firstActivity, firstLocalDay).minOrNull() ?: today
@@ -225,6 +280,7 @@ class LiseurSyncSnapshots(
             }
             val calendar = first.totals.days.toMutableList()
             val overlapDays = first.totals.overlapDays.toMutableMap()
+            var acceptedComparison = first.totals.comparison
             if (historyStart < initialFrom) {
                 val missing = initialFrom.toEpochDay() - historyStart.toEpochDay()
                 if ((missing + capabilities.maxCalendarDays - 1) / capabilities.maxCalendarDays + 1 > MAX_CALENDAR_PAGES) {
@@ -235,9 +291,13 @@ class LiseurSyncSnapshots(
                 )) {
                     val next = page(start, end) ?: return@optional null
                     if (next.revision != first.revision || next.firstActivity != first.firstActivity ||
-                        next.totals.copy(days = emptyList(), overlapDays = emptyMap()) !=
-                        first.totals.copy(days = emptyList(), overlapDays = emptyMap())
+                        next.totals.copy(
+                            days = emptyList(), overlapDays = emptyMap(), comparison = null,
+                        ) != first.totals.copy(
+                            days = emptyList(), overlapDays = emptyMap(), comparison = null,
+                        )
                     ) return@optional refuse("the server's figures moved between calendar pages")
+                    if (next.totals.comparison != acceptedComparison) acceptedComparison = null
                     calendar += next.totals.days
                     overlapDays += next.totals.overlapDays
                 }
@@ -250,8 +310,10 @@ class LiseurSyncSnapshots(
             val dense = generateSequence(historyStart) { it.plusDays(1).takeUnless { day -> day > today } }
                 .map { byDay[it] ?: InsightDay(it, 0.0) }.toList()
             val result = CompleteStatsSnapshot(
-                context, id, first.revision, today, captured, aliases,
-                first.totals.copy(days = dense, overlapDays = overlapDays),
+                context, id, first.revision, today, captured, comparisonCaptured, aliases,
+                first.totals.copy(
+                    days = dense, overlapDays = overlapDays, comparison = acceptedComparison,
+                ),
             )
             result.takeIf { isCurrent(it) } ?: refuse("the reading moved while the server was answering")
         }
@@ -263,6 +325,15 @@ class LiseurSyncSnapshots(
             snapshot.aliases == statsAliases(identityDao.aliasesFor(snapshot.peer)) &&
             sameAccount(snapshot.context.account)
     }
+
+    internal suspend fun isComparisonCurrent(snapshot: CompleteStatsSnapshot): Boolean =
+        withContext(Dispatchers.Default) {
+            val captured = snapshot.comparisonCaptured ?: return@withContext false
+            sameAccount(snapshot.context.account) &&
+                captured.matches(sessionDao.allOnce(), transmissionDao.forPeer(snapshot.peer)) &&
+                snapshot.aliases == statsAliases(identityDao.aliasesFor(snapshot.peer)) &&
+                sameAccount(snapshot.context.account)
+        }
 
     private suspend fun sameAccount(account: RemoteServer): Boolean =
         serverDao.get()?.let(LiveIdentity::from) == LiveIdentity.from(account)
@@ -294,6 +365,7 @@ class LiseurSyncSnapshots(
         workByUrl: Map<String, String>,
         candidateWorks: Set<String>,
         candidateCount: Int,
+        requestedComparison: ComparisonSpans?,
     ): Page? {
         val expectedAccount = (context.capabilities.accountId ?: context.account.liseurAccountId)
             ?.takeIf { it.isNotBlank() } ?: return refuse("the account has no identity to check a reply against")
@@ -373,6 +445,7 @@ class LiseurSyncSnapshots(
         if (matchedDays.any { exceedsMinutes(it.activeMinutes, fullDays[it.date]?.activeMinutes ?: 0.0) }) return refuse(INCOHERENT)
         // Normalize only the accepted sub-millisecond excess. Otherwise integer
         // rounding could turn that noise into a negative residual in the union.
+        val comparison = parseComparison(json, requestedComparison)
         return Page(
             revision, first,
             SnapshotTotals(
@@ -384,8 +457,47 @@ class LiseurSyncSnapshots(
                     it.date to minOf(it.activeMinutes, fullDays[it.date]?.activeMinutes ?: 0.0)
                 },
                 json.count("combined_streak_days"),
+                comparison,
             ),
         )
+    }
+
+    private fun parseComparison(
+        json: JSONObject,
+        requested: ComparisonSpans?,
+    ): SnapshotComparison? {
+        if (requested == null || !json.has("comparison")) return null
+        return try {
+            val totals = json.getJSONObject("comparison")
+            val overlap = json.getJSONObject("overlap").getJSONObject("comparison")
+            val through = LocalTime.parse(totals.getString("through"), COMPARISON_TIME)
+            val current = DateSpan(
+                LocalDate.parse(totals.getString("current_from")),
+                LocalDate.parse(totals.getString("current_to")),
+            )
+            val previous = DateSpan(
+                LocalDate.parse(totals.getString("previous_from")),
+                LocalDate.parse(totals.getString("previous_to")),
+            )
+            if (current != requested.current || previous != requested.previous ||
+                through != requested.through
+            ) return null
+            val currentMinutes = totals.minutes("current_active_minutes")
+            val previousMinutes = totals.minutes("previous_active_minutes")
+            val overlapCurrent = overlap.minutes("current_active_minutes")
+            val overlapPrevious = overlap.minutes("previous_active_minutes")
+            if (exceedsMinutes(overlapCurrent, currentMinutes) ||
+                exceedsMinutes(overlapPrevious, previousMinutes)
+            ) return null
+            SnapshotComparison(
+                requested.period, current, previous, through,
+                currentMinutes, previousMinutes, overlapCurrent, overlapPrevious,
+            )
+        } catch (_: JSONException) {
+            null
+        } catch (_: DateTimeException) {
+            null
+        }
     }
 
     private fun parseDays(array: JSONArray, from: LocalDate, to: LocalDate): List<InsightDay>? {
@@ -442,5 +554,6 @@ class LiseurSyncSnapshots(
         // A resource refusal, not a truncated chart: unusually large histories remain local.
         const val MAX_CALENDAR_DAYS = 366_000L
         const val MAX_CALENDAR_PAGES = 128
+        val COMPARISON_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
     }
 }

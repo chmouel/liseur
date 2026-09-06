@@ -3,6 +3,11 @@
 Status: accepted
 GitHub issue: [#120](https://github.com/chmouel/liseur/issues/120)
 
+The local-only comparison decision is superseded by
+[ADR-0024](0024-cross-device-reading-comparison.md) when liseur-sync can
+provide one coherent comparison snapshot. The local calculation and its
+explicit wording remain the fallback.
+
 ## Context
 
 The statistics screen says how long the reader has read in the selected

@@ -12,6 +12,7 @@ data class StatisticsCapabilities(
     val accountId: String?,
     val maxBodyBytes: Int,
     val maxLocalActiveDays: Int,
+    val comparison: Boolean,
 ) {
     companion object {
         internal fun parse(json: JSONObject): StatisticsCapabilities? {
@@ -32,6 +33,7 @@ data class StatisticsCapabilities(
                 // Version 1 defines range=all; honor an explicit opt-out when supplied.
                 !json.has("all_time") || json.opt("all_time") == true,
                 account, minOf(bytes, 4 * 1024 * 1024), minOf(activeDays, 25_000),
+                json.opt("comparison") == true,
             )
         }
     }

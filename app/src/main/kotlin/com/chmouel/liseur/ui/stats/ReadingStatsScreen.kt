@@ -79,6 +79,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonPeriod
+import com.chmouel.liseur.domain.ComparisonScope
 import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
@@ -973,13 +974,9 @@ private val StatsRange.caption: Int
  * apart, because a quiet week is not an error state. Both take
  * `onSurfaceVariant`, the same weight as the caption below.
  *
- * Every one of those sentences names this device, and it is not
- * decoration. The figure above is every device's reading and says so in
- * the caption below; this line is a comparison, and a comparison holds
- * only between two figures gathered the same way, so both of its halves
- * are this device's own sittings. Saying "12% less than last week" over
- * an all-device total would be a claim about a reader's month that the
- * arithmetic underneath has not made. See ADR 18.
+ * The local fallback names this device. A comparison proved by the
+ * server counts every device, matching the headline and its provenance
+ * caption, so it needs no second scope qualifier.
  */
 @Composable
 private fun ComparisonLine(comparison: ReadingComparison) {
@@ -991,18 +988,37 @@ private fun ComparisonLine(comparison: ReadingComparison) {
         },
     )
     val percent = comparison.percent
+    val allDevices = comparison.scope == ComparisonScope.ALL_DEVICES
     val text = when {
         comparison.direction == ComparisonDirection.SAME ->
-            stringResource(R.string.reading_stats_compare_same, period)
+            stringResource(
+                if (allDevices) R.string.reading_stats_compare_same_all
+                else R.string.reading_stats_compare_same,
+                period,
+            )
 
         // No baseline to divide by. An infinity, or a number in the
         // hundreds of thousands, is not a fact about the reader's week.
-        percent == null -> stringResource(R.string.reading_stats_compare_more_than, period)
+        percent == null -> stringResource(
+            if (allDevices) R.string.reading_stats_compare_more_than_all
+            else R.string.reading_stats_compare_more_than,
+            period,
+        )
 
         comparison.direction == ComparisonDirection.MORE ->
-            stringResource(R.string.reading_stats_compare_more, percent, period)
+            stringResource(
+                if (allDevices) R.string.reading_stats_compare_more_all
+                else R.string.reading_stats_compare_more,
+                percent,
+                period,
+            )
 
-        else -> stringResource(R.string.reading_stats_compare_less, percent, period)
+        else -> stringResource(
+            if (allDevices) R.string.reading_stats_compare_less_all
+            else R.string.reading_stats_compare_less,
+            percent,
+            period,
+        )
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
