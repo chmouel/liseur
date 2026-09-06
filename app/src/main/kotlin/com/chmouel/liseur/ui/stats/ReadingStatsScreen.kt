@@ -581,7 +581,7 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
     val chartHeight = if (showAmounts) 150.dp else 130.dp
     val dateFormat = lastReadFormat()
     val scrollState = rememberScrollState()
-    LaunchedEffect(periods, scrollable) {
+    LaunchedEffect(periods, scrollable, scrollState.maxValue) {
         if (scrollable) scrollState.scrollTo(scrollState.maxValue)
     }
 
