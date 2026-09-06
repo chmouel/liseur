@@ -14,7 +14,6 @@ import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.liseursync.InsightDay
-import com.chmouel.liseur.data.liseursync.InsightsSummary
 import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
 import com.chmouel.liseur.data.liseursync.CompleteStatsSnapshot
 import com.chmouel.liseur.data.liseursync.statsSessions
@@ -525,13 +524,12 @@ class ReadingStatsViewModel(
         }
         ReadingStatsUiState.Ready(
             stats = united?.stats ?: local.stats,
-            headline = united?.headline?.copy(comparison = comparison) ?: mergeHeadline(
-                merged = local.stats,
-                local = local.stats,
-                server = null,
-                spans = local.spans,
-                currentMs = local.currentMs,
-                previousMs = local.previousMs,
+            headline = united?.headline?.copy(comparison = comparison) ?: StatsHeadline(
+                totalMs = local.stats.totalMs,
+                sessions = local.stats.sessions,
+                streakDays = local.stats.streakDays,
+                progressionPerHour = local.stats.progressionPerHour,
+                comparison = comparison,
             ),
             range = window.range,
             provenance = if (united != null) StatsProvenance.ALL_DEVICES else StatsProvenance.THIS_DEVICE,
@@ -566,109 +564,6 @@ class ReadingStatsViewModel(
     companion object {
         /** Long enough to survive a rotation without recomputing. */
         private const val STOP_TIMEOUT_MS = 5_000L
-
-        /**
-         * Which devices the figures on screen counted.
-         *
-         * Any answer to the question the screen is asking means every
-         * device: the summary carries the headline, the per-book totals
-         * carry the list and the calendar carries the chart, and each is
-         * the same reading counted everywhere. All three refused is this
-         * device alone, and it makes no difference which of offline, a
-         * token without the scope or a server that has nothing to say
-         * produced the refusal — the figures are the same either way,
-         * and it is the reader's word for them that was missing.
-         *
-         * Not "is a server connected". That would claim a merge that did
-         * not happen: connected and unreachable is exactly the case the
-         * line exists to name.
-         */
-        internal fun provenanceOf(
-            summary: InsightsSummary?,
-            recent: List<InsightDay>?,
-            books: WorkTotals?,
-        ): StatsProvenance =
-            if (summary != null || recent != null || books != null) {
-                StatsProvenance.ALL_DEVICES
-            } else {
-                StatsProvenance.THIS_DEVICE
-            }
-
-        /**
-         * The one headline, from both sources.
-         *
-         * The total is the larger of what the server counted for this
-         * span and what the rows beneath add up to. Never the smaller,
-         * in either direction, and for two different reasons: sessions
-         * upload in the background, so a stretch read five minutes ago
-         * is real but not yet on the server; and a book read on another
-         * device may not be in this library at all, so it can never
-         * appear as a row. Taking the maximum keeps the headline at
-         * least as large as the list under it, which is the only
-         * relation between the two that reads correctly.
-         *
-         * Never the sum, either. The server's count already includes
-         * this device's uploads, so adding them would pay twice.
-         *
-         * Sittings, streak and pace come from the server when it
-         * answered, because it can see reading done elsewhere that no
-         * local arithmetic can produce. Each falls back independently: a
-         * server that reports a streak but no pace should not cost the
-         * reader the pace this device works out for itself.
-         *
-         * The comparison beneath it is the one figure on this screen the
-         * server does not touch, and that is deliberate. What the
-         * sentence claims is a *relationship* between two spans, and a
-         * relationship only holds between two figures gathered the same
-         * way. Both sides are therefore this device's own sittings, over
-         * spans that stop at the same time of day.
-         *
-         * Mixing the two sources within a side cannot be made safe here.
-         * A summary aggregates whole days, so the day that stops where
-         * the clock has got to is one no server can answer for, and the
-         * only way to use a server at all would be to add its whole days
-         * to this device's part-day. That sum is unsound twice over.
-         * Its days are the *server's* calendar days, and this device
-         * splits by its own zone, so an offset between the two leaves
-         * the two spans overlapping — reading counted once by the server
-         * and again in the part-day — or with a gap between them. And
-         * were one of the two requests to fail, one side would count
-         * every device while the other counted one, which is the
-         * evening-on-a-laptop reported as a change in the reader's
-         * habits that the whole comparison exists to avoid.
-         *
-         * The cost is that a reader with a second device is compared
-         * against themselves on this one. It is an undercount of both
-         * sides alike, which is what leaves the percentage between them
-         * standing, and the figure over it still counts everything.
-         *
-         * It is also why the comparison does not simply use [totalMs].
-         * That figure is the most complete one available and belongs
-         * over the screen, but it counts every device right up to this
-         * minute, and there is no baseline that can be built that way.
-         */
-        internal fun mergeHeadline(
-            merged: ReadingStats,
-            local: ReadingStats,
-            server: InsightsSummary?,
-            spans: ComparisonSpans? = null,
-            currentMs: Long = 0,
-            previousMs: Long = 0,
-        ): StatsHeadline {
-            val totalMs = maxOf(
-                merged.totalMs,
-                (server?.activeMinutes?.minutesAsMillis() ?: 0L) + local.pendingMs,
-            )
-            return StatsHeadline(
-                totalMs = totalMs,
-                sessions = maxOf(local.sessions, (server?.sessions ?: 0) + local.pendingSessions),
-                streakDays = maxOf(local.streakDays, server?.streakDays ?: 0),
-                progressionPerHour = server?.progressionPerHour ?: local.progressionPerHour,
-                comparison = spans?.let {
-                    compareReading(it.period, currentMs = currentMs, previousMs = previousMs)
-                },
-            )
-        }
 
         /**
          * Folds the server's aggregates into the local ones, never
