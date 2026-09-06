@@ -297,7 +297,7 @@ hack/release --no-play 0.2.1 "..."   # leave Google Play out of this one
 `-n` (`--non-interactive`, `--yes`) answers the confirmation prompts,
 and any run with nothing on stdin needs it: the prompt reads
 end-of-file as no and the release stops without having done anything.
-That applies to `--test` too.
+That applies to `--rc` too.
 
 It refuses to run on a dirty tree, off `main`, out of sync with the
 remote, on a version that is not newer, or with release notes over the
@@ -321,10 +321,10 @@ otherwise:
 hack/release --no-play 0.9.0 "..."
 ```
 
-That is the only way to keep Play out of a release once the credential
-has been uploaded once. Deleting the secret by hand does not do it:
-`hack/release` reads one missing secret as a stale environment and
-uploads them all again from `pass`, Play credential included.
+The script records that per-release choice in the annotated tag, so an
+already configured Play credential cannot override it. Deleting the
+secret by hand is neither necessary nor useful: a later ordinary release
+will restore a missing credential from `pass`.
 
 `hack/release` creates the environment and uploads whichever secrets are
 missing straight from `pass`, so an unlocked password store is the only
@@ -338,22 +338,24 @@ hack/release --sync-secrets
 Signing a build on your own machine is a separate matter, covered under
 [Signing a release build](#signing-a-release-build-optional) above.
 
-### Test releases
+### Release candidates
 
-A test release is the same build, signed with the same release key, put
-where a handful of people can install it from and nowhere else:
+A release candidate is the same build, signed with the same release key,
+put where a handful of people can install it before the final release:
 
 ```bash
-hack/release --test          # the next patch: v0.9.4-test.1, then .2
-hack/release --test 0.10.0   # a version you are working towards
-hack/release --no-play --test # skip Google Play testing tracks
+hack/release --rc             # the next patch: v0.15.0-rc.1, then .2
+hack/release --rc 0.16.0      # a version you are working towards
+hack/release --no-play --rc   # skip Google Play testing tracks
 ```
 
 It publishes a GitHub **prerelease** with the signed APK attached, uploads
 the app bundle to Google Play's **internal** and **closed** (`Testing`)
 tracks, and stops there: no F-Droid merge request, no changelog to
-write, and no local test, lint or reproducibility run. The point of a
-test release is to be quick. Pass `--no-play` to leave Google Play out.
+write, and no Google Play production upload. Before the tag is pushed,
+the generated RC commit must pass the JVM tests, Android lint, and the
+release build in its detached worktree. The reproducibility check remains
+part of the final release path. Pass `--no-play` to leave Google Play out.
 
 The signature is what makes it worth doing. It is the one F-Droid
 publishes under, through the dual-signing flow, so the APK installs
@@ -361,11 +363,11 @@ straight over a copy that came from F-Droid, with no uninstall and no
 lost library, and F-Droid offers the next real release over it afterwards,
 as an ordinary update.
 
-That last part is only true because the test build takes a
+That last part is only true because the RC takes a
 `versionCode` and the next real release lands above it. `hack/release`
 counts the next code from the highest one across `main` **and every
-tag**, so a test release at 18 pushes the following real release to 19,
-and F-Droid sees an upgrade. Nobody who installed a test build is stuck,
+tag**, so an RC at 32 pushes the following real release to 33, and
+F-Droid sees an upgrade. Nobody who installed an RC is stuck,
 but they are on it until the next release goes out, since F-Droid
 will not offer a lower `versionCode`.
 
@@ -374,23 +376,36 @@ only through its tag, so `main` stays a history of real releases and the
 next one still bumps from the last real version. Run it from any branch,
 as long as the tree is clean.
 
-F-Droid is told nothing about a test release, but it reads the public tags:
-`v0.9.4-test.1` was once picked up by their `checkupdates` bot, which
+F-Droid is told nothing about an RC, but it reads the public tags.
+`v0.9.4-test.1`, the old prerelease spelling, was once picked up by its
+`checkupdates` bot, which
 opened a merge request proposing it as the current version. The
 fdroiddata metadata therefore filters what the bot looks at, with
-`UpdateCheckMode: Tags ^v[0-9.]+$`; a test tag no longer matches. Before
-any release tag is pushed or submitted, `hack/release` runs
+`UpdateCheckMode: Tags ^v[0-9.]+$`; neither `-rc.N` nor the legacy
+`-test.N` spelling matches. Its `AutoUpdateMode: None` also means builds
+are submitted only by `hack/release`, but the tag filter remains necessary:
+the update checker and build submission are separate mechanisms. Before
+any final or RC tag is pushed or submitted, `hack/release` runs
 `hack/verify-fdroid-tags` against that live metadata. It fails closed if a
-final tag would be missed or a test tag would be discovered, so a future
-metadata or tag-format change cannot silently put a test build on F-Droid.
+final tag would be missed or either prerelease spelling would be discovered,
+so a future metadata or tag-format change cannot silently put an RC on
+F-Droid.
 
 Run `make verify-fdroid-tags` for the deterministic local regression checks,
-or run `hack/verify-fdroid-tags v0.10.0 v0.10.0-test.1` to check the live
-fdroiddata filter directly. A change to the test-tag format or the
+or run
+`hack/verify-fdroid-tags v0.15.0 v0.15.0-rc.1 v0.15.0-test.1`
+to check the live fdroiddata filter directly. A change to the RC tag format or the
 `UpdateCheckMode` pattern must update and rerun this policy check.
 
 To install one, download the APK from the release page and
 `adb install -r`, or hand it to whoever is testing.
+
+GitHub release pages are retained more narrowly than their tags. After an
+RC is published, `hack/prune-prereleases` deletes every legacy `-test.N`
+release page and keeps only the highest `-rc.N` page for each target
+version. Its APK goes with the page. The tags are never deleted: they keep
+`versionCode` allocation monotonic, number later candidates correctly, and
+remain burned names under GitHub's immutable-release rules.
 
 ### Google Play
 
@@ -423,8 +438,9 @@ than a replacement, which is also why the Play step in
 `.github/workflows/release.yml` is `continue-on-error` and skips itself
 entirely when the service account secret is absent. A fork, or a rejected
 upload, must not be what makes a release fail. `hack/release --no-play`
-turns that skip into something you can ask for, by leaving the credential
-off the release environment instead of topping it up.
+turns that skip into something you can ask for: its annotated tag carries
+`release:no-play`, and the workflow checks that marker before it considers
+the stored credential.
 
 The upload runs `fastlane android internal` with
 `SUPPLY_JSON_KEY` pointing at a service account credential written to
@@ -624,7 +640,7 @@ GEMINI_API_KEY=$(pass show google/gemini-api) \
 gh release edit v0.2.0 --notes-file notes.md
 ```
 
-### Never delete a release
+### Never delete a final release or release tag
 
 Releases are immutable once published, and that goes further than the
 assets: **a tag that has carried a release can never be used again**,
@@ -632,9 +648,15 @@ even after deleting both the release and the tag, and even with the
 feature turned off. GitHub does this so that a trusted artifact can
 never be swapped for another under the same name.
 
-So a release that went out wrong is not fixed by deleting it. Bump the
-patch version and release again. `v0.1.0` was burned exactly this way
+So a final release that went out wrong is not fixed by deleting it. Bump
+the patch version and release again. `v0.1.0` was burned exactly this way
 and is why the first published version is 0.1.1.
+
+The deliberate exception is the GitHub **release record** for a prerelease.
+`hack/prune-prereleases` removes obsolete RC pages and their APK assets to
+keep the releases list useful, but never removes the tag. The name remains
+burned and the source commit remains reachable, which is also why neither
+the script nor the workflow ever uses `gh release delete --cleanup-tag`.
 
 ### What F-Droid checks
 

@@ -63,7 +63,7 @@ done
     die "final tag must use vX.Y.Z format: $final_tag"
 
 if [[ ${#excluded_tags[@]} -eq 0 ]]; then
-    excluded_tags+=("$final_tag-test.1")
+    excluded_tags+=("$final_tag-rc.1" "$final_tag-test.1")
 fi
 
 if [[ -n "$metadata_file" ]]; then

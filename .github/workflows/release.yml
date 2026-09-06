@@ -45,16 +45,27 @@ jobs:
           grep -Fq "versionName = \"$version\"" app/build.gradle.kts
           version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
             app/build.gradle.kts)
-          # A test release (hack/release --test) is built and signed like
-          # any other; what it skips is F-Droid. It updates no
-          # F-Droid listing, so it carries no F-Droid changelog, and
-          # nothing below asks it for one.
-          if [[ "$version" == *-test.* ]]; then
+          # RCs are built and signed like final releases, but skip F-Droid.
+          # The legacy test spelling remains recognizable so an old tag
+          # cannot accidentally be treated as final.
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(rc|test)\.[0-9]+$ ]]; then
             printf 'prerelease=true\n' >> "$GITHUB_OUTPUT"
-          else
+            printf 'prerelease_kind=%s\n' "${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          elif [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             printf 'prerelease=false\n' >> "$GITHUB_OUTPUT"
+            printf 'prerelease_kind=final\n' >> "$GITHUB_OUTPUT"
             test -s "fastlane/metadata/android/en-US/changelogs/$version_code.txt"
+          else
+            printf 'Unsupported release version: %s\n' "$version" >&2
+            exit 1
           fi
+          play_requested=true
+          if [[ $(git cat-file -t "$RELEASE_TAG") == tag ]]; then
+            tag_message=$(git for-each-ref --format='%(contents)' \
+              "refs/tags/$RELEASE_TAG" | sed -n '1p')
+            [[ "$tag_message" != 'release:no-play' ]] || play_requested=false
+          fi
+          printf 'play_requested=%s\n' "$play_requested" >> "$GITHUB_OUTPUT"
           printf 'version_code=%s\n' "$version_code" >> "$GITHUB_OUTPUT"
 
       - name: Configure release signing
@@ -95,30 +106,42 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GH_TOKEN: ${{ github.token }}
+          PLAY_REQUESTED: ${{ steps.version.outputs.play_requested }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          PRERELEASE_KIND: ${{ steps.version.outputs.prerelease_kind }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           notes="$RUNNER_TEMP/notes.md"
-          # The written notes are drafted from the F-Droid changelog a
-          # test release does not have, and nobody wants a model's prose
-          # about a build made to try one thing out. The commits in it
-          # are the whole story.
+          # Prereleases have no F-Droid changelog. Their commits are the
+          # whole story, without generated prose.
           if [[ "$PRERELEASE" == true ]]; then
             previous=$(git describe --tags --abbrev=0 \
-              --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-test.*' \
+              --match 'v[0-9]*.[0-9]*.[0-9]*' \
+              --exclude '*-rc.*' --exclude '*-test.*' \
               "$RELEASE_TAG^" 2>/dev/null || true)
             range="$RELEASE_TAG"
             [[ -z "$previous" ]] || range="$previous..$RELEASE_TAG"
             {
-              printf 'A test build. It carries the release signature, so it\n'
+              if [[ "$PRERELEASE_KIND" == rc ]]; then
+                printf 'A release candidate. It carries the release signature, so it\n'
+              else
+                printf 'A legacy test build. It carries the release signature, so it\n'
+              fi
               printf 'installs over a copy that came from F-Droid, and F-Droid\n'
               printf 'updates over it once the next real release reaches it.\n\n'
-              printf 'It is on Google Play testing tracks (Internal/Testing) and\n'
-              printf 'GitHub prerelease, but not on F-Droid or Google Play production.\n\n'
+              if [[ "$PLAY_REQUESTED" == true ]]; then
+                printf 'It is on Google Play testing tracks (Internal/Testing) and\n'
+                printf 'GitHub prerelease, but not on F-Droid or Google Play production.\n\n'
+              else
+                printf 'It is a GitHub prerelease, but is not on F-Droid or Google Play.\n\n'
+              fi
               printf '### Commits%s\n\n' "${previous:+ since $previous}"
               git log --no-decorate --pretty='- %s' \
-                --invert-grep --grep='^chore: test release ' "$range"
+                --invert-grep \
+                --grep='^chore: release candidate ' \
+                --grep='^chore: test release ' \
+                "$range"
             } > "$notes"
           else
             hack/generate-release-notes --output "$notes" "$RELEASE_TAG"
@@ -147,6 +170,15 @@ jobs:
             "${flags[@]}" \
             "$RELEASE_APK"
 
+      - name: Prune obsolete prerelease pages
+        if: steps.version.outputs.prerelease == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! hack/prune-prereleases; then
+            printf '::warning::The prerelease was published, but old GitHub release pages could not be pruned.\n'
+          fi
+
       # Everything below is Google Play, and only Google Play. It runs
       # after the release above on purpose: the GitHub artefact and the
       # F-Droid submission are the primary channels, so a rejected upload
@@ -156,10 +188,14 @@ jobs:
       - name: Check for the Play credential
         id: play
         env:
+          PLAY_REQUESTED: ${{ steps.version.outputs.play_requested }}
           SERVICE_ACCOUNT: ${{ secrets.LISEUR_PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-          if [[ -n "$SERVICE_ACCOUNT" ]]; then
+          if [[ "$PLAY_REQUESTED" != true ]]; then
+            printf 'enabled=false\n' >> "$GITHUB_OUTPUT"
+            printf 'This tag opts out of Google Play; skipping.\n'
+          elif [[ -n "$SERVICE_ACCOUNT" ]]; then
             printf 'enabled=true\n' >> "$GITHUB_OUTPUT"
           else
             printf 'enabled=false\n' >> "$GITHUB_OUTPUT"
@@ -181,6 +217,7 @@ jobs:
         continue-on-error: true
         env:
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          PRERELEASE_KIND: ${{ steps.version.outputs.prerelease_kind }}
           RELEASE_TAG: ${{ github.ref_name }}
           SERVICE_ACCOUNT: ${{ secrets.LISEUR_PLAY_SERVICE_ACCOUNT_JSON }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
@@ -193,7 +230,11 @@ jobs:
           (umask 077 && printf '%s' "$SERVICE_ACCOUNT" > "$key")
           changelog="fastlane/metadata/android/en-US/changelogs/$VERSION_CODE.txt"
           if [[ "$PRERELEASE" == true && ! -f "$changelog" ]]; then
-            printf 'Test release %s\n' "$RELEASE_TAG" > "$changelog"
+            if [[ "$PRERELEASE_KIND" == rc ]]; then
+              printf 'Release candidate %s\n' "$RELEASE_TAG" > "$changelog"
+            else
+              printf 'Test release %s\n' "$RELEASE_TAG" > "$changelog"
+            fi
           fi
           gem install fastlane -v 2.238.0 --no-document
           SUPPLY_JSON_KEY="$key" fastlane android internal

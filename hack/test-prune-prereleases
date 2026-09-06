@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#
+# Deterministic tests for hack/prune-prereleases.
+
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+workdir=$(mktemp -d -t liseur-prerelease-retention.XXXXXX)
+trap 'rm -rf "$workdir"' EXIT
+
+mkdir -p "$workdir/bin"
+calls="$workdir/calls"
+fixture="$workdir/releases.json"
+
+cat > "$workdir/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$MOCK_GH_CALLS"
+if [[ "$1" == api ]]; then
+    cat "$MOCK_GH_FIXTURE"
+elif [[ "$1" == release && "$2" == delete ]]; then
+    exit 0
+else
+    printf 'unexpected gh call: %s\n' "$*" >&2
+    exit 1
+fi
+EOF
+chmod +x "$workdir/bin/gh"
+
+cat > "$fixture" <<'EOF'
+[[
+  {"tag_name":"v0.15.0-rc.10","prerelease":true},
+  {"tag_name":"v0.15.0-rc.2","prerelease":true},
+  {"tag_name":"v0.15.0-rc.1","prerelease":true},
+  {"tag_name":"v0.14.0-rc.2","prerelease":true},
+  {"tag_name":"v0.14.0-rc.1","prerelease":true},
+  {"tag_name":"v0.15.0-test.4","prerelease":true},
+  {"tag_name":"v0.14.0-test.2","prerelease":true},
+  {"tag_name":"v0.15.0","prerelease":false},
+  {"tag_name":"v0.13.0-test.1","prerelease":false},
+  {"tag_name":"v0.15.0-rc.bad","prerelease":true},
+  {"tag_name":"not-a-release","prerelease":true}
+]]
+EOF
+
+PATH="$workdir/bin:$PATH" \
+MOCK_GH_CALLS="$calls" \
+MOCK_GH_FIXTURE="$fixture" \
+    "$here/prune-prereleases" --repo example/liseur >/dev/null
+
+grep -Fxq 'api --paginate --slurp repos/example/liseur/releases?per_page=100' "$calls"
+
+actual=$(sed -nE 's/^release delete ([^ ]+) --repo example\/liseur --yes$/\1/p' \
+    "$calls" | sort)
+expected=$(printf '%s\n' \
+    v0.14.0-rc.1 \
+    v0.14.0-test.2 \
+    v0.15.0-rc.1 \
+    v0.15.0-rc.2 \
+    v0.15.0-test.4 \
+    v0.13.0-test.1 | sort)
+[[ "$actual" == "$expected" ]] || {
+    printf 'unexpected releases deleted:\n%s\n' "$actual" >&2
+    exit 1
+}
+
+! grep -q -- '--cleanup-tag' "$calls"
+! grep -q 'release delete v0.15.0 ' "$calls"
+! grep -q 'release delete v0.15.0-rc.10 ' "$calls"
+! grep -q 'release delete v0.14.0-rc.2 ' "$calls"
+
+: > "$calls"
+cat > "$fixture" <<'EOF'
+[[
+  {"tag_name":"v0.15.0-rc.10","prerelease":true},
+  {"tag_name":"v0.14.0-rc.2","prerelease":true},
+  {"tag_name":"v0.15.0","prerelease":false}
+]]
+EOF
+
+output=$(PATH="$workdir/bin:$PATH" \
+    MOCK_GH_CALLS="$calls" \
+    MOCK_GH_FIXTURE="$fixture" \
+    "$here/prune-prereleases" --repo example/liseur)
+grep -Fq 'already satisfy the retention policy' <<<"$output"
+! grep -q '^release delete ' "$calls"
+
+printf 'GitHub prerelease retention tests passed.\n'

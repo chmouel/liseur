@@ -15,8 +15,10 @@ jobs:
 
       - name: Verify release tag policy
         run: |
-          bash -n hack/release hack/verify-fdroid-tags hack/test-fdroid-tags
+          bash -n hack/release hack/verify-fdroid-tags hack/test-fdroid-tags \
+            hack/prune-prereleases hack/test-prune-prereleases
           hack/test-fdroid-tags
+          hack/test-prune-prereleases
 
       - name: Check for Android/Gradle changes
         id: changes

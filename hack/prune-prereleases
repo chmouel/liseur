@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+#
+# Remove obsolete GitHub prerelease records without deleting their tags.
+#
+# Every legacy vX.Y.Z-test.N release is removed. For vX.Y.Z-rc.N releases,
+# only the highest numeric iteration for each X.Y.Z base is retained.
+
+set -euo pipefail
+
+repo=${GH_REPO:-chmouel/liseur}
+dry_run=false
+
+usage() {
+    cat <<'EOF'
+Usage:
+  hack/prune-prereleases [--repo OWNER/REPO] [--dry-run]
+
+Deletes every legacy vX.Y.Z-test.N GitHub prerelease and all but the newest
+vX.Y.Z-rc.N prerelease for each base version. Git tags are never deleted.
+EOF
+}
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null || die "missing required command: $1"
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --repo)
+            [[ $# -ge 2 ]] || die "--repo needs OWNER/REPO"
+            repo=$2
+            shift 2
+            ;;
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            die "unknown argument: $1"
+            ;;
+    esac
+done
+
+[[ "$repo" == */* ]] || die "repository must use OWNER/REPO format"
+require_command gh
+require_command jq
+
+release_pages=$(gh api --paginate --slurp \
+    "repos/$repo/releases?per_page=100") ||
+    die "could not list GitHub releases for $repo"
+
+obsolete=$(printf '%s' "$release_pages" | jq -r '
+    (add // [])
+    | [
+        .[]
+        | .tag_name as $tag
+        | (
+            $tag
+            | try capture(
+                "^v(?<base>[0-9]+\\.[0-9]+\\.[0-9]+)-(?<series>rc|test)\\.(?<iteration>[0-9]+)$"
+            ) catch null
+          ) as $parsed
+        | select($parsed != null)
+        | {
+            tag: $tag,
+            base: $parsed.base,
+            series: $parsed.series,
+            iteration: ($parsed.iteration | tonumber),
+            prerelease: .prerelease
+          }
+      ] as $prereleases
+    | (
+        [$prereleases[] | select(.series == "test") | .tag]
+        +
+        [
+          $prereleases
+          | map(select(.series == "rc" and .prerelease == true))
+          | group_by(.base)[]
+          | sort_by(.iteration)
+          | .[0:-1][]
+          | .tag
+        ]
+      )
+    | sort
+    | .[]
+') || die "could not classify GitHub prereleases"
+
+if [[ -z "$obsolete" ]]; then
+    printf 'GitHub prereleases already satisfy the retention policy.\n'
+    exit 0
+fi
+
+while IFS= read -r tag; do
+    [[ -n "$tag" ]] || continue
+    if [[ "$dry_run" == true ]]; then
+        printf 'Would delete GitHub release %s (tag retained).\n' "$tag"
+        continue
+    fi
+    printf 'Deleting GitHub release %s; retaining its tag.\n' "$tag"
+    gh release delete "$tag" --repo "$repo" --yes
+done <<<"$obsolete"

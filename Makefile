@@ -21,7 +21,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/dev/app-dev.apk
 
-.PHONY: help build debug release bundle test lint check verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status dev dev-install dev-run dev-uninstall dev-logcat
+.PHONY: help build debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status dev dev-install dev-run dev-uninstall dev-logcat
 
 help:
 	@printf '%s\n' \
@@ -31,6 +31,7 @@ help:
 		'make test              Run JVM unit tests' \
 		'make lint              Run Android Lint' \
 		'make check             Run tests, lint, and debug build' \
+		'make verify-release-tools Check release tag and retention policies' \
 		'make verify-fdroid-tags Check the F-Droid release-tag policy' \
 		'make e2e               Run the device scenarios in tests/' \
 		'make emulator          Start the configured Android emulator' \
@@ -70,7 +71,10 @@ test:
 lint:
 	$(GRADLE) lintDebug
 
-check: test lint build verify-fdroid-tags
+check: test lint build verify-release-tools
+
+verify-release-tools: verify-fdroid-tags
+	hack/test-prune-prereleases
 
 verify-fdroid-tags:
 	hack/test-fdroid-tags
