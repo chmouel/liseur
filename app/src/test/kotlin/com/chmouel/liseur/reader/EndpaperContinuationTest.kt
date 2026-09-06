@@ -35,10 +35,10 @@ class EndpaperContinuationTest {
     )
 
     @Test
-    fun `continuation waits for the endpaper even when the book is finished`() {
-        assertFalse(shouldOfferEndpaperContinuation(finished = true, endpaperReached = false))
-        assertTrue(shouldOfferEndpaperContinuation(finished = true, endpaperReached = true))
-        assertFalse(shouldOfferEndpaperContinuation(finished = false, endpaperReached = true))
+    fun `an unfinished book does not offer a continuation`() {
+        val one = book("One", 1.0)
+        val two = book("Two", 2.0)
+        assertNull(continuation(one, listOf(one, two)))
     }
 
     @Test
@@ -133,17 +133,6 @@ class EndpaperContinuationTest {
         val one = book("One", 1.0, finished = true)
         val two = book("Two", 2.0)
         assertNull(continuation(one, listOf(one, two), endpaperReached = false))
-    }
-
-    @Test
-    fun `dismissing hides the next volume without claiming the series is done`() {
-        val one = book("One", 1.0, finished = true)
-        val two = book("Two", 2.0)
-        val offer = continuation(one, listOf(one, two), dismissed = true)
-        assertNull(offer?.next)
-        assertEquals(SeriesCompletion.IN_PROGRESS, offer?.seriesCompletion)
-        assertEquals("The Expanse", offer?.seriesName)
-        assertEquals("1", offer?.finishedVolume)
     }
 
     @Test
@@ -313,7 +302,6 @@ class EndpaperContinuationTest {
         current: Book,
         library: List<Book>,
         progressions: Map<String, Double> = emptyMap(),
-        dismissed: Boolean = false,
         endpaperReached: Boolean = true,
         downloads: Map<String, DownloadSnapshot> = emptyMap(),
         canDownload: Boolean = true,
@@ -323,7 +311,6 @@ class EndpaperContinuationTest {
         current = current,
         library = library,
         progressions = progressions,
-        dismissed = dismissed,
         endpaperReached = endpaperReached,
         downloads = downloads,
         canDownload = canDownload,

@@ -300,7 +300,7 @@ private fun LiseurApp(settings: AppSettings) {
                 onOpenReadingNavigation = { screen = Screen.READING_NAVIGATION },
                 onOpenHiddenBooks = { screen = Screen.HIDDEN_BOOKS },
                 backup = annotationBackup,
-                connections = context.container.connections,
+                server = context.container.remoteAccount.server,
                 onOpenAbout = { screen = Screen.ABOUT },
                 onBack = { screen = Screen.LIBRARY },
             )
