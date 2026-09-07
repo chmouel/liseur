@@ -157,8 +157,148 @@ class PageTurner(
      */
     private var probeGeneration = 0L
 
+    /** The turn a finger is performing, while it is. */
+    private var dragging: DraggedTurn? = null
+
+    /** True between asking for a dragged turn and answering for it. */
+    private var beginning = false
+
+    /**
+     * A page turn that has happened underneath and is still in the
+     * reader's hand: the navigator is on the new page, and [page] is
+     * what the old one looked like, for the curl to draw. [from] is
+     * where the reader was, kept exactly so that a cancelled turn puts
+     * them back there and nowhere near it.
+     */
+    class DraggedTurn(
+        val forward: Boolean,
+        val rtl: Boolean,
+        val from: Locator,
+        val page: ImageBitmap,
+    )
+
+    /**
+     * Starts a turn under the finger: photographs the page, jumps the
+     * navigator with no motion of its own, and answers [onReady] with
+     * the turn once both are done — or with null when there is no turn
+     * to be had, which the caller reads as "swipe instead". That is the
+     * case behind an overlay, while another motion is running, in a
+     * scrolled book, before the view has a size, at the first page
+     * going back, and on the last page: the endpaper finishes the book
+     * when it is reached, and a turn that may yet be put back must not
+     * reach it, so the swipe and [turn] take the last page as they
+     * always have.
+     *
+     * Asked from the pointer loop the moment a drag is claimed. The
+     * snapshot and the last-page probe both answer a frame or two
+     * later, and the finger goes on moving meanwhile; the caller holds
+     * the travel until the answer comes.
+     */
+    fun beginDraggedTurn(forward: Boolean, onReady: (DraggedTurn?) -> Unit) {
+        val nav = navigator
+        val win = window
+        val view = nav?.publicationView
+        if (nav == null || win == null || view == null ||
+            isSuspended() || showingEnd() || pendingEnd || dragging != null || beginning ||
+            effect.isRunning || isScrolling() || isEffectSuppressed() ||
+            view.width <= 0 || view.height <= 0
+        ) {
+            onReady(null)
+            return
+        }
+        beginning = true
+        val answer = { turn: DraggedTurn? ->
+            beginning = false
+            dragging = turn
+            onReady(turn)
+        }
+        val generation = ++probeGeneration
+        val from = nav.currentLocator.value
+        val start = {
+            copyPage(win, view) { bitmap ->
+                if (bitmap == null || !probeStillHolds(generation, nav, from)) {
+                    answer(null)
+                    return@copyPage
+                }
+                val token = onMoveIssued(from, null)
+                val moved = if (forward) nav.goForward(false) else nav.goBackward(false)
+                if (!moved) {
+                    onMoveDropped(token)
+                    answer(null)
+                    return@copyPage
+                }
+                val rtl = nav.overflow.value.readingProgression == ReadingProgression.RTL
+                answer(DraggedTurn(forward, rtl, from, bitmap))
+            }
+        }
+        if (forward && isOnLastResource(nav)) {
+            askIfLastContentVisible(nav) { atEnd ->
+                if (atEnd || !probeStillHolds(generation, nav, from)) answer(null) else start()
+            }
+            return
+        }
+        start()
+    }
+
+    /**
+     * Where a turn in the hand started, while one is. The place to put
+     * the reader back if the turn cannot be finished.
+     */
+    val draggedFrom: Locator? get() = dragging?.from
+
+    /**
+     * Gives up a turn a finger was performing, wherever it had got to,
+     * and puts the book back where the turn started.
+     *
+     * Unlike [cancelDraggedTurn] this needs no [DraggedTurn] in hand, so
+     * it can be called by whatever notices that the turn cannot go on:
+     * the reader leaving, the page changing size under a held curl. A
+     * tentative turn left standing would be a page the reader never
+     * asked to turn, saved as their place. A photograph still being
+     * taken is invalidated too, which its own generation check sees.
+     *
+     * The book is only put back while there is still a navigator to put
+     * it back with. Called after the navigator has gone, this forgets
+     * the turn and no more: driving a fragment whose views have been
+     * destroyed throws, and a teardown is not the place to find out.
+     */
+    fun abandonDraggedTurn() {
+        probeGeneration++
+        beginning = false
+        dragging?.let { cancelDraggedTurn(it) }
+    }
+
+    /** The page left with the finger: the turn stands. */
+    fun finishDraggedTurn(turn: DraggedTurn) {
+        if (dragging === turn) dragging = null
+    }
+
+    /**
+     * The page was put back: the navigator returns to where the turn
+     * started. An exact `go` rather than a turn the other way, so that
+     * a boundary the tentative turn crossed is crossed back to the same
+     * spot.
+     */
+    fun cancelDraggedTurn(turn: DraggedTurn) {
+        if (dragging !== turn) return
+        dragging = null
+        val nav = navigator ?: return
+        probeGeneration++
+        val token = onMoveIssued(nav.currentLocator.value, turn.from)
+        if (!nav.go(turn.from, animated = false)) onMoveDropped(token)
+    }
+
+    /**
+     * Whether a finger has the book. True from the moment a drag is
+     * claimed — not merely once the page is in hand — because the
+     * photograph and the last-page probe take a frame or two, and a key
+     * arriving in that window would invalidate them and then turn a
+     * page of its own, leaving the drag to turn a second one on release.
+     */
+    private val handTurning: Boolean get() = dragging != null || beginning
+
     fun turn(forward: Boolean) {
-        if (isSuspended()) return
+        if (isSuspended() || handTurning) return
         if (showingEnd() || pendingEnd) {
             if (!forward && showingEnd()) onLeaveEnd()
             return
@@ -385,7 +525,7 @@ class PageTurner(
      * one that answered when this locator was made.
      */
     fun stepChapter(forward: Boolean): Boolean {
-        if (isSuspended()) return false
+        if (isSuspended() || handTurning) return false
         if (showingEnd() || pendingEnd) {
             if (!forward && showingEnd()) onLeaveEnd()
             return false
