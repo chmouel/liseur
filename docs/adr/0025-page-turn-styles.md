@@ -84,6 +84,63 @@ reading of the setting — a reader who asked for no motion cannot also
 have the page follow their finger — and **Slide**, which is that
 tracking, is one tap away.
 
+#### Amended: the page follows the finger after all
+
+> Amended by [#176](https://github.com/chmouel/liseur/issues/176). The
+> paragraph above was wrong about what the setting says. A reader who
+> chose the lifted page chose what a *tap* does with it; they did not
+> ask for a thumb that pushes nothing. Losing the tracking was a cost
+> of how the claim was built, and it read on the phone as the gesture
+> having stopped working — the page sits still under the finger and
+> then jumps when it leaves.
+
+So under **Lift** and **None** the drag now curls the departing page off
+the book, and the curl follows the finger: it can be pulled halfway,
+held there, and put back. **Slide** is unchanged and still Readium's
+own drag, which is that tracking already.
+
+The curl is a page turn that has already happened underneath. The
+machinery the rejected alternative below was refused for turns out to
+be the machinery already written for the lift: `PageTurner` photographs
+the page with `PixelCopy` and jumps the navigator with `animated =
+false`, and the snapshot is drawn over the live page. The drag does the
+same, and the difference is only what moves the snapshot — a finger
+rather than a tween — and that it can be put back. Nothing is held at
+touch-down: the snapshot is taken when the drag is claimed, which is
+after the slop and after the direction is read, so a selection or a
+pinch never causes one to be taken at all.
+
+`reader/chrome/PageCurl.kt` is the geometry, and it is arithmetic:
+vertices and per-vertex colours for `Canvas.drawBitmapMesh`, which is
+hardware-accelerated back to API 18 where `drawVertices` only arrives at
+29. The page wraps a cylinder whose radius broadens as the turn opens
+and tightens as it completes, the fold tilts with the row the finger
+grabbed and with how far down it has since travelled, and the back face
+is a second pass of a plain paper tile so the text shows faintly through
+it the way thin paper does. `PageCurlOverlay.kt` draws it and
+`PageTurnDrag` is still the state machine, now with the curl behind an
+interface so that all of it stays testable as numbers.
+
+Releasing commits the turn past about 40% of the width, or on a fling
+toward it; anything less puts the page back, and a fling back cancels
+from anywhere.
+
+**Electronic paper keeps Readium's drag**, as it had before this ADR.
+The reasoning that gives it **None** for a tap is exactly the reasoning
+that refuses it a curl: a photograph dragged across such a panel is a
+trail of half-erased pages, and a curled one is a worse trail. But the
+swipe that stood in for it here was no better a fit — a gesture that
+does nothing until it is released, on the screen least able to explain
+why — and Readium's own drag is what e-paper had before and handles
+itself. Since `turnStyle` overrules e-ink to **None** in one lambda and
+a chosen **None** cannot be told from an imposed one, the claim reads a
+separate `interactive` predicate rather than the style.
+
+The swipe does not go away. It is what a refused curl falls back to:
+the last page, whose turn finishes the book and must not be tentative,
+so it is probed for first; the first page going back; a snapshot that
+could not be taken; anything drawn over the book.
+
 The claim is decided once, on the first move past the touch slop, and
 only for a drag that sets off across the page. That decision then stands
 for the rest of the gesture: a drag that set off downwards stays the web
@@ -139,6 +196,12 @@ away if the drag turns into a selection or a pinch — a lot of machinery
 for a style whose point is that the page comes off the stack, not that
 it follows anything.
 
+> Amended by [#176](https://github.com/chmouel/liseur/issues/176):
+> built, as a curl rather than a lift. The objection was answered by
+> not taking the snapshot at touch-down. It is taken when the drag is
+> claimed, by which time a selection or a pinch has already gone
+> elsewhere, so there is nothing to throw away.
+
 **Interpolating the slide ourselves.** Readium animates its own move; a
 second animation over the top of it would have to agree with the first
 about duration, easing and direction, and would drift the moment the
@@ -166,10 +229,39 @@ affordable.
 #156 also asks for pages-left-in-chapter progress and a partial progress
 bar. Not decided here.
 
+> Amended by [#176](https://github.com/chmouel/liseur/issues/176): a
+> curl that is put back is, underneath, a page turn and a turn back.
+> The navigator has already moved by the time the finger is halfway,
+> and the cancel is an exact `go` to the locator the turn started from
+> — exact rather than a step the other way, so that a resource boundary
+> the tentative turn crossed is crossed back to the same spot and not
+> merely to the same side of it. Everything downstream sees both moves:
+> the position is published twice, the pace estimator drops the
+> backward one, a catch-up offer is dismissed. This is what a tap
+> followed by a tap back already does, and it was accepted rather than
+> given a tentative-move channel of its own, which would have had to
+> reach every reader of a position. The tentative turn is kept off the
+> paths that cannot be undone: `turn` and `stepChapter` do nothing
+> while one is live, and the last page is probed before the page is
+> ever photographed, so the endpaper is never reached by a turn that
+> might yet be put back.
+>
+> A turn still in the hand when the reader leaves is put back at
+> `ON_PAUSE`, and only there. That is the last moment the navigator can
+> be driven at all: disposal is too late, because a rotation swaps the
+> navigator and the one being let go of has already lost its fragments'
+> views, so a `go` from a teardown throws. Disposal therefore drops the
+> held page and forgets the turn without driving anything. The origin is
+> published as a `LOCAL_JUMP` as well as navigated to, since the
+> navigator's own answer arrives on a later frame that a closing reader
+> is not obliged to give it — the same reasoning, and the same observer,
+> as the held scroll position published there already.
+
 *Where:* `data/settings/ReaderPrefs.kt`,
 `data/settings/ReaderPreferencesRepository.kt`,
 `data/settings/AppSettings.kt`, `reader/chrome/PageTurnEffect.kt`,
-`reader/chrome/PageTurnDrag.kt`, `reader/ReaderScreen.kt`,
+`reader/chrome/PageTurnDrag.kt`, `reader/chrome/PageCurl.kt`,
+`reader/chrome/PageCurlOverlay.kt`, `reader/ReaderScreen.kt`,
 `reader/chrome/AdvancedSheet.kt`,
 `ui/reading/ReadingAppearanceControls.kt`, `ui/settings/SettingsRows.kt`,
 `ui/settings/ReadingNavigationScreen.kt`,

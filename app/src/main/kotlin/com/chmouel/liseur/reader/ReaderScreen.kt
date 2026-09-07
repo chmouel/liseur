@@ -8,6 +8,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -65,9 +66,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -128,6 +134,9 @@ import com.chmouel.liseur.reader.chrome.AdvancedSheet
 import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
 import com.chmouel.liseur.reader.chrome.AutoScrollTicker
 import com.chmouel.liseur.reader.chrome.JumpBackPill
+import com.chmouel.liseur.reader.chrome.PageCurl
+import com.chmouel.liseur.reader.chrome.PageCurlOverlay
+import com.chmouel.liseur.reader.chrome.PageCurlState
 import com.chmouel.liseur.reader.chrome.PageTurnDrag
 import com.chmouel.liseur.reader.chrome.PageTurnEffectState
 import com.chmouel.liseur.reader.chrome.PageTurnOverlay
@@ -378,7 +387,11 @@ fun ReaderScreen(
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
     val readingThemeNow by rememberUpdatedState(readingTheme)
+    var boxInWindow by remember { mutableStateOf(Offset.Zero) }
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
     var chromeVisible by remember { mutableStateOf(false) }
+    val chromeTransition = remember { MutableTransitionState(false) }
+    val chromeDrawn = { chromeTransition.currentState || chromeTransition.targetState || !chromeTransition.isIdle }
     var showToc by remember { mutableStateOf(false) }
     var searchFor by remember { mutableStateOf<String?>(null) }
     var goToPage by remember { mutableStateOf(false) }
@@ -756,6 +769,7 @@ fun ReaderScreen(
     val eInk = LocalEInk.current
     val eInkNow by rememberUpdatedState(eInk)
     var showingEnd by remember { mutableStateOf(false) }
+    chromeTransition.targetState = chromeVisible && !showingEnd
     val showingEndNow by rememberUpdatedState(showingEnd)
     var endpaperRtl by remember { mutableStateOf(false) }
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
@@ -766,7 +780,9 @@ fun ReaderScreen(
     // of half-erased pages. The instant jump is what e-paper wants
     // anyway, and it overrules whatever is set here rather than being
     // one more thing to set. Taps and drags read the style from here, so
-    // the two ways of turning a page cannot disagree about it.
+    // the two ways of turning a page cannot disagree about which drags
+    // are Readium's; the curl a drag draws under the other styles is
+    // refused on e-paper separately, since NONE cannot say why it is set.
     val turnStyle: () -> PageTurnStyle = {
         if (eInkNow) PageTurnStyle.NONE else prefsFlow.value.pageTurnStyle
     }
@@ -774,7 +790,7 @@ fun ReaderScreen(
         PageTurner(
             effect = pageTurnEffect,
             style = turnStyle,
-            isEffectSuppressed = { chromeVisibleNow },
+            isEffectSuppressed = chromeDrawn,
             // Vertical text is scrolled whatever the setting says, so
             // this is the derived answer and not the preference: a
             // sideways-scrolled book asked to turn a page would be asked
@@ -814,6 +830,7 @@ fun ReaderScreen(
         pinchStart.value != null || pinchHeld ||
             SystemClock.uptimeMillis() - pinchSettledAt.longValue < PinchResize.GUARD_MS
     }
+    val pageCurl = remember { PageCurlState(effectScope) }
     val pageTurnDrag = remember {
         PageTurnDrag(
             style = turnStyle,
@@ -824,16 +841,87 @@ fun ReaderScreen(
                 // reach, as it does for every other way of turning it.
                 // Chrome up means the scrubber is on the page, and a
                 // drag across it is a seek, not a turn.
-                !chromeVisibleNow && !effectiveScrollingNow && reflowableTextNow &&
+                !chromeDrawn() && !effectiveScrollingNow && reflowableTextNow &&
                     !isPinching() && selection == null &&
                     viewedImageNow == null && !openingImageNow
             },
+            interactive = { !eInkNow },
             isRtl = {
                 navigatorNow?.overflow?.value?.readingProgression == ReadingProgression.RTL
             },
             density = { view.resources.displayMetrics.density },
+            width = { navigatorNow?.publicationView?.width?.toFloat() ?: view.width.toFloat() },
             onTurnPage = pageTurner::turn,
+            curl = object : PageTurnDrag.Curl {
+                // The turn in hand. Set when the navigator has jumped and
+                // the snapshot is up, cleared when the page has left or
+                // lain back down; nothing here leaves the main thread.
+                var turn: PageTurner.DraggedTurn? = null
+
+                override fun begin(forward: Boolean, grabY: Float, onReady: (Boolean) -> Unit) {
+                    pageTurner.beginDraggedTurn(forward) { started ->
+                        if (started == null) {
+                            onReady(false)
+                            return@beginDraggedTurn
+                        }
+                        turn = started
+                        val pageLocation = IntArray(2)
+                        navigatorNow?.publicationView?.getLocationInWindow(pageLocation)
+                        pageCurl.begin(
+                            bitmap = started.page,
+                            grabY = grabY - (pageLocation[1] - boxInWindow.y),
+                            movesLeft = started.forward != started.rtl,
+                            paper = readingThemeNow.background.toArgb(),
+                        )
+                        onReady(true)
+                    }
+                }
+
+                override fun follow(travel: Float, dy: Float) {
+                    pageCurl.follow(travel, dy, pageCurl.page?.height?.toFloat() ?: view.height.toFloat())
+                }
+
+                override fun finish(velocity: Float) {
+                    val done = turn ?: return
+                    turn = null
+                    pageCurl.finish(
+                        width = done.page.width.toFloat(),
+                        height = done.page.height.toFloat(),
+                        radius = PageCurl.RADIUS_DP * view.resources.displayMetrics.density,
+                        velocity = velocity,
+                    ) { pageTurner.finishDraggedTurn(done) }
+                }
+
+                override fun restore(velocity: Float) {
+                    val undone = turn ?: return
+                    turn = null
+                    pageCurl.restore(velocity) {
+                        // The book goes back under a page that is already
+                        // flat, so the moment it jumps is the moment the
+                        // snapshot can go: the two look the same.
+                        pageTurner.cancelDraggedTurn(undone)
+                        pageCurl.drop()
+                    }
+                }
+
+                override fun abandon() {
+                    turn = null
+                    pageCurl.drop()
+                    // Covers a photograph still being taken as well, so
+                    // it is asked even when there is no turn in hand.
+                    pageTurner.abandonDraggedTurn()
+                }
+            },
         )
+    }
+
+    // A snapshot is a photograph of a page that was this size. Rotating
+    // the phone or resizing the window leaves it a picture of somewhere
+    // else, and the finger is no longer over what it took hold of, so
+    // the turn is given up rather than drawn stretched. The activity
+    // handles these changes itself, so nothing else would notice.
+    LaunchedEffect(boxSize) {
+        if (pageCurl.isRunning) pageTurnDrag.abandon()
     }
 
     LaunchedEffect(showingEnd) {
@@ -1622,6 +1710,17 @@ fun ReaderScreen(
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_PAUSE) return@LifecycleEventObserver
+            // A page still in the hand has already turned the book
+            // underneath. It is put back here because here is the last
+            // moment the navigator can be driven at all: after this its
+            // fragments lose their views, and a turn nobody committed
+            // would be saved as the place the reader left off. The
+            // origin is published as well as navigated to, since the
+            // navigator's own answer arrives on a later frame that a
+            // closing reader is not obliged to have.
+            val putBack = pageTurner.draggedFrom
+            pageTurnDrag.abandon()
+            putBack?.let { onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP) }
             heldPlace.current()?.let {
                 onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
             }
@@ -1660,6 +1759,13 @@ fun ReaderScreen(
         onDispose {
             if (nav != null) listeners?.forEach(nav::removeInputListener)
             pageTurner.navigator = null
+            // After the navigator, deliberately: a rotation swaps it,
+            // and the one being let go of has already lost its views,
+            // so this drops the held page and forgets the turn without
+            // trying to drive anything. Putting the book back is the
+            // ON_PAUSE observer's job, while there is still a navigator
+            // able to do it.
+            pageTurnDrag.abandon()
             pageTurner.window = null
             pageTurner.publication = null
             onPageTurnerChanged(null)
@@ -1755,7 +1861,6 @@ fun ReaderScreen(
      * finger lifted before the document replied leaves a job in flight
      * whose answer must not open a viewer over the next page.
      */
-    var boxInWindow by remember { mutableStateOf(Offset.Zero) }
     val longPressMs = LocalViewConfiguration.current.longPressTimeoutMillis
     val publicationNow by rememberUpdatedState(publication)
 
@@ -1931,9 +2036,13 @@ fun ReaderScreen(
         Modifier
             .fillMaxSize()
             .background(readingTheme.background)
-            .onGloballyPositioned { boxInWindow = it.positionInWindow() }
+            .onGloballyPositioned {
+                boxInWindow = it.positionInWindow()
+                boxSize = it.size
+            }
             .pointerInput(Unit) {
                 val slop = viewConfiguration.touchSlop
+                val velocity = VelocityTracker()
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -1986,6 +2095,7 @@ fun ReaderScreen(
                                 touch.claim.begin(touch.startedAt)
                                 pinchHeld = false
                                 pageTurnDrag.reset()
+                                velocity.resetTracking()
                                 probeUnderFinger(down[0].position)
                             }
 
@@ -1993,18 +2103,20 @@ fun ReaderScreen(
                                 touch.moved = true
                         }
                         /*
-                         * A sideways drag under Lift or None is a page
-                         * turn in the style the reader chose, and it is
-                         * taken here because there is nowhere else to
-                         * take it: the columns are moved by the web
-                         * view's own native gesture code, which neither
-                         * the page's scripts nor the navigator can call
-                         * off. Consuming the touch is what stops them,
-                         * the way the image viewer stops the long press
-                         * that opened it from also reaching the page.
+                         * A sideways drag under Lift or None curls the
+                         * page off under the finger, and it is taken here
+                         * because there is nowhere else to take it: the
+                         * columns are moved by the web view's own native
+                         * gesture code, which neither the page's scripts
+                         * nor the navigator can call off. Consuming the
+                         * touch is what stops them, the way the image
+                         * viewer stops the long press that opened it from
+                         * also reaching the page. Under Slide the drag is
+                         * Readium's own, which is that motion already.
                          */
+                        if (down.size == 1) velocity.addPointerInputChange(down[0])
                         if (down.isEmpty()) {
-                            if (pageTurnDrag.release()) {
+                            if (pageTurnDrag.release(velocity.calculateVelocity().x)) {
                                 event.changes.forEach { it.consume() }
                                 continue
                             }
@@ -2015,7 +2127,13 @@ fun ReaderScreen(
                             // without travelling would otherwise never be
                             // seen at all.
                             val travelled = down[0].position - touch.downAt
-                            if (pageTurnDrag.offer(down.size, travelled.x, travelled.y)) {
+                            val claimed = pageTurnDrag.offer(
+                                pointers = down.size,
+                                dx = travelled.x,
+                                dy = travelled.y,
+                                downY = touch.downAt.y,
+                            )
+                            if (claimed) {
                                 event.changes.forEach { it.consume() }
                                 continue
                             }
@@ -2236,7 +2354,24 @@ fun ReaderScreen(
             }
         }
 
-        PageTurnOverlay(pageTurnEffect)
+        // PixelCopy captures the inset publication view. Keep its exact
+        // size and origin instead of stretching that image over the screen.
+        val pageOverlayBounds = Modifier.layout { measurable, constraints ->
+            val pageView = navigator?.publicationView
+            val location = IntArray(2)
+            pageView?.getLocationInWindow(location)
+            val width = pageView?.width?.coerceAtLeast(1) ?: constraints.maxWidth
+            val height = pageView?.height?.coerceAtLeast(1) ?: constraints.maxHeight
+            val placeable = measurable.measure(Constraints.fixed(width, height))
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                placeable.place(
+                    (location[0] - boxInWindow.x).toInt(),
+                    (location[1] - boxInWindow.y).toInt(),
+                )
+            }
+        }
+        PageTurnOverlay(pageTurnEffect, pageOverlayBounds)
+        PageCurlOverlay(pageCurl, pageOverlayBounds)
 
         // The ribbon is the marker for a page with no chrome on it. The
         // app bar is placed over this corner and hit first, and its
@@ -2384,7 +2519,7 @@ fun ReaderScreen(
                 fadeOut(tween(CHROME_ANIM_MS))
         }
         AnimatedVisibility(
-            visible = chromeVisible && !showingEnd,
+            visibleState = chromeTransition,
             enter = chromeEnter,
             exit = chromeExit,
             modifier = Modifier.align(Alignment.TopCenter).then(behindViewer),

@@ -404,12 +404,38 @@ emulator.
   and electronic paper overrules the reader's choice with `NONE` in that
   one lambda rather than anywhere else. The endpaper is drawn over the
   book rather than navigated to, so only `LIFT` animates its arrival.
-  A sideways drag answers to the same setting: `PageTurnDrag` claims it
-  under `LIFT` and `NONE` and routes it through the same
-  `PageTurner.turn` a tap uses, leaving `SLIDE` to Readium, which is
-  what that motion already is. `R2WebView` moves the columns in its own
+  A sideways drag answers to the same setting, but not by turning the
+  page the way a tap does: under `LIFT` and `NONE` it curls the
+  departing page off the book under the finger, and it can be pulled
+  halfway and put back. `SLIDE` is left to Readium, which is that
+  motion already, and so is electronic paper — a curl dragged across
+  e-paper is the trail of half-erased pages the lift is refused for, and
+  `turnStyle` cannot say so, since a forced `NONE` reads like a chosen
+  one. That is why the claim asks a separate `interactive` predicate.
+  `R2WebView` moves the columns in its own
   native gesture code, which a JavaScript `preventDefault()` cannot
   stop, so the drag is claimed and consumed in `ReaderScreen`'s
   `PointerEventPass.Initial` loop instead — the same route the image
   viewer uses.
+- The curl is a turn that has already happened: `beginDraggedTurn`
+  photographs the page and jumps the navigator with `animated = false`,
+  and `PageCurl`/`PageCurlOverlay` draw the snapshot over it with
+  `drawBitmapMesh`. Putting it back is `nav.go(from)`, exact, so a
+  boundary the tentative turn crossed is crossed back to the same spot;
+  the ViewModel sees a turn and a turn back, as it does for a tap and a
+  tap back. Keep it off what cannot be undone: `turn` and `stepChapter`
+  refuse while a dragged turn is live, and the last page is probed
+  before the photograph, since the endpaper finishes the book and must
+  never be tentative. A refused curl falls back to the swipe. The
+  snapshot is of the *publication view*, not the window, so both
+  overlays are placed at that view's bounds rather than stretched over
+  the screen, and neither is taken while the chrome is still fading in
+  or out, or the toolbar is photographed onto the page.
+- A turn in the hand is put back at `ON_PAUSE`, never at teardown: a
+  rotation swaps the navigator, and driving the one being let go of
+  throws once its fragments have lost their views. Disposal only drops
+  the page and forgets the turn. Anything that ends a curl from outside
+  the gesture — leaving, a rotation, a window resize — goes through
+  `PageTurnDrag.abandon`, which puts the page back without animating,
+  since an animation wants a next frame there may not be one of.
 - Bundled fonts must be under open licenses (OFL): Literata et al.
