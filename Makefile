@@ -7,7 +7,9 @@ EMULATOR ?= $(if $(wildcard $(SDK_DIR)/emulator/emulator),$(SDK_DIR)/emulator/em
 SCRCPY ?= scrcpy
 AVD ?= liseur_phone_api36
 SERIAL ?= emulator-5554
+PHONE ?= ca682d4b
 ADB_TARGET := -s $(SERIAL)
+ADB_PHONE_TARGET := -s $(PHONE)
 PACKAGE := com.chmouel.liseur
 ACTIVITY := $(PACKAGE)/.MainActivity
 DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
@@ -129,23 +131,23 @@ dev:
 	$(GRADLE) assembleDev
 
 dev-install: dev
-	$(ADB) install -r '$(DEV_APK)'
+	$(ADB) $(ADB_PHONE_TARGET) install -r '$(DEV_APK)'
 
 dev-run: dev-install
-	$(ADB)  shell am start -n '$(DEV_ACTIVITY)'
+	$(ADB) $(ADB_PHONE_TARGET) shell am start -n '$(DEV_ACTIVITY)'
 
 dev-uninstall:
-	$(ADB)  uninstall '$(DEV_PACKAGE)'
+	$(ADB) $(ADB_PHONE_TARGET) uninstall '$(DEV_PACKAGE)'
 
 # Filtered by pid rather than by tag: the app logs under a dozen of them,
 # and the pid is the one thing that says "this build and not the other".
 dev-logcat:
-	@pid=$$($(ADB)  shell pidof '$(DEV_PACKAGE)' 2>/dev/null | tr -d '\r' | awk '{print $$1}'); \
+	@pid=$$($(ADB) $(ADB_PHONE_TARGET) shell pidof '$(DEV_PACKAGE)' 2>/dev/null | tr -d '\r' | awk '{print $$1}'); \
 	if [ -z "$$pid" ]; then \
 		printf 'error: %s is not running; start it with make dev-run\n' '$(DEV_PACKAGE)' >&2; \
 		exit 1; \
 	fi; \
-	$(ADB)  logcat --pid="$$pid"
+	$(ADB) $(ADB_PHONE_TARGET) logcat --pid="$$pid"
 
 screenshots:
 	./hack/screenshots
