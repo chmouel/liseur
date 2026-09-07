@@ -102,6 +102,15 @@ class PageTurnDrag(
     private var gesture: Gesture? = null
 
     /**
+     * A gesture whose fingers have left while the page was still being
+     * photographed. It is nobody's gesture any more, but its answer is
+     * still coming, so it is kept here for [reset] and [abandon] to put
+     * down: a swipe that fell back after the reader closed the book
+     * would turn a page nobody is looking at.
+     */
+    private var awaited: Gesture? = null
+
+    /**
      * Offers a gesture in progress: [pointers] fingers are down, and the
      * first landed [downY] down the page and has travelled [dx] across
      * and [dy] down from there. Answers whether the gesture is ours, and
@@ -161,6 +170,7 @@ class PageTurnDrag(
     }
 
     private fun ready(g: Gesture, inHand: Boolean) {
+        if (awaited === g) awaited = null
         if (g.mode != Mode.PENDING) {
             // Put down or forgotten while the page was being photographed.
             if (inHand) curl.restore(0f)
@@ -197,7 +207,7 @@ class PageTurnDrag(
             Mode.SWIPE -> swipe(g)
             Mode.CURL -> letGo(g)
             // Decided when the page comes to hand.
-            Mode.PENDING -> Unit
+            Mode.PENDING -> awaited = g
             Mode.PUT_DOWN -> Unit
         }
         return true
@@ -221,6 +231,7 @@ class PageTurnDrag(
         val g = gesture
         decided = false
         gesture = null
+        putDownAwaited()
         if (g == null) return
         when (g.mode) {
             Mode.CURL -> curl.restore(0f)
@@ -240,9 +251,15 @@ class PageTurnDrag(
         val g = gesture
         decided = false
         gesture = null
+        putDownAwaited()
         // A photograph still being taken finds nothing left to hold.
         if (g != null) g.mode = Mode.PUT_DOWN
         curl.abandon()
+    }
+
+    private fun putDownAwaited() {
+        awaited?.mode = Mode.PUT_DOWN
+        awaited = null
     }
 
     companion object {
