@@ -305,6 +305,37 @@ class PageTurnDragTest {
         assertEquals("abandon", h.curl.log.last())
     }
 
+    @Test
+    fun `giving up after the fingers left turns nothing when the page arrives`() {
+        val h = Harness()
+        h.drag.offer(pointers = 1, dx = -200f, dy = 0f)
+        // The fingers leave while the photograph is still being taken,
+        // so the swipe fallback is owed an answer.
+        assertTrue(h.drag.release())
+        h.drag.abandon()
+        h.curl.ready(false)
+        assertTrue(h.turns.isEmpty())
+    }
+
+    @Test
+    fun `a fresh touch after the fingers left drops the swipe still owed`() {
+        val h = Harness()
+        h.drag.offer(pointers = 1, dx = -200f, dy = 0f)
+        assertTrue(h.drag.release())
+        h.drag.reset()
+        h.curl.ready(false)
+        assertTrue(h.turns.isEmpty())
+    }
+
+    @Test
+    fun `a swipe still owed when the fingers left turns the page as usual`() {
+        val h = Harness()
+        h.drag.offer(pointers = 1, dx = -200f, dy = 0f)
+        assertTrue(h.drag.release())
+        h.curl.ready(false)
+        assertEquals(listOf(true), h.turns)
+    }
+
     private class FakeCurl : PageTurnDrag.Curl {
         val log = mutableListOf<String>()
         private var pending: ((Boolean) -> Unit)? = null

@@ -163,6 +163,9 @@ class PageTurner(
     /** True between asking for a dragged turn and answering for it. */
     private var beginning = false
 
+    /** True while a committed page is still flying off the screen. */
+    private var settling = false
+
     /**
      * A page turn that has happened underneath and is still in the
      * reader's hand: the navigator is on the new page, and [page] is
@@ -199,7 +202,7 @@ class PageTurner(
         val win = window
         val view = nav?.publicationView
         if (nav == null || win == null || view == null ||
-            isSuspended() || showingEnd() || pendingEnd || dragging != null || beginning ||
+            isSuspended() || showingEnd() || pendingEnd || handTurning ||
             effect.isRunning || isScrolling() || isEffectSuppressed() ||
             view.width <= 0 || view.height <= 0
         ) {
@@ -207,12 +210,18 @@ class PageTurner(
             return
         }
         beginning = true
+        val generation = ++probeGeneration
+        // A photograph that has been overtaken still has to answer, so
+        // that whoever asked for it puts its page down. What it must not
+        // do is speak for the turn that overtook it: those fields belong
+        // to the newer request now.
         val answer = { turn: DraggedTurn? ->
-            beginning = false
-            dragging = turn
+            if (generation == probeGeneration) {
+                beginning = false
+                dragging = turn
+            }
             onReady(turn)
         }
-        val generation = ++probeGeneration
         val from = nav.currentLocator.value
         val start = {
             copyPage(win, view) { bitmap ->
@@ -265,12 +274,30 @@ class PageTurner(
     fun abandonDraggedTurn() {
         probeGeneration++
         beginning = false
+        settling = false
         dragging?.let { cancelDraggedTurn(it) }
     }
 
-    /** The page left with the finger: the turn stands. */
+    /**
+     * The page left with the finger: the turn stands, and cannot be put
+     * back any more. Said as soon as the finger commits, not when the
+     * snapshot has finished flying off: a turn still recorded as in hand
+     * would be cancelled by the reader leaving or the page changing
+     * size, putting the book back on a page they had already turned.
+     *
+     * The motion goes on for a moment after that, and the book stays
+     * [handTurning] until [draggedTurnSettled], so that a key arriving
+     * meanwhile does not turn a second page over the top of it.
+     */
     fun finishDraggedTurn(turn: DraggedTurn) {
-        if (dragging === turn) dragging = null
+        if (dragging !== turn) return
+        dragging = null
+        settling = true
+    }
+
+    /** The snapshot has gone: the book is the reader's again. */
+    fun draggedTurnSettled() {
+        settling = false
     }
 
     /**
@@ -295,7 +322,7 @@ class PageTurner(
      * arriving in that window would invalidate them and then turn a
      * page of its own, leaving the drag to turn a second one on release.
      */
-    private val handTurning: Boolean get() = dragging != null || beginning
+    private val handTurning: Boolean get() = dragging != null || beginning || settling
 
     fun turn(forward: Boolean) {
         if (isSuspended() || handTurning) return

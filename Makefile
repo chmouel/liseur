@@ -7,7 +7,7 @@ EMULATOR ?= $(if $(wildcard $(SDK_DIR)/emulator/emulator),$(SDK_DIR)/emulator/em
 SCRCPY ?= scrcpy
 AVD ?= liseur_phone_api36
 SERIAL ?= emulator-5554
-PHONE ?= ca682d4b
+PHONE ?= $(SERIAL)
 ADB_TARGET := -s $(SERIAL)
 ADB_PHONE_TARGET := -s $(PHONE)
 PACKAGE := com.chmouel.liseur
@@ -125,8 +125,8 @@ reset: run-bg
 # The side-by-side build. Everything above installs over whatever carries
 # the production package name, which on a phone is somebody's library; the
 # targets below carry their own package name and cannot reach it. The
-# device is still chosen with SERIAL= like everywhere else, and still
-# defaults to the emulator.
+# device is chosen with PHONE=, which falls back to SERIAL= like
+# everywhere else, and so defaults to the emulator.
 dev:
 	$(GRADLE) assembleDev
 

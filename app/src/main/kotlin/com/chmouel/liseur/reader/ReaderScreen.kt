@@ -884,12 +884,17 @@ fun ReaderScreen(
                 override fun finish(velocity: Float) {
                     val done = turn ?: return
                     turn = null
+                    // Committed the moment the finger says so, not when
+                    // the snapshot has finished leaving: a turn still
+                    // recorded as in hand would be put back by the
+                    // reader leaving or the page changing size.
+                    pageTurner.finishDraggedTurn(done)
                     pageCurl.finish(
                         width = done.page.width.toFloat(),
                         height = done.page.height.toFloat(),
                         radius = PageCurl.RADIUS_DP * view.resources.displayMetrics.density,
                         velocity = velocity,
-                    ) { pageTurner.finishDraggedTurn(done) }
+                    ) { pageTurner.draggedTurnSettled() }
                 }
 
                 override fun restore(velocity: Float) {
