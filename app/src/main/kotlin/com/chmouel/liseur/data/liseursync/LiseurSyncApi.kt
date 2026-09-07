@@ -166,6 +166,9 @@ object LiseurSyncApi {
     fun resolveBook(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/resolve")
 
+    /** The same join for a whole shelf at once (liseur-sync ADR-0035). */
+    fun resolveBooks(baseUrl: String): String = url(baseUrl, "/v1/books/resolve")
+
     fun bookDownload(baseUrl: String, bookId: String): String =
         url(baseUrl, "/v1/books/$bookId/download")
 

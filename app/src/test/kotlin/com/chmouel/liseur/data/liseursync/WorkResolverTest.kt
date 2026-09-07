@@ -402,8 +402,181 @@ class WorkResolverTest {
         assertEquals(1, server.requestCount)
     }
 
-    private fun baseUrl() = "http://127.0.0.1:${server.port}"
+    @Test
+    fun `a whole shelf of catalog books is named in one request`() = runTest {
+        answer(
+            200,
+            """{"results":[
+              {"book_id":"b-1","work_id":"w-1","confidence":"high","created":true,
+               "identifiers":[{"kind":"sha256","value":"aa"}]},
+              {"book_id":"b-2","work_id":"w-2","confidence":"high","created":true}
+            ]}""",
+        )
+        val shelf = listOf(catalogued("b-1"), catalogued("b-2"))
 
+        val filed = prefetch(shelf)
+
+        val sent = server.takeRequest()
+        assertTrue(sent.target!!.endsWith("/v1/books/resolve"))
+        val ids = JSONObject(sent.body!!.utf8()).getJSONArray("book_ids")
+        assertEquals(2, ids.length())
+        // The reader is here to be asked, so the batch never agrees to a
+        // doubtful match on their behalf.
+        assertNull(JSONObject(sent.body!!.utf8()).opt("confirmed"))
+
+        // Filed as names, so the per-book pass that follows asks nothing.
+        assertEquals(setOf(shelf[0].url, shelf[1].url), filed.keys)
+        val named = shelf.map { resolver.resolve(it, PEER, baseUrl(), TOKEN) }
+        assertEquals("w-1", (named[0] as WorkResolution.Named).alias.workId)
+        assertEquals("w-2", (named[1] as WorkResolution.Named).alias.workId)
+        assertEquals("aa", (named[0] as WorkResolution.Named).alias.editionSha)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `a book the batch refused is left for the route that can ask`() = runTest {
+        answer(
+            200,
+            """{"results":[
+              {"book_id":"b-1","work_id":"w-1","confidence":"high"},
+              {"book_id":"b-2","error":"ambiguous","works":["w-8","w-9"]},
+              {"book_id":"b-3","error":"not_found"}
+            ]}""",
+        )
+        val shelf = listOf(catalogued("b-1"), catalogued("b-2"), catalogued("b-3"))
+
+        val filed = prefetch(shelf)
+        server.takeRequest()
+
+        // Only the book that was named is handed back for the caller to
+        // lay over the aliases it already holds.
+        assertEquals(setOf(shelf[0].url), filed.keys)
+
+        // The good one is named and settled.
+        assertEquals("w-1", db.workIdentityDao().alias(shelf[0].url, PEER)!!.workId)
+        // The refused ones have nothing filed against them at all. An
+        // ambiguity has to reach the reader, and the single route is
+        // what knows how to put it there.
+        assertNull(db.workIdentityDao().alias(shelf[1].url, PEER))
+        assertNull(db.workIdentityDao().alias(shelf[2].url, PEER))
+        assertTrue(db.workIdentityDao().ambiguitiesFor(PEER).isEmpty())
+    }
+
+    @Test
+    fun `a server without the batch route changes nothing`() = runTest {
+        answer(404, """{"error":"not found"}""")
+        val shelf = listOf(catalogued("b-1"), catalogued("b-2"))
+
+        // A refusal is swallowed rather than raised: the per-book pass
+        // is about to ask the same question, and its answer is the one
+        // worth reporting.
+        assertTrue(prefetch(shelf).isEmpty())
+        server.takeRequest()
+        assertNull(db.workIdentityDao().alias(shelf[0].url, PEER))
+
+        answer(200, """{"work_id":"w-1","confidence":"high"}""")
+        val result = resolver.resolve(shelf[0], PEER, baseUrl(), TOKEN)
+        assertTrue(server.takeRequest().target!!.endsWith("/v1/books/b-1/resolve"))
+        assertEquals("w-1", (result as WorkResolution.Named).alias.workId)
+    }
+
+    @Test
+    fun `the batch asks only about books with a question outstanding`() = runTest {
+        val settled = catalogued("b-1")
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = settled.url,
+                peerId = PEER,
+                workId = "w-1",
+                confidence = WorkAlias.HIGH,
+                sourceSent = true,
+                resolvedAt = NOW,
+            ),
+        )
+        // A yes the reader gave for one book cannot travel in a batch,
+        // where `confirmed` would speak for every id at once.
+        val confirmed = catalogued("b-2")
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = confirmed.url,
+                peerId = PEER,
+                workId = "w-2",
+                confidence = WorkAlias.LOW,
+                confirmed = true,
+                resolvedAt = NOW,
+            ),
+        )
+        answer(200, """{"results":[{"book_id":"b-3","work_id":"w-3","confidence":"high"}]}""")
+
+        prefetch(listOf(settled, confirmed, catalogued("b-3"), sideloaded()))
+
+        val ids = JSONObject(server.takeRequest().body!!.utf8()).getJSONArray("book_ids")
+        assertEquals(1, ids.length())
+        assertEquals("b-3", ids.getString(0))
+    }
+
+    @Test
+    fun `a shelf with nothing outstanding is not asked about at all`() = runTest {
+        val settled = catalogued("b-1")
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = settled.url,
+                peerId = PEER,
+                workId = "w-1",
+                confidence = WorkAlias.HIGH,
+                sourceSent = true,
+                resolvedAt = NOW,
+            ),
+        )
+
+        assertTrue(prefetch(listOf(settled, sideloaded())).isEmpty())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `a batch the server will not take at that size is cut to the limit it named`() = runTest {
+        answer(400, """{"error":"batch too large","code":"batch_too_large","limit":2}""")
+        answer(
+            200,
+            """{"results":[
+              {"book_id":"b-1","work_id":"w-1","confidence":"high"},
+              {"book_id":"b-2","work_id":"w-2","confidence":"high"}
+            ]}""",
+        )
+        answer(200, """{"results":[{"book_id":"b-3","work_id":"w-3","confidence":"high"}]}""")
+        val shelf = listOf(catalogued("b-1"), catalogued("b-2"), catalogued("b-3"))
+
+        val filed = prefetch(shelf)
+
+        // The refused attempt named nothing, so all three are still
+        // asked about — two at a time, which is what the server said it
+        // would take.
+        assertEquals(3, server.takeRequest().let { JSONObject(it.body!!.utf8()) }
+            .getJSONArray("book_ids").length())
+        assertEquals(2, server.takeRequest().let { JSONObject(it.body!!.utf8()) }
+            .getJSONArray("book_ids").length())
+        assertEquals(1, server.takeRequest().let { JSONObject(it.body!!.utf8()) }
+            .getJSONArray("book_ids").length())
+        assertEquals(shelf.map { it.url }.toSet(), filed.keys)
+        assertEquals("w-3", db.workIdentityDao().alias(shelf[2].url, PEER)!!.workId)
+    }
+
+    private suspend fun prefetch(books: List<Book>) = resolver.prefetchCatalog(
+        books,
+        db.workIdentityDao().aliasesFor(PEER).associateBy { it.bookUrl },
+        PEER,
+        baseUrl(),
+        TOKEN,
+    )
+
+    private fun catalogued(bookId: String) = downloaded().copy(
+        url = "liseursync:$bookId",
+        remoteUuid = bookId,
+    )
+
+    private fun sideloaded() = downloaded().copy(url = LOCAL, remoteUuid = null)
+
+    private fun baseUrl() = "http://127.0.0.1:${server.port}"
     private fun downloaded(modifiedAt: Long = NOW) = Book(
         url = BOOK,
         title = "A Memory Called Empire",

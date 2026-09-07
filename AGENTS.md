@@ -208,7 +208,13 @@ emulator.
   its retry covers the shortfall too; one that is not must not strand
   the rest of the library. Several books to seed are seeded from one
   `GET /v1/heads`, which is a seed and not a pull: it must not move the
-  cursor.
+  cursor. A whole catalog shelf is likewise named from one
+  `POST /v1/books/resolve` before the per-book pass runs, so the ration
+  is what a server too old for that route falls back to rather than the
+  ordinary path. That batch never carries `confirmed`, which would speak
+  for every id at once: a book holding the reader's yes to a doubtful
+  match goes through the single-book route, which can say yes for that
+  book alone.
 - One server is connected at a time. Anything provider-shaped belongs
   behind a `data/remote/` contract, not in a `when (kind)` at the call
   site.

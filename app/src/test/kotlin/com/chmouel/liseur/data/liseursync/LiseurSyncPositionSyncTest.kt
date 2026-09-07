@@ -1883,6 +1883,21 @@ class LiseurSyncPositionSyncTest {
     /** The one-off "where does this book stand" for a fresh name. */
     private fun seeded() = server.enqueue(json("""{"ops":[]}"""))
 
+    /**
+     * The server names a whole shelf in one request.
+     *
+     * A catalog book is named through `POST /v1/books/resolve` before
+     * the per-book pass runs, so a run over four catalog books spends
+     * one request rather than four (liseur-sync ADR-0035).
+     */
+    private fun namedTogether(vararg names: Pair<String, String>) = server.enqueue(
+        json(
+            names.joinToString(",", prefix = """{"results":[""", postfix = "]}") { (bookId, workId) ->
+                """{"book_id":"$bookId","work_id":"$workId","confidence":"high","created":false}"""
+            },
+        ),
+    )
+
     /** The server takes every op of the request, naming each back. */
     private fun applied(request: RecordedRequest): MockResponse {
         val ops = JSONObject(request.body!!.utf8()).getJSONArray("ops")
@@ -1921,7 +1936,7 @@ class LiseurSyncPositionSyncTest {
                     ),
                 )
             }
-            catalog.indices.forEach { resolved(workId = "w-${it + 1}") }
+            namedTogether(*catalog.indices.map { "book-${it + 1}" to "w-${it + 1}" }.toTypedArray())
             // One answer for the lot, rather than one question per book.
             server.enqueue(
                 json(
@@ -1942,6 +1957,10 @@ class LiseurSyncPositionSyncTest {
             catalog.forEach {
                 assertNotNull(db.workIdentityDao().alias(it, peer())?.workId)
             }
+            // And named together: four catalog books, one request, no
+            // book asked about on its own afterwards.
+            assertEquals(1, requests().count { it.target == "/v1/books/resolve" })
+            assertTrue(requests().none { it.target.endsWith("/resolve") && it.target != "/v1/books/resolve" })
             assertEquals(1, requests().count { it.target.startsWith("/v1/heads") })
             assertTrue(requests().none { it.target.contains("/positions") })
             // And every one of them told where it stands, including the
@@ -1963,14 +1982,12 @@ class LiseurSyncPositionSyncTest {
         catalog.forEach { url ->
             db.bookDao().upsert(local().copy(url = url, title = url, localUri = null, lastOpenedAt = null))
         }
-        resolved(workId = "w-1")
-        resolved(workId = "w-2")
+        namedTogether("book-a" to "w-1", "book-b" to "w-2")
         server.enqueue(
             json(
                 """{"ops":[
                     {"op_id":"h-1","work_id":"w-1","seq":1,"progression":0.1,
-                     "client_ts":"${SyncOps.formatTime(NOW - 90_000)}"},
-                    {"op_id":"h-2","work_id":"w-2","seq":2,"progression":0.2,
+                     "client_ts":"${SyncOps.formatTime(NOW - 90_000)}"},                    {"op_id":"h-2","work_id":"w-2","seq":2,"progression":0.2,
                      "client_ts":"${SyncOps.formatTime(NOW - 1_000)}"}
                 ],"snapshot_seq":2}
                 """.trimIndent(),
@@ -2249,7 +2266,7 @@ class LiseurSyncPositionSyncTest {
                 ),
             )
         }
-        catalog.indices.forEach { resolved(workId = "w-${it + 1}") }
+        namedTogether(*catalog.indices.map { "book-${it + 1}" to "w-${it + 1}" }.toTypedArray())
         server.enqueue(
             json(
                 """{"ops":[

@@ -223,6 +223,22 @@ class WorkResolver(
             return WorkResolution.Unresolved(e)
         }
 
+        return applyCatalogAnswer(book, existing, peerId, answer)
+    }
+
+    /**
+     * Files what the server said about a catalog book.
+     *
+     * Shared by the one-book route and the batch, so the two cannot
+     * make a different alias out of the same answer — the mirror of the
+     * server sharing one resolver behind both.
+     */
+    private suspend fun applyCatalogAnswer(
+        book: Book,
+        existing: WorkAlias?,
+        peerId: String,
+        answer: JSONObject,
+    ): WorkResolution {
         val workId = answer.optString("work_id").takeIf { it.isNotEmpty() }
             ?: return WorkResolution.Unresolved(cause = null)
         dao.clearAmbiguity(book.url, peerId)
@@ -269,6 +285,141 @@ class WorkResolver(
         } else {
             WorkResolution.NeedsConfirming(alias)
         }
+    }
+
+    /**
+     * Names as many of [books] as one request can, before they are asked
+     * about one at a time.
+     *
+     * A device that has just signed in has a name here for none of its
+     * books, and a book with no name can neither send a position nor
+     * receive one — so the whole shelf waits on this. Asking per book
+     * was hundreds of round trips; `POST /v1/books/resolve` is one.
+     *
+     * Returns what it filed, keyed by book url, so the caller can lay it
+     * over the aliases it already read rather than reading them again.
+     * The per-book pass that follows then finds these books named and
+     * asks nothing. That way this is only ever an optimisation: a server
+     * without the route, or a request that fails, leaves the per-book
+     * path to do exactly what it did before — which is also why a
+     * failure is not reported as trouble, since the route behind it is
+     * about to ask the same question and its answer is the one worth
+     * having.
+     *
+     * [known] is every alias already on file for this peer. It is passed
+     * in rather than looked up a book at a time because the caller has
+     * just read the lot in one query, and a shelf of four hundred is
+     * four hundred point queries every run otherwise — including the
+     * runs where nothing at all is outstanding.
+     *
+     * Only books whose question the batch can carry are sent.
+     * `confirmed` there applies to every id at once, so a book holding
+     * the reader's yes to a doubtful match never joins one: the
+     * single-book route can say yes for that book alone. That filter is
+     * also why a lone pending book is batched like any other — there is
+     * no yes left in the queue to lose, and one id costs the one request
+     * either route would have spent.
+     */
+    suspend fun prefetchCatalog(
+        books: List<Book>,
+        known: Map<String, WorkAlias>,
+        peerId: String,
+        baseUrl: String,
+        credentials: RemoteCredentials,
+    ): Map<String, WorkAlias> {
+        val pending = books.mapNotNull { book ->
+            val bookId = catalogIdOf(book) ?: return@mapNotNull null
+            val existing = known[book.url]
+            // The same questions `resolve` asks before spending a
+            // request, and for the same reasons: a name already good
+            // enough, an answer already given, or a question already in
+            // front of the reader.
+            val worth = when {
+                existing == null -> true
+                existing.confirmed -> false
+                existing.usable -> owesSource(existing, book)
+                existing.confidence == WorkAlias.REJECTED -> false
+                else -> retryable(existing, book)
+            }
+            if (worth) Triple(book, bookId, existing) else null
+        }
+        val filed = mutableMapOf<String, WorkAlias>()
+        if (pending.isEmpty()) return filed
+
+        var room = MAX_RESOLVE_BATCH
+        var sent = 0
+        while (sent < pending.size) {
+            val chunk = pending.subList(sent, minOf(sent + room, pending.size))
+            val answers = try {
+                http.post(
+                    url = LiseurSyncApi.resolveBooks(baseUrl),
+                    credentials = credentials,
+                    json = JSONObject().put(
+                        "book_ids",
+                        JSONArray().apply { chunk.forEach { put(it.second) } },
+                    ),
+                    expected = setOf(LiseurSyncHttp.BAD_REQUEST, LiseurSyncHttp.TOO_LARGE),
+                ).optJSONArray("results")
+            } catch (rejection: LiseurSyncRejection) {
+                // A batch this server will not take at this size is cut
+                // to what it said it would and asked again; the books
+                // are still owed, so nothing moves on. Any other refusal
+                // is the per-book route's to report.
+                val cut = roomFor(chunk.size, rejection)
+                if (cut == null) {
+                    Log.i(TAG, "Could not name the shelf in one request; asking book by book", rejection)
+                    return filed
+                }
+                Log.i(TAG, "The server will not name ${chunk.size} books at once; asking $cut at a time")
+                room = cut
+                continue
+            } catch (e: IOException) {
+                Log.i(TAG, "Could not name the shelf in one request; asking book by book", e)
+                return filed
+            } ?: return filed
+
+            for (index in 0 until answers.length()) {
+                val answer = answers.optJSONObject(index) ?: continue
+                // Results come back in the order they were asked for,
+                // but the id is matched rather than the position
+                // trusted: filing one book's work under another's url
+                // would sync the wrong reading into it.
+                val entry = chunk.firstOrNull { it.second == answer.optString("book_id") }
+                    ?: continue
+                // A book refused on its own is left entirely alone. The
+                // per-book pass asks again and takes the answer through
+                // the one path that knows how to put an ambiguity to
+                // the reader.
+                if (answer.optString("error").isNotEmpty()) continue
+                val resolution = applyCatalogAnswer(entry.first, entry.third, peerId, answer)
+                aliasOf(resolution)?.let { filed[entry.first.url] = it }
+            }
+            sent += chunk.size
+        }
+        return filed
+    }
+
+    /**
+     * How many books to offer after a refusal about the size of the last
+     * attempt, or nothing when the refusal was about something else.
+     *
+     * A limit the server named is only taken if it is genuinely smaller.
+     * A bound that would leave the chunk the size it already was is a
+     * server disagreeing with itself, and asking the identical question
+     * again is how that becomes a loop rather than a refusal.
+     */
+    private fun roomFor(tried: Int, rejection: LiseurSyncRejection): Int? {
+        val aboutSize = rejection.code == LiseurSyncHttp.TOO_LARGE ||
+            rejection.errorCode == LiseurSyncRejection.BATCH_TOO_LARGE
+        if (!aboutSize || tried <= 1) return null
+        return rejection.limit?.takeIf { it < tried } ?: (tried / 2)
+    }
+
+    /** The name a resolution settled on, whether or not it may be used yet. */
+    private fun aliasOf(resolution: WorkResolution): WorkAlias? = when (resolution) {
+        is WorkResolution.Named -> resolution.alias
+        is WorkResolution.NeedsConfirming -> resolution.alias
+        else -> null
     }
 
     private suspend fun resolveByIdentifiers(
@@ -392,5 +543,14 @@ class WorkResolver(
 
     private companion object {
         const val TAG = "liseur-sync-works"
+
+        /**
+         * How many books one batch resolve may name.
+         *
+         * The server's own limit, which it will refuse above rather than
+         * trim; matching it here keeps a large library from having to
+         * learn that the hard way.
+         */
+        const val MAX_RESOLVE_BATCH = 500
     }
 }

@@ -651,6 +651,8 @@ class LiseurSyncPositionSync(
      * That distinction is what lets a fresh device finish. Every book on
      * one connected to liseur-sync came from its catalog, and rationing
      * those to a handful a run is what made the shelf arrive in batches.
+     * Where the server takes a batch resolve, they cost one request
+     * between them and the ration never comes into it.
      *
      * Asking about one book on purpose resolves that book whatever it
      * costs, because somebody is waiting.
@@ -661,11 +663,32 @@ class LiseurSyncPositionSync(
         single: Boolean,
         trouble: Trouble,
     ): Named {
-        val known = identityDao.aliasesFor(account.peerId).associateBy { it.bookUrl }
+        // Name the catalog in one request first, where the server can.
+        // What comes back is filed as aliases and laid over the ones
+        // already read, so the pass below finds them there and spends
+        // nothing on them; a server too old to have the route leaves it
+        // to do exactly what it did before, one book at a time out of
+        // the budget.
+        val onFile = identityDao.aliasesFor(account.peerId).associateBy { it.bookUrl }
+        val known = if (single) {
+            onFile
+        } else {
+            onFile + works.prefetchCatalog(
+                books,
+                onFile,
+                account.peerId,
+                account.baseUrl,
+                account.credentials,
+            )
+        }
         // A book whose question is already on file. That question may be
         // filed on its own, as an ambiguity, or as a name the server was
         // not sure enough of to use — either way the reader has already
-        // been asked, and asking again is not getting anywhere.
+        // been asked, and asking again is not getting anywhere. Read
+        // after the batch, never before: naming a book clears the
+        // ambiguity that stood against it, and a cleared one still in
+        // this set would send the book to the back of the queue for a
+        // question nobody is being asked any more.
         val asked = buildSet {
             identityDao.ambiguitiesFor(account.peerId).mapTo(this) { it.bookUrl }
             known.values.filter { it.awaitingAnswer }.mapTo(this) { it.bookUrl }
