@@ -2789,9 +2789,10 @@ fun ReaderScreen(
         ?.takeIf { viewedImage == null }
         ?.let { active ->
             val existing = active.existing ?: return@let
+            val passage = existing.text?.takeIf { it.isNotBlank() } ?: active.text
             NoteSheet(
                 annotation = existing,
-                passage = active.text,
+                passage = passage,
                 theme = readingTheme,
                 palette = highlightPalette,
                 actions = remember(active) {
@@ -2805,7 +2806,7 @@ fun ReaderScreen(
                         },
                         onShare = {
                             context.shareText(
-                                NoteText.share(active.text, existing.note),
+                                NoteText.share(passage, existing.note),
                                 publication.metadata.title,
                             )
                             dismissSelection()
