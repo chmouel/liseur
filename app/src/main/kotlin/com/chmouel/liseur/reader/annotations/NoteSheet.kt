@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -95,6 +96,7 @@ fun NoteSheet(
         Column(
             Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 16.dp),
         ) {
@@ -157,17 +159,22 @@ fun NoteSheet(
                     .fillMaxWidth()
                     .padding(top = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                palette.chipsFor(tint).forEach { chip ->
-                    TintChip(
-                        tint = chip,
-                        selected = chip == tint,
-                        onClick = { actions.onRecolour(chip) },
-                        ringColor = ink,
-                    )
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    palette.chipsFor(tint).forEach { chip ->
+                        TintChip(
+                            tint = chip,
+                            selected = chip == tint,
+                            onClick = { actions.onRecolour(chip) },
+                            ringColor = ink,
+                        )
+                    }
                 }
-                Spacer(Modifier.weight(1f))
                 IconButton(onClick = actions.onShare) {
                     Icon(
                         Icons.Outlined.Share,
