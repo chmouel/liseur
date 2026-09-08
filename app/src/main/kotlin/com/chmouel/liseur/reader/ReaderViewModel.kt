@@ -1417,15 +1417,16 @@ class ReaderViewModel(
     /** Attaches the reader's own words to a passage. */
     fun addNote(locator: Locator, note: String, existingId: String? = null) {
         val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
+        val existingNote = existing?.note?.takeIf { it.isNotBlank() }
         val now = System.currentTimeMillis()
         val noteCreatedAt = when {
             existing?.noteCreatedAt != null -> existing.noteCreatedAt
-            existing?.note == null -> now
+            existingNote == null -> now
             else -> existing.createdAt
         }
         val noteUpdatedAt = when {
-            existing?.note == null -> null
-            existing.note == note -> existing.noteUpdatedAt
+            existingNote == null -> null
+            existingNote == note -> existing.noteUpdatedAt
             else -> now * 1000
         }
         save(
@@ -1443,11 +1444,12 @@ class ReaderViewModel(
     /** Writes a thought about the book itself, without inventing a place for it. */
     fun saveBookNote(note: String, existingId: String? = null) {
         val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
+        val existingNote = existing?.note?.takeIf { it.isNotBlank() }
         val now = System.currentTimeMillis()
-        val noteCreatedAt = existing?.noteCreatedAt ?: now
+        val noteCreatedAt = existing?.noteCreatedAt ?: if (existingNote == null) now else existing.createdAt
         val noteUpdatedAt = when {
-            existing?.note == null -> null
-            existing.note == note -> existing.noteUpdatedAt
+            existingNote == null -> null
+            existingNote == note -> existing.noteUpdatedAt
             else -> now * 1000
         }
         save(
