@@ -109,6 +109,9 @@ import com.chmouel.liseur.reader.annotations.DECORATION_GROUP
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.NoteDialog
+import com.chmouel.liseur.reader.annotations.NoteSheet
+import com.chmouel.liseur.reader.annotations.NoteSheetActions
+import com.chmouel.liseur.reader.annotations.NoteText
 import com.chmouel.liseur.reader.annotations.SelectionActions
 import com.chmouel.liseur.reader.annotations.SelectionPopup
 import com.chmouel.liseur.reader.annotations.locator
@@ -2774,54 +2777,99 @@ fun ReaderScreen(
     // of buttons a screen reader could still operate — and draw them over
     // the picture besides. The selection itself is untouched and comes
     // back with the bar when the picture is dismissed.
-    (tappedSelection ?: selection)?.takeIf { viewedImage == null }?.let { active ->
-        SelectionPopup(
-            offset = active.popupOffset(),
-            activeTint = active.existing?.tint?.let(HighlightTint::fromName),
-            palette = highlightPalette,
-            actions = remember(active, dictionary) {
-                SelectionActions(
-                    onHighlight = { tint ->
-                        onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
-                        dismissSelection()
-                    },
-                    onNote = {
-                        noteFor = active
-                        dismissSelection()
-                    },
-                    onSearch = {
-                        searchFor = active.text
-                        dismissSelection()
-                    },
-                    onLookUp = {
-                        when (dictionary.target) {
-                            DefinitionTarget.BUILT_IN -> defineWord = active.text
-                            DefinitionTarget.EXTERNAL_APP -> {
-                                context.lookUpExternally(active.text, dictionary.baseUrl)
-                            }
-                        }
-                        dismissSelection()
-                    },
-                    onShare = {
-                        context.shareText(active.text, publication.metadata.title)
-                        dismissSelection()
-                    },
-                    onDelete = active.existing?.let { existing ->
-                        {
+    //
+    // A tapped mark that carries a note opens as the note, not as the bar:
+    // the reader put words there, and seeing them is what the tap was
+    // for. The sheet is modal and has its own scrim, so unlike the bar it
+    // is not placed by the selection's rectangle. A passage the reader
+    // selected by hand over such a mark still gets the bar: they were
+    // reaching for the words, not the note.
+    val notedTap = tappedSelection?.takeIf { !it.existing?.note.isNullOrBlank() }
+    notedTap
+        ?.takeIf { viewedImage == null }
+        ?.let { active ->
+            val existing = active.existing ?: return@let
+            NoteSheet(
+                annotation = existing,
+                passage = active.text,
+                theme = readingTheme,
+                palette = highlightPalette,
+                actions = remember(active) {
+                    NoteSheetActions(
+                        onEdit = {
+                            noteFor = active
+                            dismissSelection()
+                        },
+                        onRecolour = { tint ->
+                            onAnnotationAction.highlight(active.locator, tint, existing.id)
+                        },
+                        onShare = {
+                            context.shareText(
+                                NoteText.share(active.text, existing.note),
+                                publication.metadata.title,
+                            )
+                            dismissSelection()
+                        },
+                        onDelete = {
                             onAnnotationAction.remove(existing)
                             dismissSelection()
-                        }
-                    },
-                )
-            },
-            onDismiss = {
-                // The bar and the selection go together: leaving the page
-                // selected keeps the platform's handles alive and drawing
-                // over words the reader has finished with.
-                dismissSelection()
-            },
-        )
-    }
+                        },
+                    )
+                },
+                onDismiss = ::dismissSelection,
+            )
+        }
+
+    (tappedSelection ?: selection)
+        ?.takeIf { viewedImage == null && notedTap == null }
+        ?.let { active ->
+            SelectionPopup(
+                offset = active.popupOffset(),
+                activeTint = active.existing?.tint?.let(HighlightTint::fromName),
+                palette = highlightPalette,
+                actions = remember(active, dictionary) {
+                    SelectionActions(
+                        onHighlight = { tint ->
+                            onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
+                            dismissSelection()
+                        },
+                        onNote = {
+                            noteFor = active
+                            dismissSelection()
+                        },
+                        onSearch = {
+                            searchFor = active.text
+                            dismissSelection()
+                        },
+                        onLookUp = {
+                            when (dictionary.target) {
+                                DefinitionTarget.BUILT_IN -> defineWord = active.text
+                                DefinitionTarget.EXTERNAL_APP -> {
+                                    context.lookUpExternally(active.text, dictionary.baseUrl)
+                                }
+                            }
+                            dismissSelection()
+                        },
+                        onShare = {
+                            context.shareText(active.text, publication.metadata.title)
+                            dismissSelection()
+                        },
+                        onDelete = active.existing?.let { existing ->
+                            {
+                                onAnnotationAction.remove(existing)
+                                dismissSelection()
+                            }
+                        },
+                    )
+                },
+                onDismiss = {
+                    // The bar and the selection go together: leaving the page
+                    // selected keeps the platform's handles alive and drawing
+                    // over words the reader has finished with.
+                    dismissSelection()
+                },
+            )
+        }
 
     defineWord?.let { word ->
         DefinitionSheet(

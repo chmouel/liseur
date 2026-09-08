@@ -140,7 +140,12 @@ fun SelectionPopup(
 }
 
 @Composable
-private fun TintChip(tint: HighlightTint, selected: Boolean, onClick: () -> Unit) {
+internal fun TintChip(
+    tint: HighlightTint,
+    selected: Boolean,
+    onClick: () -> Unit,
+    ringColor: Color = MaterialTheme.colorScheme.onSurface,
+) {
     val label = stringResource(tint.label)
     Row(
         Modifier
@@ -150,11 +155,7 @@ private fun TintChip(tint: HighlightTint, selected: Boolean, onClick: () -> Unit
             .background(tint.color)
             .border(
                 width = if (selected) 2.dp else 0.dp,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    Color.Transparent
-                },
+                color = if (selected) ringColor else Color.Transparent,
                 shape = CircleShape,
             )
             .clickable(onClick = onClick),
