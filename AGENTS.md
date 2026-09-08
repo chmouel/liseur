@@ -352,6 +352,14 @@ emulator.
   the three, an *empty* one is a reader who chose none. The default is
   not required to be offered, since notes and that plain Highlight need
   it either way. See `docs/adr/0026-a-configurable-highlight-palette.md`.
+- A tapped mark opens as what it is: a plain highlight gets the
+  `SelectionPopup` bar, a mark carrying a note gets `NoteSheet`, a
+  bottom sheet painted in the reading theme that shows the note and only
+  then the things to do with it. Both ride the same `tappedSelection`
+  state, so the bar's guards (no turn, no auto-scroll, no curl) apply
+  to the sheet without a second copy. A passage selected by hand, even
+  over a noted mark, still gets the bar. Recolouring from the sheet does
+  not close it. See `docs/adr/0027-a-tapped-note-opens-as-a-note.md`.
 - A book only on this device can be sent to liseur-sync, where the
   server allows it: `BookUploader`, `ServerCapabilities.canUpload` (read
   from the `library-upload` scope) and `BookUploadWorker`, whose unique

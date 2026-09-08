@@ -22,6 +22,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -34,6 +35,11 @@ import androidx.compose.ui.window.PopupProperties
  * dimmed text behind as ghosting when it closes. The sheet itself is already
  * opaque; dropping the scrim and its lift leaves only the region containing
  * the controls to change. The popup appears in its final position immediately.
+ *
+ * [containerColor] and [contentColor] are Material's by default. A sheet
+ * that sits over the page itself — a note, say — passes the reading
+ * theme's instead, for the same reason the footnote card does: a white
+ * sheet over a black page at night is a lamp in the face.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +47,8 @@ fun LiseurModalBottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(),
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val eInk = LocalEInk.current
@@ -49,6 +57,11 @@ fun LiseurModalBottomSheet(
             onDismissRequest = onDismissRequest,
             modifier = modifier,
             sheetState = sheetState,
+            containerColor = containerColor,
+            contentColor = contentColor,
+            dragHandle = {
+                BottomSheetDefaults.DragHandle(color = contentColor.copy(alpha = 0.4f))
+            },
             content = content,
         )
         return
@@ -73,8 +86,8 @@ fun LiseurModalBottomSheet(
     ) {
         Surface(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
+            color = containerColor,
+            contentColor = contentColor,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
@@ -87,7 +100,10 @@ fun LiseurModalBottomSheet(
                 .fillMaxWidth(),
         ) {
             Column(Modifier.navigationBarsPadding()) {
-                BottomSheetDefaults.DragHandle(Modifier.align(Alignment.CenterHorizontally))
+                BottomSheetDefaults.DragHandle(
+                    color = contentColor.copy(alpha = 0.4f),
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
                 content()
             }
         }
