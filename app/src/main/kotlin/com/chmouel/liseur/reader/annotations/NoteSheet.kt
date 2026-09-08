@@ -215,12 +215,14 @@ fun NoteSheet(
 private fun stamps(annotation: BookAnnotation): String {
     val context = LocalContext.current
     val parts = mutableListOf<String>()
+    val noteCreatedAt = annotation.noteCreatedAt ?: annotation.createdAt
+    val noteUpdatedAt = annotation.noteUpdatedAt
     annotation.chapter?.takeIf { it.isNotBlank() }?.let(parts::add)
-    parts += stringResource(R.string.annotation_note_added, dated(context, annotation.createdAt))
-    if (NoteText.edited(annotation.createdAt, annotation.updatedAt)) {
+    parts += stringResource(R.string.annotation_note_added, dated(context, noteCreatedAt))
+    if (noteUpdatedAt != null && NoteText.edited(noteCreatedAt, noteUpdatedAt)) {
         parts += stringResource(
             R.string.annotation_note_edited,
-            dated(context, annotation.updatedAt / 1000),
+            dated(context, noteUpdatedAt / 1000),
         )
     }
     return parts.joinToString(" \u00B7 ")

@@ -67,6 +67,21 @@ class AnnotationBackupTest {
     }
 
     @Test
+    fun `note timestamps survive a backup`() {
+        val noted = full.copy(
+            kind = AnnotationKind.NOTE.name,
+            noteCreatedAt = 1_700_000_010_000,
+            noteUpdatedAt = 1_700_000_020_000_000,
+        )
+
+        val back = roundTrip(
+            listOf(BackedUpBook("calibre:uuid-1", "A Book", "An Author", listOf(noted))),
+        )
+
+        assertEquals(noted, back.single().annotations.single())
+    }
+
+    @Test
     fun `a bookmark with nothing written on it comes back empty, not blank`() {
         val back = roundTrip(listOf(BackedUpBook("calibre:uuid-1", null, null, listOf(bare))))
         assertEquals(bare, back.single().annotations.single())

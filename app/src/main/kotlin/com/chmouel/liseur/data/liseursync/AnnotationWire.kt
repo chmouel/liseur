@@ -377,6 +377,22 @@ object AnnotationWire {
             record.body.isNotEmpty() -> AnnotationKind.NOTE
             else -> AnnotationKind.HIGHLIGHT
         }
+        val note = record.body.takeIf { it.isNotEmpty() }
+        val noteCreatedAt = if (note == null) {
+            null
+        } else {
+            existing?.noteCreatedAt ?: if (existing?.note == null) {
+                record.clientTsMicros / 1000
+            } else {
+                existing.createdAt
+            }
+        }
+        val noteUpdatedAt = when {
+            note == null -> null
+            existing?.note == null -> null
+            existing.note == note -> existing.noteUpdatedAt
+            else -> record.clientTsMicros
+        }
         return BookAnnotation(
             id = record.id,
             bookId = bookId,
@@ -398,7 +414,7 @@ object AnnotationWire {
                     ?.takeIf { truncate(it, MAX_EXCERPT_BYTES) == excerpt }
                     ?: excerpt
             },
-            note = record.body.takeIf { it.isNotEmpty() },
+            note = note,
             tint = record.color.takeIf { !bookNote && it.isNotEmpty() }?.uppercase(Locale.ROOT),
             chapter = if (bookNote) {
                 null
@@ -412,6 +428,8 @@ object AnnotationWire {
             },
             totalProgression = if (bookNote) null else record.progression,
             createdAt = existing?.createdAt ?: (record.clientTsMicros / 1000),
+            noteCreatedAt = noteCreatedAt,
+            noteUpdatedAt = noteUpdatedAt,
             updatedAt = record.clientTsMicros,
         )
     }

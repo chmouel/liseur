@@ -1126,10 +1126,47 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `annotation note dates split from mark update dates on upgrade`() {
+        helper.createDatabase(TEST_DB, 49).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO annotations
+                    (id, book_id, kind, locator_json, text, note, tint, chapter,
+                     position, total_progression, created_at, updated_at)
+                VALUES
+                    ('note-1', 'book', 'NOTE', '{}', 'passage', 'words', 'YELLOW', 'One',
+                     1, 0.25, 1000, 3000000),
+                    ('highlight-1', 'book', 'HIGHLIGHT', '{}', 'passage', NULL, 'BLUE', 'One',
+                     2, 0.50, 2000, 4000000)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query(
+                """
+                SELECT id, note_created_at, note_updated_at
+                FROM annotations
+                ORDER BY id
+                """.trimIndent(),
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("highlight-1", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+                assertTrue(cursor.isNull(2))
+                assertTrue(cursor.moveToNext())
+                assertEquals("note-1", cursor.getString(0))
+                assertEquals(1000, cursor.getLong(1))
+                assertTrue(cursor.isNull(2))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 49
+        const val LATEST = 50
     }
 }

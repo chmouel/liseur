@@ -26,6 +26,11 @@ class NoteTextTest {
     }
 
     @Test
+    fun `a row with no note edit stamp is not edited`() {
+        assertFalse(NoteText.edited(createdMs, null))
+    }
+
+    @Test
     fun `microseconds are not mistaken for milliseconds`() {
         // The same instant in both units must read as the same sitting.
         assertFalse(NoteText.edited(createdMs, createdMs * 1000))

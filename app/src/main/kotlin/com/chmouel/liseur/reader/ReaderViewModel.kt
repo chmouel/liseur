@@ -1405,6 +1405,8 @@ class ReaderViewModel(
             annotation(locator, AnnotationKind.HIGHLIGHT).copy(
                 id = existing?.id ?: UUID.randomUUID().toString(),
                 note = existing?.note,
+                noteCreatedAt = existing?.noteCreatedAt,
+                noteUpdatedAt = existing?.noteUpdatedAt,
                 tint = tint.name,
                 createdAt = existing?.createdAt ?: System.currentTimeMillis(),
                 kind = existing?.kind ?: AnnotationKind.HIGHLIGHT.name,
@@ -1415,12 +1417,25 @@ class ReaderViewModel(
     /** Attaches the reader's own words to a passage. */
     fun addNote(locator: Locator, note: String, existingId: String? = null) {
         val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
+        val now = System.currentTimeMillis()
+        val noteCreatedAt = when {
+            existing?.noteCreatedAt != null -> existing.noteCreatedAt
+            existing?.note == null -> now
+            else -> existing.createdAt
+        }
+        val noteUpdatedAt = when {
+            existing?.note == null -> null
+            existing.note == note -> existing.noteUpdatedAt
+            else -> now * 1000
+        }
         save(
             annotation(locator, AnnotationKind.NOTE).copy(
                 id = existing?.id ?: UUID.randomUUID().toString(),
                 note = note,
+                noteCreatedAt = noteCreatedAt,
+                noteUpdatedAt = noteUpdatedAt,
                 tint = existing?.tint ?: highlightPalette.value.passageNoteTint.name,
-                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                createdAt = existing?.createdAt ?: now,
             ),
         )
     }
@@ -1428,6 +1443,13 @@ class ReaderViewModel(
     /** Writes a thought about the book itself, without inventing a place for it. */
     fun saveBookNote(note: String, existingId: String? = null) {
         val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
+        val now = System.currentTimeMillis()
+        val noteCreatedAt = existing?.noteCreatedAt ?: now
+        val noteUpdatedAt = when {
+            existing?.note == null -> null
+            existing.note == note -> existing.noteUpdatedAt
+            else -> now * 1000
+        }
         save(
             BookAnnotation(
                 id = existing?.id ?: UUID.randomUUID().toString(),
@@ -1435,7 +1457,9 @@ class ReaderViewModel(
                 kind = AnnotationKind.BOOK_NOTE.name,
                 locatorJson = "",
                 note = note,
-                createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+                createdAt = existing?.createdAt ?: now,
+                noteCreatedAt = noteCreatedAt,
+                noteUpdatedAt = noteUpdatedAt,
             ),
         )
     }

@@ -70,6 +70,8 @@ fun encodeAnnotationBackup(books: List<BackedUpBook>): String {
                     a.position?.let { put("position", it) }
                     a.totalProgression?.let { put("progression", it) }
                     put("created_at", a.createdAt)
+                    a.noteCreatedAt?.let { put("note_created_at", it) }
+                    a.noteUpdatedAt?.let { put("note_updated_at", it) }
                 },
             )
         }
@@ -120,6 +122,8 @@ fun decodeAnnotationBackup(json: String): BackupContents {
                 position = if (m.has("position")) m.optInt("position") else null,
                 totalProgression = if (m.has("progression")) m.optDouble("progression") else null,
                 createdAt = m.optLong("created_at"),
+                noteCreatedAt = m.optLongOrNull("note_created_at"),
+                noteUpdatedAt = m.optLongOrNull("note_updated_at"),
             )
         }
         out += BackedUpBook(
@@ -164,6 +168,9 @@ fun matchBackedUpBook(
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() }
+
+private fun JSONObject.optLongOrNull(key: String): Long? =
+    if (!has(key) || isNull(key)) null else optLong(key)
 
 /**
  * How much of a backup would land on books that are actually here.
