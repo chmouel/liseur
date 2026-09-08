@@ -75,6 +75,45 @@ class AnnotationWireTest {
     }
 
     @Test
+    fun `a blank highlight body is not a note`() {
+        val existing = mark(
+            kind = AnnotationKind.NOTE,
+            note = "   ",
+            noteCreatedAt = 1_700_000_000_000,
+            noteUpdatedAt = 1_700_000_100_000_000,
+        )
+        val record = AnnotationWire.record(server(kind = "highlight", body = "   "))!!
+
+        val landed = AnnotationWire.toAnnotation(record, BOOK, existing)
+
+        assertEquals(AnnotationKind.HIGHLIGHT.name, landed.kind)
+        assertNull(landed.note)
+        assertNull(landed.noteCreatedAt)
+        assertNull(landed.noteUpdatedAt)
+    }
+
+    @Test
+    fun `a real body replacing a blank legacy note starts now`() {
+        val existing = mark(
+            kind = AnnotationKind.NOTE,
+            note = "   ",
+            noteCreatedAt = null,
+            createdAt = 1_600_000_000_000,
+        )
+        val record = AnnotationWire.record(server(body = "new thought"))!!
+
+        val landed = AnnotationWire.toAnnotation(record, BOOK, existing)
+
+        assertEquals(MICROS / 1000, landed.noteCreatedAt)
+        assertNull(landed.noteUpdatedAt)
+    }
+
+    @Test
+    fun `a blank standalone note is refused`() {
+        assertNull(AnnotationWire.record(server(kind = "note", locator = "", body = "   ")))
+    }
+
+    @Test
     fun `a bookmark carries neither colour nor words`() {
         val item = AnnotationWire.item(
             mark(kind = AnnotationKind.BOOKMARK, note = "ignored", tint = "YELLOW"),
@@ -539,6 +578,7 @@ class AnnotationWireTest {
             tint: String? = "YELLOW",
             noteCreatedAt: Long? = null,
             noteUpdatedAt: Long? = null,
+            createdAt: Long = 1_709_294_400_000,
             updatedAt: Long = MICROS,
         ) = BookAnnotation(
             id = id,
@@ -551,7 +591,7 @@ class AnnotationWireTest {
             chapter = "Chapter One",
             position = 12,
             totalProgression = 0.25,
-            createdAt = 1_709_294_400_000,
+            createdAt = createdAt,
             noteCreatedAt = noteCreatedAt,
             noteUpdatedAt = noteUpdatedAt,
             updatedAt = updatedAt,

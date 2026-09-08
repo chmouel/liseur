@@ -266,7 +266,7 @@ object AnnotationWire {
         if (excerpt.toByteArray().size > MAX_EXCERPT_BYTES) return null
         if (body.toByteArray().size > MAX_BODY_BYTES) return null
         if (body.isNotEmpty() && kind == KIND_BOOKMARK) return null
-        if (body.isEmpty() && kind == KIND_NOTE) return null
+        if (body.isBlank() && kind == KIND_NOTE) return null
 
         return Record(
             id = id,
@@ -371,26 +371,25 @@ object AnnotationWire {
         val bookNote = record.kind == KIND_NOTE
         val locator = record.locator?.let { runCatching { JSONObject(it) }.getOrNull() }
         val locations = locator?.optJSONObject("locations")
+        val note = record.body.takeIf { it.isNotBlank() }
+        val existingNote = existing?.note?.takeIf { it.isNotBlank() }
         val kind = when {
             bookNote -> AnnotationKind.BOOK_NOTE
             record.kind == KIND_BOOKMARK -> AnnotationKind.BOOKMARK
-            record.body.isNotEmpty() -> AnnotationKind.NOTE
+            note != null -> AnnotationKind.NOTE
             else -> AnnotationKind.HIGHLIGHT
         }
-        val note = record.body.takeIf { it.isNotEmpty() }
         val noteCreatedAt = if (note == null) {
             null
         } else {
-            existing?.noteCreatedAt ?: if (existing?.note == null) {
-                record.clientTsMicros / 1000
-            } else {
-                existing.createdAt
-            }
+            existing?.noteCreatedAt?.takeIf { existingNote != null }
+                ?: existing?.createdAt?.takeIf { existingNote != null }
+                ?: (record.clientTsMicros / 1000)
         }
         val noteUpdatedAt = when {
             note == null -> null
-            existing?.note == null -> null
-            existing.note == note -> existing.noteUpdatedAt
+            existingNote == null -> null
+            existingNote == note -> existing?.noteUpdatedAt
             else -> record.clientTsMicros
         }
         return BookAnnotation(
