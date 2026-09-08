@@ -2710,7 +2710,13 @@ fun ReaderScreen(
                                 if (fragment.isNotEmpty()) {
                                     reflow.within {
                                         val before = ExactLocatorAnchor.layoutSignature(nav)
-                                        if (FootnoteLayout.reveal(nav, fragment)) {
+                                        val revealed = FootnoteLayout.reveal(nav, fragment)
+                                        // The hidden note was skipped when the
+                                        // page's repairs first ran. Once it
+                                        // is visible, mark its first blocks
+                                        // before navigating to it.
+                                        val repaired = reflowableText && repairPage(nav)
+                                        if (revealed || repaired) {
                                             awaitReflowSettled(nav, before)
                                         }
                                     }
@@ -3148,14 +3154,14 @@ class ReaderAnnotationActions(
 /**
  * Puts right what a stylesheet alone cannot, in the document on screen.
  *
- * Two unrelated faults are repaired the same way — by measuring the live
+ * Three unrelated faults are repaired the same way — by measuring the live
  * DOM and writing an attribute back into it — so they are asked together
  * and answer as one: whether the page moved. Each is independent of the
- * other and neither is allowed to hide the other's answer, because the
+ * others and none is allowed to hide another's answer, because the
  * caller uses it to decide whether the reader's place has to be put back.
  *
  * A refusal or a failure is not a change. The book's own
- * Content-Security-Policy can turn either of these down, and a page that
+ * Content-Security-Policy can turn any of these down, and a page that
  * was never touched is a page that never moved.
  *
  * A note the navigator's own position names is kept: that fragment is
@@ -3166,7 +3172,8 @@ private suspend fun repairPage(nav: EpubNavigatorFragment): Boolean {
     val fitted = WideContentFit.apply(nav) == WideContentFit.Result.CHANGED
     val here = nav.currentLocator.value.locations.fragments
     val noted = FootnoteLayout.apply(nav, here) == FootnoteLayout.Result.CHANGED
-    return fitted || noted
+    val led = SelectionHandleFix.apply(nav) == SelectionHandleFix.Result.CHANGED
+    return fitted || noted || led
 }
 
 /**
