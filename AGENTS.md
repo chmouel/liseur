@@ -446,4 +446,20 @@ emulator.
   the gesture — leaving, a rotation, a window resize — goes through
   `PageTurnDrag.abandon`, which puts the page back without animating,
   since an animation wants a next frame there may not be one of.
+- What a stylesheet alone cannot put right in the book's document is
+  repaired in the page by `repairPage()`: `WideContentFit`,
+  `FootnoteLayout` and `SelectionHandleFix` each inject a runtime
+  `<style>` and write only token-owned attributes back, never the author's
+  classes or markup. Each reports `changed`/`stable`/`blocked`/`failed` so
+  the caller knows whether the reader's place has to be put back.
+  `SelectionHandleFix` works around a WebView
+  bug (Chromium 522869957): selecting a paragraph's first word paints the
+  start handle on its last hyphen. It leads each block with two
+  non-breaking spaces at `font-size: 0` — NBSP, not ZWSP, so `::first-letter`
+  still finds the drop cap; two, since offset 1 triggers the bug too — and
+  only on blocks whose first in-flow child is inline with no authored
+  `::before`, because on a block of blocks that pseudo gets a line of its
+  own. It checks the computed pseudo-element after marking and removes the
+  token if a higher-specificity authored rule leaves the reset unsafe. Never
+  write it as a blanket `p::before`.
 - Bundled fonts must be under open licenses (OFL): Literata et al.
