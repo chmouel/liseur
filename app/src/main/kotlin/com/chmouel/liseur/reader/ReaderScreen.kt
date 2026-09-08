@@ -509,6 +509,11 @@ fun ReaderScreen(
     // A tapped mark has no platform selection. A late CLEARED from the
     // web view must not dismiss the controls we just opened for it.
     var tappedSelection by remember { mutableStateOf<ActiveSelection?>(null) }
+    // When the popup for it opened, so the locator collector below can
+    // tell Readium's trailing scroll debounce (ADR 6: up to a hundred
+    // milliseconds of stillness before it lands) from the reader
+    // scrolling again with the popup already open.
+    var tappedAt by remember { mutableStateOf(0L) }
     val annotationsNow by rememberUpdatedState(annotations)
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
@@ -1020,11 +1025,19 @@ fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         nav.currentLocator.collect { locator ->
             val tapped = tappedSelection
-            if (
-                tapped != null &&
-                (!effectiveScrollingNow || locator.href != tapped.locator.href)
-            ) {
-                tappedSelection = null
+            if (tapped != null) {
+                // A scroll that had already stopped before the tap can
+                // still land its debounced report just after: within
+                // the grace window that is the same stillness ADR 6
+                // describes, not the reader moving on, so it is not
+                // mistaken for one. Past it, this is exactly what
+                // paginated movement already does: any emission ends
+                // the tap, because the rect it was drawn at is never
+                // re-measured and a real scroll would leave it behind.
+                val settling = effectiveScrollingNow &&
+                    locator.href == tapped.locator.href &&
+                    SystemClock.elapsedRealtime() - tappedAt < TAPPED_SETTLE_GRACE_MS
+                if (!settling) tappedSelection = null
             }
             moves.onPosition(locator.restorePoint(), SystemClock.elapsedRealtime())
         }
@@ -1419,6 +1432,7 @@ fun ReaderScreen(
                     nav.clearSelection()
                     selection = null
                     tappedSelection = ActiveSelection(locator, rect, annotation)
+                    tappedAt = SystemClock.elapsedRealtime()
                     chromeVisible = false
                 }
                 return true
@@ -3056,6 +3070,14 @@ private val SEARCH_HIT_TINT = Color(0xFF80CBC4)
 
 private const val POPUP_HEIGHT_PX = 160f
 private const val POPUP_GAP_PX = 24f
+
+/**
+ * How long after a tap a same-resource locator emission is still read
+ * as the trailing report of a scroll that had already stopped, not the
+ * reader moving on. ADR 6 documents the debounce it is covering: up to
+ * a hundred milliseconds of stillness before Readium lands one.
+ */
+private const val TAPPED_SETTLE_GRACE_MS = 250L
 
 /** Bundle of in-book search actions passed down to the reader chrome. */
 class ReaderSearchActions(
