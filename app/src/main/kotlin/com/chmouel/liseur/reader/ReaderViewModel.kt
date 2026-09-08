@@ -818,8 +818,8 @@ class ReaderViewModel(
      *
      * Read eagerly because a mark can be made before anything has
      * collected it — the bar is drawn from the reader's first selection
-     * — and because [annotation] and [addNote] take the default colour
-     * from its value rather than from a constant.
+     * — and because [annotation] and [addNote] take their new-mark colours
+     * from its value rather than from constants.
      */
     val highlightPalette: StateFlow<HighlightPalette> = appSettings.settings
         .map { it.highlightPalette }
@@ -1419,7 +1419,7 @@ class ReaderViewModel(
             annotation(locator, AnnotationKind.NOTE).copy(
                 id = existing?.id ?: UUID.randomUUID().toString(),
                 note = note,
-                tint = existing?.tint ?: highlightPalette.value.default.name,
+                tint = existing?.tint ?: highlightPalette.value.passageNoteTint.name,
                 createdAt = existing?.createdAt ?: System.currentTimeMillis(),
             ),
         )
@@ -1662,7 +1662,7 @@ class ReaderViewModel(
     fun toggleHighlightTint(tint: HighlightTint) =
         viewModelScope.launch { appSettings.toggleHighlightTint(tint) }
 
-    /** Which colour a mark made without picking one comes out in. */
+    /** Which colour a plain Highlight, or an empty palette's Note, comes out in. */
     fun setHighlightDefaultTint(tint: HighlightTint) =
         viewModelScope.launch { appSettings.setHighlightDefaultTint(tint) }
 

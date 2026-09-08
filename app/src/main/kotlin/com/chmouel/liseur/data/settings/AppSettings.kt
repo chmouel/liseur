@@ -179,7 +179,7 @@ enum class DefinitionTarget(val id: String) {
  *   Wiktionary works, so a reader can pick their own language's edition or
  *   a mirror instead of the default.
  * @param highlightPalette Which colours the bar over a selected passage
- *   offers, and which one a mark made without picking gets.
+ *   offers, and the configured default for a plain highlight.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,

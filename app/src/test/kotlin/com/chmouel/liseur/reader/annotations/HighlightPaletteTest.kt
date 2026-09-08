@@ -52,6 +52,26 @@ class HighlightPaletteTest {
     }
 
     @Test
+    fun `a passage note uses the first offered colour`() {
+        val palette = HighlightPalette(
+            offered = setOf(HighlightTint.BLUE, HighlightTint.GREEN),
+            default = HighlightTint.PURPLE,
+        )
+
+        assertEquals(HighlightTint.GREEN, palette.passageNoteTint)
+    }
+
+    @Test
+    fun `a passage note falls back to the configured default when none are offered`() {
+        val palette = HighlightPalette(
+            offered = emptySet(),
+            default = HighlightTint.ORANGE,
+        )
+
+        assertEquals(HighlightTint.ORANGE, palette.passageNoteTint)
+    }
+
+    @Test
     fun `adding a colour leaves the others where they were`() {
         val three = HighlightPalette()
         val four = three.toggled(HighlightTint.PINK)

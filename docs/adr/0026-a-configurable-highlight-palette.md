@@ -26,8 +26,9 @@ selection by everybody.
 ## Decision
 
 Which colours the bar offers is the reader's to set: any subset of the
-six, and **yellow, green and blue by default**. Which colour a mark gets
-when none was picked is theirs to set too.
+six, and **yellow, green and blue by default**. Which colour a plain
+Highlight gets when none was picked is theirs to set too. A Note attached
+to selected passage text follows the first offered colour instead.
 
 `HighlightPalette` holds both, and holds the whole of the rule:
 
@@ -43,10 +44,17 @@ colour slots it in beside its neighbours and leaves the others where
 they were**, so a reader who marks by position rather than by name keeps
 their muscle memory when they change their mind.
 
-The default need not be offered. It is what a note gets, and what the
-plain Highlight action uses when nothing is ticked, so it has to mean
-something even when it is nowhere on the bar. Making it offer itself
-would be the setting quietly overruling a tick the reader made.
+The default need not be offered. It is what the plain Highlight action
+uses when nothing is ticked, and the fallback for a passage Note when no
+colours are offered, so it has to mean something even when it is nowhere
+on the bar. Making it offer itself would be the setting quietly
+overruling a tick the reader made.
+
+A Note attached to selected passage text gets the first offered colour in
+the palette's stable order. Removing yellow from the offered set therefore
+also removes yellow as the automatic Note colour, even if yellow remains
+the configured default. If the reader offers no colours at all, the Note
+falls back to that configured default so the action remains available.
 
 ### Nothing about a mark changes
 
@@ -76,8 +84,10 @@ way back.
 An empty set is a legal answer, and it does not mean "you may no longer
 highlight". The chips are replaced by a plain **Highlight** action that
 marks in the default colour — one word where six circles were, which is
-what a reader who never changes colour actually wants. A bar with no way
-to mark a passage would be a regression wearing a setting's clothes.
+what a reader who never changes colour actually wants. A passage **Note**
+also uses the default in this case because there is no offered colour to
+choose. A bar with no way to mark a passage would be a regression wearing
+a setting's clothes.
 
 Choosing none is stored, and it is not the same as never having chosen.
 `HighlightPalette.of` gives the three defaults for an absent set and an
