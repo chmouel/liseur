@@ -95,10 +95,7 @@ object AnnotationWire {
         // the limit the server refuses it, which is recorded against the
         // fingerprint and shown in a log — a stalled mark rather than a
         // silently halved one.
-        val body = when (kind) {
-            KIND_BOOKMARK -> ""
-            else -> annotation.note.orEmpty()
-        }
+        val body = body(annotation, kind)
         if (kind == KIND_NOTE && body.isEmpty()) return null
         val color = when (kind) {
             KIND_HIGHLIGHT -> color(annotation.tint)
@@ -173,7 +170,7 @@ object AnnotationWire {
             },
             if (anchored) truncate(annotation.text.orEmpty(), MAX_EXCERPT_BYTES) else "",
             if (kind == KIND_HIGHLIGHT) color(annotation.tint) else "",
-            if (kind == KIND_BOOKMARK) "" else annotation.note.orEmpty(),
+            body(annotation, kind),
             clientTs(annotation.updatedAt),
         )
         return sha256(parts.joinToString("\u0000"))
@@ -197,6 +194,13 @@ object AnnotationWire {
         val lower = tint?.lowercase(Locale.ROOT).orEmpty()
         return if (lower in COLORS) lower else ""
     }
+
+    private fun body(annotation: BookAnnotation, kind: String?): String =
+        if (kind == KIND_BOOKMARK) {
+            ""
+        } else {
+            annotation.note?.takeIf { it.isNotBlank() }.orEmpty()
+        }
 
     /**
      * Whether an id is one this device can hold at all.
@@ -389,7 +393,7 @@ object AnnotationWire {
         val noteUpdatedAt = when {
             note == null -> null
             existingNote == null -> null
-            existingNote == note -> existing?.noteUpdatedAt
+            existingNote == note -> existing.noteUpdatedAt
             else -> record.clientTsMicros
         }
         return BookAnnotation(
