@@ -179,7 +179,9 @@ enum class DefinitionTarget(val id: String) {
  *   Wiktionary works, so a reader can pick their own language's edition or
  *   a mirror instead of the default.
  * @param highlightPalette Which colours the bar over a selected passage
- *   offers, and the configured default for a plain highlight.
+ *   offers, and the configured default for a plain highlight. A passage note
+ *   uses the first colour in that bar's stable order, or the default when
+ *   the bar is empty.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,

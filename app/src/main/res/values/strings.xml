@@ -519,7 +519,7 @@
 
     <!-- The colours offered when a passage is marked. -->
     <string name="reader_highlight_colours">Available colours</string>
-    <string name="reader_highlight_colours_help">Tap a colour to offer it when you mark a passage. Hold one to make it the default, which is %1$s: a highlight made without picking gets it, and a note uses the first offered colour.</string>
+    <string name="reader_highlight_colours_help">Tap a colour to offer it when you mark a passage. Hold one to make it the default, which is %1$s: a highlight made without picking gets it, and a note uses the first colour in the bar's order.</string>
     <string name="reader_highlight_colours_none">No colours are offered, so marking a passage highlights it in %1$s. Tap a colour to bring the choice back.</string>
     <string name="reader_highlight_state_offered">Offered</string>
     <string name="reader_highlight_state_offered_default">Offered, and the default</string>
