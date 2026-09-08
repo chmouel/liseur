@@ -1018,9 +1018,15 @@ fun ReaderScreen(
     // one it would drop.
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
-        nav.currentLocator.collect {
-            tappedSelection = null
-            moves.onPosition(it.restorePoint(), SystemClock.elapsedRealtime())
+        nav.currentLocator.collect { locator ->
+            val tapped = tappedSelection
+            if (
+                tapped != null &&
+                (!effectiveScrollingNow || locator.href != tapped.locator.href)
+            ) {
+                tappedSelection = null
+            }
+            moves.onPosition(locator.restorePoint(), SystemClock.elapsedRealtime())
         }
     }
 
