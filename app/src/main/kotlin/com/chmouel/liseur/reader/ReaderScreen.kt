@@ -199,7 +199,9 @@ import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
+import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
@@ -504,6 +506,10 @@ fun ReaderScreen(
     // started. This gives it a window onto the current value.
     val noteShowing by rememberUpdatedState(footnote != null)
     var selection by remember { mutableStateOf<ActiveSelection?>(null) }
+    // A tapped mark has no platform selection. A late CLEARED from the
+    // web view must not dismiss the controls we just opened for it.
+    var tappedSelection by remember { mutableStateOf<ActiveSelection?>(null) }
+    val annotationsNow by rememberUpdatedState(annotations)
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
     var defineWord by remember { mutableStateOf<String?>(null) }
@@ -842,7 +848,7 @@ fun ReaderScreen(
                 // Chrome up means the scrubber is on the page, and a
                 // drag across it is a seek, not a turn.
                 !chromeDrawn() && !effectiveScrollingNow && reflowableTextNow &&
-                    !isPinching() && selection == null &&
+                    !isPinching() && selection == null && tappedSelection == null &&
                     viewedImageNow == null && !openingImageNow
             },
             interactive = { !eInkNow },
@@ -1013,6 +1019,7 @@ fun ReaderScreen(
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
         nav.currentLocator.collect {
+            tappedSelection = null
             moves.onPosition(it.restorePoint(), SystemClock.elapsedRealtime())
         }
     }
@@ -1329,11 +1336,14 @@ fun ReaderScreen(
     // about the platform's own magnifier and selection handles, which an
     // app hosting a web view has no say over at all.
     LaunchedEffect(navigator, selectionEvents) {
+        tappedSelection = null
         val nav = navigator ?: run {
             selection = null
             return@LaunchedEffect
         }
-        selectionEvents.collectSettledSelection(
+        selectionEvents.onEach {
+            if (it == SelectionEvent.CHANGED) tappedSelection = null
+        }.collectSettledSelection(
             settleMs = SELECTION_SETTLE_MS,
             read = { nav.currentSelection() },
             onSelection = { current ->
@@ -1373,6 +1383,43 @@ fun ReaderScreen(
     LaunchedEffect(navigator, annotations) {
         val nav = navigator ?: return@LaunchedEffect
         nav.applyDecorations(annotations.toDecorations(), DECORATION_GROUP)
+        tappedSelection = tappedSelection?.let { active ->
+            annotations.firstOrNull { it.id == active.existing?.id }?.let {
+                active.copy(existing = it)
+            }
+        }
+    }
+
+    DisposableEffect(navigator) {
+        val nav = navigator
+        val listener = object : DecorableNavigator.Listener {
+            override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
+                // Readium calls this from its JavaScript bridge thread.
+                effectScope.launch {
+                    if (nav == null || navigatorNow !== nav || isPinching()) return@launch
+                    val annotation = annotationsNow.firstOrNull { it.id == event.decoration.id }
+                        ?: return@launch
+                    val locator = annotation.locator() ?: return@launch
+                    // Decoration bounds belong to the inset publication
+                    // view; the popup is placed in the reader's root.
+                    val origin = IntArray(2)
+                    nav.publicationView.getLocationInWindow(origin)
+                    val rect = event.rect?.let {
+                        RectF(it).apply {
+                            offset(origin[0] - boxInWindow.x, origin[1] - boxInWindow.y)
+                        }
+                    }
+                    onSelectionDismissed()
+                    nav.clearSelection()
+                    selection = null
+                    tappedSelection = ActiveSelection(locator, rect, annotation)
+                    chromeVisible = false
+                }
+                return true
+            }
+        }
+        nav?.addDecorationListener(DECORATION_GROUP, listener)
+        onDispose { nav?.removeDecorationListener(listener) }
     }
 
     // Tracked rather than read: the setting arrives with the book, and
@@ -1414,6 +1461,7 @@ fun ReaderScreen(
         !goToPercent &&
         footnote == null &&
         selection == null &&
+        tappedSelection == null &&
         noteFor == null &&
         defineWord == null &&
         jumpBack == null &&
@@ -2696,6 +2744,7 @@ fun ReaderScreen(
         onSelectionDismissed()
         navigator?.clearSelection()
         selection = null
+        tappedSelection = null
     }
 
     // Not composed at all while a picture is open, rather than hidden the
@@ -2705,7 +2754,7 @@ fun ReaderScreen(
     // of buttons a screen reader could still operate — and draw them over
     // the picture besides. The selection itself is untouched and comes
     // back with the bar when the picture is dismissed.
-    selection?.takeIf { viewedImage == null }?.let { active ->
+    (tappedSelection ?: selection)?.takeIf { viewedImage == null }?.let { active ->
         SelectionPopup(
             offset = active.popupOffset(),
             activeTint = active.existing?.tint?.let(HighlightTint::fromName),
