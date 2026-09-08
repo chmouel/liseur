@@ -137,7 +137,11 @@ class AnnotationWireTest {
 
     @Test
     fun `a blank standalone note is refused`() {
-        assertNull(AnnotationWire.record(server(kind = "note", locator = "", body = "   ")))
+        assertNull(
+            AnnotationWire.record(
+                server(kind = "note", locator = "", body = "   ", color = ""),
+            ),
+        )
     }
 
     @Test
