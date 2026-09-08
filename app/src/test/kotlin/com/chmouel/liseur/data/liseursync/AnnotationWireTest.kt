@@ -141,6 +141,25 @@ class AnnotationWireTest {
     }
 
     @Test
+    fun `a blank body is normalized before conflict comparison`() {
+        val local = AnnotationWire.item(mark(note = null), WORK, 0, null)!!
+        val remote = AnnotationWire.record(server(body = "   "))!!
+
+        assertEquals("", remote.body)
+        assertTrue(AnnotationWire.sameContent(local.json, remote))
+    }
+
+    @Test
+    fun `a blank bookmark body is treated as absent`() {
+        val record = AnnotationWire.record(
+            server(kind = "bookmark", body = "   ", color = ""),
+        )
+
+        assertNotNull(record)
+        assertEquals("", record!!.body)
+    }
+
+    @Test
     fun `a bookmark carries neither colour nor words`() {
         val item = AnnotationWire.item(
             mark(kind = AnnotationKind.BOOKMARK, note = "ignored", tint = "YELLOW"),

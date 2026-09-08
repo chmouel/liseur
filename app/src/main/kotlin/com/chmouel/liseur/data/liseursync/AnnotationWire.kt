@@ -266,11 +266,12 @@ object AnnotationWire {
         if (color.isNotEmpty() && kind != KIND_HIGHLIGHT) return null
 
         val excerpt = json.optString("excerpt")
-        val body = json.optString("body")
+        val rawBody = json.optString("body")
         if (excerpt.toByteArray().size > MAX_EXCERPT_BYTES) return null
-        if (body.toByteArray().size > MAX_BODY_BYTES) return null
+        if (rawBody.toByteArray().size > MAX_BODY_BYTES) return null
+        val body = rawBody.takeIf { it.isNotBlank() }.orEmpty()
         if (body.isNotEmpty() && kind == KIND_BOOKMARK) return null
-        if (body.isBlank() && kind == KIND_NOTE) return null
+        if (body.isEmpty() && kind == KIND_NOTE) return null
 
         return Record(
             id = id,
