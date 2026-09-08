@@ -45,6 +45,10 @@ data class BookAnnotation(
     @ColumnInfo(name = "position") val position: Int? = null,
     @ColumnInfo(name = "total_progression") val totalProgression: Double? = null,
     @ColumnInfo(name = "created_at") val createdAt: Long,
+    /** When the note body was first written, in epoch milliseconds. */
+    @ColumnInfo(name = "note_created_at") val noteCreatedAt: Long? = null,
+    /** When the note body was last changed after creation, in epoch microseconds. */
+    @ColumnInfo(name = "note_updated_at") val noteUpdatedAt: Long? = null,
     /**
      * When this mark was last changed, in epoch **microseconds**.
      *

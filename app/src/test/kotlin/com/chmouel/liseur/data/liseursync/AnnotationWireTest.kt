@@ -59,10 +59,10 @@ class AnnotationWireTest {
         val record = AnnotationWire.record(
             server(kind = "highlight", body = "worth arguing with"),
         )!!
-        assertEquals(
-            AnnotationKind.NOTE.name,
-            AnnotationWire.toAnnotation(record, BOOK, null).kind,
-        )
+        val landed = AnnotationWire.toAnnotation(record, BOOK, null)
+        assertEquals(AnnotationKind.NOTE.name, landed.kind)
+        assertEquals(MICROS / 1000, landed.noteCreatedAt)
+        assertNull(landed.noteUpdatedAt)
     }
 
     @Test
@@ -106,6 +106,38 @@ class AnnotationWireTest {
         // would see its own choice quietly changed and change it back.
         val item = AnnotationWire.item(mark(tint = "CHARTREUSE"), WORK, 0, null)
         assertFalse(JSONObject(item!!.json).has("color"))
+    }
+
+    @Test
+    fun `a remote recolour does not become a note edit`() {
+        val existing = mark(
+            kind = AnnotationKind.NOTE,
+            note = "worth arguing with",
+            noteCreatedAt = 1_700_000_000_000,
+            noteUpdatedAt = null,
+        )
+        val record = AnnotationWire.record(server(body = "worth arguing with", color = "blue"))!!
+
+        val landed = AnnotationWire.toAnnotation(record, BOOK, existing)
+
+        assertEquals(existing.noteCreatedAt, landed.noteCreatedAt)
+        assertNull(landed.noteUpdatedAt)
+    }
+
+    @Test
+    fun `a remote body change advances the note edit stamp`() {
+        val existing = mark(
+            kind = AnnotationKind.NOTE,
+            note = "old thought",
+            noteCreatedAt = 1_700_000_000_000,
+            noteUpdatedAt = null,
+        )
+        val record = AnnotationWire.record(server(body = "new thought"))!!
+
+        val landed = AnnotationWire.toAnnotation(record, BOOK, existing)
+
+        assertEquals(existing.noteCreatedAt, landed.noteCreatedAt)
+        assertEquals(MICROS, landed.noteUpdatedAt)
     }
 
     // -- Fingerprints ------------------------------------------------------
@@ -505,6 +537,8 @@ class AnnotationWireTest {
             text: String? = "a passage",
             note: String? = null,
             tint: String? = "YELLOW",
+            noteCreatedAt: Long? = null,
+            noteUpdatedAt: Long? = null,
             updatedAt: Long = MICROS,
         ) = BookAnnotation(
             id = id,
@@ -518,6 +552,8 @@ class AnnotationWireTest {
             position = 12,
             totalProgression = 0.25,
             createdAt = 1_709_294_400_000,
+            noteCreatedAt = noteCreatedAt,
+            noteUpdatedAt = noteUpdatedAt,
             updatedAt = updatedAt,
         )
 

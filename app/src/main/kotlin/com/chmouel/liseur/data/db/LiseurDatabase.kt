@@ -29,7 +29,7 @@ import androidx.sqlite.execSQL
         SessionRefusal::class,
         SessionTransmission::class,
     ],
-    version = 49,
+    version = 50,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1337,6 +1337,28 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Separates a note body's own dates from the mark-wide sync stamp.
+         *
+         * Existing rows cannot say whether `updated_at` moved because the
+         * reader edited the note, recoloured the mark, or a peer changed
+         * another field. Keeping only the note creation date avoids showing
+         * old false "Edited" stamps as fact.
+         */
+        val MIGRATION_49_50 = object : Migration(49, 50) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE annotations ADD COLUMN note_created_at INTEGER")
+                connection.execSQL("ALTER TABLE annotations ADD COLUMN note_updated_at INTEGER")
+                connection.execSQL(
+                    """
+                    UPDATE annotations
+                    SET note_created_at = created_at
+                    WHERE note IS NOT NULL AND TRIM(note) != ''
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1386,6 +1408,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_46_47,
             MIGRATION_47_48,
             MIGRATION_48_49,
+            MIGRATION_49_50,
         )
     }
 }
