@@ -55,6 +55,33 @@ class AnnotationWireTest {
     }
 
     @Test
+    fun `a blank passage note is sent as a plain highlight`() {
+        val note = mark(kind = AnnotationKind.NOTE, note = "   ")
+        val highlight = note.copy(kind = AnnotationKind.HIGHLIGHT.name, note = null)
+
+        val sent = JSONObject(AnnotationWire.item(note, WORK, 0, null)!!.json)
+
+        assertEquals("highlight", sent.getString("kind"))
+        assertFalse(sent.has("body"))
+        assertEquals(
+            AnnotationWire.fingerprint(highlight, WORK),
+            AnnotationWire.fingerprint(note, WORK),
+        )
+    }
+
+    @Test
+    fun `a blank book note is not sent`() {
+        assertNull(
+            AnnotationWire.item(
+                mark(kind = AnnotationKind.BOOK_NOTE, locator = "", note = "   "),
+                WORK,
+                0,
+                null,
+            ),
+        )
+    }
+
+    @Test
     fun `a highlight with a body comes back as a note`() {
         val record = AnnotationWire.record(
             server(kind = "highlight", body = "worth arguing with"),
