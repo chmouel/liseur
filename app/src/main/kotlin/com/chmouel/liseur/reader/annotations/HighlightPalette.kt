@@ -1,8 +1,8 @@
 package com.chmouel.liseur.reader.annotations
 
 /**
- * Which colours a passage may be marked in, and which one is meant when
- * no colour was picked.
+ * Which colours a passage may be marked in, and which one a plain highlight
+ * gets when no colour was picked.
  *
  * [HighlightTint] has six entries because that is what liseur-sync's
  * palette is, and a colour arriving from another device must have a
@@ -37,6 +37,16 @@ data class HighlightPalette(
 
     /** Whether the bar has no colours to offer and needs a plain action instead. */
     val isEmpty: Boolean = shown.isEmpty()
+
+    /**
+     * The tint for a new note attached to a passage.
+     *
+     * Notes follow the first colour the reader currently offers. An empty
+     * palette has no first colour, so it falls back to the separately chosen
+     * default to keep note creation possible.
+     */
+    val passageNoteTint: HighlightTint
+        get() = shown.firstOrNull() ?: default
 
     /**
      * The chips to draw for the mark in hand.
