@@ -90,7 +90,7 @@ fun LiseurModalBottomSheet(
             contentColor = contentColor,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            border = BorderStroke(1.dp, contentColor.copy(alpha = 0.3f)),
             modifier = modifier
                 .windowInsetsPadding(
                     WindowInsets.safeDrawing

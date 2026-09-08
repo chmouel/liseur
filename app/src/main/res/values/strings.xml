@@ -389,7 +389,6 @@
     <string name="annotation_note_edit">Edit</string>
     <string name="annotation_note_added">Added %1$s</string>
     <string name="annotation_note_edited">Edited %1$s</string>
-    <string name="annotation_note_close">Close note</string>
     <string name="annotation_add_book_note">Add a book note</string>
     <string name="annotation_book_note_title">Book note</string>
     <string name="annotation_book_note_hint">What do you want to remember about this book?</string>
