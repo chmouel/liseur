@@ -239,12 +239,32 @@ per-server capability detection.
 |--------|-----------|--------|
 | Komga | Exact position in chapter | Full Readium locator, with position snapping |
 | calibre-web | Page-level at best | Percentage (`totalProgression`) via the Kobo protocol |
-| liseur-sync | Exact position in chapter | Full Readium locator via the op log |
+| liseur-sync | Exact position in chapter, in the same file | Full Readium locator via the op log |
 | Grimmory | Page-level at best | Percentage via KOReader's kosync, paired alongside the catalog |
 | Any kosync server | Page-level at best | Same partner: it speaks the generic protocol, so a stock kosync server pairs the same way |
 
 Every sync goes through the shared `reconcileReadingState` merge
 logic in `domain/ReadingStateMerge.kt`.
+
+A locator is only followed into the file it was written against. Ops
+carry the edition's SHA-256 (`edition_sha`), and a position from an
+edition this device cannot confirm it holds is used as a percentage and
+nothing more — the same paragraph is not at the same offset in another
+translation or another conversion of the book.
+
+Within a matching edition the restoration descends three rungs, in
+`reader/progress/ResourceAnchor.kt`:
+
+1. **The passage.** A locator this app marked as exact
+   (`liseurAnchor`): a block selector and a bounded quote, verified to
+   be on screen after the chapter has laid out.
+2. **The chapter.** The resource and the fraction *within* it. Kept
+   whenever the exact rung is absent or will not verify, including
+   positions from clients that do not provide a usable exact anchor.
+3. **The percentage.** The whole-book fraction, and the only rung that
+   can land in the wrong chapter: two engines compute that fraction
+   from different things, and on a book with a few large chapters they
+   disagree by pages.
 
 The kosync partner is not a kind of server: it is paired *alongside* a
 connected one, covers that server's downloaded books (matched by

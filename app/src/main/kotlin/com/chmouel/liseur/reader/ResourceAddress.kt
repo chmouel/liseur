@@ -42,6 +42,10 @@ internal object ResourceAddress {
      */
     fun href(webUrl: String?): String? = relative(webUrl)
 
+    /** A publication-relative path suitable for comparing two href spellings. */
+    fun canonicalPath(raw: String?): String? =
+        path(raw)
+
     private fun relative(raw: String?): String? {
         val address = raw?.substringBefore('#')?.substringBefore('?')?.trim() ?: return null
         if (address.isEmpty()) return null

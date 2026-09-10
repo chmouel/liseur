@@ -78,6 +78,7 @@ import com.chmouel.liseur.reader.footnotes.FootnoteResolver
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingPace
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
+import com.chmouel.liseur.reader.progress.ResourceAnchor
 import com.chmouel.liseur.reader.progress.StableBookProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -681,6 +682,7 @@ class ReaderViewModel(
         // settled on the next open; the book still opens now.
         if (outcome != ResolveOutcome.Done || !takeRemote) return
         positionsFor(publication)
+        this@ReaderViewModel.publication = publication
         offerWayBack(localLocator, here, preview)
     }
 
@@ -696,12 +698,16 @@ class ReaderViewModel(
         preview: SyncPreview,
     ) {
         val positions = bookPositions?.takeIf { it.isUsable } ?: return
-        val locator = exactLocal?.takeIf(ExactLocatorAnchor::isExact)
-            ?: positions.locatorAtOrBeforeProgression(progression)
-            ?: return
-        val position = positions.resolve(locator)?.position
+        val locator = ResourceAnchor.resumeTarget(
+            saved = exactLocal,
+            totalProgression = progression,
+            readingOrder = readingOrderPaths(),
+            byProgression = positions::locatorAtOrBeforeProgression,
+        ) ?: return
+        val prepared = prepareLocator(locator)
+        val position = positions.resolve(prepared)?.position
         _jumpBack.value = JumpBack(
-            locator = prepareLocator(locator),
+            locator = prepared,
             position = position,
             fromSync = true,
             excerpt = preview.excerpt,
@@ -723,11 +729,16 @@ class ReaderViewModel(
     /** Navigates to the position that was offered, not a later database snapshot. */
     private suspend fun goToRemotePosition(preview: SyncPreview) {
         val positions = positionsFor(publication ?: return)
-        val exact = preview.remoteLocatorJson
+        val remoteLocator = preview.remoteLocatorJson
             ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
-            ?.takeIf(ExactLocatorAnchor::isExact)
+        val exact = remoteLocator?.takeIf(ExactLocatorAnchor::isExact)
         val target = exact
-            ?: preview.remote?.let(positions::locatorAtOrBeforeProgression)
+            ?: ResourceAnchor.approximateTarget(
+                saved = remoteLocator,
+                totalProgression = preview.remote,
+                readingOrder = readingOrderPaths(),
+                byProgression = positions::locatorAtOrBeforeProgression,
+            )
             ?: return
         onJump()
         _jumpBack.value = _jumpBack.value?.copy(
@@ -749,6 +760,7 @@ class ReaderViewModel(
 
     private var publication: Publication? = null
     private var bookPositions: BookPositions? = null
+    private var readingOrderPaths: List<String>? = null
     private var goToPageResolver: GoToPageResolver? = null
     private var speed = ReadingSpeedEstimator()
     private var jumpBackTimer: Job? = null
@@ -973,6 +985,7 @@ class ReaderViewModel(
                     ?: ReadingPace.Unknown,
             )
             val positions = positionsFor(publication)
+            this@ReaderViewModel.publication = publication
             if (pulledAutomatically != null) {
                 val localLocator = beforeSync?.locatorJson
                     ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
@@ -985,17 +998,19 @@ class ReaderViewModel(
             val savedLocator = stored?.locatorJson
                 ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
             // Unmarked Readium text may describe the following synthetic
-            // position. It is approximate and deliberately resumes at or
-            // before the stable progression instead.
-            val initialLocator = if (ExactLocatorAnchor.isExact(savedLocator)) {
-                savedLocator
-            } else {
-                stored?.totalProgression?.let(positions::locatorAtOrBeforeProgression)
-                    ?: savedLocator
-            }?.let(::prepareLocator)
+            // position, so it is not treated as exact. What is left of
+            // such a locator is still the chapter and the place in it,
+            // which is tried before the whole-book progression: that
+            // last rung can land in a different chapter altogether when
+            // the fraction was written down by the other client.
+            val initialLocator = ResourceAnchor.resumeTarget(
+                saved = savedLocator,
+                totalProgression = stored?.totalProgression,
+                readingOrder = readingOrderPaths(),
+                byProgression = positions::locatorAtOrBeforeProgression,
+            )?.let(::prepareLocator)
             lastLocator = initialLocator
             library.markOpened(bookId)
-            this@ReaderViewModel.publication = publication
             _state.value = UiState.Ready(
                 publication = publication,
                 navigatorFactory = EpubNavigatorFactory(publication),
@@ -1253,6 +1268,31 @@ class ReaderViewModel(
 
     fun locatorAtOrBeforeProgression(progression: Double): Locator? =
         bookPositions?.locatorAtOrBeforeProgression(progression)
+
+    /**
+     * The chapter a peer named, if this book has it.
+     *
+     * Offered to the reading chrome so that a quote which will not
+     * verify falls back to the right chapter rather than straight to a
+     * whole-book percentage, which can land in a different one.
+     */
+    fun resourceTargetFor(locator: Locator): Locator? {
+        val target = ResourceAnchor.targetIn(locator, readingOrderPaths()) ?: return null
+        val stable = bookPositions?.resolve(target) ?: return target
+        return target.copy(
+            locations = target.locations.copy(totalProgression = stable.progression),
+        )
+    }
+
+    /** The opened publication's spine paths, computed once per book. */
+    private fun readingOrderPaths(): List<String> {
+        readingOrderPaths?.let { return it }
+        val paths = publication?.readingOrder
+            ?.map { ResourceAnchor.path(it.url().toString()) }
+            ?: return emptyList()
+        readingOrderPaths = paths
+        return paths
+    }
 
     fun onApproximateResume() {
         _jumpBack.value = _jumpBack.value?.copy(confidence = ResumeConfidence.APPROXIMATE)
