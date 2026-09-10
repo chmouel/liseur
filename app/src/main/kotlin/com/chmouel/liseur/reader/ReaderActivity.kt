@@ -426,6 +426,7 @@ class ReaderActivity : FragmentActivity() {
                                             resolvePercent = viewModel::resolvePercent,
                                             locatorAtOrBeforeProgression =
                                                 viewModel::locatorAtOrBeforeProgression,
+                                            resourceTargetFor = viewModel::resourceTargetFor,
                                             prepareLocator = viewModel::prepareLocator,
                                             onApproximateResume = viewModel::onApproximateResume,
                                         )

@@ -19,6 +19,7 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.LiveTopic
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import java.io.File
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
@@ -604,6 +605,128 @@ class LiseurSyncPositionSyncTest {
 
         assertFalse(preview.agrees)
         assertEquals(ResumeConfidence.EXACT, preview.confidence)
+    }
+
+    @Test
+    fun `a peer that names the chapter has it kept, not reduced to a percentage`() = runTest {
+        // Issue #184. The web reader records the resource it is in and
+        // how far through it the reader is, but not the app's exact
+        // passage anchor. That locator used to be discarded outright,
+        // leaving the whole-book percentage as the only thing to reopen
+        // on — and the two clients do not compute that percentage the
+        // same way, so the book reopened somewhere near the place
+        // instead of at it. The chapter is kept now.
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-local")
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer(),
+            progression = 0.31,
+            status = "reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = resourceLocator(
+                href = "/chapter-9.xhtml",
+                progression = 0.74,
+                totalProgression = 0.31,
+            ),
+            editionSha = "sha-local",
+        )
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.2, null, "reading", NOW)
+
+        assertEquals(ResolveOutcome.Done, sync().takeRemotePosition(LOCAL, 1))
+
+        val stored = JSONObject(db.readingProgressDao().get(LOCAL)!!.locatorJson!!)
+        assertEquals("/chapter-9.xhtml", stored.getString("href"))
+        assertEquals(0.74, stored.getJSONObject("locations").getDouble("progression"), 0.0)
+    }
+
+    @Test
+    fun `a kept chapter is not dressed up as the exact passage`() = runTest {
+        // The chapter is worth restoring and worth saying so about. It
+        // is not the reader's word, so it must not raise the exact
+        // confidence or offer an excerpt of a passage nobody captured.
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-local")
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer(),
+            progression = 0.31,
+            status = "reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = resourceLocator(),
+            editionSha = "sha-local",
+        )
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.2, null, "reading", NOW)
+
+        val preview = sync().preservedConflict(LOCAL, null)!!
+
+        assertEquals(ResumeConfidence.APPROXIMATE, preview.confidence)
+        assertNull(preview.excerpt)
+        // Nothing exact on either side, so the percentages decide, as
+        // they always did.
+        assertNull(preview.exactPositionAgreement)
+        assertEquals("/chapter-9.xhtml", JSONObject(preview.remoteLocatorJson!!).getString("href"))
+    }
+
+    @Test
+    fun `a chapter from another edition is still refused`() = runTest {
+        // A resource path and an offset in someone else's bytes are not
+        // a place in this book. Keeping the ladder inside the edition
+        // check is what stops this being a regression of ADR-0028.
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-local")
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer(),
+            progression = 0.31,
+            status = "reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = resourceLocator(),
+            editionSha = "sha-remote",
+        )
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.2, null, "reading", NOW)
+
+        assertEquals(ResolveOutcome.Done, sync().takeRemotePosition(LOCAL, 1))
+        assertEquals("{}", db.readingProgressDao().get(LOCAL)?.locatorJson)
+    }
+
+    @Test
+    fun `a foreign page number and a stale quote do not ride along`() = runTest {
+        // The peer's `position` is its own pagination and its `text` is
+        // a quote this device never verified. Stored as they arrive,
+        // the first indexes into the wrong place and the second reads
+        // as an exact anchor on the next run.
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-local")
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer(),
+            progression = 0.31,
+            status = "reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = """
+                {"href":"/chapter-9.xhtml","type":"application/xhtml+xml",
+                 "locations":{"progression":0.74,"totalProgression":0.31,
+                 "position":812,"fragments":["epubcfi(/6/14!/4/2/2)"]},
+                 "text":{"highlight":"a quote from another engine"}}
+            """.trimIndent(),
+            editionSha = "sha-local",
+        )
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.2, null, "reading", NOW)
+
+        assertEquals(ResolveOutcome.Done, sync().takeRemotePosition(LOCAL, 1))
+
+        val stored = db.readingProgressDao().get(LOCAL)!!.locatorJson!!
+        val locations = JSONObject(stored).getJSONObject("locations")
+        assertFalse(stored, locations.has("position"))
+        assertFalse(stored, locations.has("fragments"))
+        assertFalse(stored, JSONObject(stored).has("text"))
+        assertFalse(stored, ExactLocatorAnchor.isExactJson(stored))
+        assertEquals(0.74, locations.getDouble("progression"), 0.0)
     }
 
     @Test
@@ -2409,6 +2532,22 @@ class LiseurSyncPositionSyncTest {
                 .put("liseurAnchor", 1),
         )
         .put("text", JSONObject().put("highlight", highlight))
+        .toString()
+
+    /** What the web reader can say: a resource and how far into it. */
+    private fun resourceLocator(
+        href: String = "/chapter-9.xhtml",
+        progression: Double = 0.74,
+        totalProgression: Double = 0.31,
+    ): String = JSONObject()
+        .put("href", href)
+        .put("type", "application/xhtml+xml")
+        .put(
+            "locations",
+            JSONObject()
+                .put("progression", progression)
+                .put("totalProgression", totalProgression),
+        )
         .toString()
 
     /** Every request the server has seen, including earlier runs'. */

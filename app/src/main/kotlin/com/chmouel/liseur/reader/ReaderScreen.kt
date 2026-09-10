@@ -125,6 +125,7 @@ import com.chmouel.liseur.reader.footnotes.FootnoteLayout
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
+import com.chmouel.liseur.reader.progress.ResourceAnchor
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.readingCssFor
@@ -729,8 +730,16 @@ fun ReaderScreen(
             settleLayout()
             if (ExactLocatorAnchor.verify(nav, locator)) return
         }
-        val progression = locator.locations.totalProgression ?: return
-        val fallback = onProgressAction.locatorAtOrBeforeProgression(progression) ?: return
+        // The quote did not land. The chapter it named is still the best
+        // thing known about where the reader was: falling straight to a
+        // whole-book fraction can move them to a different chapter
+        // entirely, because that fraction may have been computed by the
+        // other client, which does not compute it the same way.
+        val fallback = onProgressAction.resourceTargetFor(locator)
+            ?: locator.locations.totalProgression
+                ?.takeIf(ResourceAnchor::isFraction)
+                ?.let(onProgressAction.locatorAtOrBeforeProgression)
+            ?: return
         retargetGate(fallback)
         pendingPositionEvent = event
         val fallbackToken = moves.issue(
@@ -1086,8 +1095,13 @@ fun ReaderScreen(
         val requested = restoreTarget ?: return@LaunchedEffect
         if (!ExactLocatorAnchor.isExact(requested)) return@LaunchedEffect
         if (openingExactAnchorArrived(nav, requested)) return@LaunchedEffect
-        val progression = requested.locations.totalProgression ?: return@LaunchedEffect
-        val fallback = onProgressAction.locatorAtOrBeforeProgression(progression)
+        // The chapter before the percentage, for the reason given in
+        // navigate(): the whole-book fraction is the only rung that can
+        // land in the wrong chapter.
+        val fallback = onProgressAction.resourceTargetFor(requested)
+            ?: requested.locations.totalProgression
+                ?.takeIf(ResourceAnchor::isFraction)
+                ?.let(onProgressAction.locatorAtOrBeforeProgression)
             ?: return@LaunchedEffect
         pendingPositionEvent = NavigatorPositionEvent.FRAGMENT_RECREATION
         // Retarget rather than release. This navigation is asynchronous
@@ -3273,6 +3287,7 @@ class ReaderProgressActions(
     val currentPercent: () -> Int,
     val resolvePercent: (String) -> GoToDestination?,
     val locatorAtOrBeforeProgression: (Double) -> Locator?,
+    val resourceTargetFor: (Locator) -> Locator?,
     val prepareLocator: (Locator) -> Locator,
     val onApproximateResume: () -> Unit,
 ) {

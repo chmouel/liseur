@@ -45,6 +45,7 @@ import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.reconcileReadingState
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.reader.progress.ResourceAnchor
 import java.io.IOException
 import org.json.JSONArray
 import org.json.JSONObject
@@ -192,10 +193,13 @@ class LiseurSyncPositionSync(
 
         val stored = progressDao.get(bookUrl)
         val exact = head.locatorJson.takeIf {
-            head.editionSha != null &&
-                head.editionSha == alias.editionSha &&
-                ExactLocatorAnchor.isExactJson(it)
+            sameEdition(head.editionSha, alias) && ExactLocatorAnchor.isExactJson(it)
         }
+        // What the reader is *told* comes from the exact anchor; where
+        // they are actually put comes from the ladder. A peer that named
+        // the chapter but not the passage is an approximate answer, and
+        // it is still a far better one than a percentage.
+        val restorable = restorableLocator(head.locatorJson, head.editionSha, alias)
         return PreviewOutcome.Ready(
             SyncPreview(
                 local = stored?.totalProgression,
@@ -214,7 +218,7 @@ class LiseurSyncPositionSync(
                 accountKey = account.peerId,
                 remoteStatus = head.progression
                     .let { ReadingStatus.forProgression(it).wireName },
-                remoteLocatorJson = exact,
+                remoteLocatorJson = restorable,
                 localRevision = stored?.localRevision,
                 resolvable = !ours,
             ),
@@ -248,7 +252,7 @@ class LiseurSyncPositionSync(
             ),
             accountKey = account.peerId,
             remoteStatus = state.pendingStatus,
-            remoteLocatorJson = exact,
+            remoteLocatorJson = state.restorableLocatorFor(alias),
             localRevision = progressDao.get(bookUrl)?.localRevision,
         ).takeIf { !it.agrees }
     }
@@ -287,7 +291,7 @@ class LiseurSyncPositionSync(
 
         val alias = bookDao.getByUrl(bookUrl)
             ?.let { works.cached(it, account.peerId) }
-        val locator = state.exactLocatorFor(alias)
+        val locator = state.restorableLocatorFor(alias)
 
         var applied = false
         var accountMatches = false
@@ -1156,7 +1160,19 @@ class LiseurSyncPositionSync(
                 exactRemote,
             ),
         )
-        return act(account, book, alias, stored, state, exactRemote, decision)
+        // The merge is decided on the exact anchor, which is the only
+        // thing that can say two places are the same passage. What a
+        // pull then *stores* is the ladder's answer, so a peer that
+        // named only the chapter is still restored to it.
+        return act(
+            account,
+            book,
+            alias,
+            stored,
+            state,
+            state?.restorableLocatorFor(alias),
+            decision,
+        )
     }
 
     private suspend fun act(
@@ -1165,7 +1181,7 @@ class LiseurSyncPositionSync(
         alias: WorkAlias,
         stored: ReadingProgress?,
         state: SyncPeerState?,
-        exactRemote: String?,
+        restorableRemote: String?,
         decision: SyncDecision,
     ): Reconciled {
         val at = now()
@@ -1198,7 +1214,7 @@ class LiseurSyncPositionSync(
                         progression = progression,
                         status = decision.state.status.wireName,
                         now = at,
-                        locatorJson = exactRemote,
+                        locatorJson = restorableRemote,
                         remoteUpdatedAt = state?.pendingUpdatedAt,
                     )
                     if (applied) {
@@ -2010,10 +2026,31 @@ class LiseurSyncPositionSync(
     /** Exact placement is safe only for byte-identical editions. */
     private fun SyncPeerState.exactLocatorFor(alias: WorkAlias?): String? =
         pendingLocatorJson.takeIf {
-            pendingEditionSha != null &&
-                pendingEditionSha == alias?.editionSha &&
-                ExactLocatorAnchor.isExactJson(it)
+            sameEdition(pendingEditionSha, alias) && ExactLocatorAnchor.isExactJson(it)
         }
+
+    /**
+     * The best place in the peer's locator this device can actually put
+     * the reader — the exact passage where there is one, and the
+     * resource with its own progression where there is not.
+     *
+     * Kept apart from [exactLocatorFor] because the two answer different
+     * questions. That one asks "may the reader be told this is the exact
+     * spot", and its answer drives the excerpt, the confidence and the
+     * agreement test. This one asks "what is the best place to open at",
+     * and its answer is what gets *stored*. Conflating them is what made
+     * a percentage the only fallback: a peer that names the chapter and
+     * how far through it the reader was had that thrown away, and the
+     * position was rebuilt from a whole-book fraction the two clients
+     * do not even compute the same way.
+     *
+     * Still bounded by the edition. A locator recorded against other
+     * bytes names a resource this copy may not have, at an offset that
+     * means nothing here, so it is no more restorable than an exact
+     * anchor would be. See ADR-0028.
+     */
+    private fun SyncPeerState.restorableLocatorFor(alias: WorkAlias?): String? =
+        restorableLocator(pendingLocatorJson, pendingEditionSha, alias)
 
     private companion object {
         /**
@@ -2099,4 +2136,38 @@ class LiseurSyncPositionSync(
         val ACCEPTED = setOf("applied", "duplicate")
         const val CONFLICT = "conflict"
     }
+}
+
+/**
+ * Whether a locator recorded against [editionSha] describes this copy.
+ *
+ * An unknown edition is not a matching one. A peer that did not say
+ * which bytes it was reading may be reading a different translation
+ * under the same work, and a resource path or an offset from that book
+ * is not a place in this one.
+ */
+private fun sameEdition(editionSha: String?, alias: WorkAlias?): Boolean =
+    editionSha != null && editionSha == alias?.editionSha
+
+/**
+ * The best place [locatorJson] can put the reader in this copy.
+ *
+ * The ladder, in one place so every caller descends it identically: the
+ * exact passage, else the resource and how far through it the reader
+ * was, else nothing — and "nothing" leaves the whole-book progression,
+ * which travels beside the locator and is what the reader gets when
+ * this copy and the peer's are not the same bytes.
+ */
+private fun restorableLocator(
+    locatorJson: String?,
+    editionSha: String?,
+    alias: WorkAlias?,
+): String? {
+    if (!sameEdition(editionSha, alias)) return null
+    if (ExactLocatorAnchor.isExactJson(locatorJson)) return locatorJson
+    // Rebuilt rather than passed through: what arrives may carry a
+    // quote that no longer resolves and a page number from another
+    // client's pagination, and both would be read here as things they
+    // are not.
+    return ResourceAnchor.sanitize(locatorJson)?.toJSON()?.toString()
 }
