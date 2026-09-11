@@ -230,8 +230,20 @@ is handed no source at all for a blocked account rather than one that
 would open, time out and be retried for as long as the app is in the
 foreground. It reports nothing: the guarded sync has already said the
 account is blocked, and the live stream is a hint that a full sync would
-be worth running. Nothing is remembered, so a grant takes effect at the
-next connection.
+be worth running.
+
+Where a background run asks the question afresh every time, that
+connection is opened once and held, so it is told when the answer moves:
+`LocalNetworkAccess.recheck()` is called after a permission result and
+on resume, and announces only an answer that actually changed, so a
+denial does not tear down a healthy stream. The connector takes that
+signal as a third input and puts it in the key it deduplicates on —
+*not* in `LiveIdentity`, which stands for the account and its
+credentials. Without it a reader who allowed the permission from the
+connected card would have waited out the rest of that foreground session
+with the stream still down, since granting changes neither the account
+nor the foreground state and the background grace period swallows a trip
+to the settings app.
 
 ### `NEARBY_WIFI_DEVICES` is not declared
 

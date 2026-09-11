@@ -460,6 +460,7 @@ class AppContainer(context: Context) {
                 ?.takeIf { !localNetwork.blocks(server.baseUrl) }
         },
         coordinator = positionSync,
+        reconnectOn = localNetwork.grants,
         requestBook = ::requestBookSync,
         reportFailure = { identity, reason ->
             if (database.remoteServerDao().get()?.let(LiveIdentity::from) == identity) {

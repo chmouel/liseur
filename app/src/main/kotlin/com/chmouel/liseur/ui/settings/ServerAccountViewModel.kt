@@ -541,6 +541,10 @@ class ServerAccountViewModel(
     fun onLocalNetworkResult(granted: Boolean) {
         val request = _state.value.localNetworkRequest ?: return
         _state.update { it.copy(localNetworkRequest = null, localNetworkAsked = true) }
+        // A background run asks afresh every time, but a live
+        // notification stream is opened once and held, so it is told
+        // the answer has moved.
+        localNetwork.recheck()
         viewModelScope.launch {
             if (granted) resume(request) else refuse(request)
         }
@@ -615,6 +619,9 @@ class ServerAccountViewModel(
      * anything else.
      */
     fun refreshLocalNetworkAccess() {
+        // Called on resume, which is how a grant made in the system
+        // settings app gets back here at all.
+        localNetwork.recheck()
         val current = _state.value
         recheckLocalNetwork(current.server, current.kosync)
     }
