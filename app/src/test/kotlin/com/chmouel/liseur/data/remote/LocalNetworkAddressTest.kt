@@ -90,6 +90,24 @@ class LocalNetworkAddressTest {
      * trailing dot as part of it would send an mDNS address off to be
      * resolved by mDNS, which is what the permission is blocking.
      */
+    /**
+     * A name is not an address because it starts with a number. Reading
+     * `127.books.home.local` as loopback would exempt a server on the
+     * reader's own network from the one check that gets them prompted.
+     */
+    @Test
+    fun `a name that begins with 127 is still a name`() = runTest {
+        assertTrue(
+            LocalNetworkAddress.isLocal("http://127.books.home.local:8083", resolver = refusing),
+        )
+        assertTrue(
+            LocalNetworkAddress.isLocal(
+                "http://127.books.example.com:8083",
+                resolver = { listOf("192.168.1.20") },
+            ),
+        )
+    }
+
     @Test
     fun `a name written out to the root label is the same name`() = runTest {
         assertTrue(LocalNetworkAddress.isLocal("http://books.local.:8083", resolver = refusing))
