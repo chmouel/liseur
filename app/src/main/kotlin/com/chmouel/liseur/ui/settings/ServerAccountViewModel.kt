@@ -606,7 +606,14 @@ class ServerAccountViewModel(
             val addresses = listOfNotNull(
                 server?.baseUrl,
                 server?.catalogUrl,
-                peer?.baseUrl?.takeIf { server?.kind?.hostsKosyncPeer == true },
+                // Both halves matter and both have bitten: a pairing
+                // the connected account does not use is never dialled,
+                // and neither is one whose stored key this Keystore
+                // cannot read back -- a database restored onto another
+                // phone. Granting the permission would not help either.
+                peer?.baseUrl?.takeIf {
+                    server?.kind?.hostsKosyncPeer == true && peer.credentials != null
+                },
             ).distinct()
             val blocked = addresses.any { localNetwork.blocks(it) }
             _state.update { it.copy(localNetworkBlocked = blocked) }
@@ -630,6 +637,19 @@ class ServerAccountViewModel(
         // the app's own foreground refresh is debounced, and a trip to
         // the settings app is well inside that minute.
         if (moved && localNetwork.granted) {
+            // And the refusal it left on the form is spent. Otherwise
+            // the notice stays up offering the settings page a reader
+            // has just come back from -- the rationale API answers
+            // false after a grant as readily as before the first ask,
+            // so the button cannot tell on its own -- and the way out
+            // is to notice that Connect works now.
+            _state.update {
+                it.copy(
+                    error = it.error.takeUnless { e -> e == AccountError.LOCAL_NETWORK_BLOCKED },
+                    kosyncError = it.kosyncError
+                        .takeUnless { e -> e == AccountError.LOCAL_NETWORK_BLOCKED },
+                )
+            }
             viewModelScope.launch {
                 positionSync.request(SyncScope.Full, System.currentTimeMillis())
             }

@@ -261,6 +261,31 @@ class ServerAccountLocalNetworkTest {
         assertEquals(0, kosyncPairings.size)
     }
 
+    /**
+     * A denial that has become permanent sends the reader to the system
+     * settings page, and coming back from it having allowed the
+     * permission has to spend the refusal it left behind. The button
+     * under the notice cannot work this out for itself: the rationale
+     * API answers false after a grant as readily as before the first
+     * ask, so the notice would sit there offering the page the reader
+     * has just come back from.
+     */
+    @Test
+    fun `a grant from the settings page clears the refusal it left behind`() = scenario {
+        blocked += "http://192.168.1.20:8083"
+        val model = connecting()
+        model.onLocalNetworkRequestLaunched(model.state.value.localNetworkRequest!!.id)
+        model.onLocalNetworkResult(granted = false)
+        assertEquals(AccountError.LOCAL_NETWORK_BLOCKED, model.state.value.error)
+
+        permitted = true
+        model.refreshLocalNetworkAccess()
+        runCurrent()
+
+        assertNull(model.state.value.error)
+        assertFalse(model.state.value.connecting)
+    }
+
     @Test
     fun `pairing a kosync partner on its own parks the same way`() = scenario {
         blocked += "http://192.168.1.9:8080"
@@ -370,6 +395,31 @@ class ServerAccountLocalNetworkTest {
                 baseUrl = "http://192.168.1.9:8080",
                 username = "ada",
                 keyCipher = KosyncPeer.seal(KosyncCredentials.keyFor("pw")),
+                addedAt = 1L,
+            ),
+        )
+
+        val model = model()
+
+        assertFalse(model.state.value.localNetworkBlocked)
+    }
+
+    /**
+     * A database restored onto another phone brings the pairing row but
+     * not a key this Keystore can open, so the run answers "not
+     * applicable" before it dials and no permission would change that.
+     */
+    @Test
+    fun `a kosync pairing whose key cannot be read raises no notice`() = scenario {
+        blocked += "http://192.168.1.9:8080"
+        db.remoteServerDao().upsert(
+            server(baseUrl = "https://books.example.com", kind = ServerKind.CUSTOM),
+        )
+        db.kosyncPeerDao().upsert(
+            KosyncPeer(
+                baseUrl = "http://192.168.1.9:8080",
+                username = "ada",
+                keyCipher = "not something this phone sealed",
                 addedAt = 1L,
             ),
         )
