@@ -142,3 +142,21 @@ artwork under their name.
 This is a licensing fact about one upstream project, not a rule about
 the picker. If Komga relicenses the icon, `ServerKindLogo` gains a
 branch and loses one.
+
+## Addendum: the fifth kind did have a layout consequence
+
+[Issue #179](https://github.com/chmouel/liseur/issues/179). The decision
+above says a fifth kind is "a `when` branch and three strings with no
+layout consequence at all", on the grounds that the sheet scrolls. The
+Custom/OPDS kind showed that up. A Material sheet's default resting
+height is about half the window, which held four rows on a normal phone
+and put the fifth under the fold with nothing to mark it, so readers
+took OPDS for unsupported.
+
+The sheet now opens expanded (`skipPartiallyExpanded = true`), which is
+what `SeriesPickerSheet` and `DefinitionSheet` already do. The scroll is
+still there and still does the job the decision asked of it, on a short
+screen or at a large font size. What was wrong was the assumption that
+being scrollable to is the same as being seen. A sixth kind is a `when`
+branch and three strings again, and this time the claim holds until the
+list outgrows a whole screen rather than half of one.

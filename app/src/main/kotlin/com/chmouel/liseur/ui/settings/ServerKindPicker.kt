@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -82,6 +83,13 @@ internal fun ServerKindRow(
  * it says whether your place in a book will follow you there. Grimmory
  * cannot carry one at all, and that is worth knowing before typing a
  * password rather than after.
+ *
+ * It opens expanded rather than half-way. A Material sheet's default
+ * resting height is about half the window, which fitted four kinds and
+ * hid the fifth below a fold with nothing to mark it, so OPDS read as
+ * unsupported (issue #179). Scrolling is not the same as being seen.
+ * The scroll stays for a short screen or a large font size, where the
+ * sheet is capped at the window and the list runs on inside it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,7 +98,10 @@ internal fun ServerKindSheet(
     onPick: (ServerKind) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    LiseurModalBottomSheet(onDismissRequest = onDismiss) {
+    LiseurModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
             Modifier
                 .verticalScroll(rememberScrollState())
