@@ -27,17 +27,29 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  * that needs the check to happen against the address actually dialled,
  * at connect time. That is worth doing and is not done here; this
  * answers the cheap and common shape, where the address is a literal.
+ *
+ * It is also not the authority on what Android will let the app reach.
+ * That is a wider and less fixed question — the routes of the network
+ * the phone is on, minus whatever a VPN carries — and it is
+ * [LocalNetworkAddress]'s, which builds on this rather than repeating
+ * it.
  */
 object PrivateAddress {
 
     fun matches(url: String): Boolean = url.toHttpUrlOrNull()?.let(::matches) ?: false
 
-    fun matches(url: HttpUrl): Boolean {
-        val host = url.host.lowercase().trim('[', ']')
-        if (host == "localhost" || host.endsWith(".localhost")) return true
-        if (host.endsWith(".local") || host.endsWith(".internal")) return true
-        if (':' in host) return isPrivateV6(host)
-        return isPrivateV4(host)
+    fun matches(url: HttpUrl): Boolean = matchesHost(url.host)
+
+    /**
+     * The same judgement about a bare host, for a caller that has one
+     * rather than a URL — a name's resolved addresses, say.
+     */
+    fun matchesHost(host: String): Boolean {
+        val cleaned = host.lowercase().trim('[', ']')
+        if (cleaned == "localhost" || cleaned.endsWith(".localhost")) return true
+        if (cleaned.endsWith(".local") || cleaned.endsWith(".internal")) return true
+        if (':' in cleaned) return isPrivateV6(cleaned)
+        return isPrivateV4(cleaned)
     }
 
     private fun isPrivateV6(host: String): Boolean {

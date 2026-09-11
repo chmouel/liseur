@@ -1,7 +1,13 @@
 package com.chmouel.liseur.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -61,6 +67,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +89,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.BulkBatch
 import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
@@ -88,6 +97,7 @@ import com.chmouel.liseur.data.calibre.BulkStopReason
 import com.chmouel.liseur.data.calibre.SpaceVerdict
 import com.chmouel.liseur.data.calibre.StorageUse
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.remote.PositionSyncStatus
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncIdentity
@@ -132,10 +142,24 @@ fun ServerAccountScreen(
     onKosyncRegisterChange: (Boolean) -> Unit,
     onKosyncConnect: () -> Unit,
     onKosyncDisconnect: () -> Unit,
+    onLocalNetworkRequestLaunched: (Long) -> Unit,
+    onLocalNetworkResult: (Boolean) -> Unit,
+    onAskLocalNetworkAgain: () -> Unit,
+    onRefreshLocalNetworkAccess: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val localNetwork = rememberLocalNetworkPrompt(
+        request = state.localNetworkRequest,
+        asked = state.localNetworkAsked,
+        onLaunched = onLocalNetworkRequestLaunched,
+        onResult = onLocalNetworkResult,
+    )
+    LifecycleResumeEffect(Unit) {
+        onRefreshLocalNetworkAccess()
+        onPauseOrDispose { }
+    }
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -189,6 +213,7 @@ fun ServerAccountScreen(
                         onKosyncUsernameChange = onKosyncUsernameChange,
                         onKosyncPasswordChange = onKosyncPasswordChange,
                         onConnect = onConnect,
+                        prompt = localNetwork,
                     )
                 } else {
                     ConnectedCard(
@@ -211,6 +236,13 @@ fun ServerAccountScreen(
                         onCancelDownloadAll = onCancelDownloadAll,
                         onDismissBatch = onDismissBatch,
                     )
+                    if (state.localNetworkBlocked) {
+                        LocalNetworkNotice(
+                            text = stringResource(R.string.server_local_network_blocked),
+                            prompt = localNetwork,
+                            onAskAgain = onAskLocalNetworkAgain,
+                        )
+                    }
                     if (server.kind == ServerKind.LISEUR_SYNC) {
                         if (state.confirmations.isNotEmpty()) {
                             SameBookCard(state.confirmations, onAnswerConfirmation)
@@ -243,6 +275,7 @@ fun ServerAccountScreen(
                         onRegisterChange = onKosyncRegisterChange,
                         onConnect = onKosyncConnect,
                         onDisconnect = onKosyncDisconnect,
+                        prompt = localNetwork,
                     )
                 }
                 val secretNote = when (server?.kind ?: state.kind) {
@@ -511,6 +544,7 @@ private fun ConnectForm(
     onKosyncUsernameChange: (String) -> Unit,
     onKosyncPasswordChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
+    prompt: LocalNetworkPrompt,
 ) {
     var picking by rememberSaveable { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -651,7 +685,7 @@ private fun ConnectForm(
             // A two-address form needs each failure next to the address
             // that caused it. Left at the foot of the form, a catalog
             // refusal reads as a complaint about the sync server.
-            ConnectError(state = state, onConnect = onConnect)
+            ConnectError(state = state, onConnect = onConnect, prompt = prompt)
 
             SectionLabel(stringResource(R.string.server_custom_kosync_section))
             OutlinedTextField(
@@ -692,10 +726,18 @@ private fun ConnectForm(
             )
             FieldHelp(stringResource(R.string.server_custom_kosync_help))
             state.kosyncError?.let {
-                Notice(
-                    text = stringResource(it.kosyncMessageRes()),
-                    tone = NoticeTone.PROBLEM,
-                )
+                if (it == AccountError.LOCAL_NETWORK_BLOCKED) {
+                    LocalNetworkNotice(
+                        text = stringResource(it.kosyncMessageRes()),
+                        prompt = prompt,
+                        onAskAgain = { onConnect(false) },
+                    )
+                } else {
+                    Notice(
+                        text = stringResource(it.kosyncMessageRes()),
+                        tone = NoticeTone.PROBLEM,
+                    )
+                }
             }
         }
         ServerKind.KOMGA -> {
@@ -733,7 +775,7 @@ private fun ConnectForm(
     }
 
     if (state.kind != ServerKind.CUSTOM) {
-        ConnectError(state = state, onConnect = onConnect)
+        ConnectError(state = state, onConnect = onConnect, prompt = prompt)
     }
 
     Button(
@@ -781,8 +823,20 @@ private fun ConnectForm(
  * about it: retrying an unreachable https address over http.
  */
 @Composable
-private fun ConnectError(state: ServerAccountUiState, onConnect: (Boolean) -> Unit) {
+private fun ConnectError(
+    state: ServerAccountUiState,
+    onConnect: (Boolean) -> Unit,
+    prompt: LocalNetworkPrompt,
+) {
     val error = state.error ?: return
+    if (error == AccountError.LOCAL_NETWORK_BLOCKED) {
+        LocalNetworkNotice(
+            text = stringResource(error.messageRes(state.kind)),
+            prompt = prompt,
+            onAskAgain = { onConnect(false) },
+        )
+        return
+    }
     Notice(
         text = stringResource(error.messageRes(state.kind)),
         tone = NoticeTone.PROBLEM,
@@ -1109,6 +1163,7 @@ private fun KosyncSection(
     onRegisterChange: (Boolean) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
+    prompt: LocalNetworkPrompt,
 ) {
     ServerSection(title = stringResource(R.string.kosync_section)) {
         val peer = state.kosync
@@ -1206,10 +1261,18 @@ private fun KosyncSection(
             ),
         )
         state.kosyncError?.let { error ->
-            Notice(
-                text = stringResource(error.kosyncMessageRes()),
-                tone = NoticeTone.PROBLEM,
-            )
+            if (error == AccountError.LOCAL_NETWORK_BLOCKED) {
+                LocalNetworkNotice(
+                    text = stringResource(error.kosyncMessageRes()),
+                    prompt = prompt,
+                    onAskAgain = onConnect,
+                )
+            } else {
+                Notice(
+                    text = stringResource(error.kosyncMessageRes()),
+                    tone = NoticeTone.PROBLEM,
+                )
+            }
         }
         Button(
             onClick = onConnect,
@@ -1237,6 +1300,7 @@ private fun AccountError.kosyncMessageRes(): Int = when (this) {
     AccountError.WRONG_SERVER -> R.string.kosync_error_not_kosync
     AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
     AccountError.RATE_LIMITED -> R.string.server_error_rate_limited
+    AccountError.LOCAL_NETWORK_BLOCKED -> R.string.server_error_local_network
     else -> R.string.server_error_unreachable
 }
 
@@ -1480,6 +1544,83 @@ internal fun Notice(text: String, tone: NoticeTone) {
     }
 }
 
+/**
+ * What to offer a reader whose phone is blocking the local network,
+ * and how to get there.
+ *
+ * The prompt itself is launched from here, from an effect keyed on the
+ * pending request, and the ViewModel is told it has been launched
+ * *before* it goes up: a rotation while the system dialog is on screen
+ * rebuilds this effect, and a second dialog behind the first is not
+ * something the reader can make sense of.
+ */
+@Composable
+private fun rememberLocalNetworkPrompt(
+    request: LocalNetworkRequest?,
+    asked: Boolean,
+    onLaunched: (Long) -> Unit,
+    onResult: (Boolean) -> Unit,
+): LocalNetworkPrompt {
+    val context = LocalContext.current
+    val activity = LocalActivity.current
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+        onResult,
+    )
+    LaunchedEffect(request?.id, request?.launched) {
+        if (request != null && !request.launched) {
+            onLaunched(request.id)
+            launcher.launch(LocalNetworkAccess.PERMISSION)
+        }
+    }
+    // Asked and told never to ask again is the one case worth sending
+    // somebody to the settings app for. Before anything has been asked
+    // the platform answers the same false, which is why nothing here
+    // reads it until an ask has happened.
+    val settingsOnly = asked &&
+        activity?.shouldShowRequestPermissionRationale(LocalNetworkAccess.PERMISSION) == false
+    return LocalNetworkPrompt(settingsOnly) {
+        context.startActivity(
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", context.packageName, null),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
+@Immutable
+private class LocalNetworkPrompt(
+    /** Whether asking again is pointless and only settings will do. */
+    val settingsOnly: Boolean,
+    val openSettings: () -> Unit,
+)
+
+/**
+ * The notice for a blocked local network, with the one thing to do
+ * about it: ask again, or go to the settings page that can still say
+ * yes.
+ */
+@Composable
+private fun LocalNetworkNotice(
+    text: String,
+    prompt: LocalNetworkPrompt,
+    onAskAgain: () -> Unit,
+) {
+    Notice(text, NoticeTone.PROBLEM)
+    TextButton(onClick = { if (prompt.settingsOnly) prompt.openSettings() else onAskAgain() }) {
+        Text(
+            stringResource(
+                if (prompt.settingsOnly) {
+                    R.string.server_local_network_settings
+                } else {
+                    R.string.server_local_network_retry
+                },
+            ),
+        )
+    }
+}
+
 private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.BAD_CREDENTIALS -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_credentials
@@ -1504,6 +1645,7 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.INSECURE_TRANSPORT -> R.string.server_sync_insecure
     AccountError.INSUFFICIENT_SCOPES -> R.string.server_error_scopes_liseur_sync
     AccountError.RATE_LIMITED -> R.string.server_error_rate_limited
+    AccountError.LOCAL_NETWORK_BLOCKED -> R.string.server_error_local_network
 }
 
 /** Plain words for how the last position sync went. */

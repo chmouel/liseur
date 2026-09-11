@@ -45,6 +45,17 @@ class RemoteRouter(
 
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
 
+    /**
+     * Where the connected server's position sync would be dialled, when
+     * it has one.
+     *
+     * One read of the connected row answers both halves, so a server
+     * that changed in between cannot have its kind taken from one
+     * account and its address from the next.
+     */
+    suspend fun positionSyncAddress(): String? =
+        serverDao.get()?.takeIf { positions[it.kind] != null }?.baseUrl
+
     fun liveFor(kind: ServerKind): LiveChanges? = live[kind]
 
     /** The deleter for a server already in hand, when the kind has one. */
@@ -75,6 +86,8 @@ class RemoteRouter(
 class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
 
     override val peerId: String get() = PeerPositionSync.CATALOG
+
+    override suspend fun dialledAddress(): String? = router.positionSyncAddress()
 
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
         router.positionSync()?.syncAll(snapshot) ?: SyncOutcome.NotApplicable

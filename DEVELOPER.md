@@ -207,6 +207,32 @@ persisted grant, so a stale grant does not reproduce the failure there.
 The fallback in `LocalLibraryRepository.addFolder` and the message that
 goes with it are for the devices where it does.
 
+### Checking the local network permission
+
+Android 17 blocks an app targeting SDK 37 from reaching addresses on the
+phone's own network until the reader allows it, and it blocks below the
+HTTP client: a LAN server does not refuse a connection, it swallows it
+until the timeout. That is #195, and ADR-0028 explains the shape of the
+answer.
+
+What the system holds is worth reading directly:
+
+```bash
+adb shell dumpsys package com.chmouel.liseur | grep -i local_network
+```
+
+An image older than API 37 can be made to behave like one, which is the
+only way to see the failure without an Android 17 device:
+
+```bash
+adb shell am compat enable RESTRICT_LOCAL_NETWORK com.chmouel.liseur.dev
+adb shell am compat reset RESTRICT_LOCAL_NETWORK com.chmouel.liseur.dev
+```
+
+Note that granting any permission in the `NEARBY_DEVICES` group grants
+this one with it, so a phone that has been asked about nearby devices
+for another reason will not show the prompt.
+
 ### Why the reading stats say "Counting this device only"
 
 The dashboard combines every device that has signed in to liseur-sync,

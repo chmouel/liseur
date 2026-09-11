@@ -62,6 +62,18 @@ sealed interface SyncFailure {
     data object StaleIdentity : SyncFailure
 
     /**
+     * The phone is refusing to let the app reach this server at all.
+     *
+     * Android 17 blocks the local network until the reader allows it,
+     * and does so below the HTTP client: without this, a LAN server
+     * times out on every scheduled run, backs off and tries again for
+     * as long as it takes the reader to wander into Settings. Nothing
+     * changes until they are asked, and they cannot be asked from a
+     * worker, so it is not worth retrying.
+     */
+    data object LocalNetworkBlocked : SyncFailure
+
+    /**
      * Whether asking again later stands a chance. A refused sign-in will
      * be refused just as firmly in ten minutes, so retrying it only
      * spends battery.
@@ -70,7 +82,7 @@ sealed interface SyncFailure {
         get() = when (this) {
             Offline, Timeout, Malformed, StaleIdentity -> true
             is ServerError -> code >= 500
-            Unauthorised, Forbidden, NotFound, InsecureTransport -> false
+            Unauthorised, Forbidden, NotFound, InsecureTransport, LocalNetworkBlocked -> false
         }
 
     /** A short tag for the log. Never contains a URL or a token. */
@@ -85,6 +97,7 @@ sealed interface SyncFailure {
             Malformed -> "malformed response"
             InsecureTransport -> "https required"
             StaleIdentity -> "stale identity"
+            LocalNetworkBlocked -> "local network blocked"
         }
 }
 

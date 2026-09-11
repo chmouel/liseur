@@ -123,6 +123,22 @@ class KosyncPositionSyncTest {
         assertEquals(0, server.requestCount)
     }
 
+    /**
+     * The address the local network guard judges comes from the same
+     * test the run opens with, so a pairing left behind by an account
+     * switch names no address to be blocked on — and a blocked phone
+     * cannot turn a run that was going to do nothing into a failure.
+     */
+    @Test
+    fun `a stranded pairing names no address to dial`() = runTest {
+        pair(baseUrl = "http://192.168.1.20:8081")
+
+        assertNull(sync(connectedKind = ServerKind.KOMGA).dialledAddress())
+        assertNull(sync(connectedKind = null).dialledAddress())
+        assertEquals("http://192.168.1.20:8081", sync().dialledAddress())
+        assertEquals(0, server.requestCount)
+    }
+
     // -- Which books a pairing speaks about ---------------------------------
 
     /**

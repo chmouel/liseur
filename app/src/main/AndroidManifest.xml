@@ -5,6 +5,16 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
+        Android 17 blocks traffic to and from the local network for every
+        app targeting it, below the HTTP client and without an error: a
+        connection to a server on the reader's own network simply hangs
+        until it times out. A self-hosted library is the ordinary case
+        here, so it is asked for at connect time, and only of a reader
+        whose address is actually local.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
+    <!--
         Android 11 and later hide installed apps from each other unless they
         are asked for by name or by what they can do. Without this, looking a
         word up finds no dictionary however many are installed, and the

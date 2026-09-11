@@ -32,6 +32,8 @@ class CompositePositionSyncTest {
         var resolved = 0
         var conflictsRead = 0
 
+        override suspend fun dialledAddress(): String? = null
+
         override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome {
             fullRuns++
             return outcome
