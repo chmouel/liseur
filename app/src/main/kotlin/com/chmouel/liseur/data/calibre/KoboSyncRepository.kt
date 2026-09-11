@@ -79,6 +79,14 @@ class KoboSyncRepository(
      * store, which is its own incremental protocol and already asks for
      * only what has changed. Any snapshot is dropped.
      */
+    /**
+     * The server's address, and only while there is a token to reach it
+     * with. Without one the run answers "not applicable" before it
+     * dials, so there is no address to be blocked on.
+     */
+    override suspend fun dialledAddress(): String? =
+        serverDao.get()?.takeIf { it.koboToken != null }?.baseUrl
+
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = run(book = null)
 
     /** Reconciles one book, for the moments someone is waiting on it. */

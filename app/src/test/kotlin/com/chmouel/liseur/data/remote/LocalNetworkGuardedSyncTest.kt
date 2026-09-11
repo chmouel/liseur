@@ -50,15 +50,22 @@ class LocalNetworkGuardedSyncTest {
 
         override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? = null
 
+        var resolutions = 0
+
         override suspend fun takeRemotePosition(
             bookUrl: String,
             atRevision: Long,
             peerId: String?,
             expectedAccountKey: String?,
-        ): ResolveOutcome = ResolveOutcome.Done
+        ): ResolveOutcome {
+            resolutions++
+            return ResolveOutcome.Done
+        }
 
-        override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
-            ResolveOutcome.Done
+        override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome {
+            resolutions++
+            return ResolveOutcome.Done
+        }
 
         override suspend fun refreshUnresolved() = Unit
 
@@ -69,6 +76,27 @@ class LocalNetworkGuardedSyncTest {
         override val required = true
         override val granted = false
         override suspend fun blocks(url: String?) = url != null && url in blocked
+    }
+
+    /**
+     * Settling a conflict writes the answer to the server, so it is
+     * refused too rather than left to sit on a timeout the reader is
+     * watching. The status line is not touched: this is one book being
+     * settled, not a run.
+     */
+    @Test
+    fun `settling a conflict is refused rather than dialled`() = runTest {
+        val peer = FakePeer(PeerPositionSync.CATALOG)
+        val reporting = SyncReporting()
+        val guarded = guard(peer, reporting, "http://192.168.1.20:8083")
+
+        val kept = guarded.keepLocalPosition("book", null)
+        val taken = guarded.takeRemotePosition("book", 1L, null, null)
+
+        assertEquals(ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked), kept)
+        assertEquals(ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked), taken)
+        assertEquals(0, peer.resolutions)
+        assertEquals(PositionSyncStatus.Idle, reporting.statusOf(PeerPositionSync.CATALOG))
     }
 
     private fun guard(

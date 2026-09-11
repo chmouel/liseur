@@ -136,6 +136,25 @@ class KomgaSyncRepositoryTest {
         )
     }
 
+    /**
+     * A database restored onto another phone arrives with ciphertext
+     * this Keystore cannot open, and the run answers "not applicable"
+     * before it dials. Naming an address anyway would let the local
+     * network guard fail a run that was never going to touch the
+     * network.
+     */
+    @Test
+    fun `a server whose credential cannot be read names no address`() = runTest {
+        assertNull(sync.dialledAddress())
+        connect()
+        assertEquals("http://127.0.0.1:${server.port}", sync.dialledAddress())
+
+        CredentialCipher.keyForTesting =
+            javax.crypto.KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+
+        assertNull(sync.dialledAddress())
+    }
+
     @Test
     fun `an offline run says so without waiting on a connection`() = runTest {
         connect()

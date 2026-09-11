@@ -242,6 +242,24 @@ sealed interface PreviewOutcome {
  */
 interface PositionSync {
     /**
+     * The address a run started now would dial, or null when it would
+     * not dial at all.
+     *
+     * Null is the whole of "this partner has nothing to do": no server
+     * connected, a kind that does not sync positions, a pairing
+     * stranded on an account that no longer uses it, a token or a
+     * credential that cannot be read back. Every implementation answers
+     * from the state its own run opens with, because the two
+     * disagreeing is how a partner that was going to answer "not
+     * applicable" is made to fail instead.
+     *
+     * It exists for [LocalNetworkGuardedSync], which has to know
+     * whether a run was going to touch the network *before* it decides
+     * that the network is out of reach.
+     */
+    suspend fun dialledAddress(): String?
+
+    /**
      * Reconciles every book that has a position on either side.
      *
      * [snapshot] is a catalog walk that has just been done, offered so a

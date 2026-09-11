@@ -18,23 +18,6 @@ interface PeerPositionSync : PositionSync {
     /** A stable, account-independent name for this partner. */
     val peerId: String
 
-    /**
-     * The address a run started now would dial, or null when it would
-     * not dial at all.
-     *
-     * Null is the whole of "this partner has nothing to do": no server
-     * connected, a kind that does not sync positions, a pairing
-     * stranded on an account that no longer uses it, a credential that
-     * cannot be read back. It answers from the same state the run
-     * itself consults, because the two disagreeing is how a peer that
-     * was going to answer "not applicable" is made to fail instead.
-     *
-     * It exists for [LocalNetworkGuardedSync], which has to know
-     * whether a run was going to touch the network *before* it decides
-     * that the network is out of reach.
-     */
-    suspend fun dialledAddress(): String?
-
     companion object {
         /** The server the library browses and downloads from. */
         const val CATALOG = "catalog"
@@ -59,6 +42,12 @@ interface PeerPositionSync : PositionSync {
  * is paid in the background.
  */
 class CompositePositionSync(private val peers: List<PeerPositionSync>) : PositionSync {
+
+    /** The first partner that would dial, if any would. */
+    override suspend fun dialledAddress(): String? {
+        for (peer in peers) peer.dialledAddress()?.let { return it }
+        return null
+    }
 
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
         fold(peers.map { it.syncAll(snapshot) })

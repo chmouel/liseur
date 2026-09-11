@@ -150,9 +150,23 @@ object LocalNetworkAddress {
     private fun clean(host: String): String =
         host.lowercase().trim('[', ']').substringBefore('%').trim()
 
+    /**
+     * Loopback, in any of the spellings this app can be handed.
+     *
+     * The IPv4-mapped form matters: `[::ffff:127.0.0.1]` is 127.0.0.1
+     * with a longer name, loopback is exempt from the restriction, and
+     * reading it as an ordinary private address would raise a prompt
+     * for a connection that was never going to be blocked. The
+     * all-zeros test is anchored on the last group, because `1::` is a
+     * global address that the digits alone would have called loopback.
+     */
     private fun isLoopback(host: String): Boolean {
-        if (':' in host) return host.replace(":", "").trimStart('0').let { it.isEmpty() || it == "1" }
-        return host.substringBefore('.').toIntOrNull() == 127
+        if (':' !in host) return host.substringBefore('.').toIntOrNull() == 127
+        val tail = host.substringAfterLast(':')
+        if ('.' in tail) return tail.substringBefore('.').toIntOrNull() == 127
+        val groups = host.split(':')
+        if (groups.last().trimStart('0') != "1") return false
+        return groups.dropLast(1).all { it.trimStart('0').isEmpty() }
     }
 
     private fun isLiteral(host: String): Boolean =

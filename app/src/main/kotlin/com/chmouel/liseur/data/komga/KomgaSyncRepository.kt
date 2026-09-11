@@ -93,6 +93,13 @@ class KomgaSyncRepository(
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
 
+    /**
+     * The server's address, and only while its credential can still be
+     * read back. See [KoboSyncRepository.dialledAddress].
+     */
+    override suspend fun dialledAddress(): String? =
+        serverDao.get()?.takeIf { it.credentials != null }?.baseUrl
+
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
         run(book = null, snapshot = snapshot)
 

@@ -232,6 +232,8 @@ class PositionSyncCoordinatorTest {
 
         val snapshots = mutableListOf<SyncSnapshot?>()
 
+        override suspend fun dialledAddress(): String? = null
+
         override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome {
             snapshots += snapshot
             return run(SyncScope.Full)
