@@ -178,7 +178,7 @@ object LocalNetworkAddress {
     }
 
     private fun isV4Loopback(host: String): Boolean =
-        host.split('.').let { it.size == 4 && it.first().toIntOrNull() == 127 }
+        isLiteral(host) && ':' !in host && host.substringBefore('.').toInt() == 127
 
     private fun isLiteral(host: String): Boolean =
         ':' in host || host.split('.').let { parts ->
