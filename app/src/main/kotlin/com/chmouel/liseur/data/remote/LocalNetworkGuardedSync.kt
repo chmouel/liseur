@@ -24,6 +24,13 @@ package com.chmouel.liseur.data.remote
  * was never going to be dialled must not manufacture a failure. The
  * peer answers it from the same state its own run consults, so the two
  * cannot drift apart.
+ *
+ * That address is the whole test, and asking one book's [canSync] as
+ * well would be a mistake: a book the peer does not carry is not a book
+ * the peer declines to dial about. A page turn in a side-loaded book on
+ * a catalog account still opens the connection, discovers there is no
+ * matching remote book, and returns nothing — so it still spends the
+ * timeout, and the guard has to reach it.
  */
 class LocalNetworkGuardedSync(
     private val delegate: PeerPositionSync,
@@ -37,7 +44,7 @@ class LocalNetworkGuardedSync(
         if (blocked()) refuse() else delegate.syncAll(snapshot)
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome =
-        if (delegate.canSync(bookUrl) && blocked()) refuse() else delegate.syncBook(bookUrl)
+        if (blocked()) refuse() else delegate.syncBook(bookUrl)
 
     /**
      * A preview is one reader asking one book a question, so it answers
@@ -45,7 +52,7 @@ class LocalNetworkGuardedSync(
      * let a glance at one book overwrite what the last real run did.
      */
     override suspend fun previewBook(bookUrl: String): PreviewOutcome =
-        if (delegate.canSync(bookUrl) && blocked()) {
+        if (blocked()) {
             PreviewOutcome.Failed(SyncFailure.LocalNetworkBlocked)
         } else {
             delegate.previewBook(bookUrl)
