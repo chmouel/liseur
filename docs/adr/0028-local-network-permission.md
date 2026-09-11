@@ -253,7 +253,12 @@ makes a grant given in the system settings app — which is where a
 permanent denial has to be undone, and which comes back through resume
 rather than through a permission result — worth as much as one given in
 the prompt: it asks for a sync too, rather than leaving the account
-showing a stale blocked failure until the next page turn. The connector takes that
+showing a stale blocked failure until the next page turn, and it spends
+the refusal left on the connect form. The notice under the form cannot
+work that second part out for itself, because
+`shouldShowRequestPermissionRationale` answers false after a grant as
+readily as before the first ask, so it would go on offering the settings
+page the reader has just come back from. The connector takes that
 signal as a third input and puts it in the key it deduplicates on —
 *not* in `LiveIdentity`, which stands for the account and its
 credentials. Without it a reader who allowed the permission from the
