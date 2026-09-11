@@ -3,6 +3,7 @@ package com.chmouel.liseur.reader.progress
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.shared.publication.Locator
@@ -37,10 +38,11 @@ class BookPositionsTest {
     private fun positions(
         resources: List<List<Locator>>,
         chapters: List<BookChapter> = emptyList(),
+        chapterIndexByResource: Map<Int, Int> = emptyMap(),
     ) = BookPositions(
         locators = resources.flatten(),
         chapters = chapters,
-        chapterIndexByResource = emptyMap(),
+        chapterIndexByResource = chapterIndexByResource,
         positionsByResource = resources,
     )
 
@@ -212,6 +214,64 @@ class BookPositionsTest {
         val target = book.locatorAtOrBeforeProgression(0.85)!!
         assertEquals(3, target.locations.position)
         assertEquals(0.85, book.resolve(target)!!.progression, 0.0001)
+    }
+
+    @Test
+    fun `chapter lookup uses the resource chapter when the position agrees`() {
+        val first = BookChapter("One", firstPosition = 1, lastPosition = 2)
+        val second = BookChapter("Two", firstPosition = 3, lastPosition = 4)
+        val book = positions(
+            resources = listOf(
+                listOf(locator("same.xhtml", 0.0, 1), locator("same.xhtml", 1.0, 2)),
+                listOf(locator("same.xhtml", 0.0, 3), locator("same.xhtml", 1.0, 4)),
+            ),
+            chapters = listOf(first, second),
+            chapterIndexByResource = mapOf(0 to 0, 1 to 1),
+        )
+
+        assertEquals(first, book.chapterFor(resourceIndex = 0, position = 2))
+    }
+
+    @Test
+    fun `chapter lookup falls back when the resource chapter range disagrees`() {
+        val first = BookChapter("One", firstPosition = 1, lastPosition = 2)
+        val second = BookChapter("Two", firstPosition = 3, lastPosition = 4)
+        val book = positions(
+            resources = listOf(
+                listOf(locator("same.xhtml", 0.0, 1), locator("same.xhtml", 1.0, 2)),
+                listOf(locator("same.xhtml", 0.0, 3), locator("same.xhtml", 1.0, 4)),
+            ),
+            chapters = listOf(first, second),
+            chapterIndexByResource = mapOf(0 to 0, 1 to 1),
+        )
+
+        assertEquals(second, book.chapterFor(resourceIndex = 0, position = 3))
+    }
+
+    @Test
+    fun `chapter lookup falls back without a resource chapter`() {
+        val chapter = BookChapter("Only", firstPosition = 1, lastPosition = 2)
+        val book = positions(
+            resources = listOf(
+                listOf(locator("chapter.xhtml", 0.0, 1), locator("chapter.xhtml", 1.0, 2)),
+            ),
+            chapters = listOf(chapter),
+        )
+
+        assertEquals(chapter, book.chapterFor(resourceIndex = null, position = 1))
+    }
+
+    @Test
+    fun `chapter lookup returns nothing outside every chapter`() {
+        val chapter = BookChapter("Only", firstPosition = 1, lastPosition = 2)
+        val book = positions(
+            resources = listOf(
+                listOf(locator("chapter.xhtml", 0.0, 1), locator("chapter.xhtml", 1.0, 2)),
+            ),
+            chapters = listOf(chapter),
+        )
+
+        assertNull(book.chapterFor(resourceIndex = null, position = 3))
     }
 
     @Test

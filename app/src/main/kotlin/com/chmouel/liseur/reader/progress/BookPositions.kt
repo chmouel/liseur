@@ -15,6 +15,27 @@ data class BookChapter(
 )
 
 /**
+ * How many pages remain before the next chapter, or null when there is
+ * no chapter to count to.
+ *
+ * A nameless chapter counts as no chapter. [BookPositions.of] gives
+ * every book at least one, by opening a chapter on the first resource
+ * whether or not anything names it and folding each untitled resource
+ * after it into the one before — which is what keeps a split chapter
+ * whole. A book with no table of contents comes out of that as a
+ * single nameless chapter spanning the whole text, and counting to the
+ * end of it under a label reading "chapter" would be counting to the
+ * end of the book. Its end is where the untitled run stops, not a
+ * boundary the book declared.
+ */
+fun pagesLeftInChapter(chapter: BookChapter?, position: Int): Int? {
+    chapter ?: return null
+    if (chapter.title == null) return null
+    if (position !in chapter.firstPosition..chapter.lastPosition) return null
+    return chapter.lastPosition - position
+}
+
+/**
  * The page-like "positions" Readium computes for a book, grouped by
  * chapter. Positions are numbered from 1 and are stable for a given
  * book, whatever the font size, which makes them a good basis for
@@ -49,6 +70,14 @@ class BookPositions(
     /** The chapter of the resource at [resourceIndex] in the reading order. */
     fun chapterOfResource(resourceIndex: Int): BookChapter? =
         chapterIndexByResource[resourceIndex]?.let(chapters::getOrNull)
+
+    /** The chapter for [position], using the resource only when its range agrees. */
+    fun chapterFor(resourceIndex: Int?, position: Int): BookChapter? {
+        val resourceChapter = resourceIndex?.let(::chapterOfResource)
+        return resourceChapter
+            ?.takeIf { position in it.firstPosition..it.lastPosition }
+            ?: chapterAt(position)
+    }
 
     /** The locator to jump to for [position], numbered from 1. */
     fun locatorAt(position: Int): Locator? =
@@ -263,7 +292,15 @@ data class StableBookProgress(
     val progression: Double,
 )
 
-/** Where the reader is in the book, and how much is left to read. */
+/**
+ * Where the reader is in the book, and how much is left to read.
+ *
+ * [positionsLeftInChapter] is null when there is no chapter to count
+ * to. The time estimates fall back to the end of the book in that
+ * case, which is a fair guess for a figure that is a guess anyway; a
+ * count labelled "in chapter" cannot do the same without quietly
+ * counting something else. See [pagesLeftInChapter].
+ */
 data class ReaderProgress(
     val position: Int,
     val totalPositions: Int,
@@ -271,6 +308,7 @@ data class ReaderProgress(
     val chapterTitle: String?,
     val minutesLeftInChapter: Int,
     val minutesLeftInBook: Int,
+    val positionsLeftInChapter: Int?,
     val isSpeedMeasured: Boolean,
 ) {
     val percent: Int get() = (totalProgression * 100).toInt().coerceIn(0, 100)

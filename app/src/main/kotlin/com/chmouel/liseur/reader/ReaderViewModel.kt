@@ -74,6 +74,7 @@ import com.chmouel.liseur.reader.progress.GoToDestination
 import com.chmouel.liseur.reader.progress.GoToPagePrompt
 import com.chmouel.liseur.reader.progress.GoToPageResolver
 import com.chmouel.liseur.reader.progress.goToPercent
+import com.chmouel.liseur.reader.progress.pagesLeftInChapter
 import com.chmouel.liseur.reader.footnotes.FootnoteResolver
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.ReadingPace
@@ -1337,9 +1338,10 @@ class ReaderViewModel(
         stable ?: return null
         val totalProgression = stable.progression.toFloat()
         val position = stable.position
-        val chapter = publication.readingOrder.indexOfFirstWithHref(locator.href)
-            ?.let(positions::chapterOfResource)
-            ?: positions.chapterAt(position)
+        val chapter = positions.chapterFor(
+            publication.readingOrder.indexOfFirstWithHref(locator.href),
+            position,
+        )
         val chapterEnd = chapter?.lastPosition ?: positions.totalPositions
         return ReaderProgress(
             position = position,
@@ -1348,6 +1350,7 @@ class ReaderViewModel(
             chapterTitle = chapter?.title,
             minutesLeftInChapter = speed.minutesFor(chapterEnd - stable.coordinate),
             minutesLeftInBook = speed.minutesFor(positions.totalPositions - stable.coordinate),
+            positionsLeftInChapter = pagesLeftInChapter(chapter, position),
             isSpeedMeasured = speed.isMeasured,
         )
     }

@@ -51,9 +51,9 @@ import com.chmouel.liseur.ui.LocalEInk
 /**
  * The quiet line of text at the bottom of the page, Kindle-style. The
  * percentage read sits on the left and the page number on the right,
- * always; the middle carries the smart slot — time left, the chapter's
- * name — and tapping the footer cycles what that slot shows. Taps
- * never turn the page.
+ * always; the middle carries the smart slot — time left, pages left in
+ * the chapter, the chapter's name — and tapping the footer cycles what
+ * that slot shows. Taps never turn the page.
  */
 @Composable
 fun ReadingFooter(
@@ -68,7 +68,11 @@ fun ReadingFooter(
     Row(
         modifier
             .fillMaxWidth()
-            .clickableWithoutRipple(onCycleMode)
+            .clickableWithoutRipple(
+                onClick = onCycleMode,
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.footer_cycle),
+            )
             .padding(horizontal = 20.dp, vertical = FooterMetrics.VERTICAL_PADDING_DP.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -110,6 +114,17 @@ private fun middleText(progress: ReaderProgress, mode: FooterMode): String? =
             stringResource(R.string.footer_left_in_book, durationText(middle.minutes))
 
         is FooterMiddle.Chapter -> middle.title
+
+        is FooterMiddle.PagesInChapter ->
+            if (middle.pages == 0) {
+                stringResource(R.string.footer_last_page_in_chapter)
+            } else {
+                pluralStringResource(
+                    R.plurals.footer_pages_left_in_chapter,
+                    middle.pages,
+                    middle.pages,
+                )
+            }
 
         null -> null
     }
