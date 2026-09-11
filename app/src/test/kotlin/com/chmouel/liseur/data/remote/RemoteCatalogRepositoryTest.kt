@@ -159,7 +159,10 @@ class RemoteCatalogRepositoryTest {
         ): List<RemoteBook> = emptyList()
     }
 
-    private fun repository(catalog: CatalogSource) = RemoteCatalogRepository(
+    private fun repository(
+        catalog: CatalogSource,
+        localNetwork: LocalNetworkAccess = LocalNetworkAccess.Unrestricted,
+    ) = RemoteCatalogRepository(
         router = RemoteRouter(
             serverDao = db.remoteServerDao(),
             catalogs = mapOf(
@@ -181,6 +184,7 @@ class RemoteCatalogRepositoryTest {
             db.annotationDao(),
             db.annotationSyncDao(),
         ),
+        localNetwork = localNetwork,
     )
 
     /** A book DAO that keeps count of what a refresh asked it to do. */
@@ -604,6 +608,34 @@ class RemoteCatalogRepositoryTest {
         repository.refresh()
 
         assertEquals(CatalogStatus.Failed(SyncFailure.Timeout), repository.status.value)
+    }
+
+    /**
+     * A server on a network the phone is blocking swallows the
+     * connection rather than refusing it, so a pull-to-refresh that
+     * dialled anyway would be fifteen seconds of spinner and then a
+     * timeout that blames the server.
+     */
+    @Test
+    fun `a server on a blocked network is named, not dialled`() = runTest {
+        connect()
+        var dialled = 0
+        val repository = repository(
+            catalog = FakeCatalog { dialled++; throw IOException("never reached") },
+            localNetwork = object : LocalNetworkAccess {
+                override val required = true
+                override val granted = false
+                override suspend fun blocks(url: String?) = url == "https://books.example"
+            },
+        )
+
+        repository.refresh()
+
+        assertEquals(
+            CatalogStatus.Failed(SyncFailure.LocalNetworkBlocked),
+            repository.status.value,
+        )
+        assertEquals(0, dialled)
     }
 
     @Test

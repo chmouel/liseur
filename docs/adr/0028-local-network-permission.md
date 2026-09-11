@@ -228,6 +228,14 @@ status line: one book being settled is not a run.
 Downloads and uploads are left alone. They fail in front of a reader who
 can be told, and the notice on the connected card is what explains them.
 
+A catalog refresh is not left alone, though it is also in front of the
+reader: it is a pull on the library screen, which is where somebody who
+has just upgraded their phone meets this for the first time. Dialling
+anyway buys fifteen seconds of spinner and then a timeout that blames
+the server, so `RemoteCatalogRepository.refresh()` asks the same
+question one rung further in than the offline check, in the same place
+and for the same reason.
+
 The live notification stream is not a sync, but it is another socket to
 the same machine, so it answers to the same block. `LiveSyncConnector`
 is handed no source at all for a blocked account rather than one that

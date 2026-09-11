@@ -66,6 +66,13 @@ interface LocalNetworkAccess {
          * the manifest declares.
          */
         const val PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
+
+        /** A phone that gates nothing, which is every phone below 17. */
+        val Unrestricted = object : LocalNetworkAccess {
+            override val required = false
+            override val granted = true
+            override suspend fun blocks(url: String?) = false
+        }
     }
 }
 
