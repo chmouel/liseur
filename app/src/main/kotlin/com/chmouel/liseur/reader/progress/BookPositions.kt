@@ -30,7 +30,7 @@ data class BookChapter(
  */
 fun pagesLeftInChapter(chapter: BookChapter?, position: Int): Int? {
     chapter ?: return null
-    if (chapter.title == null) return null
+    if (chapter.title.isNullOrBlank()) return null
     if (position !in chapter.firstPosition..chapter.lastPosition) return null
     return chapter.lastPosition - position
 }
