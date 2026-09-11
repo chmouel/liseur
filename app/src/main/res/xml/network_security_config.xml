@@ -15,7 +15,12 @@
     entered, and the default host is pinned below as well.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">wiktionary.org</domain>
     </domain-config>
