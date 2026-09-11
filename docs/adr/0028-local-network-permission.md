@@ -110,6 +110,19 @@ exempts, and every address that comes back is judged: one local answer
 among several is enough. A name that resolves to nothing is not local;
 it is about to fail as an unknown host anyway.
 
+Both a name and a literal are read in the spelling the network uses
+rather than the one a reader is likely to type. A trailing root label is
+dropped, so `books.local.` is the mDNS name it plainly is and not
+something to look up; and an IPv4 address wearing an IPv6 coat is parsed
+rather than matched as text, because `::ffff:127.0.0.1` and
+`::ffff:7f00:1` are both loopback, a dual-stack lookup hands the first
+of them back for `localhost` on plenty of setups, and loopback is exempt
+— so reading either as an ordinary private address would raise a prompt
+for a connection that was never going to be blocked. That parsing is
+[`PrivateAddress`](../../app/src/main/kotlin/com/chmouel/liseur/data/remote/PrivateAddress.kt)'s,
+reused rather than copied, so there is only ever one IPv6 parser to get
+wrong.
+
 This is a preflight, and OkHttp resolves again when it dials. A rotating
 record, split-horizon DNS, or outright rebinding can put a different
 address on the wire than the one judged here. That time-of-check /
@@ -210,6 +223,15 @@ account's status line alone: one book being settled is not a run.
 
 Downloads and uploads are left alone. They fail in front of a reader who
 can be told, and the notice on the connected card is what explains them.
+
+The live notification stream is not a sync, but it is another socket to
+the same machine, so it answers to the same block. `LiveSyncConnector`
+is handed no source at all for a blocked account rather than one that
+would open, time out and be retried for as long as the app is in the
+foreground. It reports nothing: the guarded sync has already said the
+account is blocked, and the live stream is a hint that a full sync would
+be worth running. Nothing is remembered, so a grant takes effect at the
+next connection.
 
 ### `NEARBY_WIFI_DEVICES` is not declared
 

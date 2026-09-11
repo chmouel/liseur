@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 class LiveSyncConnector(
     private val scope: CoroutineScope,
     accounts: Flow<RemoteServer?>,
-    private val sourceFor: (RemoteServer) -> LiveChanges?,
+    private val sourceFor: suspend (RemoteServer) -> LiveChanges?,
     private val coordinator: PositionSyncCoordinator,
     private val requestBook: (String) -> Unit,
     private val graceMillis: Long = 15_000,

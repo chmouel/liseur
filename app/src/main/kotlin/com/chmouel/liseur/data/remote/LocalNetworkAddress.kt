@@ -146,28 +146,39 @@ object LocalNetworkAddress {
         return clean(host).takeIf { it.isNotEmpty() }
     }
 
-    /** Lowercased, unbracketed, and without an IPv6 zone. */
+    /**
+     * Lowercased, unbracketed, without an IPv6 zone, and without the
+     * root label.
+     *
+     * `books.local.` is `books.local` fully spelled out, and reading
+     * the trailing dot as part of the name would send an mDNS address
+     * off to be resolved — by mDNS, which is the thing being blocked.
+     */
     private fun clean(host: String): String =
-        host.lowercase().trim('[', ']').substringBefore('%').trim()
+        host.lowercase().trim('[', ']').substringBefore('%').trim().removeSuffix(".")
 
     /**
      * Loopback, in any of the spellings this app can be handed.
      *
-     * The IPv4-mapped form matters: `[::ffff:127.0.0.1]` is 127.0.0.1
-     * with a longer name, loopback is exempt from the restriction, and
-     * reading it as an ordinary private address would raise a prompt
-     * for a connection that was never going to be blocked. The
-     * all-zeros test is anchored on the last group, because `1::` is a
-     * global address that the digits alone would have called loopback.
+     * The IPv4-mapped forms matter: `[::ffff:127.0.0.1]` and
+     * `[::ffff:7f00:1]` are both 127.0.0.1 with a longer name, a
+     * dual-stack lookup hands the first of those back for `localhost`
+     * on plenty of setups, loopback is exempt from the restriction,
+     * and reading either as an ordinary private address would raise a
+     * prompt for a connection that was never going to be blocked. So
+     * the literal is parsed rather than matched as text — by
+     * [PrivateAddress], which already has that parser, so there is
+     * only ever one of them.
      */
     private fun isLoopback(host: String): Boolean {
-        if (':' !in host) return host.substringBefore('.').toIntOrNull() == 127
-        val tail = host.substringAfterLast(':')
-        if ('.' in tail) return tail.substringBefore('.').toIntOrNull() == 127
-        val groups = host.split(':')
-        if (groups.last().trimStart('0') != "1") return false
-        return groups.dropLast(1).all { it.trimStart('0').isEmpty() }
+        if (':' !in host) return isV4Loopback(host)
+        PrivateAddress.mappedV4(host)?.let { return isV4Loopback(it) }
+        val groups = PrivateAddress.expandV6(host) ?: return false
+        return groups.last() == 1 && groups.dropLast(1).all { it == 0 }
     }
+
+    private fun isV4Loopback(host: String): Boolean =
+        host.split('.').let { it.size == 4 && it.first().toIntOrNull() == 127 }
 
     private fun isLiteral(host: String): Boolean =
         ':' in host || host.split('.').let { parts ->

@@ -71,13 +71,17 @@ object PrivateAddress {
      * The IPv4 address inside an IPv4-mapped or IPv4-compatible IPv6
      * literal, in dotted form, or null if this is not one.
      *
+     * Public because the local-network classifier asks the same
+     * question about loopback that this object asks about private
+     * space, and the IPv6 parsing belongs in one place.
+     *
      * Both spellings are accepted: the trailing dotted quad that
      * `::ffff:192.168.1.1` uses, and the two hex groups of
      * `::ffff:c0a8:0101`. The `::ffff:` prefix may itself be written
      * out as `0:0:0:0:0:ffff:`, so the groups are counted rather than
      * matched as text.
      */
-    private fun mappedV4(host: String): String? {
+    fun mappedV4(host: String): String? {
         val expanded = expandV6(host) ?: return null
         if (expanded.size != 8) return null
         if (expanded.take(5).any { it != 0 }) return null
@@ -90,7 +94,7 @@ object PrivateAddress {
     }
 
     /** The eight 16-bit groups of an IPv6 literal, or null if it is not one. */
-    private fun expandV6(host: String): List<Int>? {
+    fun expandV6(host: String): List<Int>? {
         var text = host
         var trailing = emptyList<Int>()
         val dotted = text.substringAfterLast(':', "")
