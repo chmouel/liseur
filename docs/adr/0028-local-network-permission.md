@@ -214,12 +214,16 @@ the connected account does not use. Answering it there would also have
 meant a `when (kind)` over which credential each kind of catalog needs,
 at exactly the kind of call site the router exists to keep them out of.
 
-Settling a conflict is guarded as well, because `keepLocalPosition` and
-`takeRemotePosition` both write to the server. They already answer
-"failed, offline" when there is no network at all; a blocked one is the
-same thing said differently, and a timeout the reader sits and watches
-is the worst possible way to say it. Like a preview, they leave the
-account's status line alone: one book being settled is not a run.
+Half of settling a conflict is guarded as well. `keepLocalPosition`
+sends this device's answer to the server, and already says "failed,
+offline" when there is no network at all; a blocked one is that said
+differently, and a timeout the reader sits and watches is the worst
+possible way to say it. `takeRemotePosition` is not guarded, because it
+sends nothing: it applies a position an earlier run already brought back
+and wrote down, and touches nothing but this phone's database. That is
+why it works on a plane, and it must go on working behind a blocked
+network for exactly the same reason. Neither touches the account's
+status line: one book being settled is not a run.
 
 Downloads and uploads are left alone. They fail in front of a reader who
 can be told, and the notice on the connected card is what explains them.

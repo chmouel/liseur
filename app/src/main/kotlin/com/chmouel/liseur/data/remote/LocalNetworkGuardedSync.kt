@@ -59,28 +59,20 @@ class LocalNetworkGuardedSync(
         }
 
     /**
-     * Settling a conflict sends the answer to the server, so it is
-     * guarded too.
+     * Keeping this device's position sends it to the server, so it is
+     * guarded; taking the server's is not.
      *
-     * Both of these are reached from the reader's own tap, and both
-     * already answer `Failed(Offline)` when there is no network at all.
-     * A blocked one is the same thing said differently: the write is
-     * not going to arrive, and a timeout the reader watches is the
-     * worst way to tell them so. The status line is left alone, as it
-     * is for a preview.
+     * The asymmetry is the two operations', not this class's. Taking
+     * the server's position applies an answer an earlier run already
+     * brought back and wrote down, and touches nothing but this
+     * phone's database — which is why it works on a plane, and must go
+     * on working behind a blocked network for the same reason. Keeping
+     * this device's dials, and already answers `Failed(Offline)` when
+     * there is no network at all; a blocked one is that said
+     * differently, and a timeout the reader sits and watches is the
+     * worst way to say it. The status line is left alone, as it is for
+     * a preview: one book being settled is not a run.
      */
-    override suspend fun takeRemotePosition(
-        bookUrl: String,
-        atRevision: Long,
-        peerId: String?,
-        expectedAccountKey: String?,
-    ): ResolveOutcome =
-        if (blocked()) {
-            ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked)
-        } else {
-            delegate.takeRemotePosition(bookUrl, atRevision, peerId, expectedAccountKey)
-        }
-
     override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
         if (blocked()) {
             ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked)
