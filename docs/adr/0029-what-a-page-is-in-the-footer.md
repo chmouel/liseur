@@ -109,13 +109,14 @@ into the footer so it can be worded there — "Last page in chapter" —
 rather than being dropped and blanking the slot on the one page of the
 chapter with something plain to say.
 
-When Readium's resource lookup and the stable position disagree about
-which chapter the reader is in, the count is absent. This can happen
-when the reading order contains the same href more than once: the href
-can resolve to one resource's chapter while the stable position belongs
-to another. Reporting zero there would falsely claim the reader is on
-that chapter's last position. Zero is reserved for a position actually
-equal to the chapter's `lastPosition`.
+Readium's resource lookup and the stable position can disagree about
+which chapter the reader is in. This can happen when the reading order
+contains the same href more than once: the href can resolve to one
+resource's chapter while the stable position belongs to another. In
+that case the stable position wins, and the footer counts against the
+chapter containing it. The count is absent only when no final named
+chapter contains the position. Zero is reserved for a position actually
+equal to that chapter's `lastPosition`.
 
 `FooterMode.SMART` is untouched. It promises time and degrades to the
 chapter's name, which is not a number at all; degrading to a different

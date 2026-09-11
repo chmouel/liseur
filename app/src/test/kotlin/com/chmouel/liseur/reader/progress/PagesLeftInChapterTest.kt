@@ -54,6 +54,7 @@ class PagesLeftInChapterTest {
         // the end of that is counting to the end of the book, which is
         // not what the label says.
         assertNull(pagesLeftInChapter(chapter.copy(title = null), 40))
+        assertNull(pagesLeftInChapter(chapter.copy(title = "   "), 40))
     }
 
     @Test
