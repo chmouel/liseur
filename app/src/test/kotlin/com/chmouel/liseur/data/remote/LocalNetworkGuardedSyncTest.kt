@@ -212,15 +212,27 @@ class LocalNetworkGuardedSyncTest {
         assertEquals(PositionSyncStatus.Idle, reporting.statusOf(PeerPositionSync.KOSYNC))
     }
 
+    /**
+     * A book the peer does not carry is not a book the peer declines to
+     * dial about: a page turn in a side-loaded book on a catalog
+     * account still opens the connection before it finds there is no
+     * matching remote book. So the address decides, not the book.
+     */
     @Test
-    fun `a book this peer does not carry passes straight through`() = runTest {
+    fun `a book this peer does not carry is still refused`() = runTest {
         val reporting = SyncReporting()
         val peer = FakePeer(PeerPositionSync.CATALOG, syncable = false)
         val guarded = guard(peer, reporting, "http://192.168.1.20:8083")
 
-        assertEquals(SyncOutcome.Success, guarded.syncBook("book://one"))
-        assertEquals(listOf("book://one"), peer.syncedBooks)
-        assertEquals(PreviewOutcome.NotSynced, guarded.previewBook("book://one"))
+        assertEquals(
+            SyncOutcome.Failure(SyncFailure.LocalNetworkBlocked),
+            guarded.syncBook("book://one"),
+        )
+        assertEquals(emptyList<String>(), peer.syncedBooks)
+        assertEquals(
+            PreviewOutcome.Failed(SyncFailure.LocalNetworkBlocked),
+            guarded.previewBook("book://one"),
+        )
     }
 
     @Test
