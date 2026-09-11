@@ -511,6 +511,7 @@ class AppContainer(context: Context) {
         bookRemoval = bookRemoval,
         inTransaction = { work -> database.withTransaction { work() } },
         networkAvailability = networkAvailability,
+        localNetwork = localNetwork,
     )
 
     val seriesExtras = SeriesExtrasRepository(

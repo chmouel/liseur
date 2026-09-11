@@ -70,6 +70,7 @@ class RemoteCatalogRepository(
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
+    private val localNetwork: LocalNetworkAccess = LocalNetworkAccess.Unrestricted,
 ) {
     private val _status = MutableStateFlow<CatalogStatus>(CatalogStatus.Idle)
     val status: StateFlow<CatalogStatus> = _status.asStateFlow()
@@ -139,6 +140,14 @@ class RemoteCatalogRepository(
             // reports nothing looks like a gesture that did not register.
             if (!networkAvailability.isAvailable()) {
                 _status.value = CatalogStatus.Failed(SyncFailure.Offline)
+                return CatalogRefresh.None
+            }
+            // Same reasoning, one rung further in: a server on a network
+            // the phone is blocking swallows the connection rather than
+            // refusing it, so a pull-to-refresh that is not stopped here
+            // is fifteen seconds of spinner and a puzzling timeout.
+            if (localNetwork.blocks(server.baseUrl)) {
+                _status.value = CatalogStatus.Failed(SyncFailure.LocalNetworkBlocked)
                 return CatalogRefresh.None
             }
 
