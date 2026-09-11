@@ -29,6 +29,38 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LiveSyncConnectorTest {
+    /**
+     * A live connection is one more socket to the machine the position
+     * sync dials, so when the phone is blocking the local network the
+     * connector must not open one: the event stream would time out and
+     * be retried for as long as the app is in the foreground.
+     */
+    @Test
+    fun `a source refused before it is opened is not connected or retried`() = runTest {
+        val accounts = MutableStateFlow<RemoteServer?>(account())
+        val source = Source()
+        var blocked = true
+        val connector = LiveSyncConnector(
+            backgroundScope,
+            accounts,
+            { source.takeIf { !blocked } },
+            PositionSyncCoordinator(NoSync),
+            {},
+        )
+        connector.foreground()
+        runCurrent()
+        advanceTimeBy(600_000)
+        runCurrent()
+        assertEquals(0, source.opens)
+
+        // And the block is not remembered: the next account the
+        // connector is handed is asked about again.
+        blocked = false
+        accounts.value = account(baseUrl = "https://books.example.org")
+        runCurrent()
+        assertEquals(1, source.opens)
+    }
+
     @Test
     fun `unauthorised refresh reports auth and stops a still healthy event stream`() = runTest {
         val accounts = MutableStateFlow<RemoteServer?>(account())
@@ -275,8 +307,8 @@ class LiveSyncConnectorTest {
         override suspend fun identity(): SyncIdentity? = null
     }
 
-    private fun account() = RemoteServer(
-        kind = ServerKind.LISEUR_SYNC, baseUrl = "http://localhost",
+    private fun account(baseUrl: String = "http://localhost") = RemoteServer(
+        kind = ServerKind.LISEUR_SYNC, baseUrl = baseUrl,
         username = "reader", passwordCipher = null, apiKeyCipher = null,
         accountId = "device", userId = null, koboTokenCipher = null,
         canDownload = true, addedAt = 1, catalogSyncedAt = null,

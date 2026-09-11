@@ -70,6 +70,12 @@ class LocalNetworkAddressTest {
         assertFalse(
             LocalNetworkAddress.isLocal("http://[0:0:0:0:0:0:0:1]:8083", resolver = refusing),
         )
+        // The same address in hex, which is what a resolver returns as
+        // readily as the dotted form.
+        assertFalse(
+            LocalNetworkAddress.isLocal("http://[::ffff:7f00:1]:8083", resolver = refusing),
+        )
+        assertFalse(LocalNetworkAddress.isLocal("http://127.1.2.3:8083", resolver = refusing))
         assertTrue(
             LocalNetworkAddress.isLocal(
                 "http://[1::]:8083",
@@ -77,6 +83,17 @@ class LocalNetworkAddressTest {
                 resolver = refusing,
             ),
         )
+    }
+
+    /**
+     * A name spelled out to its root is the same name. Reading the
+     * trailing dot as part of it would send an mDNS address off to be
+     * resolved by mDNS, which is what the permission is blocking.
+     */
+    @Test
+    fun `a name written out to the root label is the same name`() = runTest {
+        assertTrue(LocalNetworkAddress.isLocal("http://books.local.:8083", resolver = refusing))
+        assertFalse(LocalNetworkAddress.isLocal("http://localhost.:8083", resolver = refusing))
     }
 
     /**

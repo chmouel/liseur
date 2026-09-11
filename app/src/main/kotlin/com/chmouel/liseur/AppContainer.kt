@@ -449,7 +449,15 @@ class AppContainer(context: Context) {
         scope = applicationScope,
         accounts = database.remoteServerDao().observe(),
         sourceFor = { server ->
-            remoteRouter.liveFor(server.kind).takeIf { server.credentials != null }
+            // A live connection is one more socket to the same machine
+            // the position sync dials, so it answers to the same block:
+            // opening it while the permission is refused buys a retry
+            // loop of timeouts and no events. It reports nothing —
+            // the guarded sync already says the account is blocked —
+            // and the next connection picks up a grant.
+            remoteRouter.liveFor(server.kind)
+                .takeIf { server.credentials != null }
+                ?.takeIf { !localNetwork.blocks(server.baseUrl) }
         },
         coordinator = positionSync,
         requestBook = ::requestBookSync,
