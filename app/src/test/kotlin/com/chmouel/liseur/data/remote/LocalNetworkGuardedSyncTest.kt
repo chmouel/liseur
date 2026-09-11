@@ -79,13 +79,15 @@ class LocalNetworkGuardedSyncTest {
     }
 
     /**
-     * Settling a conflict writes the answer to the server, so it is
-     * refused too rather than left to sit on a timeout the reader is
-     * watching. The status line is not touched: this is one book being
-     * settled, not a run.
+     * Keeping this device's position writes it to the server, so it is
+     * refused rather than left to sit on a timeout the reader is
+     * watching. Taking the server's applies an answer an earlier run
+     * already wrote down and touches nothing but this phone, so it goes
+     * through — the same reason it works on a plane. Neither touches
+     * the status line: this is one book being settled, not a run.
      */
     @Test
-    fun `settling a conflict is refused rather than dialled`() = runTest {
+    fun `sending an answer is refused but accepting one still works`() = runTest {
         val peer = FakePeer(PeerPositionSync.CATALOG)
         val reporting = SyncReporting()
         val guarded = guard(peer, reporting, "http://192.168.1.20:8083")
@@ -94,8 +96,8 @@ class LocalNetworkGuardedSyncTest {
         val taken = guarded.takeRemotePosition("book", 1L, null, null)
 
         assertEquals(ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked), kept)
-        assertEquals(ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked), taken)
-        assertEquals(0, peer.resolutions)
+        assertEquals(ResolveOutcome.Done, taken)
+        assertEquals(1, peer.resolutions)
         assertEquals(PositionSyncStatus.Idle, reporting.statusOf(PeerPositionSync.CATALOG))
     }
 
