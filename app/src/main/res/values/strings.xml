@@ -118,6 +118,12 @@
 
     <string name="footer_left_in_chapter">%s left in chapter</string>
     <string name="footer_left_in_book">%s left in book</string>
+    <plurals name="footer_pages_left_in_chapter">
+        <item quantity="one">%d page left in chapter</item>
+        <item quantity="other">%d pages left in chapter</item>
+    </plurals>
+    <string name="footer_last_page_in_chapter">Last page in chapter</string>
+    <string name="footer_cycle">Change what the footer shows</string>
     <string name="footer_page">Page %1$d of %2$d</string>
     <string name="footer_page_compact">%1$d of %2$d</string>
     <string name="footer_percent">%d%%</string>
@@ -605,6 +611,7 @@
     <string name="reader_auto_scroll_slower">Slower</string>
     <string name="reader_auto_scroll_faster">Faster</string>
     <string name="footer_mode_smart">Time left, or the chapter</string>
+    <string name="footer_mode_pages_chapter">Pages left in chapter</string>
     <string name="footer_mode_time_book">Time left in book</string>
     <string name="footer_mode_chapter">Chapter title</string>
     <string name="footer_mode_empty">Nothing in the middle</string>

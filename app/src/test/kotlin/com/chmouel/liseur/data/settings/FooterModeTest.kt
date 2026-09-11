@@ -50,6 +50,7 @@ class FooterModeTest {
         assertEquals(FooterMode.Default, FooterMode.fromId(null))
         assertEquals(FooterMode.Default, FooterMode.fromId("something else"))
         assertEquals(FooterMode.TIME_LEFT_BOOK, FooterMode.fromId("time_book"))
+        assertEquals(FooterMode.PAGES_LEFT_CHAPTER, FooterMode.fromId("pages_chapter"))
     }
 
     @Test

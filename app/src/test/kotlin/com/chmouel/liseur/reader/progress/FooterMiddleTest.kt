@@ -20,6 +20,7 @@ class FooterMiddleTest {
         chapterTitle = "The Sign of Four",
         minutesLeftInChapter = 12,
         minutesLeftInBook = 340,
+        positionsLeftInChapter = 17,
         isSpeedMeasured = true,
     )
 
@@ -61,6 +62,47 @@ class FooterMiddleTest {
     @Test
     fun `a nameless chapter leaves the title mode empty`() {
         assertNull(footerMiddle(progress.copy(chapterTitle = null), FooterMode.CHAPTER_TITLE))
+    }
+
+    @Test
+    fun `pages left is shown before any pace is measured`() {
+        // The whole point of the mode: it needs no reading speed.
+        assertEquals(
+            FooterMiddle.PagesInChapter(17),
+            footerMiddle(progress.copy(isSpeedMeasured = false), FooterMode.PAGES_LEFT_CHAPTER),
+        )
+    }
+
+    @Test
+    fun `the chapter's last page is kept as a count of zero`() {
+        // Wording it is the footer's business; dropping it here would
+        // blank the slot on the one page of the chapter that has
+        // something plain to say.
+        assertEquals(
+            FooterMiddle.PagesInChapter(0),
+            footerMiddle(progress.copy(positionsLeftInChapter = 0), FooterMode.PAGES_LEFT_CHAPTER),
+        )
+    }
+
+    @Test
+    fun `an unknown chapter counts nothing rather than counting the book`() {
+        assertNull(
+            footerMiddle(
+                progress.copy(positionsLeftInChapter = null),
+                FooterMode.PAGES_LEFT_CHAPTER,
+            ),
+        )
+    }
+
+    @Test
+    fun `smart still falls back to the title, not to pages`() {
+        // Pages left is a mode the reader asks for by name. Smart
+        // promises time, and degrades to something that is not a
+        // number at all rather than to a different number.
+        assertEquals(
+            FooterMiddle.Chapter("The Sign of Four"),
+            footerMiddle(progress.copy(isSpeedMeasured = false), FooterMode.SMART),
+        )
     }
 
     @Test

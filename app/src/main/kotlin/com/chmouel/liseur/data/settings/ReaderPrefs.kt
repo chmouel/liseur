@@ -176,6 +176,19 @@ enum class FooterMode(val id: String) {
      * to something true rather than to a stock guess or to nothing.
      */
     SMART("time_chapter"),
+
+    /**
+     * How many pages are left before the next chapter — a figure the
+     * app has from the moment the book opens, with no reading pace to
+     * wait for and nothing in it that moves when the reader speeds up.
+     *
+     * A page here is a Readium position, the unit the footer's own
+     * right edge is already counting in. Counting screens instead
+     * would match what a turn consumes, but it would put two different
+     * meanings of "page" a hand's width apart on the same line, and
+     * the middle one would jump every time the font size did.
+     */
+    PAGES_LEFT_CHAPTER("pages_chapter"),
     TIME_LEFT_BOOK("time_book"),
     CHAPTER_TITLE("chapter"),
     EMPTY("empty"),
