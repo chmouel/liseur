@@ -56,6 +56,30 @@ class LocalNetworkAddressTest {
     }
 
     /**
+     * `::ffff:127.0.0.1` is 127.0.0.1 with a longer name, and reading
+     * it as an ordinary private address would ask for a permission
+     * that the connection was never going to need. `1::` is the
+     * opposite mistake: a global address that a digits-only test calls
+     * loopback, and then never judges at all.
+     */
+    @Test
+    fun `loopback is still loopback in its longer spellings`() = runTest {
+        assertFalse(
+            LocalNetworkAddress.isLocal("http://[::ffff:127.0.0.1]:8083", resolver = refusing),
+        )
+        assertFalse(
+            LocalNetworkAddress.isLocal("http://[0:0:0:0:0:0:0:1]:8083", resolver = refusing),
+        )
+        assertTrue(
+            LocalNetworkAddress.isLocal(
+                "http://[1::]:8083",
+                onLink = { true },
+                resolver = refusing,
+            ),
+        )
+    }
+
+    /**
      * A tailnet address is carried by a tunnel, which the restriction
      * does not reach. An ISP that hands the same range out on the LAN
      * is a different matter, and the routes are what tell them apart.

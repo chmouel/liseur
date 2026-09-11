@@ -51,6 +51,36 @@ class LocalNetworkGuardedSync(
             delegate.previewBook(bookUrl)
         }
 
+    /**
+     * Settling a conflict sends the answer to the server, so it is
+     * guarded too.
+     *
+     * Both of these are reached from the reader's own tap, and both
+     * already answer `Failed(Offline)` when there is no network at all.
+     * A blocked one is the same thing said differently: the write is
+     * not going to arrive, and a timeout the reader watches is the
+     * worst way to tell them so. The status line is left alone, as it
+     * is for a preview.
+     */
+    override suspend fun takeRemotePosition(
+        bookUrl: String,
+        atRevision: Long,
+        peerId: String?,
+        expectedAccountKey: String?,
+    ): ResolveOutcome =
+        if (blocked()) {
+            ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked)
+        } else {
+            delegate.takeRemotePosition(bookUrl, atRevision, peerId, expectedAccountKey)
+        }
+
+    override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
+        if (blocked()) {
+            ResolveOutcome.Failed(SyncFailure.LocalNetworkBlocked)
+        } else {
+            delegate.keepLocalPosition(bookUrl, peerId)
+        }
+
     private suspend fun blocked(): Boolean = access.blocks(delegate.dialledAddress())
 
     private fun refuse(): SyncOutcome {

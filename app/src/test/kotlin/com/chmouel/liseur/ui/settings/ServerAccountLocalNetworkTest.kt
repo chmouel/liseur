@@ -452,6 +452,7 @@ class ServerAccountLocalNetworkTest {
 
     /** Nothing to sync: these tests never get that far. */
     private class NoSync : PositionSync {
+        override suspend fun dialledAddress(): String? = null
         override suspend fun syncAll(snapshot: SyncSnapshot?) = SyncOutcome.Success
         override suspend fun syncBook(bookUrl: String) = SyncOutcome.Success
         override suspend fun canSync(bookUrl: String) = false

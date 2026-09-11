@@ -257,6 +257,7 @@ class LiveSyncConnectorTest {
     }
 
     private object NoSync : PositionSync {
+        override suspend fun dialledAddress(): String? = null
         override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = error("No full sync from events")
         override suspend fun syncBook(bookUrl: String): SyncOutcome = error("No inline book sync")
         override suspend fun canSync(bookUrl: String) = false

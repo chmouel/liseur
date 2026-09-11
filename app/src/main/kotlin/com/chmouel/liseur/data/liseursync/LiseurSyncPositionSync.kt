@@ -98,6 +98,13 @@ class LiseurSyncPositionSync(
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
 
+    /**
+     * The server's address, and only while its token can still be read
+     * back. See [com.chmouel.liseur.data.calibre.KoboSyncRepository.dialledAddress].
+     */
+    override suspend fun dialledAddress(): String? =
+        server()?.takeIf { it.credentials != null }?.baseUrl
+
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = run(book = null)
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)

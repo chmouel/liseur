@@ -185,20 +185,28 @@ anything to do at all before it asks about the permission, so a
 stored-but-idle LAN address cannot manufacture a failure for a run that
 was never going to touch it.
 
-That question is put to the peer rather than answered beside it.
-`PeerPositionSync.dialledAddress()` is the address a run started now
-would dial, and null is the whole of "nothing to do": no server
-connected, a kind that does not sync positions, a pairing stranded on an
-account that no longer uses it, a credential this Keystore can no longer
-open. Each peer answers from the state its own run opens with —
-`KosyncPositionSync` from the very `account()` its run calls first — so
+That question is put to the partner rather than answered beside it.
+`PositionSync.dialledAddress()` is the address a run started now would
+dial, and null is the whole of "nothing to do": no server connected, a
+kind that does not sync positions, a pairing stranded on an account that
+no longer uses it, a token or a credential this Keystore can no longer
+open. Every implementation answers from the state its own run opens with
+— `KosyncPositionSync` from the very `account()` its run calls first,
+each catalog provider from the credential its own first lines check — so
 the two cannot drift. Written as a lambda at the assembly point instead,
 it drifted immediately: a kosync pairing left behind by an account
 switch has a row and an address, its run answers "not applicable", and
 the guard would have failed every scheduled run on behalf of a partner
-the connected account does not use. Judging it there would also have
+the connected account does not use. Answering it there would also have
 meant a `when (kind)` over which credential each kind of catalog needs,
 at exactly the kind of call site the router exists to keep them out of.
+
+Settling a conflict is guarded as well, because `keepLocalPosition` and
+`takeRemotePosition` both write to the server. They already answer
+"failed, offline" when there is no network at all; a blocked one is the
+same thing said differently, and a timeout the reader sits and watches
+is the worst possible way to say it. Like a preview, they leave the
+account's status line alone: one book being settled is not a run.
 
 Downloads and uploads are left alone. They fail in front of a reader who
 can be told, and the notice on the connected card is what explains them.
