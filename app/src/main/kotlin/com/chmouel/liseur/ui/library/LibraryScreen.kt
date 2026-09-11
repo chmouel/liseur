@@ -1624,6 +1624,7 @@ private fun CatalogFailureNotice(
         // A catalog fetch never produces this one; the notice still has
         // to answer for it.
         SyncFailure.StaleIdentity -> R.string.catalog_failed_server_error
+        SyncFailure.LocalNetworkBlocked -> R.string.catalog_failed_local_network
         is SyncFailure.ServerError -> R.string.catalog_failed_server_error
     }
     Surface(

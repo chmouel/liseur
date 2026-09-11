@@ -18,5 +18,6 @@ fun SyncFailure.messageRes(): Int = when (this) {
     SyncFailure.Malformed -> R.string.server_sync_malformed
     SyncFailure.InsecureTransport -> R.string.server_sync_insecure
     SyncFailure.StaleIdentity -> R.string.server_sync_stale_identity
+    SyncFailure.LocalNetworkBlocked -> R.string.server_sync_local_network
     is SyncFailure.ServerError -> R.string.server_sync_server_error
 }

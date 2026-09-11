@@ -106,6 +106,14 @@ class KosyncPositionSync(
 
     override val peerId: String get() = PeerPositionSync.KOSYNC
 
+    /**
+     * The pairing's address, and only when a run would use it.
+     * [account] is the same test [run] opens with, so an ineligible
+     * server or a credential this Keystore cannot open answers null
+     * here exactly as it answers "not applicable" there.
+     */
+    override suspend fun dialledAddress(): String? = account()?.baseUrl
+
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome = run(book = null)
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome = run(book = bookUrl)

@@ -233,6 +233,10 @@
     <string name="server_error_rate_limited">Too many attempts. Wait a moment and try again.</string>
     <string name="server_error_unreachable">The server did not answer. Check the address and that you are online.</string>
     <string name="server_error_https">The server did not answer over a secure connection.</string>
+    <string name="server_error_local_network">Android is blocking Liseur from reaching servers on this network. Allow it access to nearby devices to connect.</string>
+    <string name="server_local_network_blocked">Android is blocking Liseur from reaching this server on your network. Allow it access to nearby devices.</string>
+    <string name="server_local_network_retry">Allow access</string>
+    <string name="server_local_network_settings">Open app settings</string>
     <string name="server_no_download_right">This account is not allowed to download books. Ask whoever runs the server to tick \"Allow Downloads\" for your user in calibre-web, then check again.</string>
     <string name="server_no_download_right_komga">This API key is not allowed to download books. Ask whoever runs the server to give your account the file download role, then check again.</string>
     <string name="server_no_download_right_custom">This catalog is not offering any books to download.</string>
@@ -287,6 +291,7 @@
     <string name="server_sync_insecure">This server refuses to take credentials over plain HTTP. Use an https:// address.</string>
     <string name="server_sync_malformed">The server answered with something unexpected; positions will sync later.</string>
     <string name="server_sync_stale_identity">The server’s book identity changed; sync will retry.</string>
+    <string name="server_sync_local_network">Android is blocking Liseur from reaching this server on your network, so positions did not sync.</string>
     <string name="server_sync_server_error">The server ran into trouble; positions will sync later.</string>
     <string name="server_sync_never">Reading positions have not synced yet.</string>
     <string name="server_sync_last">Reading positions synced %1$s</string>
@@ -692,6 +697,7 @@
     <string name="catalog_failed_malformed">Your server answered with something unexpected. Showing the saved catalog.</string>
     <string name="catalog_failed_insecure">This server needs an https:// address. Showing the saved catalog.</string>
     <string name="catalog_failed_server_error">Your server ran into trouble. Showing the saved catalog.</string>
+    <string name="catalog_failed_local_network">Android is blocking Liseur from reaching servers on this network. Showing the saved catalog.</string>
     <string name="catalog_retry">Try again</string>
     <string name="catalog_reconnect">Reconnect</string>
     <string name="state_finished">Finished</string>

@@ -14,6 +14,7 @@ import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncSetupOutcome
 import com.chmouel.liseur.data.remote.PeerPositionSync
+import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.BulkBatch
@@ -36,6 +37,7 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +56,46 @@ enum class AccountError {
     INSECURE_TRANSPORT,
     INSUFFICIENT_SCOPES,
     RATE_LIMITED,
+
+    /** The phone is blocking the network the server lives on. */
+    LOCAL_NETWORK_BLOCKED,
+}
+
+/**
+ * Something waiting on the reader's answer to a permission prompt.
+ *
+ * The whole of what was submitted travels with it, because the prompt
+ * stands between the button and the connection and the form underneath
+ * it stays live: re-reading the fields afterwards would connect with a
+ * password half-retyped in the meantime. It is also what makes resuming
+ * possible at all, since [ServerAccountViewModel.connect] and its
+ * siblings set the busy flag they themselves refuse to start under.
+ *
+ * [launched] is the prompt having been put up, which is not the same as
+ * it having been answered. A rotation while the dialog is on screen
+ * builds the screen again, and without this the new one would put up a
+ * second dialog; the result of the first still finds its way home.
+ */
+data class LocalNetworkRequest(
+    val id: Long,
+    val action: Action,
+    /** The form exactly as it was submitted, for the paths that connect. */
+    val submitted: ServerAccountUiState? = null,
+    val allowHttp: Boolean = false,
+    /** Whether a refusal belongs against the sync address, not the catalog one. */
+    val blockedKosync: Boolean = false,
+    val launched: Boolean = false,
+) {
+    enum class Action {
+        /** The connect form, whichever kind it is filled in for. */
+        CONNECT,
+
+        /** A kosync partner being paired on its own. */
+        KOSYNC,
+
+        /** An account already connected, whose permission went away. */
+        SAVED,
+    }
 }
 
 /** Which way a reader proves who they are to a liseur-sync server. */
@@ -120,6 +162,18 @@ data class ServerAccountUiState(
     val kosyncError: AccountError? = null,
     /** How the kosync partner's own last run went, apart from the summary. */
     val kosyncStatus: PositionSyncStatus = PositionSyncStatus.Idle,
+    /** A permission prompt this screen is waiting on, if any. */
+    val localNetworkRequest: LocalNetworkRequest? = null,
+    /**
+     * Whether the permission has been asked for on this screen yet.
+     *
+     * `shouldShowRequestPermissionRationale` answers false in two
+     * opposite situations — nothing ever asked, and asked and refused
+     * for good — so it means nothing until something has been asked.
+     */
+    val localNetworkAsked: Boolean = false,
+    /** Whether the connected account's own addresses are out of reach. */
+    val localNetworkBlocked: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -133,10 +187,15 @@ class ServerAccountViewModel(
     private val identityDao: WorkIdentityDao,
     private val bookDao: BookDao,
     private val kosyncAccount: KosyncAccountRepository,
+    private val localNetwork: LocalNetworkAccess,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ServerAccountUiState())
     val state: StateFlow<ServerAccountUiState> = _state.asStateFlow()
+
+    private var lastLocalNetworkRequest = 0L
+
+    private var localNetworkCheck: Job? = null
 
     init {
         viewModelScope.launch {
@@ -155,6 +214,7 @@ class ServerAccountViewModel(
                             ?: state.kosyncUrl,
                     )
                 }
+                recheckLocalNetwork(server, peer)
             }
         }
         viewModelScope.launch {
@@ -277,23 +337,31 @@ class ServerAccountViewModel(
         }
         _state.update { it.copy(kosyncConnecting = true, kosyncError = null) }
         viewModelScope.launch {
-            val outcome = kosyncAccount.connect(
-                url = current.kosyncUrl,
-                username = current.kosyncUsername,
-                password = current.kosyncPassword,
-                register = current.kosyncRegister,
-            )
-            _state.update {
-                when (outcome) {
-                    KosyncSetupOutcome.Success ->
-                        it.copy(kosyncConnecting = false, kosyncPassword = "")
-                    is KosyncSetupOutcome.Failure ->
-                        it.copy(kosyncConnecting = false, kosyncError = outcome.reason.toUiError())
-                }
+            if (localNetwork.blocks(current.kosyncUrl.trim())) {
+                park(LocalNetworkRequest.Action.KOSYNC, current, blockedKosync = true)
+                return@launch
             }
-            if (outcome == KosyncSetupOutcome.Success) {
-                positionSync.request(SyncScope.Full)
+            runKosyncConnect(current)
+        }
+    }
+
+    private suspend fun runKosyncConnect(current: ServerAccountUiState) {
+        val outcome = kosyncAccount.connect(
+            url = current.kosyncUrl,
+            username = current.kosyncUsername,
+            password = current.kosyncPassword,
+            register = current.kosyncRegister,
+        )
+        _state.update {
+            when (outcome) {
+                KosyncSetupOutcome.Success ->
+                    it.copy(kosyncConnecting = false, kosyncPassword = "")
+                is KosyncSetupOutcome.Failure ->
+                    it.copy(kosyncConnecting = false, kosyncError = outcome.reason.toUiError())
             }
+        }
+        if (outcome == KosyncSetupOutcome.Success) {
+            positionSync.request(SyncScope.Full)
         }
     }
 
@@ -327,56 +395,69 @@ class ServerAccountViewModel(
         val current = _state.value
         if (current.connecting) return
         if (!current.readyToConnect()) return
-        _state.update { it.copy(connecting = true, error = null) }
+        _state.update { it.copy(connecting = true, error = null, kosyncError = null) }
 
         viewModelScope.launch {
-            if (current.kind == ServerKind.CUSTOM) {
-                connectCustom(current, allowHttp)
+            val blocked = blockedForConnect(current)
+            if (blocked != null) {
+                park(LocalNetworkRequest.Action.CONNECT, current, allowHttp, blocked)
                 return@launch
             }
-            val result = when (current.kind) {
-                ServerKind.CALIBRE -> repository.connectCalibre(
+            runConnect(current, allowHttp)
+        }
+    }
+
+    /**
+     * The connection itself, over what was submitted rather than over
+     * whatever the form holds now.
+     */
+    private suspend fun runConnect(current: ServerAccountUiState, allowHttp: Boolean) {
+        if (current.kind == ServerKind.CUSTOM) {
+            connectCustom(current, allowHttp)
+            return
+        }
+        val result = when (current.kind) {
+            ServerKind.CALIBRE -> repository.connectCalibre(
+                url = current.url,
+                username = current.username.trim(),
+                password = current.password,
+                allowHttp = allowHttp,
+            )
+            ServerKind.KOMGA -> repository.connectKomga(
+                url = current.url,
+                apiKey = current.apiKey.trim(),
+                allowHttp = allowHttp,
+            )
+            ServerKind.GRIMMORY -> repository.connectGrimmory(
+                url = current.url,
+                username = current.username.trim(),
+                password = current.password,
+                allowHttp = allowHttp,
+            )
+            ServerKind.LISEUR_SYNC -> when (current.liseurSyncSignIn) {
+                LiseurSyncSignIn.PASSWORD -> repository.connectLiseurSync(
                     url = current.url,
                     username = current.username.trim(),
                     password = current.password,
                     allowHttp = allowHttp,
                 )
-                ServerKind.KOMGA -> repository.connectKomga(
+                LiseurSyncSignIn.TOKEN -> repository.connectLiseurSyncToken(
                     url = current.url,
-                    apiKey = current.apiKey.trim(),
+                    token = current.deviceToken,
                     allowHttp = allowHttp,
                 )
-                ServerKind.GRIMMORY -> repository.connectGrimmory(
-                    url = current.url,
-                    username = current.username.trim(),
-                    password = current.password,
-                    allowHttp = allowHttp,
-                )
-                ServerKind.LISEUR_SYNC -> when (current.liseurSyncSignIn) {
-                    LiseurSyncSignIn.PASSWORD -> repository.connectLiseurSync(
-                        url = current.url,
-                        username = current.username.trim(),
-                        password = current.password,
-                        allowHttp = allowHttp,
-                    )
-                    LiseurSyncSignIn.TOKEN -> repository.connectLiseurSyncToken(
-                        url = current.url,
-                        token = current.deviceToken,
-                        allowHttp = allowHttp,
-                    )
-                }
             }
-            if (result is SetupResult.Success) {
-                fetchCatalogAndPositions()
-                appSettings.setAccountLostToRestore(false)
-            }
-            _state.update {
-                when (result) {
-                    is SetupResult.Success ->
-                        it.copy(connecting = false, password = "", apiKey = "", deviceToken = "")
-                    is SetupResult.Failure ->
-                        it.copy(connecting = false, error = result.reason.toUiError())
-                }
+        }
+        if (result is SetupResult.Success) {
+            fetchCatalogAndPositions()
+            appSettings.setAccountLostToRestore(false)
+        }
+        _state.update {
+            when (result) {
+                is SetupResult.Success ->
+                    it.copy(connecting = false, password = "", apiKey = "", deviceToken = "")
+                is SetupResult.Failure ->
+                    it.copy(connecting = false, error = result.reason.toUiError())
             }
         }
     }
@@ -391,6 +472,151 @@ class ServerAccountViewModel(
             }
             _state.update { it.copy(connecting = false) }
         }
+    }
+
+    /**
+     * Which of a submitted form's addresses the phone will not let this
+     * app reach, or null if it will reach all of them.
+     *
+     * Both of a Custom connection are asked about: its catalog and its
+     * sync server are two machines, and either of them may be the one
+     * in the spare room. The answer says which, so a refusal lands
+     * under the field it belongs to.
+     */
+    private suspend fun blockedForConnect(current: ServerAccountUiState): Boolean? = when {
+        localNetwork.blocks(current.url.trim()) -> false
+        current.kind == ServerKind.CUSTOM &&
+            localNetwork.blocks(current.kosyncUrl.trim()) -> true
+        else -> null
+    }
+
+    /** Holds an action still, and asks the screen to put the prompt up. */
+    private fun park(
+        action: LocalNetworkRequest.Action,
+        submitted: ServerAccountUiState? = null,
+        allowHttp: Boolean = false,
+        blockedKosync: Boolean = false,
+    ) {
+        _state.update {
+            it.copy(
+                localNetworkRequest = LocalNetworkRequest(
+                    id = ++lastLocalNetworkRequest,
+                    action = action,
+                    submitted = submitted,
+                    allowHttp = allowHttp,
+                    blockedKosync = blockedKosync,
+                ),
+            )
+        }
+    }
+
+    /**
+     * The prompt for [id] is on screen.
+     *
+     * Marked before it is shown rather than after it is answered, so a
+     * screen rebuilt by a rotation while the dialog is up finds the
+     * asking already done.
+     */
+    fun onLocalNetworkRequestLaunched(id: Long) {
+        _state.update {
+            val request = it.localNetworkRequest
+            if (request?.id != id || request.launched) it
+            else it.copy(localNetworkRequest = request.copy(launched = true))
+        }
+    }
+
+    /** Asks for the permission again for an account already connected. */
+    fun askLocalNetworkAgain() {
+        if (_state.value.localNetworkRequest != null) return
+        park(LocalNetworkRequest.Action.SAVED)
+    }
+
+    /**
+     * What the reader said.
+     *
+     * The request is spent before anything is done with it, so a
+     * duplicate callback — or a screen that comes back and reports the
+     * same answer again — cannot connect twice.
+     */
+    fun onLocalNetworkResult(granted: Boolean) {
+        val request = _state.value.localNetworkRequest ?: return
+        _state.update { it.copy(localNetworkRequest = null, localNetworkAsked = true) }
+        viewModelScope.launch {
+            if (granted) resume(request) else refuse(request)
+        }
+    }
+
+    private suspend fun resume(request: LocalNetworkRequest) = when (request.action) {
+        LocalNetworkRequest.Action.CONNECT ->
+            request.submitted?.let { runConnect(it, request.allowHttp) } ?: Unit
+        LocalNetworkRequest.Action.KOSYNC ->
+            request.submitted?.let { runKosyncConnect(it) } ?: Unit
+        LocalNetworkRequest.Action.SAVED -> {
+            refreshLocalNetworkAccess()
+            positionSync.request(SyncScope.Full, System.currentTimeMillis())
+            Unit
+        }
+    }
+
+    private fun refuse(request: LocalNetworkRequest) {
+        _state.update {
+            when (request.action) {
+                LocalNetworkRequest.Action.CONNECT -> if (request.blockedKosync) {
+                    it.copy(connecting = false, kosyncError = AccountError.LOCAL_NETWORK_BLOCKED)
+                } else {
+                    it.copy(connecting = false, error = AccountError.LOCAL_NETWORK_BLOCKED)
+                }
+                LocalNetworkRequest.Action.KOSYNC -> it.copy(
+                    kosyncConnecting = false,
+                    kosyncError = AccountError.LOCAL_NETWORK_BLOCKED,
+                )
+                LocalNetworkRequest.Action.SAVED -> it.copy(localNetworkBlocked = true)
+            }
+        }
+    }
+
+    /**
+     * Whether the connected account has anywhere it can no longer
+     * reach.
+     *
+     * Both of the server's addresses, because a Custom connection
+     * catalogs at one and syncs at another; and the kosync partner's
+     * only when the connected server is one the pairing belongs to. A
+     * pairing stranded by an account switch is shown so that it can be
+     * disconnected, and nothing will dial it — asking for a permission
+     * on its behalf would be a prompt for a machine this account never
+     * talks to. That is the test [com.chmouel.liseur.data.kosync.KosyncPositionSync]
+     * applies before it runs, kept in step with it here.
+     *
+     * Recomputed whenever the stored account changes, not only on
+     * resume: the row arrives from Room after the screen is built, and
+     * a check that ran before it landed would find nothing stored,
+     * answer "not blocked", and leave a reader on Android 17 with the
+     * original timeout and no way to grant anything. Each run replaces
+     * the one before it, so a slow lookup cannot land on top of a
+     * newer answer.
+     */
+    private fun recheckLocalNetwork(server: RemoteServer?, peer: KosyncPeer?) {
+        localNetworkCheck?.cancel()
+        localNetworkCheck = viewModelScope.launch {
+            val addresses = listOfNotNull(
+                server?.baseUrl,
+                server?.catalogUrl,
+                peer?.baseUrl?.takeIf { server?.kind?.hostsKosyncPeer == true },
+            ).distinct()
+            val blocked = addresses.any { localNetwork.blocks(it) }
+            _state.update { it.copy(localNetworkBlocked = blocked) }
+        }
+    }
+
+    /**
+     * The same question asked again on resume, so coming back from the
+     * system settings page clears the notice without the reader doing
+     * anything else.
+     */
+    fun refreshLocalNetworkAccess() {
+        val current = _state.value
+        recheckLocalNetwork(current.server, current.kosync)
     }
 
     /**
@@ -581,6 +807,7 @@ class ServerAccountViewModel(
                     identityDao = container.database.workIdentityDao(),
                     bookDao = container.database.bookDao(),
                     kosyncAccount = container.kosyncAccount,
+                    localNetwork = container.localNetwork,
                 )
             }
         }

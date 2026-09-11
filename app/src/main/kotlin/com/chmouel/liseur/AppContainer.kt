@@ -30,6 +30,8 @@ import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.BookUploadRepository
 import com.chmouel.liseur.data.remote.UploadPrompts
 import com.chmouel.liseur.data.remote.CompositePositionSync
+import com.chmouel.liseur.data.remote.AndroidLocalNetworkAccess
+import com.chmouel.liseur.data.remote.LocalNetworkGuardedSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncAnnotations
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
@@ -229,6 +231,12 @@ class AppContainer(context: Context) {
      */
     val syncReporting = SyncReporting()
 
+    /**
+     * What the phone will and will not let the app reach, and the way
+     * to ask it for more.
+     */
+    val localNetwork = AndroidLocalNetworkAccess(context)
+
     val koboSync = KoboSyncRepository(
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
@@ -400,10 +408,27 @@ class AppContainer(context: Context) {
      * the position too — and the kosync partner after it. The composite
      * runs them in turn, so the coordinator's ordering rules hold across
      * both without being written twice.
+     *
+     * Each is wrapped against a phone that is blocking the network its
+     * server lives on, separately rather than together: a public
+     * catalog and a kosync server on the LAN is an ordinary pairing,
+     * and one of them being out of reach is no reason to stop syncing
+     * with the other.
      */
     val positionSync = PositionSyncCoordinator(
         CompositePositionSync(
-            listOf(RoutedPositionSync(remoteRouter), kosyncSync),
+            listOf(
+                LocalNetworkGuardedSync(
+                    delegate = RoutedPositionSync(remoteRouter),
+                    access = localNetwork,
+                    reporting = syncReporting,
+                ),
+                LocalNetworkGuardedSync(
+                    delegate = kosyncSync,
+                    access = localNetwork,
+                    reporting = syncReporting,
+                ),
+            ),
         ),
         carryOn = { PositionSyncWorker.continueBootstrap(context.applicationContext) },
     )

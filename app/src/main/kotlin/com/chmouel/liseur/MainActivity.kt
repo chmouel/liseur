@@ -570,6 +570,10 @@ private fun ServerAccountRoute(
         onKosyncRegisterChange = viewModel::setKosyncRegister,
         onKosyncConnect = viewModel::connectKosync,
         onKosyncDisconnect = viewModel::disconnectKosync,
+        onLocalNetworkRequestLaunched = viewModel::onLocalNetworkRequestLaunched,
+        onLocalNetworkResult = viewModel::onLocalNetworkResult,
+        onAskLocalNetworkAgain = viewModel::askLocalNetworkAgain,
+        onRefreshLocalNetworkAccess = viewModel::refreshLocalNetworkAccess,
         onBack = onBack,
     )
 }

@@ -267,6 +267,10 @@ class LiseurSyncServerSetup(
                 SetupFailure.WrongServer
             SyncFailure.Offline, SyncFailure.Timeout ->
                 SetupFailure.Unreachable("No answer", httpMayWork = false)
+            // Setup asks the permission gate before it dials, so this
+            // reason cannot arrive here; the branch still has to exist.
+            SyncFailure.LocalNetworkBlocked ->
+                SetupFailure.Unreachable("No answer", httpMayWork = false)
 
             is SyncFailure.ServerError ->
                 if (reason.code == TOO_MANY) {

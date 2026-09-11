@@ -33,6 +33,8 @@ class ReaderCatchUpTest {
         var revision = answer.localRevision ?: 0
         val adoptions = mutableListOf<Long>()
 
+        override suspend fun dialledAddress(): String? = null
+
         override suspend fun previewBook(bookUrl: String): PreviewOutcome {
             pending = answer
             return PreviewOutcome.Ready(answer)
