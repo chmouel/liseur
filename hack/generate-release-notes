@@ -193,15 +193,37 @@ EOF
 # pull request: Markdown images become `<img>`, and any width, height or
 # style that came with the tag is dropped for SCREENSHOT_WIDTH.
 normalize_screenshots() {
-    local notes=$1 normalized
+    local notes=$1
 
-    normalized=$(mktemp -p "$workdir")
-    sed -E \
-        -e "s@!\[([^]]*)\]\(([^)\"[:space:]]+)[^)]*\)@<img src=\"\2\" alt=\"\1\">@g" \
-        -e "/<img/ s@[[:space:]]+(width|height|style)=(\"[^\"]*\"|'[^']*'|[^[:space:]>]+)@@g" \
-        -e "/<img/ s@(<img[^>]*[^[:space:]/])[[:space:]]*/?>@\1 width=\"$SCREENSHOT_WIDTH\">@g" \
-        "$notes" > "$normalized"
-    mv "$normalized" "$notes"
+    python3 - "$notes" "$SCREENSHOT_WIDTH" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+width = sys.argv[2]
+text = path.read_text(encoding='utf-8')
+
+text = re.sub(
+    r'!\[([^]]*)\]\(([^)"\[:space:]]+)[^)]*\)',
+    r'<img src="\2" alt="\1">',
+    text,
+)
+text = re.sub(
+    r'(?is)(<img\b[^>]*?)\s+(width|height|style)=(?:"[^"]*"|\'[^\']*\'|[^\s>]+)',
+    r'\1',
+    text,
+)
+text = re.sub(
+    r'(<img\b)([^>]*?)(/?>)',
+    lambda m: f'{m.group(1)}{m.group(2)} width="{width}"{m.group(3)}'
+    if 'width=' not in m.group(2).lower() else m.group(0),
+    text,
+)
+text = re.sub(r'(?m)(?P<before>\S)\n(?P<img><img\b[^>]*>)', r'\g<before>\n\n\g<img>', text)
+text = re.sub(r'(?m)(?P<img><img\b[^>]*>)\n(?P<after>\S)', r'\g<img>\n\n\g<after>', text)
+path.write_text(text, encoding='utf-8')
+PY
 }
 
 generate() {
