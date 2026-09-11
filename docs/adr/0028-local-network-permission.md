@@ -248,7 +248,12 @@ Where a background run asks the question afresh every time, that
 connection is opened once and held, so it is told when the answer moves:
 `LocalNetworkAccess.recheck()` is called after a permission result and
 on resume, and announces only an answer that actually changed, so a
-denial does not tear down a healthy stream. The connector takes that
+denial does not tear down a healthy stream. That same answer is what
+makes a grant given in the system settings app — which is where a
+permanent denial has to be undone, and which comes back through resume
+rather than through a permission result — worth as much as one given in
+the prompt: it asks for a sync too, rather than leaving the account
+showing a stale blocked failure until the next page turn. The connector takes that
 signal as a third input and puts it in the key it deduplicates on —
 *not* in `LiveIdentity`, which stands for the account and its
 credentials. Without it a reader who allowed the permission from the

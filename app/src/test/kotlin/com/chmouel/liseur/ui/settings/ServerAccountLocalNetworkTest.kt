@@ -41,6 +41,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -322,6 +323,37 @@ class ServerAccountLocalNetworkTest {
     }
 
     /**
+     * A permanent denial sends the reader to the system settings app,
+     * so the grant comes back through resume rather than through a
+     * permission result. It has to be worth as much: without a sync
+     * the account keeps the stale blocked failure until a page turn or
+     * a manual Sync now, and the app's own foreground refresh is
+     * debounced well past a trip to the settings app and back.
+     */
+    @Test
+    fun `a grant made in the settings app clears the notice and syncs`() = scenario {
+        blocked += "http://192.168.1.20:8083"
+        db.remoteServerDao().upsert(server(baseUrl = "http://192.168.1.20:8083"))
+        val sync = NoSync()
+
+        val model = model(sync = sync)
+        assertTrue(model.state.value.localNetworkBlocked)
+        assertEquals(0, sync.fullRuns)
+
+        permitted = true
+        model.refreshLocalNetworkAccess()
+        runCurrent()
+
+        assertFalse(model.state.value.localNetworkBlocked)
+        assertEquals(1, sync.fullRuns)
+
+        // A resume that changed nothing is not a reason to sync again.
+        model.refreshLocalNetworkAccess()
+        runCurrent()
+        assertEquals(1, sync.fullRuns)
+    }
+
+    /**
      * A pairing left behind by an account switch is shown so that it
      * can be disconnected, and nothing will ever dial it. Asking for a
      * permission on its behalf would be a prompt for a machine this
@@ -394,7 +426,7 @@ class ServerAccountLocalNetworkTest {
         return model
     }
 
-    private fun model(gated: Boolean = true): ServerAccountViewModel {
+    private fun model(gated: Boolean = true, sync: NoSync = NoSync()): ServerAccountViewModel {
         val bookRemoval = BookRemoval(
             db.bookDao(),
             db.readingSessionDao(),
@@ -426,7 +458,7 @@ class ServerAccountLocalNetworkTest {
             repository = account,
             downloads = BookDownloadRepository(context, db.bookDao(), bookRemoval, scope),
             reporting = SyncReporting(),
-            positionSync = PositionSyncCoordinator(NoSync()),
+            positionSync = PositionSyncCoordinator(sync),
             catalog = RemoteCatalogRepository(
                 router = router,
                 serverDao = db.remoteServerDao(),
@@ -448,12 +480,26 @@ class ServerAccountLocalNetworkTest {
         override val granted get() = !required || permitted
         override suspend fun blocks(url: String?) =
             required && !permitted && url != null && url in blocked
+
+        private var lastGranted = granted
+
+        override fun recheck(): Boolean {
+            val now = granted
+            if (lastGranted == now) return false
+            lastGranted = now
+            return true
+        }
     }
 
-    /** Nothing to sync: these tests never get that far. */
+    /** Nothing to sync, but it does say when it was asked. */
     private class NoSync : PositionSync {
+        var fullRuns = 0
+
         override suspend fun dialledAddress(): String? = null
-        override suspend fun syncAll(snapshot: SyncSnapshot?) = SyncOutcome.Success
+        override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome {
+            fullRuns++
+            return SyncOutcome.Success
+        }
         override suspend fun syncBook(bookUrl: String) = SyncOutcome.Success
         override suspend fun canSync(bookUrl: String) = false
         override suspend fun previewBook(bookUrl: String) = PreviewOutcome.NotSynced

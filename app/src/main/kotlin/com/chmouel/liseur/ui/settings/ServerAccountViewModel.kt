@@ -621,9 +621,19 @@ class ServerAccountViewModel(
     fun refreshLocalNetworkAccess() {
         // Called on resume, which is how a grant made in the system
         // settings app gets back here at all.
-        localNetwork.recheck()
+        val moved = localNetwork.recheck()
         val current = _state.value
         recheckLocalNetwork(current.server, current.kosync)
+        // And a grant made over there deserves the same sync a grant
+        // made in the prompt gets. Without it the account keeps the
+        // stale blocked failure until a page turn or a manual Sync now:
+        // the app's own foreground refresh is debounced, and a trip to
+        // the settings app is well inside that minute.
+        if (moved && localNetwork.granted) {
+            viewModelScope.launch {
+                positionSync.request(SyncScope.Full, System.currentTimeMillis())
+            }
+        }
     }
 
     /**

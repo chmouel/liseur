@@ -55,8 +55,13 @@ interface LocalNetworkAccess {
      */
     val grants: Flow<Long> get() = flowOf(0L)
 
-    /** Look again, after the reader has answered a permission prompt. */
-    fun recheck() = Unit
+    /**
+     * Look again, after the reader has answered a permission prompt.
+     *
+     * Answers whether the answer actually moved, so a caller can tell a
+     * grant from a resume that changed nothing.
+     */
+    fun recheck(): Boolean = false
 
     companion object {
         /**
@@ -97,11 +102,12 @@ class AndroidLocalNetworkAccess(
      * grant on a phone that was never going to block anything, must not
      * tear down a healthy connection to reopen it unchanged.
      */
-    override fun recheck() {
+    override fun recheck(): Boolean {
         val now = granted
-        if (lastGranted == now) return
+        if (lastGranted == now) return false
         lastGranted = now
         _grants.value = _grants.value + 1
+        return true
     }
 
     override val granted: Boolean
