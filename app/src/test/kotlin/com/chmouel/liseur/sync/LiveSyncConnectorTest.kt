@@ -40,12 +40,14 @@ class LiveSyncConnectorTest {
         val accounts = MutableStateFlow<RemoteServer?>(account())
         val source = Source()
         var blocked = true
+        val grants = MutableStateFlow(0L)
         val connector = LiveSyncConnector(
             backgroundScope,
             accounts,
             { source.takeIf { !blocked } },
             PositionSyncCoordinator(NoSync),
             {},
+            reconnectOn = grants,
         )
         connector.foreground()
         runCurrent()
@@ -53,10 +55,11 @@ class LiveSyncConnectorTest {
         runCurrent()
         assertEquals(0, source.opens)
 
-        // And the block is not remembered: the next account the
-        // connector is handed is asked about again.
+        // And allowing it does not wait for the account to change or
+        // for a trip to the home screen longer than the grace period:
+        // the gate says the answer has moved and the stream opens.
         blocked = false
-        accounts.value = account(baseUrl = "https://books.example.org")
+        grants.value = 1L
         runCurrent()
         assertEquals(1, source.opens)
     }

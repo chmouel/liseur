@@ -6,6 +6,10 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import java.net.InetAddress
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * Whether the phone will let the app reach a given address, and what it
@@ -39,6 +43,21 @@ interface LocalNetworkAccess {
      */
     suspend fun blocks(url: String?): Boolean
 
+    /**
+     * Bumped when the answer to [blocks] may have changed, so a
+     * connection that outlives one question can ask it again.
+     *
+     * A background sync asks afresh every run and needs none of this.
+     * A live notification stream is opened once and held for as long as
+     * the app is on screen, so a reader who allows the permission from
+     * the connected card would otherwise wait out the rest of that
+     * session with the stream still down.
+     */
+    val grants: Flow<Long> get() = flowOf(0L)
+
+    /** Look again, after the reader has answered a permission prompt. */
+    fun recheck() = Unit
+
     companion object {
         /**
          * Spelled out rather than taken from `Manifest.permission`,
@@ -58,7 +77,25 @@ class AndroidLocalNetworkAccess(
 
     private val context = context.applicationContext
 
+    private val _grants = MutableStateFlow(0L)
+
+    override val grants = _grants.asStateFlow()
+
+    private var lastGranted: Boolean = granted
+
     override val required: Boolean get() = sdkInt >= Build.VERSION_CODES.CINNAMON_BUN
+
+    /**
+     * Only an answer that actually changed is announced. A denial, or a
+     * grant on a phone that was never going to block anything, must not
+     * tear down a healthy connection to reopen it unchanged.
+     */
+    override fun recheck() {
+        val now = granted
+        if (lastGranted == now) return
+        lastGranted = now
+        _grants.value = _grants.value + 1
+    }
 
     override val granted: Boolean
         get() = !required ||

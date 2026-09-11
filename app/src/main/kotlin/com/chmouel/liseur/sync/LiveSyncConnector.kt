@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 
@@ -32,6 +33,7 @@ class LiveSyncConnector(
     private val sourceFor: suspend (RemoteServer) -> LiveChanges?,
     private val coordinator: PositionSyncCoordinator,
     private val requestBook: (String) -> Unit,
+    reconnectOn: Flow<Long> = flowOf(0L),
     private val graceMillis: Long = 15_000,
     private val retryJitter: () -> Double = { Random.nextDouble() },
     private val reportFailure: suspend (LiveIdentity, SyncFailure) -> Unit = { _, _ -> },
@@ -43,9 +45,19 @@ class LiveSyncConnector(
 
     init {
         scope.launch {
-            combine(active, accounts) { foreground, server -> server.takeIf { foreground } }
-                .distinctUntilChangedBy { it?.let(LiveIdentity::from) }
-                .collectLatest { server ->
+            // The reconnect signal is in the distinct key but not in
+            // `LiveIdentity`: what it stands for is the phone's answer
+            // about reaching this server changing under a connection
+            // that was opened once and held, which is a reason to open
+            // it again and not a different account.
+            combine(active, accounts, reconnectOn) { foreground, server, generation ->
+                server.takeIf { foreground }?.let { it to generation }
+            }
+                .distinctUntilChangedBy { open ->
+                    open?.let { (server, generation) -> LiveIdentity.from(server) to generation }
+                }
+                .collectLatest { open ->
+                    val server = open?.first
                     val identity = server?.let(LiveIdentity::from)
                     coordinator.liveAccount(identity)
                     if (server != null && identity != null) {
