@@ -186,7 +186,7 @@ fun ReadingStatsScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 item {
-                    BentoHero(stats, ready.headline, ready.range)
+                    BentoHero(stats, ready.headline, ready.range, ready.provenance)
                 }
                 item {
                     ProvenanceLine(ready.provenance)
@@ -237,7 +237,12 @@ fun ReadingStatsScreen(
  * the grid instead of leaving a hole in it.
  */
 @Composable
-private fun BentoHero(stats: ReadingStats, headline: StatsHeadline, range: StatsRange) {
+private fun BentoHero(
+    stats: ReadingStats,
+    headline: StatsHeadline,
+    range: StatsRange,
+    provenance: StatsProvenance,
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -337,6 +342,11 @@ private fun BentoHero(stats: ReadingStats, headline: StatsHeadline, range: Stats
                 ),
             )
             headline.progressionPerHour?.let { pace ->
+                val paceLabel = when {
+                    provenance == StatsProvenance.ALL_DEVICES && headline.serverOnlyPace ->
+                        stringResource(R.string.reading_stats_pace_server_only)
+                    else -> stringResource(R.string.reading_stats_pace)
+                }
                 add(
                     Tally(
                         icon = Icons.Outlined.Speed,
@@ -344,7 +354,7 @@ private fun BentoHero(stats: ReadingStats, headline: StatsHeadline, range: Stats
                             R.string.reading_stats_pace_value,
                             (pace * 100).roundToInt(),
                         ),
-                        label = stringResource(R.string.reading_stats_pace),
+                        label = paceLabel,
                     ),
                 )
             }
