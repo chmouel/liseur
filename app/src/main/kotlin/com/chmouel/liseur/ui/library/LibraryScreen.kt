@@ -1863,7 +1863,7 @@ private fun FilterMenu(
     val filters = state.filters
     val active = LibraryFilterOption.entries.filter { it in filters.options }
     val grouped = stringResource(R.string.filter_group_series)
-    // The grouping is a view mode with a home in Settings, not a
+    // The grouping is a view mode offered from the filter menu, not a
     // narrowing, so it does not belong in the summary: on by default,
     // it would caption every library ever opened.
     val summary = when {

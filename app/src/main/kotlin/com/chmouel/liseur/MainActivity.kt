@@ -287,11 +287,6 @@ private fun LiseurApp(settings: AppSettings) {
                 dynamicColorAvailable = dynamicColorAvailable,
                 onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                 onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
-                onGroupSeries = { grouped ->
-                    scope.launch {
-                        repository.editLibraryFilters { it.copy(groupBySeries = grouped) }
-                    }
-                },
                 onOpenAccount = {
                     accountReturnsTo = Screen.SETTINGS
                     screen = Screen.SERVER_ACCOUNT
