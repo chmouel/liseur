@@ -108,6 +108,8 @@ data class StatsHeadline(
     val streakDays: Int,
     /** Fraction of a book per hour, or null with nothing to divide by. */
     val progressionPerHour: Double?,
+    /** True when [progressionPerHour] comes from the server snapshot only. */
+    val serverOnlyPace: Boolean = false,
     val comparison: ReadingComparison? = null,
 )
 

@@ -86,7 +86,7 @@ class StatsSnapshotUnionTest {
     }
 
     @Test
-    fun `combined headline omits pace the snapshot cannot merge`() {
+    fun `combined headline shows server-only pace when the snapshot supplies it`() {
         val local = readingStats(
             listOf(SessionSpan("book", at, 20 * 60_000, at, uploaded = false)),
             books, zone, today,
@@ -94,7 +94,22 @@ class StatsSnapshotUnionTest {
         val withPace = snapshot(overlapMinutes = 0.0)
             .copy(summary = InsightsSummary(90.0, 4, 10, progressionPerHour = 0.5))
         val result = uniteSnapshot(local, books, emptyMap(), withPace)!!
-        assertNull(result.headline.progressionPerHour)
+        assertEquals(0.5, result.headline.progressionPerHour)
+        assertEquals(true, result.headline.serverOnlyPace)
+    }
+
+    @Test
+    fun `merged totals count each closed session once`() {
+        val local = readingStats(
+            listOf(
+                SessionSpan("book", at, 20 * 60_000, at),
+                SessionSpan("book", at + 1, 10 * 60_000, at + 1),
+            ),
+            books, zone, today,
+        )
+        val result = uniteSnapshot(local, books, emptyMap(), snapshot(overlapMinutes = 20.0))!!
+        assertEquals(100 * 60_000L, result.headline.totalMs)
+        assertEquals(5, result.headline.sessions)
     }
 
     private fun snapshot(overlapMinutes: Double): SnapshotTotals = SnapshotTotals(

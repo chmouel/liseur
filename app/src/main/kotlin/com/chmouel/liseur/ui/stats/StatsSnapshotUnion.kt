@@ -58,16 +58,13 @@ internal fun uniteSnapshot(
     val merged = ReadingStatsViewModel.mergeDashboard(
         captured, knownBooks, days, WorkTotals(known, elsewhere), firstReadAtByUrl,
     ).copy(totalMs = total, sessions = sessions, streakDays = snapshot.combinedStreak)
+    val serverPace = snapshot.summary.progressionPerHour
     return UnitedStats(
         merged,
         StatsHeadline(
             total, sessions, snapshot.combinedStreak,
-            // The snapshot doesn't supply progression/time overlap, so its
-            // pace describes only server-counted sessions. Reporting it
-            // beside a total that also adds captured local-only reading
-            // would mislabel the combined figure. Omit pace here until the
-            // snapshot can merge it too.
-            progressionPerHour = null,
+            progressionPerHour = serverPace,
+            serverOnlyPace = serverPace != null,
         ),
     )
 }

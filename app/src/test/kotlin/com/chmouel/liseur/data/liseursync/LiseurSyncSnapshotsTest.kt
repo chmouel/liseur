@@ -12,9 +12,12 @@ import com.chmouel.liseur.data.db.SessionTransmission
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.LiveIdentity
+import com.chmouel.liseur.domain.SessionSpan
+import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonScope
+import com.chmouel.liseur.domain.readingStats
 import com.chmouel.liseur.ui.stats.ReadingStatsUiState
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.stats.StatsProvenance
@@ -553,6 +556,44 @@ class LiseurSyncSnapshotsTest {
         assertNull(client().discover())
         changeCapabilities = { it.put("version", 0) }
         assertNull(client().discover())
+    }
+
+    @Test
+    fun `device zone and account zone split day buckets at midnight`() {
+        val end = today.atTime(0, 30).atZone(zone).toInstant().toEpochMilli()
+        val span = listOf(SessionSpan("book", end, 600_000, end))
+        val books = mapOf("book" to StatsBook("book", "Book", null, 0.2, false))
+        val deviceStats = readingStats(span, books, zone, today, StatsRange.THIS_MONTH)
+        val accountStats = readingStats(span, books, ZoneId.of("UTC"), today, StatsRange.THIS_MONTH)
+        assertEquals(600_000L, deviceStats.recent.last().totalMs)
+        assertEquals(600_000L, accountStats.recent.single { it.date == today.minusDays(1) }.totalMs)
+        assertEquals(0L, accountStats.recent.last().totalMs)
+    }
+
+    @Test
+    fun `open session counts locally but is excluded from snapshot candidates`() = runBlocking {
+        val checkpoint = today.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = "book",
+                startedAt = checkpoint - 600_000,
+                endedAt = null,
+                lastCheckpointAt = checkpoint,
+                durationMs = 1_800_000,
+                startProgression = 0.1,
+                endProgression = 0.2,
+            ),
+        )
+        val closed = sitting()
+        transmit(closed)
+        read()
+        assertEquals(1, requests.single().getJSONArray("candidates").length())
+        val local = readingStats(
+            db.readingSessionDao().allOnce(),
+            mapOf("book" to StatsBook("book", "Book", null, 0.2, false)),
+            zone, today, StatsRange.THIS_MONTH,
+        )
+        assertTrue(local.totalMs >= 1_800_000L + 30 * 60_000L)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
