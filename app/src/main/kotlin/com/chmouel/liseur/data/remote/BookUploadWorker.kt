@@ -10,6 +10,7 @@ import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.UploadRefusal
+import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.BookFingerprint
 import com.chmouel.liseur.domain.BookFingerprints
 import java.io.File
@@ -253,7 +254,7 @@ class BookUploadWorker(
     private suspend fun snapshot(
         book: Book,
     ): Snapshot? = withContext(Dispatchers.IO) {
-        val source = (book.localUri ?: book.url).toUri()
+        val source = book.openableUri()?.toUri() ?: return@withContext null
         val own = source.takeIf { it.scheme == "file" }?.path?.let(::File)
             ?.takeIf { it.isFile && it.parentFile == ownStore() }
         if (own != null) {
@@ -301,7 +302,7 @@ class BookUploadWorker(
             book: Book,
         ): Boolean = withContext(Dispatchers.IO) {
             if (!temporary) return@withContext file.isFile && file.length() == fingerprint.size
-            val source = (book.localUri ?: book.url).toUri()
+            val source = book.openableUri()?.toUri() ?: return@withContext false
             runCatching {
                 applicationContext.contentResolver.openInputStream(source).use { input ->
                     input ?: return@runCatching false

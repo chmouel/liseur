@@ -5,10 +5,13 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import android.provider.DocumentsContract
+import androidx.annotation.RequiresApi
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.LibraryFolderDao
 import com.chmouel.liseur.domain.SeriesMetadata
@@ -78,29 +81,76 @@ class LocalLibraryRepository(
      */
     private val importLock = Mutex()
 
+    /**
+     * Starts watching a folder.
+     *
+     * Taking the grant and writing the row happen under [importLock],
+     * because removing a folder releases a grant and deletes a row under
+     * it. Adding the same folder back while a removal was still running
+     * would otherwise interleave: the fresh row deleted by the removal
+     * that was already in flight, or the fresh grant released by it. The
+     * scan is left outside, since it takes the lock for itself.
+     */
     suspend fun addFolder(treeUri: Uri) {
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                treeUri,
-                // Write as well as read: without it, deleting a book from
-                // the library cannot delete the file it stands for.
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-        }.onFailure {
-            // An older version of Liseur took read only, and the grant
-            // cannot be widened after the fact. Reading still works; the
-            // folder has to be added again before deleting will.
-            Log.i(TAG, "Only allowed to read this folder", it)
+        importLock.withLock {
             runCatching {
                 context.contentResolver.takePersistableUriPermission(
                     treeUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    // Write as well as read: without it, deleting a book from
+                    // the library cannot delete the file it stands for.
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                 )
+            }.onFailure {
+                // An older version of Liseur took read only, and the grant
+                // cannot be widened after the fact. Reading still works; the
+                // folder has to be added again before deleting will.
+                Log.i(TAG, "Only allowed to read this folder", it)
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }
+            }
+            folderDao.upsert(
+                LibraryFolder(url = treeUri.toString(), addedAt = System.currentTimeMillis()),
+            )
+        }
+        scanFolder(treeUri)
+    }
+
+    /**
+     * Stops watching a folder, removes the books it contributed, and leaves
+     * the files on the device.
+     */
+    suspend fun removeFolder(folder: LibraryFolder) = withContext(Dispatchers.IO) {
+        importLock.withLock {
+            val otherFolders = folderDao.getAll().filter { it.url != folder.url }
+            val bookUrls = bookDao.booksForSource(folder.url).map { it.url }
+            val survivors = otherFolders.map { it.url }
+            val rehomedSources = folderHoldingDocuments(bookUrls, survivors)
+            // BookRemoval applies the source changes inside the same
+            // transaction that deletes the folder and the books it owns.
+            bookRemoval.deleteFolder(folderDao, folder.url, rehomedSources)
+            // Inside the lock with the deletion, or adding this folder
+            // back meanwhile takes a fresh grant that this then releases,
+            // leaving a watched folder nothing may read.
+            val uri = Uri.parse(folder.url)
+            listOf(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            ).forEach { flag ->
+                runCatching {
+                    context.contentResolver.releasePersistableUriPermission(uri, flag)
+                }.onFailure {
+                    // Older versions only persisted read access, so release each
+                    // flag separately rather than letting the missing write flag
+                    // prevent the read permission from being released too.
+                    Log.i(TAG, "Could not release the folder permission", it)
+                }
             }
         }
-        folderDao.upsert(LibraryFolder(url = treeUri.toString(), addedAt = System.currentTimeMillis()))
-        scanFolder(treeUri)
     }
 
     /**
@@ -363,20 +413,182 @@ class LocalLibraryRepository(
         }
     }
 
+    /**
+     * Which surviving watched folder still contains each book.
+     *
+     * Three sources of truth, best first, because the cost of being
+     * wrong here is a deleted book and the reading behind it:
+     *
+     * 1. [DocumentsContract.isChildDocument], the provider's own answer.
+     *    Q and later only, and only ever a "yes": the default
+     *    `DocumentsProvider` implementation returns false, so a denial
+     *    cannot be told from a provider that never implemented the
+     *    question. See [askProvider].
+     * 2. Walking the trees it would not answer for. Slower, but true
+     *    whatever shape that provider's document ids take.
+     * 3. Comparing the ids, for a tree that would neither answer nor be
+     *    read. That one is a guess and is documented as such.
+     *
+     * A book none of those placed, while a tree of its own provider
+     * would not be read, maps to null: kept, but claimed by nothing.
+     * Only a tree that was read to the bottom and did not have the book
+     * is evidence that it is gone.
+     */
+    private suspend fun folderHoldingDocuments(
+        bookUrls: List<String>,
+        folderUrls: List<String>,
+    ): Map<String, String?> {
+        if (bookUrls.isEmpty() || folderUrls.isEmpty()) return emptyMap()
+
+        val held = mutableMapOf<String, String?>()
+        val toWalk: List<String>
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val refused = linkedSetOf<String>()
+            for (bookUrl in bookUrls) {
+                val answer = askProvider(bookUrl, folderUrls)
+                answer.held?.let { held[bookUrl] = it }
+                refused += answer.unanswered
+            }
+            // Only the trees whose provider did not say yes need walking.
+            toWalk = folderUrls.filter { it in refused }
+        } else {
+            // Before Q there is no provider-backed containment query at
+            // all, so every surviving tree has to be walked.
+            toWalk = folderUrls
+        }
+
+        val unresolved = bookUrls.filterNot { it in held }
+        if (unresolved.isEmpty() || toWalk.isEmpty()) return held
+
+        val (walked, unreadable) = enumerateHolders(unresolved, toWalk)
+        held += walked
+
+        // What is left was neither answered for nor readable. Comparing
+        // ids is the only thing still available, and it is a guess: a
+        // provider need not name a document after the path to it. It is
+        // made anyway because the alternative is deleting a book, and its
+        // reading, on no evidence at all.
+        for (bookUrl in bookUrls) {
+            if (bookUrl in held) continue
+            val home = folderContainingDocument(bookUrl, unreadable)
+            when {
+                home != null -> held[bookUrl] = home
+                // An opaque-id provider is exactly the one that declines
+                // the query, so the guess above is weakest where it is
+                // most needed. A tree that would not be read has not said
+                // the book is gone, so the row stays — but under no
+                // folder, because naming one would be picking a tree out
+                // of the air. A book filed under the wrong tree is pruned
+                // by the first complete scan of it and re-added by a scan
+                // of the right one, under a new URL, which costs the
+                // reader their sessions and strands their place and their
+                // marks on the old one. Belonging to nothing costs a
+                // stale row, and [readopt] takes it back the moment a
+                // scan actually finds the file.
+                sameProvider(bookUrl, unreadable).isNotEmpty() -> held[bookUrl] = null
+            }
+        }
+        return held
+    }
+
+    /** The trees [bookUrl]'s own provider serves; ids mean nothing across two. */
+    private fun sameProvider(bookUrl: String, folderUrls: List<String>): List<String> {
+        val authority = contentAuthority(bookUrl) ?: return emptyList()
+        return folderUrls.filter { contentAuthority(it) == authority }
+    }
+
+    /**
+     * What the book's provider says about each surviving tree.
+     *
+     * Only a `true` is an answer. `DocumentsProvider.isChildDocument`
+     * returns false by default, so a provider that never implemented
+     * containment denies every tree in exactly the words of one that
+     * looked and did not find the book — and there is no telling the
+     * two apart from here. A "no" therefore counts as no answer, and
+     * the tree is walked instead; a "yes" is proof, and saves the walk.
+     *
+     * Split out so the API guard sits on a function lint can see, and so
+     * the decision itself stays in [askHoldingFolder], where it is a pure
+     * function with tests.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun askProvider(bookUrl: String, folderUrls: List<String>): Containment {
+        val resolver = context.contentResolver
+        // No id to ask about is not an answer either: every tree of this
+        // book's provider stays open, to be walked rather than written off.
+        val docId = documentId(bookUrl)
+            ?: return askHoldingFolder(bookUrl, folderUrls) { null }
+        return askHoldingFolder(bookUrl, folderUrls) { folderUrl ->
+            val treeUri = Uri.parse(folderUrl)
+            runCatching {
+                val treeRoot = DocumentsContract.buildDocumentUriUsingTree(
+                    treeUri,
+                    DocumentsContract.getTreeDocumentId(treeUri),
+                )
+                val underTree = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                DocumentsContract.isChildDocument(resolver, treeRoot, underTree)
+            }.getOrNull()?.takeIf { it }
+        }
+    }
+
+    /**
+     * Which of [folderUrls] holds each book, by walking them.
+     *
+     * Authoritative whatever shape a provider's document ids take, which
+     * is what makes it the right answer for a provider that will not
+     * answer `isChildDocument`. Comparing the identities the walk
+     * actually returned is the point: SAF document ids are opaque and
+     * must not be read as slash-separated paths.
+     *
+     * The trees that could not be read to the bottom come back alongside,
+     * because a book missing from one of those has not been ruled out.
+     */
+    private fun enumerateHolders(
+        bookUrls: List<String>,
+        folderUrls: List<String>,
+    ): Pair<Map<String, String>, List<String>> {
+        val booksByIdentity = bookUrls.mapNotNull { bookUrl ->
+            documentIdentity(bookUrl)?.let { it to bookUrl }
+        }.groupBy({ it.first }, { it.second })
+        val held = mutableMapOf<String, String>()
+        val unreadable = mutableListOf<String>()
+        for (folderUrl in folderUrls) {
+            val scanned = findEpubs(Uri.parse(folderUrl))
+            // What the walk did find still counts; only its silences are
+            // untrustworthy, so a partial listing is used *and* fallen
+            // back over for the books it never mentioned.
+            if (scanned == null || !scanned.complete) unreadable += folderUrl
+            for (file in scanned?.files.orEmpty()) {
+                val foundUrl = file.uri.toAbsoluteUrl()?.toString() ?: continue
+                val identity = documentIdentity(foundUrl) ?: continue
+                for (bookUrl in booksByIdentity[identity].orEmpty()) {
+                    val previous = held[bookUrl]
+                    if (previous == null ||
+                        documentIdLength(folderUrl) > documentIdLength(previous)
+                    ) {
+                        held[bookUrl] = folderUrl
+                    }
+                }
+            }
+        }
+        return held to unreadable
+    }
+
     private suspend fun scanFolder(treeUri: Uri) = withContext(Dispatchers.IO) {
-        val found = findEpubs(treeUri) ?: return@withContext
+        val scanned = findEpubs(treeUri) ?: return@withContext
         importLock.withLock {
             // Walking the folder takes long enough for it to have been
             // removed in the meantime, and shelving the walk's results
             // then would file books under a folder nothing watches any
             // more: never scanned again, and never pruned.
             if (folderDao.getAll().none { it.url == treeUri.toString() }) return@withLock
-            shelve(treeUri, found)
+            shelve(treeUri, scanned.files, prune = scanned.complete)
         }
     }
 
-    private suspend fun shelve(treeUri: Uri, found: List<ScannedEpub>) {
-        val knownUrls = bookDao.urlsForSource(treeUri.toString()).toMutableSet()
+    private suspend fun shelve(treeUri: Uri, found: List<ScannedEpub>, prune: Boolean) {
+        val knownUrls = bookDao.booksForSource(treeUri.toString())
+            .mapTo(mutableSetOf()) { it.url }
         // Everything on the shelf, read once. Looking each file up as it
         // was met meant a query per book per scan, on every cold start.
         val shelf = bookDao.allOnce()
@@ -408,10 +620,22 @@ class LocalLibraryRepository(
                     // that entry is theirs to put back, and deleting it
                     // here would take it off the hidden list too.
                     aliases.filterNot { it.hidden }.forEach { duplicates += it.url }
+                    // The folder this book came from was removed and has
+                    // been added again. Nothing else would ever put the
+                    // row back: it belongs to no folder, so no scan
+                    // reaches it, and an uploaded one was demoted to
+                    // REMOTE and would only ever offer a download of the
+                    // file already sitting here.
+                    readopt(existing, treeUri)
                     // The path is the same but the file behind it is not, so the
                     // title and cover we cached are no longer the book's.
                     if (file.modifiedAt != null && existing.fileModifiedAt != file.modifiedAt) {
-                        reindexBook(url, file.modifiedAt, existing.workId)
+                        reindexBook(
+                            openableUrl = url,
+                            bookUrl = url.toString(),
+                            modifiedAt = file.modifiedAt,
+                            previousWorkId = existing.workId,
+                        )
                     }
                 }
                 // The file is on the shelf already, under the name the
@@ -435,23 +659,69 @@ class LocalLibraryRepository(
                     // other, most obviously — and taking the book off
                     // whichever scanned first would let removing that
                     // folder delete a book the other still holds.
-                    if (alias.source == null) {
-                        bookDao.setSource(alias.url, treeUri.toString())
-                    }
+                    //
+                    // The same door as the exact-URL branch, because a
+                    // folder removal orphans a row under the spelling it
+                    // had then: adding the child of a removed parent
+                    // reaches that row here rather than there, and
+                    // joining the folder without taking the file back
+                    // would leave an uploaded book offering a download
+                    // of the file it is standing on.
+                    readopt(alias, treeUri)
                     if (file.modifiedAt != null && alias.fileModifiedAt != file.modifiedAt) {
-                        Uri.parse(alias.url).toAbsoluteUrl()
-                            ?.let { reindexBook(it, file.modifiedAt, alias.workId) }
+                        reindexBook(
+                            openableUrl = url,
+                            bookUrl = alias.url,
+                            modifiedAt = file.modifiedAt,
+                            previousWorkId = alias.workId,
+                        )
                     }
                 }
                 else -> indexBook(url, source = treeUri.toString(), file.modifiedAt)
             }
         }
 
-        bookRemoval.deleteByUrls((knownUrls - foundUrls).toList())
+        bookRemoval.deleteByUrls(
+            // Only what the walk could actually account for. A directory
+            // that refused to be read leaves its books unseen, and
+            // deleting a book because a folder would not say it is still
+            // there is the whole mistake this scan must not make.
+            if (prune) (knownUrls - foundUrls).toList() else emptyList(),
+        )
         bookRemoval.dropUntouchedDuplicates(duplicates)
     }
 
+    /**
+     * Puts a row that a folder removal orphaned back under this folder.
+     *
+     * Removing a watched folder leaves the books it held with no source,
+     * and an uploaded one as [DownloadState.REMOTE] besides. The file is
+     * in front of us again, so the row rejoins the folder rather than
+     * going on offering a download of a book that is already here. Only a
+     * row that belongs to nothing is claimed: one already looked after by
+     * another watched folder stays with it.
+     */
+    private suspend fun readopt(existing: Book, treeUri: Uri) {
+        // Only a row that belongs to nothing. One still looked after by
+        // another watched folder stays with it, and a download the reader
+        // removed by hand stays removed.
+        if (existing.source != null) return
+        bookDao.setSource(existing.url, treeUri.toString())
+        if (existing.localUri == null && existing.downloadState != DownloadState.DOWNLOADED) {
+            bookDao.setDownloadState(existing.url, DownloadState.DOWNLOADED, null)
+        }
+    }
+
     private class ScannedEpub(val uri: Uri, val modifiedAt: Long?)
+
+    /**
+     * A folder's EPUBs, and whether the walk reached all of it.
+     *
+     * [complete] is false when a directory inside the tree would not be
+     * queried. The files are still the files; only the *absence* of a
+     * file becomes unsafe to act on.
+     */
+    private class ScannedFolder(val files: List<ScannedEpub>, val complete: Boolean)
 
     /**
      * Walks a folder with one query per directory, or null when the
@@ -466,8 +736,16 @@ class LocalLibraryRepository(
      * Null rather than empty on failure, because the two mean opposite
      * things to the caller: an empty folder prunes every book that came
      * from it, and a folder that would not open must prune nothing.
+     *
+     * A folder that opened but could not be read to the bottom is the
+     * same hazard in miniature, so the walk reports whether it reached
+     * everything. What it did find is true and worth having; what it
+     * missed must not be mistaken for books that have gone. A directory
+     * that would not be queried is one way to fall short; a cursor that
+     * arrives while the provider is still fetching is the other, and a
+     * cloud provider's first answer routinely is one.
      */
-    private fun findEpubs(treeUri: Uri): List<ScannedEpub>? {
+    private fun findEpubs(treeUri: Uri): ScannedFolder? {
         val projection = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
@@ -475,13 +753,34 @@ class LocalLibraryRepository(
             DocumentsContract.Document.COLUMN_LAST_MODIFIED,
         )
         val found = mutableListOf<ScannedEpub>()
+        var complete = true
 
-        fun walk(documentId: String): Boolean {
+        fun walk(documentId: String) {
             val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
             val cursor = runCatching {
                 context.contentResolver.query(children, projection, null, null, null)
-            }.getOrNull() ?: return false
+            }.getOrNull()
+            if (cursor == null) {
+                // A directory that would not answer is not an empty one.
+                // Saying so here is what stops the walk's shortfall being
+                // read as books that are no longer on disk.
+                complete = false
+                return
+            }
             cursor.use {
+                // A provider that is still fetching hands back what it
+                // has so far and says so in the cursor's extras, and one
+                // that hit trouble reports that the same way. The rows
+                // are real either way; their absence is not.
+                val extras = it.extras
+                if (extras != null &&
+                    (
+                        extras.getBoolean(DocumentsContract.EXTRA_LOADING) ||
+                            extras.containsKey(DocumentsContract.EXTRA_ERROR)
+                        )
+                ) {
+                    complete = false
+                }
                 while (it.moveToNext()) {
                     val id = it.getString(0) ?: continue
                     val name = it.getString(1).orEmpty()
@@ -500,12 +799,15 @@ class LocalLibraryRepository(
                     }
                 }
             }
-            return true
         }
 
         val rootId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }
             .getOrNull() ?: return null
-        return if (walk(rootId)) found else null
+        walk(rootId)
+        // Nothing came back and something refused: the folder did not
+        // open, which is not the same as it being empty.
+        if (!complete && found.isEmpty()) return null
+        return ScannedFolder(found, complete)
     }
 
     /**
@@ -517,11 +819,12 @@ class LocalLibraryRepository(
      * describes anything that is still there, so it goes.
      */
     private suspend fun reindexBook(
-        url: AbsoluteUrl,
+        openableUrl: AbsoluteUrl,
+        bookUrl: String,
         modifiedAt: Long?,
         previousWorkId: String?,
     ) {
-        val asset = assetRetriever.retrieve(url).getOrElse { return }
+        val asset = assetRetriever.retrieve(openableUrl).getOrElse { return }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
                 asset.close()
@@ -529,7 +832,7 @@ class LocalLibraryRepository(
             }
         try {
             val title = publication.metadata.title
-                ?: url.filename?.removeSuffix(".epub")
+                ?: openableUrl.filename?.removeSuffix(".epub")
                 ?: "Untitled"
             val author = publication.metadata.authors
                 .joinToString(", ") { it.name }
@@ -537,10 +840,10 @@ class LocalLibraryRepository(
             val workId = workIdOf(publication.metadata.identifier, title, author)
             val series = seriesOf(publication)
             bookDao.refreshIndexedFile(
-                url = url.toString(),
+                url = bookUrl,
                 title = title,
                 author = author,
-                coverPath = saveCover(publication, url.toString()),
+                coverPath = saveCover(publication, bookUrl),
                 fileModifiedAt = modifiedAt,
                 workId = workId,
                 seriesName = series.name,
@@ -548,7 +851,7 @@ class LocalLibraryRepository(
             )
             if (!isSameWork(previousWorkId, workId)) {
                 Log.i(TAG, "A different book took over a path; starting it fresh")
-                bookRemoval.contentReplaced(url.toString())
+                bookRemoval.contentReplaced(bookUrl)
             }
         } finally {
             publication.close()
@@ -668,7 +971,7 @@ class LocalLibraryRepository(
                 // away. What has been read is written, and the next run
                 // carries on from the next unchecked book.
                 currentCoroutineContext().ensureActive()
-                val fileUrl = book.openableUrl?.let { AbsoluteUrl(it) }
+                val fileUrl = book.openableUri()?.let { AbsoluteUrl(it) }
                 if (fileUrl == null) {
                     // Nothing here to open. It has been looked at as far
                     // as it can be; a download will index it properly.

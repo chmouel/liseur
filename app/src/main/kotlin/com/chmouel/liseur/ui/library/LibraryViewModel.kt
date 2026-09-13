@@ -25,6 +25,7 @@ import com.chmouel.liseur.data.db.SeriesOrderDao
 import com.chmouel.liseur.data.db.BookProgression
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.RefusedBytes
 import com.chmouel.liseur.data.db.UploadRefusal
@@ -58,6 +59,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.library.openableUri
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -1229,7 +1231,7 @@ class LibraryViewModel(
     fun importBook(uri: Uri) {
         viewModelScope.launch {
             when (val result = library.importBook(uri)) {
-                is ImportResult.Added -> result.book.openableUrl?.let {
+                is ImportResult.Added -> result.book.openableUri()?.let {
                     // Named by its library row, not by the file: the
                     // reading position is keyed to the row, and opening
                     // under any other name records it where the shelf
@@ -1257,6 +1259,21 @@ class LibraryViewModel(
     /** Puts a book back, from the undo notice or the hidden list alike. */
     fun unhide(bookUrl: String) {
         viewModelScope.launch { library.unhide(bookUrl) }
+    }
+
+    /** Watched folders, so Settings can list and remove them. */
+    val libraryFolders: Flow<List<LibraryFolder>> = library.folders
+
+    /**
+     * Stops watching a folder and removes the books only it held.
+     *
+     * On [viewModelScope] rather than the caller's composition scope:
+     * this walks SAF, one round trip per book per surviving folder, and a
+     * rotation part-way through would otherwise cancel it silently and
+     * leave the folder sitting there.
+     */
+    fun removeFolder(folder: LibraryFolder) {
+        viewModelScope.launch { library.removeFolder(folder) }
     }
 
     /** Books taken off the shelf, with their files left where they are. */

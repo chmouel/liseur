@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.data.settings.readingCssFor
 import com.chmouel.liseur.ui.reading.FineTypographyActions
@@ -119,9 +120,16 @@ class ReaderActivity : FragmentActivity() {
             // no reason to refuse to show it.
             lifecycleScope.launch {
                 val shelved = container.libraryRepository.importExternalBook(incoming)
-                val openable = shelved?.openableUrl?.toUri()?.toAbsoluteUrl()
-                target = if (shelved != null && openable != null) {
-                    OpenTarget(openable, shelved.url)
+                val openable = shelved?.openableUri()?.toUri()?.toAbsoluteUrl()
+                target = if (shelved != null) {
+                    // Where the bytes are and what the reading is filed
+                    // under are two questions. The library knowing this
+                    // book settles the second one on its own: even a row
+                    // with nothing openable behind it is still where this
+                    // book's place, marks and time live, and reading it
+                    // from the URI the sender handed over is no reason to
+                    // start a second history under a URL no row has.
+                    OpenTarget(openable ?: url, shelved.url)
                 } else {
                     OpenTarget(url, url.toString())
                 }

@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.settings
 
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.library.Inspection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,6 +80,8 @@ fun SettingsScreen(
     onOpenReadingAppearance: () -> Unit,
     onOpenReadingNavigation: () -> Unit,
     onOpenHiddenBooks: () -> Unit,
+    libraryFolders: Flow<List<LibraryFolder>>,
+    onRemoveFolder: (LibraryFolder) -> Unit,
     backup: AnnotationBackupUi,
     server: Flow<RemoteServer?>,
     onOpenAbout: () -> Unit,
@@ -84,6 +89,36 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val folders by libraryFolders.collectAsStateWithLifecycle(emptyList())
+    var folderToRemove by remember { mutableStateOf<LibraryFolder?>(null) }
+
+    folderToRemove?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { folderToRemove = null },
+            title = { Text(stringResource(R.string.remove_folder)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.remove_folder_warning,
+                        folderName(folder),
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRemoveFolder(folder)
+                    folderToRemove = null
+                }) {
+                    Text(stringResource(R.string.remove))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { folderToRemove = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -244,6 +279,41 @@ fun SettingsScreen(
                     )
                 }
 
+                SettingsGroup(stringResource(R.string.library_folders)) {
+                    if (folders.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.library_folders_empty),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                        )
+                    } else {
+                        folders.forEachIndexed { index, folder ->
+                            if (index > 0) RowDivider()
+                            ListItem(
+                                headlineContent = { Text(folderName(folder)) },
+                                supportingContent = { Text(folder.url) },
+                                leadingContent = {
+                                    Icon(Icons.Outlined.FileOpen, contentDescription = null)
+                                },
+                                trailingContent = {
+                                    IconButton(onClick = { folderToRemove = folder }) {
+                                        Icon(
+                                            Icons.Outlined.Delete,
+                                            contentDescription = stringResource(
+                                                R.string.remove_folder_a11y,
+                                                folderName(folder),
+                                            ),
+                                        )
+                                    }
+                                },
+                                colors = ListItemDefaults.colors(
+                                    containerColor = Color.Transparent,
+                                ),
+                            )
+                        }
+                    }
+                }
+
                 SettingsGroup(stringResource(R.string.settings_reading)) {
                     // The section behind this row had grown to eight
                     // switches, a chip row and two rows that only some
@@ -284,6 +354,11 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+private fun folderName(folder: LibraryFolder): String {
+    val segment = Uri.parse(folder.url).lastPathSegment ?: return folder.url
+    return segment.substringAfterLast(':').takeIf { it.isNotBlank() } ?: folder.url
 }
 
 private val ThemeMode.label: Int

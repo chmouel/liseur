@@ -2,6 +2,7 @@ package com.chmouel.liseur.reader
 
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.SeriesCompletion
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.groupedIntoSeries
@@ -113,7 +114,7 @@ internal fun endpaperContinuation(
             book = nextBook,
             volume = seriesIndexLabel(nextBook.seriesIndex),
             availability = nextVolumeAvailability(
-                openableUrl = nextBook.openableUrl,
+                openableUrl = nextBook.openableUri(),
                 downloadState = nextBook.downloadState,
                 download = snapshot,
                 canDownload = canDownload,
