@@ -73,7 +73,6 @@ fun SettingsScreen(
     dynamicColorAvailable: Boolean,
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
-    onGroupSeries: (Boolean) -> Unit,
     onOpenAccount: () -> Unit,
     onOpenReadingAppearance: () -> Unit,
     onOpenReadingNavigation: () -> Unit,
@@ -232,12 +231,6 @@ fun SettingsScreen(
                 }
 
                 SettingsGroup(stringResource(R.string.settings_library)) {
-                    SwitchRow(
-                        title = stringResource(R.string.settings_group_series),
-                        subtitle = stringResource(R.string.settings_group_series_detail),
-                        checked = settings.libraryFilters.groupBySeries,
-                        onCheckedChange = onGroupSeries,
-                    )
                     ConnectionRow(
                         icon = {
                             Icon(

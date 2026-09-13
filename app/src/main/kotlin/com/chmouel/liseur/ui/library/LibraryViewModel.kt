@@ -730,7 +730,7 @@ class LibraryViewModel(
         // The archive is a place rather than a narrowing, so Clear
         // widens the shelf you are standing on instead of walking you
         // off it without asking. The grouping survives too: it is a view
-        // mode with a home in Settings, not a filter to be cleared.
+        // mode from the filter menu, not a narrowing to be cleared.
         editFilters { stored ->
             LibraryFilters(
                 options = stored.options.filterTo(mutableSetOf()) {
