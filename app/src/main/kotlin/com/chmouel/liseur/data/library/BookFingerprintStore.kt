@@ -41,7 +41,7 @@ class BookFingerprintStore(
      * not a failure and is not logged as one.
      */
     suspend fun of(book: Book): BookFingerprint? {
-        val url = book.openableUrl ?: return null
+        val url = book.openableUri() ?: return null
 
         val cached = dao.fingerprint(book.url)
         if (cached != null && cached.fileModifiedAt == book.fileModifiedAt) {

@@ -80,6 +80,7 @@ import com.chmouel.liseur.ui.theme.isDark
 import android.net.Uri
 import androidx.core.net.toUri
 import androidx.compose.runtime.collectAsState
+import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.SeriesShelf
 
 class MainActivity : ComponentActivity() {
@@ -138,7 +139,7 @@ class MainActivity : ComponentActivity() {
         if (!container.appSettings.current().resumeLastBook) return
         val leftFromReader = container.sessionState.leftFromReader()
         val book = container.database.bookDao().mostRecentlyOpened()
-        val candidate = book?.openableUrl?.let { fileUrl ->
+        val candidate = book?.openableUri()?.let { fileUrl ->
             ResumeCandidate(
                 identity = book.url,
                 fileUrl = fileUrl,
@@ -281,6 +282,10 @@ private fun LiseurApp(settings: AppSettings) {
 
         Screen.SETTINGS -> {
             BackHandler { screen = Screen.LIBRARY }
+            // Through the ViewModel so that removing a folder, which
+            // walks SAF and can take a while, is not cancelled by a
+            // rotation part-way through.
+            val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
             SettingsScreen(
                 settings = settings,
                 readingThemeChoice = readerPrefs.themeChoice,
@@ -294,6 +299,8 @@ private fun LiseurApp(settings: AppSettings) {
                 onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
                 onOpenReadingNavigation = { screen = Screen.READING_NAVIGATION },
                 onOpenHiddenBooks = { screen = Screen.HIDDEN_BOOKS },
+                libraryFolders = library.libraryFolders,
+                onRemoveFolder = { library.removeFolder(it) },
                 backup = annotationBackup,
                 server = context.container.remoteAccount.server,
                 onOpenAbout = { screen = Screen.ABOUT },
@@ -638,7 +645,7 @@ private fun LibraryRoute(
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.alreadyShelvedHandled()
-                    book.openableUrl?.let {
+                    book.openableUri()?.let {
                         context.startActivity(ReaderActivity.intent(context, it, book.url))
                     }
                 }) {
@@ -664,7 +671,7 @@ private fun LibraryRoute(
     LaunchedEffect(viewModel) {
         viewModel.openRequests.collect { book ->
             viewModel.forgetPendingOpen()
-            book.openableUrl?.let {
+            book.openableUri()?.let {
                 context.startActivity(ReaderActivity.intent(context, it, book.url))
             }
         }
@@ -731,7 +738,7 @@ private fun LibraryRoute(
             canDownload = state.canDownload,
             onBack = { openSeriesKey = null },
             onVolumeSelected = { book ->
-                val local = book.openableUrl
+                val local = book.openableUri()
                 if (local != null) {
                     context.startActivity(ReaderActivity.intent(context, local, book.url))
                 } else {
@@ -867,7 +874,7 @@ private fun LibraryRoute(
         onAddBook = { openBook.launch(arrayOf("application/epub+zip")) },
         onAddFolder = { addFolder.launch(null) },
         onBookSelected = { book ->
-            book.openableUrl?.let {
+            book.openableUri()?.let {
                 context.startActivity(ReaderActivity.intent(context, it, book.url))
             }
         },

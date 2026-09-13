@@ -4,6 +4,8 @@ import com.chmouel.liseur.data.db.AnnotationSyncDao
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.LibraryFolderDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
@@ -32,6 +34,60 @@ class BookRemoval(
         if (bookUrls.isEmpty()) return
         inTransaction {
             forget(bookUrls)
+        }
+    }
+
+    /** Removes a watched folder and the books that only came from it. */
+    suspend fun deleteFolder(
+        folderDao: LibraryFolderDao,
+        folderUrl: String,
+        rehomedSources: Map<String, String?> = emptyMap(),
+    ) {
+        inTransaction {
+            val books = bookDao.booksForSource(folderUrl)
+            val bookUrls = books.map { it.url }
+            // The source lookup can involve SAF and therefore happens before
+            // this call, but applying its answer here keeps the source change
+            // and the deletion in one database transaction.
+            val rehomed = rehomedSources.filterKeys { it in bookUrls }
+                .also { sources ->
+                    sources.forEach { (bookUrl, source) -> bookDao.setSource(bookUrl, source) }
+                }
+            // A null source is a book nothing could be shown to hold while
+            // some tree would not be read. It keeps its row and belongs to
+            // no folder, so no scan prunes it and the first one that finds
+            // the file takes it back.
+            val homed = rehomed.filterValues { it != null }.keys
+            books
+                .filter { (it.remoteUuid != null || it.localUri != null) && it.url !in homed }
+                .forEach { book ->
+                    // An uploaded local book keeps its stable URL and server
+                    // identity, and a downloaded one its copy in the app's
+                    // own storage, but the released folder no longer makes
+                    // the folder's file available.
+                    bookDao.setSource(book.url, null)
+                    // A copy in the app's own storage is not the folder's to
+                    // take away: only a book that was readable *through* the
+                    // folder loses its file along with it.
+                    if (book.remoteUuid != null && book.localUri == null) {
+                        bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
+                    }
+                }
+            folderDao.delete(folderUrl)
+            forget(
+                books
+                    // Nothing but the folder's file stood behind these.
+                    // A row with a private copy has been kept above,
+                    // whether or not it is still linked to a server:
+                    // disconnecting an account clears `remote_uuid` and
+                    // deliberately leaves the download in place.
+                    .filter {
+                        it.remoteUuid == null &&
+                            it.localUri == null &&
+                            it.url !in rehomed.keys
+                    }
+                    .map { it.url },
+            )
         }
     }
 
@@ -169,11 +225,19 @@ class BookRemoval(
      * again as if it were new.
      */
     private suspend fun forget(bookUrls: List<String>) {
-        sessionDao.deleteForBooks(bookUrls)
-        peerStateDao.forgetBooks(bookUrls)
-        identityDao.forgetFingerprints(bookUrls)
-        identityDao.forgetAliases(bookUrls)
-        identityDao.forgetAmbiguities(bookUrls)
-        bookDao.deleteByUrls(bookUrls)
+        bookUrls.distinct().chunked(SQLITE_URL_BATCH_SIZE).forEach { batch ->
+            sessionDao.deleteForBooks(batch)
+            peerStateDao.forgetBooks(batch)
+            identityDao.forgetFingerprints(batch)
+            identityDao.forgetAliases(batch)
+            identityDao.forgetAmbiguities(batch)
+            bookDao.deleteByUrls(batch)
+        }
+    }
+
+    private companion object {
+        // Leave headroom below SQLite's 999-variable limit for Android
+        // versions that still use the default limit.
+        const val SQLITE_URL_BATCH_SIZE = 900
     }
 }

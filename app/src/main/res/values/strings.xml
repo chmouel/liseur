@@ -16,6 +16,11 @@
     <string name="add_folder">Add a folder</string>
     <string name="add_books">Add books</string>
     <string name="add_folder_hint">Point Liseur at a folder of EPUBs and it keeps watching it for new ones.</string>
+    <string name="library_folders">Watched folders</string>
+    <string name="library_folders_empty">No folders are being watched.</string>
+    <string name="remove_folder">Remove folder</string>
+    <string name="remove_folder_a11y">Remove %1$s</string>
+    <string name="remove_folder_warning">Liseur will stop watching “%1$s”. Books only this folder held will leave your library; books another watched folder holds, and books saved on your server, stay. No files are deleted from this device.</string>
     <string name="add_book_hint">Pick a single EPUB from your device or your cloud storage.</string>
     <string name="connect_server_hint">Browse a calibre-web, Komga, liseur-sync or Grimmory library, or any OPDS catalog, and keep your place across devices — Grimmory and OPDS through a paired KOReader sync server.</string>
     <string name="search_books">Search books</string>

@@ -21,6 +21,7 @@ import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.remote.BookDeleter
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.remote.ServerDeleteResult
 import java.io.File
 import java.net.URI
@@ -418,7 +419,7 @@ class BookDownloadRepository(
      * folder, and it has to be added again.
      */
     suspend fun deleteLocalBook(book: Book): Boolean = withContext(Dispatchers.IO) {
-        val uri = (book.localUri ?: book.url).toUri()
+        val uri = book.openableUri()?.toUri() ?: return@withContext false
         if (!deleteFile(uri)) return@withContext false
         bookRemoval.deleteByUrls(listOf(book.url))
         true

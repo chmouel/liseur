@@ -352,8 +352,8 @@ interface BookDao {
     @Query("UPDATE books SET catalog_missing_since = NULL WHERE url IN (:urls)")
     suspend fun clearCatalogMissing(urls: List<String>)
 
-    @Query("SELECT url FROM books WHERE source = :source")
-    suspend fun urlsForSource(source: String): List<String>
+    @Query("SELECT * FROM books WHERE source = :source")
+    suspend fun booksForSource(source: String): List<Book>
 
     @Query(
         """
@@ -636,10 +636,11 @@ interface BookDao {
      * A book picked by hand has no folder, and a folder scan that later
      * meets the same file keeps that entry rather than making a second
      * one. It has to join the folder to be looked after by it: pruned
-     * when the file goes, and removed when the folder is.
+     * when the file goes, and removed when the folder is. Null means the
+     * book is no longer tied to a watched folder.
      */
     @Query("UPDATE books SET source = :source WHERE url = :url")
-    suspend fun setSource(url: String, source: String)
+    suspend fun setSource(url: String, source: String?)
 
     /**
      * Takes a book off the shelf, or puts it back.
@@ -891,4 +892,7 @@ interface LibraryFolderDao {
 
     @Upsert
     suspend fun upsert(folder: LibraryFolder)
+
+    @Query("DELETE FROM library_folders WHERE url = :url")
+    suspend fun delete(url: String)
 }
