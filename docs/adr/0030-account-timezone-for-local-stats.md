@@ -8,91 +8,87 @@ Draft
 
 ## Context
 
-`readingStats()` takes a `ZoneId` and a `today`, and the caller passes
-the device's. That is deliberate and documented: which day a sitting
-happened on is not a question SQL can answer without being told a zone,
-the zone is the reader's, and it changes when they fly somewhere. Doing
-the sums in Kotlin means the answer is computed against the zone in force
+Which day a sitting happened on is not a question the stored rows answer
+by themselves. A `ZoneId` decides it, and `readingStats()` takes one
+rather than assuming, so the answer is computed against the zone in force
 when it is asked.
 
-The server answers the same question differently. It files a sitting into
-a `(work, day, timezone)` bucket using the *account's* timezone, and it
-records which zone it used. Those buckets are what a connected reader
-sees on the combined stats screen, merged with locally captured reading
-by `uniteSnapshot`.
+The screen asks with two different zones, and which one it uses depends
+on whether a server snapshot is in play:
 
-So the screen adds two numbers computed under two definitions of "day".
-For a reader whose device zone and account zone agree — almost everyone,
-almost always — the two agree too and nothing is visible. For a reader
-who has travelled, or who set the account zone once and moved since, they
-do not:
+- Without a usable snapshot, `LocalStats` computes with `window.zone`,
+  the device's (`ReadingStatsViewModel.kt:492-498`). The screen reports
+  `THIS_DEVICE`.
+- With one, the locally captured sessions are recomputed with the
+  snapshot's `zone` — the account's — before `uniteSnapshot` folds the
+  server's buckets in (`ReadingStatsViewModel.kt:535-539`). The
+  comparison does the same. The screen reports `ALL_DEVICES`.
 
-- A sitting that ran across local midnight is on one day in the server's
-  half of the answer and another in the local half. The day-by-day chart
-  puts it in two places.
-- The streak is worse, because a streak is a run of days and a
-  disagreement about one day can break a run that did not break, or join
-  two runs that were genuinely separate.
+The combined view is therefore internally consistent, and deliberately
+so: ADR-0021 requires the account zone for an exact merge, and
+`LiseurSyncSnapshotsTest` covers it. Both halves of that sum are filed
+the same way. This ADR is not about a mismatch inside the combined
+figures, because there is not one.
 
-`serverOnlyPace` already admits one version of this problem — the
-snapshot's pace covers only the reading the server holds, so it is
-labelled rather than silently merged. The day attribution has no such
-admission.
+It is about the seam between the two views. A reader whose device zone
+and account zone disagree — one who has travelled, or who set the account
+zone once and moved since — gets one definition of a day when a snapshot
+is usable and another when it is not. A snapshot is rejected whenever the
+device is offline, the account changes, an alias set moves, or local
+sessions are captured after the response came back. So the switch is
+routine, not exceptional.
 
-Nothing here is a bug being hit today. It is a disagreement the design
-contains and does not name.
+What that looks like: a sitting that ran across one of the two midnights
+moves between days when a snapshot lands or lapses, and the streak can
+gain or lose a day with it, because a streak is a run of days and the two
+zones do not agree about where one ends.
+
+Nothing here is a bug being hit today, and for a reader whose zones agree
+— almost everyone, almost always — the two definitions coincide and
+nothing is visible. It is a seam the design contains and does not name.
 
 ## Decision
 
 *Not decided.* Recording the options while the server-side question
-(liseur-sync ADR-0043) is open, because the two answers have to agree.
+(liseur-sync ADR-0043) is open, because whatever the combined view does
+has to match what the server files.
 
-### Use the account's zone locally when connected
+### Use the account's zone for both views once an account is connected
 
-The screen would then be internally consistent: both halves filed the
-same way, one definition of a day, a streak that means one thing. The
-cost is that a reader in Tokyo with a Paris account sees their evening
-reading attributed to the afternoon, and the local-only figures they saw
-before connecting would shift under them.
+The two views would then agree, and figures would stop moving as
+snapshots come and go. The cost is that a reader in Tokyo with a Paris
+account sees their evening reading attributed to the afternoon even while
+offline, and the local-only figures they saw before connecting shift
+under them once they do.
 
-It also makes `readingStats()` depend on a server setting, which is
-exactly the coupling its current signature was written to avoid — though
-passing a zone in from the ViewModel rather than reading a setting inside
-keeps the function pure.
+### Keep the device's zone for the local-only view and say so
 
-### Keep the device's zone and say so
-
-Cheaper and more honest about the seam: label the combined figures the
-way pace is already labelled, so the reader knows the two halves were
-counted differently. The disagreement stays, but it stops being invisible.
-
-The trouble is that a streak cannot really be footnoted. *Eleven days,
-approximately* is not a thing to put on a screen.
+Cheaper, and honest about the seam: label the local-only figures the way
+pace is already labelled. The disagreement stays, but it stops being
+invisible. The trouble is that a streak cannot really be footnoted.
+*Eleven days, approximately* is not a thing to put on a screen.
 
 ### Let the reader choose
 
-A setting under Settings → Reading, defaulting to the device. This is the
-answer that admits there is no right one, and the cost is a setting for
-something most readers will never think about — which the repository's
-own conventions say to resist.
+A setting, defaulting to the device. The answer that admits there is no
+right one, at the cost of a setting for something most readers will never
+think about, which this repository's conventions say to resist.
 
 ## Consequences
 
-Whatever is chosen has to match the server's answer, because the screen
-adds the two together. If liseur-sync ADR-0043 makes the account zone
-time-varying, the client's choice changes shape too: "the account's zone"
-stops being a single value it can be handed.
+A reader who never connects an account is unaffected: one zone, one
+definition, no seam.
 
-Until then, the honest position is that the combined streak is the
-server's `combinedStreak` — already the case — and that the local
-day-by-day chart is the device's. They are not the same question, and the
-screen currently implies they are.
+If liseur-sync ADR-0043 makes the account zone time-varying, the account
+zone stops being a single value the client can be handed, and the first
+option changes shape.
 
 ## Open questions
 
-- Is the disagreement ever large enough for a reader to notice, outside
-  of an actual move?
-- Does the comparison feature (ADR-0024) inherit this, and does a
-  period-over-period comparison across a zone change mean anything?
-- If the account zone is adopted locally, what happens to the figures
-  shown before an account is connected — do they change when it is?
+- Is the shift ever large enough for a reader to notice, outside an
+  actual move?
+- Does the comparison (ADR-0024) inherit this? It already follows the
+  snapshot's zone when united and the device's otherwise, so it has the
+  same seam.
+- If the account zone were adopted for the local-only view, what should
+  the screen show between connecting and the first snapshot arriving?
