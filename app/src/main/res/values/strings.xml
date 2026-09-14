@@ -791,7 +791,7 @@
     <string name="reading_stats_by_year">Year by year</string>
     <string name="reading_stats_calendar">Day by day</string>
     <string name="reading_stats_pace">Pace</string>
-    <string name="reading_stats_pace_server_only">Pace (other devices)</string>
+    <string name="reading_stats_pace_server_only">Pace (synced reading)</string>
     <string name="reading_stats_pace_value">%1$d%%/h</string>
     <string name="reading_stats_book_sessions">Read in %1$d sittings</string>
     <string name="reading_stats_book_sessions_one">Read in one sitting</string>
