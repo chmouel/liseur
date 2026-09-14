@@ -153,9 +153,9 @@ enum class DefinitionTarget(val id: String) {
  *   nobody triggers by accident. Pinching an image to enlarge it is not
  *   covered: that one is one visible thing, dismissed with a tap.
  * @param resumeLastBook Opening the app goes back into the book you were in.
- * @param keepScreenOn The screen stays awake while a book is open. Off
- *   until asked for: it costs battery, and it overrides a device setting
- *   the reader chose themselves.
+ * @param keepScreenOn The screen stays awake while a book is open. On by
+ *   default for new installs, and can be turned off per reader or per
+ *   book.
  * @param scrollMode Books are read by scrolling rather than by turning
  *   pages. The default for the whole library; a book read the other way
  *   is set apart from inside it.
@@ -190,7 +190,7 @@ data class AppSettings(
     val tapZones: TapZones = TapZones.Default,
     val pinchToResize: Boolean = false,
     val resumeLastBook: Boolean = true,
-    val keepScreenOn: Boolean = false,
+    val keepScreenOn: Boolean = true,
     val scrollMode: Boolean = false,
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
@@ -283,7 +283,7 @@ class AppSettingsRepository(private val context: Context) {
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
             pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: false,
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
-            keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: false,
+            keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: true,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,

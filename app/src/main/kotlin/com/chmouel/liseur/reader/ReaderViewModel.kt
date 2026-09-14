@@ -805,7 +805,7 @@ class ReaderViewModel(
     val keepScreenOn: StateFlow<Boolean> = appSettings.settings
         .map { it.keepScreenOn }
         .combine(bookScreenDao.observe(bookId)) { global, own -> own.keepsScreenOnWith(global) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     /**
      * Whether this book is read by scrolling: the app-wide setting,
