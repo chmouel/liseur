@@ -589,7 +589,17 @@ class LiseurSyncSnapshotsTest {
         read()
         assertEquals(1, requests.single().getJSONArray("candidates").length())
         val local = readingStats(
-            db.readingSessionDao().allOnce(),
+            db.readingSessionDao().allOnce().map {
+                SessionSpan(
+                    bookUrl = it.bookUrl,
+                    startedAt = it.startedAt,
+                    durationMs = it.durationMs,
+                    lastReadAt = it.endedAt ?: it.lastCheckpointAt,
+                    uploaded = it.uploadedAt != null,
+                    startProgression = it.startProgression,
+                    endProgression = it.endProgression,
+                )
+            },
             mapOf("book" to StatsBook("book", "Book", null, 0.2, false)),
             zone, today, StatsRange.THIS_MONTH,
         )

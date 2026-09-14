@@ -99,6 +99,19 @@ class StatsSnapshotUnionTest {
     }
 
     @Test
+    fun `combined headline omits pace the snapshot cannot supply`() {
+        val local = readingStats(
+            listOf(SessionSpan("book", at, 20 * 60_000, at, uploaded = false)),
+            books, zone, today,
+        )
+        // snapshot() leaves progressionPerHour null, which is a server
+        // that counted no progression rather than one that paced at zero.
+        val result = uniteSnapshot(local, books, emptyMap(), snapshot(overlapMinutes = 0.0))!!
+        assertNull(result.headline.progressionPerHour)
+        assertEquals(false, result.headline.serverOnlyPace)
+    }
+
+    @Test
     fun `merged totals count each closed session once`() {
         val local = readingStats(
             listOf(
