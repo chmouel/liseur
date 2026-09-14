@@ -455,7 +455,13 @@ private fun BentoTile(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    // Two lines, because a label may carry a qualifier
+                    // that is the whole point of it. "Pace (synced
+                    // reading)" says what the figure leaves out, and a
+                    // tile half the screen wide at a large font scale
+                    // has no room to say that on one line: it would
+                    // ellipsize to "Pace" and read as the plain figure.
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
