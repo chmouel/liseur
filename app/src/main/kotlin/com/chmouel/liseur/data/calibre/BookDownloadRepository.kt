@@ -34,6 +34,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Semaphore
@@ -152,7 +153,7 @@ class BookDownloadRepository(
                 ?: 0L
         }
         StorageUse(count = books.size, bytes = bytes)
-    }
+    }.flowOn(Dispatchers.IO)
 
     /**
      * What the file behind a [Book.localUri] weighs, or null when it
