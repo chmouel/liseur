@@ -147,12 +147,27 @@ class BookDownloadRepository(
             // Naming it from the remote id instead reports zero for a
             // book that outlived the account it came from, which is the
             // ordinary state of a book on a connection with no catalog.
-            book.localUri?.let { runCatching { File(URI(it)).length() }.getOrNull() }
+            book.localUri?.let { sizeOf(it) }
                 ?: book.remoteUuid?.let { File(dir, "$it.epub").length() }
                 ?: 0L
         }
         StorageUse(count = books.size, bytes = bytes)
     }
+
+    /**
+     * What the file behind a [Book.localUri] weighs, or null when it
+     * cannot be asked. A restored orphan's copy is a document rather
+     * than a file of ours, so it is measured through its provider.
+     */
+    private fun sizeOf(localUri: String): Long? =
+        if (localUri.startsWith("file:")) {
+            runCatching { File(URI(localUri)).length() }.getOrNull()
+        } else {
+            runCatching {
+                context.contentResolver.openAssetFileDescriptor(Uri.parse(localUri), "r")
+                    ?.use { it.length.takeIf { length -> length >= 0 } }
+            }.getOrNull()
+        }
 
     suspend fun enqueue(book: Book) {
         bookDao.setDownloadState(book.url, DownloadState.QUEUED, null)
@@ -374,6 +389,7 @@ class BookDownloadRepository(
         fileFor(uuid).delete()
         File(booksDir(), "$uuid.epub.part").delete()
         File(booksDir(), "$uuid.epub.etag").delete()
+        deleteOwnedCopy(book)
         bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
     }
 
@@ -400,6 +416,7 @@ class BookDownloadRepository(
         val result = deleter.delete(server.baseUrl, credentials, book, forgetReading)
         if (result is ServerDeleteResult.Deleted) {
             book.remoteUuid?.let { fileFor(it).delete() }
+            deleteOwnedCopy(book)
             // The book is gone from the server too, so this is not a
             // copy being freed up: nothing is coming back, and the
             // hours are no longer about anything.
@@ -439,6 +456,21 @@ class BookDownloadRepository(
     }
 
     fun booksDir(): File = File(context.filesDir, "books").apply { mkdirs() }
+
+    /**
+     * Deletes a [Book.localUri] copy that lives in the app's own books
+     * directory, and only that. A restored orphan whose grant would not
+     * persist got such a copy under a content-derived name rather than
+     * the remote id, so the id-named deletes above never reach it. A
+     * document in the reader's own folder is not ours to delete and is
+     * left alone.
+     */
+    private fun deleteOwnedCopy(book: Book) {
+        val local = book.localUri?.takeIf { it.startsWith("file:") } ?: return
+        val file = runCatching { File(URI(local)).canonicalFile }.getOrNull() ?: return
+        val owned = runCatching { booksDir().canonicalFile }.getOrNull() ?: return
+        if (file.parentFile == owned) file.delete()
+    }
 
     fun fileFor(uuid: String): File = File(booksDir(), "$uuid.epub")
 
