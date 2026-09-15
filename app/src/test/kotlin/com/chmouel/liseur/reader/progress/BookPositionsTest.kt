@@ -2,8 +2,10 @@ package com.chmouel.liseur.reader.progress
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.shared.publication.Locator
@@ -129,6 +131,7 @@ class BookPositionsTest {
         assertEquals(0, book.occurrenceOf(locator("shared.xhtml", 0.5, 1)))
         assertEquals(1, book.occurrenceOf(locator("shared.xhtml", 0.5, 4)))
         assertNull(book.occurrenceOf(locator("shared.xhtml", 0.5, null)))
+        assertTrue(book.repeatsResourceOf(locator("shared.xhtml", 0.5, null)))
     }
 
     @Test
@@ -141,6 +144,7 @@ class BookPositionsTest {
         )
 
         assertNull(book.occurrenceOf(locator("chapter-1.xhtml", 0.0, 1)))
+        assertFalse(book.repeatsResourceOf(locator("chapter-1.xhtml", 0.0, 1)))
     }
 
     @Test
