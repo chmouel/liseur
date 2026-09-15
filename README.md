@@ -1,6 +1,17 @@
 # Liseur
 
 <p align="center">
+  <a href="https://github.com/chmouel/liseur/releases/latest">
+    <img src="https://img.shields.io/github/v/release/chmouel/liseur?style=flat-square&color=10b981" alt="Latest Release">
+  </a>
+  <img src="https://img.shields.io/github/downloads/chmouel/liseur/total?style=flat-square&color=3b82f6&logo=github" alt="Total Downloads">
+  <a href="https://github.com/chmouel/liseur/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/chmouel/liseur?style=flat-square&color=3b82f6" alt="License">
+  </a>
+</p>
+
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
     <img src="docs/banner-light.png" alt="A woman reading on a couch under a lamp" width="640">
