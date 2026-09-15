@@ -296,6 +296,28 @@ enum class PageTurnStyle(val id: String) {
 }
 
 /**
+ * The style a turn actually uses, once the screen and the system have
+ * had their say.
+ *
+ * Two facts overrule the reader's choice, and they are not the same
+ * fact even though they give the same answer. [eInk] is what the panel
+ * can draw: a photograph moved across electronic paper arrives as a
+ * trail of half-erased pages. [motionRemoved] is the reader telling
+ * Android they do not want animations, which Liseur should not make
+ * them say twice.
+ *
+ * They are kept apart because things downstream ask about one and not
+ * the other — the curl a drag draws is refused on e-paper and kept for
+ * a reader who merely turned animations off, since a page following a
+ * thumb is that thumb moving and not the app playing something at them.
+ */
+fun pageTurnStyleOnScreen(
+    chosen: PageTurnStyle,
+    eInk: Boolean,
+    motionRemoved: Boolean,
+): PageTurnStyle = if (eInk || motionRemoved) PageTurnStyle.NONE else chosen
+
+/**
  * Which notch the auto-scroll slider sits on, as it is stored.
  *
  * The bounds live here rather than beside the scrolling loop because

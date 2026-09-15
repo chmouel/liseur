@@ -86,10 +86,9 @@ fun PageTurnOverlay(state: PageTurnEffectState, modifier: Modifier = Modifier) {
 /**
  * Performs page turns for taps and volume keys. Which of the three
  * motions a turn uses is [style]'s answer: the lifted snapshot, the
- * navigator's own slide, or no motion at all. The lifted one still
- * falls back to the plain slide when the snapshot cannot be taken —
- * the chrome is up, a turn is already running, the view has no size
- * yet.
+ * navigator's own slide, or no motion at all. The lifted one falls back
+ * to the instant jump when the snapshot cannot be taken — the chrome is
+ * up, a turn is already running, the view has no size yet.
  *
  * A scrolled book is a different movement altogether, and [isScrolling]
  * says so: see [scrollScreenful].
@@ -376,9 +375,16 @@ class PageTurner(
         if (win == null || isEffectSuppressed() || effect.isRunning ||
             view.width <= 0 || view.height <= 0
         ) {
-            // Rapid taps while a turn is animating jump instantly to
-            // keep up with the reader's pace.
-            navigate(nav, forward, animated = !effect.isRunning, token = token)
+            // No photograph, so no lifted page, but the turn still has
+            // to happen. It jumps rather than borrowing the navigator's
+            // slide: what the lift gives the reader is the next page
+            // now, and the part that cannot be drawn is the departing
+            // one flying off. Standing a different style's motion in
+            // its place made the same key turn the page two ways
+            // depending on whether the menu was up, and left the footer
+            // trailing the thumb, because Readium publishes its locator
+            // when its scroller stops (#201).
+            navigate(nav, forward, animated = false, token = token)
             return
         }
         copyPage(win, view) { bitmap ->
