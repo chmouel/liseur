@@ -207,22 +207,34 @@ class LocalLibraryRepository(
      * It may also be one the library remembers but can no longer open:
      * removing a watched folder keeps an uploaded book's row (issue
      * #207) with no `source` and no `localUri`. Picking that file again
-     * is asking for it back, and the picked URI — whose grant the
-     * caller has already persisted — becomes the row's [Book.localUri],
-     * under the URL it has always had, which is where its place and its
-     * marks are.
+     * is asking for it back: a durable spelling of the picked file —
+     * the URI itself once its read grant persists, or a copy in the
+     * app's own storage — becomes the row's [Book.localUri], under the
+     * URL it has always had, which is where its place and its marks
+     * are.
      */
     suspend fun importBook(uri: Uri): ImportResult = importLock.withLock {
         val url = uri.toAbsoluteUrl() ?: return@withLock ImportResult.Failed
         alreadyShelved(url)?.let { book ->
             if (book.openableUrl == null) {
                 if (book.hidden) unhide(book.url)
-                bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, url.toString())
+                // The launcher already tried to persist the grant, but a
+                // provider may refuse: a URI that only reads until the
+                // task dies would leave a book that stops opening, so it
+                // is copied in instead, as a shared-in book would be.
+                val keepsWorking = url.toString().startsWith("file:") ||
+                    persistPermission(uri)
+                val durable = if (keepsWorking) {
+                    url
+                } else {
+                    copyIntoLibrary(uri) ?: return@withLock shelveAgainOrReport(book)
+                }
+                bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
                 // The path may have been reused by a different EPUB since
                 // the row went orphaned. Re-read the file: same work keeps
                 // everything, a different one starts fresh, exactly as a
                 // folder scan treats a file rewritten in place.
-                reindexBook(url, book.url, modifiedAt = null, previousWorkId = book.workId)
+                reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)
                 return@withLock ImportResult.Added(bookDao.getByUrl(book.url) ?: book)
             }
             return@withLock shelveAgainOrReport(book)
