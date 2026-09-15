@@ -62,10 +62,11 @@ class ReadingColorSchemeTest {
 
     @Test
     fun `raised containers climb rather than jump about`() {
-        // Not that each one differs from the page: on the Black theme the
-        // lowest steps round back to pure black, and a sheet that is exactly
-        // the page is what NoteSheet and FootnoteCard already draw. What has
-        // to hold is the order, so "high" never reads as lower than "low".
+        // This deliberately does not assert that each step differs from
+        // the page: on the Black theme the lowest steps round back to
+        // pure black, and a sheet that is exactly the page is what
+        // NoteSheet and FootnoteCard already draw. What has to hold is
+        // the order, so "high" never reads as lower than "low".
         for (page in ReaderTheme.entries) {
             val s = scheme(page)
             val steps = listOf(
