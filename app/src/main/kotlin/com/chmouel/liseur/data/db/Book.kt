@@ -50,6 +50,12 @@ data class Book(
     val source: String?,
     @ColumnInfo(name = "added_at") val addedAt: Long,
     @ColumnInfo(name = "last_opened_at") val lastOpenedAt: Long?,
+    /**
+     * A URI this app can open on its own, or null: a downloaded copy in
+     * the app's own storage, or a hand-picked document whose read grant
+     * was persisted when a re-picked file restored an orphaned row
+     * (issue #207).
+     */
     @ColumnInfo(name = "local_uri") val localUri: String? = null,
     @ColumnInfo(name = "remote_uuid") val remoteUuid: String? = null,
     @ColumnInfo(name = "remote_book_id") val remoteBookId: Int? = null,

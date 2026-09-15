@@ -203,10 +203,25 @@ class LocalLibraryRepository(
      * a watched folder has two spellings and matching on the URL alone
      * shelved it twice (issue #147). What it is, rather than what it is
      * called, decides.
+     *
+     * It may also be one the library remembers but can no longer open:
+     * removing a watched folder keeps an uploaded book's row (issue
+     * #207) with no `source` and no `localUri`. Picking that file again
+     * is asking for it back, and the picked URI — whose grant the
+     * caller has already persisted — becomes the row's [Book.localUri],
+     * under the URL it has always had, which is where its place and its
+     * marks are.
      */
     suspend fun importBook(uri: Uri): ImportResult = importLock.withLock {
         val url = uri.toAbsoluteUrl() ?: return@withLock ImportResult.Failed
-        alreadyShelved(url)?.let { return@withLock shelveAgainOrReport(it) }
+        alreadyShelved(url)?.let { book ->
+            if (book.openableUrl == null) {
+                if (book.hidden) unhide(book.url)
+                bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, url.toString())
+                return@withLock ImportResult.Added(bookDao.getByUrl(book.url) ?: book)
+            }
+            return@withLock shelveAgainOrReport(book)
+        }
         indexBook(url, source = null)
             ?.let { ImportResult.Added(it) }
             ?: ImportResult.Failed
@@ -311,11 +326,26 @@ class LocalLibraryRepository(
         // A book arriving from a file manager is very often one the
         // library already has under the spelling a folder scan gave it,
         // so ask what the file is and not only what it is called.
-        alreadyShelved(incoming)?.let {
+        alreadyShelved(incoming)?.let { book ->
             // Sharing in a book that was taken off the shelf asks for it
             // back just as plainly as picking it does.
-            if (it.hidden) unhide(it.url)
-            return@withLock bookDao.getByUrl(it.url) ?: it
+            if (book.hidden) unhide(book.url)
+            // So does sharing in one orphaned by folder removal (issue
+            // #207): a durable spelling of the incoming file becomes its
+            // localUri, by the same persist-or-copy rule as a new book.
+            if (book.openableUrl == null) {
+                val keepsWorking = incoming.toString().startsWith("file:") ||
+                    persistPermission(uri)
+                val localUri = if (keepsWorking) {
+                    incoming.toString()
+                } else {
+                    copyIntoLibrary(uri)?.toString()
+                }
+                if (localUri != null) {
+                    bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, localUri)
+                }
+            }
+            return@withLock bookDao.getByUrl(book.url) ?: book
         }
 
         // A real file is already as permanent as the library is, and a
