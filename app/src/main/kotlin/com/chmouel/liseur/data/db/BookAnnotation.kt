@@ -86,6 +86,20 @@ interface BookAnnotationDao {
     suspend fun upsert(annotation: BookAnnotation)
 
     /**
+     * Corrects the page number printed beside a mark, and nothing else.
+     *
+     * The number is the reader's, not the server's: it goes on no wire
+     * and into no fingerprint, so rewriting it is not an edit and must
+     * not restamp the row. It is also the only column worth rewriting
+     * here, which is why this is a one-column update conditional on the
+     * row still being there. Writing the whole mark back from a list
+     * read a moment earlier would undo a locator that sync had since
+     * pulled in, or bring back one it had deleted.
+     */
+    @Query("UPDATE annotations SET position = :position WHERE id = :id")
+    suspend fun setPosition(id: String, position: Int)
+
+    /**
      * Restores marks, leaving alone any that are already here.
      *
      * Ignoring rather than replacing is what makes importing the same

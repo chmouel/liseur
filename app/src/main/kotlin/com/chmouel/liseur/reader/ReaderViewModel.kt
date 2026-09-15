@@ -1137,19 +1137,29 @@ class ReaderViewModel(
      *
      * [samePage] settles it from the locators themselves. The one thing
      * they cannot show is a reading order that lists the same file
-     * twice: both occurrences carry that file's href and produce the
-     * same text anchor, so a page in the first would read as the same
-     * page as its twin in the second. Where a book has such a pair the
-     * positions say which occurrence each locator fell in, exactly as
-     * they do for `BookPositions.resolve`, and that is asked first. An
-     * ordinary book has no such pair and is never asked.
+     * twice: both copies carry that file's href and produce the same
+     * text anchor, so a page in the first would read as the same page
+     * as its twin in the second. Only the positions tell the copies
+     * apart, exactly as they do for `BookPositions.resolve`, and they
+     * are asked first.
+     *
+     * A scrolled place has no position to ask, since `scrolledPlace`
+     * drops the navigator's as belonging to wherever it last stopped.
+     * In a book with such a pair the question then has no answer, and
+     * no answer counts as different: an unlit ribbon is a bookmark not
+     * offered, while a wrong yes takes the reader's mark off the other
+     * copy. A book that names each file once, which is nearly every
+     * book, is never asked.
      */
-    private fun samePlaceAs(place: Locator, here: Locator): Boolean {
-        val positions = bookPositions
-        val there = positions?.occurrenceOf(place)
-        val screen = positions?.occurrenceOf(here)
-        if (there != null && screen != null && there != screen) return false
-        return samePage(place, here)
+    private fun samePlaceAs(place: Locator, here: Locator): Boolean =
+        !differentCopies(place, here) && samePage(place, here)
+
+    private fun differentCopies(place: Locator, here: Locator): Boolean {
+        val positions = bookPositions ?: return false
+        if (!positions.repeatsResourceOf(here)) return false
+        val there = positions.occurrenceOf(place) ?: return true
+        val screen = positions.occurrenceOf(here) ?: return true
+        return there != screen
     }
 
     /**
@@ -1358,6 +1368,9 @@ class ReaderViewModel(
      * corrected in place, without restamping `updated_at`: liseur-sync
      * neither carries this number nor fingerprints it, and a new stamp
      * would push every bookmark in the book as an edit nobody made.
+     * Only that one column is written, so a mark the sync pass changed
+     * or deleted while this list was being walked is not written back
+     * over from the stale copy.
      */
     private suspend fun repairBookmarkPages(positions: BookPositions) {
         if (!positions.isUsable) return
@@ -1365,7 +1378,7 @@ class ReaderViewModel(
             .filter { it.kind == AnnotationKind.BOOKMARK.name }
             .forEach { mark ->
                 val page = mark.locator()?.let { positions.resolve(it) }?.position ?: return@forEach
-                if (page != mark.position) annotationDao.upsert(mark.copy(position = page))
+                if (page != mark.position) annotationDao.setPosition(mark.id, page)
             }
     }
 
@@ -1649,7 +1662,8 @@ class ReaderViewModel(
     ): Boolean {
         here ?: return false
         if (place != null && place.namesItsPage()) {
-            return if (scrolled) sameScreenful(place, here) else samePlaceAs(place, here)
+            if (differentCopies(place, here)) return false
+            return if (scrolled) sameScreenful(place, here) else samePage(place, here)
         }
         val there = totalProgression ?: return false
         val progression = here.locations.totalProgression ?: return false
@@ -1667,9 +1681,9 @@ class ReaderViewModel(
      * page the reader means, and it is what the footer is counting.
      */
     private fun sameScreenful(place: Locator, here: Locator): Boolean {
-        val positions = bookPositions ?: return samePlaceAs(place, here)
-        val there = positions.resolve(place)?.position ?: return samePlaceAs(place, here)
-        val screen = positions.resolve(here)?.position ?: return samePlaceAs(place, here)
+        val positions = bookPositions ?: return samePage(place, here)
+        val there = positions.resolve(place)?.position ?: return samePage(place, here)
+        val screen = positions.resolve(here)?.position ?: return samePage(place, here)
         return there == screen
     }
 

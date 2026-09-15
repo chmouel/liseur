@@ -341,14 +341,20 @@ emulator.
   Two things the locators cannot answer for themselves are asked before
   it. A reading order listing one file twice gives both copies the same
   href and the same anchor, so `BookPositions.occurrenceOf()` says which
-  copy each locator fell in, as `resolve()` already does. And a scrolled
+  copy each locator fell in, as `resolve()` already does; a scrolled
+  place carries no position to ask with, and in such a book an
+  unanswerable question counts as a different page, since an unlit
+  ribbon only fails to offer a bookmark while a wrong yes takes the
+  reader's mark off the other copy. And a scrolled
   book has no pages and its anchor moves with every line, so it falls
   back to the Readium position, which is about a screenful and is what
   the footer counts; whether a book is scrolled is `chromeScrolls()`,
   never the bare setting, since a vertical-text book scrolls without it
   and a fixed-layout book paginates despite it. The stored number is for
   the reader to read, and is written from `BookPositions.resolve()` so
-  it says what the footer said.
+  it says what the footer said. Correcting that number afterwards writes
+  the one column and nothing else (`AnnotationDao.setPosition`), or a
+  mark the sync pass changed meanwhile would be written back over.
 - Removing a book keeps its annotations *and* its `annotation_sync`
   rows. They are still on the server and on the other phone, and
   dropping only the agreements would push every mark again as new when

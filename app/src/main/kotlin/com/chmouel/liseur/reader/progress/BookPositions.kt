@@ -130,6 +130,13 @@ class BookPositions(
         return candidates.firstOrNull { position in it.firstPosition..it.lastPosition }?.index
     }
 
+    /** Whether the reading order lists this locator's resource more than once. */
+    fun repeatsResourceOf(locator: Locator): Boolean {
+        if (!isUsable) return false
+        val href = locator.href.toString()
+        return resources.count { it.href == href } > 1
+    }
+
     /** The position matching a whole-book progression between 0 and 1. */
     fun positionAtProgression(progression: Float): Int {
         if (!isUsable) return 1
