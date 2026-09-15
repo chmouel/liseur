@@ -22,8 +22,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
  *
  * Android spells that request as scale factors rather than as a switch:
  * Accessibility -> Remove animations sets all of them to zero at once,
- * and developer options can set each on its own. Anything at zero is a
- * reader who has said they do not want motion, so either is enough.
+ * and developer options can set each on its own. The one read here is
+ * `ANIMATOR_DURATION_SCALE`, because it is the one Compose's own
+ * `MotionDurationScale` obeys. Asking the same question Compose asks is
+ * what keeps every motion in the reader collapsing together: the page
+ * that a tap turns and the spring that settles a curl after the finger
+ * lifts either both animate or neither does. Reading
+ * `TRANSITION_ANIMATION_SCALE` as well was tried and dropped: zeroed on
+ * its own it stops the turn without stopping the settle, and what it
+ * actually governs is activity transitions, which a page turn is not.
  *
  * Written as "not above zero" rather than "equal to zero", because the
  * value comes out of a settings table that anything with the right
@@ -32,27 +39,20 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
  * scale. Neither of those is a slower animation, and neither compares
  * usefully with `<=`.
  */
-fun motionRemoved(animatorScale: Float, transitionScale: Float): Boolean =
-    !(animatorScale > 0f) || !(transitionScale > 0f)
+fun motionRemoved(animatorScale: Float): Boolean = !(animatorScale > 0f)
 
 /** The same question, asked of the system this build is running on. */
-fun motionRemoved(resolver: ContentResolver): Boolean = motionRemoved(
-    animatorScale = scaleOf(resolver, Settings.Global.ANIMATOR_DURATION_SCALE),
-    transitionScale = scaleOf(resolver, Settings.Global.TRANSITION_ANIMATION_SCALE),
-)
-
-private fun scaleOf(resolver: ContentResolver, key: String): Float =
-    Settings.Global.getFloat(resolver, key, 1f)
+fun motionRemoved(resolver: ContentResolver): Boolean =
+    motionRemoved(Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f))
 
 /**
  * Follows [motionRemoved] while the screen is up.
  *
  * Worth observing rather than reading once: the setting is two taps away
  * in Settings, and a reader who turns it off mid-book should not have to
- * close the book to be believed. Both keys are watched, since the
- * accessibility switch writes both and developer options writes either.
+ * close the book to be believed.
  *
- * Resuming re-reads them as well, and that is not belt and braces. On
+ * Resuming re-reads it as well, and that is not belt and braces. On
  * Android 8 and 9 the settings provider notifies the system user only,
  * so a Liseur running in a work profile or a second user hears nothing;
  * and going to Settings to change this only pauses the reader, which is
@@ -70,12 +70,11 @@ fun rememberMotionRemoved(): Boolean {
                 removed = motionRemoved(resolver)
             }
         }
-        listOf(
-            Settings.Global.ANIMATOR_DURATION_SCALE,
-            Settings.Global.TRANSITION_ANIMATION_SCALE,
-        ).forEach { key ->
-            resolver.registerContentObserver(Settings.Global.getUriFor(key), false, observer)
-        }
+        resolver.registerContentObserver(
+            Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),
+            false,
+            observer,
+        )
         val onResume = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) removed = motionRemoved(resolver)
         }
