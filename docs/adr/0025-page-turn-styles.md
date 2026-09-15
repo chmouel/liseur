@@ -38,10 +38,67 @@ reader sees:
 page keeps every fallback it had, since a snapshot that cannot be taken
 is still a turn that has to happen.
 
+> Amended by [#201](https://github.com/chmouel/liseur/issues/201). It
+> kept the wrong fallback. When the snapshot could not be taken the
+> turn borrowed **Slide**, which is another style's motion, and the
+> commonest reason it could not be taken is that the reading controls
+> are up: the toolbar sits inside the bounds `PixelCopy` reads, so it
+> would be photographed onto the page. The result was one volume key
+> turning the page two different ways depending on whether the menu was
+> open, and a footer that trailed the reader's thumb while it was,
+> because Readium publishes its new locator when its scroller stops
+> while the lift publishes it as the jump is made.
+>
+> The fallback now jumps. What the lift gives a reader is the next page
+> immediately; the part that cannot be drawn without a photograph is the
+> departing page flying off, and the honest stand-in for a motion that
+> cannot be drawn is no motion, not a different one. Every branch that
+> reached the fallback was doing this already or wanted to: rapid taps
+> during a running turn passed `animated = false` for exactly this
+> reason, and that special case is now the ordinary case.
+
 Electronic paper overrules the choice with **None** in that one lambda,
 where `&& !eInkNow` used to sit. A trail of half-erased pages is what a
 photograph dragged across such a screen actually looks like, and that is
 a fact about the panel, not a preference.
+
+> Amended by [#201](https://github.com/chmouel/liseur/issues/201): a
+> system with animations removed is overruled to **None** in that same
+> lambda, beside the panel.
+>
+> Compose hides how little of this the app was doing. Its default
+> `MotionDurationScale` reads `Settings.Global.ANIMATOR_DURATION_SCALE`
+> and collapses every Compose tween to a single frame, so the lift's
+> own snapshot animation already snapped, and a reader with animations
+> off saw an instant turn and believed the app had heard them. What the
+> platform scale does not reach is the motion Liseur asks for outside
+> Compose: Readium's slide, the `behavior: smooth` scroll a scrolled
+> book glides with, and the lift the endpaper arrives on. Putting the
+> answer in `turnStyle` covers all three at once, because
+> `scrollScreenful` already asks `style() != NONE` for its smoothness
+> and `revealEnd` already asks `style() == LIFT` for its lift.
+>
+> Both scales are read, `ANIMATOR_DURATION_SCALE` and
+> `TRANSITION_ANIMATION_SCALE`, because Accessibility -> Remove
+> animations writes both while developer options writes either, and a
+> scale is treated as removed when it is not above zero rather than
+> when it equals zero, since it comes out of a settings table and a
+> negative scale is not a slower animation. `ui/SystemMotion.kt` holds
+> the pure predicate and a `rememberMotionRemoved()` that observes both
+> keys, so turning the setting off mid-book is believed without closing
+> the book.
+>
+> The two overrules give the same answer and are not the same fact, so
+> `pageTurnStyleOnScreen(chosen, eInk, motionRemoved)` names them
+> separately. The curl a drag draws still asks only about the panel: a
+> page following a thumb is the thumb moving, which nobody asked to
+> stop by removing animations, and its release is a Compose animation
+> the platform scale already collapses.
+>
+> Neither overrule is announced in Settings. The page turn control goes
+> on showing what the reader chose, as it has for e-paper since this
+> ADR, because the setting is still theirs and still applies the moment
+> the reason for the overrule goes away.
 
 The endpaper animates only under **Lift**. It is drawn over the book
 rather than navigated to, so there is no navigator move for **Slide** to
@@ -262,7 +319,7 @@ bar. Not decided here.
 `data/settings/AppSettings.kt`, `reader/chrome/PageTurnEffect.kt`,
 `reader/chrome/PageTurnDrag.kt`, `reader/chrome/PageCurl.kt`,
 `reader/chrome/PageCurlOverlay.kt`, `reader/ReaderScreen.kt`,
-`reader/chrome/AdvancedSheet.kt`,
+`reader/chrome/AdvancedSheet.kt`, `ui/SystemMotion.kt`,
 `ui/reading/ReadingAppearanceControls.kt`, `ui/settings/SettingsRows.kt`,
 `ui/settings/ReadingNavigationScreen.kt`,
 `ui/settings/ReadingAppearanceScreen.kt`.

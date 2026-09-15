@@ -456,9 +456,22 @@ emulator.
 - How a page turns is one setting with three answers
   (`PageTurnStyle`: lift, slide, none), not a boolean. `PageTurner`
   already performed all three motions; it is told which by `style()`,
-  and electronic paper overrules the reader's choice with `NONE` in that
-  one lambda rather than anywhere else. The endpaper is drawn over the
-  book rather than navigated to, so only `LIFT` animates its arrival.
+  and two facts overrule the reader's choice with `NONE` in that one
+  lambda rather than anywhere else, through
+  `pageTurnStyleOnScreen(chosen, eInk, motionRemoved)`: electronic
+  paper, and a system whose animation scales are off. They are named
+  apart because they are not the same fact even where they agree.
+  Reading Android's switch is `ui/SystemMotion.kt`, both
+  `ANIMATOR_DURATION_SCALE` and `TRANSITION_ANIMATION_SCALE`, observed
+  rather than read once, and treated as removed when not above zero.
+  Do not add a second check for it anywhere: Compose already collapses
+  its own tweens through `MotionDurationScale`, and the one lambda
+  covers everything Liseur asks for outside Compose, since
+  `scrollScreenful` reads `style() != NONE` for its glide and
+  `revealEnd` reads `style() == LIFT` for its lift. The endpaper is
+  drawn over the book rather than navigated to, so only `LIFT` animates
+  its arrival. Neither overrule is announced in Settings; the control
+  goes on showing what the reader chose.
   A sideways drag answers to the same setting, but not by turning the
   page the way a tap does: under `LIFT` and `NONE` it curls the
   departing page off the book under the finger, and it can be pulled
@@ -466,12 +479,22 @@ emulator.
   motion already, and so is electronic paper — a curl dragged across
   e-paper is the trail of half-erased pages the lift is refused for, and
   `turnStyle` cannot say so, since a forced `NONE` reads like a chosen
-  one. That is why the claim asks a separate `interactive` predicate.
+  one. That is why the claim asks a separate `interactive` predicate,
+  which answers for the panel alone: a page following a thumb is the
+  thumb moving, and removing animations was never a request to stop it.
   `R2WebView` moves the columns in its own
   native gesture code, which a JavaScript `preventDefault()` cannot
   stop, so the drag is claimed and consumed in `ReaderScreen`'s
   `PointerEventPass.Initial` loop instead — the same route the image
   viewer uses.
+- A `LIFT` turn that cannot photograph the page jumps, and never
+  borrows `SLIDE` (#201). The commonest reason it cannot is that the
+  reading controls are up, since the toolbar sits inside the bounds
+  `PixelCopy` reads; borrowing the other style's motion there made one
+  volume key turn the page two ways depending on whether the menu was
+  open, and left the footer behind, because Readium publishes its
+  locator when its scroller stops while the lift publishes it as the
+  jump is made.
 - The curl is a turn that has already happened: `beginDraggedTurn`
   photographs the page and jumps the navigator with `animated = false`,
   and `PageCurl`/`PageCurlOverlay` draw the snapshot over it with

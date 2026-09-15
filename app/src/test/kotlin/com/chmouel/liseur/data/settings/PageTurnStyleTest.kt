@@ -58,4 +58,51 @@ class PageTurnStyleTest {
             pageTurnStyleFrom(stored = PageTurnStyle.SLIDE.id, legacyAnimation = false),
         )
     }
+
+    @Test
+    fun `an ordinary screen turns the page the way the reader asked`() {
+        PageTurnStyle.entries.forEach { style ->
+            assertEquals(
+                style,
+                pageTurnStyleOnScreen(chosen = style, eInk = false, motionRemoved = false),
+            )
+        }
+    }
+
+    @Test
+    fun `electronic paper jumps whatever was chosen`() {
+        PageTurnStyle.entries.forEach { style ->
+            assertEquals(
+                PageTurnStyle.NONE,
+                pageTurnStyleOnScreen(chosen = style, eInk = true, motionRemoved = false),
+            )
+        }
+    }
+
+    /**
+     * A reader who turned animations off in Android has already said
+     * what they want; saying it again in Liseur's own settings is the
+     * accessibility bug in #201.
+     */
+    @Test
+    fun `a system with animations removed jumps whatever was chosen`() {
+        PageTurnStyle.entries.forEach { style ->
+            assertEquals(
+                PageTurnStyle.NONE,
+                pageTurnStyleOnScreen(chosen = style, eInk = false, motionRemoved = true),
+            )
+        }
+    }
+
+    @Test
+    fun `the slide is overruled as readily as the lift`() {
+        assertEquals(
+            PageTurnStyle.NONE,
+            pageTurnStyleOnScreen(
+                chosen = PageTurnStyle.SLIDE,
+                eInk = false,
+                motionRemoved = true,
+            ),
+        )
+    }
 }

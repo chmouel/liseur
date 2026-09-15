@@ -125,6 +125,7 @@ import com.chmouel.liseur.reader.footnotes.FootnoteLayout
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
+import com.chmouel.liseur.data.settings.pageTurnStyleOnScreen
 import com.chmouel.liseur.reader.progress.ResourceAnchor
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -177,6 +178,7 @@ import com.chmouel.liseur.reader.progress.RestorePoint
 import com.chmouel.liseur.reader.progress.ScrollProgression
 import com.chmouel.liseur.reader.search.SearchScreen
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.rememberMotionRemoved
 import com.chmouel.liseur.ui.eink.EInkDisplay
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
@@ -804,16 +806,31 @@ fun ReaderScreen(
     val pageTurnEffect = remember { PageTurnEffectState(effectScope) }
     val viewedImageNow by rememberUpdatedState(viewedImage)
     val openingImageNow by rememberUpdatedState(openingImage)
-    // The sliding page is a snapshot dragged across the screen, which is
-    // the one thing electronic paper cannot draw: it arrives as a trail
-    // of half-erased pages. The instant jump is what e-paper wants
-    // anyway, and it overrules whatever is set here rather than being
-    // one more thing to set. Taps and drags read the style from here, so
-    // the two ways of turning a page cannot disagree about which drags
-    // are Readium's; the curl a drag draws under the other styles is
-    // refused on e-paper separately, since NONE cannot say why it is set.
+    // Two things overrule the reader's choice here, and only here, so
+    // that every motion a turn can make reads one answer: the tap, the
+    // volume key, the drag claim, the glide a scrolled book makes and
+    // the endpaper all ask this lambda. Taps and drags reading the same
+    // style is what stops the two ways of turning a page disagreeing
+    // about which drags are Readium's.
+    //
+    // Electronic paper is the first: a snapshot dragged across such a
+    // screen arrives as a trail of half-erased pages, so the instant
+    // jump is what the panel wants anyway. The second is a reader who
+    // turned animations off in Android, which Liseur should not make
+    // them say a second time in its own settings (#201).
+    //
+    // The curl a drag draws is refused on e-paper separately, since NONE
+    // cannot say why it is set, and the two reasons want different
+    // answers: a page following a thumb is the thumb moving, which a
+    // reader who removed animations never asked to stop.
+    val motionRemoved = rememberMotionRemoved()
+    val motionRemovedNow by rememberUpdatedState(motionRemoved)
     val turnStyle: () -> PageTurnStyle = {
-        if (eInkNow) PageTurnStyle.NONE else prefsFlow.value.pageTurnStyle
+        pageTurnStyleOnScreen(
+            chosen = prefsFlow.value.pageTurnStyle,
+            eInk = eInkNow,
+            motionRemoved = motionRemovedNow,
+        )
     }
     val pageTurner = remember {
         PageTurner(
