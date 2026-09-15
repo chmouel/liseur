@@ -130,6 +130,10 @@ class BookRemoval(
             identityDao.forgetAliases(listOf(bookUrl))
             identityDao.forgetAmbiguities(listOf(bookUrl))
             peerStateDao.forgetBooks(listOf(bookUrl))
+            // The remote link named the old contents too. Kept, position
+            // sync and catalog lookups would address the server's copy of
+            // the book that used to be here as if it were the new one.
+            bookDao.unlinkFromRemote(listOf(bookUrl))
             bookDao.forgetReadingHistory(bookUrl)
             bookDao.clearSeriesForReplacedWork(bookUrl)
         }

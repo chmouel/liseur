@@ -217,7 +217,6 @@ class LocalLibraryRepository(
         val url = uri.toAbsoluteUrl() ?: return@withLock ImportResult.Failed
         alreadyShelved(url)?.let { book ->
             if (book.openableUrl == null) {
-                if (book.hidden) unhide(book.url)
                 // The launcher already tried to persist the grant, but a
                 // provider may refuse: a URI that only reads until the
                 // task dies would leave a book that stops opening, so it
@@ -229,12 +228,16 @@ class LocalLibraryRepository(
                 } else {
                     copyIntoLibrary(uri) ?: return@withLock shelveAgainOrReport(book)
                 }
-                bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
                 // The path may have been reused by a different EPUB since
-                // the row went orphaned. Re-read the file: same work keeps
-                // everything, a different one starts fresh, exactly as a
-                // folder scan treats a file rewritten in place.
-                reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)
+                // the row went orphaned. Re-read the file before adopting
+                // it: same work keeps everything, a different one starts
+                // fresh, exactly as a folder scan treats a file rewritten
+                // in place, and one that will not open restores nothing.
+                if (!reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)) {
+                    return@withLock shelveAgainOrReport(book)
+                }
+                if (book.hidden) unhide(book.url)
+                bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
                 return@withLock ImportResult.Added(bookDao.getByUrl(book.url) ?: book)
             }
             return@withLock shelveAgainOrReport(book)
@@ -354,12 +357,14 @@ class LocalLibraryRepository(
                 val keepsWorking = incoming.toString().startsWith("file:") ||
                     persistPermission(uri)
                 val durable = if (keepsWorking) incoming else copyIntoLibrary(uri)
-                if (durable != null) {
-                    bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
-                    // Guard against a different EPUB having taken over the
-                    // path while the row was orphaned: same work keeps
-                    // everything, a different one starts fresh.
+                // Adopt the file only once it has actually been read:
+                // same work keeps everything, a different one having
+                // taken over the path starts fresh, and one that will
+                // not open restores nothing.
+                if (durable != null &&
                     reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)
+                ) {
+                    bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
                 }
             }
             return@withLock bookDao.getByUrl(book.url) ?: book
@@ -864,18 +869,21 @@ class LocalLibraryRepository(
      * place in it, everything you marked in it and when you added it.
      * If the file turns out to hold a different book, none of that
      * describes anything that is still there, so it goes.
+     *
+     * Returns whether the file could be read at all; nothing is written
+     * when it could not.
      */
     private suspend fun reindexBook(
         openableUrl: AbsoluteUrl,
         bookUrl: String,
         modifiedAt: Long?,
         previousWorkId: String?,
-    ) {
-        val asset = assetRetriever.retrieve(openableUrl).getOrElse { return }
+    ): Boolean {
+        val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
                 asset.close()
-                return
+                return false
             }
         try {
             val title = publication.metadata.title
@@ -900,6 +908,7 @@ class LocalLibraryRepository(
                 Log.i(TAG, "A different book took over a path; starting it fresh")
                 bookRemoval.contentReplaced(bookUrl)
             }
+            return true
         } finally {
             publication.close()
         }
