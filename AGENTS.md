@@ -386,6 +386,26 @@ emulator.
   `viewModelScope` is reached from the main thread.
 - Reader settings map to Readium `EpubPreferences`; reading themes
   (Light/Sepia/Dark/Black) are decoupled from the app's Material theme.
+- Inside the reader, the Material theme *is* the page.
+  `readingColorScheme()` turns the reading theme into a `ColorScheme` and
+  `ReaderActivity` installs it over the whole activity, so a new sheet or
+  dialog is on the reader's paper without being told. Do not hand-paint a
+  new one from `ReaderTheme`; the existing hand-painted call sites are
+  redundant but correct, and stay. Surfaces and ink are the page; accents
+  are inherited untouched from the app palette at the page's lightness,
+  which is what makes `error` and the accent buttons right per page.
+  Mixes are opaque `lerp`, never alpha, because translucency stacks and
+  e-ink dithers it. The mix factors are not an opinion: raise the one
+  whose case fails in `ReadingColorSchemeTest`, which checks WCAG
+  contrast over every theme, palette and e-ink state. `surfaceTint` must
+  stay transparent or elevation tints a sepia sheet lilac, and `scrim`
+  must stay black or a night page's scrim lightens the page. Dynamic
+  colour stops at the reader's door — a wallpaper accent was never
+  checked against a page Liseur picked — while the library and settings
+  keep it. Bar icons follow the page, from `SystemBarIcons` at activity
+  level, not from `ImmersiveMode`, since the page's colours reach the
+  loading and error screens too. See
+  `docs/adr/0031-the-readers-chrome-is-painted-on-the-page.md`.
 - A new reading setting goes in the Advanced sheet
   (`reader/chrome/AdvancedSheet.kt`), and on Settings -> Reading
   appearance if it is about how the page *looks*, or on Settings ->

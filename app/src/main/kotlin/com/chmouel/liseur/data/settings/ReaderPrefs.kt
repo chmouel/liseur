@@ -110,6 +110,22 @@ enum class ReaderTheme(
     BLACK("black", "Black", Color(0xFF000000), Color(0xFFB8B8B8)),
     ;
 
+    /**
+     * Whether this is a night page.
+     *
+     * Written out rather than measured off [background], because the
+     * chrome painted on the page picks a whole accent palette from this
+     * answer and a luminance threshold is a guess that lands differently
+     * for sepia than a person would. Exhaustive on purpose: a fifth
+     * reading theme does not compile until somebody says which side of
+     * this it is on.
+     */
+    val isDarkPage: Boolean
+        get() = when (this) {
+            LIGHT, SEPIA -> false
+            DARK, BLACK -> true
+        }
+
     companion object {
         val Default = LIGHT
 
