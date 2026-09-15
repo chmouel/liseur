@@ -62,13 +62,13 @@ class BookRemoval(
                 .filter { (it.remoteUuid != null || it.localUri != null) && it.url !in homed }
                 .forEach { book ->
                     // An uploaded local book keeps its stable URL and server
-                    // identity, and a downloaded one its copy in the app's
-                    // own storage, but the released folder no longer makes
+                    // identity, and one with its own openable copy keeps
+                    // it, but the released folder no longer makes
                     // the folder's file available.
                     bookDao.setSource(book.url, null)
-                    // A copy in the app's own storage is not the folder's to
-                    // take away: only a book that was readable *through* the
-                    // folder loses its file along with it.
+                    // A copy the app can open on its own is not the
+                    // folder's to take away: only a book that was readable
+                    // *through* the folder loses its file along with it.
                     if (book.remoteUuid != null && book.localUri == null) {
                         bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
                     }
