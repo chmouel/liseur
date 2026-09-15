@@ -376,6 +376,7 @@ fun ReaderScreen(
     onKeepScreenOnChanged: (Boolean) -> Unit,
     scrollModeFlow: StateFlow<Boolean>,
     onScrollModeChanged: (Boolean) -> Unit,
+    onScrollingChanged: (Boolean) -> Unit = {},
     tapZonesFlow: StateFlow<TapZones>,
     pinchToResizeFlow: StateFlow<Boolean>,
     highlightPaletteFlow: StateFlow<HighlightPalette>,
@@ -431,6 +432,11 @@ fun ReaderScreen(
     // one and must not be merged: see [chromeScrolls]/[containerScrolls].
     val effectiveScrolling = chromeScrolls(reflowableText, scrollMode, verticalText)
     val effectiveScrollingNow by rememberUpdatedState(effectiveScrolling)
+    // The model asks the same question about the bookmark ribbon, and
+    // has to get the same answer: the setting on its own would give a
+    // vertical book the paginated test and a fixed-layout one the
+    // scrolled test.
+    LaunchedEffect(effectiveScrolling) { onScrollingChanged(effectiveScrolling) }
     val pageContainerScrolls = containerScrolls(reflowableText, scrollMode)
     var autoScrollArmed by remember { mutableStateOf(false) }
     val columnMode = prefs.columnMode.effectiveFor(widthClass())

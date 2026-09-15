@@ -111,6 +111,25 @@ class BookPositions(
         return progressAtCoordinate(coordinate)
     }
 
+    /**
+     * Which occurrence of its resource [locator] falls in, for a book
+     * whose reading order lists the same file more than once.
+     *
+     * Null for an ordinary book, whose reading order names each file
+     * once, and null for a locator carrying no position to place it by.
+     * Callers that compare two locators use it to keep the twin copies
+     * of one file apart, which nothing in the locators themselves can
+     * do: they share an href and produce the same text anchor.
+     */
+    fun occurrenceOf(locator: Locator): Int? {
+        if (!isUsable) return null
+        val href = locator.href.toString()
+        val candidates = resources.filter { it.href == href }
+        if (candidates.size < 2) return null
+        val position = locator.locations.position ?: return null
+        return candidates.firstOrNull { position in it.firstPosition..it.lastPosition }?.index
+    }
+
     /** The position matching a whole-book progression between 0 and 1. */
     fun positionAtProgression(progression: Float): Int {
         if (!isUsable) return 1

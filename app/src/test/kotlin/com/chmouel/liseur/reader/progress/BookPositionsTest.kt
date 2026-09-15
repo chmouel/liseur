@@ -112,6 +112,38 @@ class BookPositionsTest {
     }
 
     @Test
+    fun `a repeated href tells its occurrences apart`() {
+        val book = positions(
+            listOf(
+                listOf(
+                    locator("shared.xhtml", 0.0, 1),
+                    locator("shared.xhtml", 1.0, 2),
+                ),
+                listOf(
+                    locator("shared.xhtml", 0.0, 3),
+                    locator("shared.xhtml", 1.0, 4),
+                ),
+            ),
+        )
+
+        assertEquals(0, book.occurrenceOf(locator("shared.xhtml", 0.5, 1)))
+        assertEquals(1, book.occurrenceOf(locator("shared.xhtml", 0.5, 4)))
+        assertNull(book.occurrenceOf(locator("shared.xhtml", 0.5, null)))
+    }
+
+    @Test
+    fun `an ordinary book has no occurrence to report`() {
+        val book = positions(
+            listOf(
+                listOf(locator("chapter-1.xhtml", 0.0, 1)),
+                listOf(locator("chapter-2.xhtml", 0.0, 2)),
+            ),
+        )
+
+        assertNull(book.occurrenceOf(locator("chapter-1.xhtml", 0.0, 1)))
+    }
+
+    @Test
     fun `missing resource falls back to a finite stable position`() {
         val book = positions(
             listOf(

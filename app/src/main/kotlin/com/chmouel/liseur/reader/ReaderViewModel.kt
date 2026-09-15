@@ -818,6 +818,21 @@ class ReaderViewModel(
         .combine(readingModeDao.observe(bookId)) { global, own -> own.scrollsWith(global) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    private val _scrolling = MutableStateFlow(false)
+
+    /**
+     * Whether the book on screen is actually being scrolled, which is a
+     * different question from whether the reader asked for scrolling.
+     * A fixed-layout book is paginated whatever the setting says, and a
+     * book whose lines run down the page is scrolled whatever it says.
+     * `chromeScrolls` is where that is worked out; the screen reports
+     * the answer here, because vertical text is only known once the
+     * navigator has read the publication.
+     */
+    fun onScrollingChanged(scrolling: Boolean) {
+        _scrolling.value = scrolling
+    }
+
     /** Which side of the page turns forward, app-wide. */
     val tapZones: StateFlow<TapZones> = appSettings.settings
         .map { it.tapZones }
@@ -1115,7 +1130,27 @@ class ReaderViewModel(
 
     /** Whether two locators name the same stable place within a resource. */
     private fun Locator.sameReadingPositionAs(other: Locator): Boolean =
-        samePage(this, other)
+        samePlaceAs(this, other)
+
+    /**
+     * Whether two locators name the same page of this book.
+     *
+     * [samePage] settles it from the locators themselves. The one thing
+     * they cannot show is a reading order that lists the same file
+     * twice: both occurrences carry that file's href and produce the
+     * same text anchor, so a page in the first would read as the same
+     * page as its twin in the second. Where a book has such a pair the
+     * positions say which occurrence each locator fell in, exactly as
+     * they do for `BookPositions.resolve`, and that is asked first. An
+     * ordinary book has no such pair and is never asked.
+     */
+    private fun samePlaceAs(place: Locator, here: Locator): Boolean {
+        val positions = bookPositions
+        val there = positions?.occurrenceOf(place)
+        val screen = positions?.occurrenceOf(here)
+        if (there != null && screen != null && there != screen) return false
+        return samePage(place, here)
+    }
 
     /**
      * Called when the reader stops being looked at.
@@ -1582,13 +1617,13 @@ class ReaderViewModel(
      * out for the rest of the book once a single page was bookmarked.
      */
     val bookmarked: StateFlow<Boolean> =
-        combine(bookmarkPlaces, _place, scrollMode) { marks, here, scrolled ->
+        combine(bookmarkPlaces, _place, _scrolling) { marks, here, scrolled ->
             marks.any { (mark, place) -> mark.isHere(place, here, scrolled) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private fun bookmarkForCurrentPage(): BookAnnotation? {
         val here = lastLocator
-        val scrolled = scrollMode.value
+        val scrolled = _scrolling.value
         return bookmarkPlaces.value
             .firstOrNull { (mark, place) -> mark.isHere(place, here, scrolled) }
             ?.first
@@ -1614,7 +1649,7 @@ class ReaderViewModel(
     ): Boolean {
         here ?: return false
         if (place != null && place.namesItsPage()) {
-            return if (scrolled) sameScreenful(place, here) else samePage(place, here)
+            return if (scrolled) sameScreenful(place, here) else samePlaceAs(place, here)
         }
         val there = totalProgression ?: return false
         val progression = here.locations.totalProgression ?: return false
@@ -1632,9 +1667,9 @@ class ReaderViewModel(
      * page the reader means, and it is what the footer is counting.
      */
     private fun sameScreenful(place: Locator, here: Locator): Boolean {
-        val positions = bookPositions ?: return samePage(place, here)
-        val there = positions.resolve(place)?.position ?: return samePage(place, here)
-        val screen = positions.resolve(here)?.position ?: return samePage(place, here)
+        val positions = bookPositions ?: return samePlaceAs(place, here)
+        val there = positions.resolve(place)?.position ?: return samePlaceAs(place, here)
+        val screen = positions.resolve(here)?.position ?: return samePlaceAs(place, here)
         return there == screen
     }
 
