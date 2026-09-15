@@ -461,9 +461,13 @@ emulator.
   `pageTurnStyleOnScreen(chosen, eInk, motionRemoved)`: electronic
   paper, and a system whose animation scales are off. They are named
   apart because they are not the same fact even where they agree.
-  Reading Android's switch is `ui/SystemMotion.kt`, both
-  `ANIMATOR_DURATION_SCALE` and `TRANSITION_ANIMATION_SCALE`, observed
-  rather than read once, and treated as removed when not above zero.
+  Reading Android's switch is `ui/SystemMotion.kt`, and it reads
+  `ANIMATOR_DURATION_SCALE` alone, observed rather than read once and
+  treated as removed when not above zero. That key and no other because
+  it is the one Compose's `MotionDurationScale` obeys, so the turn and
+  the spring that settles a released curl always agree;
+  `TRANSITION_ANIMATION_SCALE` zeroed by itself would stop one and not
+  the other, and governs activity transitions anyway.
   Do not add a second check for it anywhere: Compose already collapses
   its own tweens through `MotionDurationScale`, and the one lambda
   covers everything Liseur asks for outside Compose, since

@@ -5,33 +5,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Reading Android's animation scales as the request they stand for.
+ * Reading Android's animator duration scale as the request it stands for.
  */
 class SystemMotionTest {
 
     @Test
     fun `an ordinary phone animates`() {
-        assertFalse(motionRemoved(animatorScale = 1f, transitionScale = 1f))
+        assertFalse(motionRemoved(animatorScale = 1f))
     }
 
     @Test
     fun `slowed-down animations are still animations`() {
-        assertFalse(motionRemoved(animatorScale = 10f, transitionScale = 0.5f))
-    }
-
-    @Test
-    fun `the accessibility switch takes both scales down`() {
-        assertTrue(motionRemoved(animatorScale = 0f, transitionScale = 0f))
+        assertFalse(motionRemoved(animatorScale = 10f))
+        assertFalse(motionRemoved(animatorScale = 0.5f))
     }
 
     /**
-     * Developer options sets each scale on its own, so either at zero is
-     * a reader who has asked for less motion than the other one offers.
+     * Accessibility -> Remove animations takes every scale to zero, this
+     * one among them, which is how the switch is seen at all.
      */
     @Test
-    fun `either scale alone is enough`() {
-        assertTrue(motionRemoved(animatorScale = 0f, transitionScale = 1f))
-        assertTrue(motionRemoved(animatorScale = 1f, transitionScale = 0f))
+    fun `a scale of zero reads as no motion`() {
+        assertTrue(motionRemoved(animatorScale = 0f))
     }
 
     /**
@@ -42,13 +37,11 @@ class SystemMotionTest {
      */
     @Test
     fun `a scale below zero reads as no motion`() {
-        assertTrue(motionRemoved(animatorScale = -1f, transitionScale = 1f))
-        assertTrue(motionRemoved(animatorScale = 1f, transitionScale = -0.25f))
+        assertTrue(motionRemoved(animatorScale = -1f))
     }
 
     @Test
     fun `a scale that is not a number reads as no motion`() {
-        assertTrue(motionRemoved(animatorScale = Float.NaN, transitionScale = 1f))
-        assertTrue(motionRemoved(animatorScale = 1f, transitionScale = Float.NaN))
+        assertTrue(motionRemoved(animatorScale = Float.NaN))
     }
 }

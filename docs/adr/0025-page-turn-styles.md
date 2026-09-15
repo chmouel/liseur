@@ -78,15 +78,22 @@ a fact about the panel, not a preference.
 > `scrollScreenful` already asks `style() != NONE` for its smoothness
 > and `revealEnd` already asks `style() == LIFT` for its lift.
 >
-> Both scales are read, `ANIMATOR_DURATION_SCALE` and
-> `TRANSITION_ANIMATION_SCALE`, because Accessibility -> Remove
-> animations writes both while developer options writes either, and a
-> scale is treated as removed when it is not above zero rather than
-> when it equals zero, since it comes out of a settings table and a
-> negative scale is not a slower animation. `ui/SystemMotion.kt` holds
-> the pure predicate and a `rememberMotionRemoved()` that observes both
-> keys, so turning the setting off mid-book is believed without closing
-> the book.
+> The scale read is `ANIMATOR_DURATION_SCALE`, the one Compose's own
+> `MotionDurationScale` obeys, and it is read alone. Asking Compose's
+> question is what keeps the reader's motion of a piece: the page a tap
+> turns and the spring that settles a curl after the finger lifts
+> either both animate or neither does. `TRANSITION_ANIMATION_SCALE` was
+> read too at first and dropped, because zeroed on its own it stopped
+> the turn and left the settle springing, and what it governs is
+> activity transitions, which a page turn is not. Accessibility ->
+> Remove animations writes all three, so the switch is still seen. A
+> scale counts as removed when it is not above zero rather than when it
+> equals zero, since it comes out of a settings table where `NaN` and a
+> negative number parse as readily as a scale and neither is a slower
+> animation. `ui/SystemMotion.kt` holds the pure predicate and a
+> `rememberMotionRemoved()` that observes the key and re-reads on
+> resume, so turning the setting off mid-book is believed without
+> closing the book.
 >
 > The two overrules give the same answer and are not the same fact, so
 > `pageTurnStyleOnScreen(chosen, eInk, motionRemoved)` names them
