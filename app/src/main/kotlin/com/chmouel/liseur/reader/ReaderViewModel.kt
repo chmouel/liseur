@@ -81,6 +81,8 @@ import com.chmouel.liseur.reader.progress.ReadingPace
 import com.chmouel.liseur.reader.progress.ReadingSpeedEstimator
 import com.chmouel.liseur.reader.progress.ResourceAnchor
 import com.chmouel.liseur.reader.progress.StableBookProgress
+import com.chmouel.liseur.reader.progress.namesItsPage
+import com.chmouel.liseur.reader.progress.samePage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -838,9 +840,14 @@ class ReaderViewModel(
         .map { it.highlightPalette }
         .stateIn(viewModelScope, SharingStarted.Eagerly, HighlightPalette())
 
+    private val _place = MutableStateFlow<Locator?>(null)
+
     /** Most recent position, used to persist progress and to survive recreation. */
-    var lastLocator: Locator? = null
-        private set
+    var lastLocator: Locator?
+        get() = _place.value
+        private set(value) {
+            _place.value = value
+        }
 
     /**
      * Advances only on persisted local reading movement — never on a
@@ -986,6 +993,7 @@ class ReaderViewModel(
                     ?: ReadingPace.Unknown,
             )
             val positions = positionsFor(publication)
+            repairBookmarkPages(positions)
             this@ReaderViewModel.publication = publication
             if (pulledAutomatically != null) {
                 val localLocator = beforeSync?.locatorJson
@@ -1106,19 +1114,8 @@ class ReaderViewModel(
     }
 
     /** Whether two locators name the same stable place within a resource. */
-    private fun Locator.sameReadingPositionAs(other: Locator): Boolean {
-        if (href != other.href) return false
-        val position = locations.position
-        val otherPosition = other.locations.position
-        if (position != null && otherPosition != null && position != otherPosition) return false
-
-        val progression = locations.progression
-        val otherProgression = other.locations.progression
-        if (progression != null && otherProgression != null) {
-            return kotlin.math.abs(progression - otherProgression) < LOCATOR_EPSILON
-        }
-        return position != null && otherPosition != null
-    }
+    private fun Locator.sameReadingPositionAs(other: Locator): Boolean =
+        samePage(this, other)
 
     /**
      * Called when the reader stops being looked at.
@@ -1314,6 +1311,27 @@ class ReaderViewModel(
         return positions.chapters
             .map { (it.firstPosition - 1) / denominator }
             .filter { it > 0f }
+    }
+
+    /**
+     * Brings old bookmarks' page numbers into line with the one on the
+     * page.
+     *
+     * A mark used to be filed under Readium's raw integer position
+     * while the footer counted the interpolated one, so a bookmark
+     * could list a page the reader never saw it on. The row is
+     * corrected in place, without restamping `updated_at`: liseur-sync
+     * neither carries this number nor fingerprints it, and a new stamp
+     * would push every bookmark in the book as an edit nobody made.
+     */
+    private suspend fun repairBookmarkPages(positions: BookPositions) {
+        if (!positions.isUsable) return
+        annotationDao.forBook(bookId)
+            .filter { it.kind == AnnotationKind.BOOKMARK.name }
+            .forEach { mark ->
+                val page = mark.locator()?.let { positions.resolve(it) }?.position ?: return@forEach
+                if (page != mark.position) annotationDao.upsert(mark.copy(position = page))
+            }
     }
 
     /** Builds the synthetic and printed-page indexes together, once per book. */
@@ -1543,25 +1561,81 @@ class ReaderViewModel(
     }
 
     /**
-     * True when the page on screen is already bookmarked. It has to watch
-     * the position as well as the marks, or the ribbon would stay out for
-     * the rest of the book once a single page was bookmarked.
+     * Bookmarks with their locators already read back.
+     *
+     * The ribbon asks about every one of them on every page turn, and
+     * parsing the stored JSON that often is work for nothing: the marks
+     * change when the reader makes one, the page changes constantly.
      */
-    val bookmarked: StateFlow<Boolean> = combine(annotations, _progress) { list, _ ->
-        list.any { it.kind == AnnotationKind.BOOKMARK.name && it.isHere() }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    private val bookmarkPlaces: StateFlow<List<Pair<BookAnnotation, Locator?>>> =
+        annotations
+            .map { marks ->
+                marks
+                    .filter { it.kind == AnnotationKind.BOOKMARK.name }
+                    .map { it to it.locator() }
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    private fun bookmarkForCurrentPage(): BookAnnotation? =
-        annotations.value.firstOrNull {
-            it.kind == AnnotationKind.BOOKMARK.name && it.isHere()
+    /**
+     * True when the page on screen is already bookmarked. It has to watch
+     * where the reader is as well as the marks, or the ribbon would stay
+     * out for the rest of the book once a single page was bookmarked.
+     */
+    val bookmarked: StateFlow<Boolean> =
+        combine(bookmarkPlaces, _place, scrollMode) { marks, here, scrolled ->
+            marks.any { (mark, place) -> mark.isHere(place, here, scrolled) }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private fun bookmarkForCurrentPage(): BookAnnotation? {
+        val here = lastLocator
+        val scrolled = scrollMode.value
+        return bookmarkPlaces.value
+            .firstOrNull { (mark, place) -> mark.isHere(place, here, scrolled) }
+            ?.first
+    }
+
+    /**
+     * Whether this mark was made on the page now on screen.
+     *
+     * Decided by the two locators, which is the only way the answer can
+     * agree with itself: the number stored alongside a mark is a page
+     * number for the reader to read, rounded off Readium's positions,
+     * and several screens in a row carry the same one. Testing against
+     * that is what wrote a second bookmark on a page that already had
+     * one, and what left the ribbon hanging out pages later.
+     *
+     * The whole-book percentage is the last resort, for a mark that
+     * arrived from a server with nothing finer on it.
+     */
+    private fun BookAnnotation.isHere(
+        place: Locator?,
+        here: Locator?,
+        scrolled: Boolean,
+    ): Boolean {
+        here ?: return false
+        if (place != null && place.namesItsPage()) {
+            return if (scrolled) sameScreenful(place, here) else samePage(place, here)
         }
-
-    private fun BookAnnotation.isHere(): Boolean {
-        val page = _progress.value?.position
-        if (page != null && position != null) return position == page
-        val here = lastLocator?.locations?.totalProgression ?: return false
         val there = totalProgression ?: return false
-        return kotlin.math.abs(here - there) < EPSILON
+        val progression = here.locations.totalProgression ?: return false
+        return kotlin.math.abs(progression - there) < EPSILON
+    }
+
+    /**
+     * The scrolled book's answer to the same question.
+     *
+     * Nothing here is a page. The anchor names the word at the top of
+     * the screen and the progression is the scroll offset, so both move
+     * with every line, and a ribbon that asked them would go out at the
+     * first nudge of a finger. A Readium position is about a screenful
+     * of text, which is the nearest thing a scrolled book has to the
+     * page the reader means, and it is what the footer is counting.
+     */
+    private fun sameScreenful(place: Locator, here: Locator): Boolean {
+        val positions = bookPositions ?: return samePage(place, here)
+        val there = positions.resolve(place)?.position ?: return samePage(place, here)
+        val screen = positions.resolve(here)?.position ?: return samePage(place, here)
+        return there == screen
     }
 
     fun remove(annotation: BookAnnotation) {
@@ -1599,7 +1673,12 @@ class ReaderViewModel(
 
     private fun annotation(locator: Locator, kind: AnnotationKind): BookAnnotation {
         val progression = locator.locations.totalProgression
-        val position = locator.locations.position
+        // The page a mark is filed under has to be the page the reader
+        // saw, and that is the one the footer counts: resolve()
+        // interpolates between Readium's coarse positions, while the
+        // integer on the locator is the coarse position itself.
+        val position = bookPositions?.resolve(locator)?.position
+            ?: locator.locations.position
             ?: progression?.let { bookPositions?.positionAtProgression(it.toFloat()) }
         return BookAnnotation(
             id = UUID.randomUUID().toString(),
@@ -1779,7 +1858,6 @@ class ReaderViewModel(
     )
 
     companion object {
-        private const val LOCATOR_EPSILON = 0.000001
         private const val JUMP_BACK_TIMEOUT_MS = 30_000L
 
         /**

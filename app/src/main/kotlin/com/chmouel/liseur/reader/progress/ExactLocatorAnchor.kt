@@ -68,15 +68,34 @@ object ExactLocatorAnchor {
             ),
         )
 
+    /**
+     * The anchor written into [locator], if it carries one.
+     *
+     * Without the size check [isExact] makes: that check asks whether
+     * the locator will fit in a sync payload, and it answers by
+     * serialising the whole thing. Comparing two locators already on
+     * this device has no payload in it, and the ribbon asks on every
+     * page turn.
+     */
+    fun anchorIn(locator: Locator?): ViewportTextAnchor? {
+        locator ?: return null
+        val marker = locator.locations.otherLocations[MARKER]
+        if (marker !is Number || marker.toInt() != 1) return null
+        val selector = (locator.locations.otherLocations[CSS_SELECTOR] as? String)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val highlight = locator.text.highlight?.takeIf { it.isNotBlank() } ?: return null
+        return ViewportTextAnchor(
+            cssSelector = selector,
+            before = locator.text.before.orEmpty(),
+            highlight = highlight,
+            after = locator.text.after.orEmpty(),
+        )
+    }
+
     fun isExact(locator: Locator?): Boolean {
         locator ?: return false
-        val marker = locator.locations.otherLocations[MARKER]
-        val marked = marker is Number && marker.toInt() == 1
-        return marked &&
-            locator.locations.otherLocations[CSS_SELECTOR] is String &&
-            (locator.locations.otherLocations[CSS_SELECTOR] as String).isNotBlank() &&
-            !locator.text.highlight.isNullOrBlank() &&
-            fitsSyncLimit(locator)
+        return anchorIn(locator) != null && fitsSyncLimit(locator)
     }
 
     fun isExactJson(locatorJson: String?): Boolean =

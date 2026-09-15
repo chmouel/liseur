@@ -328,6 +328,21 @@ emulator.
   `%2E%2E` before it resolves dot segments, so no escape survives.
   `LiseurSyncApi.addressable()` is what makes a delete decline rather
   than aim at the collection.
+- Whether a bookmark is on the page now open is decided by the two
+  locators, through `samePage()`, and never by the page number stored
+  beside it. That number is rounded off Readium's positions, which are
+  far coarser than a screen, so several screens in a row carry the same
+  one: testing against it wrote a second bookmark on a page that already
+  had one and left the ribbon hanging out pages later (#194, #202). The
+  exact anchor settles it wherever both sides carry one, since it names
+  the first word on screen and so survives a reflow that rewrites every
+  progression. `sameReadingPositionAs` and the ribbon share that one
+  function so the catch-up guards and the bookmark cannot drift apart. A
+  scrolled book has no pages and its anchor moves with every line, so it
+  falls back to the Readium position, which is about a screenful and is
+  what the footer counts. The stored number is for the reader to read,
+  and is written from `BookPositions.resolve()` so it says what the
+  footer said.
 - Removing a book keeps its annotations *and* its `annotation_sync`
   rows. They are still on the server and on the other phone, and
   dropping only the agreements would push every mark again as new when
