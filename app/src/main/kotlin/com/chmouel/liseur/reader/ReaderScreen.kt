@@ -3305,47 +3305,6 @@ class ReaderBookSyncActions(
     val start: () -> Unit,
 )
 
-/**
- * Points the system-bar icons at the page rather than at the app theme.
- *
- * `enableEdgeToEdge()` picks the icon colour from whether the *app* is
- * dark, which stops being the right question the moment the reading theme
- * is allowed to disagree with it: a light app with a black reading theme
- * draws dark icons over a dark toolbar and they vanish.
- *
- * This sits at activity level rather than with [ImmersiveMode], because the
- * page's colours reach the loading and error screens and the sync dialog
- * too, and dark icons over a black loading screen is the same bug one scope
- * up.
- *
- * What the bars looked like on the way in is captured and put back on the
- * way out, so the library gets its own bars back rather than the last book's.
- */
-@Composable
-internal fun SystemBarIcons(dark: Boolean) {
-    val view = LocalView.current
-    val controller = remember(view) {
-        (view.context as? Activity)?.window?.let { WindowCompat.getInsetsController(it, view) }
-    }
-    // Read before anything below has had a chance to change them.
-    val original = remember(controller) {
-        controller?.let { it.isAppearanceLightStatusBars to it.isAppearanceLightNavigationBars }
-    }
-    DisposableEffect(controller, dark) {
-        controller?.isAppearanceLightStatusBars = !dark
-        controller?.isAppearanceLightNavigationBars = !dark
-        onDispose {}
-    }
-    DisposableEffect(controller, original) {
-        onDispose {
-            if (controller != null && original != null) {
-                controller.isAppearanceLightStatusBars = original.first
-                controller.isAppearanceLightNavigationBars = original.second
-            }
-        }
-    }
-}
-
 /** Hides the status and navigation bars while the chrome is hidden. */
 @Composable
 private fun ImmersiveMode(hideSystemBars: Boolean) {

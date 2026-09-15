@@ -43,6 +43,7 @@ import com.chmouel.liseur.ui.library.UploadDecision
 import com.chmouel.liseur.ui.library.canUploadTo
 import com.chmouel.liseur.ui.library.uploadOnOpen
 import com.chmouel.liseur.ui.theme.LiseurTheme
+import com.chmouel.liseur.ui.theme.SystemBarIcons
 import com.chmouel.liseur.ui.theme.isDark
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
