@@ -218,6 +218,11 @@ class LocalLibraryRepository(
             if (book.openableUrl == null) {
                 if (book.hidden) unhide(book.url)
                 bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, url.toString())
+                // The path may have been reused by a different EPUB since
+                // the row went orphaned. Re-read the file: same work keeps
+                // everything, a different one starts fresh, exactly as a
+                // folder scan treats a file rewritten in place.
+                reindexBook(url, book.url, modifiedAt = null, previousWorkId = book.workId)
                 return@withLock ImportResult.Added(bookDao.getByUrl(book.url) ?: book)
             }
             return@withLock shelveAgainOrReport(book)
@@ -336,13 +341,13 @@ class LocalLibraryRepository(
             if (book.openableUrl == null) {
                 val keepsWorking = incoming.toString().startsWith("file:") ||
                     persistPermission(uri)
-                val localUri = if (keepsWorking) {
-                    incoming.toString()
-                } else {
-                    copyIntoLibrary(uri)?.toString()
-                }
-                if (localUri != null) {
-                    bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, localUri)
+                val durable = if (keepsWorking) incoming else copyIntoLibrary(uri)
+                if (durable != null) {
+                    bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
+                    // Guard against a different EPUB having taken over the
+                    // path while the row was orphaned: same work keeps
+                    // everything, a different one starts fresh.
+                    reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)
                 }
             }
             return@withLock bookDao.getByUrl(book.url) ?: book
