@@ -234,6 +234,11 @@ class LocalLibraryRepository(
                 // fresh, exactly as a folder scan treats a file rewritten
                 // in place, and one that will not open restores nothing.
                 if (!reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)) {
+                    // A copy made just for this restore is not referenced
+                    // by anything once the restore is refused, so it goes.
+                    // Content addressing makes that safe: a file another
+                    // row points at holds bytes that already opened.
+                    if (!keepsWorking) dropCopiedFile(durable)
                     return@withLock shelveAgainOrReport(book)
                 }
                 if (book.hidden) unhide(book.url)
@@ -361,10 +366,16 @@ class LocalLibraryRepository(
                 // same work keeps everything, a different one having
                 // taken over the path starts fresh, and one that will
                 // not open restores nothing.
-                if (durable != null &&
-                    reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)
-                ) {
-                    bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
+                if (durable != null) {
+                    if (reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)) {
+                        bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
+                    } else if (!keepsWorking) {
+                        // A copy made just for this restore is not
+                        // referenced by anything once the restore is
+                        // refused, so it goes rather than lingering
+                        // unreachable in the app's storage.
+                        dropCopiedFile(durable)
+                    }
                 }
             }
             return@withLock bookDao.getByUrl(book.url) ?: book
@@ -442,6 +453,17 @@ class LocalLibraryRepository(
         } finally {
             if (spool.exists()) spool.delete()
         }
+    }
+
+    /**
+     * Removes a file that [copyIntoLibrary] made and nothing came to
+     * reference. Only a `file:` URL in the app's own storage qualifies.
+     */
+    private fun dropCopiedFile(url: AbsoluteUrl) {
+        val text = url.toString()
+        if (!text.startsWith("file:")) return
+        runCatching { File(java.net.URI(text)).delete() }
+            .onFailure { Log.w(TAG, "Could not drop the copied book at $url", it) }
     }
 
     suspend fun markOpened(url: String) {
@@ -894,6 +916,15 @@ class LocalLibraryRepository(
                 .ifBlank { null }
             val workId = workIdOf(publication.metadata.identifier, title, author)
             val series = seriesOf(publication)
+            // Cleanup first, then the new description. Torn the other
+            // way round, a death between the two leaves the new workId
+            // over the old reading, and the next look finds a matching
+            // work and never cleans; this way round the next look still
+            // sees the old work and finishes the job.
+            if (!isSameWork(previousWorkId, workId)) {
+                Log.i(TAG, "A different book took over a path; starting it fresh")
+                bookRemoval.contentReplaced(bookUrl)
+            }
             bookDao.refreshIndexedFile(
                 url = bookUrl,
                 title = title,
@@ -904,10 +935,6 @@ class LocalLibraryRepository(
                 seriesName = series.name,
                 seriesIndex = series.index,
             )
-            if (!isSameWork(previousWorkId, workId)) {
-                Log.i(TAG, "A different book took over a path; starting it fresh")
-                bookRemoval.contentReplaced(bookUrl)
-            }
             return true
         } finally {
             publication.close()
