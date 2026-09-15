@@ -1,4 +1,4 @@
-# 26. Imported reading keeps the time it was read
+# 32. Imported reading keeps the time it was read
 
 Status: accepted
 GitHub issue: [#180](https://github.com/chmouel/liseur/issues/180)

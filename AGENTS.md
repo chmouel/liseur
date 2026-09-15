@@ -194,7 +194,7 @@ emulator.
   `COALESCE(read_at, updated_at)`. Importing old state must reproduce
   the other device's order, never invent one from arrival times. A row
   with neither a progression nor a locator records no reading and must
-  report none. See `docs/adr/0026-imported-reading-keeps-its-own-time.md`.
+  report none. See `docs/adr/0032-imported-reading-keeps-its-own-time.md`.
 - Naming a book is rationed by what naming costs, not by a single
   number: resolving from file hashes opens the file, resolving a
   catalog book is one request. A run that leaves books unnamed or
