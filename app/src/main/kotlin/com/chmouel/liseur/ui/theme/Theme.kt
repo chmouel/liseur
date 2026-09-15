@@ -2,6 +2,7 @@ package com.chmouel.liseur.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -12,6 +13,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ThemeMode
 
 /*
@@ -186,6 +188,17 @@ internal fun eInkPalette(eInk: Boolean, colorEInk: Boolean): EInkPalette = when 
     else -> EInkPalette.MONOCHROME
 }
 
+/** A palette at both its lightnesses, so either can be asked for by name. */
+internal class PalettePair(val light: ColorScheme, val dark: ColorScheme) {
+    fun at(dark: Boolean): ColorScheme = if (dark) this.dark else light
+}
+
+/** Liseur's own paper-and-ink palette. */
+internal val BrandPalette = PalettePair(LightColors, DarkColors)
+
+/** The greyscale palette electronic paper gets instead. */
+internal val MonoPalette = PalettePair(MonoLightColors, MonoDarkColors)
+
 /** Whether this device can take its colours from the wallpaper. */
 val dynamicColorAvailable: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -200,6 +213,35 @@ val dynamicColorAvailable: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODE
 @ReadOnlyComposable
 fun ThemeMode.isDark(): Boolean = isDark(isSystemInDarkTheme())
 
+/**
+ * The fixed palette pair this configuration draws from.
+ *
+ * Wallpaper colours are not in here, because they are not a pair: the
+ * system hands over one scheme at a time and there is no counterpart to
+ * ask for. Anything that needs both lightnesses of the same palette —
+ * which is what painting chrome on a reading page needs — has to start
+ * here.
+ */
+internal fun palettePairFor(eInk: EInkPalette): PalettePair =
+    if (eInk == EInkPalette.MONOCHROME) MonoPalette else BrandPalette
+
+/** The single scheme in force, wallpaper colours included. */
+@Composable
+private fun schemeFor(
+    dark: Boolean,
+    eInk: EInkPalette,
+    dynamicColor: Boolean,
+): ColorScheme {
+    val context = LocalContext.current
+    if (eInk == EInkPalette.NONE &&
+        dynamicColor &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    ) {
+        return if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    }
+    return palettePairFor(eInk).at(dark)
+}
+
 @Composable
 fun LiseurTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -211,20 +253,32 @@ fun LiseurTheme(
     // restrained accents; a monochrome one spends the full range on contrast.
     eInk: Boolean = false,
     colorEInk: Boolean = false,
+    /**
+     * The page the chrome inside is sitting on, when it is sitting on one.
+     *
+     * Non-null only in the reader. Everything Material draws under it —
+     * every sheet, dialog, menu, slider and text field — is then already
+     * the colour of the paper, instead of each one having to remember to
+     * ask. Null everywhere else, which is the app's own theme unchanged.
+     *
+     * Wallpaper colour is deliberately dropped when this is set: see
+     * [readingColorScheme].
+     */
+    readingPage: ReaderTheme? = null,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colorScheme = when (eInkPalette(eInk, colorEInk)) {
-        EInkPalette.MONOCHROME -> if (darkTheme) MonoDarkColors else MonoLightColors
-        EInkPalette.COLOR -> if (darkTheme) DarkColors else LightColors
-        EInkPalette.NONE -> if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (darkTheme) dynamicDarkColorScheme(context)
-            else dynamicLightColorScheme(context)
-        } else if (darkTheme) {
-            DarkColors
-        } else {
-            LightColors
-        }
+    val palette = eInkPalette(eInk, colorEInk)
+    val colorScheme = if (readingPage != null) {
+        val pair = palettePairFor(palette)
+        readingColorScheme(
+            light = pair.light,
+            dark = pair.dark,
+            page = readingPage,
+            eInk = eInk,
+        )
+    } else {
+        schemeFor(dark = darkTheme, eInk = palette, dynamicColor = dynamicColor)
     }
 
     val typography = remember { liseurTypography(literataFamily(context.assets)) }

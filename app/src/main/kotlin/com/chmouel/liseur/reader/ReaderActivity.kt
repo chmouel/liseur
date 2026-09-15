@@ -154,16 +154,34 @@ class ReaderActivity : FragmentActivity() {
         setContent {
             val settings by container.appSettings.settings.collectAsState(initial = AppSettings())
             val appIsDark = settings.themeMode.isDark()
+            // The reading theme, read once for the whole activity.
+            //
+            // Null until the store has actually answered, and the book is
+            // not drawn until it has. ReaderViewModel.open() awaits this
+            // same store before it publishes Ready, so a second collector
+            // resolving on its own schedule could otherwise have the page
+            // painted black while MaterialTheme was still handing out the
+            // app's light colours. One answer, or none yet.
+            val readerPrefs by container.readerPreferences.prefs
+                .collectAsStateWithLifecycle(initialValue = null)
+            val readingPage = readerPrefs?.themeChoice?.resolve(appIsDark)
+            // The bars belong to the activity, not to the book: the page
+            // colours reach the loading and error screens too, and dark
+            // icons on a black loading screen is the same bug one scope up.
+            SystemBarIcons(dark = readingPage?.isDarkPage ?: appIsDark)
             ProvideEInk(settings.eInkMode) {
                 LiseurTheme(
                     darkTheme = appIsDark,
                     dynamicColor = settings.dynamicColor,
                     eInk = LocalEInk.current,
                     colorEInk = settings.colorEInk,
+                    readingPage = readingPage,
                 ) {
                     // Nothing may touch the view model until the book has a
-                    // name, because building it is what fixes that name.
-                    if (target == null) {
+                    // name, because building it is what fixes that name —
+                    // nor until the page has a colour, or the first frame of
+                    // the book is drawn in the wrong one.
+                    if (target == null || readingPage == null) {
                         ReaderLoadingScreen()
                         return@LiseurTheme
                     }
@@ -217,7 +235,10 @@ class ReaderActivity : FragmentActivity() {
                                 // navigator is configured, and turning scrolling on
                                 // has to take the sideways chapter jumps with it.
                                 val prefs by viewModel.prefs.collectAsStateWithLifecycle()
-                                val readingTheme = prefs.themeChoice.resolve(appIsDark)
+                                // The activity's answer, not a second one: the
+                                // scheme the chrome is painted in and the page
+                                // it sits on have to be the same theme.
+                                val readingTheme = readingPage
                                 val scrollMode by viewModel.scrollMode.collectAsStateWithLifecycle()
                                 val columnMode = prefs.columnMode.effectiveFor(widthClass())
                                 // A third key, for the same reason as the
