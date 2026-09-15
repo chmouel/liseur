@@ -75,6 +75,7 @@ import com.chmouel.liseur.ui.ProvideEInk
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.ui.theme.LiseurTheme
+import com.chmouel.liseur.ui.theme.SystemBarIcons
 import com.chmouel.liseur.ui.theme.dynamicColorAvailable
 import com.chmouel.liseur.ui.theme.isDark
 import android.net.Uri
@@ -105,9 +106,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by container.appSettings.settings
                 .collectAsState(initial = AppSettings())
+            val appIsDark = settings.themeMode.isDark()
+            // enableEdgeToEdge() above picked the icon colour from the
+            // configuration this activity was created in and will not be
+            // asked again, so a theme switched in Settings would otherwise
+            // leave dark icons on a dark bar until something recreated us.
+            SystemBarIcons(dark = appIsDark)
             ProvideEInk(settings.eInkMode) {
                 LiseurTheme(
-                    darkTheme = settings.themeMode.isDark(),
+                    darkTheme = appIsDark,
                     // E-paper needs stable colours rather than a palette
                     // lifted from the wallpaper. The central e-ink policy
                     // below therefore takes precedence over dynamic colour.
