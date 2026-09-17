@@ -50,7 +50,7 @@ class BookDownloadWorker(
         // refresh guards itself the same way and for the same reason:
         // see RemoteCatalogRepository.forAccount.
         val queuedFor = inputData.getString(BookDownloadRepository.KEY_ACCOUNT_KEY)
-        if (queuedFor != null && queuedFor != server.accountKey) {
+        if (queuedFor != null && !server.answersTo(queuedFor)) {
             batchId?.let { stopBatch(it, BulkStopReason.ACCOUNT_CHANGED) }
             return stopped(bookUrl, "queued for an account that is no longer connected")
         }
@@ -91,6 +91,28 @@ class BookDownloadWorker(
             downloads.withBulkTransferSlot(runDownload)
         } else {
             runDownload()
+        }
+
+        // Asked again now the file is here. The checks above were made
+        // before a download that may have taken minutes, and stopping a
+        // batch cannot reach inside one already running: a reader who
+        // connected another server meanwhile has had this book's row
+        // retired underneath us, so committing would leave a file on
+        // disk that nothing points at and nothing ever collects.
+        //
+        // The account is what settles it, and a download the reader
+        // asked for by name carries one too: two accounts on one
+        // catalog share their book URLs, so a refresh can put a row
+        // back at the same URL before this transfer ends, and asking
+        // only whether *a* row is there would file one account's bytes
+        // under the other's book. The row is asked about as well, for
+        // work queued by a version that stamped no account.
+        val stillOurs = queuedFor == null ||
+            container.remoteAccount.current()?.answersTo(queuedFor) == true
+        if (!stillOurs || bookDao.getByUrl(bookUrl) == null) {
+            if (outcome is DownloadOutcome.Done) downloads.fileFor(uuid).delete()
+            batchId?.let { stopBatch(it, BulkStopReason.ACCOUNT_CHANGED) }
+            return stopped(bookUrl, "the account changed while this book was downloading")
         }
 
         return when (outcome) {

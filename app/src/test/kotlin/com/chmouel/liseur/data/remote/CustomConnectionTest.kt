@@ -234,6 +234,40 @@ class CustomConnectionTest {
     }
 
     @Test
+    fun `a shelf of free books leaves a sync partner where it is`() = runTest {
+        // A kosync pairing outlives its catalog on purpose, so an empty
+        // library may well have one standing when the free-books card
+        // is offered. It is the reader's own configuration, and tapping
+        // a card about Project Gutenberg is not a request to throw away
+        // credentials and peer agreements they never mentioned.
+        connect(catalog = CATALOG, kosyncUrl = SYNC)
+        account.disconnect()
+        assertEquals(SYNC, db.kosyncPeerDao().get()?.baseUrl)
+
+        val outcome = account.connectOpenCatalogIfDisconnected(CATALOG, shelfLimit = 25)
+
+        assertEquals(OpenCatalogOutcome.CONNECTED, outcome)
+        assertEquals(SYNC, db.kosyncPeerDao().get()?.baseUrl)
+        assertEquals(25, db.remoteServerDao().get()?.shelfLimit)
+    }
+
+    @Test
+    fun `a key written down before the spelling settled still names this account`() = runTest {
+        // `accountKey` became slash-canonical in this release, but a
+        // bulk download queued before the upgrade carries the old
+        // spelling in its WorkManager input. Reading that as somebody
+        // else's account would stop the batch on a server nobody
+        // touched.
+        connect(catalog = "$CATALOG/", kosyncUrl = "")
+        val server = db.remoteServerDao().get()!!
+        val legacy = "custom|${server.catalogUrl ?: server.baseUrl}|${server.username.orEmpty()}"
+
+        assertTrue(server.answersTo(server.accountKey))
+        assertTrue(server.answersTo(legacy))
+        assertFalse(server.answersTo("custom|https://other.example/opds|"))
+    }
+
+    @Test
     fun `a cover beside the feed is signed`() {
         // Catalogs routinely serve their files from a path beside the
         // feed rather than beneath it: the feed at /opds, the covers and
@@ -296,12 +330,48 @@ class CustomConnectionTest {
         }
     }
 
+    @Test
+    fun `changing the catalog address leaves the sync partner alone`() = runTest {
+        connect(catalog = CATALOG, kosyncUrl = SYNC)
+        assertEquals(SYNC, db.kosyncPeerDao().get()?.baseUrl)
+
+        val result = connect(catalog = "$CATALOG/other", kosyncUrl = "", speaksForKosync = false)
+
+        assertTrue(result.connected)
+        assertEquals("$CATALOG/other", db.remoteServerDao().get()?.catalogUrl)
+        assertEquals(SYNC, db.kosyncPeerDao().get()?.baseUrl)
+    }
+
+    @Test
+    fun `a trailing slash does not move the account key`() = runTest {
+        // The key names every peer-keyed row and every download already
+        // queued. An address the reader retyped with a slash on the end
+        // is the same catalog, so the key it is filed under must not
+        // change with the spelling.
+        connect(catalog = CATALOG, kosyncUrl = "")
+        val first = db.remoteServerDao().get()!!.accountKey
+
+        connect(catalog = "$CATALOG/", kosyncUrl = "")
+
+        assertEquals(first, db.remoteServerDao().get()!!.accountKey)
+    }
+
+    @Test
+    fun `a whole connection with no sync half still takes the partner away`() = runTest {
+        connect(catalog = CATALOG, kosyncUrl = SYNC)
+
+        connect(catalog = CATALOG, kosyncUrl = "")
+
+        assertNull(db.kosyncPeerDao().get())
+    }
+
     private suspend fun connect(
         catalog: String,
         kosyncUrl: String,
         username: String = "",
         password: String = "",
         kosyncUsername: String = "ada",
+        speaksForKosync: Boolean = true,
     ) = account.connectCustom(
         catalogUrl = catalog,
         username = username,
@@ -309,6 +379,7 @@ class CustomConnectionTest {
         kosyncUrl = kosyncUrl,
         kosyncUsername = kosyncUsername,
         kosyncPassword = "pw",
+        speaksForKosync = speaksForKosync,
     )
 
     private suspend fun pairKosync() {

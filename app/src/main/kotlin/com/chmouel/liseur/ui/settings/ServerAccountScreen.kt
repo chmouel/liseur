@@ -19,6 +19,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -40,12 +41,14 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -70,6 +73,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -93,6 +97,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.BulkBatch
 import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
+import com.chmouel.liseur.data.calibre.limitedTo
 import com.chmouel.liseur.data.calibre.BulkStopReason
 import com.chmouel.liseur.data.calibre.SpaceVerdict
 import com.chmouel.liseur.data.calibre.StorageUse
@@ -133,7 +138,9 @@ fun ServerAccountScreen(
     onAnswerConfirmation: (String, Boolean) -> Unit,
     onAskDownloadAll: () -> Unit,
     onDismissDownloadAll: () -> Unit,
-    onDownloadAll: () -> Unit,
+    onDownloadAll: (Int?) -> Unit,
+    onEditAddress: () -> Unit,
+    onCancelEditAddress: () -> Unit,
     onCancelDownloadAll: () -> Unit,
     onDismissBatch: () -> Unit,
     onKosyncUrlChange: (String) -> Unit,
@@ -193,11 +200,17 @@ fun ServerAccountScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 val server = state.server
-                if (server == null) {
-                    if (state.lostToRestore) {
+                if (server == null || state.editingAddress) {
+                    if (server == null && state.lostToRestore) {
                         Notice(
                             text = stringResource(R.string.server_lost_to_restore),
                             tone = NoticeTone.PROBLEM,
+                        )
+                    }
+                    if (state.editingAddress) {
+                        Notice(
+                            text = stringResource(R.string.server_change_address_note),
+                            tone = NoticeTone.NEUTRAL,
                         )
                     }
                     ConnectForm(
@@ -214,7 +227,21 @@ fun ServerAccountScreen(
                         onKosyncPasswordChange = onKosyncPasswordChange,
                         onConnect = onConnect,
                         prompt = localNetwork,
+                        addressOnly = state.editingAddress,
                     )
+                    if (state.editingAddress) {
+                        TextButton(
+                            onClick = onCancelEditAddress,
+                            // An attempt already on its way cannot be
+                            // called back, and closing the form over it
+                            // hid both its failure and the account it
+                            // could still go on to replace.
+                            enabled = !state.connecting,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
                 } else {
                     ConnectedCard(
                         server = server,
@@ -228,6 +255,7 @@ fun ServerAccountScreen(
                         onRetryCapabilities = onRetryCapabilities,
                         onKoboToken = onKoboToken,
                         onDisconnect = onDisconnect,
+                        onEditAddress = onEditAddress,
                         uploadPolicy = state.uploadPolicy,
                         onSetUploadPolicy = onSetUploadPolicy,
                         batch = state.bulkBatch,
@@ -312,53 +340,102 @@ fun ServerAccountScreen(
 }
 
 /**
+ * How many books to offer taking, given how many there are.
+ *
+ * The round numbers below the library's size, and then the library's
+ * size itself, which is both the last choice and the one that starts
+ * selected: the action is still "download all books", and a reader who
+ * wants all of them should not have to say so twice.
+ */
+internal fun downloadCountChoices(available: Int): List<Int> =
+    (listOf(10, 25, 50, 100, 250, 500).filter { it < available } + available)
+        .filter { it > 0 }
+
+/**
  * Says what fetching everything will cost, before it starts.
  *
  * A batch that will not fit is still offered rather than refused: it
  * will stop of its own accord once the device runs low, and the books it
  * did fetch are worth having. What the reader needs is to know that in
  * advance, not to be argued with.
+ *
+ * The same applies to taking fewer: a shelf of thousands on a phone with
+ * room for a hundred is a real library, and the choice of how many is
+ * priced as it is made rather than guessed at.
  */
 @Composable
 private fun DownloadAllDialog(
     estimate: BulkDownloadEstimate,
-    onConfirm: () -> Unit,
+    onConfirm: (Int?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val free = Formatter.formatShortFileSize(context, estimate.freeBytes)
-    val size = estimate.bytes?.let { Formatter.formatShortFileSize(context, it) }
+    val available = estimate.count
+    val choices = downloadCountChoices(available)
+    var wanted by rememberSaveable(available) { mutableIntStateOf(available) }
+    val chosen = estimate.limitedTo(wanted)
+    val free = Formatter.formatShortFileSize(context, chosen.freeBytes)
+    val size = chosen.bytes?.let { Formatter.formatShortFileSize(context, it) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                if (estimate.count == 0) {
+                if (available == 0) {
                     stringResource(R.string.download_all)
                 } else {
                     pluralStringResource(
                         R.plurals.download_all_confirm,
-                        estimate.count,
-                        estimate.count,
+                        chosen.count,
+                        chosen.count,
                     )
                 },
             )
         },
         text = {
-            Text(
-                when {
-                    estimate.count == 0 -> stringResource(R.string.download_all_none)
-                    size == null -> stringResource(R.string.download_all_size_unknown, free)
-                    estimate.verdict == SpaceVerdict.WILL_NOT_FIT ->
-                        stringResource(R.string.download_all_will_not_fit, size, free)
-                    estimate.verdict == SpaceVerdict.TIGHT ->
-                        stringResource(R.string.download_all_tight, size, free)
-                    else -> stringResource(R.string.download_all_size, size, free)
-                },
-            )
+            Column {
+                Text(
+                    when {
+                        available == 0 -> stringResource(R.string.download_all_none)
+                        size == null -> stringResource(R.string.download_all_size_unknown, free)
+                        chosen.verdict == SpaceVerdict.WILL_NOT_FIT ->
+                            stringResource(R.string.download_all_will_not_fit, size, free)
+                        chosen.verdict == SpaceVerdict.TIGHT ->
+                            stringResource(R.string.download_all_tight, size, free)
+                        else -> stringResource(R.string.download_all_size, size, free)
+                    },
+                )
+                // Only worth showing when there is a choice to make: one
+                // book, or a library small enough that "all" is the only
+                // round number, has nothing to pick between.
+                if (choices.size > 1) {
+                    Text(
+                        stringResource(R.string.download_all_how_many, available),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        choices.forEach { choice ->
+                            FilterChip(
+                                selected = choice == wanted,
+                                onClick = { wanted = choice },
+                                label = {
+                                    Text(
+                                        if (choice == available) {
+                                            stringResource(R.string.download_all_every, choice)
+                                        } else {
+                                            choice.toString()
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         },
         confirmButton = {
-            if (estimate.count > 0) {
-                TextButton(onClick = onConfirm) {
+            if (available > 0) {
+                TextButton(onClick = { onConfirm(wanted.takeIf { it < available }) }) {
                     Text(stringResource(R.string.download_all_start))
                 }
             }
@@ -545,6 +622,14 @@ private fun ConnectForm(
     onKosyncPasswordChange: (String) -> Unit,
     onConnect: (Boolean) -> Unit,
     prompt: LocalNetworkPrompt,
+    /**
+     * Whether this form is only changing a connected server's address.
+     *
+     * Then it does not speak for the KOReader pairing: that has its own
+     * section further down, which is still on screen, and showing the
+     * same three fields twice offered to mirror or to contradict it.
+     */
+    addressOnly: Boolean = false,
 ) {
     var picking by rememberSaveable { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -661,7 +746,7 @@ private fun ConnectForm(
             OutlinedTextField(
                 value = state.username,
                 onValueChange = onUsernameChange,
-                label = { Text(stringResource(R.string.server_username)) },
+                label = { Text(stringResource(R.string.server_username_optional)) },
                 singleLine = true,
                 enabled = !state.connecting,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
@@ -670,7 +755,7 @@ private fun ConnectForm(
             OutlinedTextField(
                 value = state.password,
                 onValueChange = onPasswordChange,
-                label = { Text(stringResource(R.string.server_password)) },
+                label = { Text(stringResource(R.string.server_password_optional)) },
                 singleLine = true,
                 enabled = !state.connecting,
                 visualTransformation = secretMask,
@@ -687,56 +772,58 @@ private fun ConnectForm(
             // refusal reads as a complaint about the sync server.
             ConnectError(state = state, onConnect = onConnect, prompt = prompt)
 
-            SectionLabel(stringResource(R.string.server_custom_kosync_section))
-            OutlinedTextField(
-                value = state.kosyncUrl,
-                onValueChange = onKosyncUrlChange,
-                label = { Text(stringResource(R.string.kosync_url)) },
-                placeholder = { Text("sync.example.com") },
-                singleLine = true,
-                enabled = !state.connecting,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Next,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = state.kosyncUsername,
-                onValueChange = onKosyncUsernameChange,
-                label = { Text(stringResource(R.string.server_username)) },
-                singleLine = true,
-                enabled = !state.connecting,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = state.kosyncPassword,
-                onValueChange = onKosyncPasswordChange,
-                label = { Text(stringResource(R.string.server_password)) },
-                singleLine = true,
-                enabled = !state.connecting,
-                visualTransformation = secretMask,
-                trailingIcon = secretToggle,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            FieldHelp(stringResource(R.string.server_custom_kosync_help))
-            state.kosyncError?.let {
-                if (it == AccountError.LOCAL_NETWORK_BLOCKED) {
-                    LocalNetworkNotice(
-                        text = stringResource(it.kosyncMessageRes()),
-                        prompt = prompt,
-                        onAskAgain = { onConnect(false) },
-                    )
-                } else {
-                    Notice(
-                        text = stringResource(it.kosyncMessageRes()),
-                        tone = NoticeTone.PROBLEM,
-                    )
+            if (!addressOnly) {
+                SectionLabel(stringResource(R.string.server_custom_kosync_section))
+                OutlinedTextField(
+                    value = state.kosyncUrl,
+                    onValueChange = onKosyncUrlChange,
+                    label = { Text(stringResource(R.string.kosync_url)) },
+                    placeholder = { Text("sync.example.com") },
+                    singleLine = true,
+                    enabled = !state.connecting,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = state.kosyncUsername,
+                    onValueChange = onKosyncUsernameChange,
+                    label = { Text(stringResource(R.string.server_username)) },
+                    singleLine = true,
+                    enabled = !state.connecting,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = state.kosyncPassword,
+                    onValueChange = onKosyncPasswordChange,
+                    label = { Text(stringResource(R.string.server_password)) },
+                    singleLine = true,
+                    enabled = !state.connecting,
+                    visualTransformation = secretMask,
+                    trailingIcon = secretToggle,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                FieldHelp(stringResource(R.string.server_custom_kosync_help))
+                state.kosyncError?.let {
+                    if (it == AccountError.LOCAL_NETWORK_BLOCKED) {
+                        LocalNetworkNotice(
+                            text = stringResource(it.kosyncMessageRes()),
+                            prompt = prompt,
+                            onAskAgain = { onConnect(false) },
+                        )
+                    } else {
+                        Notice(
+                            text = stringResource(it.kosyncMessageRes()),
+                            tone = NoticeTone.PROBLEM,
+                        )
+                    }
                 }
             }
         }
@@ -883,6 +970,7 @@ private fun ConnectedCard(
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
     onDisconnect: () -> Unit,
+    onEditAddress: () -> Unit,
     onSyncNow: () -> Unit,
     uploadPolicy: UploadPolicy,
     onSetUploadPolicy: (UploadPolicy) -> Unit,
@@ -916,6 +1004,10 @@ private fun ConnectedCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
+                        // A long address wraps, and without a share of
+                        // the row to wrap inside it takes the whole
+                        // width and pushes both icons off the card.
+                        .weight(1f)
                         .clip(MaterialTheme.shapes.small)
                         .clickable(onClickLabel = open) {
                             runCatching { uriHandler.openUri(server.baseUrl) }
@@ -924,6 +1016,7 @@ private fun ConnectedCard(
                     Text(
                         server.baseUrl.substringAfter("://"),
                         style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
@@ -931,6 +1024,26 @@ private fun ConnectedCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),
                     )
+                }
+                // Beside the address rather than at the foot of the
+                // screen: the reader who wants to change it is looking
+                // at it, and the button down there reads as a sibling
+                // of Disconnect.
+                //
+                // Not offered where the address on show is the sync
+                // partner's: this form edits a catalog, and the partner
+                // has its own card below, with the password only it can
+                // ask for again.
+                if (server.catalogUrl != null) {
+                    IconButton(onClick = onEditAddress) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = stringResource(
+                                R.string.server_change_address,
+                            ),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Text(
@@ -1185,7 +1298,15 @@ private fun KosyncSection(
         }
 
         Text(
-            text = stringResource(R.string.kosync_summary),
+            text = stringResource(
+                // The pairing is offered to two kinds, and the sentence
+                // has to name the right one: a reader connecting an
+                // OPDS catalog has nothing to do with Grimmory.
+                when (state.server?.kind ?: state.kind) {
+                    ServerKind.CUSTOM -> R.string.kosync_summary_custom
+                    else -> R.string.kosync_summary
+                },
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1244,7 +1365,16 @@ private fun KosyncSection(
         )
         ListItem(
             headlineContent = { Text(stringResource(R.string.kosync_register)) },
-            supportingContent = { Text(stringResource(R.string.kosync_register_help)) },
+            supportingContent = {
+                Text(
+                    stringResource(
+                        when (state.server?.kind ?: state.kind) {
+                            ServerKind.CUSTOM -> R.string.kosync_register_help_custom
+                            else -> R.string.kosync_register_help
+                        },
+                    ),
+                )
+            },
             trailingContent = {
                 Switch(
                     checked = state.kosyncRegister,
@@ -1632,6 +1762,13 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
         ServerKind.GRIMMORY -> R.string.server_error_credentials_grimmory
         ServerKind.LISEUR_SYNC -> R.string.server_error_credentials_liseur_sync
         ServerKind.CUSTOM -> R.string.server_error_credentials_custom
+    }
+    // Only a Custom catalog is ever connected to anonymously, so this
+    // is the only kind that can reach here. The others keep their own
+    // refused-credentials wording.
+    AccountError.SIGN_IN_REQUIRED -> when (kind) {
+        ServerKind.CUSTOM -> R.string.server_error_sign_in_custom
+        else -> R.string.server_error_credentials
     }
     AccountError.WRONG_SERVER -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_not_calibre
