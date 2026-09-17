@@ -58,27 +58,11 @@ shelf of free books from [Project Gutenberg](https://www.gutenberg.org) —
 pick a category and how many books you want, and they are there before
 there is anything to connect to.
 
-Reading position syncs across devices through calibre-web, Komga and
-liseur-sync, down to the exact sentence on the last two. liseur-sync also
-syncs standalone EPUBs that never came from a catalog. A Custom connection
-can be an OPDS address, a kosync address, or both, so a plain catalog and a
-sync server that know nothing about each other still add up to a library that
-follows you. Grimmory users should choose Custom with `/api/v1/opds` and
-their OPDS user credentials, optionally pairing `/api/koreader` with their
-KOReader sync credentials. What each server can and cannot do is in
-[`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
+Reading position syncs across devices through [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org/) or
+[liseur-sync](https://github.com/chmouel/liseur-sync), down to the exact sentence on the last two. 
+A Custom connection can be an [OPDS](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) address, a kosync address, or both, so a plain catalog and a sync server that know nothing about each other still add up to a library that follows you. What each server can and cannot do is in [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
-With liseur-sync, how you like to read travels too: the font, the theme,
-the margins, the highlight colours and the rest arrive on the next device
-you sign in on, so setting one up does not mean setting all of them up.
-Settings about a particular phone, such as the volume keys or an e-ink
-panel's refresh, stay where they are.
-
-With a recent liseur-sync server, positions and annotations refresh while
-Liseur is open; statistics refresh when their screen is visible. A remote
-position never turns the page under you. Returning to the reader offers
-the further place, and accepting takes the exact position you were shown.
-Older servers keep the existing scheduled and on-open sync.
+With liseur-sync you get extras, like settings sync, and better insights of your reading progress across devices.
 
 No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
 servers and dictionary sources you configure. See the
