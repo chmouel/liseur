@@ -22,6 +22,9 @@ object LiseurSyncApi {
     /** Highlights, notes and bookmarks (ADR-0028). */
     const val ANNOTATIONS = "/v1/annotations"
 
+    /** Per-account key/value settings, synced across devices. */
+    const val ME_SETTINGS = "/v1/me/settings"
+
     /** The folders the server watches, which is where a catalog starts. */
     const val FOLDERS = "/v1/folders"
 
@@ -59,6 +62,8 @@ object LiseurSyncApi {
     )
 
     fun url(baseUrl: String, path: String): String = RemoteUrl.api(baseUrl, path)
+
+    fun meSettings(baseUrl: String): String = url(baseUrl, ME_SETTINGS)
 
     fun changes(baseUrl: String, since: Long, limit: Int): String =
         url(baseUrl, "$CHANGES?since=$since&limit=$limit")

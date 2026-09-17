@@ -15,6 +15,7 @@ side.
 | Book upload    | Not possible          | Not feasible        | Implemented          | Not implemented      | Not possible         |
 | Book delete    | Not possible          | Implemented         | Implemented          | Not implemented      | Not possible         |
 | Series claims  | N/A                   | N/A                 | Implemented          | N/A                  | N/A                  |
+| Settings sync  | Not possible          | Not possible        | Implemented          | Not possible         | Not possible         |
 
 For how each kind's position sync measures up against Kindle
 Whispersync, behaviour by behaviour, see
@@ -71,6 +72,7 @@ password). Scopes control what the token can do.
 | Book upload | `POST /v1/folders/{folderId}/books` (multipart, `application/epub+zip`) | `LiseurSyncUploadClient` + `BookUploadWorker` | Requires the `library-upload` scope. Folder selection via `GET /v1/folders` (filters on `accepts_uploads`). Adoption links the local book to the remote copy without rewriting its URL |
 | Book delete | REST API, per-folder permission | `LiseurSyncDeleteClient` | Only for books in a folder marked as accepting uploads |
 | Series claims | REST API (personal layer) | `LiseurSyncSeriesClaimClient` | |
+| Settings sync | `GET`/`PUT /v1/me/settings` | `LiseurSyncSettings` | Account-wide key/value pairs, last writer wins on a client-supplied change time. Only the keys in `syncableSettings()` travel; anything about a particular device stays put. Not applied while a book is open |
 
 **Capability detection:** `LiseurSyncServerSetup.introspect()` reads
 `GET /v1/token` for scopes. `canUpload` is true when `library-upload` or

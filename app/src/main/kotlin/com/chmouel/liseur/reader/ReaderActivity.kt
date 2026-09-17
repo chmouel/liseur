@@ -595,6 +595,19 @@ class ReaderActivity : FragmentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // A book is on screen: settings sync must not apply a pulled
+        // font size or margin under it. Unconditional, so it always
+        // pairs with onStop even when the activity is finishing.
+        ReaderPresence.opened()
+    }
+
+    override fun onStop() {
+        ReaderPresence.closed()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         // Nothing was ever opened, or the book is still being shelved, so
