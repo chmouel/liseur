@@ -219,7 +219,8 @@ class RemoteCatalogRepository(
                     }
                 }
                 if (walk.complete && deferredLegacy.isNotEmpty()) {
-                    val uniqueLegacyKeys = deferredLegacy
+                    val distinctDeferredLegacy = deferredLegacy.distinctBy { it.remoteId }
+                    val uniqueLegacyKeys = distinctDeferredLegacy
                         .groupingBy { it.title to it.author }
                         .eachCount()
                         .filterValues { it == 1 }
@@ -229,7 +230,7 @@ class RemoteCatalogRepository(
                             known = known,
                             kind = server.kind,
                             baseUrl = catalogUrl,
-                            books = deferredLegacy,
+                            books = distinctDeferredLegacy,
                             legacyKeys = uniqueLegacyKeys,
                         )
                     }

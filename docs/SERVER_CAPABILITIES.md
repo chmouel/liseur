@@ -86,7 +86,9 @@ Calibre's own content server, COPS, Kavita, or a static feed on a NAS. See
 
 Grimmory users should choose Custom, enter `/api/v1/opds` with their OPDS user
 credentials, and optionally pair `/api/koreader` with their KOReader sync
-credentials.
+credentials. Grimmory's OPDS server is disabled by default in some versions;
+enable it first (`OPDS_SERVER_ENABLED=true`) before reconnecting or migrating
+the account.
 
 A Custom connection holds two addresses and either may be left blank:
 an OPDS catalog root, and a KOReader sync (kosync) server. Filling in
