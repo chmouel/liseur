@@ -790,8 +790,13 @@ class RemoteAccountRepository(
             (identityDao?.countForPeer(to) ?: 0) +
             (annotationSyncDao?.countForPeer(to) ?: 0) +
             (sessionRefusalDao?.countForPeer(to) ?: 0) +
-            (sessionTransmissionDao?.countForPeer(to) ?: 0) +
-            (settingsSyncState?.countForPeer(to) ?: 0)
+            (sessionTransmissionDao?.countForPeer(to) ?: 0)
+        // The settings baseline is deliberately not counted. It lives in
+        // its own store, which commits without waiting for this
+        // transaction, so its copy under the new name may be there while
+        // everything else is still under the old one. Counting it would
+        // read that as somebody else's state and refuse the move for
+        // good; it is written over harmlessly if the move runs again.
         if (occupied > 0) {
             Log.w(TAG, "Not moving sync state to a key that already has $occupied rows; keeping the old key")
             return next.copy(liseurAccountId = existing.liseurAccountId)

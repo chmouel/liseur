@@ -453,6 +453,56 @@ class LiseurSyncSettingsTest {
             assertTrue("the oversized value was sent", "app.dictionary_base_url" !in sent)
         }
 
+    @Test
+    fun `a pulled value is marked even when the push that follows fails`() = runTest {
+        values["reader.font"] = "bitter"
+        values["reader.theme"] = "sepia"
+        agree("reader.theme", "dark", NOW)
+        // The account holds a newer font, which this pass applies, and
+        // this device holds a newer theme, which it tries to push.
+        enqueueGet("reader.font" to Entry("literata", LATER))
+        server.enqueue(MockResponse(code = 500))
+        clock = LATER
+
+        runCatching { sync() }
+
+        assertEquals("literata", values["reader.font"])
+        // The collector then sees the applied write. It must not read as
+        // an edit made here, or the next pass offers the server its own
+        // font back.
+        syncState.observeLocal(mapOf("reader.font" to "literata"), LATER + 1)
+        assertNull(syncState.localChanges()["reader.font"])
+    }
+
+    @Test
+    fun `a setting changed while the pull is in flight is not overwritten`() = runTest {
+        enqueueGet("reader.font" to Entry("literata", LATER))
+        // The reader picks a font in the window between this pass
+        // reading the value it will weigh and the write that follows.
+        var reads = 0
+        var written: String? = null
+        val sync = LiseurSyncSettings(
+            syncState = syncState,
+            settings = listOf(
+                SyncableSetting(
+                    key = "reader.font",
+                    read = { if (reads++ == 0) "bitter" else "vollkorn" },
+                    write = { v -> written = v; true },
+                ),
+            ),
+            now = { clock },
+        )
+
+        sync.sync(
+            accountKey = ACCOUNT,
+            baseUrl = server.url("/").toString().removeSuffix("/"),
+            credentials = RemoteCredentials.Bearer("token"),
+        )
+
+        assertNull("the newer choice was written over", written)
+        assertNull(syncState.allLastSynced(ACCOUNT)["reader.font"])
+    }
+
     private fun settings(): List<SyncableSetting> =
         values.keys.toList().map { key ->
             SyncableSetting(
