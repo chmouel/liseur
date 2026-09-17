@@ -165,35 +165,6 @@ class RemoteAccountRepositoryTest {
     }
 
     @Test
-    fun `a grimmory password survives being written down and read back`() = runTest {
-        // The regression for an account that connects happily and is
-        // unusable from the next refresh on. Grimmory signs every
-        // request with this password -- there is no token to fall back
-        // to -- so a row that comes back without it is an account that
-        // has to be set up again from nothing.
-        account.connectGrimmory(BASE, "liseur-opds", "opds-secret")
-
-        // Read through a repository of its own, so the answer cannot
-        // come from a cache warmed while connecting.
-        val reloaded = repository(db.remoteServerDao())
-
-        assertEquals(
-            RemoteCredentials.Basic("liseur-opds", "opds-secret"),
-            reloaded.credentialsForUrl("$BASE/komga/api/v1/books/1/thumbnail"),
-        )
-        assertEquals(ServerKind.GRIMMORY, reloaded.current()?.kind)
-    }
-
-    @Test
-    fun `grimmory never offers to keep a reader's place`() = runTest {
-        // The shim has no progression route at all. Saying so on the row
-        // is what keeps sync from being offered and then failing.
-        account.connectGrimmory(BASE, "liseur-opds", "opds-secret")
-
-        assertFalse(db.remoteServerDao().get()!!.canSync)
-    }
-
-    @Test
     fun `refreshing an https account does not authorise a plain http retry`() = runTest {
         // A refresh runs unattended, so it cannot be the thing that
         // decides to send the password in the clear. Every kind here
@@ -202,7 +173,7 @@ class RemoteAccountRepositoryTest {
         // that is merely down for the afternoon would leak it.
         val watching = RecordsAllowHttp()
         val repository = repositoryUsing(db.remoteServerDao(), watching)
-        repository.connectGrimmory(BASE, "liseur-opds", "opds-secret")
+        repository.connectCalibre(BASE, "reader", "secret")
 
         repository.refreshCapabilities()
 
@@ -216,7 +187,7 @@ class RemoteAccountRepositoryTest {
         // home server that has no certificate.
         val watching = RecordsAllowHttp()
         val repository = repositoryUsing(db.remoteServerDao(), watching)
-        repository.connectGrimmory("http://books.example", "liseur-opds", "opds-secret", allowHttp = true)
+        repository.connectCalibre("http://books.example", "reader", "secret", allowHttp = true)
 
         repository.refreshCapabilities()
 
@@ -263,8 +234,9 @@ class RemoteAccountRepositoryTest {
         peerStateDao = db.syncPeerStateDao(),
         kosync = { kosync() },
         setups = mapOf(
+            ServerKind.CALIBRE to setup,
             ServerKind.KOMGA to setup,
-            ServerKind.GRIMMORY to setup,
+            ServerKind.CUSTOM to setup,
         ),
     )
 
@@ -291,7 +263,7 @@ class RemoteAccountRepositoryTest {
      */
     @Test
     fun `connecting a server that cannot host the pairing puts it down`() = runTest {
-        account.connectGrimmory(BASE, "ada", "pw")
+        connectCustomCatalog()
         pairKosync()
 
         connectKomga()
@@ -302,11 +274,11 @@ class RemoteAccountRepositoryTest {
     /**
      * Only once a connection has landed. An attempt that fails leaves
      * the old server standing, and taking the pairing with it would
-     * strand a working Grimmory setup on a typo.
+     * strand a working Custom setup on a typo.
      */
     @Test
     fun `a failed connection leaves the pairing alone`() = runTest {
-        account.connectGrimmory(BASE, "ada", "pw")
+        connectCustomCatalog()
         pairKosync()
 
         val refusing = repositoryUsing(db.remoteServerDao(), NeverConnects)
@@ -314,17 +286,30 @@ class RemoteAccountRepositoryTest {
 
         assertTrue(result is SetupResult.Failure)
         assertEquals("ada", db.kosyncPeerDao().get()?.username)
-        assertEquals(ServerKind.GRIMMORY, db.remoteServerDao().get()?.kind)
+        assertEquals(ServerKind.CUSTOM, db.remoteServerDao().get()?.kind)
     }
 
     @Test
-    fun `reconnecting grimmory keeps the pairing`() = runTest {
-        account.connectGrimmory(BASE, "ada", "pw")
+    fun `reconnecting custom without editing sync keeps the pairing`() = runTest {
+        connectCustomCatalog()
         pairKosync()
 
-        account.connectGrimmory(BASE, "ada", "pw")
+        connectCustomCatalog()
 
         assertEquals("ada", db.kosyncPeerDao().get()?.username)
+    }
+
+    private suspend fun connectCustomCatalog() {
+        val result = account.connectCustom(
+            catalogUrl = BASE,
+            username = "",
+            password = "",
+            kosyncUrl = "",
+            kosyncUsername = "",
+            kosyncPassword = "",
+            speaksForKosync = false,
+        )
+        assertTrue("expected the fake setup to succeed, got $result", result.connected)
     }
 
     /** A server that refuses, so a connection can be seen not to land. */

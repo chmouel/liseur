@@ -88,7 +88,7 @@ guessed about reading you did before Liseur arrived.
   </tr>
   <tr>
     <td align="center"><sub>One server at a time, with your own credentials.</sub></td>
-    <td align="center"><sub>calibre-web, Komga, liseur-sync or Grimmory, and what each carries.</sub></td>
+    <td align="center"><sub>calibre-web, Komga, liseur-sync or Custom, and what each carries.</sub></td>
     <td align="center"><sub>A book only on this phone, offered to a server that takes uploads.</sub></td>
   </tr>
   <tr>

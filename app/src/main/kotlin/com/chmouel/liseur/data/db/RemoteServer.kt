@@ -160,7 +160,7 @@ data class RemoteServer(
     @get:Ignore
     val credentials: RemoteCredentials?
         get() = when (kind) {
-            ServerKind.CALIBRE, ServerKind.GRIMMORY ->
+            ServerKind.CALIBRE ->
                 passwordCipher?.let(CredentialCipher::decrypt)
                     ?.let { RemoteCredentials.Basic(username.orEmpty(), it) }
 
@@ -194,22 +194,15 @@ data class RemoteServer(
      * liseur-sync sync over the same API they do everything else with,
      * so there is nothing extra to obtain.
      *
-     * Grimmory is a flat no, and not for want of a token: its Komga
-     * shim answers 404 to every progress route and never fills in a read
-     * progress on a book, so there is nothing to exchange. Saying so
-     * here is what keeps the app from offering a sync it cannot do.
+     * A Custom OPDS catalog has no position API of its own. Its optional
+     * KOReader sync partner is handled separately.
      */
     @get:Ignore
     val canSync: Boolean
         get() = when (kind) {
             ServerKind.CALIBRE -> koboTokenCipher != null
             ServerKind.KOMGA, ServerKind.LISEUR_SYNC -> true
-            // Neither carries a position of its own. Grimmory's shim
-            // answers 404 to every progress route; a Custom connection
-            // is a catalog and nothing more. Both keep a reader's place
-            // through a paired kosync server instead, which is a
-            // different question and asked elsewhere.
-            ServerKind.GRIMMORY, ServerKind.CUSTOM -> false
+            ServerKind.CUSTOM -> false
         }
 
     /**
@@ -229,11 +222,6 @@ data class RemoteServer(
         get() = when (kind) {
             ServerKind.CALIBRE -> "$baseUrl|$username|${userId ?: -1}"
             ServerKind.KOMGA -> "$baseUrl|$username|${accountId ?: "-1"}"
-            // Grimmory's shim reports an id for the OPDS user, which is
-            // the identity that actually owns what is read here — the
-            // browser login it hangs off is a different account with a
-            // different shelf.
-            ServerKind.GRIMMORY -> "grimmory|$baseUrl|$username|${accountId ?: "-1"}"
             // The liseur-sync spelling is the one the old sync-only
             // account already wrote into `sync_peer_state` and
             // `work_alias`, and the migration carries it across: the

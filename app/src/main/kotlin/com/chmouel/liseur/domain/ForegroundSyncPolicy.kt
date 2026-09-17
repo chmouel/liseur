@@ -17,9 +17,8 @@ const val FOREGROUND_SYNC_FRESH_FOR_MS = 60L * 60L * 1000L
  * the system decides to reclaim some memory.
  *
  * The kosync partner is asked about on its own terms: it lives alongside
- * the catalog server, and a Grimmory account that cannot sync positions
- * itself is exactly the account a kosync partner is paired next to. But
- * only where the connected server is one the pairing belongs to
+ * a Custom catalog. It runs only where the connected server is one the
+ * pairing belongs to
  * ([com.chmouel.liseur.data.remote.ServerKind.hostsKosyncPeer]) — a peer
  * left behind by an account switch or restored with a backup would
  * otherwise wake a sync against a server nobody paired it with.

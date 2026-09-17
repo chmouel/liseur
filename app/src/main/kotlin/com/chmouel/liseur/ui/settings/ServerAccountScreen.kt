@@ -307,8 +307,7 @@ fun ServerAccountScreen(
                     )
                 }
                 val secretNote = when (server?.kind ?: state.kind) {
-                    ServerKind.CALIBRE, ServerKind.GRIMMORY ->
-                        R.string.server_password_storage_note
+                    ServerKind.CALIBRE -> R.string.server_password_storage_note
                     ServerKind.KOMGA -> R.string.server_api_key_storage_note
                     ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
                     // With no catalog connected there is no catalog
@@ -706,7 +705,7 @@ private fun ConnectForm(
         PasswordVisualTransformation()
     }
     when (state.kind) {
-        ServerKind.CALIBRE, ServerKind.GRIMMORY -> {
+        ServerKind.CALIBRE -> {
             OutlinedTextField(
                 value = state.username,
                 onValueChange = onUsernameChange,
@@ -730,17 +729,6 @@ private fun ConnectForm(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (state.kind == ServerKind.GRIMMORY) {
-                // The one thing worth saying next to the fields
-                // themselves. Grimmory's browser login is right there
-                // and does not work here, and nothing about the refusal
-                // says why.
-                Text(
-                    stringResource(R.string.server_opds_user_help),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
         ServerKind.CUSTOM -> {
             OutlinedTextField(
@@ -868,7 +856,7 @@ private fun ConnectForm(
     Button(
         onClick = { onConnect(false) },
         enabled = !state.connecting && when (state.kind) {
-            ServerKind.CALIBRE, ServerKind.GRIMMORY ->
+            ServerKind.CALIBRE ->
                 state.url.isNotBlank() &&
                     state.username.isNotBlank() && state.password.isNotBlank()
             ServerKind.KOMGA -> state.url.isNotBlank() && state.apiKey.isNotBlank()
@@ -1078,10 +1066,6 @@ private fun ConnectedCard(
                     ServerKind.KOMGA -> R.string.server_no_download_right_komga
                     ServerKind.LISEUR_SYNC -> R.string.server_no_download_right_liseur_sync
                     ServerKind.CUSTOM -> R.string.server_no_download_right_custom
-                    // Unreachable in practice: Grimmory's shim always
-                    // reports downloads as available, because it has no
-                    // role to withhold them with.
-                    ServerKind.GRIMMORY -> R.string.server_no_download_right
                 },
             ),
             tone = NoticeTone.PROBLEM,
@@ -1131,10 +1115,6 @@ private fun ConnectedCard(
         title = stringResource(R.string.server_section_sync),
     ) {
         Notice(
-            // "Switched off" invites a reader to go and switch it on. On
-            // Grimmory there is nothing to find: the shim carries no
-            // reading position at all, and saying so is the whole
-            // difference between a limitation and a fault.
             text = when {
                 server.canSync -> stringResource(R.string.server_sync_on)
 
@@ -1143,9 +1123,6 @@ private fun ConnectedCard(
                 // work they have done.
                 paired && server.kind.hostsKosyncPeer ->
                     stringResource(R.string.server_sync_kosync_paired)
-
-                server.kind == ServerKind.GRIMMORY ->
-                    stringResource(R.string.server_sync_unsupported)
 
                 // Neither is OPDS a thing to switch on: the format
                 // carries no reading state at all, and the pairing
@@ -1263,9 +1240,8 @@ private fun ConnectedCard(
  * The KOReader sync (kosync) partner, paired alongside the catalog
  * server rather than instead of it.
  *
- * This is how Grimmory's positions reach the app: its Komga shim
- * carries none, while its kosync endpoint does. The section speaks the
- * generic protocol, so a stock kosync server works the same way.
+ * A Custom connection can combine an OPDS catalog with any server that
+ * speaks the protocol.
  */
 @Composable
 private fun KosyncSection(
@@ -1298,15 +1274,7 @@ private fun KosyncSection(
         }
 
         Text(
-            text = stringResource(
-                // The pairing is offered to two kinds, and the sentence
-                // has to name the right one: a reader connecting an
-                // OPDS catalog has nothing to do with Grimmory.
-                when (state.server?.kind ?: state.kind) {
-                    ServerKind.CUSTOM -> R.string.kosync_summary_custom
-                    else -> R.string.kosync_summary
-                },
-            ),
+            text = stringResource(R.string.kosync_summary_custom),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1366,14 +1334,7 @@ private fun KosyncSection(
         ListItem(
             headlineContent = { Text(stringResource(R.string.kosync_register)) },
             supportingContent = {
-                Text(
-                    stringResource(
-                        when (state.server?.kind ?: state.kind) {
-                            ServerKind.CUSTOM -> R.string.kosync_register_help_custom
-                            else -> R.string.kosync_register_help
-                        },
-                    ),
-                )
+                Text(stringResource(R.string.kosync_register_help_custom))
             },
             trailingContent = {
                 Switch(
@@ -1755,11 +1716,6 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.BAD_CREDENTIALS -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_credentials
         ServerKind.KOMGA -> R.string.server_error_credentials_komga
-        // Names the admin setting as well as the password: Grimmory
-        // refuses a request to a switched-off Komga API with the same
-        // 403 it uses for a bad one, and nothing on the wire tells them
-        // apart.
-        ServerKind.GRIMMORY -> R.string.server_error_credentials_grimmory
         ServerKind.LISEUR_SYNC -> R.string.server_error_credentials_liseur_sync
         ServerKind.CUSTOM -> R.string.server_error_credentials_custom
     }
@@ -1773,7 +1729,6 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.WRONG_SERVER -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_not_calibre
         ServerKind.KOMGA -> R.string.server_error_not_komga
-        ServerKind.GRIMMORY -> R.string.server_error_not_grimmory
         ServerKind.LISEUR_SYNC -> R.string.server_error_not_liseur_sync
         ServerKind.CUSTOM -> R.string.server_error_not_custom
     }

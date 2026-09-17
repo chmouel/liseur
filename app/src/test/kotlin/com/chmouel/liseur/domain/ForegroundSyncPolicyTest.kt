@@ -114,33 +114,28 @@ class ForegroundSyncPolicyTest {
         positionSyncedAt = syncedAt,
     )
 
-    /**
-     * The kosync partner is exactly what a Grimmory account pairs with,
-     * and Grimmory itself can never sync — so the partner is asked about
-     * on its own terms rather than through `canSync`.
-     */
     @Test
     fun `a kosync partner makes sync due even when the server cannot sync itself`() {
-        val grimmory = server(kind = ServerKind.GRIMMORY, koboToken = null, syncedAt = null)
-        assertEquals(false, shouldSyncOnForeground(grimmory, now))
+        val custom = server(kind = ServerKind.CUSTOM, koboToken = null, syncedAt = null)
+        assertEquals(false, shouldSyncOnForeground(custom, now))
         assertEquals(
             true,
-            shouldSyncOnForeground(grimmory, now, kosync = kosync(syncedAt = null)),
+            shouldSyncOnForeground(custom, now, kosync = kosync(syncedAt = null)),
         )
     }
 
     @Test
     fun `a kosync partner that synced minutes ago is left alone`() {
-        val grimmory = server(kind = ServerKind.GRIMMORY, syncedAt = null)
+        val custom = server(kind = ServerKind.CUSTOM, syncedAt = null)
         assertEquals(
             false,
-            shouldSyncOnForeground(grimmory, now, kosync = kosync(syncedAt = now - 5 * 60 * 1000)),
+            shouldSyncOnForeground(custom, now, kosync = kosync(syncedAt = now - 5 * 60 * 1000)),
         )
     }
 
     @Test
     fun `either partner being stale is enough to ask`() {
-        val fresh = server(kind = ServerKind.GRIMMORY, syncedAt = now - 5 * 60 * 1000)
+        val fresh = server(kind = ServerKind.CUSTOM, syncedAt = now - 5 * 60 * 1000)
         assertEquals(
             true,
             shouldSyncOnForeground(fresh, now, kosync = kosync(syncedAt = now - 2 * 60 * 60 * 1000)),

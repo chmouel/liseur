@@ -2,6 +2,10 @@
 
 Status: accepted
 
+Grimmory is no longer a dedicated server kind. References below describe the
+historical migration context; its OPDS and optional kosync endpoints are now
+configured through Custom.
+
 ## Context
 
 [Issue #102](https://github.com/chmouel/liseur/issues/102). Liseur
@@ -48,7 +52,7 @@ as an Atom feed.
 
 For every other kind `catalog_url` equals `base_url`, and the
 migration backfills it for every row already on a phone. Left null, the
-column would tell every existing calibre-web, Komga, Grimmory and
+column would have told every existing calibre-web, Komga, Grimmory and
 liseur-sync account that it has no catalog, and those libraries would
 stop refreshing the moment the reader updated.
 
@@ -209,7 +213,7 @@ Settings could not say who is connected.
 
 The form is authoritative on every successful Custom connection. A
 filled sync address replaces any existing pairing; an empty one removes
-it. Without that, choosing a catalog-only Custom after Grimmory would
+it. At the time, choosing a catalog-only Custom after Grimmory would
 leave Grimmory's pairing running against a field the reader
 deliberately left blank.
 

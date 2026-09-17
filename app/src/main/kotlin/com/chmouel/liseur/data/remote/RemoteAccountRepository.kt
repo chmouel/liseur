@@ -280,36 +280,6 @@ class RemoteAccountRepository(
     )
 
     /**
-     * Probes a Grimmory server and, if it answers, saves it as the
-     * account.
-     *
-     * The username and password are the ones belonging to a Grimmory
-     * *OPDS user*, not the login used in a browser: the Komga shim
-     * authenticates against those and only those. Unlike liseur-sync,
-     * the password is kept, because every later request is signed with
-     * it — there is nothing to trade it for.
-     */
-    suspend fun connectGrimmory(
-        url: String,
-        username: String,
-        password: String,
-        allowHttp: Boolean = false,
-        /**
-         * Run once the server has answered and before the account is
-         * written, for work that has to stop before the account it runs
-         * against is retired. Never run when the probe fails, so a
-         * mistyped address costs nothing.
-         */
-        beforePublish: suspend () -> Unit = {},
-    ): SetupResult = connect(
-        kind = ServerKind.GRIMMORY,
-        url = url,
-        credentials = RemoteCredentials.Basic(username, password),
-        allowHttp = allowHttp,
-        beforePublish = beforePublish,
-    )
-
-    /**
      * Signs into a liseur-sync server and keeps the minted device token.
      *
      * The password goes no further than the setup call: it buys an
@@ -425,9 +395,9 @@ class RemoteAccountRepository(
      * half that answered while the form that reported the other half's
      * error has already been cleared.
      *
-     * The form is authoritative. Whatever was paired before — a
-     * Grimmory pairing, an earlier Custom one — a filled sync address
-     * replaces it and an empty one removes it. Otherwise choosing
+     * The form is authoritative. Whatever Custom pairing was saved
+     * before, a filled sync address replaces it and an empty one removes
+     * it. Otherwise choosing
      * catalog-only Custom would quietly leave the last server's pairing
      * running against a field the reader deliberately left blank.
      */
@@ -711,7 +681,7 @@ class RemoteAccountRepository(
         // rather than sitting there invisibly. Here rather than when the
         // reader starts connecting, because an attempt that fails leaves
         // the old server standing and would otherwise have taken a
-        // working Grimmory pairing with it. This is tidiness: what keeps
+        // working Custom pairing with it. This is tidiness: what keeps
         // a stray peer from syncing is that the peer and the foreground
         // policy both ask `hostsKosyncPeer` on every run.
         if (!kind.hostsKosyncPeer && !keepsPairing) kosync().forget()
