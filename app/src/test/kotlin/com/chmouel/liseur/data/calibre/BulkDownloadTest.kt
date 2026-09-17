@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.calibre
 
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.ui.settings.downloadCountChoices
 import com.chmouel.liseur.data.db.DownloadState
 import java.io.IOException
 import org.junit.Assert.assertEquals
@@ -179,6 +180,79 @@ class BulkDownloadTest {
         }
         assertNull(BulkStopReason.fromId(null))
         assertNull(BulkStopReason.fromId("something else"))
+    }
+
+    @Test
+    fun `taking fewer books is priced as the books it would take`() {
+        val estimate = estimateBulkDownload(listOf(GIB, GIB, GIB, GIB), freeBytes = GIB * 100)
+
+        val half = estimate.limitedTo(2)
+
+        assertEquals(2, half.count)
+        assertEquals(GIB * 2, half.bytes)
+    }
+
+    @Test
+    fun `a shorter run names the books it priced`() {
+        // What the dialog quotes is what gets downloaded, so the list
+        // has to be cut at the same place the price is.
+        val estimate = estimateBulkDownload(listOf(GIB, GIB, GIB), freeBytes = GIB * 100)
+            .copy(urls = listOf("a", "b", "c"))
+
+        assertEquals(listOf("a", "b"), estimate.limitedTo(2).urls)
+        assertEquals(listOf("a", "b", "c"), estimate.limitedTo(9).urls)
+    }
+
+    @Test
+    fun `an unpriced run still names the books it would take`() {
+        val estimate = estimateBulkDownload(listOf(null, null, null), freeBytes = GIB)
+            .copy(urls = listOf("a", "b", "c"))
+
+        assertEquals(listOf("a"), estimate.limitedTo(1).urls)
+    }
+
+    @Test
+    fun `a shorter run can fit where the whole one would not`() {
+        val free = GIB * 3 + BULK_DOWNLOAD_RESERVE_BYTES * 2
+        val estimate = estimateBulkDownload(listOf(GIB, GIB, GIB, GIB, GIB), freeBytes = free)
+        assertEquals(SpaceVerdict.WILL_NOT_FIT, estimate.verdict)
+
+        assertEquals(SpaceVerdict.FITS, estimate.limitedTo(1).verdict)
+    }
+
+    @Test
+    fun `asking for more books than there are takes them all`() {
+        val estimate = estimateBulkDownload(listOf(GIB, GIB), freeBytes = GIB * 100)
+
+        assertEquals(estimate, estimate.limitedTo(9))
+        assertEquals(2, estimate.limitedTo(9).count)
+    }
+
+    /**
+     * Nothing reported a size, so there is no total to cut down and
+     * still nothing honest to say about one.
+     */
+    @Test
+    fun `a run nobody can price stays unpriced when it is shortened`() {
+        val estimate = estimateBulkDownload(listOf(null, null, null), freeBytes = GIB)
+
+        val fewer = estimate.limitedTo(1)
+
+        assertEquals(1, fewer.count)
+        assertNull(fewer.bytes)
+        assertEquals(SpaceVerdict.UNKNOWN, fewer.verdict)
+    }
+
+    /**
+     * The offered numbers stop below the shelf's size and end with it,
+     * so "all of them" is always the last choice and never a duplicate.
+     */
+    @Test
+    fun `the counts offered are the round ones that fit under the total`() {
+        assertEquals(listOf(10, 25, 50, 64), downloadCountChoices(64))
+        assertEquals(listOf(10, 25), downloadCountChoices(25))
+        assertEquals(listOf(3), downloadCountChoices(3))
+        assertEquals(emptyList<Int>(), downloadCountChoices(0))
     }
 
     private companion object {

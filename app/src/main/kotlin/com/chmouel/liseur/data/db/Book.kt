@@ -269,7 +269,13 @@ interface BookDao {
     @Query("UPDATE books SET archived_at = :archivedAt WHERE url = :url")
     suspend fun setArchived(url: String, archivedAt: Long?)
 
-    @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL")
+    /**
+     * Ordered, so that "the first thirty of them" means the same thing
+     * twice: a bulk download prices one read of this list and enqueues
+     * another, and an unordered pair could quote one slice and fetch a
+     * different one.
+     */
+    @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL ORDER BY url")
     suspend fun allRemote(): List<Book>
 
     /**
