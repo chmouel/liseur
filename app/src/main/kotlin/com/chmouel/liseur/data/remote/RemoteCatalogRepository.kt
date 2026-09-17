@@ -204,10 +204,34 @@ class RemoteCatalogRepository(
                 // a query each against an unindexed column, so the cost of
                 // folding a catalog in grew with the square of the shelf.
                 val known = KnownBooks(bookDao.allOnce())
+                val deferredLegacy = mutableListOf<RemoteBook>()
                 val walk = client.allBooks(catalogUrl, credentials) { page ->
                     page.forEach { seen += it.remoteId }
                     forAccount(server) {
-                        store(known, server.kind, catalogUrl, page)
+                        store(
+                            known = known,
+                            kind = server.kind,
+                            baseUrl = catalogUrl,
+                            books = page,
+                            deferLegacy = server.kind == ServerKind.CUSTOM,
+                            deferredLegacy = deferredLegacy,
+                        )
+                    }
+                }
+                if (walk.complete && deferredLegacy.isNotEmpty()) {
+                    val uniqueLegacyKeys = deferredLegacy
+                        .groupingBy { it.title to it.author }
+                        .eachCount()
+                        .filterValues { it == 1 }
+                        .keys
+                    forAccount(server) {
+                        store(
+                            known = known,
+                            kind = server.kind,
+                            baseUrl = catalogUrl,
+                            books = deferredLegacy,
+                            legacyKeys = uniqueLegacyKeys,
+                        )
                     }
                 }
                 if (!walk.complete) {
@@ -367,6 +391,9 @@ class RemoteCatalogRepository(
         kind: ServerKind,
         baseUrl: String,
         books: List<RemoteBook>,
+        deferLegacy: Boolean = false,
+        deferredLegacy: MutableList<RemoteBook>? = null,
+        legacyKeys: Set<Pair<String, String?>> = emptySet(),
     ) {
         val now = System.currentTimeMillis()
         // What is known was read once before the walk began, so a book
@@ -387,6 +414,14 @@ class RemoteCatalogRepository(
         val updates = mutableListOf<CatalogUpdate>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
+            if (
+                deferLegacy &&
+                    deferredLegacy != null &&
+                    known.hasLegacyCandidate(remote.remoteId, url, remote.title, remote.author)
+            ) {
+                deferredLegacy += remote
+                return@forEach
+            }
             // A book first seen earlier in this walk was written without
             // its generated id coming back, so ask the database for it.
             // One seen earlier on this same page has not landed yet, and
@@ -396,6 +431,7 @@ class RemoteCatalogRepository(
                 url,
                 remote.title,
                 remote.author,
+                (remote.title to remote.author) in legacyKeys,
             )
                 ?.let { pending ->
                     if (pending.id == 0L) bookDao.getByUrl(url) ?: pending else pending
@@ -608,9 +644,23 @@ private class KnownBooks(books: List<Book>) {
 
     fun findExact(remoteId: String, url: String): Book? = byUuid[remoteId] ?: byUrl[url]
 
-    fun find(remoteId: String, url: String, title: String, author: String?): Book? =
+    fun hasLegacyCandidate(remoteId: String, url: String, title: String, author: String?): Boolean =
+        findExact(remoteId, url) == null &&
+            url.startsWith("custom:") &&
+            legacyGrimmory.containsKey(title to author)
+
+    fun find(
+        remoteId: String,
+        url: String,
+        title: String,
+        author: String?,
+        allowLegacy: Boolean,
+    ): Book? =
         findExact(remoteId, url)
-            ?: url.takeIf { it.startsWith("custom:") }
+            ?: allowLegacy.takeIf { it }
+                ?.let {
+                    url.takeIf { it.startsWith("custom:") }
+                }
                 ?.let { legacyGrimmory.remove(title to author) }
 
     fun remember(book: Book) {
