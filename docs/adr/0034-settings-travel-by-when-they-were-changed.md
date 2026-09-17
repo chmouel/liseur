@@ -114,6 +114,15 @@ unsendable setting would take every other setting down with it on every
 pass, forever. The client drops such a value before the request rather
 than discovering it in a `400`.
 
+A time is unsendable in the same way. The server refuses a batch
+carrying an `updated_at` more than a day ahead of its own clock, and a
+change stamp is only as good as the clock that was running when it was
+recorded — a phone whose date was wrong once leaves one behind, and it
+outlives the correction. So an outgoing stamp is capped at now. This
+loses nothing worth keeping: a change that has not happened yet is a
+wrong answer whatever it is compared against, and now is the nearest
+right one.
+
 **The baseline belongs to one account.** Its timestamps came off that
 server's clock and mean nothing anywhere else, so it is keyed by account
 and moves or is dropped with it, like every other peer-keyed table. The

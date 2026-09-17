@@ -522,6 +522,26 @@ class LiseurSyncSettingsTest {
         assertNull(syncState.allLastSynced(ACCOUNT)["reader.font"])
     }
 
+    @Test
+    fun `a stamp from a clock that was wrong is not sent into the future`() = runTest {
+        values["reader.font"] = "bitter"
+        agree("reader.font", "literata", NOW)
+        // Recorded while the device's clock was a year out.
+        syncState.observeLocal(mapOf("reader.font" to "literata"), NOW)
+        syncState.observeLocal(mapOf("reader.font" to "bitter"), LATER * 1000)
+        enqueueGet()
+        enqueuePut("reader.font" to Entry("bitter", LATER))
+        clock = LATER
+
+        sync()
+
+        // The server refuses a whole batch dated more than a day ahead,
+        // so one such stamp would block every setting for good.
+        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
+            .getJSONObject("settings").getJSONObject("reader.font")
+        assertEquals(iso(LATER), sent.getString("updated_at"))
+    }
+
     private fun settings(): List<SyncableSetting> =
         values.keys.toList().map { key ->
             SyncableSetting(

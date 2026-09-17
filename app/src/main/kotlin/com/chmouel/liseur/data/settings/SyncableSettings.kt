@@ -174,8 +174,13 @@ fun syncableSettings(
         read = { reader.prefs.first().autoScrollSpeed.toString() },
         write = { raw ->
             val v = raw.toFloatOrNull()
+            // On a notch, not merely between the ends: the setter snaps,
+            // so anything else would be filed as agreed under a number
+            // that was never stored, and this device would push its own
+            // rounding back over the choice that was made.
             val ok = v != null && v.isFinite() &&
-                v >= AutoScrollPreference.MIN_STEP && v <= AutoScrollPreference.MAX_STEP
+                v >= AutoScrollPreference.MIN_STEP && v <= AutoScrollPreference.MAX_STEP &&
+                AutoScrollPreference.snap(v) == v
             if (ok) reader.setAutoScrollSpeed(v)
             ok
         },

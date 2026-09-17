@@ -219,6 +219,21 @@ class SyncableSettingsTest {
     }
 
     @Test
+    fun `an auto-scroll pace between two notches is refused`() = runTest {
+        val r = reader()
+        val registry = syncableSettings(app(), r).associateBy { it.key }
+        r.setAutoScrollSpeed(7f)
+
+        // The setter snaps to a whole notch, so taking 4.5 would file
+        // 4.5 as agreed while storing 5, and this device would push its
+        // own rounding back over the pace that was actually chosen.
+        assertFalse(registry.getValue("reader.auto_scroll_speed").write("4.5"))
+        assertEquals(7f, r.prefs.first().autoScrollSpeed, 0.0001f)
+        assertTrue(registry.getValue("reader.auto_scroll_speed").write("5.0"))
+        assertEquals(5f, r.prefs.first().autoScrollSpeed, 0.0001f)
+    }
+
+    @Test
     fun `a font from a newer build is refused instead of falling back`() = runTest {
         val r = reader()
         val registry = syncableSettings(app(), r).associateBy { it.key }
