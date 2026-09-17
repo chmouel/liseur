@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.library
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -10,6 +11,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+import java.util.zip.CRC32
+import java.util.zip.DeflaterOutputStream
+import java.util.zip.GZIPOutputStream
 
 /**
  * That an SVG cover actually becomes a picture.
@@ -117,5 +123,83 @@ class SvgCoverRenderTest {
     @Test
     fun `a document with no geometry is not a cover`() {
         assertNull(render("""<svg xmlns="http://www.w3.org/2000/svg"><rect fill="red"/></svg>"""))
+    }
+
+    /**
+     * AndroidSVG unzips an SVGZ by itself, with nothing counting what
+     * comes out, so the cap on the bytes read from the book would be a
+     * cap on the compressed size of an arbitrary tree. A cover already
+     * inside a zip gains nothing from being zipped again.
+     */
+    @Test
+    fun `a compressed cover is refused rather than expanded`() {
+        val xml = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+              <rect width="300" height="400" fill="#ff0000"/>
+            </svg>
+        """.trimIndent()
+        val gzipped = ByteArrayOutputStream().also { out ->
+            GZIPOutputStream(out).use { it.write(xml.toByteArray()) }
+        }.toByteArray()
+
+        assertNotNull(render(xml))
+        assertNull(renderSvgCover(gzipped, emptyMap()))
+    }
+
+    /**
+     * An inline image never reaches the resolver: AndroidSVG decodes it
+     * with no subsampling, which is the one decode in this path that is
+     * not bounded. A header claiming sixty thousand pixels a side is a
+     * few bytes and a 13 GB allocation.
+     */
+    @Test
+    fun `an enormous inline image is not drawn`() {
+        assertNull(render(svgAround(pngHeader(60_000, 60_000))))
+        assertNotNull(render(svgAround(pngHeader(300, 400))))
+    }
+
+    private fun svgAround(png: ByteArray): String {
+        val encoded = Base64.encodeToString(png, Base64.NO_WRAP)
+        return """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400">
+              <image width="300" height="400" href="data:image/png;base64,$encoded"/>
+            </svg>
+        """.trimIndent()
+    }
+
+    /**
+     * Enough PNG for `inJustDecodeBounds` to read a size off. A real one
+     * would be complete too: sixty thousand pixels square of one colour
+     * compresses to a few hundred kilobytes, well inside the cap on the
+     * bytes, and asks for thirteen gigabytes when it is decoded.
+     */
+    private fun pngHeader(width: Int, height: Int): ByteArray {
+        val header = ByteArrayOutputStream()
+        DataOutputStream(header).use { data ->
+            data.writeInt(width)
+            data.writeInt(height)
+            data.writeByte(8)
+            data.writeByte(2)
+            data.writeByte(0)
+            data.writeByte(0)
+            data.writeByte(0)
+        }
+        val pixels = ByteArrayOutputStream()
+        DeflaterOutputStream(pixels).use { it.write(ByteArray(16)) }
+        val png = ByteArrayOutputStream()
+        png.write(byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10))
+        chunk(png, "IHDR", header.toByteArray())
+        chunk(png, "IDAT", pixels.toByteArray())
+        chunk(png, "IEND", ByteArray(0))
+        return png.toByteArray()
+    }
+
+    private fun chunk(out: ByteArrayOutputStream, type: String, body: ByteArray) {
+        val typed = type.toByteArray() + body
+        DataOutputStream(out).apply {
+            writeInt(body.size)
+            write(typed)
+            writeInt(CRC32().apply { update(typed) }.value.toInt())
+        }
     }
 }

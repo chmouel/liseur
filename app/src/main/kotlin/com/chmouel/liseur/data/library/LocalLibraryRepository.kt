@@ -1324,7 +1324,7 @@ private val Link.isSvg: Boolean
  * and an ordinary portrait cover of 1600 by 2400 comes to less, so a
  * real book is decoded whole and only the absurd is brought down.
  */
-private const val MAX_COVER_PIXELS = 2048L * 2048
+internal const val MAX_COVER_PIXELS = 2048L * 2048
 
 /**
  * How much to subsample an image of [width] by [height], or null when

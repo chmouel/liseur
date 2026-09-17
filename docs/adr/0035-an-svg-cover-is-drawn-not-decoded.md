@@ -118,6 +118,15 @@ is a program more than it is a picture. So:
   float reciprocal of `1e-40` is infinite, and a cover may legally state
   that.
 - **Images**: four. A cover needs one.
+- **Gzip**: refused. AndroidSVG sniffs for the magic number and parses
+  through a `GZIPInputStream` with nothing counting what comes out, so
+  the cap on bytes read would become a cap on the *compressed* size of an
+  arbitrary tree. A cover inside an EPUB is already in a zip.
+- **Inline images**: measured first. A `data:` URI never reaches the
+  resolver — the renderer base64-decodes it and decodes the bitmap with
+  no subsampling, the one decode in this path that is not bounded — so
+  the ones it would decode are decoded here for their header alone, and a
+  cover carrying an image over the pixel budget is not drawn.
 - **Geometry**: a document stating neither its dimensions nor a viewBox
   has nothing to scale and is not drawn.
 

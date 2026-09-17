@@ -1,9 +1,11 @@
 package com.chmouel.liseur.data.library
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.RectF
+import android.util.Base64
 import androidx.core.graphics.createBitmap
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGExternalFileResolver
@@ -105,7 +107,10 @@ private fun usable(value: Float) = value.isFinite() && value > 0f
  * AndroidSVG takes the last one it reads rather than preferring either.
  * Guessing which it will ask for risks reading the wrong file and
  * drawing the wrapper blank, so both are read: an image that is not
- * asked for costs one of the four slots and nothing else.
+ * asked for costs one of the four slots and nothing else. The value is
+ * trimmed because AndroidSVG trims it before asking, and a key that
+ * still has the document's whitespace on it is a key it will never ask
+ * for.
  */
 internal fun svgImageHrefs(bytes: ByteArray, limit: Int = MAX_SVG_IMAGES): List<String> =
     runCatching {
@@ -114,7 +119,7 @@ internal fun svgImageHrefs(bytes: ByteArray, limit: Int = MAX_SVG_IMAGES): List<
             .asSequence()
             .flatMap { image -> image.attributes().asSequence() }
             .filter { it.key == "href" || it.key.endsWith(":href") }
-            .map { it.value }
+            .map { it.value.trim() }
             .filter { it.isNotBlank() && !it.startsWith("data:", ignoreCase = true) }
             .distinct()
             .take(limit)
@@ -130,6 +135,7 @@ internal fun svgImageHrefs(bytes: ByteArray, limit: Int = MAX_SVG_IMAGES): List<
  * drawn on nothing would be a cover drawn on black.
  */
 internal fun renderSvgCover(bytes: ByteArray, images: Map<String, Bitmap>): Bitmap? = runCatching {
+    if (!worthHandingOver(bytes)) return@runCatching null
     prepareSvgRendering()
     val svg = SVG.getFromInputStream(ByteArrayInputStream(bytes))
     val documentWidth = svg.documentWidth
@@ -161,6 +167,69 @@ internal fun renderSvgCover(bytes: ByteArray, images: Map<String, Bitmap>): Bitm
     }
     bitmap
 }.getOrNull()
+
+/**
+ * Whether these bytes are worth handing to AndroidSVG at all.
+ *
+ * The caps this file talks about are on the bytes read out of the book,
+ * and there are two ways a file can get past them without breaking
+ * them, both of which AndroidSVG will walk into by itself:
+ *
+ * - **Gzip.** The parser sniffs for the magic number and, finding it,
+ *   parses through a `GZIPInputStream` with nothing watching how much
+ *   comes out, so four megabytes of SVGZ can be gigabytes of tree. A
+ *   cover inside an EPUB is already in a zip and has nothing to gain by
+ *   being compressed twice, so a compressed one is refused rather than
+ *   measured.
+ * - **An inline image.** A `data:` URI never reaches the resolver: the
+ *   renderer base64-decodes it and calls `BitmapFactory.decodeByteArray`
+ *   with no options, which is the one decode in this path that is not
+ *   subsampled. A few kilobytes of PNG can declare sixty thousand pixels
+ *   a side. So the ones it will decode are decoded here first for their
+ *   header alone, and a cover carrying an image over the budget is not
+ *   drawn.
+ *
+ * Bounds before pictures: a document that cannot be checked is refused,
+ * not drawn.
+ */
+private fun worthHandingOver(bytes: ByteArray): Boolean =
+    !gzipped(bytes) && inlineImagesFit(bytes)
+
+private fun gzipped(bytes: ByteArray): Boolean =
+    bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+
+private fun inlineImagesFit(bytes: ByteArray, max: Long = MAX_COVER_PIXELS): Boolean =
+    runCatching {
+        Jsoup.parse(ByteArrayInputStream(bytes), null, "", Parser.xmlParser())
+            .select("image")
+            .asSequence()
+            .flatMap { image -> image.attributes().asSequence() }
+            .filter { it.key == "href" || it.key.endsWith(":href") }
+            .map { it.value.trim() }
+            .filter { it.startsWith("data:", ignoreCase = true) }
+            .all { inlineImageFits(it, max) }
+    }.getOrElse { false }
+
+/**
+ * Whether one `data:` URI declares an image small enough to decode.
+ *
+ * Only the `;base64` form is measured, because that is the only form
+ * AndroidSVG decodes: anything else it hands to the resolver, which
+ * answers from a map of files read out of the book and so cannot be
+ * this. A payload that is not an image leaves the dimensions at zero and
+ * is nothing to refuse — the renderer will get null for it too.
+ */
+private fun inlineImageFits(dataUri: String, max: Long): Boolean {
+    val comma = dataUri.indexOf(',')
+    if (comma < 0 || !dataUri.substring(0, comma).endsWith(";base64")) return true
+    val payload = runCatching {
+        Base64.decode(dataUri.substring(comma + 1), Base64.DEFAULT)
+    }.getOrNull() ?: return true
+    val header = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(payload, 0, payload.size, header)
+    if (header.outWidth <= 0 || header.outHeight <= 0) return true
+    return header.outWidth.toLong() * header.outHeight <= max
+}
 
 private val svgPrepared: Unit by lazy {
     SVG.setInternalEntitiesEnabled(false)
