@@ -69,6 +69,17 @@ account's real settings on first connect. So a missing stamp reads as
 *now* where a baseline exists and as the beginning of time where none
 does.
 
+**A value back where it started is still a choice.** A reader who
+changes a setting and changes it back leaves it matching what the
+account agreed, which usually means nothing happened — but not always,
+and the stamp tells the two apart. A value the account agreed on, with
+a later change recorded against it, overrules a server that moved in
+between and is offered back under the time the reader settled on it.
+The collector is what makes this possible and also what limits it: a
+change and its undoing faster than the collector runs looks like
+nothing at all, which is the advisory stamp's floor rather than a case
+to be worked around.
+
 **A conflict is settled against the copy that was sent.** If the reader
 changes a setting while its push is in the air, the answer to that push
 is about the old value and must not be written over the new one. This

@@ -309,6 +309,13 @@ private suspend fun writeNumber(
     }
     val v = raw.toDoubleOrNull() ?: return false
     if (!v.isFinite() || v < range.min || v > range.max) return false
+    // A slider stores notches, and its setter moves anything else onto
+    // the nearest one. Accepting a value between two of them would file
+    // an agreement about a number that was never stored, and this device
+    // would push its own rounding back over the choice that was made.
+    // A build whose notches are finer is a build this one cannot follow,
+    // which is the same answer it gives an unrecognised font.
+    if (range is TypographyRange.Slider && range.snap(v) != v) return false
     set(v)
     return true
 }

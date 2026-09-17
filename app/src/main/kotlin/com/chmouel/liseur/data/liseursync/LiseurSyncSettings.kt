@@ -91,7 +91,6 @@ class LiseurSyncSettings(
         val localChanges = syncState.localChanges()
         val pushTime = now()
         val agreed = mutableMapOf<String, SettingsSyncRepository.SyncedEntry>()
-        val applied = mutableMapOf<String, String>()
         val toPush = JSONObject()
         var exchanged = 0
 
@@ -104,23 +103,32 @@ class LiseurSyncSettings(
                 (synced == null || server.updatedAtMillis > synced.serverTimestamp)
             val localDiffers = synced == null || localValue != synced.value
 
+            // What this device did to the key since it was agreed, if
+            // the collector saw it. Zero is "nothing recorded", which is
+            // not the same as "nothing happened" — see localStamp.
+            val changedHere = localChanges[entry.key] ?: 0L
+
             // Both sides moved: whoever moved last wins. The local side
             // is dated by when the reader actually changed it, which is
             // the whole reason that is recorded separately.
             val takeServer = when {
                 server == null -> false
-                !localDiffers -> serverIsNewer
+                // The value is back where the account agreed it, which
+                // usually means nothing happened here. It can also mean
+                // the reader went away and came back, and that is still
+                // a choice, made when they came back: a value the server
+                // changed before that has been overruled since.
+                !localDiffers -> serverIsNewer && server.updatedAtMillis > changedHere
                 !serverIsNewer -> false
                 else -> server.updatedAtMillis > localStamp(entry.key, synced, localChanges, pushTime)
             }
 
             if (takeServer) {
-                if (apply(entry, server!!.value, canApplyReaderSettings, localValue)) {
+                if (apply(entry, server!!.value, canApplyReaderSettings, stillConnected, localValue)) {
                     agreed[entry.key] = SettingsSyncRepository.SyncedEntry(
                         server.value,
                         server.updatedAtMillis,
                     )
-                    applied[entry.key] = server.value
                     exchanged++
                 }
                 continue
@@ -129,16 +137,19 @@ class LiseurSyncSettings(
             // A key the server does not have is always offered, even one
             // agreed on before: the server having lost it means this
             // device is the only copy left.
-            if (server == null || localDiffers) {
+            // A key the server does not hold what this device holds is
+            // offered, including one whose value is back where it was
+            // agreed: the server may have lost it, or another device may
+            // have moved it since and been overruled here.
+            if (server == null || localDiffers || server.value != localValue) {
                 if (!sendable(entry.key, localValue)) continue
-                // A key the server lost but that never changed here is
-                // re-offered as what it always was. Dating it from the
-                // change record would be wrong twice over: that record
-                // may hold the moment a pulled value was applied, and
-                // either way the value is not a local edit and must not
-                // outrank a real one made elsewhere since.
+                // An unchanged value is re-offered as what it always
+                // was. Dating it now would have a key the server merely
+                // lost outrank a real edit made elsewhere since. Where
+                // the reader did change it and put it back, that later
+                // time is the one that speaks for it.
                 val stamp = if (!localDiffers && synced != null) {
-                    synced.serverTimestamp
+                    maxOf(synced.serverTimestamp, changedHere)
                 } else {
                     localStamp(entry.key, synced, localChanges, pushTime)
                 }
@@ -151,15 +162,6 @@ class LiseurSyncSettings(
             }
         }
 
-        // Before the push, in one write. A push that throws or is
-        // refused would otherwise leave every value this pass just
-        // applied looking like an edit made here, and the next pass
-        // would offer the server its own settings back.
-        if (applied.isNotEmpty()) {
-            syncState.markApplied(applied)
-            applied.clear()
-        }
-
         if (toPush.length() > 0) {
             if (!stillConnected()) return exchanged
             exchanged += push(
@@ -167,14 +169,12 @@ class LiseurSyncSettings(
                 credentials,
                 toPush,
                 agreed,
-                applied,
                 canApplyReaderSettings,
                 stillConnected,
             )
         }
         if (!stillConnected()) return exchanged
         syncState.recordSynced(accountKey, agreed)
-        syncState.markApplied(applied)
         // Asked once more, because the check above and these two writes
         // are not one thing: a disconnect landing between them would
         // have cleared the baseline just before this put it back.
@@ -246,7 +246,6 @@ class LiseurSyncSettings(
         credentials: RemoteCredentials,
         toPush: JSONObject,
         agreed: MutableMap<String, SettingsSyncRepository.SyncedEntry>,
-        applied: MutableMap<String, String>,
         canApplyReaderSettings: suspend () -> Boolean,
         stillConnected: suspend () -> Boolean,
     ): Int {
@@ -277,13 +276,7 @@ class LiseurSyncSettings(
                 // agreed, which is the one state nothing later can
                 // correct.
                 Log.d(TAG, "Push of ${entry.key} lost; taking the server's value")
-                if (!apply(entry, serverValue, canApplyReaderSettings, sent)) continue
-                applied[entry.key] = serverValue
-                // Written down here rather than with the rest, because
-                // nothing after this point is guaranteed to run and an
-                // unmarked value is one the collector will offer back as
-                // an edit made on this device.
-                syncState.markApplied(mapOf(entry.key to serverValue))
+                if (!apply(entry, serverValue, canApplyReaderSettings, stillConnected, sent)) continue
             }
             agreed[entry.key] = SettingsSyncRepository.SyncedEntry(serverValue, serverTs)
             exchanged++
@@ -303,8 +296,13 @@ class LiseurSyncSettings(
         entry: SyncableSetting,
         value: String,
         canApplyReaderSettings: suspend () -> Boolean,
+        stillConnected: suspend () -> Boolean,
         decidedAgainst: String,
     ): Boolean {
+        // Asked per setting, not once for the run. Writing a departed
+        // account's value here cannot be taken back afterwards, so the
+        // check has to sit next to the write rather than near it.
+        if (!stillConnected()) return false
         if (entry.affectsOpenBook && !canApplyReaderSettings()) {
             Log.d(TAG, "Holding ${entry.key} back while a book is open")
             return false
@@ -321,6 +319,12 @@ class LiseurSyncSettings(
             Log.w(TAG, "Server value for ${entry.key} not understood; leaving it alone")
             return false
         }
+        // Immediately, and not with the rest at the end of the pass.
+        // Anything between the write and this is time in which the
+        // reader can change the setting and the collector can stamp it,
+        // and a later note would then put the server's value back as the
+        // one observed and drop that stamp with it.
+        syncState.markApplied(mapOf(entry.key to value))
         return true
     }
 
