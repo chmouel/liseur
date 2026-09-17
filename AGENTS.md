@@ -437,6 +437,17 @@ emulator.
   changed under an open sheet leaves them behind unless the sheet says it
   again — which `LiseurModalBottomSheet` does, for every sheet, once. See
   `docs/adr/0031-the-readers-chrome-is-painted-on-the-page.md`.
+- The chrome lies over the page, so it reaches the screen's edge. A
+  scrolled page runs to that edge, and a bottom panel lifted off it by
+  `navigationBarsPadding()` left a strip of the book printed underneath
+  the controls, across the gesture pill (#223). The navigation-bar inset
+  therefore lives *inside* `ReadingScrubber`, after its background, and
+  the column that holds the panel takes it as a spacer for the times the
+  panel is not there — that spacer is what keeps a lone pill's lift.
+  Where the chrome's inner edges cut a line of type in half,
+  `ChromeEdgeFade` ramps the page's colour away so the cut reads as
+  something covering the page rather than as a fault. Electronic paper
+  gets no ramp, as it gets no shadow: it dithers one and ghosts it.
 - A new reading setting goes in the Advanced sheet
   (`reader/chrome/AdvancedSheet.kt`), and on Settings -> Reading
   appearance if it is about how the page *looks*, or on Settings ->
