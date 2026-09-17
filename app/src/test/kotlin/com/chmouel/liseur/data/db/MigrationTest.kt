@@ -1338,7 +1338,7 @@ class MigrationTest {
                     """.trimIndent(),
                 ).use {
                     assertTrue(it.moveToFirst())
-                    assertTrue(it.isNull(0))
+                    assertEquals("downloaded", it.getString(0))
                     assertEquals("file:///downloaded.epub", it.getString(1))
                     assertEquals("File Series", it.getString(2))
                     assertEquals(3.0, it.getDouble(3), 0.0)

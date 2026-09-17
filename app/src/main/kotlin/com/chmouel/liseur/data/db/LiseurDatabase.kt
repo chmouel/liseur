@@ -1447,7 +1447,13 @@ abstract class LiseurDatabase : RoomDatabase() {
                 connection.execSQL(
                     """
                     UPDATE books SET
-                        remote_uuid = NULL,
+                        -- Keep the old id on downloaded rows until the
+                        -- first Custom OPDS refresh can replace it with
+                        -- the catalog's namespaced identity.
+                        remote_uuid = CASE
+                            WHEN local_uri IS NOT NULL THEN remote_uuid
+                            ELSE NULL
+                        END,
                         remote_book_id = NULL,
                         cover_url = NULL,
                         download_href = NULL,
