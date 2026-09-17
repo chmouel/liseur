@@ -16,6 +16,8 @@ import com.chmouel.liseur.data.kosync.KosyncSetupOutcome
 import com.chmouel.liseur.data.remote.PeerPositionSync
 import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
+import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteUrl
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.BulkBatch
 import com.chmouel.liseur.data.calibre.BulkDownloadEstimate
@@ -50,6 +52,13 @@ import kotlinx.coroutines.launch
 /** What went wrong while connecting, phrased as something to act on. */
 enum class AccountError {
     BAD_CREDENTIALS,
+
+    /**
+     * The server refused, and nothing was typed for it to refuse. Only
+     * an open catalog can be connected to that way, so the message is
+     * about the catalog rather than about a password (#219).
+     */
+    SIGN_IN_REQUIRED,
     WRONG_SERVER,
     UNREACHABLE,
     UNREACHABLE_TRY_HTTP,
@@ -174,6 +183,16 @@ data class ServerAccountUiState(
     val localNetworkAsked: Boolean = false,
     /** Whether the connected account's own addresses are out of reach. */
     val localNetworkBlocked: Boolean = false,
+    /**
+     * Whether the connect form is open over a connected account, so its
+     * address can be corrected without disconnecting first.
+     *
+     * Disconnecting is the only way there was, and it deletes every
+     * book the server has not been asked for yet. A reader whose server
+     * moved, or who wants the shelf next door, should not have to pay
+     * that to change a line of text.
+     */
+    val editingAddress: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -412,8 +431,27 @@ class ServerAccountViewModel(
      * whatever the form holds now.
      */
     private suspend fun runConnect(current: ServerAccountUiState, allowHttp: Boolean) {
+        // A batch downloading against the account about to be left has
+        // to be stopped before it is left, exactly as `disconnect()`
+        // stops one. Publishing first would retire the account's books
+        // underneath work already running: queued items would fail on
+        // their own "unknown book" check without ending the batch, and
+        // anything already past its account check would carry on
+        // fetching into rows nothing points at any more.
+        //
+        // Handed to the connect call rather than run here, so that it
+        // happens only once the server has answered. An address that
+        // turns out to be a typo publishes nothing, and must therefore
+        // cost nothing: a batch is an hour of somebody's evening.
+        //
+        // And only where the account may actually change. A reader
+        // fixing a typo in their own address, or adding the trailing
+        // slash back, is not leaving anything.
+        val stopDownloads: suspend () -> Unit = {
+            if (current.switchesAccount()) downloads.cancelAll(BulkStopReason.ACCOUNT_CHANGED)
+        }
         if (current.kind == ServerKind.CUSTOM) {
-            connectCustom(current, allowHttp)
+            connectCustom(current, allowHttp, stopDownloads)
             return
         }
         val result = when (current.kind) {
@@ -422,17 +460,20 @@ class ServerAccountViewModel(
                 username = current.username.trim(),
                 password = current.password,
                 allowHttp = allowHttp,
+                beforePublish = stopDownloads,
             )
             ServerKind.KOMGA -> repository.connectKomga(
                 url = current.url,
                 apiKey = current.apiKey.trim(),
                 allowHttp = allowHttp,
+                beforePublish = stopDownloads,
             )
             ServerKind.GRIMMORY -> repository.connectGrimmory(
                 url = current.url,
                 username = current.username.trim(),
                 password = current.password,
                 allowHttp = allowHttp,
+                beforePublish = stopDownloads,
             )
             ServerKind.LISEUR_SYNC -> when (current.liseurSyncSignIn) {
                 LiseurSyncSignIn.PASSWORD -> repository.connectLiseurSync(
@@ -440,11 +481,13 @@ class ServerAccountViewModel(
                     username = current.username.trim(),
                     password = current.password,
                     allowHttp = allowHttp,
+                    beforePublish = stopDownloads,
                 )
                 LiseurSyncSignIn.TOKEN -> repository.connectLiseurSyncToken(
                     url = current.url,
                     token = current.deviceToken,
                     allowHttp = allowHttp,
+                    beforePublish = stopDownloads,
                 )
             }
         }
@@ -454,11 +497,83 @@ class ServerAccountViewModel(
         }
         _state.update {
             when (result) {
-                is SetupResult.Success ->
-                    it.copy(connecting = false, password = "", apiKey = "", deviceToken = "")
+                is SetupResult.Success -> it.copy(
+                    connecting = false,
+                    password = "",
+                    apiKey = "",
+                    deviceToken = "",
+                    editingAddress = false,
+                )
                 is SetupResult.Failure ->
                     it.copy(connecting = false, error = result.reason.toUiError())
             }
+        }
+    }
+
+    /**
+     * Opens the connect form over the connected account, filled in.
+     *
+     * The secret goes back into the field it came from, so correcting
+     * an address is a matter of editing one line rather than finding a
+     * password again. Where the address still names the same account,
+     * connecting keeps every book; where it does not, this is the same
+     * account switch the form has always been able to make.
+     */
+    fun editAddress() {
+        val server = _state.value.server ?: return
+        // A Custom connection with no catalog has no address this form
+        // can edit: what it shows is its sync partner, which is the
+        // card below's to change.
+        if (server.kind == ServerKind.CUSTOM && server.catalogUrl == null) return
+        val credentials = server.credentials
+        _state.update {
+            it.copy(
+                editingAddress = true,
+                error = null,
+                kind = server.kind,
+                url = editableAddress(server),
+                username = server.username.orEmpty(),
+                password = (credentials as? RemoteCredentials.Basic)?.password.orEmpty(),
+                apiKey = (credentials as? RemoteCredentials.ApiKey)?.key.orEmpty(),
+                deviceToken = (credentials as? RemoteCredentials.Bearer)?.token.orEmpty(),
+                // A liseur-sync account holds a device token however it
+                // was signed in, and the password it was signed in with
+                // is not kept. Offering the password form would leave
+                // the reader with two empty fields and a dead Connect
+                // button beside a credential that is right there.
+                liseurSyncSignIn = if (credentials is RemoteCredentials.Bearer) {
+                    LiseurSyncSignIn.TOKEN
+                } else {
+                    it.liseurSyncSignIn
+                },
+                // The sync half is not this form's to speak for, and
+                // what it left behind cannot be submitted: a connection
+                // made earlier by this same screen leaves its address
+                // and name standing while clearing the password, which
+                // reads as half a pair and refuses the whole form. The
+                // partner has its own card below.
+                kosyncUrl = "",
+                kosyncUsername = "",
+                kosyncPassword = "",
+                kosyncError = null,
+            )
+        }
+    }
+
+    /** Closes the form again, leaving the connection as it was. */
+    fun cancelEditAddress() {
+        _state.update {
+            it.copy(
+                editingAddress = false,
+                error = null,
+                password = "",
+                apiKey = "",
+                deviceToken = "",
+                kosyncUrl = "",
+                kosyncUsername = "",
+                kosyncPassword = "",
+                kosyncError = null,
+            )
         }
     }
 
@@ -692,8 +807,13 @@ class ServerAccountViewModel(
      * and reported separately, so the reader is told which of the two
      * they mistyped rather than that "the server" said no.
      */
-    private suspend fun connectCustom(current: ServerAccountUiState, allowHttp: Boolean) {
+    private suspend fun connectCustom(
+        current: ServerAccountUiState,
+        allowHttp: Boolean,
+        beforePublish: suspend () -> Unit,
+    ) {
         val result = repository.connectCustom(
+            beforePublish = beforePublish,
             catalogUrl = current.url.trim(),
             username = current.username.trim(),
             password = current.password,
@@ -701,6 +821,20 @@ class ServerAccountViewModel(
             kosyncUsername = current.kosyncUsername.trim(),
             kosyncPassword = current.kosyncPassword,
             allowHttp = allowHttp,
+            // Changing the catalog address says nothing about the sync
+            // partner, which has its own card further down the screen.
+            // The pairing's password is not kept — only a value derived
+            // from it — so the form could not offer the peer back even
+            // if it wanted to, and empty fields must not read as "take
+            // it away".
+            // Only an edit that stays on the same kind of connection
+            // leaves the partner alone. Switching a Grimmory account to
+            // Custom is an account switch like any other, and its
+            // pairing belongs to the account being left.
+            speaksForKosync = !(
+                current.editingAddress &&
+                    current.server?.kind == ServerKind.CUSTOM
+                ),
         )
         if (result.connected) {
             _state.update {
@@ -710,6 +844,7 @@ class ServerAccountViewModel(
                     kosyncPassword = "",
                     error = null,
                     kosyncError = null,
+                    editingAddress = false,
                 )
             }
             // With no catalog there is no walk to wait for, and waiting
@@ -785,10 +920,21 @@ class ServerAccountViewModel(
 
     fun dismissDownloadAll() = _state.update { it.copy(bulkEstimate = null) }
 
-    fun downloadAll() {
-        val accountKey = _state.value.server?.accountKey ?: return
+    /** Starts the batch, of however many books the reader settled on. */
+    fun downloadAll(limit: Int? = null) {
+        val current = _state.value
+        val accountKey = current.server?.accountKey ?: return
+        // The books the dialog quoted, not a fresh count: the shelf may
+        // have moved while it was open, and the reader agreed to a
+        // price for a particular set.
+        val priced = current.bulkEstimate?.urls.orEmpty()
+        val only = when {
+            priced.isEmpty() -> null
+            limit == null -> priced
+            else -> priced.take(limit.coerceAtLeast(0))
+        }
         _state.update { it.copy(bulkEstimate = null) }
-        viewModelScope.launch { downloads.enqueueAll(accountKey) }
+        viewModelScope.launch { downloads.enqueueAll(accountKey, only) }
     }
 
     fun cancelDownloadAll() {
@@ -820,6 +966,7 @@ class ServerAccountViewModel(
 
     private fun SetupFailure.toUiError(): AccountError = when (this) {
         SetupFailure.BadCredentials -> AccountError.BAD_CREDENTIALS
+        SetupFailure.SignInRequired -> AccountError.SIGN_IN_REQUIRED
         SetupFailure.InsufficientScopes -> AccountError.INSUFFICIENT_SCOPES
         SetupFailure.WrongServer -> AccountError.WRONG_SERVER
         SetupFailure.InsecureTransport -> AccountError.INSECURE_TRANSPORT
@@ -869,4 +1016,54 @@ internal fun kosyncPrefillUrl(
     if (server?.kind != ServerKind.GRIMMORY) return null
     if (peer != null || currentUrl.isNotBlank()) return null
     return server.baseUrl.trimEnd('/') + "/api/koreader"
+}
+
+/**
+ * The address the connect form should hold when it opens over a
+ * connected account.
+ *
+ * A Custom connection with no catalog holds its sync server in
+ * `baseUrl`, which is not what this field is for: offering it would ask
+ * the reader to walk their kosync server for books.
+ */
+internal fun editableAddress(server: RemoteServer): String = when (server.kind) {
+    ServerKind.CUSTOM -> server.catalogUrl.orEmpty()
+    else -> server.catalogUrl ?: server.baseUrl
+}
+
+/**
+ * Whether submitting this form would leave the account it opened over.
+ *
+ * Asked before anything is published, because what a switch costs has
+ * to be paid first: a bulk download running against the account being
+ * left is stopped, the way disconnecting stops one. Waiting until the
+ * new account is stored would be asking work already in flight about
+ * rows that had just been retired underneath it.
+ *
+ * Read the other way round from the repository's own test, which
+ * compares what the server *answered* with. This one only has what was
+ * typed, so it says no only where the two plainly name the same
+ * account, and yes wherever it cannot tell. A batch stopped in an
+ * abundance of caution can be started again; one that ran on into a
+ * retired account leaves files nothing points at.
+ */
+internal fun ServerAccountUiState.switchesAccount(): Boolean {
+    val server = server ?: return false
+    // The form only stands over a live connection while its address is
+    // being edited. Otherwise there is no account to leave.
+    if (!editingAddress) return false
+    if (kind != server.kind) return true
+    if (!RemoteUrl.sameAddress(editableAddress(server), url.trim())) return true
+    if (username.trim() != server.username.orEmpty()) return true
+    // A kind whose account is named by its credential rather than by a
+    // name beside the address: the same URL with a different key is a
+    // different account, and only the credential can say so.
+    return when (kind) {
+        ServerKind.KOMGA ->
+            apiKey.trim() != (server.credentials as? RemoteCredentials.ApiKey)?.key
+        ServerKind.LISEUR_SYNC ->
+            liseurSyncSignIn == LiseurSyncSignIn.TOKEN &&
+                deviceToken.trim() != (server.credentials as? RemoteCredentials.Bearer)?.token
+        else -> false
+    }
 }

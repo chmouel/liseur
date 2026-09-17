@@ -16,6 +16,8 @@ import java.net.SocketTimeoutException
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import kotlinx.coroutines.flow.first
@@ -141,6 +143,7 @@ class RemoteCatalogRepositoryTest {
     /** A catalog that does whatever the test needs it to do. */
     private class FakeCatalog(
         private val complete: Boolean = true,
+        private val shelfWasFilled: Boolean = false,
         private val walk: suspend (suspend (List<RemoteBook>) -> Unit) -> Unit,
     ) : CatalogSource {
         override suspend fun allBooks(
@@ -149,7 +152,7 @@ class RemoteCatalogRepositoryTest {
             onPage: suspend (List<RemoteBook>) -> Unit,
         ): CatalogWalk {
             walk(onPage)
-            return CatalogWalk(complete)
+            return CatalogWalk(complete, shelfWasFilled = shelfWasFilled)
         }
 
         override suspend fun search(
@@ -349,6 +352,29 @@ class RemoteCatalogRepositoryTest {
     }
 
     @Test
+    fun `a shelf read whole prunes what has dropped off it`() = runTest {
+        // A shelf offered at a size is read to that size and no
+        // further, so the catalog behind it is unseen while the shelf
+        // itself is not. Without this the shelf keeps every book that
+        // was ever popular enough to reach it and grows with every
+        // refresh. Twice, because one absence is only a suspicion.
+        connect(ServerKind.KOMGA)
+        shelve("b1", progressedTo = 0.4)
+        shelve("b2", progressedTo = 0.9)
+
+        val catalog = FakeCatalog(complete = false, shelfWasFilled = true) { onPage ->
+            onPage(listOf(book("b1")))
+        }
+        repository(catalog).refresh()
+        repository(catalog).refresh()
+
+        assertEquals(null, db.bookDao().getByUrl("komga:b2"))
+        assertNotNull(db.bookDao().getByUrl("komga:b1"))
+        // Still only part of the catalog, so it is still not current.
+        assertEquals(null, db.remoteServerDao().get()?.catalogSyncedAt)
+    }
+
+    @Test
     fun `a walk that did finish is still allowed to prune`() = runTest {
         // The other half of the rule, so the test above cannot be
         // satisfied by never pruning at all. Twice, because one absence
@@ -465,6 +491,23 @@ class RemoteCatalogRepositoryTest {
         repository(FakeCatalog(complete = false) { onPage -> onPage(listOf(book("b1"))) }).refresh()
 
         assertEquals(null, db.bookDao().getByUrl("komga:b2")?.catalogMissingSince)
+    }
+
+    @Test
+    fun `and says so, rather than settling as if it had`() = runTest {
+        // The books that arrived are real, so it is not a failure; the
+        // shelf is a part of the catalog rather than the whole of it,
+        // so it is not idle either. Reported as neither, a reader
+        // pointed at a catalog of tens of thousands of books got a few
+        // hundred of them and no explanation (#219).
+        connect(ServerKind.CUSTOM)
+        val repository = repository(
+            FakeCatalog(complete = false) { onPage -> onPage(listOf(book("b1"))) },
+        )
+
+        repository.refresh()
+
+        assertEquals(CatalogStatus.Partial, repository.status.value)
     }
 
     /**
@@ -874,6 +917,60 @@ class RemoteCatalogRepositoryTest {
 
         assertEquals(false, settled.await().completed)
         assertEquals(CatalogStatus.Idle, repository.status.value)
+    }
+
+    /**
+     * An account that has just changed is exactly when the previous
+     * account's walk is still going, and that walk throws its own
+     * result away on noticing. Standing down would leave the new
+     * account's shelf empty until somebody pulled it down by hand.
+     */
+    @Test
+    fun `a detached refresh waits for the walk in flight instead of standing down`() = runTest {
+        connect()
+        val gate = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
+        var walks = 0
+        val catalog = FakeCatalog { onPage ->
+            if (walks++ == 0) {
+                started.complete(Unit)
+                gate.await()
+            }
+            onPage(listOf(book("b1")))
+        }
+        val repository = RemoteCatalogRepository(
+            router = RemoteRouter(
+                serverDao = db.remoteServerDao(),
+                catalogs = mapOf(ServerKind.KOMGA to catalog),
+                files = emptyMap(),
+                positions = emptyMap(),
+            ),
+            serverDao = db.remoteServerDao(),
+            bookDao = db.bookDao(),
+            bookRemoval = BookRemoval(
+                db.bookDao(),
+                db.readingSessionDao(),
+                db.syncPeerStateDao(),
+                db.workIdentityDao(),
+                db.readingProgressDao(),
+                db.annotationDao(),
+                db.annotationSyncDao(),
+            ),
+            scope = this,
+        )
+
+        val first = launch { repository.refresh() }
+        started.await()
+        val settled = CompletableDeferred<CatalogRefresh>()
+        repository.refreshDetached { settled.complete(it) }
+        runCurrent()
+        assertEquals(1, walks)
+
+        gate.complete(Unit)
+        first.join()
+
+        assertTrue(settled.await().completed)
+        assertEquals(2, walks)
     }
 
     /**
