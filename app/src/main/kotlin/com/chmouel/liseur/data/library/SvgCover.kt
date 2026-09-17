@@ -10,7 +10,6 @@ import com.caverock.androidsvg.SVGExternalFileResolver
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import java.io.ByteArrayInputStream
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
 /**
@@ -94,13 +93,21 @@ private fun usable(value: Float) = value.isFinite() && value > 0f
  * are dropped because AndroidSVG decodes those itself, and the list is
  * capped because a cover needs one image and an arbitrary file can name
  * thousands.
+ *
+ * An `<image>` may legally carry both `href` and `xlink:href`, and
+ * AndroidSVG takes the last one it reads rather than preferring either.
+ * Guessing which it will ask for risks reading the wrong file and
+ * drawing the wrapper blank, so both are read: an image that is not
+ * asked for costs one of the four slots and nothing else.
  */
 internal fun svgImageHrefs(bytes: ByteArray, limit: Int = MAX_SVG_IMAGES): List<String> =
     runCatching {
         Jsoup.parse(ByteArrayInputStream(bytes), null, "", Parser.xmlParser())
             .select("image")
             .asSequence()
-            .map { it.attr("xlink:href").ifBlank { it.attr("href") } }
+            .flatMap { image -> image.attributes().asSequence() }
+            .filter { it.key == "href" || it.key.endsWith(":href") }
+            .map { it.value }
             .filter { it.isNotBlank() && !it.startsWith("data:", ignoreCase = true) }
             .distinct()
             .take(limit)
@@ -148,7 +155,10 @@ internal fun renderSvgCover(bytes: ByteArray, images: Map<String, Bitmap>): Bitm
     bitmap
 }.getOrNull()
 
-private val svgPrepared = AtomicBoolean(false)
+private val svgPrepared: Unit by lazy {
+    SVG.setInternalEntitiesEnabled(false)
+    SVG.registerExternalFileResolver(SvgImages)
+}
 
 /**
  * The two global settings AndroidSVG has, applied once.
@@ -157,12 +167,15 @@ private val svgPrepared = AtomicBoolean(false)
  * and entity expansion is how a few kilobytes of XML become a heap dump.
  * The resolver is registered rather than passed because 1.4 has nowhere
  * to pass one: see [SvgImages].
+ *
+ * Once means once for the process, and covers are drawn on whichever IO
+ * thread is free, so the second caller has to wait for the first rather
+ * than be waved past a flag raised before the settings were written. A
+ * lazy is that barrier: it publishes after its initialiser has run, not
+ * before.
  */
 private fun prepareSvgRendering() {
-    if (svgPrepared.compareAndSet(false, true)) {
-        SVG.setInternalEntitiesEnabled(false)
-        SVG.registerExternalFileResolver(SvgImages)
-    }
+    svgPrepared
 }
 
 /**
