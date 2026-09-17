@@ -597,7 +597,11 @@ private class KnownBooks(books: List<Book>) {
         .toMutableMap()
     private val byUrl = books.associateBy { it.url }.toMutableMap()
     private val legacyGrimmory = books
-        .filter { it.url.startsWith("grimmory:") && it.openableUrl != null }
+        .filter {
+            it.url.startsWith("grimmory:") &&
+                it.remoteUuid != null &&
+                it.openableUrl != null
+        }
         .groupBy { it.title to it.author }
         .filterValues { it.size == 1 }
         .mapValuesTo(mutableMapOf()) { it.value.single() }
