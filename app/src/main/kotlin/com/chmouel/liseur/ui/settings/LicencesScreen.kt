@@ -69,6 +69,11 @@ private val Components = listOf(
     Component("OkHttp", "Apache 2.0"),
     Component("Coil", "Apache 2.0"),
     Component(
+        name = "AndroidSVG",
+        licence = "Apache 2.0",
+        notice = "Copyright 2013 Paul LeBeau, Cave Rock Software Ltd.",
+    ),
+    Component(
         name = "Reorderable",
         licence = "Apache 2.0",
         notice = "Copyright 2023 Calvin Liang",

@@ -27,11 +27,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.cover
 import org.readium.r2.shared.util.AbsoluteUrl
+import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
+import org.readium.r2.shared.util.mediatype.MediaType
 import org.readium.r2.shared.util.toAbsoluteUrl
 import org.readium.r2.streamer.PublicationOpener
 
@@ -1101,6 +1104,7 @@ class LocalLibraryRepository(
         // drawn on the thread doing the decoding.
         return withContext(Dispatchers.IO) {
             val cover = publication.cover()
+                ?: declaredSvgCover(publication)
                 ?: coverNamedCover(publication)
                 ?: return@withContext null
             val dir = File(context.filesDir, "covers").apply { mkdirs() }
@@ -1110,6 +1114,26 @@ class LocalLibraryRepository(
                 file.absolutePath
             }.getOrNull()
         }
+    }
+
+    /**
+     * The cover a book declared, when that cover is a vector.
+     *
+     * Readium resolves both ways a publication can point at its cover —
+     * the EPUB 3 `cover-image` property, and the EPUB 2 `<meta
+     * name="cover">` pointer at a manifest id — and both arrive here as
+     * `rel=cover`. What it cannot do is draw one: `publication.cover()`
+     * ends at `BitmapFactory`, which has never known `image/svg+xml`, so
+     * a book whose artwork is an SVG comes back from it with nothing at
+     * all, however plainly it said what its cover was.
+     *
+     * Reached only once that route has come back empty, and ahead of
+     * [coverNamedCover], because a declaration is a statement and a
+     * filename is a guess.
+     */
+    private suspend fun declaredSvgCover(publication: Publication): Bitmap? {
+        val link = publication.linksWithRel("cover").firstOrNull { it.isSvg } ?: return null
+        return svgCover(publication, link.url())
     }
 
     /**
@@ -1150,28 +1174,83 @@ class LocalLibraryRepository(
         // spine item. Resource order and then spine order: neither is
         // the manifest's own order, but both are fixed, so a book with
         // two candidates always resolves to the same one.
+        //
+        // A vector counts as a candidate, and is the only reason the
+        // media type is asked about twice: `isBitmap` is the six formats
+        // `BitmapFactory` decodes, and an SVG is drawn rather than
+        // decoded.
         val link = (publication.resources + publication.readingOrder).firstOrNull {
-            it.mediaType?.isBitmap == true && isNamedCover(it.url().filename)
+            (it.mediaType?.isBitmap == true || it.isSvg) && isNamedCover(it.url().filename)
         } ?: return null
+        if (link.isSvg) return svgCover(publication, link.url())
         // Off the main thread by the time anything is read or decoded —
         // belt and braces with [saveCover], which already dispatches,
         // because a suspend function that reads and decodes should not
         // depend on its caller to be safe.
         return withContext(Dispatchers.IO) {
-            val resource = publication.get(link) ?: return@withContext null
-            val bytes = try {
-                // Asking the range rather than trusting `length()`, which
-                // Readium documents as a hint that "might not reflect the
-                // actual bytes length". Out-of-range reads are clamped, so
-                // a small entry comes back whole, and one byte past the
-                // limit is enough to tell a file at the limit from one
-                // over it.
-                resource.read(0 until MAX_COVER_BYTES + 1).getOrNull()
-            } finally {
-                resource.close()
-            }
-            if (bytes == null || bytes.size > MAX_COVER_BYTES) null else decodeBounded(bytes)
+            val bytes = readBounded(publication, link.url(), MAX_COVER_BYTES)
+            bytes?.let { decodeBounded(it) }
         }
+    }
+
+    /**
+     * Draws the SVG at [url] as this book's cover.
+     *
+     * The wrapper case is why the referenced images are read first: a
+     * cover SVG is very often a `<svg>` around an `<image>` pointing at
+     * the JPEG beside it, and AndroidSVG asks for those through a
+     * callback that cannot suspend. Reading them up front turns that
+     * callback into a map lookup, which is also what keeps it inside
+     * this book — see [SvgImages].
+     *
+     * An href that will not parse, or names something the book does not
+     * contain, is simply not in the map: the page draws without it,
+     * which is the same thing a browser does.
+     */
+    private suspend fun svgCover(publication: Publication, url: Url): Bitmap? =
+        withContext(Dispatchers.IO) {
+            val bytes = readBounded(publication, url, MAX_SVG_BYTES) ?: return@withContext null
+            val images = svgImageHrefs(bytes).mapNotNull { href ->
+                val target = runCatching { Url(href)?.let { url.resolve(it) } }.getOrNull()
+                    ?: return@mapNotNull null
+                val image = readBounded(publication, target, MAX_COVER_BYTES)
+                    ?.let { decodeBounded(it) }
+                    ?: return@mapNotNull null
+                href to image
+            }.toMap()
+            renderSvgCover(bytes, images)
+        }
+
+    /**
+     * Reads an entry of the book, or null when it is missing, unreadable
+     * or bigger than [cap].
+     *
+     * The length is asked first and the range is cut to it, because a
+     * range that runs past the end of an entry comes back as a decoding
+     * failure rather than clamped to what is there — whatever `read`
+     * documents. Asking for one byte past the cap, which is the obvious
+     * way to tell a file at the limit from one over it, therefore
+     * refused every cover small enough to want.
+     *
+     * Readium calls `length()` a hint that "might not reflect the actual
+     * bytes length", so it is used as a bound and not as an answer: the
+     * bytes that arrive are measured again. An entry that will not say
+     * how big it is at all is read whole and measured afterwards, which
+     * is what reading any declared cover already does.
+     */
+    private suspend fun readBounded(publication: Publication, url: Url, cap: Long): ByteArray? {
+        val resource = publication.get(url) ?: return null
+        val bytes = try {
+            val length = resource.length().getOrNull()
+            when {
+                length == null -> resource.read()
+                length > cap -> return null
+                else -> resource.read(0 until length)
+            }.getOrNull()
+        } finally {
+            resource.close()
+        }
+        return if (bytes == null || bytes.size > cap) null else bytes
     }
 
     /**
@@ -1218,8 +1297,22 @@ class LocalLibraryRepository(
          * named `cover.jpg` to be read cannot cost much.
          */
         const val MAX_COVER_BYTES = 16L * 1024 * 1024
+
+        /**
+         * The same, for a cover that is an SVG.
+         *
+         * Smaller than the raster bound because XML is not what it
+         * costs: a document becomes a tree several times the size of
+         * the bytes it was written as, and a megabyte of cover artwork
+         * is already an extravagantly drawn one.
+         */
+        const val MAX_SVG_BYTES = 4L * 1024 * 1024
     }
 }
+
+/** Whether a link points at a vector image rather than a picture of one. */
+private val Link.isSvg: Boolean
+    get() = mediaType?.matches(MediaType.SVG) == true
 
 /**
  * The most pixels a cover is decoded to.

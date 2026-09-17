@@ -22,10 +22,10 @@ class IsNamedCoverTest {
 
     /**
      * The name rule knows nothing about formats, and does not need to:
-     * a candidate is only considered when Readium already called it a
-     * bitmap, and `MediaType.isBitmap` is BMP, GIF, JPEG, PNG, TIFF and
-     * WEBP. So `cover.svg` passing here does not mean an SVG cover
-     * works — the media type is what turns it away, one step earlier.
+     * a candidate is only considered when Readium has already called it
+     * a bitmap or an SVG. `cover.txt` passing here is the media type's
+     * business, one step earlier, and `cover.svg` passing is the point —
+     * a vector cover is drawn by [renderSvgCover] rather than decoded.
      */
     @Test
     fun `the rule is about the name, not the format`() {
