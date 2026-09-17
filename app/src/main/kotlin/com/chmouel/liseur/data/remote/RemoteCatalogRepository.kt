@@ -378,7 +378,7 @@ class RemoteCatalogRepository(
         // the snapshot already covers are left alone: their snapshot is
         // what the series write below checks itself against.
         val unknown = books.map { it.remoteId }
-            .filter { known.find(it, kind.remoteUrl(it)) == null }
+            .filter { known.findExact(it, kind.remoteUrl(it)) == null }
         if (unknown.isNotEmpty()) bookDao.byRemoteUuids(unknown).forEach(known::remember)
         // Keyed by URL so a feed that names the same book twice on one
         // page folds into one insert, rather than two rows racing for
@@ -391,7 +391,12 @@ class RemoteCatalogRepository(
             // its generated id coming back, so ask the database for it.
             // One seen earlier on this same page has not landed yet, and
             // the pending row itself is the answer.
-            val existing = known.find(remote.remoteId, url)
+            val existing = known.find(
+                remote.remoteId,
+                url,
+                remote.title,
+                remote.author,
+            )
                 ?.let { pending ->
                     if (pending.id == 0L) bookDao.getByUrl(url) ?: pending else pending
                 }
@@ -591,12 +596,23 @@ private class KnownBooks(books: List<Book>) {
     private val byUuid = books.mapNotNull { book -> book.remoteUuid?.let { it to book } }.toMap()
         .toMutableMap()
     private val byUrl = books.associateBy { it.url }.toMutableMap()
+    private val legacyGrimmory = books
+        .filter { it.url.startsWith("grimmory:") && it.openableUrl != null }
+        .groupBy { it.title to it.author }
+        .filterValues { it.size == 1 }
+        .mapValuesTo(mutableMapOf()) { it.value.single() }
 
-    fun find(remoteId: String, url: String): Book? = byUuid[remoteId] ?: byUrl[url]
+    fun findExact(remoteId: String, url: String): Book? = byUuid[remoteId] ?: byUrl[url]
+
+    fun find(remoteId: String, url: String, title: String, author: String?): Book? =
+        findExact(remoteId, url)
+            ?: url.takeIf { it.startsWith("custom:") }
+                ?.let { legacyGrimmory.remove(title to author) }
 
     fun remember(book: Book) {
         book.remoteUuid?.let { byUuid[it] = book }
         byUrl[book.url] = book
+        legacyGrimmory.remove(book.title to book.author)
     }
 }
 
