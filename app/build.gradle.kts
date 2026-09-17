@@ -217,6 +217,10 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    // The platform cannot decode SVG, so a book whose cover is one has a
+    // blank tile on the shelf however well it reads. Covers are
+    // rasterized once at import, so this is only ever reached there.
+    implementation(libs.androidsvg)
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.datastore.preferences)
 

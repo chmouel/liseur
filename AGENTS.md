@@ -444,6 +444,20 @@ emulator.
   position, annotation and session hangs off, and only `remote_uuid` and
   `download_href` are written (`BookDao.linkToRemote`). Never rewrite
   `books.url` to the server's spelling: the reader's place goes with it.
+- A local cover is resolved once, at import, and written as a JPEG that
+  every screen then reads through `books.cover_path`. Three routes, in
+  this order and no other: `publication.cover()`, a declared `rel=cover`
+  that is an SVG, then an image *named* `cover`, raster or SVG — a
+  declaration is a statement and a filename is a guess. An SVG is drawn
+  by `data/library/SvgCover.kt` rather than decoded, because
+  `BitmapFactory` has never known the format; it is drawn on opaque
+  white, since the file it lands in has no alpha, and its size is
+  chosen rather than read, since a vector has none. AndroidSVG's
+  external-file resolver is *static* and cannot suspend, so the images a
+  wrapper SVG refers to are read before the render and handed over per
+  thread — never let that callback reach the archive, or two books drawn
+  at once can swap artwork. See
+  `docs/adr/0035-an-svg-cover-is-drawn-not-decoded.md`.
 - Live notifications are topic-only hints routed through `data/remote/`.
   Keep their foreground connection separate from the full-sync debounce,
   with a short background grace period. Connection identity includes the
