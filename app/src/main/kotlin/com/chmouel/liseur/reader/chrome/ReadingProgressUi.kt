@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -172,10 +174,14 @@ fun ChromeEdgeFade(
     modifier: Modifier = Modifier,
 ) {
     if (LocalEInk.current) return
+    // The clear end of the ramp is the page's own colour at zero alpha,
+    // not Color.Transparent, which is a transparent *black* and drags
+    // the hue towards it wherever the two are interpolated unpremultiplied.
+    val clear = theme.background.copy(alpha = 0f)
     val stops = if (solidAtTop) {
-        listOf(theme.background, Color.Transparent)
+        listOf(theme.background, clear)
     } else {
-        listOf(Color.Transparent, theme.background)
+        listOf(clear, theme.background)
     }
     Box(
         modifier
@@ -334,7 +340,13 @@ private fun ChromePill(
         color = if (eInk) theme.foreground else theme.foreground.copy(alpha = 0.92f),
         contentColor = theme.background,
         shadowElevation = if (eInk) 0.dp else 6.dp,
-        modifier = modifier.padding(16.dp),
+        // The column this sits in no longer takes the navigation bar's
+        // room, since the scrubber under it must reach the screen's
+        // edge. A pill must still keep out of a bar stood on its side,
+        // which is where a landscape phone puts it.
+        modifier = modifier
+            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
+            .padding(16.dp),
         content = content,
     )
 }
