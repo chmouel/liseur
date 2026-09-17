@@ -315,7 +315,7 @@ object OpdsParser {
             throw SAXException("the document is not an Atom feed but a <${root.tagName}>")
         }
         val entries = root.children("entry")
-        val books = entries.mapNotNull(::parseEntry)
+        val books = entries.mapNotNull(::parseEntry).oneEntryPerPublication()
         val navigation = entries.filter(::isNavigation).mapNotNull(::navigationLink)
         val next = root.children("link")
             .firstOrNull { it.rels().contains("next") }
@@ -331,6 +331,123 @@ object OpdsParser {
     }
 
     /**
+     * One entry per publication, in the order the feed gave them.
+     *
+     * A few catalogs list the same book more than once in a single
+     * feed, one entry per set of files. Project Gutenberg does it for
+     * every book it has: `urn:gutenberg:1342:2` offers the EPUB without
+     * illustrations and `urn:gutenberg:1342:3` offers the one with
+     * them, same title, same author, same cover. Both carry an EPUB, so
+     * both read as books, and the shelf ends up holding every Gutenberg
+     * book twice.
+     *
+     * Same work, same title, same author and the *same cover file* is
+     * what counts as the same publication, and every part of that is
+     * load-bearing. Two entries name the same work when their ids are a
+     * numbered work in a numbered form: `urn:gutenberg:1342:2` and
+     * `urn:gutenberg:1342:3` are both 1342. That is the part that makes
+     * the test safe, because a catalog that hands all its books one
+     * placeholder cover, or no author, or a title as generic as
+     * "Untitled", would otherwise collapse a whole shelf into one book.
+     * Ids of `book-1` and `book-2`, and identifiers that are complete in
+     * themselves like `urn:isbn:0451450523`, name separate works and are
+     * left alone however much else they share, and an entry with no
+     * cover is never a duplicate of anything.
+     *
+     * The one with the lowest entry id survives. Which of the two it
+     * is matters far less than that the answer never changes:
+     * `books.url` is derived from the entry id, so a rule that picked
+     * differently on the next refresh would delete the book and add it
+     * back under another name, taking its reading position, its
+     * highlights and its sessions with it. An id is the entry's own and
+     * travels with it; where it sits in the feed is not, because OPDS
+     * promises no order and a catalog is free to list the pair the
+     * other way round tomorrow. Nothing that varies at all — a clock, a
+     * locale, the iteration order of a set — may be consulted here.
+     *
+     * Lowest rather than highest only because a pair has to be settled
+     * somehow. For Gutenberg it keeps `:2` over `:3`, which is the
+     * edition without illustrations: the same text in a fiftieth of the
+     * bytes.
+     *
+     * Within one feed and no further. Recognising the two halves of a
+     * pair across pages would mean carrying every publication the walk
+     * has ever seen, which on a catalog of some tens of thousands of
+     * books is unbounded; and no catalog splits a pair that way, since
+     * the point of the second entry is to sit beside the first.
+     */
+    private fun List<OpdsBook>.oneEntryPerPublication(): List<OpdsBook> {
+        if (size < 2) return this
+        val survivor = mutableMapOf<Publication, String>()
+        forEach { book ->
+            val key = book.publication() ?: return@forEach
+            val standing = survivor[key]
+            if (standing == null || book.entryId < standing) survivor[key] = book.entryId
+        }
+        if (survivor.isEmpty()) return this
+        val taken = mutableSetOf<Publication>()
+        return filter { book ->
+            val key = book.publication() ?: return@filter true
+            survivor[key] == book.entryId && taken.add(key)
+        }
+    }
+
+    /**
+     * What makes this entry the same book as another, or nothing.
+     *
+     * Null for an entry with no cover, which is never a duplicate of
+     * anything.
+     */
+    private fun OpdsBook.publication(): Publication? {
+        val cover = coverHref?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val work = workId(entryId) ?: return null
+        return Publication(
+            work = work,
+            title = title.trim().lowercase(),
+            author = author?.trim()?.lowercase(),
+            coverHref = cover,
+            // Two entries under different bases mean different files by
+            // the same relative href, so they are not the same cover
+            // and not the same publication.
+            xmlBase = xmlBase,
+        )
+    }
+
+    /**
+     * The work an entry id names, if it names one alongside a variant.
+     *
+     * The shape is a numbered work in a numbered form:
+     * `urn:gutenberg:1342:2` and `urn:gutenberg:1342:3` are both 1342,
+     * once in the files without illustrations and once in the files
+     * with them. Both halves must be numbers, which is what keeps
+     * `urn:isbn:0451450523` out — its number is the whole identifier
+     * and `urn:isbn` is not a work, so two ISBNs would otherwise be
+     * read as two forms of one book. Null for anything else, including
+     * ids of `book-1` and `book-2` and a pair of bare numbers, so those
+     * entries are separate books whatever else they share.
+     */
+    private fun workId(entryId: String): String? {
+        val cut = entryId.lastIndexOf(':')
+        if (cut <= 0 || cut == entryId.lastIndex) return null
+        if (!entryId.substring(cut + 1).all(Char::isDigit)) return null
+        val work = entryId.substring(0, cut)
+        if (!work.last().isDigit()) return null
+        // The work's own number needs a name in front of it, or the id
+        // is a bare pair of numbers and neither half means anything.
+        if (work.lastIndexOf(':') <= 0) return null
+        return work
+    }
+
+    /** What makes two entries in one feed the same book. */
+    private data class Publication(
+        val work: String,
+        val title: String,
+        val author: String?,
+        val coverHref: String,
+        val xmlBase: String?,
+    )
+
+    /**
      * Whether this entry is a shelf to walk into rather than a book.
      *
      * An entry offering a download is a book whatever else it links to:
@@ -341,12 +458,37 @@ object OpdsParser {
     private fun isNavigation(entry: Element): Boolean {
         val links = entry.children("link")
         if (links.any { it.rels().any { rel -> rel in DOWNLOAD_RELS } }) return false
-        return links.any(::pointsAtAFeed)
+        return links.any(::isPointer)
     }
 
-    private fun pointsAtAFeed(link: Element): Boolean =
+    /**
+     * Whether a link points somewhere else rather than at a file.
+     *
+     * Loose on purpose, because this is what keeps an entry out of the
+     * library. Gutenberg's author feeds end with an entry linking to
+     * the author's Wikipedia page — `rel="subsection"`, but
+     * `type="text/html"` — and it is no more a book for not being a
+     * feed. Shelving it put *See also: en.wikipedia* on the shelf.
+     */
+    private fun isPointer(link: Element): Boolean =
         link.rels().any { it in NAVIGATION_RELS } ||
             link.getAttribute("type").startsWith(ATOM_TYPE, ignoreCase = true)
+
+    /**
+     * Whether a link is one the walk may ask for.
+     *
+     * Strict, because this one costs a request to somebody's server. A
+     * declared type settles it: a link that says `text/html` is a web
+     * page, and asking Wikipedia for a catalog feed earned a refusal
+     * that ended the whole refresh. A link that declares nothing falls
+     * back to its `rel`, which is all there is to go on and is how most
+     * catalogs spell navigation (#226).
+     */
+    private fun pointsAtAFeed(link: Element): Boolean {
+        val type = link.getAttribute("type")
+        if (type.isNotEmpty()) return type.startsWith(ATOM_TYPE, ignoreCase = true)
+        return link.rels().any { it in NAVIGATION_RELS }
+    }
 
     private fun navigationLink(entry: Element): OpdsLink? {
         val href = entry.children("link").firstOrNull(::pointsAtAFeed)?.href() ?: return null

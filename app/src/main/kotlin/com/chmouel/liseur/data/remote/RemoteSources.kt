@@ -38,6 +38,21 @@ data class CatalogWalk(
     val complete: Boolean,
     /** What the provider kept of the walk, for reusing within this run. */
     val snapshot: CatalogSnapshot? = null,
+    /**
+     * Whether the only thing left unseen is the catalog beyond a shelf
+     * Liseur itself decided to stop at.
+     *
+     * A shelf size is this app's rule, not the server's, so a walk that
+     * ended on it has seen everything the shelf is meant to hold. That
+     * makes it a complete answer about the shelf even though it is not
+     * one about the catalog: books that have dropped off the shelf
+     * since the last run can be let go, which is what stops a shelf
+     * offered at thirty books growing every time it is refreshed.
+     *
+     * False whenever anything else went short first, because then what
+     * is missing is not only the tail.
+     */
+    val shelfWasFilled: Boolean = false,
 )
 
 /**
@@ -170,6 +185,18 @@ sealed interface SetupFailure {
     data object BadCredentials : SetupFailure
 
     /**
+     * The URL answered, refused the request, and nothing was typed for
+     * it to have refused.
+     *
+     * Told apart from [BadCredentials] because the advice is not the
+     * same. An open OPDS catalog is connected to with both fields
+     * empty, so blaming "that username or password" names a username
+     * the reader never gave and sends them looking for a mistake they
+     * did not make (#219).
+     */
+    data object SignInRequired : SetupFailure
+
+    /**
      * The credentials work but do not grant what the app needs — a
      * liseur-sync device token without the `sync` scope, say.
      */
@@ -192,6 +219,14 @@ sealed interface SetupResult {
     data class Success(val capabilities: ServerCapabilities) : SetupResult
     data class Failure(val reason: SetupFailure) : SetupResult
 }
+
+/**
+ * What came of offering to connect an open catalog.
+ *
+ * [ALREADY_CONNECTED] is not a failure and has nothing to report: a
+ * server is connected, which is what the offer was for.
+ */
+enum class OpenCatalogOutcome { CONNECTED, UNREACHABLE, ALREADY_CONNECTED }
 
 /**
  * What came of connecting a Custom server, address by address.

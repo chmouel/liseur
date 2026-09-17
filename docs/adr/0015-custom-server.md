@@ -221,6 +221,34 @@ connection with a catalog keeps the bounded query; one without reads the
 locally openable books instead. One function decides which, so the scan
 and the push cannot drift.
 
+A catalog address is sent exactly as it was typed, slash and all.
+Every other server's address is a base to build request paths onto,
+where `/opds` and `/opds/` name one prefix and the trailing slash is
+noise. A catalog address is never built onto — it is fetched — so the
+slash is part of the resource name, and catalogs act on the difference:
+Project Gutenberg answers 200 to `/ebooks/search.opds/` and 403 to
+`/ebooks/search.opds`. Trimming it reported an open catalog as a
+refused username (#219). Identity is unaffected, because
+`OpdsScope.fingerprint` canonicalises the path's trailing slash away,
+so `books.url` is the same either spelling and no reading position
+moves when a connection is remade.
+
+Which spelling a catalog wants cannot be known in advance, so a failed
+probe is tried once with the slash flipped. Catalogs publish one form
+and answer to the other — Gutenberg links `/ebooks.opds` in its own
+pages — and a reader copying an address they were given has no way to
+tell. Only for a refusal that means something answered and said no. An
+address nothing answered at all is not a spelling mistake, and guessing
+at it would double the wait before the offer to try plain HTTP, which
+owns that case. The first failure is the one reported, since it is
+about the address the reader actually typed.
+
+A request nobody signed is not a password being wrong. An open catalog
+is connected to with both fields empty, so a 401 or 403 there is
+answered with `SetupFailure.SignInRequired` and a message that names
+both possibilities — a private catalog, or the wrong address — rather
+than blaming a username the reader never gave.
+
 ## Consequences
 
 The OPDS parser is shared now. A change made for a generic server can
@@ -238,7 +266,25 @@ searched through the books already listed locally.
 Real servers disagree about profiles, relative hrefs and paging, so the
 walk will meet catalogs it reads only partly. The bounds matter more
 than the coverage: a walk that stops early is a smaller library, and a
-walk that does not stop is a refresh that never ends.
+walk that does not stop is a refresh that never ends. A walk stopped by
+one of its bounds now says so — `CatalogStatus.Partial`, and a notice
+above the shelf — because the alternative was silence: a reader pointed
+at Project Gutenberg, whose root lists a feed per book across some
+76,000 of them, got a few hundred books and no account of the rest.
+Not a failure and not retryable, since the same walk from the same root
+reads the same pages every time; the advice is a narrower address. The
+notice names no cause, because a walk also stops short on a feed that
+loops, on paging it cannot make sense of, and on a link out of the
+catalog, and the advice is the same for all of them.
 
 Nothing stops a future kind from having both a native sync and a
 pairing. `ServerKind.hostsKosyncPeer` is where that answer lives.
+
+The empty-library screen now connects one particular OPDS catalog by
+itself, as a way of having something to read before having anywhere to
+read it from. It is an ordinary anonymous Custom connection; the one
+thing the walk knows about it is how many books that shelf is offered
+at, and it is keyed on the address so no catalog a reader typed is
+affected. See [ADR-0033](0033-a-shelf-of-free-books-to-start-with.md),
+which also covers the parser learning that one publication listed twice
+in a feed is one book.
