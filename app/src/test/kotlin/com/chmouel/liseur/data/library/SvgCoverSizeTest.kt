@@ -107,4 +107,23 @@ class SvgCoverSizeTest {
     fun `a nonsensical target draws nothing`() {
         assertNull(svgCoverSize(600f, 800f, -1f, -1f, edge = 0))
     }
+
+    /**
+     * The other way to ask for an enormous bitmap: not a dimension that
+     * looks wrong, but one so small that scaling it up overflows. A
+     * float reciprocal of `1e-40` is infinite, and both edges then round
+     * to `Int.MAX_VALUE`.
+     */
+    @Test
+    fun `a vanishing dimension cannot ask for an enormous bitmap`() {
+        val size = size(documentWidth = 1e-40f, documentHeight = 1e-40f)!!
+        assertEquals(CoverSize(1600, 1600), size)
+    }
+
+    /** And the same shape sideways, where one edge rounds away entirely. */
+    @Test
+    fun `a dimension too small to see is still a pixel`() {
+        val size = size(documentWidth = 1e-40f, documentHeight = 800f)!!
+        assertEquals(CoverSize(1, 1600), size)
+    }
 }
