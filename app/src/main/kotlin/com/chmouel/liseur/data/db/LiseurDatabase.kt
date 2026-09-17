@@ -1419,12 +1419,6 @@ abstract class LiseurDatabase : RoomDatabase() {
                     "DELETE FROM reading_progress WHERE book_url IN ($remoteOnly)",
                 )
                 connection.execSQL(
-                    "DELETE FROM annotations WHERE book_id IN ($remoteOnly)",
-                )
-                connection.execSQL(
-                    "DELETE FROM annotation_sync WHERE book_id IN ($remoteOnly)",
-                )
-                connection.execSQL(
                     "DELETE FROM reading_sessions WHERE book_url IN ($remoteOnly)",
                 )
                 connection.execSQL(

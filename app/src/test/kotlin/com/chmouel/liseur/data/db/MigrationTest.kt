@@ -1343,8 +1343,12 @@ class MigrationTest {
                 }
                 db.query("SELECT id FROM annotations").use {
                     assertTrue(it.moveToFirst())
-                    assertEquals("mark-2", it.getString(0))
-                    assertFalse(it.moveToNext())
+                    val ids = buildSet {
+                        do {
+                            add(it.getString(0))
+                        } while (it.moveToNext())
+                    }
+                    assertEquals(setOf("mark-1", "mark-2"), ids)
                 }
                 db.query(
                     "SELECT COUNT(*) FROM reading_sessions WHERE book_url = 'grimmory:remote'",
