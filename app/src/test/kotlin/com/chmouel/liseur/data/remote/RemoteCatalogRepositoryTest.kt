@@ -326,6 +326,46 @@ class RemoteCatalogRepositoryTest {
     }
 
     @Test
+    fun `custom refresh keeps duplicate metadata entries separate from legacy row`() = runTest {
+        connect(ServerKind.CUSTOM)
+        db.bookDao().upsertAll(
+            listOf(
+                Book(
+                    url = "grimmory:old",
+                    title = "Moby Dick",
+                    author = "Herman Melville",
+                    coverPath = null,
+                    source = null,
+                    addedAt = 0,
+                    lastOpenedAt = null,
+                    localUri = "file:///books/moby.epub",
+                    remoteUuid = "old",
+                    downloadState = com.chmouel.liseur.data.db.DownloadState.DOWNLOADED,
+                ),
+            ),
+        )
+
+        repository(
+            FakeCatalog { onPage ->
+                onPage(
+                    listOf(
+                        book("new-1").copy(title = "Moby Dick", author = "Herman Melville"),
+                        book("new-2").copy(title = "Moby Dick", author = "Herman Melville"),
+                    ),
+                )
+            },
+        ).refresh()
+
+        val stored = db.bookDao().allOnce()
+        assertEquals(3, stored.size)
+        assertEquals("old", stored.first { it.url == "grimmory:old" }.remoteUuid)
+        assertEquals(
+            setOf("new-1", "new-2"),
+            stored.filter { it.url.startsWith("custom:") }.map { it.remoteUuid }.toSet(),
+        )
+    }
+
+    @Test
     fun `liseur-sync personal series becomes the local override`() = runTest {
         connect(ServerKind.LISEUR_SYNC)
         val remote = book("b1").copy(
