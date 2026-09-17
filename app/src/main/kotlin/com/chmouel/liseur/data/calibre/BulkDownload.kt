@@ -70,7 +70,45 @@ data class BulkDownloadEstimate(
     val bytes: Long?,
     val freeBytes: Long,
     val verdict: SpaceVerdict,
+    /**
+     * What each book in the run is charged, in the order they would be
+     * fetched. Kept so a shorter run can be priced without asking the
+     * server again, and empty when nothing reported a size.
+     */
+    val charges: List<Long> = emptyList(),
+    /**
+     * Which books were priced, in the order they would be fetched.
+     *
+     * The run downloads exactly these, so a book that finished
+     * downloading or was archived while the dialog was open drops out
+     * rather than letting an unpriced one take its place.
+     */
+    val urls: List<String> = emptyList(),
 )
+
+/**
+ * The same run, stopped after [count] books.
+ *
+ * The books taken are the first ones, in the order the run would fetch
+ * them, so the price quoted is the price of exactly what would be
+ * downloaded.
+ */
+fun BulkDownloadEstimate.limitedTo(count: Int): BulkDownloadEstimate {
+    val kept = count.coerceIn(0, this.count)
+    if (kept == this.count) return this
+    if (charges.isEmpty()) return copy(count = kept, urls = urls.take(kept))
+    var total = 0L
+    charges.take(kept).forEach { charge ->
+        total = if (total > Long.MAX_VALUE - charge) Long.MAX_VALUE else total + charge
+    }
+    return copy(
+        count = kept,
+        bytes = total,
+        verdict = spaceVerdict(total, freeBytes),
+        charges = charges.take(kept),
+        urls = urls.take(kept),
+    )
+}
 
 /**
  * How much room a bulk download is required to leave behind.
@@ -137,17 +175,30 @@ fun estimateBulkDownload(sizes: List<Long?>, freeBytes: Long): BulkDownloadEstim
     // Saturating rather than wrapping: a total that overflowed into a
     // negative would read as "plenty of room" at exactly the moment
     // there is none.
+    val charged = sizes.map { size ->
+        size?.takeIf { it in 1..MAX_PLAUSIBLE_BOOK_BYTES } ?: median
+    }
     var total = 0L
-    sizes.forEach { size ->
-        val charge = size?.takeIf { it in 1..MAX_PLAUSIBLE_BOOK_BYTES } ?: median
+    charged.forEach { charge ->
         total = if (total > Long.MAX_VALUE - charge) Long.MAX_VALUE else total + charge
     }
+    return BulkDownloadEstimate(
+        count = sizes.size,
+        bytes = total,
+        freeBytes = freeBytes,
+        verdict = spaceVerdict(total, freeBytes),
+        charges = charged,
+    )
+}
+
+/** Whether a total of this size has room, with the reserve on top. */
+private fun spaceVerdict(total: Long, freeBytes: Long): SpaceVerdict {
     val required = if (total > Long.MAX_VALUE - BULK_DOWNLOAD_RESERVE_BYTES) {
         Long.MAX_VALUE
     } else {
         total + BULK_DOWNLOAD_RESERVE_BYTES
     }
-    val verdict = when {
+    return when {
         required > freeBytes -> SpaceVerdict.WILL_NOT_FIT
         // It fits, but not by much. Worth a different word, because a
         // batch that lands with 300 MB to spare is one photo album away
@@ -155,10 +206,4 @@ fun estimateBulkDownload(sizes: List<Long?>, freeBytes: Long): BulkDownloadEstim
         required + BULK_DOWNLOAD_RESERVE_BYTES > freeBytes -> SpaceVerdict.TIGHT
         else -> SpaceVerdict.FITS
     }
-    return BulkDownloadEstimate(
-        count = sizes.size,
-        bytes = total,
-        freeBytes = freeBytes,
-        verdict = verdict,
-    )
 }
