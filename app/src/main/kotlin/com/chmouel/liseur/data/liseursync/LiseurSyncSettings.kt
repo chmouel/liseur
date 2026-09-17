@@ -43,12 +43,22 @@ class LiseurSyncSettings(
      * Pulls settings from the server, applies the ones that won, then
      * pushes the ones changed here.
      *
-     * [canApplyReaderSettings] is false while a book is on screen. The
-     * `reader.*` keys are then left for a later pass rather than applied
-     * under the reader: a pulled font size or margin reflows the page
-     * mid-sentence, which is the settings version of turning someone's
-     * page for them. Nothing is recorded for a key left that way, so the
-     * next pass still sees it as owed.
+     * [canApplyReaderSettings] is asked again before every write rather
+     * than once at the start, because a book can be opened while the
+     * request is in the air — a resume-last-book start is exactly that.
+     * A setting that re-lays out the page is then left for a later pass
+     * rather than applied under the reader: a pulled font size or margin
+     * reflows the page mid-sentence, which is the settings version of
+     * turning someone's page for them. Nothing is recorded for a key
+     * left that way, so the next pass still sees it as owed.
+     *
+     * [stillConnected] is asked before each network call and again
+     * before anything is applied or recorded. The request is itself a
+     * side effect, so a disconnect or an account switch partway through
+     * must stop the run rather than be overwritten by what it had
+     * already decided: the answer to a question asked of the account
+     * just left may not be written to this device, and its baseline must
+     * not be rebuilt after `forgetSyncPeer` has taken it away.
      *
      * Returns the number of settings exchanged, or -1 if the server does
      * not serve them.
@@ -57,9 +67,11 @@ class LiseurSyncSettings(
         accountKey: String,
         baseUrl: String,
         credentials: RemoteCredentials,
-        canApplyReaderSettings: Boolean = true,
+        canApplyReaderSettings: suspend () -> Boolean = { true },
+        stillConnected: suspend () -> Boolean = { true },
     ): Int {
         if (baseUrl in unsupported) return -1
+        if (!stillConnected()) return 0
 
         val serverMap: Map<String, ServerEntry>
         try {
@@ -73,10 +85,13 @@ class LiseurSyncSettings(
             return -1
         }
 
+        if (!stillConnected()) return 0
+
         val lastSynced = syncState.allLastSynced(accountKey)
         val localChanges = syncState.localChanges()
         val pushTime = now()
         val agreed = mutableMapOf<String, SettingsSyncRepository.SyncedEntry>()
+        val applied = mutableMapOf<String, String>()
         val toPush = JSONObject()
         var exchanged = 0
 
@@ -96,7 +111,7 @@ class LiseurSyncSettings(
                 server == null -> false
                 !localDiffers -> serverIsNewer
                 !serverIsNewer -> false
-                else -> server.updatedAtMillis > (localChanges[entry.key] ?: 0L)
+                else -> server.updatedAtMillis > localStamp(entry.key, synced, localChanges, pushTime)
             }
 
             if (takeServer) {
@@ -105,6 +120,7 @@ class LiseurSyncSettings(
                         server.value,
                         server.updatedAtMillis,
                     )
+                    applied[entry.key] = server.value
                     exchanged++
                 }
                 continue
@@ -114,7 +130,18 @@ class LiseurSyncSettings(
             // agreed on before: the server having lost it means this
             // device is the only copy left.
             if (server == null || localDiffers) {
-                val stamp = localChanges[entry.key] ?: pushTime
+                if (!sendable(entry.key, localValue)) continue
+                // A key the server lost but that never changed here is
+                // re-offered as what it always was. Dating it from the
+                // change record would be wrong twice over: that record
+                // may hold the moment a pulled value was applied, and
+                // either way the value is not a local edit and must not
+                // outrank a real one made elsewhere since.
+                val stamp = if (!localDiffers && synced != null) {
+                    synced.serverTimestamp
+                } else {
+                    localStamp(entry.key, synced, localChanges, pushTime)
+                }
                 toPush.put(
                     entry.key,
                     JSONObject()
@@ -125,10 +152,67 @@ class LiseurSyncSettings(
         }
 
         if (toPush.length() > 0) {
-            exchanged += push(baseUrl, credentials, toPush, agreed, canApplyReaderSettings)
+            if (!stillConnected()) return exchanged
+            exchanged += push(
+                baseUrl,
+                credentials,
+                toPush,
+                agreed,
+                applied,
+                canApplyReaderSettings,
+                stillConnected,
+            )
         }
+        if (!stillConnected()) return exchanged
         syncState.recordSynced(accountKey, agreed)
+        syncState.markApplied(applied)
         return exchanged
+    }
+
+    /**
+     * When the reader last changed a setting that differs from what this
+     * account agreed to.
+     *
+     * The stamp comes from a collector watching the settings flows, so
+     * there is a moment after a setter commits in which the change is
+     * real but undated, and a sync landing in it finds nothing. Reading
+     * that as the epoch hands every such conflict to the server and
+     * destroys an edit made seconds ago, so a divergence from an agreed
+     * baseline with no stamp counts as one made now: it can only have
+     * happened after the agreement, and the agreement is the only bound
+     * there is.
+     *
+     * A key with no baseline at all is the opposite case. Nothing was
+     * changed here; this is merely what the device holds, and a phone
+     * signing in to an account for the first time is asking for that
+     * account's settings, not offering it its own defaults.
+     */
+    private fun localStamp(
+        key: String,
+        synced: SettingsSyncRepository.SyncedEntry?,
+        localChanges: Map<String, Long>,
+        fallbackNow: Long,
+    ): Long = localChanges[key] ?: if (synced == null) 0L else fallbackNow
+
+    /**
+     * Whether a value can go on the wire at all.
+     *
+     * The server writes a whole batch in one transaction, so a single
+     * value it refuses takes every other setting down with it, on this
+     * pass and on every pass after — and one of these keys is a free-text
+     * URL. Dropping the offending key alone keeps the rest moving.
+     */
+    private fun sendable(key: String, value: String): Boolean {
+        if (value.contains('\u0000')) {
+            Log.w(TAG, "Not sending $key: the server cannot store this value")
+            return false
+        }
+        val bytes = value.toByteArray(Charsets.UTF_8).size
+        if (bytes > MAX_VALUE_BYTES) {
+            Log.w(TAG, "Not sending $key: $bytes bytes is over the server's limit")
+            return false
+        }
+        return true
     }
 
     /**
@@ -149,13 +233,16 @@ class LiseurSyncSettings(
         credentials: RemoteCredentials,
         toPush: JSONObject,
         agreed: MutableMap<String, SettingsSyncRepository.SyncedEntry>,
-        canApplyReaderSettings: Boolean,
+        applied: MutableMap<String, String>,
+        canApplyReaderSettings: suspend () -> Boolean,
+        stillConnected: suspend () -> Boolean,
     ): Int {
         val response = http.put(
             LiseurSyncApi.meSettings(baseUrl),
             credentials,
             JSONObject().put("settings", toPush),
         )
+        if (!stillConnected()) return 0
         val merged = response.optJSONObject("settings")
         var exchanged = 0
         for (entry in settings) {
@@ -168,9 +255,21 @@ class LiseurSyncSettings(
                 // either, so the next pass offers it again.
                 continue
             }
-            if (serverValue != toPush.getJSONObject(entry.key).getString("value")) {
+            val sent = toPush.getJSONObject(entry.key).getString("value")
+            if (serverValue != sent) {
+                // The conflict is settled against the value that was
+                // sent, never against a newer one the reader wrote while
+                // the request was in the air. Overwriting that edit
+                // would lose it and then file the server's answer as
+                // agreed, which is the one state nothing later can
+                // correct.
+                if (entry.read() != sent) {
+                    Log.d(TAG, "${entry.key} changed while the push was in flight; leaving it")
+                    continue
+                }
                 Log.d(TAG, "Push of ${entry.key} lost; taking the server's value")
                 if (!apply(entry, serverValue, canApplyReaderSettings)) continue
+                applied[entry.key] = serverValue
             }
             agreed[entry.key] = SettingsSyncRepository.SyncedEntry(serverValue, serverTs)
             exchanged++
@@ -189,9 +288,9 @@ class LiseurSyncSettings(
     private suspend fun apply(
         entry: SyncableSetting,
         value: String,
-        canApplyReaderSettings: Boolean,
+        canApplyReaderSettings: suspend () -> Boolean,
     ): Boolean {
-        if (!canApplyReaderSettings && entry.key.startsWith(READER_PREFIX)) {
+        if (entry.affectsOpenBook && !canApplyReaderSettings()) {
             Log.d(TAG, "Holding ${entry.key} back while a book is open")
             return false
         }
@@ -239,8 +338,11 @@ class LiseurSyncSettings(
     companion object {
         private const val TAG = "SettingsSync"
 
-        /** The keys that change how an open book looks on screen. */
-        private const val READER_PREFIX = "reader."
+        /**
+         * The server's per-value ceiling, mirrored so a value too big for
+         * it is dropped here instead of failing the whole batch there.
+         */
+        private const val MAX_VALUE_BYTES = 4 * 1024
 
         private val formatter = DateTimeFormatter.ISO_INSTANT
 

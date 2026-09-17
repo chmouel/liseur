@@ -30,11 +30,19 @@ const val SETTING_UNSET = "__unset__"
  * was made — then keep doing it, in both directions, forever. A `false`
  * means the value is left alone and nothing is recorded as agreed, so
  * the newer device's answer stays the answer.
+ *
+ * [affectsOpenBook] marks a setting that re-lays out a book already on
+ * screen, and those are held back until the reader closes it. Most of
+ * them are the `reader.` typography keys, which is the default, but the
+ * wire key is not what decides it: `app.scroll_mode` keys the navigator
+ * itself, so applying it under an open book rebuilds the page the
+ * reader is looking at.
  */
 class SyncableSetting(
     val key: String,
     val read: suspend () -> String,
     val write: suspend (String) -> Boolean,
+    val affectsOpenBook: Boolean = key.startsWith("reader."),
 )
 
 /**
@@ -175,6 +183,10 @@ fun syncableSettings(
         key = "app.scroll_mode",
         read = { app.current().scrollMode.toString() },
         write = { raw -> writeBoolean(raw) { app.setScrollMode(it) } },
+        // Not a `reader.` key, but it decides how the navigator is
+        // built, so switching it under an open book rebuilds the page
+        // being read.
+        affectsOpenBook = true,
     ),
     SyncableSetting(
         key = "app.resume_last_book",

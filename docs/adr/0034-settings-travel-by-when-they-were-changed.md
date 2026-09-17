@@ -42,10 +42,37 @@ real edit.
 
 That stamp is **advisory**. What actually gets pushed is still decided
 by comparing the current value against the baseline the account agreed
-to. This is what lets the collector run without locking against the sync
-pass: when the pass writes a pulled value, the collector sees it and
-stamps it like any other write, and nothing comes of it, because the
-value now matches the baseline and so is not offered.
+to. This is most of what lets the collector run without locking against
+the sync pass: when the pass writes a pulled value, the collector sees
+it and stamps it like any other write, and nothing comes of it, because
+the value now matches the baseline and so is not offered.
+
+Most, but not all — the argument has a hole on an account nothing has
+been agreed with yet, where there is no baseline for the stamp to be
+harmless against. So the pass says outright which values came off a
+server, and those are not this device's edits. The two run
+independently and land in either order, so saying so covers both: the
+value is written down, so a collection arriving after it skips the key,
+and the stamp is removed, so a collection that got there first is
+undone. An edit *away* from a server's value is an edit like any other
+and is stamped.
+
+A key with no stamp at all is the other half of the same question. It
+means one of two things, and they want opposite answers. On an account
+this device has agreed something with, an unstamped difference is an
+edit the collector has not caught up with — the window between a setter
+committing and the flow emitting — and treating it as the beginning of
+time would hand the server every race it should lose. With no baseline
+at all, nothing was chosen here: it is what the device happens to hold,
+and offering it would push a fresh install's defaults over the
+account's real settings on first connect. So a missing stamp reads as
+*now* where a baseline exists and as the beginning of time where none
+does.
+
+**A conflict is settled against the copy that was sent.** If the reader
+changes a setting while its push is in the air, the answer to that push
+is about the old value and must not be written over the new one. This
+is the rule annotation sync already follows, for the same reason.
 
 **A push that loses is not an error.** The server's upsert keeps
 whichever side is newer and answers `200` either way, carrying the
@@ -70,6 +97,12 @@ so absence travels as a sentinel. Without one, clearing a setting could
 never be pushed, and the stale baseline would put the old number back on
 the next pass.
 
+**What cannot be stored is not sent.** A NUL byte or an oversized value
+is refused by the server, and its `PUT` is one transaction, so a single
+unsendable setting would take every other setting down with it on every
+pass, forever. The client drops such a value before the request rather
+than discovering it in a `400`.
+
 **The baseline belongs to one account.** Its timestamps came off that
 server's clock and mean nothing anywhere else, so it is keyed by account
 and moves or is dropped with it, like every other peer-keyed table. The
@@ -81,7 +114,19 @@ font.
 margin reflows the page under whoever is reading it, which is the
 settings version of turning somebody's page. Reader settings are held
 back and nothing is recorded for them, so the next pass applies them.
-This is the rule an incoming position already follows.
+This is the rule an incoming position already follows. Which settings
+those are is a property each one carries, not its prefix: `reader.` is
+right for typography and wrong for `app.scroll_mode`, which is not
+typography and rebuilds the page anyway. Whether a book is open is
+asked again for each write rather than sampled once for the run, since
+a device set to resume its last book opens one while the request is
+still out.
+
+**A run only counts for the account it started on.** Disconnecting or
+switching accounts part-way through must leave nothing behind: the
+account is checked before the request, after it, and again before
+anything is written down. The request is itself the side effect, which
+is the rule annotation sync already states.
 
 **Only some settings travel.** Anything about a particular piece of
 hardware — the volume keys, keeping the screen on, an e-ink panel's

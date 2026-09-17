@@ -326,6 +326,25 @@ class SyncableSettingsTest {
         assertFalse(setting.write("CHARTREUSE"))
     }
 
+    @Test
+    fun `every setting that relays out the page says so`() = runTest {
+        val entries = syncableSettings(app(), reader()).associateBy { it.key }
+
+        // Typography is the obvious half, and the prefix carries it.
+        for ((key, entry) in entries) {
+            if (key.startsWith("reader.")) {
+                assertTrue("$key should be held back under an open book", entry.affectsOpenBook)
+            }
+        }
+
+        // Scrolling is not typography and is not named like it, but
+        // turning it on rebuilds the page under the reader all the same.
+        assertTrue(entries.getValue("app.scroll_mode").affectsOpenBook)
+
+        // And the account-wide ones are not.
+        assertFalse(entries.getValue("app.resume_last_book").affectsOpenBook)
+    }
+
     private suspend fun configure(a: AppSettingsRepository, r: ReaderPreferencesRepository) {
         r.setFontSize(1.5)
         r.setLineHeight(1.6)

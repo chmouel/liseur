@@ -265,18 +265,39 @@ emulator.
   the application scope whether or not a server is connected, and the
   stamp is advisory: whether a key is offered is still decided by
   comparing it against the account's agreed baseline, which is what
-  lets the collector run unlocked. A `PUT` answers `200` whether the
+  lets the collector run unlocked. That argument runs out on an account
+  with no baseline yet, so the pass says outright which values came off
+  a server (`markApplied`) and those are not counted as edits made
+  here; it writes the value down *and* drops the stamp, because the
+  collector races it in both directions. A key with no stamp at all
+  means opposite things on the two sides of that line: with a baseline
+  it is an edit the collector has not seen yet and reads as *now*, with
+  none it is only what the device happens to hold and reads as the
+  beginning of time, or a fresh install pushes its defaults over the
+  account on first connect. A `PUT` answers `200` whether the
   value won or lost, so record *both* halves from the merged reply and
   apply the server's value where it differs; a key the server did not
-  speak for records nothing. A value this build cannot parse or
-  recognise records nothing either, or an older build pushes its own
-  fallback over a newer one's choice. Absence is a value and travels as
+  speak for records nothing, and is re-offered under the timestamp that
+  was agreed rather than a fresh one. An answer that arrives after the
+  reader has changed the setting again is about the value that was
+  sent and is not written over the new one. A value this build cannot
+  parse or recognise records nothing either, or an older build pushes
+  its own fallback over a newer one's choice. A value the server cannot
+  store — a NUL byte, or over 4 KiB — is dropped before the request,
+  since the `PUT` is one transaction and one bad key would block every
+  other one forever. Absence is a value and travels as
   a sentinel, because the server has no delete and no null. The
   baseline is peer state and moves with the account; the record of what
-  this device changed is not. Nothing under `reader.*` is applied while
-  a book is open — that is the settings version of turning somebody's
-  page — and device-shaped settings never travel at all. See
-  `docs/adr/0034-settings-travel-by-when-they-were-changed.md`.
+  this device changed is not. The account is re-checked before the
+  request, after it and before anything is recorded, because the
+  request is the side effect. A setting that relays out the page is not
+  applied while a book is open — that is the settings version of
+  turning somebody's page — and which ones those are is
+  `SyncableSetting.affectsOpenBook`, not the `reader.` prefix, since
+  `app.scroll_mode` rebuilds the page and is not named for it; it is
+  asked per write, not once per run, because resuming the last book
+  opens one mid-request. Device-shaped settings never travel at all.
+  See `docs/adr/0034-settings-travel-by-when-they-were-changed.md`.
 - Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
   must stand on its own. Cross-device figures require a coherent snapshot:
