@@ -88,6 +88,12 @@ class LiseurSyncSettings(
         if (!stillConnected()) return 0
 
         val lastSynced = syncState.allLastSynced(accountKey)
+        // Read before the clock, never after: the collector writes
+        // these from its own scope while the pass runs, and a change
+        // that landed between the two reads would be capped back to
+        // before it happened, which is the one way this cap could take
+        // an edit away rather than protect one.
+        val recordedChanges = syncState.localChanges()
         val pushTime = now()
         // No change is dated later than now. A device whose clock was
         // wrong records one that is, and correcting the clock does not
@@ -99,7 +105,7 @@ class LiseurSyncSettings(
         // comparisons too: a time that has not happened yet is a wrong
         // answer whatever it is measured against, and now is the nearest
         // right one.
-        val localChanges = syncState.localChanges().mapValues { minOf(it.value, pushTime) }
+        val localChanges = recordedChanges.mapValues { minOf(it.value, pushTime) }
         val agreed = mutableMapOf<String, SettingsSyncRepository.SyncedEntry>()
         val toPush = JSONObject()
         var exchanged = 0

@@ -128,6 +128,12 @@ value over it. This loses nothing worth keeping: a change that has not
 happened yet is a wrong answer whatever it is compared against, and
 now is the nearest right one.
 
+The one way this cap could take an edit away rather than protect one is
+by reading the clock before the stamps. The collector writes them from
+its own scope while a pass is running, so a change landing between the
+two reads would be capped back to before it happened. The stamps are
+read first and the clock second, which makes that impossible.
+
 **The baseline belongs to one account.** Its timestamps came off that
 server's clock and mean nothing anywhere else, so it is keyed by account
 and moves or is dropped with it, like every other peer-keyed table. The
