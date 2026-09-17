@@ -4,11 +4,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -47,6 +53,9 @@ import com.chmouel.liseur.reader.progress.FooterMiddle
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.footerMiddle
 import com.chmouel.liseur.ui.LocalEInk
+
+/** How tall the ramp at a chrome edge is. */
+private val CHROME_FADE_HEIGHT = 20.dp
 
 /**
  * The quiet line of text at the bottom of the page, Kindle-style. The
@@ -143,6 +152,40 @@ fun durationText(minutes: Int): String {
 }
 
 /**
+ * A short ramp from the page's colour to nothing, drawn at the inner
+ * edge of a piece of chrome.
+ *
+ * The chrome lies over the page rather than pushing it aside, so its
+ * edges land wherever the type happens to be and cut a line in half.
+ * The ramp makes that read as something covering the page instead of
+ * as a rendering fault (#223). [solidAtTop] says which end the chrome
+ * is on: the page's colour is there, and the fade runs away from it.
+ *
+ * Electronic paper gets nothing. A gradient is dithered there and
+ * ghosts on the next repaint, so a clean hard edge is the better of
+ * the two, as it is for [ChromePill]'s shadow.
+ */
+@Composable
+fun ChromeEdgeFade(
+    theme: ReaderTheme,
+    solidAtTop: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    if (LocalEInk.current) return
+    val stops = if (solidAtTop) {
+        listOf(theme.background, Color.Transparent)
+    } else {
+        listOf(Color.Transparent, theme.background)
+    }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(CHROME_FADE_HEIGHT)
+            .background(Brush.verticalGradient(stops)),
+    )
+}
+
+/**
  * The scrubber shown with the reader chrome: drag to move through the
  * book, with a tick for every chapter and a preview of where you are
  * heading.
@@ -170,6 +213,7 @@ fun ReadingScrubber(
         modifier
             .fillMaxWidth()
             .background(theme.background)
+            .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 20.dp)
             .padding(top = 8.dp, bottom = 2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),

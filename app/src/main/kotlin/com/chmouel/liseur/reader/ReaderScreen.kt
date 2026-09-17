@@ -20,6 +20,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsets
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -154,6 +156,7 @@ import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.reader.chrome.visibleWebViewCache
 import com.chmouel.liseur.reader.chrome.layoutPasses
+import com.chmouel.liseur.reader.chrome.ChromeEdgeFade
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
 import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
@@ -2505,16 +2508,25 @@ fun ReaderScreen(
         }
 
         // The bars come and go with the chrome, so this corner takes the
-        // live navigation-bar inset: it lifts the scrubber and the pills
-        // clear of a bar that is actually there, and asks for nothing
-        // when there is none. Reading it ignoring visibility parked
-        // everything a bar's height up an empty screen.
+        // live navigation-bar inset: it lifts the pills clear of a bar
+        // that is actually there, and asks for nothing when there is
+        // none. Reading it ignoring visibility parked everything a
+        // bar's height up an empty screen.
+        //
+        // The inset is taken here as a spacer rather than as padding on
+        // the column, because the scrubber must not float on it: a
+        // scrolled page runs all the way to the screen's edge, and a
+        // panel lifted a bar's height off that edge leaves a strip of
+        // the book printed underneath it, across the gesture pill
+        // (#223). The scrubber takes the same inset inside its own
+        // paper instead, so the panel reaches the edge while its
+        // controls stay where they are.
+        val scrubberShown = !showingEnd && chromeVisible && progress != null
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .then(behindViewer)
-                .navigationBarsPadding(),
+                .then(behindViewer),
         ) {
             if (!showingEnd) {
                 jumpBack?.let { target ->
@@ -2554,7 +2566,8 @@ fun ReaderScreen(
                         )
                     }
                 }
-                if (chromeVisible) {
+                if (scrubberShown) {
+                    ChromeEdgeFade(theme = readingTheme, solidAtTop = false)
                     ReadingScrubber(
                         progress = progress,
                         theme = readingTheme,
@@ -2575,6 +2588,11 @@ fun ReaderScreen(
                         onGoToPercent = { goToPercent = true },
                     )
                 }
+            }
+            // The panel's own paper covers the bar when the panel is
+            // there; this is the same lift for the times it is not.
+            if (!scrubberShown) {
+                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
 
@@ -2637,80 +2655,83 @@ fun ReaderScreen(
             exit = chromeExit,
             modifier = Modifier.align(Alignment.TopCenter).then(behindViewer),
         ) {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = publication.metadata.title.orEmpty(),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.reader_back),
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { searchFor = "" }) {
-                        Icon(
-                            Icons.Outlined.Search,
-                            contentDescription = stringResource(R.string.reader_search),
-                        )
-                    }
-                    // "Aa" is what a reader looks for and what every other
-                    // reading app draws here, so it stays — but it is a
-                    // picture of two letters, not a word, and TalkBack
-                    // announcing "Aa" describes nothing. The button says
-                    // what it opens instead.
-                    val typographyLabel = stringResource(R.string.reader_typography)
-                    IconButton(
-                        onClick = { sheet = ReaderSheet.TYPOGRAPHY },
-                        modifier = Modifier.semantics {
-                            contentDescription = typographyLabel
-                        },
-                    ) {
+            Column {
+                TopAppBar(
+                    title = {
                         Text(
-                            text = "Aa",
+                            text = publication.metadata.title.orEmpty(),
                             style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                    IconButton(onClick = { showToc = true }) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.List,
-                            contentDescription = stringResource(R.string.reader_contents),
-                        )
-                    }
-                    // The bar owns this corner while it is up, ribbon and
-                    // all, so it owns the bookmark with it. Last of the
-                    // actions to keep the mark where the ribbon hangs.
-                    IconButton(onClick = ::toggleBookmarkHere) {
-                        Icon(
-                            if (bookmarked) {
-                                Icons.Filled.Bookmark
-                            } else {
-                                Icons.Outlined.BookmarkBorder
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.reader_back),
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { searchFor = "" }) {
+                            Icon(
+                                Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.reader_search),
+                            )
+                        }
+                        // "Aa" is what a reader looks for and what every other
+                        // reading app draws here, so it stays — but it is a
+                        // picture of two letters, not a word, and TalkBack
+                        // announcing "Aa" describes nothing. The button says
+                        // what it opens instead.
+                        val typographyLabel = stringResource(R.string.reader_typography)
+                        IconButton(
+                            onClick = { sheet = ReaderSheet.TYPOGRAPHY },
+                            modifier = Modifier.semantics {
+                                contentDescription = typographyLabel
                             },
-                            contentDescription = stringResource(
+                        ) {
+                            Text(
+                                text = "Aa",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                        IconButton(onClick = { showToc = true }) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.List,
+                                contentDescription = stringResource(R.string.reader_contents),
+                            )
+                        }
+                        // The bar owns this corner while it is up, ribbon and
+                        // all, so it owns the bookmark with it. Last of the
+                        // actions to keep the mark where the ribbon hangs.
+                        IconButton(onClick = ::toggleBookmarkHere) {
+                            Icon(
                                 if (bookmarked) {
-                                    R.string.reader_remove_bookmark
+                                    Icons.Filled.Bookmark
                                 } else {
-                                    R.string.reader_add_bookmark
+                                    Icons.Outlined.BookmarkBorder
                                 },
-                            ),
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = readingTheme.background,
-                    titleContentColor = readingTheme.foreground,
-                    navigationIconContentColor = readingTheme.foreground,
-                    actionIconContentColor = readingTheme.foreground,
-                ),
-            )
+                                contentDescription = stringResource(
+                                    if (bookmarked) {
+                                        R.string.reader_remove_bookmark
+                                    } else {
+                                        R.string.reader_add_bookmark
+                                    },
+                                ),
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = readingTheme.background,
+                        titleContentColor = readingTheme.foreground,
+                        navigationIconContentColor = readingTheme.foreground,
+                        actionIconContentColor = readingTheme.foreground,
+                    ),
+                )
+                ChromeEdgeFade(theme = readingTheme, solidAtTop = true)
+            }
         }
 
         // Last inside the box, and so on top of everything in it: a note is
