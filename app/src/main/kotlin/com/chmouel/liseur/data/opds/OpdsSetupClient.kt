@@ -36,10 +36,13 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
         credentials: RemoteCredentials,
         allowHttp: Boolean,
     ): SetupResult = withContext(Dispatchers.IO) {
-        val base = RemoteUrl.normaliseBase(rawUrl, keepQuery = true)
+        // Slash and all: a catalog address is fetched rather than built
+        // onto, so `…/search.opds/` and `…/search.opds` are two
+        // resources and only the reader knows which one they were given.
+        val base = RemoteUrl.normaliseBase(rawUrl, keepQuery = true, keepTrailingSlash = true)
             ?: return@withContext SetupResult.Failure(SetupFailure.WrongServer)
 
-        when (val probed = probe(base, credentials)) {
+        when (val probed = probeEitherSpelling(base, credentials)) {
             is Probe.Ok -> SetupResult.Success(probed.capabilities)
             is Probe.Failed -> {
                 // HTTPS first even when plain HTTP is allowed, and only
@@ -56,7 +59,10 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
                             httpMayWork = true,
                         ),
                     )
-                    else -> when (val retried = probe(RemoteUrl.withHttp(base), credentials)) {
+                    else -> when (
+                        val retried =
+                            probeEitherSpelling(RemoteUrl.withHttp(base), credentials)
+                    ) {
                         is Probe.Ok -> SetupResult.Success(retried.capabilities)
                         // Report why HTTPS failed; that is the more
                         // useful complaint.
@@ -64,6 +70,36 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * The address as typed, and then the same address spelled with the
+     * other trailing slash.
+     *
+     * Catalogs publish both forms and answer to one. Project Gutenberg
+     * links `/ebooks.opds` in its own pages and answers 403 to it,
+     * serving only `/ebooks.opds/`; others do the reverse. A reader
+     * copying an address they were given cannot be expected to know
+     * which, and a second guess costs one request on a connection that
+     * has already failed.
+     *
+     * Only when something answered and said no. An address nothing
+     * answered at all is not a spelling mistake, and retrying it would
+     * double the wait before the offer to try plain HTTP — which owns
+     * that case. A refusal of the transport is not about the path
+     * either.
+     *
+     * The first failure is what gets reported when both spellings fail:
+     * it is the one about the address the reader actually typed.
+     */
+    private fun probeEitherSpelling(base: String, credentials: RemoteCredentials): Probe {
+        val first = probe(base, credentials)
+        if (first !is Probe.Failed || !first.worthAnotherSpelling()) return first
+        val flipped = RemoteUrl.flipTrailingSlash(base) ?: return first
+        return when (val second = probe(flipped, credentials)) {
+            is Probe.Ok -> second
+            is Probe.Failed -> first
         }
     }
 
@@ -89,7 +125,7 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
             val page = fetched.response.use { response ->
                 when {
                     response.code == 401 || response.code == 403 ->
-                        return Probe.Failed(SetupFailure.BadCredentials)
+                        return Probe.Failed(refusal(credentials))
                     !response.isSuccessful ->
                         return Probe.Failed(SetupFailure.WrongServer)
                     else -> OpdsParser.parse(response.body.string())
@@ -100,8 +136,11 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
                     // Where the walk landed, which is where the catalog
                     // is. A root that redirected once will redirect on
                     // every refresh otherwise, and the origin rule would
-                    // be reasoning about an address nothing uses.
-                    baseUrl = fetched.url.toString().trimEnd('/'),
+                    // be reasoning about an address nothing uses. Kept
+                    // exactly as it answered, trailing slash included,
+                    // or every later refresh would ask for the spelling
+                    // that did not work.
+                    baseUrl = fetched.url.toString(),
                     // A root that only lists shelves is downloadable:
                     // the books are a walk away, and saying otherwise
                     // would hide the download button on every one of
@@ -121,13 +160,21 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
             Log.i(TAG, "That address did not answer with an OPDS feed", e)
             Probe.Failed(SetupFailure.WrongServer)
         } catch (e: IOException) {
-            Probe.Failed(e.opdsSetupFailure())
+            Probe.Failed(e.opdsSetupFailure(credentials))
         }
     }
 
     private sealed interface Probe {
         data class Ok(val capabilities: ServerCapabilities) : Probe
-        data class Failed(val reason: SetupFailure) : Probe
+        data class Failed(val reason: SetupFailure) : Probe {
+            fun worthAnotherSpelling(): Boolean = when (reason) {
+                SetupFailure.WrongServer,
+                SetupFailure.BadCredentials,
+                SetupFailure.SignInRequired,
+                -> true
+                else -> false
+            }
+        }
     }
 
     private companion object {
@@ -135,10 +182,26 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
     }
 }
 
+/**
+ * What a refused request means, which depends on whether anything was
+ * offered for it to refuse.
+ *
+ * An open catalog is connected to with both fields empty, so a 401 or
+ * 403 there is not a password being wrong. It may be a catalog that
+ * wants a sign-in, or an address that is not the catalog — the message
+ * for [SetupFailure.SignInRequired] says both.
+ */
+private fun refusal(credentials: RemoteCredentials): SetupFailure =
+    if (credentials is RemoteCredentials.Anonymous) {
+        SetupFailure.SignInRequired
+    } else {
+        SetupFailure.BadCredentials
+    }
+
 /** What a failure during the probe means to someone filling in a form. */
-private fun IOException.opdsSetupFailure(): SetupFailure = when {
+private fun IOException.opdsSetupFailure(credentials: RemoteCredentials): SetupFailure = when {
     this is RemoteHttpFailure -> when (reason) {
-        SyncFailure.Unauthorised, SyncFailure.Forbidden -> SetupFailure.BadCredentials
+        SyncFailure.Unauthorised, SyncFailure.Forbidden -> refusal(credentials)
         SyncFailure.InsecureTransport -> SetupFailure.InsecureTransport
         SyncFailure.Offline, SyncFailure.Timeout ->
             SetupFailure.Unreachable("No answer", httpMayWork = false)

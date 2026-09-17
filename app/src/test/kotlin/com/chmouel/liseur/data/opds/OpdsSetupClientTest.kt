@@ -88,6 +88,7 @@ class OpdsSetupClientTest {
     @Test
     fun `a web page that answers happily is not a catalog`() {
         server.enqueue(MockResponse(code = 200, body = "<html><body>Please sign in</body></html>"))
+        server.enqueue(MockResponse(code = 200, body = "<html><body>Please sign in</body></html>"))
 
         assertEquals(SetupFailure.WrongServer, (connect() as SetupResult.Failure).reason)
     }
@@ -95,22 +96,136 @@ class OpdsSetupClientTest {
     @Test
     fun `a refused sign-in is reported as one, not as the wrong address`() {
         server.enqueue(MockResponse(code = 401))
+        // The other spelling of the address is tried before the refusal
+        // is believed, so both have to answer.
+        server.enqueue(MockResponse(code = 401))
 
-        assertEquals(SetupFailure.BadCredentials, (connect() as SetupResult.Failure).reason)
+        val result = runBlocking {
+            OpdsSetupClient().connect(
+                url(),
+                RemoteCredentials.Basic("reader", "secret"),
+                allowHttp = true,
+            )
+        }
+
+        assertEquals(SetupFailure.BadCredentials, (result as SetupResult.Failure).reason)
     }
 
     @Test
     fun `a catalog that will not show itself to this reader is the same complaint`() {
         server.enqueue(MockResponse(code = 403))
+        server.enqueue(MockResponse(code = 403))
 
-        assertEquals(SetupFailure.BadCredentials, (connect() as SetupResult.Failure).reason)
+        val result = runBlocking {
+            OpdsSetupClient().connect(
+                url(),
+                RemoteCredentials.Basic("reader", "secret"),
+                allowHttp = true,
+            )
+        }
+
+        assertEquals(SetupFailure.BadCredentials, (result as SetupResult.Failure).reason)
+    }
+
+    @Test
+    fun `a refusal of a request nobody signed does not blame a password`() {
+        // Both fields were left empty, which is how an open catalog is
+        // connected to. Naming a username the reader never gave sends
+        // them looking for a mistake they did not make (#219).
+        server.enqueue(MockResponse(code = 403))
+        server.enqueue(MockResponse(code = 403))
+
+        assertEquals(SetupFailure.SignInRequired, (connect() as SetupResult.Failure).reason)
     }
 
     @Test
     fun `nothing at that path is the wrong address`() {
         server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 404))
 
         assertEquals(SetupFailure.WrongServer, (connect() as SetupResult.Failure).reason)
+    }
+
+    @Test
+    fun `the trailing slash an address was typed with is sent and kept`() {
+        // `…/search.opds/` and `…/search.opds` are two resources, and
+        // Project Gutenberg answers 200 to the first and 403 to the
+        // second. Trimming the slash turned an open catalog into a
+        // refused sign-in (#219).
+        server.enqueue(feed())
+
+        val result = runBlocking {
+            OpdsSetupClient().connect("${url()}/", RemoteCredentials.Anonymous, allowHttp = true)
+        } as SetupResult.Success
+
+        assertEquals("/opds/", server.takeRequest().target)
+        assertEquals("http://127.0.0.1:${server.port}/opds/", result.capabilities.baseUrl)
+    }
+
+    @Test
+    fun `an address refused without its slash is tried again with one`() {
+        // Catalogs publish both spellings and answer to one, and the
+        // reader copying an address cannot be expected to know which.
+        server.enqueue(MockResponse(code = 403))
+        server.enqueue(feed())
+
+        val result = connect() as SetupResult.Success
+
+        assertEquals("/opds", server.takeRequest().target)
+        assertEquals("/opds/", server.takeRequest().target)
+        assertEquals("http://127.0.0.1:${server.port}/opds/", result.capabilities.baseUrl)
+    }
+
+    @Test
+    fun `and an address refused with its slash is tried again without`() {
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(feed())
+
+        val result = runBlocking {
+            OpdsSetupClient().connect("${url()}/", RemoteCredentials.Anonymous, allowHttp = true)
+        } as SetupResult.Success
+
+        assertEquals("/opds/", server.takeRequest().target)
+        assertEquals("/opds", server.takeRequest().target)
+        assertEquals("http://127.0.0.1:${server.port}/opds", result.capabilities.baseUrl)
+    }
+
+    @Test
+    fun `an address nothing answered is not a spelling mistake`() {
+        // No second guess: retrying would double the wait before the
+        // offer to try plain HTTP, which is what that case is for.
+        val dead = MockWebServer()
+        dead.start(InetAddress.getByName("127.0.0.1"), 0)
+        val port = dead.port
+        dead.close()
+
+        val result = runBlocking {
+            OpdsSetupClient().connect(
+                "http://127.0.0.1:$port/opds",
+                RemoteCredentials.Anonymous,
+                allowHttp = true,
+            )
+        }
+
+        assertTrue((result as SetupResult.Failure).reason is SetupFailure.Unreachable)
+    }
+
+    @Test
+    fun `a bare host has no second spelling to try`() {
+        // `http://host` and `http://host/` are one request. A second
+        // attempt at it is not a guess, only a repeat.
+        server.enqueue(MockResponse(code = 404))
+
+        val result = runBlocking {
+            OpdsSetupClient().connect(
+                "http://127.0.0.1:${server.port}",
+                RemoteCredentials.Anonymous,
+                allowHttp = true,
+            )
+        }
+
+        assertEquals(SetupFailure.WrongServer, (result as SetupResult.Failure).reason)
+        assertEquals(1, server.requestCount)
     }
 
     @Test

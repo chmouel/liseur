@@ -90,6 +90,15 @@ class OpdsScopeTest {
             scope("https://books.example/opds").fingerprint,
             scope("https://books.example/opds/").fingerprint,
         )
+        // And so is every book in it: the spelling of the address is
+        // free to change — the reader retypes it, a catalog is
+        // reconnected with the slash it insists on (#219) — but
+        // `books.url` is the key reading positions and highlights hang
+        // off, and it may not move under them.
+        assertEquals(
+            scope("https://books.example/opds").remoteId("1"),
+            scope("https://books.example/opds/").remoteId("1"),
+        )
     }
 
     @Test
