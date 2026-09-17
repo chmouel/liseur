@@ -258,6 +258,28 @@ class AppSettingsRepository(private val context: Context) {
         val STATS_RANGE = stringPreferencesKey("stats_range")
         val HIGHLIGHT_TINTS = stringSetPreferencesKey("highlight_tints_offered")
         val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
+        val CATALOG_PARTIAL_DISMISSED = stringPreferencesKey("catalog_partial_dismissed")
+    }
+
+    /**
+     * The catalog address whose part-read notice has been put away.
+     *
+     * Kept apart from [settings] because it is an answer to one message
+     * rather than a preference, and kept as an address rather than a
+     * flag so a reader who later points Liseur somewhere else is told
+     * about that catalog.
+     */
+    val catalogPartialDismissedFor: Flow<String?> =
+        context.appSettingsStore.data.map { it[Keys.CATALOG_PARTIAL_DISMISSED] }
+
+    suspend fun setCatalogPartialDismissedFor(catalogUrl: String?) {
+        context.appSettingsStore.edit { prefs ->
+            if (catalogUrl == null) {
+                prefs.remove(Keys.CATALOG_PARTIAL_DISMISSED)
+            } else {
+                prefs[Keys.CATALOG_PARTIAL_DISMISSED] = catalogUrl
+            }
+        }
     }
 
     /**
