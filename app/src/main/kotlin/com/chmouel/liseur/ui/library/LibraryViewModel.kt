@@ -14,10 +14,13 @@ import com.chmouel.liseur.data.remote.BookUploadRepository
 import com.chmouel.liseur.data.remote.UploadPrompts
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.calibre.DownloadProgress
+import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.remote.ServerDeleteResult
 import com.chmouel.liseur.data.remote.CatalogStatus
+import com.chmouel.liseur.data.remote.OpenCatalogOutcome
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
+import com.chmouel.liseur.data.remote.RemoteUrl
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
@@ -68,6 +71,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.take
@@ -264,6 +268,31 @@ data class LibraryUiState(
      * Downloaded filter would only ever say "all of them".
      */
     val hasServer: Boolean = false,
+    /**
+     * Whether the connected catalog is one the reader addresses
+     * themselves, so "point at a single shelf" is advice they can act
+     * on. Only a Custom (OPDS) connection is: Komga, calibre-web,
+     * liseur-sync and Grimmory are told where their books are.
+     */
+    val catalogIsAddressable: Boolean = false,
+    /**
+     * Whether to say that the shelf is only part of the catalog.
+     *
+     * The status alone is not enough. It is the last refresh's and
+     * outlives the disconnection that leaves nothing to be partial
+     * about, and a reader who has read the notice and put it away is
+     * not asking to be told again on every refresh of the same catalog.
+     */
+    val showCatalogPartial: Boolean = false,
+    /**
+     * Whether the offer of a shelf of free books is being taken up
+     * right now.
+     *
+     * Only the second or two the probe takes: once the catalog is
+     * connected the ordinary refresh indicator takes over and books
+     * start landing on the shelf as the walk reads pages.
+     */
+    val connectingStarterCatalog: Boolean = false,
     /** Whether any book knows what series it is in, so the chip is worth offering. */
     val hasSeries: Boolean = false,
     /**
@@ -388,6 +417,17 @@ class LibraryViewModel(
     private val _deleteFailures = MutableSharedFlow<DeleteFailure>(extraBufferCapacity = 1)
     /** Deletions that did not happen, so the library can say so. */
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
+
+    /** Whether the free-books catalog is being connected right now. */
+    private val connectingStarterCatalog = MutableStateFlow(false)
+
+    private val _starterCatalogFailures = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * The offer of free books having come to nothing, so the empty
+     * library can say so rather than simply stay empty.
+     */
+    val starterCatalogFailures: Flow<Unit> = _starterCatalogFailures
 
     private val _openImported = MutableStateFlow<ImportedOpen?>(null)
 
@@ -514,6 +554,8 @@ class LibraryViewModel(
                 progressDao.observeProgressions(),
                 uploads.inFlight,
                 refusedByServer,
+                connectingStarterCatalog,
+                appSettings.catalogPartialDismissedFor,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -545,6 +587,8 @@ class LibraryViewModel(
             val uploading = baseValues[9] as Set<String>
             @Suppress("UNCHECKED_CAST")
             val refusedRows = baseValues[10] as Map<String, RefusedBytes>
+            val connectingStarter = baseValues[11] as Boolean
+            val partialDismissedFor = baseValues[12] as String?
             val refused = refusedRows.filterValues { it.stillApplies }.keys
 
             val onTheShelf = books.filter { !it.archived }
@@ -696,6 +740,26 @@ class LibraryViewModel(
                 hasArchived = books.any { it.archived },
                 hasFinished = books.any { !it.archived && it.finished },
                 hasServer = server != null,
+                catalogIsAddressable = server?.kind == ServerKind.CUSTOM,
+                // Not an error and not retryable, so it is not folded
+                // into the failure notice: the shelf is real, there is
+                // simply more catalog behind it than one pass read.
+                // Slash-insensitive, as account identity is: the same
+                // catalog written with or without its trailing slash is
+                // the same catalog, and a notice put away for it must
+                // stay away when the address is corrected.
+                // Against the connected catalog, not merely a
+                // connected server: the status outlives the account it
+                // was set for, and a Custom connection that carries
+                // nothing but a sync address has no catalog for it to
+                // be about.
+                showCatalogPartial = catalogStatus is CatalogStatus.Partial &&
+                    server?.catalogUrl != null &&
+                    !(
+                        partialDismissedFor != null &&
+                            RemoteUrl.sameAddress(server.catalogUrl, partialDismissedFor)
+                        ),
+                connectingStarterCatalog = connectingStarter,
                 hasSeries = shelves.isNotEmpty(),
                 seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
                 shownSeries = shownSeries,
@@ -844,6 +908,63 @@ class LibraryViewModel(
      */
     fun refreshIfStale() {
         refresher.scanIfStale()
+    }
+
+    /**
+     * Takes up the offer of a shelf of free books.
+     *
+     * An ordinary anonymous Custom connection to [category]'s address,
+     * made here rather than through the account form because the whole
+     * point is that there is nothing to fill in: no account, no
+     * password, no address to be told. HTTP is not allowed and the
+     * local-network permission is not consulted, because the address is
+     * a public host reached over HTTPS and neither question applies to
+     * it.
+     *
+     * [shelf] is stored on the connection rather than acted on once,
+     * because every later refresh walks the same catalog and has to
+     * stop in the same place.
+     *
+     * Refused while one is already in flight, and refused once a server
+     * is connected. One server is connected at a time, so this would
+     * replace whatever the reader signed into — and disconnecting takes
+     * the books they have not downloaded with it. The offer is only
+     * ever made on an empty library with no server, and
+     * [RemoteAccountRepository.connectOpenCatalogIfDisconnected] asks
+     * again as it writes, because a tap can outlive the state that
+     * allowed it and the probe takes a moment.
+     */
+    fun connectStarterCatalog(
+        category: StarterCatalog.Category = StarterCatalog.Category.POPULAR,
+        shelf: Int = StarterCatalog.DEFAULT_SHELF,
+    ) {
+        if (connectingStarterCatalog.value) return
+        connectingStarterCatalog.value = true
+        viewModelScope.launch {
+            try {
+                val outcome = runCatching {
+                    account.connectOpenCatalogIfDisconnected(category.url, shelf)
+                }.getOrDefault(OpenCatalogOutcome.UNREACHABLE)
+                when (outcome) {
+                    OpenCatalogOutcome.CONNECTED -> Unit
+                    OpenCatalogOutcome.UNREACHABLE -> {
+                        _starterCatalogFailures.tryEmit(Unit)
+                        return@launch
+                    }
+                    // Someone else's server got there first, which is
+                    // the better outcome and not one to complain about.
+                    OpenCatalogOutcome.ALREADY_CONNECTED -> return@launch
+                }
+            } finally {
+                connectingStarterCatalog.value = false
+            }
+            // Outside the flag, so the card stops spinning the moment
+            // there is a server and the shelf's own refresh indicator
+            // takes over. Two spinners for one wait is one too many.
+            // Owed rather than dropped: a refresh already running was
+            // asked before this server existed and will not read it.
+            refresher.allWhenFree()
+        }
     }
 
     fun download(book: Book) {
@@ -1327,6 +1448,19 @@ class LibraryViewModel(
     fun dismissUploadPrompt() {
         state.value.pendingUploads.forEach { prompts.answer(it.url) }
         uploadPromptDismissed.value = true
+    }
+
+    /**
+     * Puts the part-read notice away for the catalog now connected.
+     *
+     * Remembered against the address rather than as a flag, so it stays
+     * away for this catalog and is raised again for the next one.
+     */
+    fun dismissCatalogPartial() {
+        viewModelScope.launch {
+            val catalogUrl = account.server.first()?.catalogUrl ?: return@launch
+            appSettings.setCatalogPartialDismissedFor(catalogUrl)
+        }
     }
 
     companion object {

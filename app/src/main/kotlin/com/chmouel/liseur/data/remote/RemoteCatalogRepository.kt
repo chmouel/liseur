@@ -40,6 +40,31 @@ sealed interface CatalogStatus {
      */
     data class Failed(val reason: SyncFailure) : CatalogStatus
 
+    /**
+     * The refresh worked, but the walk did not reach the end of the
+     * catalog.
+     *
+     * Usually because the catalog is bigger than one pass of it: a walk
+     * stops at its request budget or its depth limit. It can also be a
+     * feed that points back at itself, paging a client cannot make
+     * sense of, entries it cannot read, or a link out of the catalog it
+     * will not follow. Either way what it did read is real: the books
+     * are there and the shelf is usable.
+     *
+     * What is not true is that this is the whole library, and until now
+     * that was reported by falling through to [Idle] — a reader pointed
+     * at a catalog of tens of thousands of books got a few hundred of
+     * them and no explanation (#219). The notice says only that, and
+     * names no cause, because every cause looks the same from here and
+     * the advice is the same for all of them.
+     *
+     * Not a [Failed]: nothing went wrong and there is nothing to retry.
+     * The same walk from the same root reads the same pages every time,
+     * so the advice is to point Liseur at a narrower shelf rather than
+     * to try again.
+     */
+    data object Partial : CatalogStatus
+
     /** The stored password could not be read, so the account must be set up again. */
     data object CredentialsLost : CatalogStatus
 }
@@ -85,6 +110,14 @@ class RemoteCatalogRepository(
      * — long before a catalog of any size has been read. Tying the fetch
      * to that screen's lifetime is how the library ends up empty until
      * the app is restarted.
+     *
+     * Waits for a walk already in flight rather than standing down, and
+     * this is the one caller that may. An account that has just changed
+     * is precisely when the old account's walk is still going, and it
+     * will throw its own result away on noticing — so dropping this one
+     * too leaves the new account's shelf empty until somebody pulls it
+     * down by hand. Every other caller has a screen behind it that can
+     * see a refresh is already running.
      */
     fun refreshDetached(andThen: suspend (CatalogRefresh) -> Unit = {}) {
         scope.launch {
@@ -93,7 +126,7 @@ class RemoteCatalogRepository(
             // the whole app down. IO troubles are already handled inside;
             // this is for the failure nobody predicted.
             val refreshed = try {
-                refresh()
+                refreshing.withLock { refreshLocked() }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -110,6 +143,15 @@ class RemoteCatalogRepository(
     /** Pulls the catalog and folds it into the library. Safe to call often. */
     suspend fun refresh(): CatalogRefresh {
         if (!refreshing.tryLock()) return CatalogRefresh.None
+        return try {
+            refreshLocked()
+        } finally {
+            refreshing.unlock()
+        }
+    }
+
+    /** The refresh itself, with the turn already taken. */
+    private suspend fun refreshLocked(): CatalogRefresh {
         try {
             val server = serverDao.get() ?: run {
                 _status.value = CatalogStatus.Idle
@@ -172,8 +214,23 @@ class RemoteCatalogRepository(
                     // A walk that stopped short has not seen the whole
                     // library, so nothing may be removed for being absent
                     // from it and nothing may be told this is current.
+                    //
+                    // Unless the only thing it stopped short of is the
+                    // catalog past a shelf this app decided the size of.
+                    // The shelf was seen whole, so a book that has
+                    // dropped off it may go; without that, a shelf whose
+                    // order changes between runs keeps every book that
+                    // was ever on it and grows without end.
+                    //
+                    // Through the account guard like every other write
+                    // here, because the status is about a server: one
+                    // signed out of while this was in flight must not
+                    // leave its notice over the next account's shelf.
                     Log.i(TAG, "The catalog walk did not finish; keeping what is known")
-                    _status.value = CatalogStatus.Idle
+                    forAccount(server) {
+                        if (walk.shelfWasFilled) reconcileVanished(seen)
+                        _status.value = CatalogStatus.Partial
+                    }
                     return CatalogRefresh.None
                 }
                 // Someone may have disconnected or signed in elsewhere
@@ -224,7 +281,6 @@ class RemoteCatalogRepository(
             if (_status.value is CatalogStatus.Refreshing) {
                 _status.value = CatalogStatus.Idle
             }
-            refreshing.unlock()
         }
     }
 

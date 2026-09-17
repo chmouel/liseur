@@ -213,6 +213,7 @@ class AppContainer(context: Context) {
         bookRemoval = bookRemoval,
         scope = applicationScope,
         bulkStore = bulkDownloads,
+        accountKey = { database.remoteServerDao().get()?.accountKey },
     )
 
     val bookUploads = BookUploadRepository(context.applicationContext)
@@ -335,7 +336,28 @@ class AppContainer(context: Context) {
             ServerKind.KOMGA to KomgaCatalogClient(),
             ServerKind.GRIMMORY to GrimmoryCatalogClient(),
             ServerKind.LISEUR_SYNC to LiseurSyncCatalogClient(),
-            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsCatalogClient(),
+            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsCatalogClient(
+                // The size a starter shelf was asked for is the
+                // connection's own, read from the row that stored it. A
+                // background refresh has no idea what the reader
+                // picked, and a shelf that came back a different size
+                // every run would grow or shrink under them.
+                //
+                // Never worked out from the address: a reader may have
+                // typed the same Gutenberg feed into the Book server
+                // form themselves, and capping *their* catalog would
+                // reconcile everything past the cap as gone.
+                shelfLimit = { url ->
+                    database.remoteServerDao().get()
+                        ?.takeIf {
+                            com.chmouel.liseur.data.remote.RemoteUrl.sameAddress(
+                                it.catalogUrl ?: it.baseUrl,
+                                url,
+                            )
+                        }
+                        ?.shelfLimit
+                },
+            ),
         ),
         files = mapOf(
             ServerKind.CALIBRE to CalibreFileSource(),

@@ -88,6 +88,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -137,6 +138,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.db.RefusedBytes
 import com.chmouel.liseur.data.db.UploadRefusal
 import com.chmouel.liseur.data.calibre.DownloadProgress
@@ -179,6 +181,7 @@ fun LibraryScreen(
     onUploadPending: () -> Unit,
     onUploadPendingAlways: () -> Unit,
     onDismissUploadPrompt: () -> Unit,
+    onDismissCatalogPartial: () -> Unit,
     onSetSeries: (Book, String?, Double?) -> Unit,
     onResetSeries: (Book) -> Unit,
     onResetSharedSeries: (Book) -> Unit,
@@ -198,6 +201,8 @@ fun LibraryScreen(
     onClearFilters: () -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
+    onStartWithFreeBooks: (StarterCatalog.Category, Int) -> Unit = { _, _ -> },
+    freeBooksFailures: Flow<Unit> = emptyFlow(),
     notice: Notice? = null,
     onNoticeShown: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -224,6 +229,7 @@ fun LibraryScreen(
     var confirmRemoveFromLibrary by remember { mutableStateOf<Book?>(null) }
     var confirmRemoveDownload by remember { mutableStateOf<Book?>(null) }
     var editSeriesOf by remember { mutableStateOf<Book?>(null) }
+    var starterSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val eInk = LocalEInk.current
     val notYetHere = stringResource(R.string.book_not_downloaded)
@@ -237,6 +243,10 @@ fun LibraryScreen(
             val message = if (failure.onServer) serverDeleteFailed else localDeleteFailed
             snackbarHost.showSnackbar(message.format(failure.book.title))
         }
+    }
+    val freeBooksFailed = stringResource(R.string.starter_catalog_failed)
+    LaunchedEffect(freeBooksFailures) {
+        freeBooksFailures.collect { snackbarHost.showSnackbar(freeBooksFailed) }
     }
     // Removing a book from the library is quiet and easy to do by
     // accident, and the entry it took away may be the one being read,
@@ -657,6 +667,13 @@ fun LibraryScreen(
                         onReconnect = onConnectServer,
                     )
                 }
+                if (state.showCatalogPartial) {
+                    CatalogPartialNotice(
+                        canNarrowCatalog = state.catalogIsAddressable,
+                        onChangeCatalog = onConnectServer,
+                        onDismiss = onDismissCatalogPartial,
+                    )
+                }
                 when {
                     state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
 
@@ -681,6 +698,12 @@ fun LibraryScreen(
                         onAddBook = onAddBook,
                         onAddFolder = onAddFolder,
                         onConnectServer = onConnectServer,
+                        // One server at a time, so the offer is only
+                        // made where taking it up costs nothing: an
+                        // empty library with nothing connected.
+                        offerFreeBooks = !state.hasServer,
+                        connectingFreeBooks = state.connectingStarterCatalog,
+                        onStartWithFreeBooks = { starterSheet = true },
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -854,6 +877,23 @@ fun LibraryScreen(
                 editSeriesOf = null
             },
             onDismiss = { editSeriesOf = null },
+        )
+    }
+
+    if (starterSheet) {
+        // The sheet stays up while the probe runs, so its button can
+        // spin and its chips stay still: closing it on the tap left the
+        // reader on an empty library with nothing happening, and put a
+        // failure in a snackbar over a card that looked untouched.
+        // `hasServer` is what settles it — the shelf's own refresh
+        // indicator takes over from there.
+        if (state.hasServer) {
+            LaunchedEffect(Unit) { starterSheet = false }
+        }
+        StarterCatalogSheet(
+            connecting = state.connectingStarterCatalog,
+            onConfirm = onStartWithFreeBooks,
+            onDismiss = { starterSheet = false },
         )
     }
 }
@@ -1651,6 +1691,64 @@ private fun CatalogFailureNotice(
                         Text(stringResource(R.string.catalog_retry))
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The catalog is bigger than one walk of it.
+ *
+ * Not a failure: the books on the shelf are real and nothing is being
+ * retried. What it has to say is that the shelf is a part of the
+ * catalog rather than the whole of it — and that trying again will not
+ * change that, since the walk starts at the same root with the same
+ * budget and reads the same pages. The way out is a narrower address,
+ * so the action goes to where the address is typed.
+ */
+@Composable
+private fun CatalogPartialNotice(
+    canNarrowCatalog: Boolean,
+    onChangeCatalog: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+        ) {
+            Text(
+                // Narrowing the address is only advice for a catalog
+                // the reader gave an address to. Komga, calibre-web,
+                // liseur-sync and Grimmory reach their page guards too,
+                // and there is no shelf to point those at.
+                text = stringResource(
+                    if (canNarrowCatalog) {
+                        R.string.catalog_partial_narrowable
+                    } else {
+                        R.string.catalog_partial
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+            )
+            TextButton(onClick = onChangeCatalog) {
+                Text(stringResource(R.string.catalog_partial_change))
+            }
+            // Said once is enough. Every refresh of a catalog too big
+            // to read in one pass raises this again, and a notice that
+            // cannot be put away is a permanent band across the shelf.
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.catalog_partial_dismiss),
+                )
             }
         }
     }

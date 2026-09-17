@@ -4,6 +4,8 @@ import com.chmouel.liseur.data.remote.CatalogRefresh
 import com.chmouel.liseur.data.remote.CatalogSnapshot
 import com.chmouel.liseur.data.remote.SyncSnapshot
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -153,6 +155,53 @@ class LibraryRefreshTest {
         scanGate?.complete(Unit)
         advanceUntilIdle()
         assertEquals(false, refresh.refreshing.value)
+    }
+
+    /**
+     * Connecting a server needs the refresh that follows it to happen,
+     * even if the reader had just pulled the shelf down.
+     */
+    @Test
+    fun `a refresh that has to happen waits for the one in flight`() = runTest {
+        scanGate = CompletableDeferred()
+        val refresh = refresher(this)
+
+        refresh.all()
+        advanceUntilIdle()
+        refresh.allWhenFree()
+        advanceUntilIdle()
+        assertEquals(1, scans)
+
+        scanGate?.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(2, scans)
+    }
+
+    /**
+     * And it keeps waiting until it is the run that started: a pull
+     * landing in the gap takes the turn, and the owed refresh must
+     * follow it rather than be dropped.
+     */
+    @Test
+    fun `a pull at the handoff does not swallow a refresh that has to happen`() = runTest {
+        scanGate = CompletableDeferred()
+        val refresh = refresher(this)
+
+        refresh.all()
+        advanceUntilIdle()
+
+        // Waiting first, so this is the one woken when the run in
+        // flight lets go, and it is the one that takes the turn.
+        launch {
+            refresh.refreshing.first { !it }
+            refresh.all()
+        }
+        refresh.allWhenFree()
+        advanceUntilIdle()
+
+        scanGate?.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(3, scans)
     }
 
     /**

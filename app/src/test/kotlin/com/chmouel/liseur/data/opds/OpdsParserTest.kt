@@ -81,6 +81,40 @@ class OpdsParserTest {
     }
 
     @Test
+    fun `a subsection that says it is a web page is not walked into`() {
+        // Gutenberg's author feeds end with an entry linking to the
+        // author's Wikipedia page: `rel="subsection"`, which reads as
+        // navigation, and `type="text/html"`, which says plainly that
+        // it is not a feed. Walking into one took the catalog off the
+        // server it was reading, asked Wikipedia for a feed, and lost
+        // the refresh to the refusal that came back (#226).
+        val parsed = OpdsParser.parse(WIKIPEDIA_ENTRY)
+
+        assertTrue(parsed.navigation.isEmpty())
+        // Nor is it a book. It is a pointer either way, and shelving it
+        // put *See also: en.wikipedia* between two novels.
+        assertTrue(parsed.books.isEmpty())
+    }
+
+    @Test
+    fun `a subsection that says nothing about itself is still a shelf`() {
+        // Most catalogs spell navigation with the `rel` alone, and the
+        // rel is all there is to go on.
+        val page = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Authors</title>
+                <id>/opds/author</id>
+                <link rel="subsection" href="/opds/author"/>
+              </entry>
+            </feed>
+        """.trimIndent()
+
+        assertEquals("/opds/author", OpdsParser.parse(page).navigation.single().href)
+    }
+
+    @Test
     fun `keeps a book that has no download link so it can still be seen`() {
         val noDownload = feed.replace("http://opds-spec.org/acquisition", "related")
         val book = OpdsParser.parse(noDownload).books.single()
@@ -441,5 +475,20 @@ class OpdsParserTest {
         val book = entryWithContent("""<p>SERIES: Some Other Thing [9.00]</p>""")
 
         assertNull(book.seriesName)
+    }
+
+    private companion object {
+        /** An entry as Gutenberg's author feeds end with. */
+        val WIKIPEDIA_ENTRY = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>See also: en.wikipedia</title>
+                <id>wiki</id>
+                <link rel="subsection" type="text/html"
+                      href="https://en.wikipedia.org/wiki/Jules_Verne"/>
+              </entry>
+            </feed>
+        """.trimIndent()
     }
 }

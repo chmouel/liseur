@@ -238,11 +238,19 @@ class RemoteAccountRepository(
         username: String,
         password: String,
         allowHttp: Boolean = false,
+        /**
+         * Run once the server has answered and before the account is
+         * written, for work that has to stop before the account it runs
+         * against is retired. Never run when the probe fails, so a
+         * mistyped address costs nothing.
+         */
+        beforePublish: suspend () -> Unit = {},
     ): SetupResult = connect(
         kind = ServerKind.CALIBRE,
         url = url,
         credentials = RemoteCredentials.Basic(username, password),
         allowHttp = allowHttp,
+        beforePublish = beforePublish,
     )
 
     /** Probes a Komga server and, if it answers, saves it as the account. */
@@ -250,11 +258,19 @@ class RemoteAccountRepository(
         url: String,
         apiKey: String,
         allowHttp: Boolean = false,
+        /**
+         * Run once the server has answered and before the account is
+         * written, for work that has to stop before the account it runs
+         * against is retired. Never run when the probe fails, so a
+         * mistyped address costs nothing.
+         */
+        beforePublish: suspend () -> Unit = {},
     ): SetupResult = connect(
         kind = ServerKind.KOMGA,
         url = url,
         credentials = RemoteCredentials.ApiKey(apiKey),
         allowHttp = allowHttp,
+        beforePublish = beforePublish,
     )
 
     /**
@@ -272,11 +288,19 @@ class RemoteAccountRepository(
         username: String,
         password: String,
         allowHttp: Boolean = false,
+        /**
+         * Run once the server has answered and before the account is
+         * written, for work that has to stop before the account it runs
+         * against is retired. Never run when the probe fails, so a
+         * mistyped address costs nothing.
+         */
+        beforePublish: suspend () -> Unit = {},
     ): SetupResult = connect(
         kind = ServerKind.GRIMMORY,
         url = url,
         credentials = RemoteCredentials.Basic(username, password),
         allowHttp = allowHttp,
+        beforePublish = beforePublish,
     )
 
     /**
@@ -292,11 +316,19 @@ class RemoteAccountRepository(
         username: String,
         password: String,
         allowHttp: Boolean = false,
+        /**
+         * Run once the server has answered and before the account is
+         * written, for work that has to stop before the account it runs
+         * against is retired. Never run when the probe fails, so a
+         * mistyped address costs nothing.
+         */
+        beforePublish: suspend () -> Unit = {},
     ): SetupResult = connect(
         kind = ServerKind.LISEUR_SYNC,
         url = url,
         credentials = RemoteCredentials.Basic(username, password),
         allowHttp = allowHttp,
+        beforePublish = beforePublish,
     )
 
     /**
@@ -307,12 +339,75 @@ class RemoteAccountRepository(
         url: String,
         token: String,
         allowHttp: Boolean = false,
+        /**
+         * Run once the server has answered and before the account is
+         * written, for work that has to stop before the account it runs
+         * against is retired. Never run when the probe fails, so a
+         * mistyped address costs nothing.
+         */
+        beforePublish: suspend () -> Unit = {},
     ): SetupResult = connect(
         kind = ServerKind.LISEUR_SYNC,
         url = url,
         credentials = RemoteCredentials.Bearer(token),
         allowHttp = allowHttp,
+        beforePublish = beforePublish,
     )
+
+    /**
+     * Connects an open catalog, and only while nothing is connected.
+     *
+     * For the shelf of free books the empty library offers. That card
+     * is shown only when there is no server, but a tap can outlive the
+     * state that allowed it: probing the catalog takes a moment, and a
+     * reader who connects their own server in that moment must not have
+     * it replaced by one they tapped before it existed. So the account
+     * is read again inside the transaction that would write over it,
+     * and the connection made first is the one that stands.
+     *
+     * Anonymous, and no plain-text fallback. An open catalog has no
+     * login, and the address is one Liseur ships rather than one
+     * anybody typed, so there is nobody to ask about either.
+     *
+     * A KOReader pairing is left exactly where it is. It outlives a
+     * catalog disconnection on purpose, so an empty library may well
+     * have one standing, and it is the reader's own configuration:
+     * taking it away because they tapped a card offering free books
+     * would lose credentials and peer agreements they never mentioned.
+     * Those books syncing to their sync server is what a sync server
+     * is for.
+     */
+    suspend fun connectOpenCatalogIfDisconnected(
+        catalogUrl: String,
+        shelfLimit: Int? = null,
+    ): OpenCatalogOutcome {
+        if (dao.get() != null) return OpenCatalogOutcome.ALREADY_CONNECTED
+        val setup = setups[ServerKind.CUSTOM] ?: return OpenCatalogOutcome.UNREACHABLE
+        val probed = setup.connect(catalogUrl, RemoteCredentials.Anonymous, allowHttp = false)
+        val capabilities = when (probed) {
+            is SetupResult.Failure -> return OpenCatalogOutcome.UNREACHABLE
+            is SetupResult.Success -> probed.capabilities
+        }
+        var published = false
+        changingAccount {
+            inTransaction {
+                if (dao.get() != null) return@inTransaction
+                storeLocked(
+                    ServerKind.CUSTOM,
+                    RemoteCredentials.Anonymous,
+                    capabilities,
+                    keepsPairing = true,
+                    shelfLimit = shelfLimit,
+                )
+                published = true
+            }
+        }
+        return if (published) {
+            OpenCatalogOutcome.CONNECTED
+        } else {
+            OpenCatalogOutcome.ALREADY_CONNECTED
+        }
+    }
 
     /**
      * Connects a Custom server: an OPDS catalog, a KOReader sync
@@ -338,6 +433,14 @@ class RemoteAccountRepository(
         kosyncUsername: String,
         kosyncPassword: String,
         allowHttp: Boolean = false,
+        speaksForKosync: Boolean = true,
+        /**
+         * Run once both halves have answered and before the account is
+         * written, for work that has to stop before the account it runs
+         * against is retired. Never run when a probe fails, so a
+         * mistyped address costs nothing.
+         */
+        beforePublish: suspend () -> Unit = {},
     ): CustomSetupResult {
         val wantsCatalog = catalogUrl.isNotBlank()
         val wantsKosync = kosyncUrl.isNotBlank()
@@ -400,7 +503,8 @@ class RemoteAccountRepository(
         } else {
             null
         }
-        publishCustom(capabilities, credentials, pairing, syncOnlyUser)
+        beforePublish()
+        publishCustom(capabilities, credentials, pairing, syncOnlyUser, speaksForKosync)
         return CustomSetupResult()
     }
 
@@ -450,6 +554,7 @@ class RemoteAccountRepository(
         credentials: RemoteCredentials,
         pairing: ProvedKosyncPairing?,
         syncOnlyUser: String?,
+        speaksForKosync: Boolean,
     ) = changingAccount {
         inTransaction {
             storeLocked(
@@ -459,7 +564,14 @@ class RemoteAccountRepository(
                 keepsPairing = true,
                 signedInAs = syncOnlyUser,
             )
-            if (pairing != null) kosync().adopt(pairing) else kosync().forget()
+            when {
+                pairing != null -> kosync().adopt(pairing)
+                // A submission that covers the whole connection says by
+                // its empty sync half that there is to be no partner.
+                // One that covers only the catalog address says nothing
+                // about it, and must leave the pairing where it is.
+                speaksForKosync -> kosync().forget()
+            }
         }
     }
 
@@ -468,6 +580,7 @@ class RemoteAccountRepository(
         url: String,
         credentials: RemoteCredentials,
         allowHttp: Boolean,
+        beforePublish: suspend () -> Unit = {},
     ): SetupResult {
         val setup = setups[kind] ?: return SetupResult.Failure(SetupFailure.WrongServer)
         // What the stored account of the same kind knew about itself.
@@ -480,7 +593,10 @@ class RemoteAccountRepository(
         } else {
             setup.connect(url, credentials, allowHttp)
         }
-        if (result is SetupResult.Success) store(kind, credentials, result.capabilities)
+        if (result is SetupResult.Success) {
+            beforePublish()
+            store(kind, credentials, result.capabilities)
+        }
         return result
     }
 
@@ -526,6 +642,12 @@ class RemoteAccountRepository(
          * server. That name is the account here.
          */
         signedInAs: String? = null,
+        /**
+         * How many books to offer this connection's shelf at, or null
+         * to leave whatever it already had. Only the starter card sets
+         * it; every other connection walks as much as it can.
+         */
+        shelfLimit: Int? = null,
     ) {
         val username = signedInAs ?: when (credentials) {
             is RemoteCredentials.Basic -> credentials.username
@@ -556,7 +678,11 @@ class RemoteAccountRepository(
             credentials is RemoteCredentials.Basic
         val sameAccount = stored != null &&
             stored.kind == kind &&
-            stored.baseUrl == capabilities.baseUrl &&
+            // Not compared character for character: the stored
+            // spelling of a trailing slash changed between versions,
+            // and reading that as a stranger retires the account and
+            // takes every book the server has not been asked for yet.
+            RemoteUrl.sameAddress(stored.baseUrl, capabilities.baseUrl) &&
             if (stableIdentity) {
                 stored.liseurAccountId == capabilities.liseurAccountId
             } else {
@@ -623,6 +749,11 @@ class RemoteAccountRepository(
                 annotationCursorSeq = existing?.annotationCursorSeq ?: 0,
                 liseurAccountId = capabilities.liseurAccountId
                     ?: existing?.liseurAccountId,
+                // The reader's choice stands until they make another
+                // one. A reconnect that says nothing about the size —
+                // an address correction, a refreshed credential — keeps
+                // the shelf the size it was offered at.
+                shelfLimit = shelfLimit ?: existing?.shelfLimit,
             ).let { next -> if (existing != null) carryPeerState(existing, next) else next },
         )
     }

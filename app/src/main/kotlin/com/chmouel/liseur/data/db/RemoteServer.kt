@@ -9,6 +9,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteUrl
 import com.chmouel.liseur.data.remote.ServerKind
 import kotlinx.coroutines.flow.Flow
 
@@ -115,6 +116,24 @@ data class RemoteServer(
      */
     @ColumnInfo(name = "annotation_cursor_seq", defaultValue = "0")
     val annotationCursorSeq: Long = 0,
+
+    /**
+     * How many books this connection's shelf is offered at, or null for
+     * as much of the catalog as the walk's budget reaches.
+     *
+     * Only a shelf Liseur offered sets it: a reader who typed an
+     * address gets the ordinary walk. It has to be stored rather than
+     * worked out from the address, because the walk runs again on every
+     * refresh — including from a background worker with no idea what
+     * was picked — and a number that came back different would have the
+     * shelf grow or shrink under the reader.
+     *
+     * Deliberately absent from [accountKey]. Changing fifty to a
+     * hundred is not changing account, and a key that moved with it
+     * would strand every peer-keyed row and stop any download already
+     * queued.
+     */
+    @ColumnInfo(name = "shelf_limit") val shelfLimit: Int? = null,
 ) {
     /** The Kobo sync token in the clear, or null if there is none to read. */
     @get:Ignore
@@ -228,9 +247,31 @@ data class RemoteServer(
             // shelves; the same login to two servers likewise. A
             // catalog-less Custom falls back to its base URL, which is
             // then the sync address, and is the only account it can be.
+            // Slash-canonical, because `RemoteUrl.sameAddress` calls
+            // the two spellings one catalog and `OpdsScope.fingerprint`
+            // already names its books as if they were. A key that
+            // disagreed would move when the address was merely
+            // corrected, stranding what was filed under it and
+            // stopping downloads already in flight.
             ServerKind.CUSTOM ->
-                "custom|${catalogUrl ?: baseUrl}|${username.orEmpty()}"
+                "custom|${RemoteUrl.withoutTrailingSlash(catalogUrl ?: baseUrl)}|" +
+                    username.orEmpty()
         }
+
+    /**
+     * Whether a key written down earlier still names this account.
+     *
+     * Normally the key itself and nothing else. A Custom catalog also
+     * answers to the spelling it had before [accountKey] became
+     * slash-canonical: work queued under the old one — a bulk download
+     * running across the upgrade — would otherwise read as somebody
+     * else's account and stop the batch on a server that never changed.
+     */
+    fun answersTo(key: String): Boolean = when {
+        key == accountKey -> true
+        kind != ServerKind.CUSTOM -> false
+        else -> key == "custom|${catalogUrl ?: baseUrl}|${username.orEmpty()}"
+    }
 
     companion object {
         const val SINGLE_ID = 1L

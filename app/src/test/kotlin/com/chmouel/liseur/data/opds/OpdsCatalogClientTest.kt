@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.opds
 
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import java.net.InetAddress
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.Dispatcher
@@ -109,6 +110,127 @@ class OpdsCatalogClientTest {
             ) { found += it }
         }
         return result.complete to found
+    }
+
+    /** The walk as the free-books card makes it: capped at a shelf. */
+    private fun walkShelf(
+        limit: Int = StarterCatalog.DEFAULT_SHELF,
+    ): Pair<Boolean, List<com.chmouel.liseur.data.remote.RemoteBook>> {
+        val found = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient(shelfLimit = { limit })
+                .allBooks(root(), RemoteCredentials.Anonymous) { found += it }
+        }
+        return result.complete to found
+    }
+
+    @Test
+    fun `a shelf offered at a size stops there`() {
+        // Ten pages of ten books, so the cap falls inside a page and the
+        // pages beyond it exist to be left unread.
+        repeat(10) { page ->
+            val books = (0 until 10).joinToString("") { book("p$page-$it") }
+            val next = if (page < 9) {
+                """<link rel="next" href="/page${page + 1}"
+                     type="application/atom+xml;profile=opds-catalog"/>"""
+            } else {
+                ""
+            }
+            pages[if (page == 0) "/opds" else "/page$page"] = feed(books + next)
+        }
+
+        val (complete, books) = walkShelf(limit = 25)
+
+        assertEquals(25, books.size)
+        // A capped walk has not seen the whole catalog, and must not be
+        // read as proof that anything absent from it was deleted.
+        assertFalse(complete)
+        // It stopped inside page 3 and never asked for what follows.
+        assertFalse(asked.contains("/page3"))
+    }
+
+    @Test
+    fun `a full shelf says the rest of the catalog is all that is missing`() {
+        pages["/opds"] = feed((0 until 50).joinToString("") { book("b$it") })
+
+        val walk = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 5 })
+                .allBooks(root(), RemoteCredentials.Anonymous) { }
+        }
+
+        assertFalse(walk.complete)
+        assertTrue(walk.shelfWasFilled)
+    }
+
+    @Test
+    fun `a shelf filled after something else went short claims nothing`() {
+        // A link into the house from a catalog on the internet is
+        // refused, which is already a hole in the walk: the books that
+        // were not seen are then not only the ones past the shelf.
+        pages["/opds"] = feed(
+            book("b0") +
+                navigation("Next door", "http://127.0.0.1:${server.port}/private") +
+                """<link rel="next" href="/page1"
+                     type="application/atom+xml;profile=opds-catalog"/>""",
+        )
+        pages["/page1"] = feed((0 until 10).joinToString("") { book("p1-$it") })
+
+        val client = OkHttpClient.Builder()
+            .dns { listOf(InetAddress.getByName("127.0.0.1")) }
+            .build()
+        val walk = runBlocking {
+            OpdsCatalogClient(OpdsHttp(client), shelfLimit = { 5 }).allBooks(
+                "http://books.example:${server.port}/opds",
+                RemoteCredentials.Anonymous,
+            ) { }
+        }
+
+        assertFalse(walk.complete)
+        assertFalse(walk.shelfWasFilled)
+    }
+
+    @Test
+    fun `a shelf smaller than one page is still that size`() {
+        pages["/opds"] = feed((0 until 50).joinToString("") { book("b$it") })
+
+        val (complete, books) = walkShelf(limit = 5)
+
+        assertEquals(listOf("Book b0", "Book b1", "Book b2", "Book b3", "Book b4"), books.map { it.title })
+        assertFalse(complete)
+    }
+
+    @Test
+    fun `a catalog smaller than the shelf is read whole and reported complete`() {
+        pages["/opds"] = feed(book("1") + book("2"))
+
+        val (complete, books) = walkShelf()
+
+        assertEquals(2, books.size)
+        assertTrue(complete)
+    }
+
+    @Test
+    fun `a catalog holding exactly the shelf's size is complete, not partial`() {
+        // The awkward case: the shelf fills on the very last book there
+        // is. Counting the books says "full", but there is nothing left
+        // to fetch, so this is the whole catalog and saying otherwise
+        // put a Partial notice on the shelf that no refresh could clear.
+        pages["/opds"] = feed((0 until 5).joinToString("") { book("b$it") })
+
+        val (complete, books) = walkShelf(limit = 5)
+
+        assertEquals(5, books.size)
+        assertTrue(complete)
+    }
+
+    @Test
+    fun `an ordinary catalog is not capped`() {
+        pages["/opds"] = feed((0 until 60).joinToString("") { book("b$it") })
+
+        val (complete, books) = walk()
+
+        assertEquals(60, books.size)
+        assertTrue(complete)
     }
 
     @Test
@@ -344,6 +466,42 @@ class OpdsCatalogClientTest {
         }
 
         assertFalse(walk.complete)
+    }
+
+    @Test
+    fun `a feed that cannot be read costs its own page and no more`() {
+        // Gutenberg's author feeds carry a link to the author's
+        // Wikipedia page. Following one and being refused used to end
+        // the refresh and throw away every book already handed over — a
+        // whole shelf lost to one stale link on somebody else's server.
+        pages["/opds"] = feed(
+            navigation("Gone", "/opds/gone") +
+                navigation("Here", "/opds/here"),
+        )
+        pages["/opds/here"] = feed(book("kept"))
+
+        val (complete, books) = walk()
+
+        assertEquals(listOf("Book kept"), books.map { it.title })
+        // What was behind the refused feed was not seen, so nothing
+        // missing from this walk may be read as deleted.
+        assertFalse(complete)
+        assertTrue(asked.contains("/opds/here"))
+    }
+
+    @Test
+    fun `a root that cannot be read is the catalog's own answer`() {
+        // Nothing to walk on with, and a refused sign-in or a server in
+        // trouble has to reach the reader rather than read as an empty
+        // catalog.
+        var failure: Throwable? = null
+        runBlocking {
+            failure = runCatching {
+                OpdsCatalogClient().allBooks(root(), RemoteCredentials.Anonymous) {}
+            }.exceptionOrNull()
+        }
+
+        assertTrue(failure is RemoteHttpFailure)
     }
 
     private fun path(depth: Int) = if (depth == 0) "/opds" else "/opds/d$depth"

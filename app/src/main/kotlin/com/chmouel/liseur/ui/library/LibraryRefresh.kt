@@ -8,6 +8,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -65,8 +66,39 @@ class LibraryRefresh(
      * read on another device sitting at the old page.
      */
     fun all() {
-        if (_refreshing.value) return
-        _refreshing.value = true
+        startAll()
+    }
+
+    /**
+     * A refresh that has to happen, even if one is running.
+     *
+     * [all] drops a request made while another is in flight, which is
+     * right for a gesture repeated impatiently and wrong for the
+     * refresh that is the only thing about to put a just-connected
+     * server's books on the shelf. Pulling the empty library down and
+     * then taking up the offer of a shelf of free books is enough to
+     * meet the two, and the shelf stayed empty. This one waits its turn
+     * rather than being dropped.
+     *
+     * It keeps waiting until it is the run that started, since a gesture
+     * arriving in the gap between one run ending and this one beginning
+     * would otherwise take the turn and leave this request dropped after
+     * all.
+     */
+    fun allWhenFree() {
+        scope.launch {
+            while (!startAll()) _refreshing.first { !it }
+        }
+    }
+
+    /**
+     * Begin a refresh, or report that one was already under way.
+     *
+     * Claiming the flag and starting the work are one step, so two
+     * callers arriving together cannot both believe they started it.
+     */
+    private fun startAll(): Boolean {
+        if (!_refreshing.compareAndSet(expect = false, update = true)) return false
         scope.launch {
             try {
                 // The folders and the server know nothing of each other,
@@ -85,6 +117,7 @@ class LibraryRefresh(
                 _refreshing.value = false
             }
         }
+        return true
     }
 
     /**
