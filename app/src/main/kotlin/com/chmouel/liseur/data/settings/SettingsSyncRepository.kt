@@ -90,6 +90,14 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
     /** Moves the baseline to a new spelling of the same account. */
     suspend fun rekeyPeer(from: String, to: String) {
         if (from == to) return
+        // Copied rather than moved. This commits on its own, while the
+        // caller's Room transaction may still roll back, and a baseline
+        // filed under a name nothing answers to any more is a baseline
+        // lost: the next connection would read as a first one and take
+        // the account's settings over an edit made here offline. What is
+        // left behind is a few dead entries under a spelling this device
+        // has stopped using, which costs nothing and is written over if
+        // the migration runs again.
         store.edit { prefs ->
             val fromValues = valuePrefix(from)
             val fromStamps = stampPrefix(from)
@@ -98,13 +106,11 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
                     key.name.startsWith(fromValues) -> {
                         val settingKey = key.name.removePrefix(fromValues)
                         prefs[valueKey(to, settingKey)] = value as String
-                        prefs.remove(key)
                     }
 
                     key.name.startsWith(fromStamps) -> {
                         val settingKey = key.name.removePrefix(fromStamps)
                         prefs[stampKey(to, settingKey)] = value as Long
-                        prefs.remove(key)
                     }
                 }
             }
@@ -166,8 +172,14 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
                 val seen = prefs[observedKey(settingKey)]
                 if (seen == value) continue
                 prefs[observedKey(settingKey)] = value
+                // The marker answers for one change and is then spent.
+                // Leaving it would make a later, deliberate return to the
+                // same value look like the server's doing all over again,
+                // and the key would keep the time of the edit before it.
+                val applied = prefs[appliedKey(settingKey)]
+                prefs.remove(appliedKey(settingKey))
                 if (seen == null) continue
-                if (prefs[appliedKey(settingKey)] == value) continue
+                if (applied == value) continue
                 prefs[changedKey(settingKey)] = now
             }
         }
