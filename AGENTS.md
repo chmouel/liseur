@@ -429,9 +429,13 @@ emulator.
   must stay black or a night page's scrim lightens the page. Dynamic
   colour stops at the reader's door — a wallpaper accent was never
   checked against a page Liseur picked — while the library and settings
-  keep it. Bar icons follow the page, from `SystemBarIcons` at activity
-  level, not from `ImmersiveMode`, since the page's colours reach the
-  loading and error screens too. See
+  keep it. Bar icons follow the page, from `SystemBarIcons`, not from
+  `ImmersiveMode`, since the page's colours reach the loading and error
+  screens too. It speaks for the window it is composed in, not for the
+  activity's: a sheet is a window of its own, and Material paints that
+  window's icons from the sheet's ink only when it is built, so a theme
+  changed under an open sheet leaves them behind unless the sheet says it
+  again — which `LiseurModalBottomSheet` does, for every sheet, once. See
   `docs/adr/0031-the-readers-chrome-is-painted-on-the-page.md`.
 - A new reading setting goes in the Advanced sheet
   (`reader/chrome/AdvancedSheet.kt`), and on Settings -> Reading

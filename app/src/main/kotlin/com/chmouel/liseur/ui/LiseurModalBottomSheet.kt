@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.chmouel.liseur.ui.theme.SystemBarIcons
+import com.chmouel.liseur.ui.theme.isDarkSurface
 
 /**
  * A Material sheet that does not repaint the page behind it on e-paper.
@@ -62,7 +64,17 @@ fun LiseurModalBottomSheet(
             dragHandle = {
                 BottomSheetDefaults.DragHandle(color = contentColor.copy(alpha = 0.4f))
             },
-            content = content,
+            content = {
+                // The sheet is a window of its own, and Material points
+                // the bar icons at its paper once, when that window is
+                // built. A reader changing the reading theme from the
+                // sheet in front of them repaints the page and the sheet
+                // underneath the icons without moving them, which leaves
+                // a black clock on a black status bar (#225). Said here,
+                // inside the sheet's own window, it moves with the paper.
+                SystemBarIcons(dark = isDarkSurface(containerColor))
+                content()
+            },
         )
         return
     }

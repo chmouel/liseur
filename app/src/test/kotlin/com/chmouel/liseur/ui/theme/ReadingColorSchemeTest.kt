@@ -97,6 +97,26 @@ class ReadingColorSchemeTest {
         }
     }
 
+    // ---- the bars over it ------------------------------------------------
+
+    @Test
+    fun `a sheet asks the bars for what the page asks them for`() {
+        // A sheet is a window of its own and sets the bar icons from its
+        // own paper, which is the page's. If those two answers could
+        // differ, opening or closing a sheet would flip the status bar's
+        // icons out from under a page that had not changed — and a theme
+        // changed from an open sheet would leave them behind (#225).
+        for ((name, palette) in palettes) {
+            for (page in ReaderTheme.entries) {
+                assertEquals(
+                    "bar icons over a $name $page sheet",
+                    page.isDarkPage,
+                    isDarkSurface(scheme(page, palette).surface),
+                )
+            }
+        }
+    }
+
     // ---- the accents -----------------------------------------------------
 
     @Test
