@@ -232,7 +232,9 @@ private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataS
 )
 
 /** Persists [AppSettings]. */
-class AppSettingsRepository(private val context: Context) {
+class AppSettingsRepository(private val store: DataStore<Preferences>) {
+
+    constructor(context: Context) : this(context.appSettingsStore)
 
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -270,10 +272,10 @@ class AppSettingsRepository(private val context: Context) {
      * about that catalog.
      */
     val catalogPartialDismissedFor: Flow<String?> =
-        context.appSettingsStore.data.map { it[Keys.CATALOG_PARTIAL_DISMISSED] }
+        store.data.map { it[Keys.CATALOG_PARTIAL_DISMISSED] }
 
     suspend fun setCatalogPartialDismissedFor(catalogUrl: String?) {
-        context.appSettingsStore.edit { prefs ->
+        store.edit { prefs ->
             if (catalogUrl == null) {
                 prefs.remove(Keys.CATALOG_PARTIAL_DISMISSED)
             } else {
@@ -291,13 +293,13 @@ class AppSettingsRepository(private val context: Context) {
      * been read, or as soon as an account is connected again.
      */
     val accountLostToRestore: Flow<Boolean> =
-        context.appSettingsStore.data.map { it[Keys.ACCOUNT_LOST] ?: false }
+        store.data.map { it[Keys.ACCOUNT_LOST] ?: false }
 
     suspend fun setAccountLostToRestore(lost: Boolean) {
-        context.appSettingsStore.edit { it[Keys.ACCOUNT_LOST] = lost }
+        store.edit { it[Keys.ACCOUNT_LOST] = lost }
     }
 
-    val settings: Flow<AppSettings> = context.appSettingsStore.data.map { p ->
+    val settings: Flow<AppSettings> = store.data.map { p ->
         AppSettings(
             themeMode = ThemeMode.fromId(p[Keys.THEME_MODE]),
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
@@ -332,51 +334,51 @@ class AppSettingsRepository(private val context: Context) {
     suspend fun current(): AppSettings = settings.first()
 
     suspend fun setThemeMode(mode: ThemeMode) {
-        context.appSettingsStore.edit { it[Keys.THEME_MODE] = mode.id }
+        store.edit { it[Keys.THEME_MODE] = mode.id }
     }
 
     suspend fun setStatsRange(range: StatsRange) {
-        context.appSettingsStore.edit { it[Keys.STATS_RANGE] = range.id }
+        store.edit { it[Keys.STATS_RANGE] = range.id }
     }
 
     suspend fun setUploadPolicy(policy: UploadPolicy) {
-        context.appSettingsStore.edit { it[Keys.UPLOAD_POLICY] = policy.id }
+        store.edit { it[Keys.UPLOAD_POLICY] = policy.id }
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.DYNAMIC_COLOR] = enabled }
+        store.edit { it[Keys.DYNAMIC_COLOR] = enabled }
     }
 
     suspend fun setVolumeKeysTurnPages(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.VOLUME_KEYS] = enabled }
+        store.edit { it[Keys.VOLUME_KEYS] = enabled }
     }
 
     suspend fun setTapZones(zones: TapZones) {
-        context.appSettingsStore.edit { it[Keys.TAP_ZONES] = zones.id }
+        store.edit { it[Keys.TAP_ZONES] = zones.id }
     }
 
     suspend fun setPinchToResize(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.PINCH_TO_RESIZE] = enabled }
+        store.edit { it[Keys.PINCH_TO_RESIZE] = enabled }
     }
 
     suspend fun setResumeLastBook(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.RESUME_LAST_BOOK] = enabled }
+        store.edit { it[Keys.RESUME_LAST_BOOK] = enabled }
     }
 
     suspend fun setKeepScreenOn(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.KEEP_SCREEN_ON] = enabled }
+        store.edit { it[Keys.KEEP_SCREEN_ON] = enabled }
     }
 
     suspend fun setScrollMode(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.SCROLL_MODE] = enabled }
+        store.edit { it[Keys.SCROLL_MODE] = enabled }
     }
 
     suspend fun setLibrarySort(sort: LibrarySort) {
-        context.appSettingsStore.edit { it[Keys.LIBRARY_SORT] = sort.id }
+        store.edit { it[Keys.LIBRARY_SORT] = sort.id }
     }
 
     suspend fun setLibrarySortReversed(reversed: Boolean) {
-        context.appSettingsStore.edit { it[Keys.LIBRARY_SORT_REVERSED] = reversed }
+        store.edit { it[Keys.LIBRARY_SORT_REVERSED] = reversed }
     }
 
     /**
@@ -394,7 +396,7 @@ class AppSettingsRepository(private val context: Context) {
      * what makes the whole change atomic.
      */
     suspend fun editLibraryFilters(edit: (LibraryFilters) -> LibraryFilters) {
-        context.appSettingsStore.edit { p ->
+        store.edit { p ->
             val filters = edit(
                 LibraryFilters(
                     options = LibraryFilters.parse(p[Keys.LIBRARY_FILTERS]),
@@ -407,23 +409,23 @@ class AppSettingsRepository(private val context: Context) {
     }
 
     suspend fun setEInkMode(mode: EInkMode) {
-        context.appSettingsStore.edit { it[Keys.EINK_MODE] = mode.id }
+        store.edit { it[Keys.EINK_MODE] = mode.id }
     }
 
     suspend fun setColorEInk(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.COLOR_EINK] = enabled }
+        store.edit { it[Keys.COLOR_EINK] = enabled }
     }
 
     suspend fun setVendorRefresh(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.VENDOR_REFRESH] = enabled }
+        store.edit { it[Keys.VENDOR_REFRESH] = enabled }
     }
 
     suspend fun setDefinitionTarget(target: DefinitionTarget) {
-        context.appSettingsStore.edit { it[Keys.DEFINITION_TARGET] = target.id }
+        store.edit { it[Keys.DEFINITION_TARGET] = target.id }
     }
 
     suspend fun setDictionaryLookupEnabled(enabled: Boolean) {
-        context.appSettingsStore.edit { it[Keys.DICTIONARY_ENABLED] = enabled }
+        store.edit { it[Keys.DICTIONARY_ENABLED] = enabled }
     }
 
     /**
@@ -433,7 +435,7 @@ class AppSettingsRepository(private val context: Context) {
      */
     suspend fun setDictionaryBaseUrl(url: String) {
         val normalised = DictionaryUrl.normalise(url) ?: DictionaryUrl.DEFAULT_BASE_URL
-        context.appSettingsStore.edit { it[Keys.DICTIONARY_BASE_URL] = normalised }
+        store.edit { it[Keys.DICTIONARY_BASE_URL] = normalised }
     }
 
     /**
@@ -452,13 +454,42 @@ class AppSettingsRepository(private val context: Context) {
      * with.
      */
     suspend fun toggleHighlightTint(tint: HighlightTint) {
-        context.appSettingsStore.edit { p ->
+        store.edit { p ->
             val next = HighlightPalette.of(p[Keys.HIGHLIGHT_TINTS], null).toggled(tint)
             p[Keys.HIGHLIGHT_TINTS] = next.offered.map { it.name }.toSet()
         }
     }
 
     suspend fun setHighlightDefaultTint(tint: HighlightTint) {
-        context.appSettingsStore.edit { it[Keys.HIGHLIGHT_TINT_DEFAULT] = tint.name }
+        store.edit { it[Keys.HIGHLIGHT_TINT_DEFAULT] = tint.name }
+    }
+
+    /**
+     * The offered set exactly as stored, with null for a reader who
+     * never chose one.
+     *
+     * [AppSettings.highlightPalette] cannot answer this: it resolves an
+     * absent set to the default three, so through it a reader who never
+     * chose looks identical to one who chose exactly those three.
+     * Settings sync has to tell them apart, or "never chose" travels to
+     * the other device as a choice and outvotes a real one.
+     */
+    suspend fun offeredHighlightTintNames(): Set<String>? =
+        store.data.first()[Keys.HIGHLIGHT_TINTS]
+
+    /**
+     * Replaces the offered set outright, or clears it when [names] is
+     * null so the reader counts as never having chosen.
+     *
+     * Unlike [toggleHighlightTint] this says where to end up rather than
+     * which swatch was tapped, which is what an incoming palette is:
+     * toggling its way there would publish every set on the route, and
+     * one of those is the empty set, which is its own answer rather than
+     * a step towards another.
+     */
+    suspend fun setOfferedHighlightTints(names: Set<String>?) {
+        store.edit { p ->
+            if (names == null) p.remove(Keys.HIGHLIGHT_TINTS) else p[Keys.HIGHLIGHT_TINTS] = names
+        }
     }
 }

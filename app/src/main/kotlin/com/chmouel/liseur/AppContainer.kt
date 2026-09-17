@@ -33,6 +33,7 @@ import com.chmouel.liseur.data.remote.CompositePositionSync
 import com.chmouel.liseur.data.remote.AndroidLocalNetworkAccess
 import com.chmouel.liseur.data.remote.LocalNetworkGuardedSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncAnnotations
+import com.chmouel.liseur.data.liseursync.LiseurSyncSettings
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
@@ -56,6 +57,10 @@ import com.chmouel.liseur.data.remote.RemoteRouter
 import com.chmouel.liseur.data.remote.RoutedPositionSync
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncReporting
+import com.chmouel.liseur.reader.ReaderPresence
+import com.chmouel.liseur.data.settings.SettingsChangeTracker
+import com.chmouel.liseur.data.settings.SettingsSyncRepository
+import com.chmouel.liseur.data.settings.syncableSettings
 import com.chmouel.liseur.data.settings.SessionStateRepository
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.LatestPositionSync
@@ -176,6 +181,8 @@ class AppContainer(context: Context) {
     /** The one bulk download that is running, or was last. */
     val bulkDownloads = BulkDownloadStore(context.applicationContext)
 
+    val settingsSyncState = SettingsSyncRepository(context.applicationContext)
+
     val remoteAccount = RemoteAccountRepository(
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
@@ -189,6 +196,7 @@ class AppContainer(context: Context) {
         uploadRefusalDao = database.uploadRefusalDao(),
         sessionRefusalDao = database.sessionRefusalDao(),
         sessionTransmissionDao = database.sessionTransmissionDao(),
+        settingsSyncState = settingsSyncState,
         // Declared later in this file, so it is reached through the
         // lambda rather than held: the pairing is only ever touched
         // after a connection has landed, never while one is being built.
@@ -305,6 +313,26 @@ class AppContainer(context: Context) {
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
+    private val syncableSettings = syncableSettings(appSettings, readerPreferences)
+
+    private val liseurSyncSettings = LiseurSyncSettings(
+        syncState = settingsSyncState,
+        settings = syncableSettings,
+    )
+
+    /**
+     * Notes when the reader changes a setting, so a conflict is settled
+     * on when the edit was made rather than on which device reached the
+     * network first. Started from the container because it has to be
+     * watching whether or not anything is connected: a change made
+     * offline is exactly the one whose time cannot be recovered later.
+     */
+    private val settingsChangeTracker = SettingsChangeTracker(
+        syncState = settingsSyncState,
+        settings = syncableSettings,
+        sources = listOf(readerPreferences.prefs, appSettings.settings),
+    ).also { it.start(applicationScope) }
+
     val liseurSync = LiseurSyncPositionSync(
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
@@ -321,6 +349,8 @@ class AppContainer(context: Context) {
         reporting = syncReporting,
         networkAvailability = networkAvailability,
         annotations = liseurSyncAnnotations,
+        settingsSync = liseurSyncSettings,
+        readerIsOpen = { ReaderPresence.isOpen },
         inTransaction = { work -> database.withTransaction { work() } },
     )
 

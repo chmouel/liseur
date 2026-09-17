@@ -260,6 +260,23 @@ emulator.
   `ta:`-only match is low confidence and syncs nothing until the reader
   confirms it; a rejection is stored as `confidence = 'rejected'` rather
   than deleted, or the next run asks again.
+- A synced setting travels with the time the *reader* changed it, never
+  the time it is pushed. `SettingsChangeTracker` stamps that time from
+  the application scope whether or not a server is connected, and the
+  stamp is advisory: whether a key is offered is still decided by
+  comparing it against the account's agreed baseline, which is what
+  lets the collector run unlocked. A `PUT` answers `200` whether the
+  value won or lost, so record *both* halves from the merged reply and
+  apply the server's value where it differs; a key the server did not
+  speak for records nothing. A value this build cannot parse or
+  recognise records nothing either, or an older build pushes its own
+  fallback over a newer one's choice. Absence is a value and travels as
+  a sentinel, because the server has no delete and no null. The
+  baseline is peer state and moves with the account; the record of what
+  this device changed is not. Nothing under `reader.*` is applied while
+  a book is open — that is the settings version of turning somebody's
+  page — and device-shaped settings never travel at all. See
+  `docs/adr/0034-settings-travel-by-when-they-were-changed.md`.
 - Statistics from a server are decoration. Every failure there is
   null and silent; the stats screen is built from local sessions and
   must stand on its own. Cross-device figures require a coherent snapshot:

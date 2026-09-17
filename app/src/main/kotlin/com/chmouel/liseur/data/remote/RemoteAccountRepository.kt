@@ -75,6 +75,12 @@ class RemoteAccountRepository(
     private val sessionRefusalDao: SessionRefusalDao? = null,
     private val sessionTransmissionDao: com.chmouel.liseur.data.db.SessionTransmissionDao? = null,
     /**
+     * What each account agreed the syncable settings were. Peer state
+     * like the rest: it moves with a reconnect and goes with a
+     * disconnect. Null in tests that do not sync settings.
+     */
+    private val settingsSyncState: com.chmouel.liseur.data.settings.SettingsSyncRepository? = null,
+    /**
      * The KOReader pairing, which a connection may drop, replace or
      * leave alone.
      *
@@ -784,7 +790,8 @@ class RemoteAccountRepository(
             (identityDao?.countForPeer(to) ?: 0) +
             (annotationSyncDao?.countForPeer(to) ?: 0) +
             (sessionRefusalDao?.countForPeer(to) ?: 0) +
-            (sessionTransmissionDao?.countForPeer(to) ?: 0)
+            (sessionTransmissionDao?.countForPeer(to) ?: 0) +
+            (settingsSyncState?.countForPeer(to) ?: 0)
         if (occupied > 0) {
             Log.w(TAG, "Not moving sync state to a key that already has $occupied rows; keeping the old key")
             return next.copy(liseurAccountId = existing.liseurAccountId)
@@ -795,6 +802,7 @@ class RemoteAccountRepository(
         uploadRefusalDao?.rekeyAccount(from, to)
         sessionRefusalDao?.rekeyPeer(from, to)
         sessionTransmissionDao?.rekeyPeer(from, to)
+        settingsSyncState?.rekeyPeer(from, to)
         progressDao.rekeyAccount(from, to)
         return next
     }
@@ -930,6 +938,12 @@ class RemoteAccountRepository(
         sessionDao?.forgetTransmissionEvidence()
         sessionTransmissionDao?.clearPeer(server.accountKey)
         sessionRefusalDao?.clearPeer(server.accountKey)
+        // What this account agreed each setting was. Timestamps are the
+        // issuing server's to interpret, so carrying them to the next
+        // one would have every key read as neither newer nor older than
+        // itself and go quiet. The reader's settings themselves stay —
+        // signing out of a server is not a request to be reconfigured.
+        settingsSyncState?.forgetPeer(server.accountKey)
     }
 
     private companion object {

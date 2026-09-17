@@ -43,6 +43,7 @@ import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
+import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.domain.reconcileReadingState
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.progress.ResourceAnchor
@@ -94,6 +95,16 @@ class LiseurSyncPositionSync(
      * names. Null in tests that are only about positions.
      */
     private val annotations: LiseurSyncAnnotations? = null,
+    private val settingsSync: LiseurSyncSettings? = null,
+    /**
+     * Whether a book is on screen right now.
+     *
+     * The sync layer has no idea what the reader is doing, and pulling a
+     * font size or a margin while a book is open reflows the page under
+     * whoever is reading it. Same rule as an incoming position, which
+     * waits for resume rather than turning an open book's page.
+     */
+    private val readerIsOpen: () -> Boolean = { false },
     private val now: () -> Long = System::currentTimeMillis,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : PositionSync {
@@ -452,6 +463,30 @@ class LiseurSyncPositionSync(
         )
 
         reporting.report(PositionSyncStatus.Syncing)
+
+        // Settings first: lightweight and best-effort. A failure here
+        // never blocks positions or annotations.
+        //
+        // Only on a full sync. Settings are account-wide, so a
+        // book-scoped run has nothing of its own to say about them — and
+        // those runs fire from the reader on every annotation edit and
+        // position disagreement, which is precisely when a book is on
+        // screen to be reflowed.
+        if (book == null) {
+            try {
+                settingsSync?.sync(
+                    accountKey = account.accountKey,
+                    baseUrl = account.baseUrl,
+                    credentials = account.credentials,
+                    canApplyReaderSettings = !readerIsOpen(),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Settings sync failed, continuing: ${e.message}")
+            }
+        }
+
         val books = if (book == null) {
             bookDao.allOnce()
         } else {
