@@ -115,7 +115,7 @@ class LiseurSyncSettings(
             }
 
             if (takeServer) {
-                if (apply(entry, server!!.value, canApplyReaderSettings)) {
+                if (apply(entry, server!!.value, canApplyReaderSettings, localValue)) {
                     agreed[entry.key] = SettingsSyncRepository.SyncedEntry(
                         server.value,
                         server.updatedAtMillis,
@@ -149,6 +149,15 @@ class LiseurSyncSettings(
                         .put("updated_at", millisToRfc3339(stamp)),
                 )
             }
+        }
+
+        // Before the push, in one write. A push that throws or is
+        // refused would otherwise leave every value this pass just
+        // applied looking like an edit made here, and the next pass
+        // would offer the server its own settings back.
+        if (applied.isNotEmpty()) {
+            syncState.markApplied(applied)
+            applied.clear()
         }
 
         if (toPush.length() > 0) {
@@ -267,13 +276,14 @@ class LiseurSyncSettings(
                 // would lose it and then file the server's answer as
                 // agreed, which is the one state nothing later can
                 // correct.
-                if (entry.read() != sent) {
-                    Log.d(TAG, "${entry.key} changed while the push was in flight; leaving it")
-                    continue
-                }
                 Log.d(TAG, "Push of ${entry.key} lost; taking the server's value")
-                if (!apply(entry, serverValue, canApplyReaderSettings)) continue
+                if (!apply(entry, serverValue, canApplyReaderSettings, sent)) continue
                 applied[entry.key] = serverValue
+                // Written down here rather than with the rest, because
+                // nothing after this point is guaranteed to run and an
+                // unmarked value is one the collector will offer back as
+                // an edit made on this device.
+                syncState.markApplied(mapOf(entry.key to serverValue))
             }
             agreed[entry.key] = SettingsSyncRepository.SyncedEntry(serverValue, serverTs)
             exchanged++
@@ -293,9 +303,18 @@ class LiseurSyncSettings(
         entry: SyncableSetting,
         value: String,
         canApplyReaderSettings: suspend () -> Boolean,
+        decidedAgainst: String,
     ): Boolean {
         if (entry.affectsOpenBook && !canApplyReaderSettings()) {
             Log.d(TAG, "Holding ${entry.key} back while a book is open")
+            return false
+        }
+        // The decision to take the server's value was made against the
+        // value this device held a moment ago. If the reader has changed
+        // it since, that decision was about something else; leave it and
+        // let the next pass weigh the new value on its own.
+        if (entry.read() != decidedAgainst) {
+            Log.d(TAG, "${entry.key} changed while the pull was in flight; leaving it")
             return false
         }
         if (!entry.write(value)) {
