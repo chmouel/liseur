@@ -118,10 +118,15 @@ A time is unsendable in the same way. The server refuses a batch
 carrying an `updated_at` more than a day ahead of its own clock, and a
 change stamp is only as good as the clock that was running when it was
 recorded — a phone whose date was wrong once leaves one behind, and it
-outlives the correction. So an outgoing stamp is capped at now. This
-loses nothing worth keeping: a change that has not happened yet is a
-wrong answer whatever it is compared against, and now is the nearest
-right one.
+outlives the correction. So change times are capped at now, where they
+are read rather than where they are sent, which means a stamp is
+compared as it is sent. Capping only the payload would leave the
+uncapped one deciding the disagreements: the server allows a day of
+slack of its own, so a copy another device wrote can legitimately be
+dated after this device's now, and a bad stamp would push a stale
+value over it. This loses nothing worth keeping: a change that has not
+happened yet is a wrong answer whatever it is compared against, and
+now is the nearest right one.
 
 **The baseline belongs to one account.** Its timestamps came off that
 server's clock and mean nothing anywhere else, so it is keyed by account

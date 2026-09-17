@@ -287,11 +287,15 @@ emulator.
   its own fallback over a newer one's choice. A value the server cannot
   store — a NUL byte, or over 4 KiB — is dropped before the request,
   since the `PUT` is one transaction and one bad key would block every
-  other one forever. For the same reason an outgoing stamp is never
-  later than now: the server refuses a whole batch dated more than a
-  day ahead, so one time recorded while the device's clock was wrong
-  would block every setting on every pass from then on, and a time that
-  has not happened yet is a wrong answer anyway. Absence is a value and travels as
+  other one forever. For the same reason no change is dated later than
+  now, and the capping happens where the change times are *read*, not
+  on the way out, so a stamp is compared as it is sent: the server
+  refuses a whole batch dated more than a day ahead, so one time
+  recorded while the device's clock was wrong would block every setting
+  on every pass from then on, and left uncapped it would also outrank
+  every honest edit the account received until that date arrived. A
+  time that has not happened yet is a wrong answer whatever it is
+  measured against. Absence is a value and travels as
   a sentinel, because the server has no delete and no null. The
   baseline is peer state and moves with the account; the record of what
   this device changed is not. The account is re-checked before the

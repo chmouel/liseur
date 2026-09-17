@@ -88,8 +88,18 @@ class LiseurSyncSettings(
         if (!stillConnected()) return 0
 
         val lastSynced = syncState.allLastSynced(accountKey)
-        val localChanges = syncState.localChanges()
         val pushTime = now()
+        // No change is dated later than now. A device whose clock was
+        // wrong records one that is, and correcting the clock does not
+        // correct what was already written down. Such a stamp would win
+        // every disagreement with the account until the date arrived,
+        // and the server refuses a whole batch carrying a time more than
+        // a day ahead, so one of them would block every other setting on
+        // every pass. Capping here rather than on the way out covers the
+        // comparisons too: a time that has not happened yet is a wrong
+        // answer whatever it is measured against, and now is the nearest
+        // right one.
+        val localChanges = syncState.localChanges().mapValues { minOf(it.value, pushTime) }
         val agreed = mutableMapOf<String, SettingsSyncRepository.SyncedEntry>()
         val toPush = JSONObject()
         var exchanged = 0
@@ -157,13 +167,10 @@ class LiseurSyncSettings(
                     entry.key,
                     JSONObject()
                         .put("value", localValue)
-                        // Never dated ahead of now. The server refuses a
-                        // whole batch carrying a time more than a day in
-                        // the future, so one stamp left behind by a
-                        // device whose clock was wrong would block every
-                        // other setting on every pass from then on. A
-                        // time that has not happened yet is a wrong
-                        // answer anyway; the nearest right one is now.
+                        // Capped again because the agreed time came off
+                        // the server, which allows a day of slack of its
+                        // own, and re-offering it may be the far side of
+                        // that day.
                         .put("updated_at", millisToRfc3339(minOf(stamp, pushTime))),
                 )
             }
