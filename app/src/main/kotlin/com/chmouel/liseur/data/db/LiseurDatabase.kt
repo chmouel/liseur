@@ -1487,7 +1487,15 @@ abstract class LiseurDatabase : RoomDatabase() {
                     statement.bindText(1, accountKey)
                     statement.step()
                 }
-                connection.execSQL("DELETE FROM remote_server WHERE kind = 'GRIMMORY'")
+                connection.execSQL(
+                    """
+                    UPDATE remote_server
+                    SET kind = 'CUSTOM',
+                        base_url = RTRIM(base_url, '/') || '/api/v1/opds',
+                        catalog_url = RTRIM(base_url, '/') || '/api/v1/opds'
+                    WHERE kind = 'GRIMMORY'
+                    """.trimIndent(),
+                )
             }
         }
 
