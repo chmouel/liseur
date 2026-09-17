@@ -65,10 +65,17 @@ internal fun svgCoverSize(
     // either has no geometry to draw: there is nothing to scale and
     // nothing to guess from.
     if (!usable(width) || !usable(height) || edge <= 0) return null
-    val scale = edge / maxOf(width, height)
+    // In Double, and clamped. A float ratio is not safe here: a document
+    // is allowed to state `width="1e-40"`, which is finite and positive
+    // and whose reciprocal is not, so the scale overflows to infinity
+    // and both edges round to `Int.MAX_VALUE` — the allocation this is
+    // here to prevent, reached through arithmetic rather than through a
+    // dimension that looks wrong. Every finite pair has a Double ratio,
+    // and the long edge is the bound by construction.
+    val scale = edge.toDouble() / maxOf(width, height).toDouble()
     return CoverSize(
-        width = (width * scale).roundToInt().coerceAtLeast(1),
-        height = (height * scale).roundToInt().coerceAtLeast(1),
+        width = (width * scale).roundToInt().coerceIn(1, edge),
+        height = (height * scale).roundToInt().coerceIn(1, edge),
     )
 }
 

@@ -113,7 +113,10 @@ is a program more than it is a picture. So:
   budget the raster path subsamples down to, so neither route can be
   talked into an allocation by a file. An infinite or undefined dimension
   is treated as an absent one; left in, it rounds to `Int.MAX_VALUE`
-  pixels.
+  pixels. A vanishing one is the same danger from the other end, so the
+  scale is worked out in double precision and each edge is clamped: a
+  float reciprocal of `1e-40` is infinite, and a cover may legally state
+  that.
 - **Images**: four. A cover needs one.
 - **Geometry**: a document stating neither its dimensions nor a viewBox
   has nothing to scale and is not drawn.
