@@ -423,10 +423,6 @@ class LiseurSyncSettingsTest {
     fun `a key the server lost is re-offered as what it was, not as a fresh edit`() = runTest {
         values["reader.font"] = "bitter"
         agree("reader.font", "bitter", NOW)
-        // A later unrelated stamp exists for the key, as it would after
-        // this device applied a pulled value.
-        syncState.observeLocal(mapOf("reader.font" to "seed"), LATER)
-        syncState.observeLocal(mapOf("reader.font" to "bitter"), LATER)
         enqueueGet()
         enqueuePut("reader.font" to Entry("bitter", NOW))
         clock = LATER + 1
@@ -436,6 +432,29 @@ class LiseurSyncSettingsTest {
         val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
             .getJSONObject("settings").getJSONObject("reader.font")
         assertEquals(iso(NOW), sent.getString("updated_at"))
+    }
+
+    @Test
+    fun `a setting changed and changed back is still the reader's latest word`() = runTest {
+        values["reader.font"] = "bitter"
+        agree("reader.font", "bitter", NOW)
+        // Away and back again, which leaves the value where the account
+        // agreed it but is a choice made at LATER all the same.
+        syncState.observeLocal(mapOf("reader.font" to "bitter"), NOW)
+        syncState.observeLocal(mapOf("reader.font" to "vollkorn"), NOW + 1)
+        syncState.observeLocal(mapOf("reader.font" to "bitter"), LATER)
+        // Another device moved it in between, and was overruled here.
+        enqueueGet("reader.font" to Entry("literata", NOW + 2))
+        enqueuePut("reader.font" to Entry("bitter", LATER))
+        clock = LATER + 1
+
+        sync()
+
+        assertEquals("bitter", values["reader.font"])
+        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
+            .getJSONObject("settings").getJSONObject("reader.font")
+        assertEquals("bitter", sent.getString("value"))
+        assertEquals(iso(LATER), sent.getString("updated_at"))
     }
 
     @Test

@@ -278,7 +278,9 @@ emulator.
   value won or lost, so record *both* halves from the merged reply and
   apply the server's value where it differs; a key the server did not
   speak for records nothing, and is re-offered under the timestamp that
-  was agreed rather than a fresh one. An answer that arrives after the
+  was agreed — or under a later recorded change, since a value the
+  reader moved and put back matches the baseline but is still a choice,
+  and overrules a server that moved in between. An answer that arrives after the
   reader has changed the setting again is about the value that was
   sent and is not written over the new one. A value this build cannot
   parse or recognise records nothing either, or an older build pushes
