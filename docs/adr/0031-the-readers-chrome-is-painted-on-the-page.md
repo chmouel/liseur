@@ -110,6 +110,19 @@ page colours now reach the loading screen, the error screen and
 same bug one scope up. `ImmersiveMode` goes on doing only what it did:
 showing and hiding the bars.
 
+Activity level is not the only level, though, because the activity's is
+not the only window. A `ModalBottomSheet` is a window of its own, laid
+over the bars, and Material points that window's icons at the sheet's ink
+*once*, when the window is built: `updateParameters` takes a new colour
+and never says it again. So the reader who changes the reading theme from
+the sheet in front of them repaints the page, the sheet and nothing else —
+a black clock left on a black status bar (#225). `SystemBarIcons` resolves
+the window it is composed in, through `DialogWindowProvider`, and
+`LiseurModalBottomSheet` says it from inside the sheet, keyed on the
+sheet's paper. `ReadingColorSchemeTest` holds the two answers together:
+the paper a sheet is painted in is dark exactly when the page is, so
+opening or dismissing a sheet can never flip the icons on its own.
+
 ## Consequences
 
 The existing hand-painted `theme.foreground` / `theme.background` call
