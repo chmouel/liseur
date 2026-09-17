@@ -60,19 +60,6 @@ enum class ServerKind(
     LISEUR_SYNC("liseur-sync"),
 
     /**
-     * Grimmory, reached through the Komga-compatible REST shim it
-     * serves under `/komga/api`.
-     *
-     * Its own kind rather than a flavour of [KOMGA] because almost
-     * nothing about connecting to it is the same: it signs in with a
-     * username and password rather than an API key, lives under a path
-     * prefix, lists its catalog through a different route, and cannot
-     * carry a reading position at all. The DTO shapes it answers with
-     * are Komga's, and that is where the sharing stops.
-     */
-    GRIMMORY("grimmory"),
-
-    /**
      * A server the reader describes themselves: an OPDS catalog
      * address, a KOReader sync address, or one of the two (ADR-0015).
      *
@@ -111,7 +98,7 @@ enum class ServerKind(
     val linksAreAbsolute: Boolean
         get() = when (this) {
             CUSTOM -> true
-            CALIBRE, KOMGA, LISEUR_SYNC, GRIMMORY -> false
+            CALIBRE, KOMGA, LISEUR_SYNC -> false
         }
 
     /**
@@ -137,13 +124,12 @@ enum class ServerKind(
      * Keeping the distinction here means the next kind that needs a
      * stored password has one place to declare it, rather than a
      * `takeIf` buried in the repository to remember to widen — which is
-     * exactly the bug this replaces, where a Grimmory account would
-     * connect happily and then report lost credentials on its first
-     * refresh.
+     * exactly the bug this replaces, where an account could connect
+     * happily and then report lost credentials on its first refresh.
      */
     val signsWithStoredPassword: Boolean
         get() = when (this) {
-            CALIBRE, GRIMMORY -> true
+            CALIBRE -> true
             // A Custom catalog's password is signed into every request
             // too, but only when there is one: an open catalog is
             // `RemoteCredentials.Anonymous`, and this asks about the
@@ -156,9 +142,9 @@ enum class ServerKind(
      * Whether a KOReader sync (kosync) partner may be paired alongside
      * this kind of server.
      *
-     * The pairing exists for servers that catalog books but carry no
-     * reading position, which today is Grimmory alone. Offering it
-     * where the server already syncs natively would leave one book with
+     * The pairing exists for Custom connections whose catalog carries
+     * no reading position. Offering it where the server already syncs
+     * natively would leave one book with
      * two sources of truth and a conflict the reader can neither see nor
      * resolve, so the answer is no for calibre-web, Komga and
      * liseur-sync.
@@ -172,7 +158,7 @@ enum class ServerKind(
      */
     val hostsKosyncPeer: Boolean
         get() = when (this) {
-            GRIMMORY, CUSTOM -> true
+            CUSTOM -> true
             CALIBRE, KOMGA, LISEUR_SYNC -> false
         }
 
@@ -183,17 +169,13 @@ enum class ServerKind(
      * calibre-web is [SyncAbility.PROGRESSION] because the Kobo
      * protocol exchanges a percentage and nothing else, so the page
      * comes back approximately. Komga and liseur-sync exchange a whole
-     * locator. Grimmory's shim answers 404 to every progress route.
+     * locator. OPDS carries no reading position.
      */
     val syncAbility: SyncAbility
         get() = when (this) {
             CALIBRE -> SyncAbility.PROGRESSION
             KOMGA, LISEUR_SYNC -> SyncAbility.EXACT
-            // Neither has anywhere to put a position: Grimmory's shim
-            // answers 404 to every progress route, and OPDS is a
-            // catalog format with no notion of one. Both say so up
-            // front, and both offer the KOReader pairing instead.
-            GRIMMORY, CUSTOM -> SyncAbility.NONE
+            CUSTOM -> SyncAbility.NONE
         }
 
     companion object {
@@ -202,7 +184,8 @@ enum class ServerKind(
          * opposed to a file the reader added on the device.
          */
         fun isRemoteUrl(bookUrl: String): Boolean =
-            entries.any { bookUrl.startsWith("${it.urlPrefix}:") }
+            bookUrl.startsWith("grimmory:") ||
+                entries.any { bookUrl.startsWith("${it.urlPrefix}:") }
 
         /**
          * The kind stored under [name], defaulting to [CALIBRE].

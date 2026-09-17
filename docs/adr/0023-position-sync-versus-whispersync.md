@@ -2,6 +2,10 @@
 
 Status: accepted
 
+Grimmory is no longer a dedicated server kind. References below describe the
+former arrangement; Grimmory users configure its catalog and optional kosync
+pairing through Custom.
+
 ## Context
 
 The bar most readers hold a reading app to is the Kindle's: close a
@@ -13,7 +17,7 @@ liseur-sync batch recover on its own and a reconnect keep its device
 which connections, so that the answer written into the README and the
 server screen is an honest one.
 
-Liseur syncs against five kinds of server through one client-side
+Liseur syncs against four kinds of server through one client-side
 machine: every persisted page turn is pushed live and coalesced per book
 (`LatestPositionSync`), leaving the reader queues a background backstop
 (`PositionSyncWorker.pushBook`), an hourly job reconciles every book on
@@ -25,10 +29,10 @@ carries. `domain/ReadingStateMerge.kt` decides every conflict, once.
 ## The comparison
 
 Kindle is the reference column. *kosync* is KOReader's protocol, paired
-alongside a Grimmory or custom OPDS server (ADR-0014). *Grimmory / OPDS*
-is what those two carry on their own, which is nothing.
+alongside a Custom OPDS server (ADR-0014). A Custom OPDS catalog carries no
+position on its own.
 
-| Behaviour | Kindle | liseur-sync | calibre-web (Kobo) | Komga | kosync | Grimmory / OPDS |
+| Behaviour | Kindle | liseur-sync | calibre-web (Kobo) | Komga | kosync | Custom OPDS |
 |---|---|---|---|---|---|---|
 | What travels | last page, furthest page | full Readium locator and progression; the server keeps every op | percentage | full Readium locator, in Komga's spelling (`KomgaLocator`) | percentage | nothing |
 | Reopens at the exact place | yes | yes | the right page, near enough | yes | the right page, near enough | — |
@@ -112,8 +116,8 @@ with the same typography, and near it otherwise. That is "your place
 follows you", which the server screen already says, and not "the exact
 place". Neither protocol has a field for more.
 
-**Grimmory and a plain OPDS catalog carry nothing** until a kosync
-server is paired, after which the kosync column applies.
+**A Custom OPDS catalog carries nothing** until a kosync server is paired,
+after which the kosync column applies.
 
 Two small changes came out of writing this down, both provider-neutral:
 

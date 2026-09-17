@@ -218,10 +218,6 @@ class ServerAccountViewModel(
 
     init {
         viewModelScope.launch {
-            // Server and kosync peer arrive together: the Grimmory
-            // prefill below must know whether a peer exists, and two
-            // independent collectors would let it fire before the
-            // peer's first emission.
             combine(repository.server, kosyncAccount.peer) { server, peer ->
                 server to peer
             }.collect { (server, peer) ->
@@ -229,8 +225,6 @@ class ServerAccountViewModel(
                     state.copy(
                         server = server,
                         kosync = peer,
-                        kosyncUrl = kosyncPrefillUrl(server, peer, state.kosyncUrl)
-                            ?: state.kosyncUrl,
                     )
                 }
                 recheckLocalNetwork(server, peer)
@@ -465,13 +459,6 @@ class ServerAccountViewModel(
             ServerKind.KOMGA -> repository.connectKomga(
                 url = current.url,
                 apiKey = current.apiKey.trim(),
-                allowHttp = allowHttp,
-                beforePublish = stopDownloads,
-            )
-            ServerKind.GRIMMORY -> repository.connectGrimmory(
-                url = current.url,
-                username = current.username.trim(),
-                password = current.password,
                 allowHttp = allowHttp,
                 beforePublish = stopDownloads,
             )
@@ -828,9 +815,7 @@ class ServerAccountViewModel(
             // if it wanted to, and empty fields must not read as "take
             // it away".
             // Only an edit that stays on the same kind of connection
-            // leaves the partner alone. Switching a Grimmory account to
-            // Custom is an account switch like any other, and its
-            // pairing belongs to the account being left.
+            // leaves the partner alone.
             speaksForKosync = !(
                 current.editingAddress &&
                     current.server?.kind == ServerKind.CUSTOM
@@ -870,8 +855,7 @@ class ServerAccountViewModel(
 
     /** Whether enough of the form is filled in to be worth trying. */
     private fun ServerAccountUiState.credentialsSupplied(): Boolean = when (kind) {
-        ServerKind.CALIBRE, ServerKind.GRIMMORY ->
-            username.isNotBlank() && password.isNotBlank()
+        ServerKind.CALIBRE -> username.isNotBlank() && password.isNotBlank()
         ServerKind.KOMGA -> apiKey.isNotBlank()
         ServerKind.LISEUR_SYNC -> when (liseurSyncSignIn) {
             LiseurSyncSignIn.PASSWORD -> username.isNotBlank() && password.isNotBlank()
@@ -996,26 +980,6 @@ class ServerAccountViewModel(
             }
         }
     }
-}
-
-/**
- * Grimmory's own kosync mount, offered once.
- *
- * Grimmory alone, and not because it is the only kind that may pair:
- * `/api/koreader` is Grimmory's spelling of the route, so there is
- * nothing to guess for anything else. Only while the URL field is
- * untouched and nothing is paired, so a reader's typing is never
- * overwritten and an existing pairing is never disturbed; null means
- * "leave the field as it is".
- */
-internal fun kosyncPrefillUrl(
-    server: RemoteServer?,
-    peer: KosyncPeer?,
-    currentUrl: String,
-): String? {
-    if (server?.kind != ServerKind.GRIMMORY) return null
-    if (peer != null || currentUrl.isNotBlank()) return null
-    return server.baseUrl.trimEnd('/') + "/api/koreader"
 }
 
 /**

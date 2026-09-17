@@ -170,7 +170,7 @@ class KosyncPositionSyncTest {
         pair()
         db.bookDao().upsert(book(url = "file:///shelf/dune.epub", remoteUuid = null))
 
-        sync(connectedKind = ServerKind.GRIMMORY).syncAll(null)
+        sync(connectedKind = ServerKind.CUSTOM).syncAll(null)
 
         assertEquals(0, server.requestCount)
     }
@@ -726,7 +726,7 @@ class KosyncPositionSyncTest {
 
     private fun sync(
         online: Boolean = true,
-        connectedKind: ServerKind? = ServerKind.GRIMMORY,
+        connectedKind: ServerKind? = ServerKind.CUSTOM,
         catalogUrl: String? = "https://books.example",
     ): KosyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()

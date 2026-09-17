@@ -2,6 +2,9 @@
 
 Status: accepted
 
+Grimmory is no longer a dedicated server kind. References below describe the
+picker when it was one and are retained as historical context.
+
 ## Context
 
 [Issue #96](https://github.com/chmouel/liseur/issues/96). The kind picker
@@ -69,10 +72,10 @@ than dropped:
 
 - Grimmory's "not the login you sign into Grimmory with in a browser"
   was already duplicated in `server_opds_user_help`, shown inline under
-  the password field. It stays exactly there. Naming the credential a
+  the password field. It stayed exactly there. Naming the credential a
   server actually wants is the thing this screen most has to get right,
   and it belongs next to the box, not in a paragraph above it.
-- Grimmory's "it cannot keep your place in a book here" is now its sync
+- Grimmory's "it cannot keep your place in a book here" was then its sync
   line, which the reader sees *before* choosing rather than after. The
   issue asks that this survive; it is better served than it was.
 - liseur-sync's "books that came from nowhere but this phone" moved into

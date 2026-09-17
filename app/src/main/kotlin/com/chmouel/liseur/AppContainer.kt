@@ -9,9 +9,6 @@ import com.chmouel.liseur.data.calibre.CalibreCatalogClient
 import com.chmouel.liseur.data.calibre.CalibreFileSource
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
 import com.chmouel.liseur.data.calibre.BulkDownloadStore
-import com.chmouel.liseur.data.grimmory.GrimmoryCatalogClient
-import com.chmouel.liseur.data.grimmory.GrimmoryFileSource
-import com.chmouel.liseur.data.grimmory.GrimmorySetupClient
 import com.chmouel.liseur.data.komga.KomgaCatalogClient
 import com.chmouel.liseur.data.komga.KomgaFileSource
 import com.chmouel.liseur.data.komga.KomgaSyncRepository
@@ -204,7 +201,6 @@ class AppContainer(context: Context) {
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
-            ServerKind.GRIMMORY to GrimmorySetupClient(),
             // The device token is minted in the device's own name, since
             // the server shows it in its device list.
             ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
@@ -275,11 +271,7 @@ class AppContainer(context: Context) {
         fingerprints = bookFingerprints,
     )
 
-    /**
-     * The KOReader kosync partner (issue #95): position sync alongside
-     * the catalog server, for servers — Grimmory above all — that hold
-     * positions behind kosync rather than their catalog API.
-     */
+    /** The KOReader kosync partner paired alongside a Custom catalog. */
     val kosyncAccount = KosyncAccountRepository(
         dao = database.kosyncPeerDao(),
         peerStateDao = database.syncPeerStateDao(),
@@ -364,7 +356,6 @@ class AppContainer(context: Context) {
         catalogs = mapOf(
             ServerKind.CALIBRE to CalibreCatalogClient(),
             ServerKind.KOMGA to KomgaCatalogClient(),
-            ServerKind.GRIMMORY to GrimmoryCatalogClient(),
             ServerKind.LISEUR_SYNC to LiseurSyncCatalogClient(),
             ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsCatalogClient(
                 // The size a starter shelf was asked for is the
@@ -392,21 +383,12 @@ class AppContainer(context: Context) {
         files = mapOf(
             ServerKind.CALIBRE to CalibreFileSource(),
             ServerKind.KOMGA to KomgaFileSource(),
-            ServerKind.GRIMMORY to GrimmoryFileSource(),
             ServerKind.LISEUR_SYNC to LiseurSyncFileSource(),
             ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsFileSource(),
         ),
-        // Neither Grimmory nor Custom has an entry, and unlike the
-        // others this is not a
-        // matter of the app having nothing to say yet: its Komga shim
-        // answers 404 to every progress route and never fills in a
-        // book's read progress, so there is nothing to sync with. No
-        // entry means `RoutedPositionSync` answers `NotApplicable` and
-        // the app stays quiet, rather than offering a sync that fails.
-        // A Custom server is an OPDS catalog, and OPDS has no notion
-        // of a reading position at all. Both keep a place through the
-        // KOReader pairing instead, which is not routed here: it is a
-        // peer of its own, alongside whatever is connected.
+        // Custom has no entry because OPDS has no notion of a reading
+        // position. It keeps a place through the KOReader pairing
+        // instead, which is a peer of its own alongside the catalog.
         positions = mapOf(
             ServerKind.CALIBRE to koboSync,
             ServerKind.KOMGA to komgaSync,

@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.db
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -1209,10 +1210,189 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `removing grimmory retires its catalog and keeps downloaded reading`() {
+        helper.createDatabase(TEST_DB, 51).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO remote_server (
+                    id, kind, base_url, catalog_url, username, password_cipher,
+                    account_id, can_download, can_manage_library, can_upload,
+                    can_delete, can_read_insights, can_admin, added_at
+                ) VALUES (
+                    1, 'GRIMMORY', 'https://books.example', 'https://books.example',
+                    'ada', 'cipher', 'user-1', 1, 0, 0, 0, 0, 0, 1000
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO books (
+                    url, title, author, cover_path, source, added_at, last_opened_at,
+                    local_uri, remote_uuid, remote_book_id, cover_url, download_href,
+                    download_state, series_name, series_index, file_series_name,
+                    file_series_index, series_id, series_checked, catalog_series_name,
+                    catalog_series_index, series_override, series_claim_pending,
+                    series_claim_reset, series_index_override
+                ) VALUES
+                    (
+                        'grimmory:remote', 'Remote', NULL, NULL, NULL, 1, NULL,
+                        NULL, 'remote', 1, '/cover', '/file', 'REMOTE',
+                        'Catalog Series', 1, NULL, NULL, 'series-1', 0,
+                        'Catalog Series', 1, 0, 0, 0, 0
+                    ),
+                    (
+                        'grimmory:downloaded', 'Downloaded', NULL, NULL, NULL, 1, 2,
+                        'file:///downloaded.epub', 'downloaded', 2, '/cover', '/file',
+                        'DOWNLOADED', 'Catalog Series', 2, 'File Series', 3, 'series-1',
+                        0, 'Catalog Series', 2, 0, 0, 0, 0
+                    )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO reading_progress (book_url, locator_json, total_progression, updated_at)
+                VALUES
+                    ('grimmory:remote', '{"at":0.2}', 0.2, 100),
+                    ('grimmory:downloaded', '{"at":0.6}', 0.6, 200)
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO annotations (id, book_id, kind, locator_json, created_at)
+                VALUES
+                    ('mark-1', 'grimmory:remote', 'BOOKMARK', '{"at":0.2}', 100),
+                    ('mark-2', 'grimmory:downloaded', 'BOOKMARK', '{"at":0.6}', 200)
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO reading_sessions
+                    (book_url, started_at, ended_at, last_checkpoint_at, duration_ms,
+                     legacy_evidence_unknown)
+                VALUES
+                    ('grimmory:remote', 1, 2, 2, 1, 0),
+                    ('grimmory:downloaded', 1, 2, 2, 1, 0)
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO sync_peer_state (book_url, peer_id)
+                VALUES
+                    ('grimmory:remote', 'kosync|peer'),
+                    ('grimmory:downloaded', 'kosync|peer')
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO work_alias
+                    (book_url, peer_id, work_id, confidence, confirmed, resolved_at)
+                VALUES ('grimmory:remote', 'peer', 'work-1', 'strong', 0, 1)
+                """.trimIndent(),
+            )
+            old.execSQL(
+                "INSERT INTO series_extra (series_id, fetched_at) VALUES ('series-1', 1)",
+            )
+            old.execSQL(
+                """
+                INSERT INTO upload_refusal
+                    (book_url, account_key, refused_at, kind)
+                VALUES (
+                    'grimmory:downloaded',
+                    'grimmory|https://books.example|ada|user-1',
+                    1,
+                    'permanent'
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO kosync_peer (id, base_url, username, key_cipher, added_at)
+                VALUES (1, 'https://books.example/api/koreader', 'ada', 'cipher', 1)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT kind, base_url, catalog_url, username, password_cipher " +
+                        "FROM remote_server",
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals("CUSTOM", it.getString(0))
+                    assertEquals("https://books.example/api/v1/opds", it.getString(1))
+                    assertEquals("https://books.example/api/v1/opds", it.getString(2))
+                    assertEquals("ada", it.getString(3))
+                    assertEquals("cipher", it.getString(4))
+                    assertFalse(it.moveToNext())
+                }
+                db.query("SELECT COUNT(*) FROM books WHERE url = 'grimmory:remote'").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(0, it.getInt(0))
+                }
+                db.query(
+                    """
+                    SELECT remote_uuid, local_uri, series_name, series_index
+                    FROM books WHERE url = 'grimmory:downloaded'
+                    """.trimIndent(),
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals("downloaded", it.getString(0))
+                    assertEquals("file:///downloaded.epub", it.getString(1))
+                    assertEquals("File Series", it.getString(2))
+                    assertEquals(3.0, it.getDouble(3), 0.0)
+                }
+                db.query(
+                    "SELECT COUNT(*) FROM reading_progress WHERE book_url LIKE 'grimmory:%'",
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(1, it.getInt(0))
+                }
+                db.query("SELECT id FROM annotations").use {
+                    assertTrue(it.moveToFirst())
+                    val ids = buildSet {
+                        do {
+                            add(it.getString(0))
+                        } while (it.moveToNext())
+                    }
+                    assertEquals(setOf("mark-1", "mark-2"), ids)
+                }
+                db.query(
+                    "SELECT COUNT(*) FROM reading_sessions WHERE book_url = 'grimmory:remote'",
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(0, it.getInt(0))
+                }
+                db.query(
+                    "SELECT COUNT(*) FROM reading_sessions WHERE book_url = 'grimmory:downloaded'",
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(1, it.getInt(0))
+                }
+                db.query("SELECT book_url FROM sync_peer_state").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals("grimmory:downloaded", it.getString(0))
+                    assertFalse(it.moveToNext())
+                }
+                for (table in listOf("work_alias", "series_extra", "upload_refusal")) {
+                    db.query("SELECT COUNT(*) FROM $table").use {
+                        assertTrue(it.moveToFirst())
+                        assertEquals(0, it.getInt(0))
+                    }
+                }
+                db.query("SELECT base_url, username FROM kosync_peer").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals("https://books.example/api/koreader", it.getString(0))
+                    assertEquals("ada", it.getString(1))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 51
+        const val LATEST = 52
     }
 }

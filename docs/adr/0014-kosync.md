@@ -2,6 +2,10 @@
 
 Status: accepted
 
+Grimmory is no longer a dedicated server kind. References below describe the
+former integration; Grimmory users now configure its OPDS and optional kosync
+endpoints through Custom.
+
 ## Context
 
 [Issue #95](https://github.com/chmouel/liseur/issues/95). Grimmory is
@@ -28,7 +32,7 @@ resolution needed it first. Auth is two headers: `x-auth-user` and
 ## Decision
 
 **The pairing is offered where a server has no positions of its own,
-which today means Grimmory.** calibre-web, Komga and liseur-sync all
+which at the time meant Grimmory.** calibre-web, Komga and liseur-sync all
 carry a reading position themselves, and pairing kosync next to one of
 them would leave a single book with two sources of truth, silently
 disagreeing on a device the reader is not looking at. That is a conflict
@@ -130,7 +134,7 @@ flows through this same partner, so the rules exist once.
 
 ## Consequences
 
-- Grimmory gets position sync: browse through the shim, sync through
+- At the time, Grimmory gained position sync: browse through the shim, sync through
   kosync, with `{base}/api/koreader` prefilled and the "positions are
   not synced here" notice replaced by directions to the section below.
 - Any stock kosync server works the same way, which is tested end to end
@@ -140,5 +144,5 @@ flows through this same partner, so the rules exist once.
   work do not exchange positions. That is the protocol's nature, not a
   bug to fix here.
 - `shouldSyncOnForeground` now asks about the kosync partner on its own
-  terms, because the account it is most useful next to (Grimmory) is
+  terms, because the account it was most useful next to (Grimmory) was
   exactly the one whose `canSync` is false.

@@ -129,11 +129,7 @@ class CustomConnectionTest {
 
     @Test
     fun `an empty sync address takes down the pairing left by the last server`() = runTest {
-        // Without this, choosing a catalog-only Custom after Grimmory
-        // would leave Grimmory's pairing running against a field the
-        // reader deliberately left blank.
-        account.connectGrimmory(GRIMMORY, "ada", "pw")
-        pairKosync()
+        connect(catalog = OLD_CATALOG, kosyncUrl = SYNC)
 
         connect(catalog = CATALOG, kosyncUrl = "")
 
@@ -142,8 +138,7 @@ class CustomConnectionTest {
 
     @Test
     fun `a filled sync address replaces the pairing left by the last server`() = runTest {
-        account.connectGrimmory(GRIMMORY, "ada", "pw")
-        pairKosync()
+        connect(catalog = OLD_CATALOG, kosyncUrl = OLD_SYNC)
 
         connect(catalog = CATALOG, kosyncUrl = SYNC, kosyncUsername = "bob")
 
@@ -153,13 +148,12 @@ class CustomConnectionTest {
 
     @Test
     fun `a failed custom connection leaves the server that was already there`() = runTest {
-        account.connectGrimmory(GRIMMORY, "ada", "pw")
-        pairKosync()
+        connect(catalog = OLD_CATALOG, kosyncUrl = OLD_SYNC)
         kosyncAnswer = SetupFailure.BadCredentials
 
         connect(catalog = CATALOG, kosyncUrl = SYNC)
 
-        assertEquals(ServerKind.GRIMMORY, db.remoteServerDao().get()?.kind)
+        assertEquals(OLD_CATALOG, db.remoteServerDao().get()?.catalogUrl)
         assertNotNull("a failed attempt took the working pairing down", db.kosyncPeerDao().get())
     }
 
@@ -382,17 +376,6 @@ class CustomConnectionTest {
         speaksForKosync = speaksForKosync,
     )
 
-    private suspend fun pairKosync() {
-        db.kosyncPeerDao().upsert(
-            KosyncPeer(
-                baseUrl = "$GRIMMORY/api/koreader",
-                username = "ada",
-                keyCipher = KosyncPeer.seal(KosyncCredentials.keyFor("pw")),
-                addedAt = 0L,
-            ),
-        )
-    }
-
     /** A kosync server that agrees, or refuses, on command. */
     private inner class ScriptedPairing : KosyncPairing {
         private val real = KosyncAccountRepository(db.kosyncPeerDao(), db.syncPeerStateDao())
@@ -447,20 +430,14 @@ class CustomConnectionTest {
                     ?.let { SetupResult.Failure(it) }
                     ?: success(rawUrl)
             },
-            ServerKind.GRIMMORY to object : ServerSetup {
-                override suspend fun connect(
-                    rawUrl: String,
-                    credentials: RemoteCredentials,
-                    allowHttp: Boolean,
-                ): SetupResult = success(rawUrl)
-            },
         ),
     )
 
     private companion object {
         const val CATALOG = "https://books.example/opds"
         const val SYNC = "https://sync.example/kosync"
-        const val GRIMMORY = "https://grimmory.example"
+        const val OLD_CATALOG = "https://old.example/opds"
+        const val OLD_SYNC = "https://old.example/kosync"
 
         fun success(url: String = CATALOG) = SetupResult.Success(
             ServerCapabilities(

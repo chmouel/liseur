@@ -1,6 +1,9 @@
 # 12. Connecting to Grimmory through its Komga-compatibility API
 
-Status: accepted
+Status: superseded
+
+Dedicated Grimmory support was removed. This ADR is retained as a historical
+record of the former Komga-compatibility implementation.
 
 ## Context
 

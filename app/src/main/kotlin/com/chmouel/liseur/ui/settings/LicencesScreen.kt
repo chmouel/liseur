@@ -127,13 +127,6 @@ private val Components = listOf(
             "github.com/janeczku/calibre-web",
         licenceAsset = "licences/gpl-3.0.txt",
     ),
-    Component(
-        name = "Grimmory logo",
-        licence = "AGPL-3.0-or-later",
-        notice = "Copyright (c) The Grimmory contributors\n" +
-            "github.com/grimmory-tools/grimmory",
-        licenceAsset = "licences/agpl-3.0.txt",
-    ),
 )
 
 /** The third-party components list. */

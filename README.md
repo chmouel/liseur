@@ -18,7 +18,7 @@
   </picture>
 </p>
 
-An open-source ebook reader for Android, and a client for [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org), [liseur-sync](https://github.com/chmouel/liseur-sync), [Grimmory](https://github.com/grimmory-tools/grimmory) and any [OPDS](https://specs.opds.io/opds-1.2) catalog: EPUBs on your phone, in sync with your own book server.
+An open-source ebook reader for Android, and a client for [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org), [liseur-sync](https://github.com/chmouel/liseur-sync) and any [OPDS](https://specs.opds.io/opds-1.2) catalog: EPUBs on your phone, in sync with your own book server.
 
 <table>
   <tr>
@@ -51,35 +51,18 @@ the six you want along with the colour new marks use. Footnotes open as a
 card over the page rather than sending you to the back of the book.
 
 The library is one shelf whatever the source: local folders, calibre-web,
-Komga, liseur-sync, Grimmory, or any OPDS catalog. Series are grouped into stacks tracking
+Komga, liseur-sync, or any OPDS catalog. Series are grouped into stacks tracking
 reading order, progress, and missing volumes. "Download all books" fills the
 shelf from a connected server in one go. An empty library also offers a
 shelf of free books from [Project Gutenberg](https://www.gutenberg.org) —
 pick a category and how many books you want, and they are there before
 there is anything to connect to.
 
-Reading position syncs across devices through calibre-web, Komga and
-liseur-sync, down to the exact sentence on the last two. liseur-sync also
-syncs standalone EPUBs that never came from a catalog. Grimmory keeps
-your books but not your place in them, so it can be paired with a
-KOReader sync (kosync) server, which is how positions travel there; any
-kosync-compatible server works. So can a Custom connection, which is an
-OPDS address, a kosync address, or one of the two, so a plain catalog
-and a sync server that know nothing about each other still add up to a
-library that follows you. What each server can and cannot do is in
-[`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
+Reading position syncs across devices through [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org/) or
+[liseur-sync](https://github.com/chmouel/liseur-sync), down to the exact sentence on the last two. 
+A Custom connection can be an [OPDS](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) address, a kosync address, or both, so a plain catalog and a sync server that know nothing about each other still add up to a library that follows you. What each server can and cannot do is in [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
-With liseur-sync, how you like to read travels too: the font, the theme,
-the margins, the highlight colours and the rest arrive on the next device
-you sign in on, so setting one up does not mean setting all of them up.
-Settings about a particular phone, such as the volume keys or an e-ink
-panel's refresh, stay where they are.
-
-With a recent liseur-sync server, positions and annotations refresh while
-Liseur is open; statistics refresh when their screen is visible. A remote
-position never turns the page under you. Returning to the reader offers
-the further place, and accepting takes the exact position you were shown.
-Older servers keep the existing scheduled and on-open sync.
+With liseur-sync you get extras, like settings sync, and better insights of your reading progress across devices.
 
 No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
 servers and dictionary sources you configure. See the

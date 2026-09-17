@@ -204,10 +204,35 @@ class RemoteCatalogRepository(
                 // a query each against an unindexed column, so the cost of
                 // folding a catalog in grew with the square of the shelf.
                 val known = KnownBooks(bookDao.allOnce())
+                val deferredLegacy = mutableListOf<RemoteBook>()
                 val walk = client.allBooks(catalogUrl, credentials) { page ->
                     page.forEach { seen += it.remoteId }
                     forAccount(server) {
-                        store(known, server.kind, catalogUrl, page)
+                        store(
+                            known = known,
+                            kind = server.kind,
+                            baseUrl = catalogUrl,
+                            books = page,
+                            deferLegacy = server.kind == ServerKind.CUSTOM,
+                            deferredLegacy = deferredLegacy,
+                        )
+                    }
+                }
+                if (walk.complete && deferredLegacy.isNotEmpty()) {
+                    val distinctDeferredLegacy = deferredLegacy.distinctBy { it.remoteId }
+                    val uniqueLegacyKeys = distinctDeferredLegacy
+                        .groupingBy { it.title to it.author }
+                        .eachCount()
+                        .filterValues { it == 1 }
+                        .keys
+                    forAccount(server) {
+                        store(
+                            known = known,
+                            kind = server.kind,
+                            baseUrl = catalogUrl,
+                            books = distinctDeferredLegacy,
+                            legacyKeys = uniqueLegacyKeys,
+                        )
                     }
                 }
                 if (!walk.complete) {
@@ -367,6 +392,9 @@ class RemoteCatalogRepository(
         kind: ServerKind,
         baseUrl: String,
         books: List<RemoteBook>,
+        deferLegacy: Boolean = false,
+        deferredLegacy: MutableList<RemoteBook>? = null,
+        legacyKeys: Set<Pair<String, String?>> = emptySet(),
     ) {
         val now = System.currentTimeMillis()
         // What is known was read once before the walk began, so a book
@@ -378,7 +406,7 @@ class RemoteCatalogRepository(
         // the snapshot already covers are left alone: their snapshot is
         // what the series write below checks itself against.
         val unknown = books.map { it.remoteId }
-            .filter { known.find(it, kind.remoteUrl(it)) == null }
+            .filter { known.findExact(it, kind.remoteUrl(it)) == null }
         if (unknown.isNotEmpty()) bookDao.byRemoteUuids(unknown).forEach(known::remember)
         // Keyed by URL so a feed that names the same book twice on one
         // page folds into one insert, rather than two rows racing for
@@ -387,11 +415,25 @@ class RemoteCatalogRepository(
         val updates = mutableListOf<CatalogUpdate>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
+            if (
+                deferLegacy &&
+                    deferredLegacy != null &&
+                    known.hasLegacyCandidate(remote.remoteId, url, remote.title, remote.author)
+            ) {
+                deferredLegacy += remote
+                return@forEach
+            }
             // A book first seen earlier in this walk was written without
             // its generated id coming back, so ask the database for it.
             // One seen earlier on this same page has not landed yet, and
             // the pending row itself is the answer.
-            val existing = known.find(remote.remoteId, url)
+            val existing = known.find(
+                remote.remoteId,
+                url,
+                remote.title,
+                remote.author,
+                (remote.title to remote.author) in legacyKeys,
+            )
                 ?.let { pending ->
                     if (pending.id == 0L) bookDao.getByUrl(url) ?: pending else pending
                 }
@@ -591,12 +633,41 @@ private class KnownBooks(books: List<Book>) {
     private val byUuid = books.mapNotNull { book -> book.remoteUuid?.let { it to book } }.toMap()
         .toMutableMap()
     private val byUrl = books.associateBy { it.url }.toMutableMap()
+    private val legacyGrimmory = books
+        .filter {
+            it.url.startsWith("grimmory:") &&
+                it.remoteUuid != null &&
+                it.openableUrl != null
+        }
+        .groupBy { it.title to it.author }
+        .filterValues { it.size == 1 }
+        .mapValuesTo(mutableMapOf()) { it.value.single() }
 
-    fun find(remoteId: String, url: String): Book? = byUuid[remoteId] ?: byUrl[url]
+    fun findExact(remoteId: String, url: String): Book? = byUuid[remoteId] ?: byUrl[url]
+
+    fun hasLegacyCandidate(remoteId: String, url: String, title: String, author: String?): Boolean =
+        findExact(remoteId, url) == null &&
+            url.startsWith("custom:") &&
+            legacyGrimmory.containsKey(title to author)
+
+    fun find(
+        remoteId: String,
+        url: String,
+        title: String,
+        author: String?,
+        allowLegacy: Boolean,
+    ): Book? =
+        findExact(remoteId, url)
+            ?: allowLegacy.takeIf { it }
+                ?.let {
+                    url.takeIf { it.startsWith("custom:") }
+                }
+                ?.let { legacyGrimmory.remove(title to author) }
 
     fun remember(book: Book) {
         book.remoteUuid?.let { byUuid[it] = book }
         byUrl[book.url] = book
+        legacyGrimmory.remove(book.title to book.author)
     }
 }
 
