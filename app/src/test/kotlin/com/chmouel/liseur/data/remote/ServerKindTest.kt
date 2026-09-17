@@ -22,10 +22,9 @@ class ServerKindTest {
         assertEquals("calibre", ServerKind.CALIBRE.urlPrefix)
         assertEquals("komga", ServerKind.KOMGA.urlPrefix)
         assertEquals("liseur-sync", ServerKind.LISEUR_SYNC.urlPrefix)
-        assertEquals("grimmory", ServerKind.GRIMMORY.urlPrefix)
         assertEquals("custom", ServerKind.CUSTOM.urlPrefix)
         assertEquals(
-            listOf("CALIBRE", "KOMGA", "LISEUR_SYNC", "GRIMMORY", "CUSTOM"),
+            listOf("CALIBRE", "KOMGA", "LISEUR_SYNC", "CUSTOM"),
             ServerKind.entries.map { it.name },
         )
     }
@@ -35,15 +34,13 @@ class ServerKindTest {
         assertEquals("liseur-sync:b-1", ServerKind.LISEUR_SYNC.remoteUrl("b-1"))
         assertEquals("b-1", ServerKind.LISEUR_SYNC.remoteId("liseur-sync:b-1"))
         assertEquals(null, ServerKind.LISEUR_SYNC.remoteId("komga:b-1"))
-        assertEquals("grimmory:4207", ServerKind.GRIMMORY.remoteUrl("4207"))
-        assertEquals("4207", ServerKind.GRIMMORY.remoteId("grimmory:4207"))
     }
 
     @Test
-    fun `a grimmory book is known to have come from a server`() {
+    fun `a custom book is known to have come from a server`() {
         // Everything downstream -- the download prompt, removal, the
         // upload offer -- reads a book's origin off this.
-        assertTrue(ServerKind.isRemoteUrl("grimmory:4207"))
+        assertTrue(ServerKind.isRemoteUrl("custom:catalog:4207"))
         assertFalse(ServerKind.isRemoteUrl("content://local/file.epub"))
     }
 
@@ -53,7 +50,7 @@ class ServerKindTest {
         // lost credentials on its first refresh: liseur-sync also holds
         // a Basic, and deliberately throws the password away.
         assertTrue(ServerKind.CALIBRE.signsWithStoredPassword)
-        assertTrue(ServerKind.GRIMMORY.signsWithStoredPassword)
+        assertTrue(ServerKind.CUSTOM.signsWithStoredPassword)
         assertFalse(ServerKind.KOMGA.signsWithStoredPassword)
         assertFalse(ServerKind.LISEUR_SYNC.signsWithStoredPassword)
     }
@@ -66,13 +63,11 @@ class ServerKindTest {
 
     @Test
     fun `every kind says what it can do with a reading position`() {
-        // What the server picker shows before an account exists, so a
-        // reader learns Grimmory cannot keep their place while they can
-        // still choose otherwise.
+        // What the server picker shows before an account exists.
         assertEquals(SyncAbility.PROGRESSION, ServerKind.CALIBRE.syncAbility)
         assertEquals(SyncAbility.EXACT, ServerKind.KOMGA.syncAbility)
         assertEquals(SyncAbility.EXACT, ServerKind.LISEUR_SYNC.syncAbility)
-        assertEquals(SyncAbility.NONE, ServerKind.GRIMMORY.syncAbility)
+        assertEquals(SyncAbility.NONE, ServerKind.CUSTOM.syncAbility)
     }
 
     @Test
@@ -109,7 +104,6 @@ class ServerKindTest {
                 )
             }
         }
-        assertEquals(true, ServerKind.GRIMMORY.hostsKosyncPeer)
         assertEquals(true, ServerKind.CUSTOM.hostsKosyncPeer)
         listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC).forEach {
             assertEquals("${it.name} must not host a kosync pairing", false, it.hostsKosyncPeer)
@@ -126,7 +120,7 @@ class ServerKindTest {
     @Test
     fun `a link an arbitrary catalog wrote is left where it points`() {
         assertEquals(true, ServerKind.CUSTOM.linksAreAbsolute)
-        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.GRIMMORY).forEach {
+        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC).forEach {
             assertEquals("${it.name} re-roots its links", false, it.linksAreAbsolute)
         }
     }

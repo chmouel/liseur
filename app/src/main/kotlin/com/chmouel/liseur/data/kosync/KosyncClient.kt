@@ -48,9 +48,8 @@ data class KosyncProgress(
 /**
  * KOReader's kosync protocol: three endpoints under a mount root.
  *
- * The root differs per server — Grimmory serves it at `/api/koreader`,
- * liseur-sync at `/adapter/kosync`, a stock kosync server at `/` — so
- * the stored URL is the mount root and the endpoints are appended here.
+ * The root differs per server, so the stored URL is the mount root and
+ * the endpoints are appended here.
  *
  * Positions travel as a percentage plus KOReader's own `progress`
  * string. This client reads and writes only the percentage: `progress`
@@ -93,8 +92,8 @@ class KosyncClient(
 
     /**
      * Registers this credential with the server, for servers that take
-     * one — liseur-sync redeems a pairing code this way; Grimmory
-     * forbids the route outright.
+     * one. liseur-sync redeems a pairing code this way, while many
+     * servers require the account to be created in their own settings.
      *
      * The body carries the password as typed, per the protocol; only
      * the derived key is ever kept afterwards.

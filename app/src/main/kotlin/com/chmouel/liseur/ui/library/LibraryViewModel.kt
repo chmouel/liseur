@@ -271,8 +271,8 @@ data class LibraryUiState(
     /**
      * Whether the connected catalog is one the reader addresses
      * themselves, so "point at a single shelf" is advice they can act
-     * on. Only a Custom (OPDS) connection is: Komga, calibre-web,
-     * liseur-sync and Grimmory are told where their books are.
+     * on. Only a Custom (OPDS) connection is: Komga, calibre-web and
+     * liseur-sync are told where their books are.
      */
     val catalogIsAddressable: Boolean = false,
     /**

@@ -1444,9 +1444,9 @@ shot 09-server
 # a book will follow you there. The row says only which one is picked, so
 # the sheet under it is the picture worth having.
 tap_on "Which kind of server?"
-wait_for "Grimmory" 15 >/dev/null || die "the server kind sheet never opened"
+wait_for "Custom" 15 >/dev/null || die "the server kind sheet never opened"
 shot 22-server-kind
-dismiss_sheet "Grimmory"
+dismiss_sheet "Custom"
 
 step "Dark"
 

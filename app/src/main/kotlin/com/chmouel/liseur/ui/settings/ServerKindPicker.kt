@@ -80,9 +80,7 @@ internal fun ServerKindRow(
 /**
  * Every kind at once, which is the thing the reader could not do
  * before: the tagline says what the server is for, and the line under
- * it says whether your place in a book will follow you there. Grimmory
- * cannot carry one at all, and that is worth knowing before typing a
- * password rather than after.
+ * it says whether your place in a book will follow you there.
  *
  * It opens expanded rather than half-way. A Material sheet's default
  * resting height is about half the window, which fitted four kinds and
@@ -173,7 +171,6 @@ private fun ServerKindLogo(kind: ServerKind) {
 private fun ServerKind.logoRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.drawable.ic_server_calibre_web
     ServerKind.KOMGA -> R.drawable.ic_server_generic
-    ServerKind.GRIMMORY -> R.drawable.ic_server_grimmory
     ServerKind.LISEUR_SYNC -> R.drawable.ic_server_liseur_sync
     ServerKind.CUSTOM -> R.drawable.ic_server_generic
 }
@@ -192,13 +189,9 @@ private fun KindSupport(kind: ServerKind) {
 }
 
 /**
- * What the picker says about keeping your place. Grimmory gets its own
- * line rather than [SyncAbility.NONE]'s: the kind itself cannot carry a
- * position, but a KOReader sync server paired alongside it can, and
- * "cannot keep your place" would be false the moment one is.
+ * What the picker says about keeping your place.
  */
 private fun ServerKind.syncLineRes(): Int = when (this) {
-    ServerKind.GRIMMORY -> R.string.server_sync_grimmory
     ServerKind.CUSTOM -> R.string.server_sync_custom
     else -> when (syncAbility) {
         SyncAbility.EXACT -> R.string.server_sync_exact
@@ -210,7 +203,6 @@ private fun ServerKind.syncLineRes(): Int = when (this) {
 internal fun ServerKind.labelRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_kind_calibre
     ServerKind.KOMGA -> R.string.server_kind_komga
-    ServerKind.GRIMMORY -> R.string.server_kind_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_kind_liseur_sync
     ServerKind.CUSTOM -> R.string.server_kind_custom
 }
@@ -218,7 +210,6 @@ internal fun ServerKind.labelRes(): Int = when (this) {
 internal fun ServerKind.taglineRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_tagline_calibre
     ServerKind.KOMGA -> R.string.server_tagline_komga
-    ServerKind.GRIMMORY -> R.string.server_tagline_grimmory
     ServerKind.LISEUR_SYNC -> R.string.server_tagline_liseur_sync
     ServerKind.CUSTOM -> R.string.server_tagline_custom
 }
@@ -233,7 +224,6 @@ private const val LISEUR_SYNC_SERVER_URL = "https://github.com/chmouel/liseur-sy
 internal fun ServerKind.homeUrl(): String = when (this) {
     ServerKind.CALIBRE -> "https://github.com/janeczku/calibre-web"
     ServerKind.KOMGA -> "https://komga.org"
-    ServerKind.GRIMMORY -> "https://github.com/grimmory-tools/grimmory"
     ServerKind.LISEUR_SYNC -> LISEUR_SYNC_SERVER_URL
     // The specification rather than a product: a Custom connection is
     // not a server anyone can go and get, it is whatever the reader
@@ -244,7 +234,6 @@ internal fun ServerKind.homeUrl(): String = when (this) {
 internal fun ServerKind.linkRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_link_calibre
     ServerKind.KOMGA -> R.string.server_link_komga
-    ServerKind.GRIMMORY -> R.string.server_link_grimmory
     ServerKind.LISEUR_SYNC -> R.string.liseur_sync_get_one
     ServerKind.CUSTOM -> R.string.server_link_custom
 }

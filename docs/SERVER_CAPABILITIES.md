@@ -6,16 +6,16 @@ side.
 
 ## Summary
 
-| Capability     | Komga               | calibre-web        | liseur-sync         | Grimmory            | Custom (OPDS)       |
-|----------------|----------------------|---------------------|----------------------|----------------------|----------------------|
-| Catalog browse | Implemented          | Implemented         | Implemented          | Implemented          | Implemented          |
-| Search         | Implemented          | Implemented         | Implemented          | Local only           | Local only           |
-| File download  | Implemented          | Implemented         | Implemented          | Implemented          | Implemented          |
-| Position sync  | Implemented (full)   | Implemented (%)     | Implemented (full)   | Implemented (%, kosync) | Implemented (%, kosync) |
-| Book upload    | Not possible          | Not feasible        | Implemented          | Not implemented      | Not possible         |
-| Book delete    | Not possible          | Implemented         | Implemented          | Not implemented      | Not possible         |
-| Series claims  | N/A                   | N/A                 | Implemented          | N/A                  | N/A                  |
-| Settings sync  | Not possible          | Not possible        | Implemented          | Not possible         | Not possible         |
+| Capability     | Komga              | calibre-web       | liseur-sync        | Custom (OPDS)            |
+|----------------|--------------------|-------------------|--------------------|--------------------------|
+| Catalog browse | Implemented        | Implemented       | Implemented        | Implemented              |
+| Search         | Implemented        | Implemented       | Implemented        | Local only               |
+| File download  | Implemented        | Implemented       | Implemented        | Implemented              |
+| Position sync  | Implemented (full) | Implemented (%)   | Implemented (full) | Implemented (%, kosync) |
+| Book upload    | Not possible       | Not feasible      | Implemented        | Not possible             |
+| Book delete    | Not possible       | Implemented       | Implemented        | Not possible             |
+| Series claims  | N/A                | N/A               | Implemented        | N/A                      |
+| Settings sync | Not possible      | Not possible       | Implemented         | Not possible             |
 
 For how each kind's position sync measures up against Kindle
 Whispersync, behaviour by behaviour, see
@@ -78,64 +78,15 @@ password). Scopes control what the token can do.
 `GET /v1/token` for scopes. `canUpload` is true when `library-upload` or
 admin is among them; `canDelete` is scoped the same way.
 
-## Grimmory
-
-Reached through the Komga-compatibility API Grimmory ships, mounted at
-`/komga/api` rather than `/api`. It is a subset: enough to browse and
-download, and no more. Verified against **v3.3.3**; see
-[`adr/0012-grimmory-komga-shim.md`](adr/0012-grimmory-komga-shim.md) for
-why it is its own `ServerKind` rather than a flavour of Komga.
-
-**Auth:** Basic, with a dedicated OPDS user rather than the account you sign
-into Grimmory with.
-
-### Connecting to one
-
-Two things have to be set up in Grimmory first, both as an administrator:
-
-1. **Settings -> OPDS**: create an OPDS user and share the libraries you want
-   on your phone with it. This is the login Liseur uses; an ordinary
-   Grimmory account will not work.
-2. **Settings**: switch the Komga API on. It is off by default.
-
-Then in Liseur, **Settings -> Book server -> Grimmory**: the address of your
-Grimmory server (the same one you open in a browser, with the `/komga` path
-added for you) and the OPDS user's name and password.
-
-A refused sign-in is one of those two things, the wrong kind of user or the
-API still switched off. Grimmory answers 403 to both, so Liseur cannot say
-which.
-
-| Feature | Server API | Liseur | Notes |
-|---------|-----------|--------|-------|
-| Catalog browse | `GET /komga/api/v1/books?page=&size=` (paginated) | `GrimmoryCatalogClient` | Komga's `POST /v1/books/list` is explicitly not implemented and answers 501, so the plain paged route is used instead. Filtered client-side on `media.mediaType`, since Grimmory reports MOBI and AZW3 under `mediaProfile: "EPUB"` |
-| Search | None on the compatibility API | Returns nothing | Liseur's library search is local and covers the whole catalog, which is walked into the database anyway. Grimmory's OPDS `catalog?q=` is the way in if remote search is ever wired to the UI |
-| File download | `GET /komga/api/v1/books/{id}/file` | `GrimmoryFileSource` | Serves the book's primary file. Open to any authenticated OPDS user the library is shared with |
-| Position sync | None on the compatibility API. `/progression`, `/read-progress` and `/positions` all fall through to a 404, and `readProgress` is never populated on a book | `KosyncPositionSync`, paired separately | Grimmory speaks KOReader's kosync at `/api/koreader`, behind a third credential set (a KOReader user created in its device settings) and matched by file hash. Liseur pairs it from the KOReader sync section on the server screen; percentages only. See [`adr/0014-kosync.md`](adr/0014-kosync.md) |
-| Series metadata | Ids are synthetic (`{libraryId}-{slug}`) and change when a series is renamed | Not implemented | `SeriesExtrasRepository` is gated on Komga and never fires here. The id still arrives on the book and groups the shelf, so a rename regroups rather than corrupts |
-| Book upload / delete | Not exposed by the compatibility API | Not implemented | |
-
-**Capability detection:** `GrimmorySetupClient` probes
-`GET /komga/api/v2/users/me` and requires a `roles` array, as the Komga
-probe does. `canDownload` is unconditionally true: Grimmory hardcodes
-`roles: ["USER"]` and has no `FILE_DOWNLOAD` to report, so gating on it as
-the Komga client does would refuse every download.
-
-**A walk that is not understood does not prune.** `dropVanished()` deletes
-every catalogued book a completed walk did not see, taking its reading
-progress with it. So `GrimmoryCatalogClient` reports `complete = false` for
-anything it cannot account for: a page that does not describe itself, one
-shorter than the count it declared, a catalog whose size changed between
-pages, the same book counted twice, a `content` field that is not an array,
-an unparseable id, a media type this build has never heard of, or a whole
-catalog that filtered down to nothing. This prevents a changed response
-from being read as an emptied library.
-
 ## Custom (OPDS, KOReader sync, or one of the two)
 
 Custom is a standard-based connection for servers with no dedicated client:
 Calibre's own content server, COPS, Kavita, or a static feed on a NAS. See
 [`adr/0015-custom-server.md`](adr/0015-custom-server.md).
+
+Grimmory users should choose Custom, enter `/api/v1/opds` with their OPDS user
+credentials, and optionally pair `/api/koreader` with their KOReader sync
+credentials.
 
 A Custom connection holds two addresses and either may be left blank:
 an OPDS catalog root, and a KOReader sync (kosync) server. Filling in
@@ -233,7 +184,6 @@ per-server capability detection.
 | Komga | No | Admin-only, intentionally hidden |
 | calibre-web | Yes (`CalibreBookDeleter`) | Web UI form POST via `CalibreWebSession` |
 | liseur-sync | Yes (`LiseurSyncDeleteClient`) | REST API, per-folder permission |
-| Grimmory | No | Not exposed by the compatibility API |
 
 ## Position sync quality
 
@@ -242,7 +192,6 @@ per-server capability detection.
 | Komga | Exact position in chapter | Full Readium locator, with position snapping |
 | calibre-web | Page-level at best | Percentage (`totalProgression`) via the Kobo protocol |
 | liseur-sync | Exact position in chapter, in the same file | Full Readium locator via the op log |
-| Grimmory | Page-level at best | Percentage via KOReader's kosync, paired alongside the catalog |
 | Any kosync server | Page-level at best | Same partner: it speaks the generic protocol, so a stock kosync server pairs the same way |
 
 Every sync goes through the shared `reconcileReadingState` merge
@@ -272,9 +221,8 @@ The kosync partner is not a kind of server: it is paired *alongside* a
 connected one, covers that server's downloaded books (matched by
 KOReader's partial MD5 of the file), and has its own lifecycle.
 
-It is offered only where the connected server carries no position of its
-own, which today means Grimmory. calibre-web, Komga and liseur-sync sync
-positions natively, and a second source for the same book is a conflict
-the reader can neither see nor resolve. `ServerKind.hostsKosyncPeer` is
-the single answer to that question, and where a future kind states its
-own. See [`adr/0014-kosync.md`](adr/0014-kosync.md).
+It is offered for Custom, whose OPDS catalog carries no position of its own.
+calibre-web, Komga and liseur-sync sync positions natively, and a second
+source for the same book is a conflict the reader can neither see nor resolve.
+`ServerKind.hostsKosyncPeer` is the single answer to that question, and where
+a future kind states its own. See [`adr/0014-kosync.md`](adr/0014-kosync.md).

@@ -1725,8 +1725,8 @@ private fun CatalogPartialNotice(
         ) {
             Text(
                 // Narrowing the address is only advice for a catalog
-                // the reader gave an address to. Komga, calibre-web,
-                // liseur-sync and Grimmory reach their page guards too,
+                // the reader gave an address to. Komga, calibre-web and
+                // liseur-sync reach their page guards too,
                 // and there is no shelf to point those at.
                 text = stringResource(
                     if (canNarrowCatalog) {

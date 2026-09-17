@@ -29,7 +29,7 @@ import androidx.sqlite.execSQL
         SessionRefusal::class,
         SessionTransmission::class,
     ],
-    version = 51,
+    version = 52,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1380,6 +1380,123 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Retires the dedicated Grimmory connection before its server kind
+         * disappears from the app.
+         *
+         * The Komga compatibility API and Grimmory's OPDS catalog issue
+         * different book identities, so changing the kind in place would
+         * duplicate the shelf and risk attaching reading state to the wrong
+         * entry. Remote-only identities and their local state leave because
+         * this app can never discover those identities again. Downloaded books
+         * keep their stable URL and reading data but lose the server link, and
+         * the separately configured KOReader peer remains available for a
+         * later Custom connection.
+         */
+        val MIGRATION_51_52 = object : Migration(51, 52) {
+            override fun migrate(connection: SQLiteConnection) {
+                val grimmory = connection.prepare(
+                    """
+                    SELECT base_url, username, COALESCE(account_id, '-1')
+                    FROM remote_server
+                    WHERE kind = 'GRIMMORY'
+                    """.trimIndent(),
+                ).use { statement ->
+                    if (!statement.step()) {
+                        null
+                    } else {
+                        Triple(
+                            statement.getText(0),
+                            statement.getText(1),
+                            statement.getText(2),
+                        )
+                    }
+                } ?: return
+
+                val remoteOnly =
+                    "SELECT url FROM books WHERE remote_uuid IS NOT NULL AND local_uri IS NULL"
+                connection.execSQL(
+                    "DELETE FROM reading_progress WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM annotations WHERE book_id IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM annotation_sync WHERE book_id IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM reading_sessions WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM sync_peer_state WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM book_fingerprint WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM work_alias WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM work_ambiguity WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM book_typography WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM book_screen WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL(
+                    "DELETE FROM book_reading_mode WHERE book_url IN ($remoteOnly)",
+                )
+                connection.execSQL("DELETE FROM books WHERE url IN ($remoteOnly)")
+
+                connection.execSQL(
+                    """
+                    UPDATE books SET
+                        remote_uuid = NULL,
+                        remote_book_id = NULL,
+                        cover_url = NULL,
+                        download_href = NULL,
+                        remote_updated_at = NULL,
+                        remote_page_count = NULL,
+                        catalog_series_name = NULL,
+                        catalog_series_index = NULL,
+                        catalog_folder_id = NULL,
+                        catalog_series_source = NULL,
+                        catalog_missing_since = NULL,
+                        series_name = CASE
+                            WHEN series_override = 1 THEN user_series_name
+                            ELSE file_series_name
+                        END,
+                        series_index = CASE
+                            WHEN series_override = 1 THEN CASE
+                                WHEN user_series_name IS NOT NULL
+                                     AND series_index_override = 1
+                                    THEN user_series_index
+                                ELSE NULL
+                            END
+                            WHEN file_series_name IS NULL THEN NULL
+                            WHEN series_index_override = 1 THEN user_series_index
+                            ELSE file_series_index
+                        END,
+                        series_id = NULL
+                    WHERE remote_uuid IS NOT NULL
+                    """.trimIndent(),
+                )
+                connection.execSQL("DELETE FROM series_extra")
+
+                val accountKey =
+                    "grimmory|${grimmory.first}|${grimmory.second}|${grimmory.third}"
+                connection.prepare(
+                    "DELETE FROM upload_refusal WHERE account_key = ?",
+                ).use { statement ->
+                    statement.bindText(1, accountKey)
+                    statement.step()
+                }
+                connection.execSQL("DELETE FROM remote_server WHERE kind = 'GRIMMORY'")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1431,6 +1548,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_48_49,
             MIGRATION_49_50,
             MIGRATION_50_51,
+            MIGRATION_51_52,
         )
     }
 }

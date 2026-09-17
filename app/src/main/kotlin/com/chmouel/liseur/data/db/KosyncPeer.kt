@@ -16,9 +16,8 @@ import kotlinx.coroutines.flow.Flow
  *
  * A row of its own rather than more columns on `remote_server`, because
  * the two connections have separate lives: kosync is configured
- * *alongside* whatever catalog server is connected — that is the whole
- * point for Grimmory, whose Komga shim carries no position — and
- * disconnecting one must not take the other with it.
+ * *alongside* a Custom catalog, and disconnecting one must not take the
+ * other with it.
  *
  * Only one row ever exists ([SINGLE_ID]). What is stored is the derived
  * auth key, never the password: the key is what travels on the wire, so

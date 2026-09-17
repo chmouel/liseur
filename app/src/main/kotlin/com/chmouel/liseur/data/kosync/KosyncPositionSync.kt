@@ -48,10 +48,9 @@ private data class BookOutcome(
 /**
  * Keeps reading positions in step with a kosync server (issue #95).
  *
- * A partner alongside the catalog server, not a kind of it: Grimmory is
- * browsed through its Komga shim, which carries no reading position,
- * while its kosync endpoint does — so the two are configured separately
- * and this peer runs after the catalog's in `CompositePositionSync`.
+ * A partner alongside a Custom catalog, not a kind of server itself.
+ * The two are configured separately and this peer runs after the
+ * catalog's position sync in `CompositePositionSync`.
  *
  * It runs only where [ServerKind.hostsKosyncPeer] says the pairing
  * belongs. Where a server carries positions itself, a second source for
