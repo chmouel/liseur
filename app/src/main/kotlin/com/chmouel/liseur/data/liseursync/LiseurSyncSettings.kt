@@ -157,7 +157,14 @@ class LiseurSyncSettings(
                     entry.key,
                     JSONObject()
                         .put("value", localValue)
-                        .put("updated_at", millisToRfc3339(stamp)),
+                        // Never dated ahead of now. The server refuses a
+                        // whole batch carrying a time more than a day in
+                        // the future, so one stamp left behind by a
+                        // device whose clock was wrong would block every
+                        // other setting on every pass from then on. A
+                        // time that has not happened yet is a wrong
+                        // answer anyway; the nearest right one is now.
+                        .put("updated_at", millisToRfc3339(minOf(stamp, pushTime))),
                 )
             }
         }
