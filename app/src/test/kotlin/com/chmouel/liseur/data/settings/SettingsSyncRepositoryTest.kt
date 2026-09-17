@@ -99,9 +99,14 @@ class SettingsSyncRepositoryTest {
         repo.rekeyPeer(A, B)
 
         assertEquals(entry("1.4", 100), repo.allLastSynced(B)["reader.font_size"])
-        assertTrue(repo.allLastSynced(A).isEmpty())
-        assertEquals(0, repo.countForPeer(A))
         assertEquals(1, repo.countForPeer(B))
+
+        // The old spelling keeps its copy. This commits on its own while
+        // the rename around it may still roll back, and a baseline left
+        // only under a name nothing answers to is a baseline lost: the
+        // next connection would read as a first one and take the
+        // account's settings over an edit made here offline.
+        assertEquals(entry("1.4", 100), repo.allLastSynced(A)["reader.font_size"])
     }
 
     @Test
@@ -212,6 +217,22 @@ class SettingsSyncRepositoryTest {
         repo.observeLocal(mapOf("reader.font_size" to "1.8"), 30)
 
         assertEquals(30L, repo.localChanges()["reader.font_size"])
+    }
+
+    @Test
+    fun `changing back to what a server handed over is the reader's own edit`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf("reader.font_size" to "1.0"), 10)
+        repo.markApplied(mapOf("reader.font_size" to "1.4"))
+        repo.observeLocal(mapOf("reader.font_size" to "1.4"), 20)
+        repo.observeLocal(mapOf("reader.font_size" to "1.8"), 30)
+
+        // Back to 1.4, but chosen this time. The marker answered for one
+        // change and is spent; keeping it would leave this edit dated 30,
+        // which is when the reader picked something else entirely.
+        repo.observeLocal(mapOf("reader.font_size" to "1.4"), 40)
+
+        assertEquals(40L, repo.localChanges()["reader.font_size"])
     }
 
     @Test

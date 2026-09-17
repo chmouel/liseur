@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.settings
 
+import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import kotlinx.coroutines.flow.first
 
@@ -202,11 +203,16 @@ fun syncableSettings(
         key = "app.dictionary_base_url",
         read = { app.current().dictionaryBaseUrl },
         write = { raw ->
-            // setDictionaryBaseUrl normalises and refuses anything that
-            // is not an https host, so a rejected string must not be
-            // recorded as agreed; read back to find out which happened.
-            app.setDictionaryBaseUrl(raw)
-            app.current().dictionaryBaseUrl == raw
+            // Asked before writing, not after. setDictionaryBaseUrl puts
+            // the default back for anything it refuses, so writing first
+            // would destroy this device's URL on the way to reporting
+            // that the server's was no good.
+            if (DictionaryUrl.normalise(raw) != raw) {
+                false
+            } else {
+                app.setDictionaryBaseUrl(raw)
+                true
+            }
         },
     ),
     SyncableSetting(

@@ -166,6 +166,10 @@ class LiseurSyncSettings(
         if (!stillConnected()) return exchanged
         syncState.recordSynced(accountKey, agreed)
         syncState.markApplied(applied)
+        // Asked once more, because the check above and these two writes
+        // are not one thing: a disconnect landing between them would
+        // have cleared the baseline just before this put it back.
+        if (!stillConnected()) syncState.forgetPeer(accountKey)
         return exchanged
     }
 
