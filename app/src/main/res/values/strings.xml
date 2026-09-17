@@ -260,8 +260,8 @@
     <string name="server_error_credentials_liseur_sync">The server did not accept that sign-in or token.</string>
     <string name="server_error_not_liseur_sync">That address answered, but not like a liseur-sync server.</string>
     <string name="server_error_not_custom">That address answered, but not with an OPDS catalog. Check the address, including any folder it is served from.</string>
-    <string name="server_error_credentials_custom">That username or password was refused by the catalog. Leave both empty if the catalog is open to everyone.</string>
-    <string name="server_error_sign_in_custom">The catalog refused the request. If it is private, add a username and password; otherwise check the address, including any folder it is served from.</string>
+    <string name="server_error_credentials_custom">That username or password was refused by the catalog. If this is a migrated Grimmory connection, enable Grimmory\'s OPDS server first. Leave both empty if the catalog is open to everyone.</string>
+    <string name="server_error_sign_in_custom">The catalog refused the request. If this is a migrated Grimmory connection, enable Grimmory\'s OPDS server first; otherwise, if it is private, add a username and password or check the address.</string>
     <string name="server_error_scopes_liseur_sync">That token works but may not sync reading positions. Make one with at least the “sync” scope — the full set is sync, read-insights and library-read.</string>
     <string name="server_error_rate_limited">Too many attempts. Wait a moment and try again.</string>
     <string name="server_error_unreachable">The server did not answer. Check the address and that you are online.</string>
@@ -725,7 +725,7 @@
     <string name="catalog_failed_offline">Couldn\'t reach your server. Showing the saved catalog.</string>
     <string name="catalog_failed_timeout">Your server took too long to answer. Showing the saved catalog.</string>
     <string name="catalog_failed_unauthorised">Your server no longer accepts this sign-in. Reconnect the account to see new books.</string>
-    <string name="catalog_failed_forbidden">This account is not allowed to browse the library. Ask whoever runs the server.</string>
+    <string name="catalog_failed_forbidden">The catalog refused access. For a migrated Grimmory connection, enable Grimmory\'s OPDS server, then reconnect. Otherwise ask whoever runs the server.</string>
     <string name="catalog_failed_not_found">No catalog answered at that address. Check it in the server settings.</string>
     <string name="catalog_failed_malformed">Your server answered with something unexpected. Showing the saved catalog.</string>
     <string name="catalog_failed_insecure">This server needs an https:// address. Showing the saved catalog.</string>
