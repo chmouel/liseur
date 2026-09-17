@@ -11,6 +11,7 @@ import okhttp3.Headers
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -122,8 +123,12 @@ class LiseurSyncSettingsTest {
         agree("reader.font_size", "120", NOW)
         values["reader.font_size"] = "150"
         // The reader changed it here at LATER + 1; the server's copy is
-        // from LATER. Arrival order would hand this to the server.
+        // from LATER. Arrival order would hand this to the server. The
+        // clock is moved past the edit, as it always is outside a test:
+        // the collector stamps a change with the same clock the pass
+        // reads, so a real change is never later than the pass.
         changedAt("reader.font_size", LATER + 1)
+        clock = LATER + 2
         enqueueGet("reader.font_size" to Entry("140", LATER))
         enqueuePut("reader.font_size" to Entry("150", LATER + 1))
 
@@ -526,7 +531,7 @@ class LiseurSyncSettingsTest {
     fun `a stamp from a clock that was wrong is not sent into the future`() = runTest {
         values["reader.font"] = "bitter"
         agree("reader.font", "literata", NOW)
-        // Recorded while the device's clock was a year out.
+        // Recorded while the device's date was days ahead of the truth.
         syncState.observeLocal(mapOf("reader.font" to "literata"), NOW)
         syncState.observeLocal(mapOf("reader.font" to "bitter"), LATER * 1000)
         enqueueGet()
@@ -540,6 +545,29 @@ class LiseurSyncSettingsTest {
         val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
             .getJSONObject("settings").getJSONObject("reader.font")
         assertEquals(iso(LATER), sent.getString("updated_at"))
+    }
+
+    @Test
+    fun `a change dated in the future does not outrank the account`() = runTest {
+        // Unchanged here since it was agreed, but carrying a stamp from
+        // a day when this device's date was wrong.
+        values["reader.font"] = "literata"
+        agree("reader.font", "literata", NOW)
+        changedAt("reader.font", LATER * 1000)
+        // Another device changed it, and the server's clock is a little
+        // ahead of this one — it allows a day of slack, so its copy can
+        // legitimately be dated after this device's now.
+        enqueueGet("reader.font" to Entry("vollkorn", LATER + 5))
+        enqueuePut("reader.font" to Entry("literata", LATER))
+        clock = LATER
+
+        sync()
+
+        // Compared as it is sent, the stamp cannot beat a copy it has no
+        // business outranking, so the newer choice arrives instead of
+        // being pushed over.
+        assertEquals("vollkorn", values["reader.font"])
+        assertFalse(requests().any { it.first == "PUT" })
     }
 
     private fun settings(): List<SyncableSetting> =
