@@ -131,6 +131,10 @@ device. Both routes now ask the entry how long it is, refuse it on that,
 and read exactly that range — measuring the bytes that arrive all the
 same, since the length is a hint.
 
+An entry that will not say how long it is is refused rather than read
+whole. A whole-entry read is a read with no bound, and the size in a zip
+directory is written by whoever wrote the zip.
+
 ### White underneath
 
 SVG has no background, and the file this ends up in is a JPEG, which has

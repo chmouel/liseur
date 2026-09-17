@@ -1232,21 +1232,23 @@ class LocalLibraryRepository(
      * way to tell a file at the limit from one over it, therefore
      * refused every cover small enough to want.
      *
+     * An entry that will not say how big it is is refused rather than
+     * read. Readium answers a whole-entry read by reading the whole
+     * entry, so an archive whose directory understates or omits a size —
+     * which an archive chosen by nobody trustworthy can do on purpose —
+     * would be reading with no bound at all. A cover is not worth that,
+     * and a zip written by anything ordinary states its sizes.
+     *
      * Readium calls `length()` a hint that "might not reflect the actual
-     * bytes length", so it is used as a bound and not as an answer: the
-     * bytes that arrive are measured again. An entry that will not say
-     * how big it is at all is read whole and measured afterwards, which
-     * is what reading any declared cover already does.
+     * bytes length", so it is a bound and not an answer: the bytes that
+     * arrive are measured again.
      */
     private suspend fun readBounded(publication: Publication, url: Url, cap: Long): ByteArray? {
         val resource = publication.get(url) ?: return null
         val bytes = try {
             val length = resource.length().getOrNull()
-            when {
-                length == null -> resource.read()
-                length > cap -> return null
-                else -> resource.read(0 until length)
-            }.getOrNull()
+            if (length == null || length > cap) return null
+            resource.read(0 until length).getOrNull()
         } finally {
             resource.close()
         }

@@ -38,6 +38,23 @@ class SvgImageHrefsTest {
     }
 
     /**
+     * An image is allowed to carry both spellings, and AndroidSVG reads
+     * the attributes in the order they are written and keeps the last
+     * one. Rather than guess which that is, both are read: the one it
+     * does not ask for costs a slot and nothing else.
+     */
+    @Test
+    fun `both spellings of a reference are read`() {
+        val xml = """
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 600 800">
+              <image xlink:href="fallback.jpg" href="cover.jpg"/>
+            </svg>
+        """.trimIndent()
+        assertEquals(setOf("fallback.jpg", "cover.jpg"), hrefs(xml).toSet())
+    }
+
+    /**
      * AndroidSVG decodes a data URI itself, so reading one out of the
      * archive is a lookup that could never succeed.
      */
