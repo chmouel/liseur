@@ -111,6 +111,16 @@ class BookDownloadRepository(
     private val bookRemoval: BookRemoval,
     private val scope: CoroutineScope,
     private val bulkStore: BulkDownloadStore = BulkDownloadStore(context),
+    /**
+     * Who the connected account is, asked at the moment work is
+     * queued.
+     *
+     * Read here rather than passed in at each call site, because the
+     * stamp is what lets a worker tell its own book from a book the
+     * next account happens to give the same URL. A call site that
+     * forgot it would look exactly like one that had nothing to say.
+     */
+    private val accountKey: suspend () -> String? = { null },
     private val bulkTransferGate: BulkTransferGate = BulkTransferGate(),
 ) {
     private val workManager get() = WorkManager.getInstance(context)
@@ -175,7 +185,7 @@ class BookDownloadRepository(
         workManager.enqueueUniqueWork(
             workName(book.url),
             ExistingWorkPolicy.KEEP,
-            request(book.url, accountKey = null, batchId = null),
+            request(book.url, accountKey = accountKey(), batchId = null),
         )
     }
 
@@ -191,6 +201,7 @@ class BookDownloadRepository(
     suspend fun bulkEstimate(): BulkDownloadEstimate = withContext(Dispatchers.IO) {
         val candidates = booksToDownload(bookDao.allRemote())
         estimateBulkDownload(candidates.map { it.sizeBytes }, freeBytes())
+            .copy(urls = candidates.map { it.url })
     }
 
     /**
@@ -211,9 +222,23 @@ class BookDownloadRepository(
      *
      * Returns how many were actually accepted, which is not always how
      * many were selected — see [confirmMembership].
+     *
+     * [only] is the exact set the reader was quoted a price for, in the
+     * order it was priced in. The library is read again, because a book
+     * may have finished downloading or been archived while the dialog
+     * was open, but nothing that was not priced is put in its place:
+     * the run is what was agreed to or less, never something else.
+     * Null is every book that needs fetching, which is what the action
+     * has always meant.
      */
-    suspend fun enqueueAll(accountKey: String): Int = scope.async(Dispatchers.IO) {
-        val candidates = booksToDownload(bookDao.allRemote())
+    suspend fun enqueueAll(accountKey: String, only: List<String>? = null): Int = scope.async(Dispatchers.IO) {
+        val available = booksToDownload(bookDao.allRemote())
+        val candidates = if (only == null) {
+            available
+        } else {
+            val byUrl = available.associateBy { it.url }
+            only.mapNotNull(byUrl::get)
+        }
         if (candidates.isEmpty()) return@async 0
         val batchId = UUID.randomUUID().toString()
         val batchTag = batchTag(batchId)

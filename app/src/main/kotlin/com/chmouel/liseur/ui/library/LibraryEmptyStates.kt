@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.CreateNewFolder
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
@@ -156,6 +158,7 @@ internal fun LibraryActionCard(
     hint: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    busy: Boolean = false,
 ) {
     val eInk = LocalEInk.current
     // Held under a second name because the semantics block below has an
@@ -164,6 +167,7 @@ internal fun LibraryActionCard(
     val activate = onClick
     Card(
         onClick = onClick,
+        enabled = !busy,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -187,9 +191,14 @@ internal fun LibraryActionCard(
             .clearAndSetSemantics {
                 contentDescription = "$title. $hint"
                 role = Role.Button
-                onClick(label = title) {
-                    activate()
-                    true
+                // Nothing to press while the card is already doing what
+                // pressing it asks for, and offering the action anyway
+                // would let a screen reader start a second one.
+                if (!busy) {
+                    onClick(label = title) {
+                        activate()
+                        true
+                    }
                 }
             },
     ) {
@@ -224,11 +233,22 @@ internal fun LibraryActionCard(
                 )
             }
             Spacer(Modifier.width(8.dp))
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // In the arrow's place rather than beside it: the arrow says
+            // "this leads somewhere", and while the card is already on
+            // its way that is the one thing it no longer needs to say.
+            if (busy) {
+                BusyIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -256,10 +276,16 @@ private fun LibraryEmptyIcon(icon: ImageVector) {
  * The first screen anyone sees, and the only chance the app gets to say
  * what it is for.
  *
- * The three routes are laid out rather than listed: a folder to watch,
- * one book to bring in, and a server to borrow a whole catalog from.
- * The server used to live three taps away under Settings, which is not
- * somewhere a new library looks.
+ * The routes are laid out rather than listed: a folder to watch, one
+ * book to bring in, a server to borrow a whole catalog from, and — for
+ * somebody who has none of those — a shelf of free books. The server
+ * used to live three taps away under Settings, which is not somewhere a
+ * new library looks.
+ *
+ * The free books come last because they are a particular instance of
+ * the card above them rather than a fourth idea: a catalog already
+ * chosen, with nothing to fill in. They are offered only while no
+ * server is connected, since taking them up would replace one.
  */
 @Composable
 internal fun EmptyLibrary(
@@ -267,6 +293,9 @@ internal fun EmptyLibrary(
     onAddFolder: () -> Unit,
     onConnectServer: () -> Unit,
     modifier: Modifier = Modifier,
+    offerFreeBooks: Boolean = false,
+    connectingFreeBooks: Boolean = false,
+    onStartWithFreeBooks: () -> Unit = {},
 ) {
     // Which cut of the mark to draw is asked of the theme in force
     // here, not of a -night qualifier: those follow the system, and the
@@ -314,6 +343,19 @@ internal fun EmptyLibrary(
             onClick = onConnectServer,
             modifier = Modifier.entrance(delayMillis = 4 * ENTRANCE_STEP_MS),
         )
+        if (offerFreeBooks) {
+            LibraryActionCard(
+                icon = Icons.Outlined.AutoStories,
+                title = stringResource(R.string.starter_catalog),
+                hint = stringResource(
+                    if (connectingFreeBooks) R.string.starter_catalog_connecting
+                    else R.string.starter_catalog_hint,
+                ),
+                onClick = onStartWithFreeBooks,
+                busy = connectingFreeBooks,
+                modifier = Modifier.entrance(delayMillis = 5 * ENTRANCE_STEP_MS),
+            )
+        }
     }
 }
 

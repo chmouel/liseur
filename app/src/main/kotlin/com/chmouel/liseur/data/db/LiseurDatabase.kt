@@ -29,7 +29,7 @@ import androidx.sqlite.execSQL
         SessionRefusal::class,
         SessionTransmission::class,
     ],
-    version = 50,
+    version = 51,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1359,6 +1359,27 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Remembers how many books a starter shelf was asked for.
+         *
+         * Null on every existing row, and deliberately so. The card
+         * that asks the question arrives in this same version, so no
+         * row that predates it was ever made by one: a Custom catalog
+         * on a version 50 database was typed into the Book server form
+         * by hand and has never been capped. Backfilling a number from
+         * an address would cap it now, and — because a capped walk
+         * reports the shelf whole — reconcile everything past the cap
+         * as deleted on the refresh after that.
+         *
+         * A size is written down only when the free-books card makes
+         * the connection.
+         */
+        val MIGRATION_50_51 = object : Migration(50, 51) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE remote_server ADD COLUMN shelf_limit INTEGER")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1409,6 +1430,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_47_48,
             MIGRATION_48_49,
             MIGRATION_49_50,
+            MIGRATION_50_51,
         )
     }
 }

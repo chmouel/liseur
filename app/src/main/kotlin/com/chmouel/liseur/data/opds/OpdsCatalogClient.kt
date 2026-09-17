@@ -33,7 +33,19 @@ import org.xml.sax.SAXException
  * is what stops the library treating a walk cut short as proof that
  * everything else was deleted.
  */
-class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource {
+class OpdsCatalogClient(
+    private val http: OpdsHttp = OpdsHttp(),
+    /**
+     * How many books this address is offered at, or null for as much of
+     * it as the budget reaches.
+     *
+     * Asked rather than worked out, because the answer is the
+     * connection's and nothing about an address can say it: a shelf the
+     * reader picked a size for stored it, and any other catalog is
+     * walked in full. Suspending because reading it is a database read.
+     */
+    private val shelfLimit: suspend (String) -> Int? = { null },
+) : CatalogSource {
 
     override suspend fun allBooks(
         baseUrl: String,
@@ -43,6 +55,13 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
         val scope = OpdsScope.of(baseUrl) ?: return@withContext CatalogWalk(complete = false)
         val root = scope.root
 
+        // A shelf Liseur offers is a fixed number of books rather than
+        // as much of the catalog as the budget reaches. Null for every
+        // address a reader typed, which is all of them but the handful
+        // the starter card connects.
+        val shelf = shelfLimit(baseUrl)
+        var shelved = 0
+
         val seen = mutableSetOf(root.toString())
         // Breadth-first, so a shallow shelf full of books is read before
         // a deep tree of empty ones. A reader watching the library fill
@@ -50,6 +69,7 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
         val queue = ArrayDeque(listOf(Step(root, depth = 0)))
         var requests = 0
         var complete = true
+        var shelfWasFilled = false
 
         while (queue.isNotEmpty()) {
             coroutineContext.ensureActive()
@@ -59,10 +79,31 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
                 break
             }
             val step = queue.removeFirst()
+            val isRoot = requests == 0
             requests++
 
-            val page = fetch(step.url, scope, credentials)
-            onPage(page.books.map { it.toRemote(scope, page.base) })
+            // The root's answer is the catalog's answer: a refused
+            // sign-in or a server in trouble has to reach the reader,
+            // and there is nothing to carry on with anyway. A page
+            // reached from it is one page. A two-hundred-book shelf is
+            // two hundred requests to somebody else's server, and one
+            // stale link among them — Gutenberg's author feeds point at
+            // Wikipedia — used to lose the whole refresh, and with it
+            // every book the walk had already handed over.
+            val page = try {
+                fetch(step.url, scope, credentials)
+            } catch (e: RemoteHttpFailure) {
+                if (isRoot) throw e
+                Log.i(TAG, "A feed in this catalog could not be read; walking on", e)
+                // What was behind it was not seen, so this is no longer
+                // a whole picture of the catalog and nothing missing
+                // from it may be read as deleted.
+                complete = false
+                continue
+            }
+            val books = if (shelf == null) page.books else page.books.take(shelf - shelved)
+            shelved += books.size
+            onPage(books.map { it.toRemote(scope, page.base) })
 
             // A link the fetch rule refuses is skipped, not followed
             // and not fatal. Handing it to `OpdsHttp` would throw and
@@ -88,11 +129,43 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
                     Log.i(TAG, "Stopped at depth $MAX_DEPTH; the catalog nests deeper than that")
                     complete = false
                 }
-                continue
+            } else {
+                page.navigation.forEach { enqueue(it, step.depth + 1) }
             }
-            page.navigation.forEach { enqueue(it, step.depth + 1) }
+
+            // A full shelf stops the walk. Asked after this page's
+            // links have been taken in rather than before, because
+            // whether anything is left to read is the whole question: a
+            // shelf that runs out on the very book the reader asked for
+            // has been read to the end, and calling that partial put a
+            // notice on it that no refresh could ever clear. Books this
+            // page itself held back count as much as an unfollowed
+            // link, since `take` is where they were left.
+            //
+            // Where there is more, this is not a current picture of the
+            // catalog and must never be stored as one. It is a whole
+            // picture of the shelf, though, which is what
+            // `shelfWasFilled` carries: the shelf's size is this app's
+            // rule, so everything it is meant to hold was seen, and a
+            // book missing from it has dropped off rather than gone
+            // unasked-about — which is what lets the shelf stay the size
+            // it is offered at instead of growing every refresh.
+            if (shelf != null && shelved >= shelf) {
+                if (queue.isEmpty() && books.size == page.books.size) {
+                    Log.i(TAG, "The shelf ran out at $shelved books, inside the $shelf asked for")
+                    break
+                }
+                Log.i(TAG, "Stopped at $shelf books; this shelf is offered at that size")
+                // Only when nothing else had already gone short: after a
+                // refused link or a feed too deep to follow, the books
+                // that were not seen are not merely the ones past the
+                // shelf, and none of them may be let go.
+                shelfWasFilled = complete
+                complete = false
+                break
+            }
         }
-        CatalogWalk(complete = complete)
+        CatalogWalk(complete = complete, shelfWasFilled = shelfWasFilled)
     }
 
     /**
@@ -121,7 +194,15 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
     private fun fetch(url: HttpUrl, scope: OpdsScope, credentials: RemoteCredentials): Resolved {
         val fetched = http.get(url, scope, credentials)
         val page = fetched.response.use { response ->
-            if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
+            if (!response.isSuccessful) {
+                // A walk of a hundred-odd requests will meet an
+                // occasional bad answer from a busy public server, and
+                // one of them ends the refresh. Without the code there
+                // is nothing to tell a shelf that has moved from a
+                // server having a bad minute.
+                Log.i(TAG, "A catalog feed at ${url.encodedPath} answered ${response.code}")
+                throw RemoteHttpFailure(failureForCode(response.code))
+            }
             try {
                 OpdsParser.parse(response.body.string())
             } catch (e: SAXException) {
@@ -161,7 +242,7 @@ class OpdsCatalogClient(private val http: OpdsHttp = OpdsHttp()) : CatalogSource
     private fun HttpUrl.resolveOrSelf(href: String?): HttpUrl =
         href?.let { resolve(it) } ?: this
 
-    private companion object {
+    internal companion object {
         const val TAG = "opds-catalog"
 
         /**

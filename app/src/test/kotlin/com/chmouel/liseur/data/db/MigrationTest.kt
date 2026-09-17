@@ -1163,10 +1163,56 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `no catalog that predates the card is given a size`() {
+        // The card that asks how many books to fetch arrives in this
+        // same version, so nothing on a version 50 database was made by
+        // one. Every row there is a catalog somebody typed in by hand,
+        // including one that happens to point at the address the card
+        // now offers, and none of them has ever been capped.
+        //
+        // Null is what the walk reads as "fetch the whole thing".
+        // Backfilling a number from an address would cap a catalog its
+        // owner never asked to cap, and then reconcile everything past
+        // the cap as deleted.
+        helper.createDatabase(TEST_DB, 50).use { old ->
+            for ((id, url) in listOf(
+                1 to "https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads",
+                2 to "https://www.gutenberg.org/ebooks/search.opds?sort_order=downloads",
+                3 to "https://www.gutenberg.org/ebooks/search.opds/?sort_order=release_date",
+                4 to "https://books.example/opds/",
+            )) {
+                old.execSQL(
+                    """
+                    INSERT INTO remote_server
+                        (id, kind, base_url, can_download, can_manage_library, can_upload,
+                         can_delete, can_read_insights, can_admin, added_at)
+                    VALUES ($id, 'CUSTOM', '$url', 1, 0, 0, 0, 0, 0, 1000)
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT id, shelf_limit FROM remote_server ORDER BY id").use {
+                    val sized = buildMap {
+                        while (it.moveToNext()) {
+                            put(it.getInt(0), if (it.isNull(1)) null else it.getInt(1))
+                        }
+                    }
+                    assertEquals(
+                        mapOf(1 to null, 2 to null, 3 to null, 4 to null),
+                        sized,
+                    )
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 50
+        const val LATEST = 51
     }
 }

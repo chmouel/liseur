@@ -53,7 +53,10 @@ card over the page rather than sending you to the back of the book.
 The library is one shelf whatever the source: local folders, calibre-web,
 Komga, liseur-sync, Grimmory, or any OPDS catalog. Series are grouped into stacks tracking
 reading order, progress, and missing volumes. "Download all books" fills the
-shelf from a connected server in one go.
+shelf from a connected server in one go. An empty library also offers a
+shelf of free books from [Project Gutenberg](https://www.gutenberg.org) —
+pick a category and how many books you want, and they are there before
+there is anything to connect to.
 
 Reading position syncs across devices through calibre-web, Komga and
 liseur-sync, down to the exact sentence on the last two. liseur-sync also
