@@ -83,12 +83,10 @@ guessed about reading you did before Liseur arrived.
 <table>
   <tr>
     <td width="33%"><img src="screenshots/09-server.png" alt="Server setup"></td>
-    <td width="33%"><img src="screenshots/22-server-kind.png" alt="The kinds of server"></td>
     <td width="33%"><img src="screenshots/15-upload-offer.png" alt="Sending a book to the server"></td>
   </tr>
   <tr>
     <td align="center"><sub>One server at a time, with your own credentials.</sub></td>
-    <td align="center"><sub>calibre-web, Komga, liseur-sync or Custom, and what each carries.</sub></td>
     <td align="center"><sub>A book only on this phone, offered to a server that takes uploads.</sub></td>
   </tr>
   <tr>

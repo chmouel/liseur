@@ -1315,9 +1315,17 @@ class MigrationTest {
 
         helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
             .use { db ->
-                db.query("SELECT COUNT(*) FROM remote_server").use {
+                db.query(
+                    "SELECT kind, base_url, catalog_url, username, password_cipher " +
+                        "FROM remote_server",
+                ).use {
                     assertTrue(it.moveToFirst())
-                    assertEquals(0, it.getInt(0))
+                    assertEquals("CUSTOM", it.getString(0))
+                    assertEquals("https://books.example/api/v1/opds", it.getString(1))
+                    assertEquals("https://books.example/api/v1/opds", it.getString(2))
+                    assertEquals("ada", it.getString(3))
+                    assertEquals("cipher", it.getString(4))
+                    assertFalse(it.moveToNext())
                 }
                 db.query("SELECT COUNT(*) FROM books WHERE url = 'grimmory:remote'").use {
                     assertTrue(it.moveToFirst())
