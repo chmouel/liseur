@@ -42,6 +42,8 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
 
     private fun observedKey(settingKey: String) = stringPreferencesKey("ob:$settingKey")
 
+    private fun appliedKey(settingKey: String) = stringPreferencesKey("ap:$settingKey")
+
     private fun changedKey(settingKey: String) = longPreferencesKey("ch:$settingKey")
 
     /** Everything [accountKey] agreed to, keyed by setting name. */
@@ -146,6 +148,17 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
      * it: an install, or a key added by a new version, has not been
      * *changed* by the reader, and stamping it would claim an edit that
      * never happened and push it over another device's real one.
+     *
+     * A value the sync pass wrote is not stamped either, for the same
+     * reason and with more at stake. It reaches this collector looking
+     * like any other write, and dating it now would say the reader chose
+     * it, moments ago. Within one account that is harmless, since the
+     * value matches what was agreed and so is never offered — but the
+     * change record deliberately outlives an account switch, and on the
+     * next account nothing is agreed yet, so that invented edit is fresh
+     * enough to beat whatever that account holds. One server's settings
+     * would quietly move into another's. [markApplied] records the value
+     * that was handed to this device, and it is skipped here.
      */
     suspend fun observeLocal(values: Map<String, String>, now: Long) {
         store.edit { prefs ->
@@ -153,7 +166,30 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
                 val seen = prefs[observedKey(settingKey)]
                 if (seen == value) continue
                 prefs[observedKey(settingKey)] = value
-                if (seen != null) prefs[changedKey(settingKey)] = now
+                if (seen == null) continue
+                if (prefs[appliedKey(settingKey)] == value) continue
+                prefs[changedKey(settingKey)] = now
+            }
+        }
+    }
+
+    /**
+     * Notes that these values arrived from a server rather than from the
+     * reader, and so are not changes this device has to offer anyone.
+     *
+     * Written from two sides because the collector runs on its own and
+     * the two can land in either order: the value is remembered so a
+     * collection arriving afterwards knows not to stamp it, and any
+     * stamp a collection already left is removed. Whichever goes first,
+     * the key ends up unstamped.
+     */
+    suspend fun markApplied(values: Map<String, String>) {
+        if (values.isEmpty()) return
+        store.edit { prefs ->
+            for ((settingKey, value) in values) {
+                prefs[appliedKey(settingKey)] = value
+                prefs[observedKey(settingKey)] = value
+                prefs.remove(changedKey(settingKey))
             }
         }
     }

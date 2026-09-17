@@ -478,7 +478,8 @@ class LiseurSyncPositionSync(
                     accountKey = account.accountKey,
                     baseUrl = account.baseUrl,
                     credentials = account.credentials,
-                    canApplyReaderSettings = !readerIsOpen(),
+                    canApplyReaderSettings = { !readerIsOpen() },
+                    stillConnected = { sameAccount(account) },
                 )
             } catch (e: CancellationException) {
                 throw e

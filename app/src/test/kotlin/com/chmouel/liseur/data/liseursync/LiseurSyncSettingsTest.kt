@@ -41,6 +41,7 @@ class LiseurSyncSettingsTest {
     private lateinit var syncState: SettingsSyncRepository
     private val values = mutableMapOf<String, String>()
     private val refused = mutableSetOf<String>()
+    private val affectsPage = mutableSetOf<String>()
     private var clock = NOW
     private val seen = mutableListOf<Pair<String, String?>>()
 
@@ -53,6 +54,7 @@ class LiseurSyncSettingsTest {
         )
         values.clear()
         refused.clear()
+        affectsPage.clear()
         seen.clear()
         clock = NOW
     }
@@ -312,6 +314,145 @@ class LiseurSyncSettingsTest {
      * registry with a spare key in it makes every "nothing was pushed"
      * assertion in this file test the spare key instead of the subject.
      */
+    // -- What the review found --------------------------------------------
+
+    @Test
+    fun `a setting that relays out the page is held back whatever its prefix`() = runTest {
+        values["app.scroll_mode"] = "false"
+        affectsPage += "app.scroll_mode"
+        enqueueGet("app.scroll_mode" to Entry("true", LATER))
+
+        sync(canApplyReaderSettings = false)
+
+        assertEquals("false", values["app.scroll_mode"])
+        assertNull(syncState.allLastSynced(ACCOUNT)["app.scroll_mode"])
+
+        // And it arrives once the book is closed.
+        enqueueGet("app.scroll_mode" to Entry("true", LATER))
+        sync()
+        assertEquals("true", values["app.scroll_mode"])
+    }
+
+    @Test
+    fun `an edit made while the push is in flight is not overwritten by the answer`() = runTest {
+        values["reader.font"] = "bitter"
+        enqueueGet()
+        // The server refuses and holds something else. Normally this
+        // device would take the server's value.
+        enqueuePut("reader.font" to Entry("literata", LATER))
+        // But the reader picks a third font while the request is away.
+        val sync = LiseurSyncSettings(
+            syncState = syncState,
+            settings = listOf(
+                SyncableSetting(
+                    key = "reader.font",
+                    read = { values.getValue("reader.font") },
+                    write = { v -> values["reader.font"] = v; true },
+                ),
+            ),
+            now = { clock },
+        )
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest): MockResponse {
+                if (request.method == "PUT") {
+                    values["reader.font"] = "vollkorn"
+                    return MockResponse(
+                        code = 200,
+                        body = body("reader.font" to Entry("literata", LATER)),
+                    )
+                }
+                return MockResponse(code = 200, body = body())
+            }
+        }
+
+        sync.sync(
+            accountKey = ACCOUNT,
+            baseUrl = server.url("/").toString().removeSuffix("/"),
+            credentials = RemoteCredentials.Bearer("token"),
+        )
+
+        assertEquals("vollkorn", values["reader.font"])
+        // Nothing is filed as agreed either, or the edit would never be
+        // offered again.
+        assertNull(syncState.allLastSynced(ACCOUNT)["reader.font"])
+    }
+
+    @Test
+    fun `an account switched away from mid-run neither writes here nor is recorded`() = runTest {
+        values["reader.font"] = "bitter"
+        enqueueGet("reader.font" to Entry("literata", LATER))
+
+        sync(connected = false)
+
+        assertEquals("bitter", values["reader.font"])
+        assertEquals(0, syncState.countForPeer(ACCOUNT))
+    }
+
+    @Test
+    fun `a divergence the tracker has not stamped yet beats an older server value`() = runTest {
+        values["reader.font"] = "bitter"
+        agree("reader.font", "literata", NOW)
+        // The reader has just changed it and no stamp exists yet, which
+        // is the window between a setter committing and the collector
+        // noticing. The server moved too, but longer ago.
+        enqueueGet("reader.font" to Entry("vollkorn", NOW + 1))
+        enqueuePut("reader.font" to Entry("bitter", LATER))
+        clock = LATER
+
+        sync()
+
+        assertEquals("bitter", values["reader.font"])
+        assertEquals("bitter", pushed()["reader.font"])
+    }
+
+    @Test
+    fun `a first connection takes the account's settings rather than offering its own`() =
+        runTest {
+            values["reader.font"] = "bitter"
+            // No baseline, no stamp: nothing was changed here, this is
+            // just what the device holds.
+            enqueueGet("reader.font" to Entry("literata", NOW))
+            clock = LATER
+
+            sync()
+
+            assertEquals("literata", values["reader.font"])
+        }
+
+    @Test
+    fun `a key the server lost is re-offered as what it was, not as a fresh edit`() = runTest {
+        values["reader.font"] = "bitter"
+        agree("reader.font", "bitter", NOW)
+        // A later unrelated stamp exists for the key, as it would after
+        // this device applied a pulled value.
+        syncState.observeLocal(mapOf("reader.font" to "seed"), LATER)
+        syncState.observeLocal(mapOf("reader.font" to "bitter"), LATER)
+        enqueueGet()
+        enqueuePut("reader.font" to Entry("bitter", NOW))
+        clock = LATER + 1
+
+        sync()
+
+        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
+            .getJSONObject("settings").getJSONObject("reader.font")
+        assertEquals(iso(NOW), sent.getString("updated_at"))
+    }
+
+    @Test
+    fun `a value the server could not store is dropped without taking the batch with it`() =
+        runTest {
+            values["app.dictionary_base_url"] = "https://example.com/" + "x".repeat(5000)
+            values["reader.font"] = "bitter"
+            enqueueGet()
+            enqueuePut("reader.font" to Entry("bitter", NOW))
+
+            sync()
+
+            val sent = pushed()
+            assertTrue("reader.font" in sent)
+            assertTrue("the oversized value was sent", "app.dictionary_base_url" !in sent)
+        }
+
     private fun settings(): List<SyncableSetting> =
         values.keys.toList().map { key ->
             SyncableSetting(
@@ -325,6 +466,7 @@ class LiseurSyncSettingsTest {
                         true
                     }
                 },
+                affectsOpenBook = key.startsWith("reader.") || key in affectsPage,
             )
         }
 
@@ -345,11 +487,13 @@ class LiseurSyncSettingsTest {
     private suspend fun sync(
         account: String = ACCOUNT,
         canApplyReaderSettings: Boolean = true,
+        connected: Boolean = true,
     ): Int = sync.sync(
         accountKey = account,
         baseUrl = server.url("/").toString().removeSuffix("/"),
         credentials = RemoteCredentials.Bearer("token"),
-        canApplyReaderSettings = canApplyReaderSettings,
+        canApplyReaderSettings = { canApplyReaderSettings },
+        stillConnected = { connected },
     )
 
     private suspend fun agree(

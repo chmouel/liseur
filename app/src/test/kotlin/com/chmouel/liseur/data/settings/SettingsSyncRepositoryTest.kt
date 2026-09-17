@@ -175,6 +175,46 @@ class SettingsSyncRepositoryTest {
     }
 
     @Test
+    fun `a value a server handed over is not counted as an edit made here`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf("reader.font_size" to "1.0"), 10)
+
+        // The sync pass applies the account's value and says so. The
+        // collector then sees that write, as it sees every write.
+        repo.markApplied(mapOf("reader.font_size" to "1.4"))
+        repo.observeLocal(mapOf("reader.font_size" to "1.4"), 20)
+
+        assertNull(repo.localChanges()["reader.font_size"])
+    }
+
+    @Test
+    fun `it does not matter which of the collector and the sync pass gets there first`() =
+        runTest {
+            val repo = repo()
+            repo.observeLocal(mapOf("reader.font_size" to "1.0"), 10)
+
+            // The collector wins the race and has already stamped the
+            // applied value as an edit before the pass says otherwise.
+            repo.observeLocal(mapOf("reader.font_size" to "1.4"), 20)
+            repo.markApplied(mapOf("reader.font_size" to "1.4"))
+
+            assertNull(repo.localChanges()["reader.font_size"])
+        }
+
+    @Test
+    fun `an edit away from what a server handed over is still an edit`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf("reader.font_size" to "1.0"), 10)
+        repo.markApplied(mapOf("reader.font_size" to "1.4"))
+        repo.observeLocal(mapOf("reader.font_size" to "1.4"), 20)
+
+        // The reader then picks something else, which is theirs.
+        repo.observeLocal(mapOf("reader.font_size" to "1.8"), 30)
+
+        assertEquals(30L, repo.localChanges()["reader.font_size"])
+    }
+
+    @Test
     fun `a setting changed back and forth keeps the latest time`() = runTest {
         val repo = repo()
         repo.observeLocal(mapOf("reader.font_size" to "1.0"), 10)
