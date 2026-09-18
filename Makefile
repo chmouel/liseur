@@ -24,7 +24,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/dev/app-dev.apk
 
-.PHONY: help build debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-install dev-run dev-uninstall dev-logcat dev-locale
+.PHONY: help build debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
@@ -49,6 +49,7 @@ help:
 		'make dev               Build the side-by-side APK ($(DEV_PACKAGE))' \
 		'make dev-install       Build and install it beside the real app' \
 		'make dev-run           Install it and launch it' \
+		'make dev-reset         Reinstall it from scratch, wiping its storage' \
 		'make dev-uninstall     Remove it' \
 		'make dev-logcat        Tail its logs' \
 		'make dev-locale        Show or set dev app locale with LOCALE=xx' \
@@ -193,6 +194,18 @@ dev-locale:
 	else \
 		$(ADB) $(ADB_PHONE_TARGET) shell cmd locale get-app-locales '$(DEV_PACKAGE)'; \
 	fi
+
+# Uninstalling is how the storage is wiped: `pm clear` needs a permission
+# the adb shell does not have on every build. A package that is not there
+# is nothing to remove; one that is there and refuses to go is a failure,
+# since reinstalling over it would keep the data this target exists to drop.
+dev-reset:
+	@if $(ADB) $(ADB_PHONE_TARGET) shell pm list packages '$(DEV_PACKAGE)' \
+		| tr -d '\r' | grep -qx 'package:$(DEV_PACKAGE)'; then \
+		$(ADB) $(ADB_PHONE_TARGET) uninstall '$(DEV_PACKAGE)'; \
+	fi
+	$(MAKE) dev-install
+	$(ADB) $(ADB_PHONE_TARGET) shell am start -n '$(DEV_ACTIVITY)'
 
 # Filtered by pid rather than by tag: the app logs under a dozen of them,
 # and the pid is the one thing that says "this build and not the other".
