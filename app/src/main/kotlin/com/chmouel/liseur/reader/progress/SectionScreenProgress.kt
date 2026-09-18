@@ -24,7 +24,7 @@ data class SectionScreens(val screen: Int, val screens: Int)
  * bookmarks, the scrubber and the go-to dialog still speak in it — but
  * it is not a screen, and a short chapter read large can spend three or
  * four turns on one of them. A footer that says 42 for four turns
- * running reads as a stuck number rather than as arithmetic (#229).
+ * running reads as a stuck number rather than as arithmetic.
  *
  * A screenful is a thing only the laid-out document knows, so it is
  * measured there, and only for the resource actually on screen: the

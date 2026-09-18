@@ -66,20 +66,24 @@ data class BookScreenEstimate(
 
     /**
      * The book's length in screenfuls, or null before anything has
-     * been measured.
+     * been measured and for an answer too long to be a book.
      *
      * What has been measured is counted; the rest of the book is
      * guessed at the density of what has. The book is never shorter
      * than the last page it can already print, so a total that moves
      * cannot leave a page number hanging past the end.
+     *
+     * A total past [MAX_BOOK_SCREENS] is refused outright rather than
+     * clamped. Clamping keeps the figure in range by making it stop
+     * moving, and a page number that stands still while the reader
+     * turns pages is the thing this whole file is here to prevent.
      */
     val totalScreens: Int? by lazy {
         val perUnit = density ?: return@lazy null
-        if (measuredScreens > MAX_BOOK_SCREENS) return@lazy null
         val unmeasured = (1.0 - measuredSpan).coerceAtLeast(0.0)
         val guessed = (measuredScreens + unmeasured * perUnit).roundToInt()
         val printable = ordered.maxOf { it.origin + it.screens }
-        maxOf(guessed, printable).coerceIn(measuredScreens, MAX_BOOK_SCREENS)
+        maxOf(guessed, printable).takeIf { it in measuredScreens..MAX_BOOK_SCREENS }
     }
 
     /**

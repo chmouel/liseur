@@ -67,7 +67,7 @@ private val CHROME_FADE_HEIGHT = 20.dp
 /**
  * The quiet line of text at the bottom of the page, Kindle-style. The
  * percentage read sits on the left and the page number on the right,
- * always; the middle carries the smart slot — time left, locations left
+ * always; the middle carries the smart slot — time left, pages left
  * in the chapter, the chapter's name — and tapping the footer cycles
  * what that slot shows. Taps never turn the page.
  *
