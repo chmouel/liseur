@@ -314,7 +314,8 @@ object OpdsParser {
         if (root.localName?.lowercase() != "feed" && root.tagName.lowercase() != "feed") {
             throw SAXException("the document is not an Atom feed but a <${root.tagName}>")
         }
-        val entries = root.children("entry")
+        val rawEntries = root.children("entry")
+        val entries = rawEntries.filterNot(::isNoRecordsFound)
         val books = entries.mapNotNull(::parseEntry).oneEntryPerPublication()
         val navigation = entries.filter(::isNavigation).mapNotNull(::navigationLink)
         val next = root.children("link")
@@ -459,6 +460,19 @@ object OpdsParser {
         val links = entry.children("link")
         if (links.any { it.rels().any { rel -> rel in DOWNLOAD_RELS } }) return false
         return links.any(::isPointer)
+    }
+
+    /**
+     * Gutenberg returns an entry with id ending in `/ebooks.opds/` and title
+     * "No records found." when an OPDS query yields no matching books.
+     * That entry must be ignored so it is neither shelved nor followed as navigation.
+     */
+    private fun isNoRecordsFound(entry: Element): Boolean {
+        val title = entry.childText("title")?.trim() ?: return false
+        val id = entry.childText("id")?.trim() ?: ""
+        return (title.equals("No records found.", ignoreCase = true) ||
+            title.equals("No records found", ignoreCase = true)) &&
+            (id.endsWith("/ebooks.opds/") || id.endsWith("/ebooks.opds"))
     }
 
     /**

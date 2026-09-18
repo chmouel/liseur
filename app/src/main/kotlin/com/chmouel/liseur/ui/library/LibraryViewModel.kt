@@ -18,10 +18,12 @@ import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.remote.ServerDeleteResult
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.OpenCatalogOutcome
+import com.chmouel.liseur.data.remote.StarterCatalogOutcome
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
 import com.chmouel.liseur.data.remote.RemoteUrl
 import com.chmouel.liseur.data.remote.ServerKind
+import java.util.Locale
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.SeriesOrderDao
@@ -428,6 +430,14 @@ class LibraryViewModel(
      * library can say so rather than simply stay empty.
      */
     val starterCatalogFailures: Flow<Unit> = _starterCatalogFailures
+
+    private val _starterCatalogFallback = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * The offer of free books connected, but fell back to English
+     * because no books were found in the requested language.
+     */
+    val starterCatalogFallback: Flow<Unit> = _starterCatalogFallback
 
     private val _openImported = MutableStateFlow<ImportedOpen?>(null)
 
@@ -930,30 +940,35 @@ class LibraryViewModel(
      * replace whatever the reader signed into — and disconnecting takes
      * the books they have not downloaded with it. The offer is only
      * ever made on an empty library with no server, and
-     * [RemoteAccountRepository.connectOpenCatalogIfDisconnected] asks
+     * [RemoteAccountRepository.connectStarterCatalogIfDisconnected] asks
      * again as it writes, because a tap can outlive the state that
      * allowed it and the probe takes a moment.
      */
     fun connectStarterCatalog(
         category: StarterCatalog.Category = StarterCatalog.Category.POPULAR,
         shelf: Int = StarterCatalog.DEFAULT_SHELF,
+        languageCode: String? = null,
     ) {
         if (connectingStarterCatalog.value) return
         connectingStarterCatalog.value = true
         viewModelScope.launch {
             try {
+                val lang = languageCode ?: Locale.getDefault().language
                 val outcome = runCatching {
-                    account.connectOpenCatalogIfDisconnected(category.url, shelf)
-                }.getOrDefault(OpenCatalogOutcome.UNREACHABLE)
+                    account.connectStarterCatalogIfDisconnected(category, shelf, lang)
+                }.getOrDefault(StarterCatalogOutcome.UNREACHABLE)
                 when (outcome) {
-                    OpenCatalogOutcome.CONNECTED -> Unit
-                    OpenCatalogOutcome.UNREACHABLE -> {
+                    StarterCatalogOutcome.CONNECTED -> Unit
+                    StarterCatalogOutcome.CONNECTED_FALLBACK -> {
+                        _starterCatalogFallback.tryEmit(Unit)
+                    }
+                    StarterCatalogOutcome.UNREACHABLE -> {
                         _starterCatalogFailures.tryEmit(Unit)
                         return@launch
                     }
                     // Someone else's server got there first, which is
                     // the better outcome and not one to complain about.
-                    OpenCatalogOutcome.ALREADY_CONNECTED -> return@launch
+                    StarterCatalogOutcome.ALREADY_CONNECTED -> return@launch
                 }
             } finally {
                 connectingStarterCatalog.value = false

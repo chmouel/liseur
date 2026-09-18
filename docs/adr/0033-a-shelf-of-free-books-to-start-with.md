@@ -82,6 +82,46 @@ can only ever make the first choice. Changing afterwards goes through
 the address editor on the Book server screen, which already says what
 disconnecting costs.
 
+### Language-aware shelves and English fallback
+
+When connecting the starter catalog, Liseur queries Project Gutenberg
+for books in the reader's active language using `query=l.<lang>` (or
+`query=s.<subject>+l.<lang>` for categories). If the requested language
+collection yields no matching books, it transparently falls back to the
+curated English shelf and displays a notice.
+
+The reader's own language is the answer, not the only one. The sheet
+asks it first, above the shelves, because language narrows everything
+under it: a shelf picked before a language is a shelf picked in the
+dark. The menu opens on the phone's language where Gutenberg has a
+collection for it and on English where it does not — so a reader whose
+phone agrees with them says nothing, and one learning German or reading
+in a second language says so once.
+
+It is a menu rather than a third row of chips because fifteen
+categories and four sizes are already as tall as that sheet should get,
+and it opens short: the reader's language and English, with the rest
+behind one more tap. On an English phone, or one set to a language
+Gutenberg has no collection for, that short list is English alone. The
+names in it come from the platform's
+own locale data rather than from `strings.xml`: seventeen languages
+across six translations is a hundred strings Android already knows, and
+it spells each the way the reading locale spells it.
+
+Choosing English deliberately is not a fallback and does not raise the
+notice. Only a language collection that came back with no books does.
+
+One shelf exists in English and nowhere else. "Best books ever" is a
+list somebody at Gutenberg wrote down, and unlike the genre shelves it
+has no subject to search a language by. Asked for in French it would
+have to fall back to something, and the something was the language's
+most-downloaded feed — the identical address "Most popular" already
+builds, which put two chips on one account with no way to tell from the
+shelf which had been tapped. So it keeps its own English address, and
+the sheet stops offering it once another language is chosen. That is
+also why language is asked first: the shelves below it are the shelves
+that exist in the language above.
+
 ### As many books as the reader asks for, up to two hundred
 
 The walk would read about 380 books before its 400-request budget ran

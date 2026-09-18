@@ -55,7 +55,7 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
                     !worthRetrying -> SetupResult.Failure(probed.reason)
                     !allowHttp -> SetupResult.Failure(
                         SetupFailure.Unreachable(
-                            (probed.reason as SetupFailure.Unreachable).message,
+                            probed.reason.message,
                             httpMayWork = true,
                         ),
                     )
@@ -153,6 +153,7 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
                     // read a name off, and "opds.example.org" is at
                     // least true.
                     displayName = page.title?.takeIf { it.isNotBlank() } ?: fetched.url.host,
+                    hasBooks = page.books.isNotEmpty() || page.navigation.isNotEmpty(),
                 ),
             ).also { Log.i(TAG, "Connected to an OPDS catalog at ${fetched.url.host}") }
         } catch (e: SAXException) {

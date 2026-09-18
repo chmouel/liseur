@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.kosync.KosyncPairing
 import com.chmouel.liseur.data.kosync.KosyncProbe
 import com.chmouel.liseur.data.kosync.ProvedKosyncPairing
 import com.chmouel.liseur.data.library.BookRemoval
+import com.chmouel.liseur.data.opds.StarterCatalog
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -42,6 +43,7 @@ class CustomConnectionTest {
     private lateinit var db: LiseurDatabase
     private lateinit var account: RemoteAccountRepository
     private var catalogRefusal: SetupFailure? = null
+    private var catalogHasBooks: (String) -> Boolean = { true }
     private var kosyncAnswer: SetupFailure? = null
 
     @Before
@@ -246,6 +248,62 @@ class CustomConnectionTest {
     }
 
     @Test
+    fun `starter catalog connects to preferred language when books exist`() = runTest {
+        val outcome = account.connectStarterCatalogIfDisconnected(
+            category = StarterCatalog.Category.POPULAR,
+            shelfLimit = 50,
+            languageCode = "fr",
+        )
+
+        assertEquals(StarterCatalogOutcome.CONNECTED, outcome)
+        val server = db.remoteServerDao().get()!!
+        assertEquals(StarterCatalog.Category.POPULAR.url("fr"), server.catalogUrl)
+        assertEquals(50, server.shelfLimit)
+    }
+
+    @Test
+    fun `starter catalog falls back to english when preferred language is empty`() = runTest {
+        catalogHasBooks = { url -> !url.contains("l.fr") }
+
+        val outcome = account.connectStarterCatalogIfDisconnected(
+            category = StarterCatalog.Category.POPULAR,
+            shelfLimit = 50,
+            languageCode = "fr",
+        )
+
+        assertEquals(StarterCatalogOutcome.CONNECTED_FALLBACK, outcome)
+        val server = db.remoteServerDao().get()!!
+        assertEquals(StarterCatalog.Category.POPULAR.englishUrl, server.catalogUrl)
+    }
+
+    @Test
+    fun `starter catalog does not fall back to english on network failure`() = runTest {
+        catalogRefusal = SetupFailure.Unreachable("No internet", httpMayWork = false)
+
+        val outcome = account.connectStarterCatalogIfDisconnected(
+            category = StarterCatalog.Category.POPULAR,
+            shelfLimit = 50,
+            languageCode = "fr",
+        )
+
+        assertEquals(StarterCatalogOutcome.UNREACHABLE, outcome)
+        assertNull(db.remoteServerDao().get())
+    }
+
+    @Test
+    fun `starter catalog connects directly to english when english is requested`() = runTest {
+        val outcome = account.connectStarterCatalogIfDisconnected(
+            category = StarterCatalog.Category.SCIENCE_FICTION,
+            shelfLimit = 25,
+            languageCode = "en",
+        )
+
+        assertEquals(StarterCatalogOutcome.CONNECTED, outcome)
+        val server = db.remoteServerDao().get()!!
+        assertEquals(StarterCatalog.Category.SCIENCE_FICTION.englishUrl, server.catalogUrl)
+    }
+
+    @Test
     fun `a key written down before the spelling settled still names this account`() = runTest {
         // `accountKey` became slash-canonical in this release, but a
         // bulk download queued before the upgrade carries the old
@@ -428,7 +486,7 @@ class CustomConnectionTest {
                     allowHttp: Boolean,
                 ): SetupResult = catalogRefusal
                     ?.let { SetupResult.Failure(it) }
-                    ?: success(rawUrl)
+                    ?: success(rawUrl, catalogHasBooks(rawUrl))
             },
         ),
     )
@@ -439,12 +497,13 @@ class CustomConnectionTest {
         const val OLD_CATALOG = "https://old.example/opds"
         const val OLD_SYNC = "https://old.example/kosync"
 
-        fun success(url: String = CATALOG) = SetupResult.Success(
+        fun success(url: String = CATALOG, hasBooks: Boolean = true) = SetupResult.Success(
             ServerCapabilities(
                 baseUrl = url,
                 canDownload = true,
                 accountId = null,
                 displayName = "The Shelf",
+                hasBooks = hasBooks,
             ),
         )
     }

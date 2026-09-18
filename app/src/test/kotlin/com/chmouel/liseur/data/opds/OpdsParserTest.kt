@@ -97,6 +97,24 @@ class OpdsParserTest {
     }
 
     @Test
+    fun `gutenberg no records found entry is not parsed as a book nor as navigation`() {
+        val noRecordsFeed = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog">
+              <title>Books: Language: French</title>
+              <entry>
+                <id>https://www.gutenberg.org/ebooks.opds/</id>
+                <title>No records found.</title>
+                <link type="application/atom+xml;profile=opds-catalog" rel="subsection" href="/ebooks.opds/"/>
+              </entry>
+            </feed>
+        """.trimIndent()
+        val parsed = OpdsParser.parse(noRecordsFeed)
+        assertTrue(parsed.books.isEmpty())
+        assertTrue(parsed.navigation.isEmpty())
+    }
+
+    @Test
     fun `a subsection that says nothing about itself is still a shelf`() {
         // Most catalogs spell navigation with the `rel` alone, and the
         // rel is all there is to go on.

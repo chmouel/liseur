@@ -21,6 +21,7 @@ import com.chmouel.liseur.data.kosync.KosyncPairing
 import com.chmouel.liseur.data.kosync.KosyncProbe
 import com.chmouel.liseur.data.kosync.ProvedKosyncPairing
 import com.chmouel.liseur.data.opds.OpdsSetupClient
+import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runBlocking
@@ -382,6 +383,74 @@ class RemoteAccountRepository(
             OpenCatalogOutcome.CONNECTED
         } else {
             OpenCatalogOutcome.ALREADY_CONNECTED
+        }
+    }
+
+    /**
+     * Connects Project Gutenberg's starter catalog, preferring [languageCode]
+     * and falling back to English if the requested language feed has no matching books.
+     */
+    suspend fun connectStarterCatalogIfDisconnected(
+        category: StarterCatalog.Category,
+        shelfLimit: Int? = null,
+        languageCode: String? = null,
+    ): StarterCatalogOutcome {
+        if (dao.get() != null) return StarterCatalogOutcome.ALREADY_CONNECTED
+        val setup = setups[ServerKind.CUSTOM] ?: return StarterCatalogOutcome.UNREACHABLE
+
+        val normalizedLang = StarterCatalog.baseLanguage(languageCode)
+            ?.takeIf { it in StarterCatalog.SUPPORTED_LANGUAGES }
+        val targetUrl = category.url(normalizedLang)
+
+        if (normalizedLang != null && targetUrl != category.englishUrl) {
+            val probed = setup.connect(targetUrl, RemoteCredentials.Anonymous, allowHttp = false)
+            when (probed) {
+                is SetupResult.Success -> {
+                    if (probed.capabilities.hasBooks) {
+                        return publishStarter(probed.capabilities, shelfLimit, isFallback = false)
+                    }
+                    // The feed answered successfully but contained no books ("No records found")
+                    // -> fall through to English
+                }
+                is SetupResult.Failure -> {
+                    // Network or server failure: report unreachable rather than quiet English fallback
+                    return StarterCatalogOutcome.UNREACHABLE
+                }
+            }
+        }
+
+        val englishProbed = setup.connect(category.englishUrl, RemoteCredentials.Anonymous, allowHttp = false)
+        val capabilities = when (englishProbed) {
+            is SetupResult.Failure -> return StarterCatalogOutcome.UNREACHABLE
+            is SetupResult.Success -> englishProbed.capabilities
+        }
+        val isFallback = normalizedLang != null && targetUrl != category.englishUrl
+        return publishStarter(capabilities, shelfLimit, isFallback = isFallback)
+    }
+
+    private suspend fun publishStarter(
+        capabilities: ServerCapabilities,
+        shelfLimit: Int?,
+        isFallback: Boolean,
+    ): StarterCatalogOutcome {
+        var published = false
+        changingAccount {
+            inTransaction {
+                if (dao.get() != null) return@inTransaction
+                storeLocked(
+                    ServerKind.CUSTOM,
+                    RemoteCredentials.Anonymous,
+                    capabilities,
+                    keepsPairing = true,
+                    shelfLimit = shelfLimit,
+                )
+                published = true
+            }
+        }
+        return if (published) {
+            if (isFallback) StarterCatalogOutcome.CONNECTED_FALLBACK else StarterCatalogOutcome.CONNECTED
+        } else {
+            StarterCatalogOutcome.ALREADY_CONNECTED
         }
     }
 

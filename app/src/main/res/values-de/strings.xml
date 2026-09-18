@@ -100,11 +100,14 @@
     <string name="empty_library_title">Deine Bibliothek ist leer</string>
     <string name="empty_library_subtitle">So füllst du sie.</string>
     <string name="starter_catalog">Mit kostenlosen Büchern starten</string>
-    <string name="starter_catalog_hint">Klassiker von Project Gutenberg, gemeinfrei und kostenlos zu lesen. Wähle ein Regal und wie viele Bücher geholt werden sollen.</string>
+    <string name="starter_catalog_hint">Klassiker von Project Gutenberg, gemeinfrei und kostenlos zu lesen. Wähle eine Sprache, ein Regal und wie viele Bücher geholt werden sollen.</string>
     <string name="starter_catalog_connecting">Verbindung zu Project Gutenberg…</string>
     <string name="starter_catalog_failed">Project Gutenberg war nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="starter_catalog_fallback_english">Keine Bücher in dieser Sprache gefunden; der englische Katalog wird angezeigt.</string>
     <string name="starter_catalog_sheet_hint">Project Gutenberg verschenkt Bücher, deren Urheberrecht abgelaufen ist. Keine Anmeldung nötig.</string>
     <string name="starter_catalog_which">Welche Bücher</string>
+    <string name="starter_catalog_language">Sprache</string>
+    <string name="starter_catalog_language_more">Weitere Sprachen</string>
     <string name="starter_catalog_how_many">Wie viele</string>
     <string name="starter_catalog_how_many_hint">Jedes Buch ist eine eigene Anfrage an einen kostenlosen, spendenfinanzierten Server — ein größeres Regal dauert also länger. Du kannst jederzeit auch eigene Bücher hinzufügen.</string>
     <string name="starter_catalog_start">Bücher holen</string>

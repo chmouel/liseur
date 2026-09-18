@@ -31,6 +31,7 @@ object StarterCatalog {
      * here would cost every connection a wasted request and a retry.
      */
     private const val SHELF_BASE = "https://www.gutenberg.org/ebooks/bookshelf/"
+    private const val SEARCH_BASE = "https://www.gutenberg.org/ebooks/search.opds/"
 
     /**
      * Gutenberg's whole catalog, most-downloaded first.
@@ -45,14 +46,75 @@ object StarterCatalog {
         "https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads"
 
     /**
+     * Languages with dedicated catalogs on Project Gutenberg.
+     */
+    val SUPPORTED_LANGUAGES = setOf(
+        "fr", "de", "es", "it", "ru", "pt", "nl", "zh", "ja", "eo",
+        "ca", "da", "fi", "hu", "pl", "sv",
+    )
+
+    /**
+     * The language a shelf is in when nobody asked for another.
+     *
+     * Deliberately absent from [SUPPORTED_LANGUAGES], which lists the
+     * languages that need a search address of their own: English is
+     * what the curated shelves already are, so it is the one language
+     * reached by *not* asking. A picker needs it back as something to
+     * choose, which is what [OFFERED_LANGUAGES] is for.
+     */
+    const val DEFAULT_LANGUAGE = "en"
+
+    /**
+     * Every language a starting shelf may be asked for.
+     *
+     * A list rather than a set because this is what a reader is
+     * offered, and an offer has an order. English leads it because it
+     * is the one that always has books.
+     */
+    val OFFERED_LANGUAGES: List<String> = listOf(DEFAULT_LANGUAGE) + SUPPORTED_LANGUAGES
+
+    /**
+     * Which of [OFFERED_LANGUAGES] to open on, given the reader's own.
+     *
+     * A phone set to a language Gutenberg has a catalog for should not
+     * have to say so, and one set to a language it does not should be
+     * shown the shelf that has books rather than an empty one. Answered
+     * here, once, rather than at whichever screen happens to ask.
+     *
+     * This does not decide an address — [Category.url] still does that,
+     * and still applies its own rule to whatever it is handed.
+     */
+    fun resolveLanguage(preferred: String?): String =
+        baseLanguage(preferred)?.takeIf { it in OFFERED_LANGUAGES } ?: DEFAULT_LANGUAGE
+
+    /**
+     * The primary subtag of a language tag, lowercased.
+     *
+     * Gutenberg catalogues by language and knows nothing of where it is
+     * spoken: `pt-BR` and `pt-PT` are one collection, and `zh-Hans` is
+     * the Chinese one. Android's `Locale.getLanguage()` hands over the
+     * bare subtag already, so nothing in the app reaches this with a
+     * region on it today — but a code is the sort of thing that arrives
+     * from somewhere new, and reading `pt-BR` as "no Portuguese here"
+     * would silently answer a reader in the wrong language.
+     *
+     * Both separators, because a tag is spelled with a hyphen and a
+     * Java locale prints itself with an underscore.
+     */
+    internal fun baseLanguage(tag: String?): String? =
+        tag?.lowercase()?.substringBefore('-')?.substringBefore('_')?.takeIf { it.isNotEmpty() }
+
+    /**
      * What the reader may start with.
      *
-     * [POPULAR] is the whole catalog by download count. The rest are
-     * Project Gutenberg's own bookshelves, which are curated by hand
-     * and read far better than anything a subject search produces: a
-     * search for the word "philosophy" leads with *The Picture of
-     * Dorian Gray*, while the Philosophy bookshelf leads with *The
-     * Prince*.
+     * [POPULAR] is the catalog by download count. The rest are
+     * Project Gutenberg's bookshelves or subject searches.
+     *
+     * In English, bookshelves curated by hand at Gutenberg are used
+     * where available. For non-English languages, searches combining
+     * subject and language (`s.<subject>+l.<lang>`) or the language's
+     * most downloaded books are queried. If no books match, resolution
+     * falls back to the English shelf.
      *
      * The ids are written down because there is no way to discover
      * them: Gutenberg publishes no OPDS index of its bookshelves. That
@@ -66,26 +128,65 @@ object StarterCatalog {
      * made to a library with no server: it can make the first choice
      * and no other.
      */
-    enum class Category(private val shelf: Int?) {
+    enum class Category(private val shelf: Int?, internal val subject: String? = null) {
         POPULAR(null),
         BEST_EVER(13),
-        SCIENCE_FICTION(68),
-        FANTASY(36),
-        HORROR(42),
-        GOTHIC(39),
-        ADVENTURE(82),
-        WESTERN(77),
-        HISTORICAL_FICTION(41),
-        MYSTERY(51),
-        SHORT_STORIES(69),
-        POETRY(60),
-        HUMOR(44),
-        PHILOSOPHY(57),
-        CHILDRENS(20),
+        SCIENCE_FICTION(68, "science fiction"),
+        FANTASY(36, "fantasy"),
+        HORROR(42, "horror"),
+        GOTHIC(39, "gothic"),
+        ADVENTURE(82, "adventure"),
+        WESTERN(77, "western"),
+        HISTORICAL_FICTION(41, "historical fiction"),
+        MYSTERY(51, "detective"),
+        SHORT_STORIES(69, "short stories"),
+        POETRY(60, "poetry"),
+        HUMOR(44, "humor"),
+        PHILOSOPHY(57, "philosophy"),
+        CHILDRENS(20, "children"),
         ;
 
-        /** The OPDS address this shelf is read from. */
-        val url: String get() = shelf?.let { "$SHELF_BASE$it.opds" } ?: POPULAR_URL
+        /** English URL (curated shelf or default popular). */
+        val englishUrl: String get() = shelf?.let { "$SHELF_BASE$it.opds" } ?: POPULAR_URL
+
+        /**
+         * Whether this shelf exists in any language but English.
+         *
+         * A curated bookshelf is a list somebody at Gutenberg wrote
+         * down, and only "Best books ever" has no subject to search by
+         * instead. Asked for in French it would have to fall back to
+         * *something*, and the something it fell back to was the
+         * language's most-downloaded feed — the identical address
+         * "Most popular" already builds. Two chips, one account, no way
+         * to tell from the shelf which one had been tapped.
+         */
+        val englishOnly: Boolean get() = shelf != null && subject == null
+
+        /** Whether this shelf is worth offering to a reader of [languageCode]. */
+        fun offeredIn(languageCode: String): Boolean =
+            !englishOnly || baseLanguage(languageCode) == DEFAULT_LANGUAGE
+
+        /**
+         * The OPDS address for this category in [languageCode],
+         * or [englishUrl] if languageCode is null, "en", or unsupported.
+         *
+         * An English-only shelf keeps its own English address rather
+         * than borrowing another category's, so every category stays a
+         * distinct account whatever language is asked for.
+         */
+        fun url(languageCode: String? = null): String {
+            if (englishOnly) return englishUrl
+            val lang = baseLanguage(languageCode)?.takeIf { it in SUPPORTED_LANGUAGES }
+                ?: return englishUrl
+            return if (subject != null) {
+                "$SEARCH_BASE?query=s.${subject.replace(' ', '+')}+l.$lang&sort_order=downloads"
+            } else {
+                "$SEARCH_BASE?query=l.$lang&sort_order=downloads"
+            }
+        }
+
+        /** The default English OPDS address for backwards compatibility. */
+        val url: String get() = englishUrl
     }
 
     /**
