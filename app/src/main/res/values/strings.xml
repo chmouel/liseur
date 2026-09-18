@@ -537,7 +537,11 @@
     <string name="reader_typography">Reading appearance</string>
     <string name="reader_font">Font</string>
     <string name="reader_size">Size</string>
+    <string name="reader_size_decrease">Decrease font size</string>
+    <string name="reader_size_increase">Increase font size</string>
     <string name="reader_brightness">Brightness</string>
+    <string name="reader_brightness_decrease">Decrease brightness</string>
+    <string name="reader_brightness_increase">Increase brightness</string>
     <string name="reader_brightness_system">Follow system brightness</string>
     <string name="reader_progress">Progress</string>
     <string name="reader_line_spacing">Line spacing</string>

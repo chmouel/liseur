@@ -58,6 +58,7 @@ import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderFont
+import com.chmouel.liseur.reader.chrome.PinchResize
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
@@ -436,10 +437,28 @@ fun ReadingFooterModeDropdown(selected: FooterMode, onSelected: (FooterMode) -> 
 @Composable
 fun ReadingFontSizeSlider(value: Double, enabled: Boolean, onChanged: (Double) -> Unit) {
     var sliderValue by remember(value) { mutableFloatStateOf(value.toFloat()) }
+    val decreaseFontSize = stringResource(R.string.reader_size_decrease)
+    val increaseFontSize = stringResource(R.string.reader_size_increase)
+    fun step(delta: Int) {
+        val next = PinchResize.sizeAt(PinchResize.positionOf(sliderValue.toDouble()) + delta)
+        sliderValue = next.toFloat()
+        onChanged(next)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_size))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("A", fontSize = 14.sp)
+            IconButton(
+                enabled = enabled && sliderValue > ReaderPrefs.MIN_FONT_SIZE.toFloat(),
+                onClick = { step(-1) },
+            ) {
+                Text(
+                    "A",
+                    fontSize = 14.sp,
+                    modifier = Modifier.semantics {
+                        contentDescription = decreaseFontSize
+                    },
+                )
+            }
             Slider(
                 value = sliderValue,
                 enabled = enabled,
@@ -451,22 +470,49 @@ fun ReadingFontSizeSlider(value: Double, enabled: Boolean, onChanged: (Double) -
                     .weight(1f)
                     .padding(horizontal = 12.dp),
             )
-            Text("A", fontSize = 26.sp)
+            IconButton(
+                enabled = enabled && sliderValue < ReaderPrefs.MAX_FONT_SIZE.toFloat(),
+                onClick = { step(1) },
+            ) {
+                Text(
+                    "A",
+                    fontSize = 26.sp,
+                    modifier = Modifier.semantics {
+                        contentDescription = increaseFontSize
+                    },
+                )
+            }
         }
     }
 }
 
+private const val BRIGHTNESS_STEP = 0.1f
+private const val BRIGHTNESS_BOUNDARY_EPSILON = 0.0001f
+
 @Composable
 fun ReadingBrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
     var sliderValue by remember(value) { mutableFloatStateOf(value ?: 0.5f) }
+    fun step(delta: Float) {
+        val next = when {
+            delta < 0f && sliderValue <= BRIGHTNESS_STEP + BRIGHTNESS_BOUNDARY_EPSILON -> 0f
+            delta > 0f && sliderValue >= 1f - BRIGHTNESS_STEP - BRIGHTNESS_BOUNDARY_EPSILON -> 1f
+            else -> (sliderValue + delta).coerceIn(0f, 1f)
+        }
+        sliderValue = next
+        onChanged(next)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_brightness))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Outlined.BrightnessLow,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            IconButton(
+                enabled = sliderValue > BRIGHTNESS_BOUNDARY_EPSILON,
+                onClick = { step(-BRIGHTNESS_STEP) },
+            ) {
+                Icon(
+                    Icons.Outlined.BrightnessLow,
+                    contentDescription = stringResource(R.string.reader_brightness_decrease),
+                )
+            }
             Slider(
                 value = sliderValue,
                 onValueChange = {
@@ -478,11 +524,15 @@ fun ReadingBrightnessSlider(value: Float?, onChanged: (Float?) -> Unit) {
                     .weight(1f)
                     .padding(horizontal = 12.dp),
             )
-            Icon(
-                Icons.Outlined.BrightnessHigh,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            IconButton(
+                enabled = sliderValue < 1f - BRIGHTNESS_BOUNDARY_EPSILON,
+                onClick = { step(BRIGHTNESS_STEP) },
+            ) {
+                Icon(
+                    Icons.Outlined.BrightnessHigh,
+                    contentDescription = stringResource(R.string.reader_brightness_increase),
+                )
+            }
             IconButton(onClick = { onChanged(null) }) {
                 Icon(
                     Icons.Outlined.BrightnessAuto,
