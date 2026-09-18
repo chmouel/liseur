@@ -1418,6 +1418,7 @@ class ReaderViewModel(
             minutesLeftInBook = speed.minutesFor(positions.totalPositions - stable.coordinate),
             positionsLeftInChapter = pagesLeftInChapter(chapter, position),
             isSpeedMeasured = speed.isMeasured,
+            resource = stable.resource,
         )
     }
 

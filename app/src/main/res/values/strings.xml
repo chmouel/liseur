@@ -155,6 +155,8 @@
     <string name="footer_cycle">Change what the footer shows</string>
     <string name="footer_page">Page %1$d of %2$d</string>
     <string name="footer_page_compact">%1$d of %2$d</string>
+    <string name="footer_screen_compact">%1$d/%2$d</string>
+    <string name="footer_page_about">About page %1$d of %2$d</string>
     <string name="footer_percent">%d%%</string>
     <string name="go_to_page_title">Go to page</string>
     <string name="go_to_printed_page_title">Go to printed page</string>

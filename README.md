@@ -44,7 +44,8 @@ brightness, and page-turn vs. continuous-scroll are adjustable per book or
 library-wide. Auto-scroll runs at a set pace and continues across chapter
 boundaries.
 
-A footer shows time remaining in the chapter. Highlights, margin notes,
+A footer shows the page you are on, how much of the chapter is left, and
+time remaining. Highlights, margin notes,
 bookmarks, and dictionary lookups are inline; book-level notes live in the
 notebook. Marking a passage offers three colours, and you tick which of
 the six you want along with the colour new marks use. Footnotes open as a
