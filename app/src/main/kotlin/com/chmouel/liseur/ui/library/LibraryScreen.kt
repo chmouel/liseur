@@ -201,8 +201,9 @@ fun LibraryScreen(
     onClearFilters: () -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
-    onStartWithFreeBooks: (StarterCatalog.Category, Int) -> Unit = { _, _ -> },
+    onStartWithFreeBooks: (StarterCatalog.Category, Int, String) -> Unit = { _, _, _ -> },
     freeBooksFailures: Flow<Unit> = emptyFlow(),
+    freeBooksFallback: Flow<Unit> = emptyFlow(),
     notice: Notice? = null,
     onNoticeShown: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -247,6 +248,10 @@ fun LibraryScreen(
     val freeBooksFailed = stringResource(R.string.starter_catalog_failed)
     LaunchedEffect(freeBooksFailures) {
         freeBooksFailures.collect { snackbarHost.showSnackbar(freeBooksFailed) }
+    }
+    val freeBooksFallbackMsg = stringResource(R.string.starter_catalog_fallback_english)
+    LaunchedEffect(freeBooksFallback) {
+        freeBooksFallback.collect { snackbarHost.showSnackbar(freeBooksFallbackMsg) }
     }
     // Removing a book from the library is quiet and easy to do by
     // accident, and the entry it took away may be the one being read,

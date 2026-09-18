@@ -99,11 +99,14 @@
     <string name="empty_library_title">Tu biblioteca está vacía</string>
     <string name="empty_library_subtitle">Así es como la rellenas.</string>
     <string name="starter_catalog">Empieza con libros gratis</string>
-    <string name="starter_catalog_hint">Clásicos de Project Gutenberg, sin copyright y gratis para leer. Elige un estante y cuántos libros traer.</string>
+    <string name="starter_catalog_hint">Clásicos de Project Gutenberg, sin copyright y gratis para leer. Elige un idioma, un estante y cuántos libros traer.</string>
     <string name="starter_catalog_connecting">Conectando con Project Gutenberg…</string>
     <string name="starter_catalog_failed">No se pudo contactar con Project Gutenberg. Comprueba tu conexión e inténtalo de nuevo.</string>
+    <string name="starter_catalog_fallback_english">No se encontraron libros en este idioma; mostrando el catálogo en inglés.</string>
     <string name="starter_catalog_sheet_hint">Project Gutenberg regala libros cuyo copyright ha caducado. No hay que registrarse.</string>
     <string name="starter_catalog_which">Qué libros</string>
+    <string name="starter_catalog_language">Idioma</string>
+    <string name="starter_catalog_language_more">Más idiomas</string>
     <string name="starter_catalog_how_many">Cuántos</string>
     <string name="starter_catalog_how_many_hint">Cada libro es una petición aparte a un servidor gratuito financiado por donaciones, así que un estante más grande tarda más. Siempre puedes añadir también tus propios libros.</string>
     <string name="starter_catalog_start">Obtener libros</string>

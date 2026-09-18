@@ -177,6 +177,8 @@ data class ServerCapabilities(
      * read off [baseUrl] downstream.
      */
     val catalogUrl: String? = baseUrl,
+    /** Whether the probed feed contains books or sub-shelves to explore. */
+    val hasBooks: Boolean = true,
 )
 
 /** Why connecting to a server did not work, in terms a user can act on. */
@@ -227,6 +229,20 @@ sealed interface SetupResult {
  * server is connected, which is what the offer was for.
  */
 enum class OpenCatalogOutcome { CONNECTED, UNREACHABLE, ALREADY_CONNECTED }
+
+/**
+ * What came of offering to connect Project Gutenberg's starter shelf.
+ */
+enum class StarterCatalogOutcome {
+    /** Connected to the requested language. */
+    CONNECTED,
+    /** Connected to English because the requested language had no matching books. */
+    CONNECTED_FALLBACK,
+    /** The catalog server could not be reached or failed. */
+    UNREACHABLE,
+    /** A server was already connected in the meantime. */
+    ALREADY_CONNECTED,
+}
 
 /**
  * What came of connecting a Custom server, address by address.

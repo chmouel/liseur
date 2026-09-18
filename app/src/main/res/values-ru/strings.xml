@@ -103,11 +103,14 @@
     <string name="empty_library_title">Библиотека пуста</string>
     <string name="empty_library_subtitle">Вот как её заполнить.</string>
     <string name="starter_catalog">Начать с бесплатных книг</string>
-    <string name="starter_catalog_hint">Классика с Project Gutenberg — без авторских прав и бесплатно. Выберите полку и сколько книг скачать.</string>
+    <string name="starter_catalog_hint">Классика с Project Gutenberg — без авторских прав и бесплатно. Выберите язык, полку и сколько книг скачать.</string>
     <string name="starter_catalog_connecting">Подключение к Project Gutenberg…</string>
     <string name="starter_catalog_failed">Не удалось связаться с Project Gutenberg. Проверьте соединение и попробуйте снова.</string>
+    <string name="starter_catalog_fallback_english">Книг на этом языке не найдено; показан каталог на английском.</string>
     <string name="starter_catalog_sheet_hint">Project Gutenberg раздаёт книги, у которых истёк срок авторских прав. Регистрация не нужна.</string>
     <string name="starter_catalog_which">Какие книги</string>
+    <string name="starter_catalog_language">Язык</string>
+    <string name="starter_catalog_language_more">Другие языки</string>
     <string name="starter_catalog_how_many">Сколько</string>
     <string name="starter_catalog_how_many_hint">Каждая книга — отдельный запрос к бесплатному серверу на пожертвованиях, поэтому большая полка займёт больше времени. Свои книги можно добавить в любой момент.</string>
     <string name="starter_catalog_start">Получить книги</string>

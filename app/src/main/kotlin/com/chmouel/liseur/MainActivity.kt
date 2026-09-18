@@ -893,6 +893,7 @@ private fun LibraryRoute(
         onConnectServer = onConnectServer,
         onStartWithFreeBooks = viewModel::connectStarterCatalog,
         freeBooksFailures = viewModel.starterCatalogFailures,
+        freeBooksFallback = viewModel.starterCatalogFallback,
         onDownload = viewModel::download,
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,

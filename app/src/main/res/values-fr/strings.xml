@@ -99,11 +99,14 @@
     <string name="empty_library_title">Votre bibliothèque est vide</string>
     <string name="empty_library_subtitle">Voici comment la remplir.</string>
     <string name="starter_catalog">Commencer avec des livres gratuits</string>
-    <string name="starter_catalog_hint">Des classiques de Project Gutenberg, libres de droits et gratuits à lire. Choisissez une étagère et combien de livres récupérer.</string>
+    <string name="starter_catalog_hint">Des classiques de Project Gutenberg, libres de droits et gratuits à lire. Choisissez une langue, une étagère et combien de livres récupérer.</string>
     <string name="starter_catalog_connecting">Connexion à Project Gutenberg…</string>
     <string name="starter_catalog_failed">Impossible d\'atteindre Project Gutenberg. Vérifiez votre connexion et réessayez.</string>
+    <string name="starter_catalog_fallback_english">Aucun livre n\'a été trouvé dans cette langue ; affichage du catalogue en anglais.</string>
     <string name="starter_catalog_sheet_hint">Project Gutenberg offre des livres dont le copyright a expiré. Aucune inscription.</string>
     <string name="starter_catalog_which">Quels livres</string>
+    <string name="starter_catalog_language">Langue</string>
+    <string name="starter_catalog_language_more">Plus de langues</string>
     <string name="starter_catalog_how_many">Combien</string>
     <string name="starter_catalog_how_many_hint">Chaque livre est une requête séparée vers un serveur gratuit financé par des dons, donc une plus grande étagère prend plus de temps. Vous pouvez toujours ajouter vos propres livres aussi.</string>
     <string name="starter_catalog_start">Obtenir les livres</string>

@@ -104,11 +104,14 @@
     <string name="empty_library_title">Your library is empty</string>
     <string name="empty_library_subtitle">Here is how to fill it.</string>
     <string name="starter_catalog">Start with free books</string>
-    <string name="starter_catalog_hint">Classics from Project Gutenberg, out of copyright and free to read. Pick a shelf and how many books to fetch.</string>
+    <string name="starter_catalog_hint">Classics from Project Gutenberg, out of copyright and free to read. Pick a language, a shelf, and how many books to fetch.</string>
     <string name="starter_catalog_connecting">Connecting to Project Gutenberg…</string>
     <string name="starter_catalog_failed">Could not reach Project Gutenberg. Check your connection and try again.</string>
+    <string name="starter_catalog_fallback_english">No books were found in this language; showing the English catalog.</string>
     <string name="starter_catalog_sheet_hint">Project Gutenberg gives away books whose copyright has expired. Nothing to sign up for.</string>
     <string name="starter_catalog_which">Which books</string>
+    <string name="starter_catalog_language">Language</string>
+    <string name="starter_catalog_language_more">More languages</string>
     <string name="starter_catalog_how_many">How many</string>
     <string name="starter_catalog_how_many_hint">Each book is a separate request to a free, donation-funded server, so a bigger shelf takes longer. You can always add your own books as well.</string>
     <string name="starter_catalog_start">Get books</string>

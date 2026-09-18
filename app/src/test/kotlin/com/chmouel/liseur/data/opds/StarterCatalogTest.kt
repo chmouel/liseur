@@ -126,6 +126,130 @@ class StarterCatalogTest {
         assertTrue(scope.mayFetch("https://www.gutenberg.org/ebooks/84.opds".toHttpUrl()))
     }
 
+    @Test
+    fun `language URLs query the language on search and survive normalisation`() {
+        for (lang in listOf("fr", "de", "es", "it", "ru")) {
+            val popularUrl = StarterCatalog.Category.POPULAR.url(lang)
+            assertTrue(popularUrl.contains("query=l.$lang"))
+            assertTrue(popularUrl.contains("sort_order=downloads"))
+            assertEquals(popularUrl, normalised(popularUrl))
+            assertNotNull(OpdsScope.of(popularUrl))
+
+            val sciFiUrl = StarterCatalog.Category.SCIENCE_FICTION.url(lang)
+            assertTrue(sciFiUrl.contains("query=s.science+fiction+l.$lang"))
+            assertTrue(sciFiUrl.contains("sort_order=downloads"))
+            assertEquals(sciFiUrl, normalised(sciFiUrl))
+            assertNotNull(OpdsScope.of(sciFiUrl))
+        }
+    }
+
+    @Test
+    fun `english and unsupported languages fall back to default shelf`() {
+        for (category in StarterCatalog.Category.entries) {
+            assertEquals(category.englishUrl, category.url(null))
+            assertEquals(category.englishUrl, category.url("en"))
+            assertEquals(category.englishUrl, category.url("EN"))
+            assertEquals(category.englishUrl, category.url("unsupported_language"))
+            assertEquals(category.englishUrl, category.url(""))
+        }
+    }
+
+    @Test
+    fun `the offer leads with English and holds every supported language`() {
+        assertEquals(StarterCatalog.DEFAULT_LANGUAGE, StarterCatalog.OFFERED_LANGUAGES.first())
+        assertTrue(StarterCatalog.OFFERED_LANGUAGES.containsAll(StarterCatalog.SUPPORTED_LANGUAGES))
+        assertEquals(
+            StarterCatalog.SUPPORTED_LANGUAGES.size + 1,
+            StarterCatalog.OFFERED_LANGUAGES.size,
+        )
+        assertEquals(
+            StarterCatalog.OFFERED_LANGUAGES,
+            StarterCatalog.OFFERED_LANGUAGES.distinct(),
+        )
+        // English is reached by not asking, so it is deliberately not a
+        // feed of its own.
+        assertTrue(StarterCatalog.DEFAULT_LANGUAGE !in StarterCatalog.SUPPORTED_LANGUAGES)
+    }
+
+    @Test
+    fun `the picker opens on the reader's language when there is a shelf for it`() {
+        for (lang in StarterCatalog.OFFERED_LANGUAGES) {
+            assertEquals(lang, StarterCatalog.resolveLanguage(lang))
+            assertEquals(lang, StarterCatalog.resolveLanguage(lang.uppercase()))
+        }
+    }
+
+    @Test
+    fun `a language with no shelf opens on English rather than on nothing`() {
+        // A phone in Welsh or Arabic has no Gutenberg feed to offer, and
+        // an empty shelf is a worse first minute than an English one.
+        for (unknown in listOf(null, "", "cy", "ar", "unsupported_language")) {
+            assertEquals(StarterCatalog.DEFAULT_LANGUAGE, StarterCatalog.resolveLanguage(unknown))
+        }
+    }
+
+    @Test
+    fun `every offered language names an address the catalog may walk`() {
+        for (lang in StarterCatalog.OFFERED_LANGUAGES) {
+            for (category in StarterCatalog.Category.entries) {
+                val url = category.url(lang)
+                assertEquals(url, normalised(url))
+                assertNotNull(OpdsScope.of(url))
+            }
+        }
+    }
+
+    @Test
+    fun `no two shelves are the same account in any language`() {
+        // The English-only check above missed this: "Best books ever"
+        // is a curated list with no subject to search by, so asking for
+        // it in French once built the identical address "Most popular"
+        // did. Two chips, one account, and no way to tell from the
+        // shelf which had been tapped.
+        for (lang in StarterCatalog.OFFERED_LANGUAGES) {
+            val fingerprints = StarterCatalog.Category.entries
+                .filter { it.offeredIn(lang) }
+                .map { OpdsScope.of(it.url(lang))!!.fingerprint }
+
+            assertEquals(lang, fingerprints.size, fingerprints.toSet().size)
+        }
+    }
+
+    @Test
+    fun `an English-only shelf is offered in English and nowhere else`() {
+        for (lang in StarterCatalog.OFFERED_LANGUAGES) {
+            for (category in StarterCatalog.Category.entries) {
+                val offered = category.offeredIn(lang)
+                if (lang == StarterCatalog.DEFAULT_LANGUAGE) {
+                    assertTrue(offered)
+                } else {
+                    assertEquals(!category.englishOnly, offered)
+                }
+            }
+        }
+        // Most popular is every language's shelf; it is the one with no
+        // curated list behind it to be English about.
+        assertTrue(!StarterCatalog.Category.POPULAR.englishOnly)
+        assertTrue(StarterCatalog.Category.BEST_EVER.englishOnly)
+    }
+
+    @Test
+    fun `a language tag keeps its collection when it carries a region`() {
+        // Gutenberg catalogues by language and knows nothing of where
+        // it is spoken. Reading `pt-BR` as "no Portuguese here" would
+        // answer a Brazilian reader in English.
+        assertEquals("pt", StarterCatalog.resolveLanguage("pt-BR"))
+        assertEquals("pt", StarterCatalog.resolveLanguage("pt_BR"))
+        assertEquals("zh", StarterCatalog.resolveLanguage("zh-Hans"))
+        assertEquals("fr", StarterCatalog.resolveLanguage("fr-CA"))
+        assertEquals("en", StarterCatalog.resolveLanguage("en-GB"))
+
+        assertEquals(
+            StarterCatalog.Category.POPULAR.url("pt"),
+            StarterCatalog.Category.POPULAR.url("pt-BR"),
+        )
+    }
+
     private companion object {
         /** Entries per page, as Gutenberg reports in `opensearch:itemsPerPage`. */
         const val PAGE = 25

@@ -99,11 +99,14 @@
     <string name="empty_library_title">La libreria è vuota</string>
     <string name="empty_library_subtitle">Ecco come riempirla.</string>
     <string name="starter_catalog">Inizia con libri gratis</string>
-    <string name="starter_catalog_hint">Classici di Project Gutenberg, fuori copyright e gratis da leggere. Scegli uno scaffale e quanti libri scaricare.</string>
+    <string name="starter_catalog_hint">Classici di Project Gutenberg, fuori copyright e gratis da leggere. Scegli una lingua, uno scaffale e quanti libri scaricare.</string>
     <string name="starter_catalog_connecting">Connessione a Project Gutenberg…</string>
     <string name="starter_catalog_failed">Impossibile raggiungere Project Gutenberg. Controlla la connessione e riprova.</string>
+    <string name="starter_catalog_fallback_english">Nessun libro trovato in questa lingua; visualizzazione del catalogo in inglese.</string>
     <string name="starter_catalog_sheet_hint">Project Gutenberg offre libri il cui copyright è scaduto. Niente da registrare.</string>
     <string name="starter_catalog_which">Quali libri</string>
+    <string name="starter_catalog_language">Lingua</string>
+    <string name="starter_catalog_language_more">Altre lingue</string>
     <string name="starter_catalog_how_many">Quanti</string>
     <string name="starter_catalog_how_many_hint">Ogni libro è una richiesta separata a un server gratuito finanziato da donazioni, quindi uno scaffale più grande richiede più tempo. Puoi sempre aggiungere anche i tuoi libri.</string>
     <string name="starter_catalog_start">Prendi i libri</string>
