@@ -178,6 +178,15 @@ emulator.
 - Never add a `Co-authored-by` (or any co-author/AI attribution)
   trailer to commits.
 
+- UI copy lives in `app/src/main/res/values/strings.xml` and is read with
+  `stringResource` / `pluralStringResource` — never hardcode user-facing
+  English. Every new or changed translatable string must also be
+  translated in French, Spanish, Russian, Italian and German
+  (`values-fr`, `values-es`, `values-ru`, `values-it`, `values-de`) in
+  the same change. Skip keys marked `translatable="false"` (brand and
+  product names). Russian plurals need `one` / `few` / `many` /
+  `other`. See `docs/TRANSLATING.md`.
+
 - Reading positions are Readium `Locator`s locally. calibre-web sync
   exchanges percentage progression (`locations.totalProgression`); Komga
   and liseur-sync exchange a full locator, so they also restore the

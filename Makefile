@@ -8,6 +8,7 @@ SCRCPY ?= scrcpy
 AVD ?= liseur_phone_api36
 SERIAL ?= emulator-5554
 PHONE ?= $(SERIAL)
+LOCALE ?=
 ADB_TARGET := -s $(SERIAL)
 ADB_PHONE_TARGET := -s $(PHONE)
 PACKAGE := com.chmouel.liseur
@@ -23,7 +24,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/dev/app-dev.apk
 
-.PHONY: help build debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset screenshots icon feature-graphic store-status dev dev-install dev-run dev-uninstall dev-logcat
+.PHONY: help build debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-install dev-run dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
@@ -43,18 +44,20 @@ help:
 		'make run               Start the emulator, install, launch, and show it with scrcpy' \
 		'make run-bg            Start the emulator, install, and launch without scrcpy' \
 		'make reset             Reinstall the app, wipe its storage, and reseed a demo library' \
+		'make locale            Show or set app locale with LOCALE=xx (e.g. fr, de, es, it, ru)' \
 		'make clean             Remove build outputs' \
 		'make dev               Build the side-by-side APK ($(DEV_PACKAGE))' \
 		'make dev-install       Build and install it beside the real app' \
 		'make dev-run           Install it and launch it' \
 		'make dev-uninstall     Remove it' \
 		'make dev-logcat        Tail its logs' \
+		'make dev-locale        Show or set dev app locale with LOCALE=xx' \
 		'make screenshots       Capture the UI screenshots' \
 		'make icon              Generate the store icon' \
 		'make feature-graphic   Generate the store feature graphic' \
 		'make store-status      Show what each store is publishing' \
 		'' \
-		'Variables: AVD=liseur_phone_api36 SERIAL=...'
+		'Variables: AVD=liseur_phone_api36 SERIAL=... LOCALE=...'
 
 build debug:
 	$(GRADLE) assembleDebug
@@ -113,6 +116,9 @@ run-bg: emulator build
 	@printf 'Waiting for Android to finish booting.\n'
 	@until [ "$$($(ADB) $(ADB_TARGET) shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do sleep 1; done
 	$(ADB) $(ADB_TARGET) install -r '$(DEBUG_APK)'
+	@if [ -n "$(LOCALE)" ]; then \
+		$(ADB) $(ADB_TARGET) shell cmd locale set-app-locales '$(PACKAGE)' --locales '$(LOCALE)'; \
+	fi
 	$(ADB) $(ADB_TARGET) shell am start -n '$(ACTIVITY)'
 
 run: run-bg
@@ -121,6 +127,29 @@ run: run-bg
 
 reset: run-bg
 	./hack/reset-books -s $(SERIAL)
+
+locale:
+	@loc='$(LOCALE)'; \
+	code=''; \
+	if [ -z "$$loc" ] && command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then \
+		choice=$$(gum choose --header="Choose locale for $(PACKAGE):" \
+			"de  (Deutsch)" \
+			"en  (English)" \
+			"es  (Español)" \
+			"fr  (Français)" \
+			"it  (Italiano)" \
+			"ru  (Русский)" \
+			"reset (System default)"); \
+		[ -n "$$choice" ] || exit 0; \
+		code=$$(printf '%s' "$$choice" | awk '{print $$1}'); \
+		if [ "$$code" = "reset" ]; then loc=""; else loc="$$code"; fi; \
+	fi; \
+	if [ -n "$$loc" ] || [ "$$code" = "reset" ]; then \
+		$(ADB) $(ADB_TARGET) shell cmd locale set-app-locales '$(PACKAGE)' --locales "$$loc"; \
+		printf 'Locale for %s set to: %s\n' '$(PACKAGE)' "$${loc:-(system default)}"; \
+	else \
+		$(ADB) $(ADB_TARGET) shell cmd locale get-app-locales '$(PACKAGE)'; \
+	fi
 
 # The side-by-side build. Everything above installs over whatever carries
 # the production package name, which on a phone is somebody's library; the
@@ -134,10 +163,36 @@ dev-install: dev
 	$(ADB) $(ADB_PHONE_TARGET) install -r '$(DEV_APK)'
 
 dev-run: dev-install
+	@if [ -n "$(LOCALE)" ]; then \
+		$(ADB) $(ADB_PHONE_TARGET) shell cmd locale set-app-locales '$(DEV_PACKAGE)' --locales '$(LOCALE)'; \
+	fi
 	$(ADB) $(ADB_PHONE_TARGET) shell am start -n '$(DEV_ACTIVITY)'
 
 dev-uninstall:
 	$(ADB) $(ADB_PHONE_TARGET) uninstall '$(DEV_PACKAGE)'
+
+dev-locale:
+	@loc='$(LOCALE)'; \
+	code=''; \
+	if [ -z "$$loc" ] && command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then \
+		choice=$$(gum choose --header="Choose locale for $(DEV_PACKAGE):" \
+			"de  (Deutsch)" \
+			"en  (English)" \
+			"es  (Español)" \
+			"fr  (Français)" \
+			"it  (Italiano)" \
+			"ru  (Русский)" \
+			"reset (System default)"); \
+		[ -n "$$choice" ] || exit 0; \
+		code=$$(printf '%s' "$$choice" | awk '{print $$1}'); \
+		if [ "$$code" = "reset" ]; then loc=""; else loc="$$code"; fi; \
+	fi; \
+	if [ -n "$$loc" ] || [ "$$code" = "reset" ]; then \
+		$(ADB) $(ADB_PHONE_TARGET) shell cmd locale set-app-locales '$(DEV_PACKAGE)' --locales "$$loc"; \
+		printf 'Locale for %s set to: %s\n' '$(DEV_PACKAGE)' "$${loc:-(system default)}"; \
+	else \
+		$(ADB) $(ADB_PHONE_TARGET) shell cmd locale get-app-locales '$(DEV_PACKAGE)'; \
+	fi
 
 # Filtered by pid rather than by tag: the app logs under a dozen of them,
 # and the pid is the one thing that says "this build and not the other".

@@ -66,6 +66,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -871,11 +872,11 @@ private fun BookStatCard(book: BookReadingStats, onClick: (() -> Unit)?) {
                 )
                 if (book.sessions > 0) {
                     Text(
-                        text = if (book.sessions == 1) {
-                            stringResource(R.string.reading_stats_book_sessions_one)
-                        } else {
-                            stringResource(R.string.reading_stats_book_sessions, book.sessions)
-                        },
+                        text = pluralStringResource(
+                            R.plurals.reading_stats_book_sessions,
+                            book.sessions,
+                            book.sessions,
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

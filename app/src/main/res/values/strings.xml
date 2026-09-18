@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Liseur</string>
+    <string name="app_name" translatable="false">Liseur</string>
 
     <string name="sort_recent">Recent</string>
     <string name="sort_title">Title</string>
@@ -7,7 +7,7 @@
     <string name="sort_added">Recently added</string>
     <string name="sort_normal">Reverse the order</string>
     <string name="sort_reversed">Back to the usual order</string>
-    <string name="library_title">Liseur</string>
+    <string name="library_title" translatable="false">Liseur</string>
     <plurals name="library_book_count">
         <item quantity="one">%d book</item>
         <item quantity="other">%d books</item>
@@ -44,7 +44,7 @@
     </plurals>
     <string name="series_read_count">%d read</string>
     <string name="series_in_progress_count">%d in progress</string>
-    <string name="series_meta_separator"> · </string>
+    <string name="series_meta_separator" translatable="false"> · </string>
     <string name="series_continue">Continue with %s</string>
     <string name="series_start">Start %s</string>
     <string name="series_all_read">You\'ve read the whole series</string>
@@ -145,6 +145,7 @@
     <string name="reader_open_failed">Couldn\'t open this book</string>
     <string name="dismiss">Dismiss</string>
 
+    <!-- Reading chrome footer: time/pages left, page number, or percent. -->
     <string name="footer_left_in_chapter">%s left in chapter</string>
     <string name="footer_left_in_book">%s left in book</string>
     <plurals name="footer_pages_left_in_chapter">
@@ -155,6 +156,7 @@
     <string name="footer_cycle">Change what the footer shows</string>
     <string name="footer_page">Page %1$d of %2$d</string>
     <string name="footer_page_compact">%1$d of %2$d</string>
+    <!-- Slash form for screenfuls; keep the slash, not "of". -->
     <string name="footer_screen_compact">%1$d/%2$d</string>
     <string name="footer_page_about">About page %1$d of %2$d</string>
     <string name="footer_percent">%d%%</string>
@@ -182,6 +184,7 @@
         <item quantity="one">%d hr</item>
         <item quantity="other">%d hrs</item>
     </plurals>
+    <!-- Offers to jump back on this device, or catch up to another device's place. -->
     <string name="jump_back">Back</string>
     <string name="jump_back_to_page">Back to page %d</string>
     <string name="catch_up">Continue where you left off elsewhere</string>
@@ -200,6 +203,7 @@
     <string name="liseur_sync_password_help">Your password is used once, to ask the server for a token for this device. It is never stored.</string>
     <string name="liseur_sync_token">Device token</string>
     <string name="liseur_sync_token_help">Create one on the server with “liseur-sync admin mint-token”, then paste the secret here.</string>
+    <!-- Low-confidence title/author match on liseur-sync; sync waits for a yes. -->
     <string name="sync_server_same_book_title">Is this the same book?</string>
     <string name="sync_server_same_book_detail">Your server matched these by title and author alone. Two translations, or two editions with different text, look the same that way — so nothing is synced for them until you say.</string>
     <string name="sync_server_same_book_yes">Same book</string>
@@ -215,9 +219,10 @@
     <string name="connect_server">Connect a book server</string>
     <string name="connect_server_short">Connect a server</string>
     <string name="server_kind">Which kind of server?</string>
-    <string name="server_kind_calibre">calibre-web</string>
-    <string name="server_kind_komga">Komga</string>
-    <string name="server_kind_liseur_sync">liseur-sync</string>
+    <!-- Product names; keep the spelling used by those projects. -->
+    <string name="server_kind_calibre" translatable="false">calibre-web</string>
+    <string name="server_kind_komga" translatable="false">Komga</string>
+    <string name="server_kind_liseur_sync" translatable="false">liseur-sync</string>
     <string name="server_kind_custom">Custom</string>
     <string name="server_kind_change">Change the kind of server</string>
     <string name="server_sync_exact">Keeps your exact place in a book across devices</string>
@@ -784,8 +789,10 @@
     <string name="reading_stats_last_read_label">Last read</string>
     <string name="reading_stats_started_label">Started</string>
     <string name="reading_stats_reading_for_label">Reading for</string>
-    <string name="reading_stats_reading_for_days">%1$d days</string>
-    <string name="reading_stats_reading_for_one_day">1 day</string>
+    <plurals name="reading_stats_reading_for_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
     <string name="reading_stats_week_total">%1$s this week</string>
     <string name="reading_stats_progress">%1$d%% through</string>
     <string name="reading_stats_period_read">%1$s during %2$s</string>
@@ -826,8 +833,10 @@
     <string name="reading_stats_pace">Pace</string>
     <string name="reading_stats_pace_server_only">Pace (synced reading)</string>
     <string name="reading_stats_pace_value">%1$d%%/h</string>
-    <string name="reading_stats_book_sessions">Read in %1$d sittings</string>
-    <string name="reading_stats_book_sessions_one">Read in one sitting</string>
+    <plurals name="reading_stats_book_sessions">
+        <item quantity="one">Read in %d sitting</item>
+        <item quantity="other">Read in %d sittings</item>
+    </plurals>
     <string name="reading_stats_heatmap_day">%1$s on %2$s</string>
     <string name="reading_stats_heatmap_empty_day">Nothing read on %1$s</string>
     <string name="reading_stats_empty_range">Nothing read in this span. Try a longer one.</string>
