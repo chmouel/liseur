@@ -194,6 +194,18 @@ class BookScreenEstimateTest {
     }
 
     @Test
+    fun `an answer too long to be a book is refused, not clamped`() {
+        // A sliver of a resource measured at a thousand screens puts
+        // the book past any believable length. Holding the figure at
+        // the cap would print the same page for every turn, which is
+        // the stuck number this all exists to prevent.
+        val absurd = BookScreenEstimate().record(0, 0.999, 1.0, 1000)
+        assertNull(absurd.totalScreens)
+        assertNull(absurd.pageAt(0, 1))
+        assertNull(absurd.pageAt(0, 2))
+    }
+
+    @Test
     fun `a book is never shorter than what has been counted in it`() {
         // A resource claiming almost the whole book still holds its
         // own screens, so the total cannot round below them.
