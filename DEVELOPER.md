@@ -800,6 +800,23 @@ showing the wrong thing:
 montage docs/screenshots/*.png -tile 6x2 -geometry 320x+6+6 /tmp/sheet.png
 ```
 
+## Translations
+
+English UI copy lives in `app/src/main/res/values/strings.xml`. French,
+Spanish, Russian, Italian and German ship beside it as `values-fr`,
+`values-es`, `values-ru`, `values-it` and `values-de`.
+
+- New user-facing text goes in the English file first, then in each
+  locale file, and is read with `stringResource` / `pluralStringResource`.
+  Mark brand and product names `translatable="false"` — those keys are
+  omitted from locale files.
+- Russian plurals need `one` / `few` / `many` / `other`.
+- The app follows the system language and falls back to English for
+  missing keys. There is no in-app language picker yet, and
+  `resourceConfigurations` must not freeze the APK to a language list.
+
+See [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
+
 ## Architecture
 
 See `AGENTS.md` for the layered package layout and project conventions.
@@ -1062,7 +1079,9 @@ what lets it sync a book that came off an SD card.
   request itself.
 - Metadata lives in the repo under
   `fastlane/metadata/android/en-US/`: title, descriptions, per-versionCode
-  changelogs, icon and screenshots.
+  changelogs, icon and screenshots. Extra listing locales go beside
+  `en-US` when translated; app UI locales are documented in
+  [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
 - The build needs no network beyond Gradle dependencies and no
   signing config: `assembleRelease` on a clean checkout produces an
   unsigned APK, which is what F-Droid builds and signs itself.

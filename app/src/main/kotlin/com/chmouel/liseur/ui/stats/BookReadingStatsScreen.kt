@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -241,19 +242,19 @@ fun BookReadingStatsScreen(
                                 )
                                 // Both endpoints count: begun and last read
                                 // on the same day is one day with the book,
-                                // not none.
+                                // not none. A clock corrected backwards can
+                                // date the start after the end, which is
+                                // still a day with the book and never fewer.
                                 val daysWithBook =
-                                    ChronoUnit.DAYS.between(firstDate, lastDate) + 1
+                                    (ChronoUnit.DAYS.between(firstDate, lastDate) + 1)
+                                        .coerceAtLeast(1L)
                                 BookMetricTile(
                                     icon = Icons.Outlined.CalendarMonth,
-                                    value = if (daysWithBook <= 1L) {
-                                        stringResource(R.string.reading_stats_reading_for_one_day)
-                                    } else {
-                                        stringResource(
-                                            R.string.reading_stats_reading_for_days,
-                                            daysWithBook,
-                                        )
-                                    },
+                                    value = pluralStringResource(
+                                        R.plurals.reading_stats_reading_for_days,
+                                        daysWithBook.toInt(),
+                                        daysWithBook.toInt(),
+                                    ),
                                     label = stringResource(R.string.reading_stats_reading_for_label),
                                     modifier = Modifier.weight(1f),
                                 )
@@ -271,11 +272,11 @@ fun BookReadingStatsScreen(
                             )
                             BookMetricTile(
                                 icon = Icons.AutoMirrored.Outlined.MenuBook,
-                                value = if (stats.sessions == 1) {
-                                    stringResource(R.string.reading_stats_book_sessions_one)
-                                } else {
-                                    stringResource(R.string.reading_stats_book_sessions, stats.sessions)
-                                },
+                                value = pluralStringResource(
+                                    R.plurals.reading_stats_book_sessions,
+                                    stats.sessions,
+                                    stats.sessions,
+                                ),
                                 label = stringResource(R.string.reading_stats_sessions),
                                 modifier = Modifier.weight(1f),
                             )
