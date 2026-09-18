@@ -2,7 +2,8 @@
 
 Date: 2026-09-11
 
-Status: accepted
+Status: accepted, amended by
+[36. The footer counts screens](0036-the-footer-counts-screens.md)
 
 ## Context
 

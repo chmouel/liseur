@@ -49,13 +49,22 @@ class BookPositions(
 ) {
     private val resources = positionsByResource.mapIndexedNotNull { index, positions ->
         positions.takeIf { it.isNotEmpty() }?.let {
-            val nextPosition = positionsByResource
+            val following = positionsByResource
                 .drop(index + 1)
                 .firstNotNullOfOrNull { resource ->
                     resource.firstNotNullOfOrNull { locator -> locator.locations.position }
                 }
-                ?: locators.size
-            ResourcePositions(index, it, nextPosition)
+            // A resource covers [firstPosition, endPosition), counting
+            // from 1. The last one runs one past the book's last
+            // position rather than up to it: a final resource holding a
+            // single position is still a stretch of the book, and must
+            // not come out as no stretch at all.
+            ResourcePositions(
+                index = index,
+                positions = it,
+                nextPosition = following ?: locators.size,
+                endPosition = following ?: (locators.size + 1),
+            )
         }
     }
 
@@ -108,7 +117,7 @@ class BookPositions(
             ?.let(resource::coordinateAt)
             ?: locator.locations.position?.toDouble()
             ?: resource.firstPosition.toDouble()
-        return progressAtCoordinate(coordinate)
+        return progressAtCoordinate(coordinate).copy(resource = resource.describe())
     }
 
     /**
@@ -173,17 +182,22 @@ class BookPositions(
             .takeIf { it.isFinite() }
             ?.coerceIn(1.0, totalPositions.toDouble())
             ?: 1.0
-        val progression = if (totalPositions <= 1) {
-            0.0
-        } else {
-            (bounded - 1) / (totalPositions - 1)
-        }
         return StableBookProgress(
             coordinate = bounded,
             position = bounded.roundToInt().coerceIn(1, totalPositions),
             totalPositions = totalPositions,
-            progression = progression,
+            progression = progressionAtCoordinate(bounded),
         )
+    }
+
+    /** Where [coordinate] falls in the whole book, between 0 and 1. */
+    private fun progressionAtCoordinate(coordinate: Double): Double {
+        if (totalPositions <= 1) return 0.0
+        val bounded = coordinate
+            .takeIf { it.isFinite() }
+            ?.coerceIn(1.0, totalPositions.toDouble())
+            ?: 1.0
+        return (bounded - 1) / (totalPositions - 1)
     }
 
     private fun List<ResourcePositions>.withAnchor(position: Int?): ResourcePositions? {
@@ -195,9 +209,26 @@ class BookPositions(
     private inner class ResourcePositions(
         val index: Int,
         val positions: List<Locator>,
-        nextPosition: Int,
+        val nextPosition: Int,
+        val endPosition: Int,
     ) {
         val href: String = positions.first().href.toString()
+
+        /**
+         * This resource's stretch of the book, from its share of the
+         * positions rather than from the interpolated coordinate.
+         *
+         * Positions are counted, so every resource holding one gets a
+         * positive share and consecutive resources tile the book
+         * exactly. Reading the stretch off the coordinate instead left
+         * a final one-position resource beginning and ending at 1.0.
+         */
+        fun describe(): BookResource = BookResource(
+            index = index,
+            href = href,
+            start = if (totalPositions <= 0) 0.0 else (firstPosition - 1).toDouble() / totalPositions,
+            end = if (totalPositions <= 0) 1.0 else (endPosition - 1).toDouble() / totalPositions,
+        )
         val firstPosition: Int =
             positions.firstNotNullOfOrNull { it.locations.position } ?: 1
         val lastPosition: Int =
@@ -310,12 +341,42 @@ class BookPositions(
     }
 }
 
-/** A stable local coordinate derived from Readium's synthetic positions. */
+/**
+ * Which reading-order resource a place falls in, and how much of the
+ * book that resource is.
+ *
+ * [index] is the position in the reading order, so it tells apart the
+ * two occurrences of a file listed twice, which [href] cannot. [start]
+ * and [end] run from 0 to 1 and are derived from Readium's position
+ * counts, so they do not move when the typography does: that is what
+ * lets a count of screenfuls measured from one laid-out file be scaled
+ * up to the book it is part of. Consecutive resources tile the book
+ * exactly, and every resource holding at least one position has a
+ * positive span.
+ */
+data class BookResource(
+    val index: Int,
+    val href: String,
+    val start: Double,
+    val end: Double,
+) {
+    /** The share of the whole book this resource holds. */
+    val span: Double get() = (end - start).coerceAtLeast(0.0)
+}
+
+/**
+ * A stable local coordinate derived from Readium's synthetic positions.
+ *
+ * [resource] is null when the place could not be tied to a reading-order
+ * resource, which leaves anything scaled from it unanswerable rather
+ * than wrong.
+ */
 data class StableBookProgress(
     val coordinate: Double,
     val position: Int,
     val totalPositions: Int,
     val progression: Double,
+    val resource: BookResource? = null,
 )
 
 /**
@@ -336,6 +397,7 @@ data class ReaderProgress(
     val minutesLeftInBook: Int,
     val positionsLeftInChapter: Int?,
     val isSpeedMeasured: Boolean,
+    val resource: BookResource? = null,
 ) {
     val percent: Int get() = (totalProgression * 100).toInt().coerceIn(0, 100)
 }

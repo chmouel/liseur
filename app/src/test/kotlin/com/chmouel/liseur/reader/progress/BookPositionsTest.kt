@@ -339,4 +339,37 @@ class BookPositionsTest {
         val measured = book.resolve(locator("chapter-2.xhtml", 2.0 / 3.0, null))!!
         assertEquals(7.0, measured.coordinate, 0.0)
     }
+
+    @Test
+    fun `every resource holds a positive stretch of the book`() {
+        // The last resource holds one position. Reading its stretch off
+        // the interpolated coordinate put both ends at 1.0, so nothing
+        // measured in it could be scaled and its page number stuck.
+        val book = positions(
+            listOf(
+                listOf(locator("one.xhtml", 0.0, 1), locator("one.xhtml", 0.5, 2)),
+                listOf(locator("two.xhtml", 0.0, 3)),
+                listOf(locator("three.xhtml", 0.0, 4)),
+            ),
+        )
+        val stretches = listOf("one.xhtml", "two.xhtml", "three.xhtml").map { href ->
+            requireNotNull(book.resolve(locator(href, 0.0, null))?.resource)
+        }
+        stretches.forEach { assertTrue("$it has no span", it.span > 0.0) }
+        // They tile the book, end to end, from nought to one.
+        assertEquals(0.0, stretches.first().start, 1e-9)
+        assertEquals(1.0, stretches.last().end, 1e-9)
+        stretches.zipWithNext { left, right ->
+            assertEquals(left.end, right.start, 1e-9)
+        }
+        assertEquals(listOf(0, 1, 2), stretches.map { it.index })
+    }
+
+    @Test
+    fun `a book of one position still has a stretch to scale`() {
+        val book = positions(listOf(listOf(locator("only.xhtml", 0.0, 1))))
+        val only = requireNotNull(book.resolve(locator("only.xhtml", 0.0, 1))?.resource)
+        assertEquals(0.0, only.start, 1e-9)
+        assertEquals(1.0, only.end, 1e-9)
+    }
 }

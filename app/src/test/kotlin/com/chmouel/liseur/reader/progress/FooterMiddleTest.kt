@@ -110,4 +110,62 @@ class FooterMiddleTest {
         assertNull(footerMiddle(progress, FooterMode.EMPTY))
         assertNull(footerMiddle(progress, FooterMode.NONE))
     }
+
+    @Test
+    fun `a reflowable book counts the screens left, so a turn takes one off`() {
+        val mode = FooterMode.PAGES_LEFT_CHAPTER
+        assertEquals(
+            FooterMiddle.PagesInChapter(8),
+            footerMiddle(progress, mode, reflowable = true, screens = SectionScreens(4, 12)),
+        )
+        assertEquals(
+            FooterMiddle.PagesInChapter(7),
+            footerMiddle(progress, mode, reflowable = true, screens = SectionScreens(5, 12)),
+        )
+    }
+
+    @Test
+    fun `the last screen of the section counts zero, which the footer words`() {
+        assertEquals(
+            FooterMiddle.PagesInChapter(0),
+            footerMiddle(
+                progress,
+                FooterMode.PAGES_LEFT_CHAPTER,
+                reflowable = true,
+                screens = SectionScreens(12, 12),
+            ),
+        )
+    }
+
+    @Test
+    fun `an unmeasured reflowable page says nothing rather than the stable count`() {
+        assertNull(
+            footerMiddle(
+                progress,
+                FooterMode.PAGES_LEFT_CHAPTER,
+                reflowable = true,
+                screens = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `a fixed-layout book counts positions, which are its pages`() {
+        assertEquals(
+            FooterMiddle.PagesInChapter(17),
+            footerMiddle(progress, FooterMode.PAGES_LEFT_CHAPTER, reflowable = false),
+        )
+    }
+
+    @Test
+    fun `no chapter to count to stays quiet however well the page measures`() {
+        assertNull(
+            footerMiddle(
+                progress.copy(positionsLeftInChapter = null),
+                FooterMode.PAGES_LEFT_CHAPTER,
+                reflowable = true,
+                screens = SectionScreens(4, 12),
+            ),
+        )
+    }
 }

@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,7 +53,10 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.reader.progress.BookScreenEstimate
 import com.chmouel.liseur.reader.progress.FooterMiddle
+import com.chmouel.liseur.reader.progress.SectionScreens
+import com.chmouel.liseur.reader.progress.footerPages
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.footerMiddle
 import com.chmouel.liseur.ui.LocalEInk
@@ -62,19 +67,31 @@ private val CHROME_FADE_HEIGHT = 20.dp
 /**
  * The quiet line of text at the bottom of the page, Kindle-style. The
  * percentage read sits on the left and the page number on the right,
- * always; the middle carries the smart slot — time left, pages left in
- * the chapter, the chapter's name — and tapping the footer cycles what
- * that slot shows. Taps never turn the page.
+ * always; the middle carries the smart slot — time left, locations left
+ * in the chapter, the chapter's name — and tapping the footer cycles
+ * what that slot shows. Taps never turn the page.
+ *
+ * What a page is here depends on the book. A reflowable one counts
+ * screenfuls of the resource on screen, measured from the laid-out
+ * page, so the right edge moves and the chapter countdown comes down by
+ * one for every turn. A fixed-layout one counts the book's own pages,
+ * which are Readium positions there. [screens] is null while a
+ * reflowable page is still being laid out, and then both figures are
+ * left out rather than filled with a number that counts something else.
  */
 @Composable
 fun ReadingFooter(
     progress: ReaderProgress?,
+    reflowable: Boolean,
+    screens: SectionScreens?,
+    bookScreens: BookScreenEstimate,
     mode: FooterMode,
     theme: ReaderTheme,
     onCycleMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (mode == FooterMode.NONE || progress == null) return
+    val pages = footerPages(reflowable, screens, progress, bookScreens)
     val color = theme.foreground.copy(alpha = 0.6f)
     Row(
         modifier
@@ -90,7 +107,7 @@ fun ReadingFooter(
     ) {
         FooterEdge(stringResource(R.string.footer_percent, progress.percent), color)
         Text(
-            text = middleText(progress, mode).orEmpty(),
+            text = middleText(progress, mode, reflowable, screens).orEmpty(),
             style = MaterialTheme.typography.labelSmall,
             color = color,
             maxLines = 1,
@@ -98,26 +115,49 @@ fun ReadingFooter(
             textAlign = TextAlign.Center,
             modifier = Modifier.weight(1f),
         )
-        FooterEdge(
-            stringResource(R.string.footer_page_compact, progress.position, progress.totalPositions),
-            color,
-        )
+        // "137/892" rather than "137 of 892": the long form is what the
+        // scrubber prints for stable locations, and the same shape in
+        // the same corner for a different count is how a footer starts
+        // lying about which of the two a reader is looking at. The
+        // screen reader gets the long form, where there is room to say
+        // it properly.
+        pages?.let {
+            FooterEdge(
+                text = stringResource(R.string.footer_screen_compact, it.page, it.pages),
+                color = color,
+                description = stringResource(
+                    if (it.exact) R.string.footer_page else R.string.footer_page_about,
+                    it.page,
+                    it.pages,
+                ),
+            )
+        }
     }
 }
 
 @Composable
-private fun FooterEdge(text: String, color: Color) {
+private fun FooterEdge(text: String, color: Color, description: String? = null) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
         color = color,
         maxLines = 1,
+        modifier = if (description == null) {
+            Modifier
+        } else {
+            Modifier.clearAndSetSemantics { contentDescription = description }
+        },
     )
 }
 
 @Composable
-private fun middleText(progress: ReaderProgress, mode: FooterMode): String? =
-    when (val middle = footerMiddle(progress, mode)) {
+private fun middleText(
+    progress: ReaderProgress,
+    mode: FooterMode,
+    reflowable: Boolean,
+    screens: SectionScreens?,
+): String? =
+    when (val middle = footerMiddle(progress, mode, reflowable, screens)) {
         is FooterMiddle.TimeInChapter ->
             stringResource(R.string.footer_left_in_chapter, durationText(middle.minutes))
 

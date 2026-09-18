@@ -395,14 +395,53 @@ emulator.
   ribbon only fails to offer a bookmark while a wrong yes takes the
   reader's mark off the other copy. And a scrolled
   book has no pages and its anchor moves with every line, so it falls
-  back to the Readium position, which is about a screenful and is what
-  the footer counts; whether a book is scrolled is `chromeScrolls()`,
+  back to the Readium position, which is about a screenful and is the
+  unit every stable number in the app counts in; whether a book is
+  scrolled is `chromeScrolls()`,
   never the bare setting, since a vertical-text book scrolls without it
   and a fixed-layout book paginates despite it. The stored number is for
   the reader to read, and is written from `BookPositions.resolve()` so
-  it says what the footer said. Correcting that number afterwards writes
+  it says what the scrubber said. Correcting that number afterwards writes
   the one column and nothing else (`AnnotationDao.setPosition`), or a
   mark the sync pass changed meanwhile would be written back over.
+- The footer's two numbers are the only ones in the app that are *not*
+  stable positions. In a reflowable book being paginated they count
+  screenfuls, measured from the laid-out document by
+  `SectionScreenProgress`: the middle slot counts screens left in the
+  resource on screen, so it goes 10, 9, 8, one per turn
+  (`pagesLeftInChapter`), and the right edge prints a whole-book page
+  number as `137/892` (`footerPages`). A whole-book figure can be
+  measured because a resource's *share* of the book is stable even when
+  its length is not: `BookPositions` counts positions to give every
+  resource a positive share that tiles the book, and
+  `BookScreenEstimate` keeps one sample per reading-order index —
+  index, not href, since a reading order may list a file twice — and
+  divides screens by span. The screens *behind* the reader are counted
+  rather than scaled, and only never-visited stretches are guessed at
+  the running density; and because a book resumed mid-way has a guessed
+  stretch ahead of where it was opened, each resource's `origin` is
+  settled when it is first measured and afterwards only pushed further
+  along, never pulled back. Those two together are what stop a short
+  resource joining the samples from dragging the page number backwards
+  on a forward turn — the property `BookScreenEstimateTest` asserts
+  screen by screen from every resumption point, not just from page one.
+  The total refines rather than lurches and stands still while one
+  resource is read, which is what makes the page walk up by exactly one.
+  Anything that rebuilds the page bumps `layoutGeneration`, which empties
+  the estimate and makes a measurement still in flight from the old shape
+  be refused rather than averaged in. A reading is only
+  filed against the resource the progress agrees is on screen, since
+  progress and navigator are published on separate paths. The estimate
+  is signed as one: "About page 137 of 892" to a screen reader, and a
+  slash rather than the scrubber's `137 of 892`. A fixed-layout book is
+  exact instead, since there a position *is* a page, and a scrolled book
+  draws no footer at all. All of it is display only: never stored, never
+  sent, never counted as reading, and the wording stays *page*
+  throughout, because that is what liseur-sync's web reader says. A
+  measurement that has not settled shows nothing rather than a stale
+  number, and a turn held under the thumb freezes the count until it is
+  made or put back.
+  See `docs/adr/0036-the-footer-counts-screens.md`.
 - Removing a book keeps its annotations *and* its `annotation_sync`
   rows. They are still on the server and on the other phone, and
   dropping only the agreements would push every mark again as new when

@@ -56,6 +56,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -155,6 +156,7 @@ import com.chmouel.liseur.reader.chrome.HeldPlace
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.reader.chrome.visibleWebViewCache
+import com.chmouel.liseur.reader.chrome.CachedLookup
 import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.ChromeEdgeFade
 import com.chmouel.liseur.reader.chrome.ReadingScrubber
@@ -173,7 +175,10 @@ import com.chmouel.liseur.reader.chrome.GoToPercentDialog
 import com.chmouel.liseur.reader.chrome.TypographySheet
 import com.chmouel.liseur.reader.progress.GoToDestination
 import com.chmouel.liseur.reader.progress.GoToPagePrompt
+import com.chmouel.liseur.reader.progress.BookScreenEstimate
 import com.chmouel.liseur.reader.progress.ReaderProgress
+import com.chmouel.liseur.reader.progress.SectionScreenProgress
+import com.chmouel.liseur.reader.progress.SectionScreens
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.progress.OpeningRestoration
 import com.chmouel.liseur.reader.progress.OpeningRestorationVerdict
@@ -297,6 +302,12 @@ private const val MAX_IMAGE_BYTES = 16L * 1024 * 1024
 // loss against a document round trip, and only a page that moved since
 // the last look is worth one.
 private const val SCROLL_PLACE_POLL_MS = 2_000L
+
+// How many two-frame waits a screen measurement gets to hold still.
+// The common case exits on the second reading; the bound is only
+// reached by a page that never comes to rest, which is told apart
+// from a slow one by reporting nothing rather than a guess.
+private const val SCREEN_SETTLE_POLLS = 12
 
 /**
  * Which sheet is open over the page, if any.
@@ -452,6 +463,25 @@ fun ReaderScreen(
     LaunchedEffect(chromeVisible) { onChromeVisibleChanged(chromeVisible) }
     val typographyIsOwn by typographyIsOwnFlow.collectAsStateWithLifecycle()
     val progress by progressFlow.collectAsStateWithLifecycle()
+    // How many screenfuls the resource on screen has, and which one is
+    // being read. Measured from the laid-out page rather than derived
+    // from the book, so it is display only: nothing here is saved,
+    // synced, or counted as reading. See [SectionScreenProgress].
+    var sectionScreens by remember { mutableStateOf<SectionScreens?>(null) }
+    // Which resource the figure above belongs to, so that moving into
+    // another one takes it off rather than letting it stand.
+    var measuredHref by remember { mutableStateOf<String?>(null) }
+    // What the measured resources so far say about the length of the
+    // whole book. See [BookScreenEstimate].
+    var bookScreens by remember { mutableStateOf(BookScreenEstimate()) }
+    // Which shape those measurements were taken at. Anything that
+    // rebuilds the page — a typography change, a rotation, a resize —
+    // moves it on, and the samples taken at the old shape are about a
+    // book with different pages. It is carried through the measurement
+    // rather than used to clear the estimate outright, so a reading
+    // that was already in the air when the page was rebuilt is refused
+    // instead of filed against the new shape.
+    var layoutGeneration by remember { mutableIntStateOf(0) }
     val jumpBack by jumpBackFlow.collectAsStateWithLifecycle()
     val catchUp by catchUpFlow.collectAsStateWithLifecycle()
     val continuation by continuationFlow.collectAsStateWithLifecycle()
@@ -976,6 +1006,16 @@ fun ReaderScreen(
     // handles these changes itself, so nothing else would notice.
     LaunchedEffect(boxSize) {
         if (pageCurl.isRunning) pageTurnDrag.abandon()
+        // The page is a different shape, so every screen counted at the
+        // old one is a count of something else.
+        layoutGeneration++
+    }
+
+    // The samples move to the new shape as soon as it is known, so a
+    // reading still in the air from the old one is refused rather than
+    // wiping the estimate a moment after it started again.
+    LaunchedEffect(layoutGeneration) {
+        bookScreens = bookScreens.forLayout(layoutGeneration)
     }
 
     LaunchedEffect(showingEnd) {
@@ -1078,6 +1118,168 @@ fun ReaderScreen(
                 if (!settling) tappedSelection = null
             }
             moves.onPosition(locator.restorePoint(), SystemClock.elapsedRealtime())
+        }
+    }
+
+    /**
+     * Asks the page on screen how many screenfuls its resource has and
+     * which one is showing, keeps [sectionScreens] in step with the
+     * answer, and only believes an answer that holds still.
+     *
+     * A resource arrives, reflows and comes to rest over several
+     * frames, and a width read partway through that is the width of a
+     * page nobody will ever see. So two readings have to agree before
+     * either is shown, and a page that never comes to rest within the
+     * bound shows nothing rather than a number that is wrong.
+     *
+     * What is already on the footer comes off the moment a reading
+     * proves it wrong, rather than at the end of the settling. A
+     * reading that disagrees about the *total* is a page rebuilt under
+     * the reader — a larger font, a rotation, a new resource — and the
+     * old figure describes a page that no longer exists. A reading that
+     * only disagrees about which screen is showing is an ordinary turn,
+     * and there the old figure is left alone for the frame or two the
+     * answer takes, because clearing it would blink the footer on every
+     * single turn.
+     *
+     * [generation] names the shape the page had when the question was
+     * asked. An answer that comes back after the page has been rebuilt
+     * is about screens that no longer exist, and is refused for the
+     * countdown as well as for the book's length.
+     */
+    suspend fun measureSectionScreens(
+        nav: EpubNavigatorFragment,
+        webViews: CachedLookup<WebView>,
+        generation: Int,
+    ) {
+        var previous: SectionScreens? = null
+        repeat(SCREEN_SETTLE_POLLS) {
+            val href = nav.currentLocator.value.href.toString()
+            val web = webViews.current()
+            // The view has to be showing the resource the navigator
+            // names, before the question and again after it. Readium
+            // puts a resource on screen before it publishes having
+            // arrived there, and draws the next chapter in the view
+            // the last one used, so a width measured across that swap
+            // belongs to neither.
+            if (web == null || !ResourceAddress.shows(web.url, href)) {
+                sectionScreens = null
+                return
+            }
+            val measured = SectionScreenProgress.of(web)
+            // A turn came into the reader's hand while the question was
+            // out. The page they are looking at is the photograph, so
+            // the figure under it is left exactly as it was; the drag
+            // ending asks again.
+            if (pageCurl.isRunning) return
+            // The page was rebuilt while the question was out, so the
+            // answer counts screens of a page that is gone. It is
+            // refused for the countdown exactly as it is for the
+            // book's length, and nothing stale is left standing: the
+            // generation moving on is itself a trigger, and the next
+            // pass asks the page it actually has.
+            if (generation != layoutGeneration) {
+                sectionScreens = null
+                return
+            }
+            if (web !== webViews.current() ||
+                !ResourceAddress.shows(web.url, href) ||
+                nav.currentLocator.value.href.toString() != href
+            ) {
+                sectionScreens = null
+                return
+            }
+            val showing = sectionScreens
+            if (showing != null && measured != null && measured.screens != showing.screens) {
+                sectionScreens = null
+            }
+            if (measured != null && measured == previous) {
+                sectionScreens = measured
+                // The book's length follows from the resources that
+                // have been measured, and this is one of them. A
+                // resource that measures differently from last time
+                // throws the older samples away inside `recording`,
+                // because they describe a page that no longer exists.
+                //
+                // The reading is only filed against a stretch of the
+                // book that is this resource's. The progress and the
+                // navigator are published on separate paths, so on a
+                // move the progress may still describe the file the
+                // reader has just left, and filing one file's screens
+                // under another's share of the book would skew the
+                // estimate badly. It is left unrecorded instead; the
+                // progress arriving asks again.
+                val here = progressFlow.value?.resource
+                if (here != null && here.href == href) {
+                    bookScreens = bookScreens
+                        .recording(
+                            generation = generation,
+                            index = here.index,
+                            start = here.start,
+                            end = here.end,
+                            screens = measured.screens,
+                        )
+                }
+                return
+            }
+            previous = measured
+            settleLayout()
+        }
+        sectionScreens = null
+    }
+
+    // The footer's screen count, for a reflowable book being
+    // paginated and for nothing else: a scrolled book has no screens
+    // to turn, and a fixed-layout one is already counted in real
+    // pages.
+    //
+    // It takes both triggers, as everything on this screen that asks
+    // the document a question does. A move alone misses the reflow
+    // that rebuilds the page under a reader who is standing still, and
+    // a layout pass alone misses a turn that moved the page without
+    // changing its shape.
+    LaunchedEffect(navigator, reflowableText, effectiveScrolling, lifecycle) {
+        val nav = navigator
+        if (nav == null || !reflowableText || effectiveScrolling) {
+            sectionScreens = null
+            return@LaunchedEffect
+        }
+        val root = nav.publicationView
+        val webViews = visibleWebViewCache(root)
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            merge(
+                nav.currentLocator.map { },
+                layoutPasses(root),
+                snapshotFlow { pageCurl.isRunning }.map { },
+                // The progress is published on its own path, a little
+                // behind the navigator, and it is what says which
+                // stretch of the book the resource on screen is. A
+                // reading taken before it caught up was measured but
+                // not filed; this is what asks again.
+                progressFlow.map { it?.resource }.distinctUntilChanged().map { },
+                // The page rebuilt at a new type size or a new shape is
+                // a different number of screens, and nothing measured
+                // before it counts.
+                snapshotFlow { layoutGeneration }.map { },
+            ).collect {
+                webViews.invalidate()
+                // A turn held in the hand has already moved the
+                // navigator, while what the reader is looking at is a
+                // photograph of the page they are leaving. The number
+                // under it goes on describing that page until the turn
+                // is either made or put back.
+                if (pageCurl.isRunning) return@collect
+                // A resource the reader has just moved into shares
+                // nothing with the one they left, not even by
+                // coincidence of length, so its figure goes at once
+                // rather than surviving into the new section.
+                val href = nav.currentLocator.value.href.toString()
+                if (href != measuredHref) {
+                    sectionScreens = null
+                    measuredHref = href
+                }
+                measureSectionScreens(nav, webViews, layoutGeneration)
+            }
         }
     }
 
@@ -1215,6 +1417,10 @@ fun ReaderScreen(
                     }
                     val before = ExactLocatorAnchor.layoutSignature(nav)
                     nav.submitPreferences(it)
+                    // Type size, margins, columns: the book is about to
+                    // be broken into different screens, so the ones
+                    // counted so far stop being about this book.
+                    layoutGeneration++
                     awaitReflowSettled(nav, before)
                     // A table can be comfortable at 100% and too wide at 175%,
                     // so what fits has to be asked again once the new size has
@@ -2623,6 +2829,9 @@ fun ReaderScreen(
         ) {
             ReadingFooter(
                 progress = progress,
+                reflowable = reflowableText,
+                screens = sectionScreens,
+                bookScreens = bookScreens,
                 mode = prefs.footerMode,
                 theme = readingTheme,
                 onCycleMode = onProgressAction.cycleFooterMode,
