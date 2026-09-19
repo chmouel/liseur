@@ -29,10 +29,10 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  * answers the cheap and common shape, where the address is a literal.
  *
  * It is also not the authority on what Android will let the app reach.
- * That is a wider and less fixed question — the routes of the network
- * the phone is on, minus whatever a VPN carries — and it is
- * [LocalNetworkAddress]'s, which builds on this rather than repeating
- * it.
+ * That is a wider and less fixed question — which prefixes the phone's
+ * own interfaces put on the local network, minus whatever a VPN carries
+ * — and it is [LocalNetworkAddress]'s, which builds on this rather than
+ * repeating it.
  */
 object PrivateAddress {
 
