@@ -22,7 +22,10 @@ class OnLinkPrefixesTest {
      * in the world local here, because the cellular default route is
      * `0.0.0.0/0` and `::/0` with no gateway, and a gateway-less route
      * matching an address was the whole test. A reader on LTE could not
-     * reach Project Gutenberg, or anything else.
+     * reach Project Gutenberg, or anything else. The runtime skips
+     * cellular networks entirely because Android excludes WWAN from
+     * local-network protection; this test keeps the prefix matcher honest
+     * if it is ever given those addresses by another caller.
      */
     @Test
     fun `a mobile connection does not put the whole internet on the local network`() {
@@ -31,6 +34,12 @@ class OnLinkPrefixesTest {
             link("2405:dc00:ec25:199a:a7dd:11ef:c0aa:319a", 64),
         )
         assertFalse(OnLinkPrefixes.contains(cellular, "152.19.134.47"))
+        assertTrue(
+            OnLinkPrefixes.contains(
+                cellular,
+                "2405:dc00:ec25:199a:1234:5678:9abc:def0",
+            ),
+        )
         assertFalse(OnLinkPrefixes.contains(cellular, "2610:28:3090:3000:0:bad:cafe:47"))
         // A DNS64 phone synthesises an AAAA for an IPv4-only host, in
         // the carrier's NAT64 prefix rather than the phone's own /64.

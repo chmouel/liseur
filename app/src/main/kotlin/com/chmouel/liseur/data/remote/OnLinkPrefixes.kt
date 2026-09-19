@@ -29,8 +29,9 @@ package com.chmouel.liseur.data.remote
  *
  * IPv4 is widened rather than taken literally. An interface holding
  * `192.168.1.5/24` arms the whole of `192.168.0.0/16`, not its own /24,
- * and a mobile interface holding a point-to-point `10.99.61.153/32`
- * arms the whole of `10.0.0.0/8`. Only the prefixes in [V4_PREFIXES]
+ * and a point-to-point address such as `10.99.61.153/32` would arm the
+ * whole of `10.0.0.0/8` if it belonged to an eligible interface. Only
+ * the prefixes in [V4_PREFIXES]
  * can be armed this way, so an interface with a public address arms
  * nothing.
  *
