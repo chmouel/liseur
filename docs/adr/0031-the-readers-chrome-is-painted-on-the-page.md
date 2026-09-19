@@ -71,6 +71,9 @@ which side it is on.
 
 ### Wallpaper colours stop at the reader's door
 
+> **Amended.** One exception was added later: the loading indicator. See
+> "The loading indicator is not reading chrome" below.
+
 A dynamic scheme's accents are chosen against *its own* surfaces, which
 this replaces with a page Liseur picked. Nobody — not Material, not the
 reader — has ever checked a wallpaper-derived primary against sepia, and a
@@ -123,6 +126,61 @@ sheet's paper. `ReadingColorSchemeTest` holds the two answers together:
 the paper a sheet is painted in is dark exactly when the page is, so
 opening or dismissing a sheet can never flip the icons on its own.
 
+## Amendment: the loading indicator is not reading chrome
+
+Added after [#221]: a reader with an aquamarine wallpaper accent got a
+golden spinner while a book opened. The decision above is why, and it
+stands for everything that is actually chrome over a page. The spinner
+is not.
+
+It is the app saying "still working" before there is a book to read at
+all, on a screen with no text, no page furniture and nothing the reader
+picked a paper colour for. Calling that reading chrome also produced a
+sillier symptom than the wrong hue: `ReaderActivity` builds the theme with
+`readingPage = null` until the preferences land, so one continuous spinner
+started in the wallpaper accent and turned gold part-way through, with
+nothing on screen having changed.
+
+So the indicator keeps the app's own accent, wallpaper colours included.
+The objection above — that a JVM test cannot check a wallpaper accent
+against sepia — is answered by not asking a JVM test to. `loadingAccentOn`
+measures the contrast at runtime against the exact page background the
+indicator will sit on, and hands back the page's accent when the app's
+cannot be seen. The measurement is a pure function, so what *is* testable
+is tested.
+
+Three things keep this from growing into the reversal it is not:
+
+- The accent is resolved at the *page's* lightness, not the app's, by the
+  same `isDarkPage` rule the scheme above uses. A light-scheme tone would
+  clear the threshold on a black page and still look wrong.
+- The threshold is 3:1, not 4.5:1. An indicator carries no glyphs, so WCAG
+  1.4.11 Non-text Contrast is the rule that applies, and borrowing the
+  body-text minimum would refuse accents that are perfectly visible.
+- With wallpaper colour off, or below API 31, or under e-ink, the app's
+  accent and the page's are the same colour from the same palette at the
+  same lightness, so the exception computes today's answer exactly.
+  `ReadingColorSchemeTest` asserts that, and it is the whole safety
+  argument: nothing moves unless dynamic colour is on.
+
+The window before the app's settings arrive is left as it was: there is
+no page yet, so the indicator draws in whatever `MaterialTheme` is
+handing out, which is the app's own theme. That is what it always did.
+What goes away is the hue changing, which is what the reader in #221 saw,
+and only for an accent that clears the guard. An accent too close to the
+page still falls back to the page's own, and that fallback can change the
+hue; refusing an invisible spinner is worth more than holding one colour.
+
+The tone can still move too, because the app and the page do not have to
+be the same lightness: a light app opening a black page takes the light
+scheme's accent before preferences land and the dark scheme's after. That
+is the right answer both times, since the surface underneath flips at the
+same instant and the accent is following the paper it sits on.
+
+The error screen is deliberately not included. A failure message is
+content, its red is semantic, and the scheme above already gets it right
+per page.
+
 ## Consequences
 
 The existing hand-painted `theme.foreground` / `theme.background` call
@@ -148,3 +206,4 @@ Readium's page rendering is unaffected; it is a WebView driven by
 `EpubPreferences`.
 
 [#212]: https://github.com/chmouel/liseur/issues/212
+[#221]: https://github.com/chmouel/liseur/issues/221

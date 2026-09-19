@@ -966,7 +966,14 @@ reader behavior.
   measurements, and never store or sync the displayed page count.
 - `readingColorScheme()` supplies the Material theme for the entire reader
   activity. Keep dynamic color outside the reader, use opaque mixes, and keep
-  `surfaceTint` transparent and `scrim` black.
+  `surfaceTint` transparent and `scrim` black. The loading indicator is the
+  one exception: it keeps the app's accent through `loadingAccentOn()` when
+  that accent holds 3:1 against the page. Both `ReaderLoadingScreen()` call
+  sites must be handed the same computed value. The tone still follows the
+  page, so a light app opening a dark page moves from the light scheme's
+  accent to the dark scheme's when preferences land. The hue stays put only
+  while the app's accent clears the guard; an accent too close to the page
+  falls back to the page's own, which is the point of the guard.
 - Page turning is a three-way `PageTurnStyle` choice. Resolve e-ink and
   system-motion overrides in `pageTurnStyleOnScreen`; do not duplicate the
   motion check elsewhere. A dragged lift turn must photograph the publication

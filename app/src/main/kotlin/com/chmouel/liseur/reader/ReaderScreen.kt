@@ -47,6 +47,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -3625,15 +3626,23 @@ private fun KeepScreenOn(enabled: Boolean) {
     }
 }
 
+/**
+ * The screen a book opens onto, before there is a book.
+ *
+ * [accent] is the indicator's colour rather than whatever `MaterialTheme`
+ * is handing out, because inside the reader that is the reading page and
+ * the spinner is the one thing here that is not reading chrome. See
+ * `loadingAccentOn`.
+ */
 @Composable
-fun ReaderLoadingScreen() {
+fun ReaderLoadingScreen(accent: Color = ProgressIndicatorDefaults.circularColor) {
     Box(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center,
     ) {
-        BusyIndicator()
+        BusyIndicator(color = accent)
     }
 }
 

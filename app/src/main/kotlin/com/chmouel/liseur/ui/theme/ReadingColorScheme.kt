@@ -3,7 +3,10 @@ package com.chmouel.liseur.ui.theme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import com.chmouel.liseur.data.settings.ReaderTheme
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * The app's palette, re-laid on the page the reader chose.
@@ -120,3 +123,63 @@ private const val DIM = 0.10f
 private const val QUIET_INK = 0.80f
 private const val OUTLINE = 0.65f
 private const val OUTLINE_VARIANT = 0.22f
+
+/**
+ * The colour the spinner is drawn in while a book is opening.
+ *
+ * A spinner is not reading chrome. It is the app saying "still working"
+ * before there is a book to read at all, on a screen with no text, no page
+ * furniture and nothing the reader picked a paper colour for. So it is the
+ * one accent in the reader that is allowed to stay the app's own, wallpaper
+ * colours included: the bounded exception to
+ * `docs/adr/0031-the-readers-chrome-is-painted-on-the-page.md`, reported as
+ * [#221](https://github.com/chmouel/liseur/issues/221).
+ *
+ * Reading chrome was painted on the page in the first place because nobody
+ * had ever checked a wallpaper-derived accent against sepia. That is
+ * checked here instead, at runtime, against the exact background the
+ * indicator will sit on. When the app's accent cannot be seen on the page
+ * the page's own accent is used, which is what the whole reader used before
+ * this exception existed.
+ *
+ * [appAccent] is expected to have been resolved at the *page's* lightness
+ * rather than the app's, so that a light-scheme accent never lands on a
+ * night page. A tone that dark would clear [CONTROL] on black and still
+ * look wrong.
+ *
+ * With wallpaper colour off this returns [fallback] unchanged, because the
+ * app's accent and the page's are then the same colour from the same
+ * palette. The exception has no effect at all until somebody turns dynamic
+ * colour on.
+ *
+ * @param page the paper the indicator is sitting on
+ * @param appAccent the app's own accent, at the page's lightness
+ * @param fallback the page's accent, used when [appAccent] cannot be seen
+ */
+internal fun loadingAccentOn(page: ReaderTheme, appAccent: Color, fallback: Color): Color =
+    if (contrastRatio(appAccent, page.background) >= CONTROL) appAccent else fallback
+
+/**
+ * WCAG 2.x minimum for a graphical control, which is what a spinner is.
+ *
+ * Deliberately not the 4.5 the rest of this file is tuned against: that is
+ * the body-text minimum, and it applies to the accent where the accent is
+ * text, as it is in the definition sheet. An indicator carries no glyphs,
+ * so 1.4.11 Non-text Contrast is the rule it has to meet.
+ */
+private const val CONTROL = 3.0
+
+/**
+ * The WCAG contrast ratio between two colours, 1.0 to 21.0.
+ *
+ * Both colours must be opaque. Nothing here composites, so a translucent
+ * colour would be measured as though its alpha were 1 and the answer would
+ * be wrong in the safe-looking direction. Every colour this is asked about
+ * comes from a [ColorScheme] or a [ReaderTheme], and those are opaque by
+ * construction.
+ */
+internal fun contrastRatio(a: Color, b: Color): Double {
+    val la = a.luminance().toDouble()
+    val lb = b.luminance().toDouble()
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+}

@@ -75,7 +75,7 @@ class ReadingColorSchemeTest {
                 s.surfaceContainer,
                 s.surfaceContainerHigh,
                 s.surfaceContainerHighest,
-            ).map { contrastRatio(it, page.background) }
+            ).map { wcagContrastRatio(it, page.background) }
             assertEquals(
                 "raised containers on $page should get progressively more ink",
                 steps.sorted(),
@@ -223,7 +223,7 @@ class ReadingColorSchemeTest {
     }
 
     private fun assertContrast(where: String, fg: Color, bg: Color, atLeast: Double) {
-        val ratio = contrastRatio(fg, bg)
+        val ratio = wcagContrastRatio(fg, bg)
         assertTrue(
             "$where: contrast %.2f is below %.1f".format(ratio, atLeast),
             ratio >= atLeast,
@@ -290,7 +290,133 @@ class ReadingColorSchemeTest {
             assertContrast("$where onError on error", s.onError, s.error, TEXT)
         }
     }
+
+    // ---- the loading indicator -------------------------------------------
+
+    /*
+     * The one accent in the reader allowed to stay the app's own, wallpaper
+     * colours included. What has to hold is that it is only ever the app's
+     * when it can actually be seen on the page, and that it is nobody's
+     * business at all until somebody turns dynamic colour on.
+     */
+
+    /** A wallpaper accent, at the two tones Material would pick for one. */
+    private val aquamarineLight = Color(0xFF00696B)
+    private val aquamarineDark = Color(0xFF4FD8DB)
+
+    private fun pageAccent(page: ReaderTheme, palette: PalettePair) =
+        scheme(page, palette).primary
+
+    @Test
+    fun `the app's accent is kept when it can be seen on the page`() {
+        for (page in ReaderTheme.entries) {
+            val wallpaper = if (page.isDarkPage) aquamarineDark else aquamarineLight
+            assertEquals(
+                "the wallpaper accent should survive on $page",
+                wallpaper,
+                loadingAccentOn(page, wallpaper, pageAccent(page, BrandPalette)),
+            )
+        }
+    }
+
+    @Test
+    fun `an accent that vanishes into the page is refused`() {
+        // A colour close enough to each page to disappear into it. The
+        // reader would be left watching a wait with nothing in it.
+        for (page in ReaderTheme.entries) {
+            val fallback = pageAccent(page, BrandPalette)
+            assertEquals(
+                "an accent the colour of $page should be refused",
+                fallback,
+                loadingAccentOn(page, page.background, fallback),
+            )
+        }
+    }
+
+    @Test
+    fun `wallpaper colour off changes nothing at all`() {
+        // The whole safety argument for the exception. Walk the settings
+        // the way the app walks them, through eInkPalette() and the
+        // wallpaper gate, and check that wherever that gate is shut the
+        // accent the indicator takes is the one the page already had.
+        val shut = listOf(
+            FixedPalette("dynamic colour off", dynamicColor = false),
+            FixedPalette("below API 31", available = false),
+            FixedPalette("e-ink, monochrome", eInk = true),
+            FixedPalette("e-ink, colour", eInk = true, colorEInk = true),
+        )
+        for (settings in shut) {
+            val ink = eInkPalette(settings.eInk, settings.colorEInk)
+            assertTrue(
+                "${settings.name} should not be taking wallpaper colours",
+                !usesWallpaperColours(ink, settings.dynamicColor, settings.available),
+            )
+            val pair = palettePairFor(ink)
+            for (page in ReaderTheme.entries) {
+                // What appAccent() returns once schemeFor() has fallen
+                // through its wallpaper branch.
+                val app = pair.at(page.isDarkPage).primary
+                val fallback = scheme(page, pair, settings.eInk).primary
+                assertEquals("${settings.name} on $page", fallback, app)
+                assertEquals(
+                    "${settings.name} on $page",
+                    fallback,
+                    loadingAccentOn(page, app, fallback),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the threshold is the one for a control, not for text`() {
+        // A tone that clears 3:1 on the page but not 4.5:1. Held by the
+        // indicator, which carries no glyphs, and that is the distinction
+        // the constant exists to record.
+        val page = ReaderTheme.LIGHT
+        val borderline = Color(0xFF949494)
+        val ratio = wcagContrastRatio(borderline, page.background)
+        assertTrue(
+            "this fixture only proves something between 3 and 4.5, was %.2f".format(ratio),
+            ratio >= NON_TEXT && ratio < TEXT,
+        )
+        assertEquals(
+            borderline,
+            loadingAccentOn(page, borderline, pageAccent(page, BrandPalette)),
+        )
+    }
+
+    @Test
+    fun `the measured ratio agrees with an independent implementation`() {
+        // This file works out its own contrast so its claims depend on
+        // nothing. The app now measures contrast too, and the two have to
+        // be the same measurement or one of these tests is checking a rule
+        // the app does not apply.
+        val samples = listOf(
+            Color.White to Color.Black,
+            aquamarineLight to Color.White,
+            aquamarineDark to Color.Black,
+            Leather to ReaderTheme.SEPIA.background,
+            LeatherNight to ReaderTheme.BLACK.background,
+        )
+        for ((a, b) in samples) {
+            assertEquals(
+                "contrast of $a on $b",
+                wcagContrastRatio(a, b),
+                contrastRatio(a, b),
+                0.01,
+            )
+        }
+    }
 }
+
+/** One set of settings that leaves the app on its own fixed palette. */
+private data class FixedPalette(
+    val name: String,
+    val eInk: Boolean = false,
+    val colorEInk: Boolean = false,
+    val dynamicColor: Boolean = true,
+    val available: Boolean = true,
+)
 
 /** WCAG 2.x body-text minimum. */
 private const val TEXT = 4.5
@@ -302,9 +428,11 @@ private const val NON_TEXT = 3.0
  * The WCAG contrast ratio between two opaque colours, 1.0 to 21.0.
  *
  * Written out rather than taken from a library so the test depends on
- * nothing, and because it is eight lines.
+ * nothing, and because it is eight lines. The app has its own, built on
+ * Compose's `luminance()`; `the measured ratio agrees with an independent
+ * implementation` is what keeps the two honest.
  */
-private fun contrastRatio(a: Color, b: Color): Double {
+private fun wcagContrastRatio(a: Color, b: Color): Double {
     val la = relativeLuminance(a)
     val lb = relativeLuminance(b)
     return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)

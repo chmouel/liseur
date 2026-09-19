@@ -9,6 +9,8 @@ import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +34,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import com.chmouel.liseur.data.library.openableUri
+import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.data.settings.readingCssFor
 import com.chmouel.liseur.ui.reading.FineTypographyActions
@@ -44,7 +48,9 @@ import com.chmouel.liseur.ui.library.canUploadTo
 import com.chmouel.liseur.ui.library.uploadOnOpen
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import com.chmouel.liseur.ui.theme.SystemBarIcons
+import com.chmouel.liseur.ui.theme.appAccent
 import com.chmouel.liseur.ui.theme.isDark
+import com.chmouel.liseur.ui.theme.loadingAccentOn
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
 import com.chmouel.liseur.ui.LocalEInk
@@ -189,12 +195,22 @@ class ReaderActivity : FragmentActivity() {
                     colorEInk = settings.colorEInk,
                     readingPage = readingPage,
                 ) {
+                    // One rule for both spinners below. They are the same
+                    // wait seen from either side of the preferences
+                    // landing, and answering it differently on each side is
+                    // what turned one spinner from aquamarine to gold.
+                    val loadingAccent = loadingAccent(
+                        page = readingPage,
+                        eInk = LocalEInk.current,
+                        colorEInk = settings.colorEInk,
+                        dynamicColor = settings.dynamicColor,
+                    )
                     // Nothing may touch the view model until the book has a
                     // name, because building it is what fixes that name —
                     // nor until the page has a colour, or the first frame of
                     // the book is drawn in the wrong one.
                     if (target == null || readingPage == null) {
-                        ReaderLoadingScreen()
+                        ReaderLoadingScreen(loadingAccent)
                         return@LiseurTheme
                     }
                     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -223,7 +239,7 @@ class ReaderActivity : FragmentActivity() {
                     Box(Modifier.fillMaxSize()) {
                         when (val s = state) {
                             ReaderViewModel.UiState.Loading ->
-                                ReaderLoadingScreen()
+                                ReaderLoadingScreen(loadingAccent)
 
                             is ReaderViewModel.UiState.Failure ->
                                 ReaderErrorScreen(message = s.message, onBack = ::finish)
@@ -764,4 +780,41 @@ class ReaderActivity : FragmentActivity() {
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_ID, id)
     }
+}
+
+/**
+ * What the spinner is drawn in while a book is opening.
+ *
+ * Before the reader preferences land there is no page yet, so the activity
+ * is still wearing the app's own theme and the accent in force is already
+ * the right one. After they land the page is installed over `MaterialTheme`
+ * and the app's accent has to be asked for by name.
+ *
+ * Both loading screens are handed whatever this returns, so within one
+ * composition they cannot disagree. Across the preferences landing the
+ * answer does change, because the page arrives and the tone is chosen at
+ * the page's lightness rather than the app's. What stops changing is the
+ * hue, for an accent that clears the guard; one that does not clear it
+ * falls back to the page's own accent, which is the guard working. The
+ * complaint is [#221](https://github.com/chmouel/liseur/issues/221).
+ */
+@Composable
+private fun loadingAccent(
+    page: ReaderTheme?,
+    eInk: Boolean,
+    colorEInk: Boolean,
+    dynamicColor: Boolean,
+): Color {
+    val pageAccent = MaterialTheme.colorScheme.primary
+    if (page == null) return pageAccent
+    return loadingAccentOn(
+        page = page,
+        appAccent = appAccent(
+            dark = page.isDarkPage,
+            eInk = eInk,
+            colorEInk = colorEInk,
+            dynamicColor = dynamicColor,
+        ),
+        fallback = pageAccent,
+    )
 }
