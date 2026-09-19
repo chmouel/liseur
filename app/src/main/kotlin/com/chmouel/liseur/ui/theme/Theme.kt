@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.theme
 
 import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -216,14 +217,32 @@ fun ThemeMode.isDark(): Boolean = isDark(isSystemInDarkTheme())
 /**
  * The fixed palette pair this configuration draws from.
  *
- * Wallpaper colours are not in here, because they are not a pair: the
- * system hands over one scheme at a time and there is no counterpart to
- * ask for. Anything that needs both lightnesses of the same palette —
- * which is what painting chrome on a reading page needs — has to start
- * here.
+ * Wallpaper colours are not in here, because a pair is a palette at both
+ * its lightnesses and this is the fixed half of the answer: the one that
+ * does not depend on a [android.content.Context]. Anything that needs both
+ * lightnesses of the same palette — which is what painting chrome on a
+ * reading page needs — starts here.
  */
 internal fun palettePairFor(eInk: EInkPalette): PalettePair =
     if (eInk == EInkPalette.MONOCHROME) MonoPalette else BrandPalette
+
+/**
+ * Whether this configuration takes its colours from the wallpaper.
+ *
+ * Split out of [schemeFor] so the other branch can be checked without a
+ * [android.content.Context]. The loading indicator's exception rests on
+ * what happens when this is false, and that half is worth a test.
+ *
+ * [available] is a parameter only so a test can shut the gate by hand; a
+ * unit test sees no API level at all, so every answer would otherwise be
+ * false for the wrong reason. Nothing in the app passes it.
+ */
+@ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
+internal fun usesWallpaperColours(
+    eInk: EInkPalette,
+    dynamicColor: Boolean,
+    available: Boolean = dynamicColorAvailable,
+): Boolean = eInk == EInkPalette.NONE && dynamicColor && available
 
 /** The single scheme in force, wallpaper colours included. */
 @Composable
@@ -233,14 +252,37 @@ private fun schemeFor(
     dynamicColor: Boolean,
 ): ColorScheme {
     val context = LocalContext.current
-    if (eInk == EInkPalette.NONE &&
-        dynamicColor &&
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    ) {
+    if (usesWallpaperColours(eInk, dynamicColor)) {
         return if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     }
     return palettePairFor(eInk).at(dark)
 }
+
+/**
+ * The accent the app itself would draw in, asked for at a given lightness.
+ *
+ * The reader installs the reading page over `MaterialTheme`, so inside it
+ * there is no way left to ask what the app's own colours are. The loading
+ * indicator needs to: see [loadingAccentOn]. The lightness is a parameter
+ * rather than the app's own because the indicator sits on the reading page,
+ * and it is the page's darkness that decides which half of a palette
+ * belongs on it.
+ *
+ * Returns the same colour the page would have given when wallpaper colour
+ * is off or unavailable, since both then come from the same palette at the
+ * same lightness.
+ */
+@Composable
+internal fun appAccent(
+    dark: Boolean,
+    eInk: Boolean,
+    colorEInk: Boolean,
+    dynamicColor: Boolean,
+): Color = schemeFor(
+    dark = dark,
+    eInk = eInkPalette(eInk, colorEInk),
+    dynamicColor = dynamicColor,
+).primary
 
 @Composable
 fun LiseurTheme(
