@@ -862,8 +862,10 @@ reader behavior.
   All providers use `domain/ReadingStateMerge.kt` for conflict rules.
 - `updated_at` is when this device wrote a row and is used for derived sync
   ids and outgoing client timestamps. `read_at` is when reading happened and
-  must remain the source for Recent and Continue Reading ordering. A row with
-  neither progression nor locator is not a reading.
+  must remain the source for Recent and Continue Reading ordering. Those
+  queries use `COALESCE(read_at, updated_at)` so legacy rows without `read_at`
+  retain their correct order. A row with neither progression nor locator is
+  not a reading.
 - In scrolled reading, Readium's last locator may lag the viewport. Refresh
   through the current scrolled-place helper before any action that depends on
   the current position.
@@ -873,9 +875,10 @@ reader behavior.
 - liseur-sync is an append-only log, not a current-position store. Apply a
   changes page and advance `remote_server.sync_cursor_seq` in the same
   transaction, never before applying the page.
-- Operation and session ids are derived from the device, work, and revision;
-  payload fields come from stored state. A retry must be byte-identical and
-  must not require random ids or a `pending_ops` table.
+- Operation ids are derived from the device, work, and revision; session ids
+  are derived from the device and stored local session id. Payload fields come
+  from stored state. A retry must be byte-identical and must not require
+  random ids or a `pending_ops` table.
 - Reconnect with the stored device id. A pasted token that reconnects as a
   different device can return `conflict`; advance that book's revision
   conditionally from the revision that was sent before retrying.
@@ -893,6 +896,15 @@ reader behavior.
 - Uploads are opt-in through both the server capability and folder
   capability. Successful upload is adoption: preserve the local `books.url`
   and only link the remote identity and download URL.
+- Live notifications are topic-only hints routed through `data/remote/`.
+  Their foreground connection is separate from the full-sync debounce and
+  identifies the account and credentials, never a cursor or timestamp. Topic
+  refreshes share `PositionSyncCoordinator`'s turn lock, and an invalidation
+  during a refresh stays owed. Do not call `syncAll()` for an invalidation or
+  bypass cursor and annotation reconciliation. Signal local annotation edits
+  after commit. An incoming position waits until the reader resumes; catch-up
+  acceptance binds the original account, peer, fingerprint, and local
+  revision. See `docs/adr/0023-position-sync-versus-whispersync.md`.
 
 ### Settings and statistics
 
@@ -919,7 +931,8 @@ reader behavior.
 - An annotation id is derived from mutable content only until it becomes
   editable; thereafter `annotation_sync` stores the server acknowledgement and
   the exact pending request bytes. Write those bytes before the call and
-  replay them verbatim through `postRaw`.
+  replay them verbatim through `postRaw`. Do not add a queue: it would be a
+  second copy of the truth and can drift from the live annotations table.
 - The acknowledged fingerprint excludes request metadata such as `base_rev`
   and `edition_sha`; the pending fingerprint identifies the request so an
   answer cannot overwrite a newer local edit.
