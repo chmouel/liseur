@@ -201,6 +201,82 @@ class OpdsCatalogClientTest {
     }
 
     @Test
+    fun `an initial shelf's continuation resumes the load-more without rereading it`() {
+        // The initial connect walk stops inside "fiction" with "mystery"
+        // still queued and unread. Its continuation must let the first
+        // "Load 50 more" go straight to "mystery" rather than reading
+        // the root and "fiction" all over again to rediscover books it
+        // already has.
+        pages["/opds"] = feed(navigation("Fiction", "/fiction") + navigation("Mystery", "/mystery"))
+        pages["/fiction"] = feed(book("f1") + book("f2") + book("f3"))
+        pages["/mystery"] = feed(book("m1") + book("m2") + book("m3"))
+        val initial = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val walk = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 3 })
+                .allBooks(root(), RemoteCredentials.Anonymous) { initial += it }
+        }
+
+        assertEquals(listOf("Book f1", "Book f2", "Book f3"), initial.map { it.title })
+        assertFalse(walk.complete)
+        val continuation = walk.continuation
+        assertNotNull(continuation)
+
+        asked.clear()
+        val more = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 3 }).loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                continuation,
+                initial.map { it.remoteId }.toSet(),
+                50,
+            ) { more += it }
+        }
+
+        assertEquals(listOf("Book m1", "Book m2", "Book m3"), more.map { it.title })
+        assertTrue(result.exhausted)
+        assertFalse(asked.contains("/opds"))
+        assertFalse(asked.contains("/fiction"))
+    }
+
+    @Test
+    fun `a shelf that stops mid-feed resumes past the books it already took`() {
+        // Five books on one page, a shelf of three: the cap falls inside
+        // the page itself rather than between feeds, so the resumed
+        // batch has to skip the books this walk already delivered
+        // instead of handing them out again.
+        pages["/opds"] = feed((0 until 5).joinToString("") { book("b$it") })
+        val initial = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val walk = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 3 })
+                .allBooks(root(), RemoteCredentials.Anonymous) { initial += it }
+        }
+
+        assertEquals(listOf("Book b0", "Book b1", "Book b2"), initial.map { it.title })
+        assertFalse(walk.complete)
+        val continuation = walk.continuation
+        assertNotNull(continuation)
+        assertEquals(1, continuation!!.queue.size)
+        assertEquals(3, continuation.queue.single().skippedBooks)
+
+        val more = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                continuation,
+                initial.map { it.remoteId }.toSet(),
+                50,
+            ) { more += it }
+        }
+
+        assertEquals(listOf("Book b3", "Book b4"), more.map { it.title })
+        assertTrue(result.exhausted)
+    }
+
+    @Test
     fun `an ordinary catalog is not capped`() {
         pages["/opds"] = feed((0 until 60).joinToString("") { book("b$it") })
 

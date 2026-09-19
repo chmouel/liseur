@@ -74,6 +74,10 @@ class OpdsCatalogClient(
         val queue = ArrayDeque(listOf(Step(root, depth = 0)))
         var requests = 0
         var complete = true
+        // Left over from a page a shelf cap cut into, so a resumed
+        // load-more can start from the same unconsumed entries rather
+        // than fetching that feed again from its first book.
+        var leftover: CatalogStep? = null
 
         while (queue.isNotEmpty()) {
             coroutineContext.ensureActive()
@@ -159,10 +163,24 @@ class OpdsCatalogClient(
                 }
                 Log.i(TAG, "Stopped at $shelf books; this shelf is offered at that size")
                 complete = false
+                if (books.size < page.books.size) {
+                    leftover = CatalogStep(step.url.toString(), step.depth, skippedBooks = books.size)
+                }
                 break
             }
         }
-        CatalogWalk(complete = complete)
+        // Only a starter shelf resumes a walk, so only a starter shelf
+        // needs this recorded: the queue and in-page position where the
+        // initial capped walk stopped, so the first "Load 50 more" tap
+        // carries on rather than reading the root and every feed since
+        // all over again.
+        val continuation = shelf?.let {
+            CatalogContinuation(
+                queue = listOfNotNull(leftover) + queue.map { step -> CatalogStep(step.url.toString(), step.depth) },
+                seen = seen,
+            )
+        }
+        CatalogWalk(complete = complete, continuation = continuation)
     }
 
     /**

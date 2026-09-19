@@ -174,12 +174,24 @@ The progress row goes when the connection does. Reconnecting the same
 catalog later walks it again from the root rather than inheriting a
 verdict about a shelf that has moved on since.
 
-The first load-more on a shelf made before this state existed starts
-from the catalog root and skips identities the library already knows
-until it reaches new books. That can spend requests without adding
-anything, but it is safe: existing rows are updated rather than
-duplicated, and the checkpoint moves only after the connected account is
-checked again.
+The initial capped walk that fills the shelf on connect (or on an
+ordinary refresh, before any load-more has run) seeds this same
+checkpoint, from wherever it stopped, the first time it has one to
+offer. Gutenberg lists one feed per book, so that first walk has
+already read every feed the shelf's books came from; without this, the
+very first "Load 50 more" tap on any new shelf would read the root and
+every one of those feeds again just to re-skip books it already knows,
+for no reason beyond the shelf being brand new. Seeding never overwrites
+a checkpoint a load-more has already moved past — that row is ahead of
+what an ordinary refresh would rebuild, and stamping over it would
+throw its progress away.
+
+Only a shelf connected before this state existed has nothing to seed
+from. Its first load-more starts from the catalog root and skips
+identities the library already knows until it reaches new books. That
+can spend requests without adding anything, but it is safe: existing
+rows are updated rather than duplicated, and the checkpoint moves only
+after the connected account is checked again.
 
 The size is **stored on the connection**, in `remote_server.shelf_limit`,
 not decided afresh from the address. The walk re-runs on every refresh,
