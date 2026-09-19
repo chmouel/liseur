@@ -76,6 +76,12 @@ data class CatalogWalk(
     val complete: Boolean,
     /** What the provider kept of the walk, for reusing within this run. */
     val snapshot: CatalogSnapshot? = null,
+    /**
+     * Where a bounded starter shelf stopped, for [ResumableCatalogSource.loadMore]
+     * to resume from rather than walking the root again. Null for a provider or
+     * an address this does not apply to.
+     */
+    val continuation: CatalogContinuation? = null,
 )
 
 /**

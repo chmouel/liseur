@@ -447,9 +447,24 @@ class LibraryViewModel(
     /**
      * Comes from the repository rather than from here: the walk outlives
      * this screen, so what it came to has to as well, through a rotation
-     * or a moment spent off the library.
+     * or a moment spent off the library. The account filtering there is
+     * a cold flow, not a [StateFlow], because it must be re-checked
+     * against whoever is connected each time this screen subscribes, not
+     * frozen at the moment some earlier screen last collected it.
+     *
+     * `replayExpirationMillis = 0` drops that cached value the moment
+     * this stops being collected, rather than keeping it to hand to
+     * whoever resubscribes next: a plain [SharingStarted.WhileSubscribed]
+     * would replay a result read for an account that has since been
+     * switched away from before the freshly restarted upstream had a
+     * chance to filter it back out.
      */
-    val starterCatalogMoreResult: StateFlow<StarterCatalogMoreResult?> = catalog.starterMoreResult
+    val starterCatalogMoreResult: StateFlow<StarterCatalogMoreResult?> =
+        catalog.starterMoreResult.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000, replayExpirationMillis = 0),
+            null,
+        )
 
     fun starterCatalogMoreResultShown() {
         catalog.starterMoreResultShown()
