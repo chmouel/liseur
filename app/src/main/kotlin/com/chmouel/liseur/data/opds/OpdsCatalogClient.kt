@@ -75,8 +75,9 @@ class OpdsCatalogClient(
         var requests = 0
         var complete = true
         // Left over from a page a shelf cap cut into, so a resumed
-        // load-more can start from the same unconsumed entries rather
-        // than fetching that feed again from its first book.
+        // load-more re-queues that same feed rather than treating it as
+        // fully read; it is fetched again from the top, since a
+        // position in it is not something a later request can trust.
         var leftover: CatalogStep? = null
 
         while (queue.isNotEmpty()) {
@@ -164,13 +165,13 @@ class OpdsCatalogClient(
                 Log.i(TAG, "Stopped at $shelf books; this shelf is offered at that size")
                 complete = false
                 if (books.size < page.books.size) {
-                    leftover = CatalogStep(step.url.toString(), step.depth, skippedBooks = books.size)
+                    leftover = CatalogStep(step.url.toString(), step.depth)
                 }
                 break
             }
         }
         // Only a starter shelf resumes a walk, so only a starter shelf
-        // needs this recorded: the queue and in-page position where the
+        // needs this recorded: the queue of feeds still owed where the
         // initial capped walk stopped, so the first "Load 50 more" tap
         // carries on rather than reading the root and every feed since
         // all over again.
@@ -267,8 +268,11 @@ class OpdsCatalogClient(
                 // that will pass later — a timeout, a server error. One
                 // that will not is the server's last word on this feed,
                 // and keeping it would have the walk retry that word
-                // forever, never reaching exhausted.
-                if (e.reason.worthRetrying) {
+                // forever, never reaching exhausted. A 429 counts as
+                // worth retrying too, same as `LiveSyncConnector`: it is
+                // the donation-funded server asking to be asked again
+                // later, not a refusal of this feed.
+                if (e.reason.worthRetrying || (e.reason as? SyncFailure.ServerError)?.code == 429) {
                     retryableFailure = e
                     deferred += step
                 }
@@ -276,7 +280,14 @@ class OpdsCatalogClient(
             }
             fetched++
 
-            val entries = page.books.drop(step.skippedBooks)
+            // The whole page is rescanned every time, rather than
+            // dropping by a remembered position: Gutenberg's popularity
+            // ordering can shift between requests, so a position from
+            // an earlier visit is not a safe cutoff on a page fetched
+            // fresh. `known` (seeded from every book already stored) is
+            // what skips the ones this walk has already delivered,
+            // wherever they now sit on the page.
+            val entries = page.books
             var consumed = 0
             for (book in entries) {
                 val remote = book.toRemote(scope, page.base)
@@ -286,13 +297,7 @@ class OpdsCatalogClient(
                 added++
                 if (added >= limit) {
                     if (consumed < entries.size) {
-                        queue.addFirst(
-                            CatalogStep(
-                                url = step.url,
-                                depth = step.depth,
-                                skippedBooks = step.skippedBooks + consumed,
-                            ),
-                        )
+                        queue.addFirst(CatalogStep(url = step.url, depth = step.depth))
                         flush()
                         return@withContext CatalogMore(
                             added = added,
