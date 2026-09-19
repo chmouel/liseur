@@ -12,17 +12,17 @@ import java.net.InetAddress
  * object asks whether an address is somewhere only the reader's own
  * network can reach, which is about what is safe to send in the clear
  * and what a catalog may point the phone at. This asks what the
- * platform will drop, and the platform's answer is not a table: it is
- * the directly connected routes of the networks the phone is on, and it
- * excludes whatever a VPN carries.
+ * platform will drop, and the platform's answer is not a table alone:
+ * it is also whichever prefixes the phone's own interfaces are holding,
+ * and it excludes whatever a VPN carries.
  *
  * So the judgement has two halves. The fixed half is everything
  * [PrivateAddress] knows, plus broadcast and multicast. The live half is
- * [onLink], a predicate over the phone's own routes, which
- * `LocalNetworkAccess` fills in and the tests supply directly. Both are
- * needed: a home server on a global IPv6 address in the phone's own /64
- * is on-link and blocked, and no list of private ranges will ever say
- * so.
+ * [onLink], a predicate over the phone's own addresses, which
+ * `LocalNetworkAccess` fills in from [OnLinkPrefixes] and the tests
+ * supply directly. Both are needed: a home server on a global IPv6
+ * address in the phone's own /64 is on-link and blocked, and no list of
+ * private ranges will ever say so.
  *
  * Carrier-grade NAT space, `100.64.0.0/10`, is deliberately absent from
  * the fixed half. That is where a Tailscale address lives; that traffic

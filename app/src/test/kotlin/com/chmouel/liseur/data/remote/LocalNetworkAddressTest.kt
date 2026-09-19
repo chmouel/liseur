@@ -12,7 +12,7 @@ import org.junit.Test
  * Getting this wrong is expensive in both directions: too eager and a
  * reader whose library is on the open internet is asked to let the app
  * see their home network for no reason, too shy and they wait out a
- * timeout with nothing to show for it. The route predicate and the
+ * timeout with nothing to show for it. The on-link predicate and the
  * resolver are both injected, so none of this touches a network or an
  * emulator.
  */
@@ -117,16 +117,45 @@ class LocalNetworkAddressTest {
     /**
      * A tailnet address is carried by a tunnel, which the restriction
      * does not reach. An ISP that hands the same range out on the LAN
-     * is a different matter, and the routes are what tell them apart.
+     * is a different matter, and the phone's own addresses are what
+     * tell them apart.
      */
     @Test
-    fun `carrier-grade NAT is judged by the routes and not by the range`() = runTest {
+    fun `carrier-grade NAT is judged by the phone's own addresses, not by the range`() = runTest {
         assertFalse(LocalNetworkAddress.isLocal("100.64.0.1", resolver = refusing))
         assertTrue(
             LocalNetworkAddress.isLocal(
                 "100.64.0.1",
                 onLink = { it == "100.64.0.1" },
                 resolver = refusing,
+            ),
+        )
+    }
+
+    /**
+     * A public catalog reached over mobile data, which is #241 with the
+     * whole path in it.
+     *
+     * The on-link half used to be written over routes, and the default
+     * route on a mobile network frequently carries no gateway, so every
+     * address in the world matched it. Project Gutenberg was judged to
+     * be on the reader's own network, the catalog refresh refused
+     * before it dialled, and the library stayed empty behind a notice
+     * about a permission that could not have helped.
+     */
+    @Test
+    fun `a public catalog on mobile data is not local`() = runTest {
+        val cellular = listOf(
+            OnLinkPrefixes.Link("10.99.61.153", 32),
+            OnLinkPrefixes.Link("2405:dc00:ec25:199a:a7dd:11ef:c0aa:319a", 64),
+        )
+        assertFalse(
+            LocalNetworkAddress.isLocal(
+                "https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads",
+                onLink = { OnLinkPrefixes.contains(cellular, it) },
+                resolver = resolving(
+                    "www.gutenberg.org" to listOf("152.19.134.47", "2610:28:3090:3000:0:bad:cafe:47"),
+                ),
             ),
         )
     }

@@ -51,12 +51,12 @@ its opposite.
 `PrivateAddress` answers a narrower question: whether plain HTTP is
 defensible, whether a catalog link is a probe nobody asked for.
 Android's idea of a local address is wider, and it is not knowable from
-a table — it is the directly connected routes of the networks the phone
-is on, and it excludes what a VPN carries.
+a table alone — part of it is whichever addresses the phone's own
+interfaces are holding, and it excludes what a VPN carries.
 
 So `LocalNetworkAddress` has a fixed half — everything `PrivateAddress`
 knows, plus IPv4 broadcast and IPv4 and IPv6 multicast — and a live
-half, a route predicate that `AndroidLocalNetworkAccess` fills in from
+half, `OnLinkPrefixes`, which `AndroidLocalNetworkAccess` fills in from
 `ConnectivityManager`. `PrivateAddress` is reused rather than copied, so
 the IPv6 parsing has one home, and it gained a `matchesHost` for the
 purpose.
@@ -68,24 +68,51 @@ address in it. And carrier-grade NAT space, `100.64.0.0/10`, is
 deliberately *not* in the fixed set: that is where a Tailscale address
 lives, that traffic goes down the tunnel and needs no permission, so a
 table entry would prompt a tailnet reader for nothing. An ISP that hands
-`100.64` out on the LAN still gets the prompt, through the route, which
-is the honest reason.
+`100.64` out on the LAN still gets the prompt, through the live half,
+which is the honest reason.
 
-VPN transports are left out of the live half because Android's
-restriction does not reach what a tunnel carries. Routes are read across
-every non-VPN network rather than the default one alone, so a Wi-Fi
+The live half reads each non-VPN interface's own addresses, which is the
+rule the platform itself enforces: an IPv6 address puts its prefix on
+the local network, and an IPv4 address puts the whole private range it
+sits in there, so a phone holding `192.168.1.5/24` blocks all of
+`192.168.0.0/16` and not merely its own subnet. VPN transports are left
+out because Android's restriction does not reach what a tunnel carries.
+Every network is read rather than the default one alone, so a Wi-Fi
 library stays reachable while cellular is default.
+
+#### Correction: it is the addresses, not the routes
+
+The first version of the live half read *routes* instead, and called an
+address on-link when a gateway-less route matched it. On Wi-Fi that
+behaves: the default route carries the router's IP, so it is filtered
+out and only the real subnet remains. On mobile data it does not. The
+modem frequently reports no gateway at all, and `RouteInfo` then
+substitutes the unspecified address, which `hasGateway()` reports as no
+gateway — so `0.0.0.0/0` and `::/0` were gateway-less routes matching
+every address there is. Every server on the internet was judged to be on
+the reader's own network and refused before it was dialled. A reader on
+LTE could not reach Project Gutenberg, and was shown a notice about a
+permission that could not have helped, because nothing was being blocked
+(#241). It is carrier-dependent, which is why it survived testing:
+plenty of modems do report a gateway.
+
+The platform never had this problem because the platform never looked at
+routes. It derives its blocked prefixes from link addresses, and guards
+a zero-length prefix explicitly. `OnLinkPrefixes` now does the same, and
+being arithmetic over a list rather than a call into
+`ConnectivityManager` it is covered by ordinary unit tests, which the
+route predicate never could be.
 
 ### Two inaccuracies, both accepted, both erring the same way
 
 A VPN carrying a private range can raise a prompt Android would not have
-needed; and the routes are read across every network rather than the one
-a socket will actually leave by. Deciding either correctly means
-resolving the route a connection will take, which is a routing engine
-this app has no business containing. Asking a question that turns out to
-have been unnecessary costs one dialog, on a screen the reader opened to
-connect a server. Not asking costs the fifteen seconds of silence that
-opened #195.
+needed; and the phone's addresses are read across every network rather
+than the one a socket will actually leave by. Deciding either correctly
+means resolving the route a connection will take, which is a routing
+engine this app has no business containing. Asking a question that turns
+out to have been unnecessary costs one dialog, on a screen the reader
+opened to connect a server. Not asking costs the fifteen seconds of
+silence that opened #195.
 
 ### The address that will be dialled, not the text that was typed
 

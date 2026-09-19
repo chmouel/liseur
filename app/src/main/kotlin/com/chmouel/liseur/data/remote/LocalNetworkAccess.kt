@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
-import java.net.InetAddress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,7 +80,7 @@ interface LocalNetworkAccess {
     }
 }
 
-/** The real thing, reading the phone's permission and its routes. */
+/** The real thing, reading the phone's permission and its addresses. */
 class AndroidLocalNetworkAccess(
     context: Context,
     private val sdkInt: Int = Build.VERSION.SDK_INT,
@@ -130,27 +129,41 @@ class AndroidLocalNetworkAccess(
      * reach what a tunnel carries, and a tailnet address must not raise
      * a prompt for a permission it never needed.
      *
-     * This is not a routing table and does not pretend to be one. It
-     * can name an address local that the socket would in fact have
+     * What is read is each interface's own addresses, which is what the
+     * platform's own rule is written over. Reading routes instead looks
+     * equivalent and is not: on a mobile network the modem frequently
+     * reports no gateway for the default route, and a gateway-less
+     * `0.0.0.0/0` matches every address there is, so every server on the
+     * internet was judged local and refused before it was dialled
+     * (#241). [OnLinkPrefixes] holds the rule and the arithmetic.
+     *
+     * This is still not a routing table and does not pretend to be one.
+     * It can name an address local that the socket would in fact have
      * reached another way, and the cost of that is one dialog on a
      * screen the reader opened to connect a server. The cost of the
      * other direction is the fifteen seconds of silence this whole file
      * exists to prevent.
+     *
+     * Stacked links are not read, because nothing public exposes them.
+     * That is where a 464XLAT translation address lives, on a
+     * `192.0.0.0/24` the platform arms no range for, so there is
+     * nothing to miss in the case that actually occurs.
      */
     private fun onLink(host: String): Boolean {
-        // The routes are read through APIs newer than `minSdk`, and are
-        // only ever worth reading where the restriction exists at all.
+        // The link addresses are read through APIs newer than `minSdk`,
+        // and are only ever worth reading where the restriction exists
+        // at all.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.CINNAMON_BUN) return false
-        val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return false
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
-        return manager.allNetworks.any { network ->
+        val links = manager.allNetworks.flatMap { network ->
             val capabilities = manager.getNetworkCapabilities(network)
             if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) != false) {
-                return@any false
+                return@flatMap emptyList()
             }
-            manager.getLinkProperties(network)?.routes.orEmpty().any {
-                !it.hasGateway() && it.matches(address)
+            manager.getLinkProperties(network)?.linkAddresses.orEmpty().mapNotNull { link ->
+                link.address.hostAddress?.let { OnLinkPrefixes.Link(it, link.prefixLength) }
             }
         }
+        return OnLinkPrefixes.contains(links, host)
     }
 }
