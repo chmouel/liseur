@@ -254,7 +254,11 @@ class OpdsCatalogClient(
         val deferred = mutableListOf<CatalogStep>()
         val delivered = mutableListOf<RemoteBook>()
 
-        fun remaining(): List<CatalogStep> = queue.toList() + deferred
+        // `deferred` goes first, same as `allBooks()`: a page cut short by
+        // the batch limit is requeued at the front of `queue`, and it can
+        // recur run after run. Putting it ahead of `deferred` would let it
+        // crowd out an earlier failure indefinitely.
+        fun remaining(): List<CatalogStep> = deferred + queue.toList()
 
         fun enqueue(url: HttpUrl, depth: Int) {
             if (!scope.mayFetch(url)) {

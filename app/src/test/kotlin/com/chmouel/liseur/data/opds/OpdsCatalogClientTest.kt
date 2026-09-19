@@ -419,6 +419,44 @@ class OpdsCatalogClientTest {
     }
 
     @Test
+    fun `a feed that fails inside one load-more run is still ahead of a page it cuts short`() {
+        // Same starvation as above, but both things happen inside a
+        // single loadMore() run rather than across two: the busy feed
+        // fails and is deferred, then the very next feed in the queue
+        // runs the batch out and requeues itself. The saved order must
+        // still put the deferred feed first.
+        codes["/opds/busy"] = 503
+        pages["/opds/later"] = feed((0 until 5).joinToString("") { book("b$it") })
+        val continuation = com.chmouel.liseur.data.remote.CatalogContinuation(
+            queue = listOf(
+                com.chmouel.liseur.data.remote.CatalogStep("http://127.0.0.1:${server.port}/opds/busy", 1),
+                com.chmouel.liseur.data.remote.CatalogStep("http://127.0.0.1:${server.port}/opds/later", 1),
+            ),
+            seen = setOf(
+                "http://127.0.0.1:${server.port}/opds/busy",
+                "http://127.0.0.1:${server.port}/opds/later",
+            ),
+        )
+
+        val more = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                continuation,
+                emptySet(),
+                3,
+            ) { more += it }
+        }
+
+        assertEquals(listOf("Book b0", "Book b1", "Book b2"), more.map { it.title })
+        assertEquals(
+            listOf("http://127.0.0.1:${server.port}/opds/busy", "http://127.0.0.1:${server.port}/opds/later"),
+            result.state.queue.map { it.url },
+        )
+    }
+
+    @Test
     fun `an ordinary catalog is not capped`() {
         pages["/opds"] = feed((0 until 60).joinToString("") { book("b$it") })
 
