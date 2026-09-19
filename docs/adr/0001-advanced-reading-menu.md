@@ -90,9 +90,9 @@ section there. It listed the four flat at first, on the argument that a
 screen with nothing else competing for room has no empty-sheet problem
 to avoid; that argument lost. See the second update below.
 
-New reading settings default to Advanced. `AGENTS.md` carries that as a
-convention, so the next reasonable row has to argue its way onto the
-first sheet rather than simply land there.
+New reading settings default to Advanced. The implementation invariants in
+`DEVELOPER.md` carry that convention, so the next reasonable row has to argue
+its way onto the first sheet rather than simply land there.
 
 *Where:* `reader/chrome/TypographySheet.kt`,
 `reader/chrome/AdvancedSheet.kt`,
@@ -107,7 +107,7 @@ rows that only some devices show, so it moved behind a single row into
 (`ui/settings/ReadingNavigationScreen.kt`), taking the dictionary
 section with it. Reading appearance is unchanged and still holds how
 the page looks; the tap-zone chip row named above is now on the new
-screen. `AGENTS.md` names both destinations.
+screen. `DEVELOPER.md` documents both destinations.
 
 ## Second update
 
@@ -136,9 +136,9 @@ down a spaced column, so it gets `SettingsExpandableSection`: the same
 header, announced the same way, without the card that would box
 controls that are not rows.
 
-The convention that follows is the one `AGENTS.md` now carries: a
-setting that appears on both surfaces is everyday on both or advanced
-on both. Placing such a row on one of them is placing it on the other.
+The convention that follows is the one `DEVELOPER.md` now carries: a setting
+that appears on both surfaces is everyday on both or advanced on both.
+Placing such a row on one of them is placing it on the other.
 
 *Where:* `ui/settings/ReadingAppearanceScreen.kt`,
 `ui/settings/SettingsRows.kt`.

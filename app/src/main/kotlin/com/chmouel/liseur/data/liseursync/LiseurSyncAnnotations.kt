@@ -26,8 +26,9 @@ import org.json.JSONObject
  * annotated and deleted, and every one of those is a change to the same
  * record. So this cannot work the way positions do.
  *
- * It also cannot work by queueing. `AGENTS.md` is blunt about that, and
- * right: a queue is a second copy of the truth, and the two drift.
+ * It also cannot work by queueing. The `DEVELOPER.md` implementation
+ * invariants are blunt about that, and right: a queue is a second copy of the
+ * truth, and the two drift.
  * Instead [AnnotationSync] records what the server *confirmed*, and the
  * work owed is whatever the live `annotations` table says that the
  * confirmation does not. A mark with no agreement is a create; one

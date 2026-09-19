@@ -15,10 +15,10 @@ died with it: no second device, no web reader, no recovery from a lost
 phone beyond the manual backup file.
 
 Positions and sessions were straightforward to sync because they are
-append-only or single-valued. `AGENTS.md` records how: "every payload
-field comes from stored state rather than the clock, so a retry is
-byte-identical and the server answers `duplicate`. Do not introduce a
-random id or a `pending_ops` table."
+append-only or single-valued. `DEVELOPER.md` records the invariant: every
+payload field comes from stored state rather than the clock, so a retry is
+byte-identical and the server answers `duplicate`; random ids and a
+`pending_ops` table are prohibited.
 
 Annotations are neither append-only nor single-valued. A highlight is
 edited and deleted, so a payload derived purely from the current row
@@ -105,8 +105,8 @@ the duplicate answer the whole design rests on. Locators are
 canonicalised once, when the request is built.
 
 Pure mapping, fingerprinting, canonicalisation and truncation live in
-`AnnotationWire.kt` with no Android types, so they are testable on the
-JVM as `AGENTS.md` requires. `LiseurSyncAnnotations.kt` holds the five
+`AnnotationWire.kt` with no Android types, so they are testable on the JVM as
+the project conventions require. `LiseurSyncAnnotations.kt` holds the five
 phases and every database write.
 
 A book-scoped run is not a book-scoped pass. Closing a book syncs that
