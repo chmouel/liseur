@@ -89,6 +89,10 @@ their bot cannot automate that yet. It needs fdroidserver installed
 release still goes out and hack/release --fdroid-only VERSION finishes
 the F-Droid part later.
 
+A final release also goes to Google Play's internal and closed testing
+tracks, then promotes the same build to production. RCs stop at the testing
+tracks.
+
 The signing key lives in pass, under android/liseur.keystore.p12,
 android/liseur.keystore-password and android/liseur.keystore-alias, and the
 Play upload credential under android/google.play.service.serviceaccount. Any

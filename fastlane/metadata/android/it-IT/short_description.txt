@@ -1,0 +1,1 @@
+Lettore EPUB sincronizzato con il tuo server calibre-web, Komga o OPDS.

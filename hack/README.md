@@ -50,7 +50,8 @@ target wrapping them. Run `make help` for the short list. See
   `versionName`, checks that F-Droid will see final tags but not RC tags,
   tags, builds, publishes the GitHub release, and submits the F-Droid
   update. `--rc` publishes only to a GitHub prerelease and Google Play's
-  testing tracks. See `DEVELOPER.md` for the full workflow and flags.
+  testing tracks. Final releases are also published to Google Play
+  production. See `DEVELOPER.md` for the full workflow and flags.
 - `prune-prereleases`: Deletes every legacy `vX.Y.Z-test.N` GitHub release
   page and all but the newest `vX.Y.Z-rc.N` page for each target version.
   It never deletes tags. The release workflow runs it after publishing an

@@ -1,0 +1,35 @@
+Liseur est un lecteur d'ebooks EPUB libre et gratuit pour Android. Il lit les livres d'un dossier de votre téléphone et se connecte à votre propre serveur calibre-web, Komga ou liseur-sync pour réunir toute votre bibliothèque sur une seule étagère. Pas de publicité, de traqueurs, d'analyse d'utilisation ni de compte Liseur. L'accès au réseau se limite aux serveurs de livres et aux dictionnaires que vous choisissez, ainsi qu'à Project Gutenberg lorsque vous ajoutez des livres gratuits.
+
+TOUTE VOTRE BIBLIOTHÈQUE SUR UNE ÉTAGÈRE
+
+* Dossiers de votre téléphone ou de votre carte SD, indexés avec les couvertures
+* Catalogues calibre-web, Komga, liseur-sync et OPDS réunis sur la même étagère, avec un badge nuage pour les livres du serveur
+* Séries regroupées dans l'ordre de lecture, avec l'avancement et les volumes manquants visibles immédiatement
+* Livres gratuits de Project Gutenberg pour commencer avant même de connecter un serveur
+
+LISEZ COMME VOUS VOULEZ
+
+* Pages ou défilement continu, pour un livre ou toute la bibliothèque
+* Polices libres intégrées (Literata, Vollkorn, Atkinson Hyperlegible et Inter) ou police de l'éditeur
+* Marges, interligne, luminosité et quatre thèmes de lecture : clair, sépia, sombre et noir pour les écrans OLED
+* Défilement automatique à votre rythme, qui continue entre les chapitres
+* Pied de page avec la page actuelle, ce qu'il reste dans le chapitre et le temps de lecture restant
+* Mode de rafraîchissement adapté aux écrans à encre électronique Onyx
+
+RETROUVEZ VOTRE PLACE SUR CHAQUE APPAREIL
+
+* Synchronisation de votre position de lecture avec calibre-web, Komga ou liseur-sync, jusqu'à la phrase exacte
+* Association d'un catalogue OPDS et d'un serveur kosync dans une seule connexion personnalisée
+* Synchronisation des paramètres et des statistiques de lecture avec liseur-sync
+* Fermez le livre sur votre téléphone et reprenez-le sur votre tablette
+
+SURLIGNAGES, NOTES ET DICTIONNAIRE
+
+* Surlignages en quatre couleurs, notes et marque-pages réunis dans un carnet par livre, exportable en Markdown
+* Recherche dans tout le livre avec accès direct au passage
+* Notes de bas de page ouvertes dans une fiche au-dessus de la page
+* Définitions de Wiktionary ou d'une application de dictionnaire hors ligne ; les recherches en ligne restent désactivées tant que vous ne les activez pas, et vous choisissez la source
+
+UN LOGICIEL LIBRE PAR CONCEPTION
+
+Liseur repose sur la boîte à outils libre Readium, sans dépendance propriétaire ni services Google Play. Code source, suivi des problèmes et documentation : https://github.com/chmouel/liseur

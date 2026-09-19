@@ -1,38 +1,35 @@
-Liseur is an open-source ebook reader for Android. It opens EPUB books stored on your phone, and it is also a client for calibre-web, Komga and liseur-sync, so the books on your own server share a shelf with the ones on the device — and the page you stopped on follows you from one to the other.
+Liseur is a free, open-source ebook reader for Android. It reads EPUB books from a folder on your phone, and it connects to your own calibre-web, Komga or liseur-sync server so your whole library lives on one shelf. No ads, no trackers, no analytics, no Liseur account. Network access is limited to the book servers and dictionary sources you choose, plus Project Gutenberg when you add free books.
 
-It works offline, has no ads and no account of its own, and asks for nothing beyond the server you point it at.
+YOUR LIBRARY, ONE SHELF
 
-Reading EPUB books
+* Folders on your phone or SD card, indexed with covers
+* calibre-web, Komga, liseur-sync and OPDS catalogs merged into the same shelf, with a cloud badge on server books
+* Series grouped in reading order, with progress and missing volumes at a glance
+* Free books from Project Gutenberg to start you off, before you connect anything
 
-* Paginated EPUB rendering through the Readium toolkit, full screen by default
-* Tap right to go forward, left to go back, the middle for the controls; volume keys work too
-* A whole page always fits the screen, with no stray scrolling to catch the last line
-* Four reading themes — Light, Sepia, Dark and a black night mode for OLED screens — independent of the app's own theme
-* Four bundled open fonts or the publisher's own, plus size, line spacing, margins and brightness
-* Time left in the chapter, time left in the book, page or percentage, and a scrubber with chapter ticks
+READ YOUR WAY
 
-Highlights, notes and dictionary
+* Pages or continuous scrolling, per book or library-wide
+* Bundled open typefaces (Literata, Vollkorn, Atkinson Hyperlegible, Inter) or the publisher's own
+* Margins, line spacing, brightness and four reading themes: light, sepia, dark, and black for OLED screens
+* Auto-scroll at your pace, carrying on across chapters
+* A footer with the current page, what is left in the chapter, and time remaining
+* A refresh mode tuned for Onyx e-ink displays
 
-* Highlights in four colours, notes, and bookmarks with a corner ribbon
-* A notebook of everything you marked in a book, exportable as Markdown
-* Search the whole book, with snippets and jump-to highlighting
-* Definitions for any selected word, or a hand-off to an offline dictionary app. Online lookups are off until you turn them on, and you choose which Wiktionary edition or mirror answers them
+YOUR PLACE FOLLOWS YOU
 
-Your ebook library
+* Your reading position syncs across devices through calibre-web, Komga or liseur-sync, down to the exact sentence
+* Pair any OPDS catalog with any kosync server as a single Custom connection
+* Settings sync and reading statistics across devices when you connect liseur-sync
+* Close the book on your phone and pick it up on your tablet
 
-* Index folders of EPUBs on the device or an SD card, covers and all
-* Books you are using sort to the front; finished ones get a tick
-* Pull to refresh picks up whatever changed behind the app's back
+HIGHLIGHTS, NOTES, DICTIONARY
 
-Your own book server: calibre-web, Komga, liseur-sync
+* Highlights in four colours, notes and bookmarks, gathered in a per-book notebook you can export as Markdown
+* Search the whole book and jump straight to the passage
+* Footnotes open as a card over the page instead of sending you to the back
+* Definitions from Wiktionary or an offline dictionary app; online lookups stay off until you turn them on, and you pick the source
 
-* calibre-web: one screen sets it up with URL, username and password, and Liseur works out the catalog, download rights and sync token
-* Komga: paste the server address and an API key
-* liseur-sync: sign in or paste a device token; it also syncs books that never came from a server
-* Your server's books merge into the same library with a cloud badge; tap one to download and open it
-* Reading positions sync both ways — exactly where you left off, on Komga and liseur-sync
-* Remove the copy on the device, or delete the book from the server
+FREE SOFTWARE, BY DESIGN
 
-Free software
-
-No trackers, no analytics, no proprietary dependencies. The only network traffic is to the book server you configured and, if you switch online definitions on, to the dictionary site you chose.
+Liseur is built on the open Readium toolkit, with no proprietary dependencies and no Google Play services. Source code, issue tracker and documentation: https://github.com/chmouel/liseur

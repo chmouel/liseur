@@ -1,0 +1,35 @@
+Liseur è un lettore di ebook EPUB gratuito e open source per Android. Legge i libri da una cartella del telefono e si collega al tuo server calibre-web, Komga o liseur-sync per riunire tutta la libreria su un unico scaffale. Niente pubblicità, tracker, analisi dell'utilizzo o account Liseur. L'accesso alla rete è limitato ai server di libri e ai dizionari che scegli, oltre a Project Gutenberg quando aggiungi libri gratuiti.
+
+TUTTA LA LIBRERIA SU UN SOLO SCAFFALE
+
+* Cartelle sul telefono o sulla scheda SD, indicizzate con le copertine
+* Cataloghi calibre-web, Komga, liseur-sync e OPDS riuniti sullo stesso scaffale, con un'icona a forma di nuvola per i libri sul server
+* Serie raggruppate in ordine di lettura, con avanzamento e volumi mancanti subito visibili
+* Libri gratuiti da Project Gutenberg per iniziare prima di collegare un server
+
+LEGGI COME PREFERISCI
+
+* Pagine o scorrimento continuo, per ogni libro o per tutta la libreria
+* Caratteri liberi inclusi (Literata, Vollkorn, Atkinson Hyperlegible e Inter) oppure il carattere dell'editore
+* Margini, interlinea, luminosità e quattro temi di lettura: chiaro, seppia, scuro e nero per schermi OLED
+* Scorrimento automatico alla velocità che preferisci, anche tra un capitolo e l'altro
+* Piè di pagina con la pagina corrente, quanto resta del capitolo e il tempo rimanente
+* Modalità di aggiornamento ottimizzata per gli schermi e-ink Onyx
+
+RIPRENDI LA LETTURA SU OGNI DISPOSITIVO
+
+* Sincronizzazione della posizione di lettura tramite calibre-web, Komga o liseur-sync, fino alla frase esatta
+* Un catalogo OPDS e un server kosync abbinati in un'unica connessione personalizzata
+* Sincronizzazione delle impostazioni e delle statistiche di lettura con liseur-sync
+* Chiudi il libro sul telefono e riprendilo sul tablet
+
+EVIDENZIAZIONI, NOTE E DIZIONARIO
+
+* Evidenziazioni in quattro colori, note e segnalibri raccolti in un quaderno per ogni libro, esportabile in Markdown
+* Ricerca in tutto il libro con passaggio diretto al brano
+* Note a piè di pagina aperte in una scheda sopra la pagina
+* Definizioni da Wiktionary o da un'app dizionario offline; le ricerche online restano disattivate finché non le abiliti e sei tu a scegliere la fonte
+
+SOFTWARE LIBERO PER SCELTA
+
+Liseur usa il toolkit aperto Readium, senza dipendenze proprietarie né servizi Google Play. Codice sorgente, segnalazioni e documentazione: https://github.com/chmouel/liseur

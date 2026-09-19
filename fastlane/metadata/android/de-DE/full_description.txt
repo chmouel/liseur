@@ -1,0 +1,35 @@
+Liseur ist ein kostenloser, quelloffener EPUB-Reader für Android. Er liest Bücher aus einem Ordner auf deinem Handy und verbindet sich mit deinem eigenen calibre-web-, Komga- oder liseur-sync-Server, damit deine gesamte Bibliothek in einem Regal liegt. Keine Werbung, Tracker, Nutzungsanalyse oder Liseur-Kontopflicht. Der Netzwerkzugriff beschränkt sich auf die von dir gewählten Buchserver und Wörterbücher sowie auf Project Gutenberg, wenn du kostenlose Bücher hinzufügst.
+
+DEINE BIBLIOTHEK IN EINEM REGAL
+
+* Ordner auf dem Handy oder der SD-Karte, mit Buchcovern indexiert
+* calibre-web-, Komga-, liseur-sync- und OPDS-Kataloge im selben Regal, mit Wolkensymbol für Bücher auf dem Server
+* Reihen in Lesereihenfolge, mit Fortschritt und fehlenden Bänden auf einen Blick
+* Kostenlose Bücher von Project Gutenberg, damit du schon vor dem Verbinden eines Servers loslesen kannst
+
+LIES, WIE DU MÖCHTEST
+
+* Seitenansicht oder fortlaufendes Scrollen, pro Buch oder für die ganze Bibliothek
+* Mitgelieferte freie Schriften (Literata, Vollkorn, Atkinson Hyperlegible und Inter) oder die Schrift des Verlags
+* Ränder, Zeilenabstand, Helligkeit und vier Lesethemen: hell, sepia, dunkel und schwarz für OLED-Bildschirme
+* Automatisches Scrollen in deinem Tempo, auch über Kapitelgrenzen hinweg
+* Fußzeile mit aktueller Seite, Rest des Kapitels und verbleibender Lesezeit
+* Aktualisierungsmodus für Onyx-E-Ink-Bildschirme
+
+LIES AUF JEDEM GERÄT WEITER
+
+* Synchronisierung deiner Leseposition über calibre-web, Komga oder liseur-sync bis zum genauen Satz
+* Ein OPDS-Katalog und ein kosync-Server als gemeinsame benutzerdefinierte Verbindung
+* Synchronisierung von Einstellungen und Lesestatistiken mit liseur-sync
+* Schließe das Buch auf dem Handy und lies auf dem Tablet weiter
+
+MARKIERUNGEN, NOTIZEN UND WÖRTERBUCH
+
+* Markierungen in vier Farben, Notizen und Lesezeichen in einem Notizbuch pro Buch, das du als Markdown exportieren kannst
+* Suche im ganzen Buch mit direktem Sprung zur Textstelle
+* Fußnoten öffnen sich als Karte über der Seite
+* Definitionen aus Wiktionary oder einer Offline-Wörterbuch-App; Online-Abfragen bleiben aus, bis du sie einschaltest, und du wählst die Quelle
+
+FREIE SOFTWARE AUS ÜBERZEUGUNG
+
+Liseur basiert auf dem offenen Readium-Toolkit, ohne proprietäre Abhängigkeiten und ohne Google Play-Dienste. Quellcode, Fehlerberichte und Dokumentation: https://github.com/chmouel/liseur

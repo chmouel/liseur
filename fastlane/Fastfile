@@ -26,6 +26,7 @@ default_platform(:android)
 # four standard ids.
 INTERNAL_TRACK = "internal".freeze
 CLOSED_TRACK = "Testing".freeze
+PRODUCTION_TRACK = "production".freeze
 
 # The version code being released, read from the one file that decides
 # it. Promotion has to name a build, and naming it from the source is
@@ -37,18 +38,17 @@ def liseur_version_code
   code.to_i
 end
 
-# Moving a build already on the internal track across to the closed one.
+# Moving a build already on the internal track across to another track.
 # The bundle is not sent again: Play refuses a version code it has seen,
 # so the only way to put one build on two tracks is to promote it.
-def liseur_promote(version_code)
+def liseur_promote(version_code, target_track)
   upload_to_play_store(
     track: INTERNAL_TRACK,
-    track_promote_to: CLOSED_TRACK,
+    track_promote_to: target_track,
     track_promote_release_status: "completed",
     version_code: version_code,
     # Promoting takes the build off the track it came from unless it is
-    # told not to, and a build that leaves internal is a build the fast
-    # lane no longer has. It belongs on both.
+    # told not to. Internal remains the fast lane for the same artifact.
     deactivate_on_promote: false,
     skip_upload_aab: true,
     skip_upload_apk: true,
@@ -87,8 +87,20 @@ platform :android do
       validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
     )
 
-    liseur_promote(version_code)
+    liseur_promote(version_code, CLOSED_TRACK)
     UI.success("#{version_code} is on #{INTERNAL_TRACK} and #{CLOSED_TRACK}")
+  end
+
+  desc "Promote the release on the internal track to production"
+  lane :production do |options|
+    requested = (options[:version_code] || ENV["PLAY_VERSION_CODE"] || liseur_version_code).to_s
+    unless requested.match?(/\A[1-9][0-9]*\z/)
+      UI.user_error!("version_code must be a positive integer, got #{requested.inspect}")
+    end
+
+    version_code = requested.to_i
+    liseur_promote(version_code, PRODUCTION_TRACK)
+    UI.success("#{version_code} is published on #{PRODUCTION_TRACK}")
   end
 
   desc "Promote a build already on the internal track to the closed track, without rebuilding"
@@ -104,7 +116,7 @@ platform :android do
     end
 
     version_code = requested.to_i
-    liseur_promote(version_code)
+    liseur_promote(version_code, CLOSED_TRACK)
     UI.success("#{version_code} is on #{CLOSED_TRACK}")
   end
 end

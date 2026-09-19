@@ -472,7 +472,8 @@ The upload runs `fastlane android internal` with
 `SUPPLY_JSON_KEY` pointing at a service account credential written to
 `$RUNNER_TEMP` and removed by a trap in the same step. The credential is
 `android/google.play.service.serviceaccount` in `pass`, shared with the
-other apps on the account; it needs *Release to testing tracks* on Liseur
+other apps on the account; it needs *Release apps to testing tracks* and
+*Release to production, exclude devices and use Play app signing* on Liseur
 under Users and permissions.
 
 A build that is already on internal, a release whose Play step was
@@ -532,13 +533,19 @@ app isn't available":
   Store on the phone is not the address that was added. A browser signed
   into a second Google account looks exactly the same.
 
-The service account holds *Release to testing tracks*, which covers
-everything in this repository: uploads, promotions, and every read
-`hack/store-status` makes. It deliberately does not hold *Manage testing
-tracks and edit tester lists* (`CAN_MANAGE_TRACK_USERS_GLOBAL`), the
-permission `edits.testers.update` would need. Nothing automated has any
-business rewriting who may install the app, and while the track runs off
-an email list that call could not help anyway.
+The service account has app-level access to Liseur and must retain both
+*Release apps to testing tracks* and *Release to production, exclude devices
+and use Play app signing*. The first covers testing uploads, promotions and
+every read `hack/store-status` makes; the second lets final releases publish
+to production. Nothing in the release workflow edits tester lists.
+
+Final releases promote the build already on **internal** to the
+**production** track. Play refuses a second upload of a version code it has
+already seen, so production reuses the internal artifact rather than sending
+the AAB again. RC and legacy test tags never enter production, and
+`--no-play` skips both testing and production uploads. A production promotion
+failure remains non-load-bearing for GitHub and F-Droid, but the workflow
+reports it clearly.
 
 Only the changelog is pushed from the repository. The store listing is
 edited in the console, because Play holds declarations that no file here
@@ -549,9 +556,16 @@ Play links to is `docs/PRIVACY.md`, served by GitHub Pages from `main`
 `/docs`; it is a published legal document, so change it in a commit and
 not in the console.
 
-Promotion out of testing and in front of the public is a manual action
-in the console, on purpose. Nothing in this repository can put a build
-on the production track.
+Production publication is automated for every final release. **Before the
+first production release**, finish the Play listing rather than
+treating the existing metadata as proof that the store page is launch-ready.
+Review the title, short and full descriptions, icon, feature graphic, phone
+and tablet screenshots, contact details, privacy-policy URL, data safety,
+content rating, target audience, app access, ads declaration and country
+availability. The repository's starting copy and assets live under
+`fastlane/metadata/android/en-US/`; refresh them when they no longer show the
+current app. Verify the privacy URL anonymously before publishing the first
+final release.
 
 **The signing key.** Play App Signing holds the same key as the GitHub
 release, enrolled from `pass` through Google's PEPK tool rather than

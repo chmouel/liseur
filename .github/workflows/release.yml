@@ -185,7 +185,8 @@ jobs:
       # F-Droid submission are the primary channels, so a rejected upload
       # here must never be what makes a release fail. The lane puts the
       # build on the internal track and then on the closed one testers
-      # are recruited into; see DEVELOPER.md for why both.
+      # are recruited into. Final releases are also published to production;
+      # see DEVELOPER.md for the channel boundaries.
       - name: Check for the Play credential
         id: play
         env:
@@ -239,3 +240,17 @@ jobs:
           fi
           gem install fastlane -v 2.238.0 --no-document
           SUPPLY_JSON_KEY="$key" fastlane android internal
+
+      - name: Publish the final release to the Play production track
+        if: steps.play.outputs.enabled == 'true' && steps.version.outputs.prerelease == 'false'
+        continue-on-error: true
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          SERVICE_ACCOUNT: ${{ secrets.LISEUR_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/play-production-service-account.json"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s' "$SERVICE_ACCOUNT" > "$key")
+          SUPPLY_JSON_KEY="$key" fastlane android production \
+            version_code:"${{ steps.version.outputs.version_code }}"

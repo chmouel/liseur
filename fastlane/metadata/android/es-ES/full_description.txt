@@ -1,0 +1,35 @@
+Liseur es un lector de ebooks EPUB gratuito y de código abierto para Android. Lee los libros de una carpeta de tu teléfono y se conecta a tu propio servidor calibre-web, Komga o liseur-sync para reunir toda tu biblioteca en un solo estante. Sin anuncios, rastreadores, analíticas ni cuenta de Liseur. El acceso a la red se limita a los servidores de libros y diccionarios que elijas, además de Project Gutenberg cuando añades libros gratis.
+
+TODA TU BIBLIOTECA EN UN ESTANTE
+
+* Carpetas del teléfono o de la tarjeta SD, indexadas con sus portadas
+* Catálogos de calibre-web, Komga, liseur-sync y OPDS reunidos en el mismo estante, con una insignia de nube para los libros del servidor
+* Series agrupadas en orden de lectura, con el progreso y los volúmenes que faltan a la vista
+* Libros gratis de Project Gutenberg para empezar antes de conectar nada
+
+LEE A TU MANERA
+
+* Páginas o desplazamiento continuo, para cada libro o para toda la biblioteca
+* Tipografías libres incluidas (Literata, Vollkorn, Atkinson Hyperlegible e Inter) o la del editor
+* Márgenes, interlineado, brillo y cuatro temas de lectura: claro, sepia, oscuro y negro para pantallas OLED
+* Desplazamiento automático a tu ritmo, que continúa entre capítulos
+* Pie de página con la página actual, lo que queda del capítulo y el tiempo restante
+* Modo de refresco adaptado a las pantallas de tinta electrónica Onyx
+
+RETOMA LA LECTURA EN CUALQUIER DISPOSITIVO
+
+* Sincronización de la posición de lectura con calibre-web, Komga o liseur-sync, hasta la frase exacta
+* Un catálogo OPDS y un servidor kosync unidos en una sola conexión personalizada
+* Sincronización de ajustes y estadísticas de lectura con liseur-sync
+* Cierra el libro en el teléfono y retómalo en la tableta
+
+SUBRAYADOS, NOTAS Y DICCIONARIO
+
+* Subrayados en cuatro colores, notas y marcadores reunidos en un cuaderno por libro que puedes exportar como Markdown
+* Búsqueda en todo el libro con acceso directo al pasaje
+* Notas al pie abiertas en una tarjeta sobre la página
+* Definiciones de Wiktionary o de una app de diccionario sin conexión; las consultas en línea siguen desactivadas hasta que las actives, y tú eliges la fuente
+
+SOFTWARE LIBRE POR DISEÑO
+
+Liseur utiliza la herramienta abierta Readium, sin dependencias propietarias ni servicios de Google Play. Código fuente, seguimiento de problemas y documentación: https://github.com/chmouel/liseur
