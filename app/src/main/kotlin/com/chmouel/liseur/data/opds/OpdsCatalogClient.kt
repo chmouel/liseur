@@ -2,10 +2,14 @@ package com.chmouel.liseur.data.opds
 
 import android.util.Log
 import com.chmouel.liseur.data.remote.CatalogSource
+import com.chmouel.liseur.data.remote.CatalogContinuation
+import com.chmouel.liseur.data.remote.CatalogMore
+import com.chmouel.liseur.data.remote.CatalogStep
 import com.chmouel.liseur.data.remote.CatalogWalk
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
+import com.chmouel.liseur.data.remote.ResumableCatalogSource
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
 import kotlin.coroutines.coroutineContext
@@ -13,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.xml.sax.SAXException
 
 /**
@@ -45,7 +50,7 @@ class OpdsCatalogClient(
      * walked in full. Suspending because reading it is a database read.
      */
     private val shelfLimit: suspend (String) -> Int? = { null },
-) : CatalogSource {
+) : CatalogSource, ResumableCatalogSource {
 
     override suspend fun allBooks(
         baseUrl: String,
@@ -69,7 +74,6 @@ class OpdsCatalogClient(
         val queue = ArrayDeque(listOf(Step(root, depth = 0)))
         var requests = 0
         var complete = true
-        var shelfWasFilled = false
 
         while (queue.isNotEmpty()) {
             coroutineContext.ensureActive()
@@ -142,30 +146,23 @@ class OpdsCatalogClient(
             // page itself held back count as much as an unfollowed
             // link, since `take` is where they were left.
             //
-            // Where there is more, this is not a current picture of the
-            // catalog and must never be stored as one. It is a whole
-            // picture of the shelf, though, which is what
-            // `shelfWasFilled` carries: the shelf's size is this app's
-            // rule, so everything it is meant to hold was seen, and a
-            // book missing from it has dropped off rather than gone
-            // unasked-about — which is what lets the shelf stay the size
-            // it is offered at instead of growing every refresh.
+            // Where there is more, this is not a current picture of
+            // the catalog and must never be stored as one. It used to
+            // count as a whole picture of the *shelf*, which let a book
+            // that had dropped out of the top N be deleted; a shelf
+            // that can be asked for more books is no longer a rolling
+            // top N, so nothing is let go on that reasoning any more.
             if (shelf != null && shelved >= shelf) {
                 if (queue.isEmpty() && books.size == page.books.size) {
                     Log.i(TAG, "The shelf ran out at $shelved books, inside the $shelf asked for")
                     break
                 }
                 Log.i(TAG, "Stopped at $shelf books; this shelf is offered at that size")
-                // Only when nothing else had already gone short: after a
-                // refused link or a feed too deep to follow, the books
-                // that were not seen are not merely the ones past the
-                // shelf, and none of them may be let go.
-                shelfWasFilled = complete
                 complete = false
                 break
             }
         }
-        CatalogWalk(complete = complete, shelfWasFilled = shelfWasFilled)
+        CatalogWalk(complete = complete)
     }
 
     /**
@@ -180,6 +177,149 @@ class OpdsCatalogClient(
         credentials: RemoteCredentials,
         query: String,
     ): List<RemoteBook> = emptyList()
+
+    override suspend fun loadMore(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        state: CatalogContinuation?,
+        knownRemoteIds: Set<String>,
+        limit: Int,
+        onPage: suspend (List<RemoteBook>) -> Unit,
+    ): CatalogMore = withContext(Dispatchers.IO) {
+        val scope = OpdsScope.of(baseUrl) ?: return@withContext CatalogMore(
+            added = 0,
+            exhausted = true,
+            state = CatalogContinuation(emptyList(), emptySet()),
+        )
+        val root = scope.root.toString()
+        val seen = state?.seen?.toMutableSet() ?: mutableSetOf(root)
+        val queue = ArrayDeque(
+            state?.queue?.takeIf { it.isNotEmpty() } ?: listOf(CatalogStep(root, depth = 0)),
+        )
+        val known = knownRemoteIds.toMutableSet()
+        var added = 0
+        var requests = 0
+        var fetched = 0
+        // A refusal worth retrying, kept apart from a permanent one: if
+        // nothing else in this run succeeded, that is still a real
+        // failure to report, not an empty shelf.
+        var retryableFailure: RemoteHttpFailure? = null
+        // The root is the one feed whose loss cannot be read as "no more
+        // books" even when the refusal is permanent, because without it
+        // this run never reached any part of the catalog at all.
+        var rootFailure: RemoteHttpFailure? = null
+        // Feeds this run could not read. They are kept rather than
+        // dropped, so the next run tries them again instead of deciding
+        // the catalog has nothing left in it; and they are held apart
+        // from the queue so a feed that keeps failing cannot be retried
+        // over and over inside one run.
+        val deferred = mutableListOf<CatalogStep>()
+        val delivered = mutableListOf<RemoteBook>()
+
+        fun remaining(): List<CatalogStep> = queue.toList() + deferred
+
+        fun enqueue(url: HttpUrl, depth: Int) {
+            if (!scope.mayFetch(url)) {
+                Log.i(TAG, "A feed pointed somewhere this catalog may not send us")
+                return
+            }
+            if (seen.add(url.toString())) {
+                queue.addLast(CatalogStep(url.toString(), depth))
+            }
+        }
+
+        suspend fun flush() {
+            if (delivered.isNotEmpty()) {
+                onPage(delivered.toList())
+                delivered.clear()
+            }
+        }
+
+        while (queue.isNotEmpty() && added < limit && requests < MAX_REQUESTS) {
+            coroutineContext.ensureActive()
+            val step = queue.removeFirst()
+            val url = step.url.toHttpUrlOrNull() ?: continue
+            requests++
+            val page = try {
+                fetch(url, scope, credentials)
+            } catch (e: RemoteHttpFailure) {
+                Log.i(TAG, "A feed in this catalog could not be read while loading more", e)
+                if (step.url == root) rootFailure = e
+                // A refusal worth retrying may be answering something
+                // that will pass later — a timeout, a server error. One
+                // that will not is the server's last word on this feed,
+                // and keeping it would have the walk retry that word
+                // forever, never reaching exhausted.
+                if (e.reason.worthRetrying) {
+                    retryableFailure = e
+                    deferred += step
+                }
+                continue
+            }
+            fetched++
+
+            val entries = page.books.drop(step.skippedBooks)
+            var consumed = 0
+            for (book in entries) {
+                val remote = book.toRemote(scope, page.base)
+                consumed++
+                if (!known.add(remote.remoteId)) continue
+                delivered += remote
+                added++
+                if (added >= limit) {
+                    if (consumed < entries.size) {
+                        queue.addFirst(
+                            CatalogStep(
+                                url = step.url,
+                                depth = step.depth,
+                                skippedBooks = step.skippedBooks + consumed,
+                            ),
+                        )
+                        flush()
+                        return@withContext CatalogMore(
+                            added = added,
+                            exhausted = false,
+                            state = CatalogContinuation(remaining(), seen),
+                        )
+                    }
+                    break
+                }
+            }
+            flush()
+
+            page.nextUrl?.let { enqueue(it, step.depth) }
+            if (step.depth >= MAX_DEPTH) {
+                if (page.navigation.isNotEmpty()) {
+                    Log.i(TAG, "Stopped at depth $MAX_DEPTH while loading more")
+                }
+            } else {
+                page.navigation.forEach { enqueue(it, step.depth + 1) }
+            }
+            if (added >= limit) {
+                return@withContext CatalogMore(
+                    added = added,
+                    exhausted = remaining().isEmpty(),
+                    state = CatalogContinuation(remaining(), seen),
+                )
+            }
+        }
+
+        // Nothing this run touched could be read. If any of that was a
+        // refusal worth retrying, or the root itself, that is the
+        // catalog being unreachable rather than a shelf with nothing
+        // left on it, and the reader is told so. A permanent refusal of
+        // some other feed, with nothing retryable left pending, is not:
+        // that feed is simply gone, and the walk may still be exhausted.
+        if (fetched == 0 && added == 0) {
+            (retryableFailure ?: rootFailure)?.let { throw it }
+        }
+
+        CatalogMore(
+            added = added,
+            exhausted = remaining().isEmpty(),
+            state = CatalogContinuation(remaining(), seen),
+        )
+    }
 
     private class Step(val url: HttpUrl, val depth: Int)
 

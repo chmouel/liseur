@@ -139,6 +139,48 @@ the next step up would not fit. Fifty is the default: enough that the
 shelf looks like a library rather than a sample, few enough that the
 walk finishes while the reader is still watching it.
 
+That ceiling is only for the first minute. Once the shelf has books on
+it, the library offers to load 50 more from the same category and
+language. This is not search and not a category switch: the connection
+stays the same, and the button only continues the traversal the starter
+shelf began.
+
+The continuation is stored in `starter_catalog_progress`, keyed by the
+connected account and the canonical catalog address. It keeps the queue
+of OPDS feeds still owed, the feeds already seen and the point inside a
+feed where a batch stopped. Gutenberg's book lists are not one page of
+books followed by a neat offset; they are pages of navigation entries,
+and each book is another feed. Saving only a `next` URL would lose the
+queued book feeds, and saving no intra-page position would reread the
+same slice every time a batch ended in the middle of a page.
+
+The walk is finished only when nothing is owed. A feed that answered
+with something worth trying again — a timeout, a server error — stays
+queued for the next run rather than being dropped, so a sub-shelf that
+was briefly unreachable does not turn into "there are no more books". A
+feed the server has given its last word on, such as a 404 or a
+revoked credential, is given up on instead: keeping it queued would
+have the walk retry an answer that will never change and never reach
+exhausted. Losing a feed that way is that feed being gone, not the
+whole catalog going dark, so the run can still end exhausted once
+nothing retryable is left. The root is the one exception: without it
+this run never touched any part of the catalog, so a permanent refusal
+of the root, or any refusal worth retrying still pending when nothing
+else was read, is reported as a failure rather than an empty exhausted
+shelf. Depth and scope limits are permanent and say nothing: a link the
+walk will never follow is not work still owed.
+
+The progress row goes when the connection does. Reconnecting the same
+catalog later walks it again from the root rather than inheriting a
+verdict about a shelf that has moved on since.
+
+The first load-more on a shelf made before this state existed starts
+from the catalog root and skips identities the library already knows
+until it reaches new books. That can spend requests without adding
+anything, but it is safe: existing rows are updated rather than
+duplicated, and the checkpoint moves only after the connected account is
+checked again.
+
 The size is **stored on the connection**, in `remote_server.shelf_limit`,
 not decided afresh from the address. The walk re-runs on every refresh,
 including from a background worker that never saw the card, and a size
@@ -182,21 +224,27 @@ A capped walk reports itself incomplete, like any other walk that
 stopped short, so `CatalogStatus.Partial` shows and the catalog is
 never marked current.
 
-It is nonetheless a complete answer about the shelf, and says so with
-`CatalogWalk.shelfWasFilled`. The shelf's size is this app's rule, not
-the server's, so everything the shelf is meant to hold was seen, and a
-book absent from it has dropped off rather than gone unasked-about.
-Without that distinction the shelf grows without end as Gutenberg's
-popularity ordering shifts: each refresh adds whatever has risen into
-the shelf and lets go of nothing, which is how a thirty-book shelf
-became seven hundred and sixty-six rows in testing. Reconciling applies
-the ordinary two-strikes rule, so one refresh only suspects a book and
-a downloaded one keeps its file.
+After load-more exists, a starter shelf is no longer a rolling top-N
+view. Discovered books stay in the library. Refresh updates the entries
+it sees, but it must not remove books simply because they no longer sit
+inside the first N results. Gutenberg's popularity order moves, and a
+reader who asked for more books asked to grow the shelf, not to trade
+old remote-only rows for newer ones.
 
-`shelfWasFilled` is false whenever anything else went short first — a
-refused link, a feed nested past the depth limit, the request budget.
-Then what was not seen is more than the tail, and nothing may be let
-go.
+`CatalogWalk.shelfWasFilled` is gone with that reasoning. It existed to
+say that the only unseen part was the tail past Liseur's own starter
+limit, which was what allowed a short walk to prune; it was only ever
+true of a shelf-limited walk, so the condition that kept it away from
+starter shelves could never fire at all. A walk that stopped short now
+reconciles nothing, whoever it was walking for. A complete walk still
+prunes, and that is what keeps an ordinary Custom OPDS catalog able to
+let go of a book the server deleted.
+
+The stored starter size is what marks a connection as one this app
+made. It stays on the row across a reconnect that says nothing about
+the size, but only while the connection still points at the same
+catalog: a reader who edits the address to their own server gets an
+ordinary connection back, pruning included.
 
 The trailing slash is load-bearing, and the two routes disagree about
 it. Gutenberg answers `403` to the slash-less spelling of
@@ -296,12 +344,10 @@ pair that way: the point of the second entry is to sit beside the first.
 - The app can be used within a minute of installing, by somebody who
   arrived with nothing, and the shelf they arrive at is the one they
   asked for.
-- Every Gutenberg refresh shows the partial-catalog notice, unless the
-  category ran out of books first, since a capped walk is a walk that
-  stopped short. That is correct: there is far more in the archive. It
-  can be put away, and stays away for that catalog, because a notice
-  raised on every refresh of a shelf that is deliberately capped is a
-  permanent band across the library.
+- A Gutenberg starter shelf shows a load-more action after setup rather
+  than sending the reader to the server address editor. Generic Custom
+  OPDS catalogs still use the partial-catalog notice, because they do
+  not have a stored starter size or a resumable shelf contract.
 - A generic rule now runs over every OPDS feed for the sake of one
   catalog's habit. It fires only on entries whose ids name the same work
   and which agree on a cover file as well as a title and an author, and

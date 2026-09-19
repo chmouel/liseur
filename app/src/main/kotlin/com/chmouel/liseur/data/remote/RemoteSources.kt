@@ -26,6 +26,44 @@ interface CatalogSource {
 }
 
 /**
+ * A catalog that can resume discovery from a stored traversal point.
+ *
+ * This is separate from [CatalogSource.allBooks]: a refresh updates the
+ * connected library, while this explicitly asks a starter shelf for more
+ * books after setup. Providers that cannot resume simply do not implement it.
+ */
+interface ResumableCatalogSource {
+    suspend fun loadMore(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        state: CatalogContinuation?,
+        knownRemoteIds: Set<String>,
+        limit: Int,
+        onPage: suspend (List<RemoteBook>) -> Unit = {},
+    ): CatalogMore
+}
+
+/** One feed still owed by a resumable catalog walk. */
+data class CatalogStep(
+    val url: String,
+    val depth: Int,
+    val skippedBooks: Int = 0,
+)
+
+/** The durable part of a resumable catalog walk. */
+data class CatalogContinuation(
+    val queue: List<CatalogStep>,
+    val seen: Set<String>,
+)
+
+/** What came back from asking a catalog for another bounded slice. */
+data class CatalogMore(
+    val added: Int,
+    val exhausted: Boolean,
+    val state: CatalogContinuation,
+)
+
+/**
  * How a walk of the whole catalog ended.
  *
  * [complete] is the difference between "the server has no more books"
@@ -38,21 +76,6 @@ data class CatalogWalk(
     val complete: Boolean,
     /** What the provider kept of the walk, for reusing within this run. */
     val snapshot: CatalogSnapshot? = null,
-    /**
-     * Whether the only thing left unseen is the catalog beyond a shelf
-     * Liseur itself decided to stop at.
-     *
-     * A shelf size is this app's rule, not the server's, so a walk that
-     * ended on it has seen everything the shelf is meant to hold. That
-     * makes it a complete answer about the shelf even though it is not
-     * one about the catalog: books that have dropped off the shelf
-     * since the last run can be let go, which is what stops a shelf
-     * offered at thirty books growing every time it is refreshed.
-     *
-     * False whenever anything else went short first, because then what
-     * is missing is not only the tail.
-     */
-    val shelfWasFilled: Boolean = false,
 )
 
 /**

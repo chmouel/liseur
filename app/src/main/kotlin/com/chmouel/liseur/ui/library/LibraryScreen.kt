@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -88,6 +89,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
@@ -136,6 +139,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
+import com.chmouel.liseur.data.remote.StarterCatalogMoreResult
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.opds.StarterCatalog
@@ -204,6 +208,9 @@ fun LibraryScreen(
     onStartWithFreeBooks: (StarterCatalog.Category, Int, String) -> Unit = { _, _, _ -> },
     freeBooksFailures: Flow<Unit> = emptyFlow(),
     freeBooksFallback: Flow<Unit> = emptyFlow(),
+    onLoadMoreFreeBooks: () -> Unit = {},
+    freeBooksMoreResult: StateFlow<StarterCatalogMoreResult?> = MutableStateFlow(null),
+    onFreeBooksMoreResultShown: () -> Unit = {},
     notice: Notice? = null,
     onNoticeShown: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -222,6 +229,7 @@ fun LibraryScreen(
     val wide = tileHeight >= 64.dp
     val gridState = rememberLazyGridState()
     val snackbarHost = remember { SnackbarHostState() }
+    val context = LocalContext.current
     val downloading = stringResource(R.string.download_in_progress)
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     var sheetBook by remember { mutableStateOf<Book?>(null) }
@@ -252,6 +260,29 @@ fun LibraryScreen(
     val freeBooksFallbackMsg = stringResource(R.string.starter_catalog_fallback_english)
     LaunchedEffect(freeBooksFallback) {
         freeBooksFallback.collect { snackbarHost.showSnackbar(freeBooksFallbackMsg) }
+    }
+    val noMoreFreeBooks = stringResource(R.string.starter_catalog_more_exhausted)
+    val freeBooksMoreFailed = stringResource(R.string.starter_catalog_more_failed)
+    val freeBooksMoreResultValue by freeBooksMoreResult.collectAsStateWithLifecycle()
+    LaunchedEffect(freeBooksMoreResultValue) {
+        val result = freeBooksMoreResultValue ?: return@LaunchedEffect
+        when (result) {
+            is StarterCatalogMoreResult.Added -> {
+                val message = if (result.count == 0 && result.exhausted) {
+                    noMoreFreeBooks
+                } else {
+                    context.resources.getQuantityString(
+                        R.plurals.starter_catalog_more_added,
+                        result.count,
+                        result.count,
+                    )
+                }
+                snackbarHost.showSnackbar(message)
+            }
+            is StarterCatalogMoreResult.Failed -> snackbarHost.showSnackbar(freeBooksMoreFailed)
+            StarterCatalogMoreResult.NotAvailable -> Unit
+        }
+        onFreeBooksMoreResultShown()
     }
     // Removing a book from the library is quiet and easy to do by
     // accident, and the entry it took away may be the one being read,
@@ -677,6 +708,22 @@ fun LibraryScreen(
                         canNarrowCatalog = state.catalogIsAddressable,
                         onChangeCatalog = onConnectServer,
                         onDismiss = onDismissCatalogPartial,
+                    )
+                }
+                if (
+                    state.starterCatalogMoreAvailable &&
+                    !state.starterCatalogMoreExhausted &&
+                    !state.libraryIsEmpty &&
+                    LibraryFilterOption.ARCHIVED !in state.filters.options
+                ) {
+                    StarterCatalogMoreNotice(
+                        // A refresh holds the same lock this walk needs,
+                        // so a tap during one would be dropped without
+                        // anything happening. Greying the button out
+                        // says so rather than ignoring the reader.
+                        loading = state.starterCatalogMoreLoading || state.refreshing,
+                        showProgress = state.starterCatalogMoreLoading,
+                        onLoadMore = onLoadMoreFreeBooks,
                     )
                 }
                 when {
@@ -1754,6 +1801,42 @@ private fun CatalogPartialNotice(
                     Icons.Outlined.Close,
                     contentDescription = stringResource(R.string.catalog_partial_dismiss),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StarterCatalogMoreNotice(
+    loading: Boolean,
+    showProgress: Boolean,
+    onLoadMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.starter_catalog_more_hint),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+            )
+            TextButton(onClick = onLoadMore, enabled = !loading) {
+                if (showProgress) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp),
+                    )
+                } else {
+                    Text(stringResource(R.string.starter_catalog_more_button))
+                }
             }
         }
     }

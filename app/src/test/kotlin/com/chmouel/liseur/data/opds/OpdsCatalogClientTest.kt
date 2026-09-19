@@ -31,6 +31,7 @@ class OpdsCatalogClientTest {
 
     private lateinit var server: MockWebServer
     private val pages = mutableMapOf<String, String>()
+    private val codes = mutableMapOf<String, Int>()
     private val asked = mutableListOf<String>()
 
     @Before
@@ -41,6 +42,7 @@ class OpdsCatalogClientTest {
                 val path = request.url.encodedPath +
                     (request.url.encodedQuery?.let { "?$it" } ?: "")
                 asked += path
+                codes[path]?.let { return MockResponse(code = it) }
                 val body = pages[path] ?: return MockResponse(code = 404)
                 return MockResponse(
                     code = 200,
@@ -150,7 +152,10 @@ class OpdsCatalogClientTest {
     }
 
     @Test
-    fun `a full shelf says the rest of the catalog is all that is missing`() {
+    fun `a full shelf leaves the rest of the catalog unseen`() {
+        // Stopping at the shelf size leaves the catalog behind it
+        // unread, so the walk is not a current picture of the catalog
+        // and must not be stored as one.
         pages["/opds"] = feed((0 until 50).joinToString("") { book("b$it") })
 
         val walk = runBlocking {
@@ -159,34 +164,6 @@ class OpdsCatalogClientTest {
         }
 
         assertFalse(walk.complete)
-        assertTrue(walk.shelfWasFilled)
-    }
-
-    @Test
-    fun `a shelf filled after something else went short claims nothing`() {
-        // A link into the house from a catalog on the internet is
-        // refused, which is already a hole in the walk: the books that
-        // were not seen are then not only the ones past the shelf.
-        pages["/opds"] = feed(
-            book("b0") +
-                navigation("Next door", "http://127.0.0.1:${server.port}/private") +
-                """<link rel="next" href="/page1"
-                     type="application/atom+xml;profile=opds-catalog"/>""",
-        )
-        pages["/page1"] = feed((0 until 10).joinToString("") { book("p1-$it") })
-
-        val client = OkHttpClient.Builder()
-            .dns { listOf(InetAddress.getByName("127.0.0.1")) }
-            .build()
-        val walk = runBlocking {
-            OpdsCatalogClient(OpdsHttp(client), shelfLimit = { 5 }).allBooks(
-                "http://books.example:${server.port}/opds",
-                RemoteCredentials.Anonymous,
-            ) { }
-        }
-
-        assertFalse(walk.complete)
-        assertFalse(walk.shelfWasFilled)
     }
 
     @Test
@@ -323,6 +300,153 @@ class OpdsCatalogClientTest {
 
         assertTrue(complete)
         assertEquals(listOf("Book 1", "Book 2"), books.map { it.title })
+    }
+
+    @Test
+    fun `loading more resumes inside a page`() {
+        pages["/opds"] = feed((0 until 5).joinToString("") { book("b$it") })
+        val client = OpdsCatalogClient()
+        val first = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val second = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val a = runBlocking {
+            client.loadMore(root(), RemoteCredentials.Anonymous, null, emptySet(), 3) {
+                first += it
+            }
+        }
+        val b = runBlocking {
+            client.loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                a.state,
+                first.map { it.remoteId }.toSet(),
+                3,
+            ) {
+                second += it
+            }
+        }
+
+        assertEquals(listOf("Book b0", "Book b1", "Book b2"), first.map { it.title })
+        assertEquals(listOf("Book b3", "Book b4"), second.map { it.title })
+        assertFalse(a.exhausted)
+        assertTrue(b.exhausted)
+    }
+
+    @Test
+    fun `loading more skips books already discovered`() {
+        pages["/opds"] = feed((0 until 4).joinToString("") { book("b$it") })
+        val known = (0 until 2)
+            .map { OpdsScope.of(root())!!.remoteId("b$it") }
+            .toSet()
+        val found = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                null,
+                known,
+                2,
+            ) { found += it }
+        }
+
+        assertEquals(listOf("Book b2", "Book b3"), found.map { it.title })
+        assertEquals(2, result.added)
+        assertTrue(result.exhausted)
+    }
+
+    @Test
+    fun `a feed that could not be reached is tried again next time`() {
+        // A shelf that answered with a server error once is not a shelf
+        // with nothing on it. Calling the walk finished here would take
+        // the button away and the books with it.
+        pages["/opds"] = feed(book("b0") + navigation("Later", "/opds/later"))
+        codes["/opds/later"] = 503
+        val client = OpdsCatalogClient()
+        val first = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val second = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val a = runBlocking {
+            client.loadMore(root(), RemoteCredentials.Anonymous, null, emptySet(), 50) {
+                first += it
+            }
+        }
+        assertEquals(listOf("Book b0"), first.map { it.title })
+        assertFalse(a.exhausted)
+
+        codes.remove("/opds/later")
+        pages["/opds/later"] = feed(book("b1"))
+        val b = runBlocking {
+            client.loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                a.state,
+                first.map { it.remoteId }.toSet(),
+                50,
+            ) {
+                second += it
+            }
+        }
+
+        assertEquals(listOf("Book b1"), second.map { it.title })
+        assertTrue(b.exhausted)
+    }
+
+    @Test
+    fun `a feed the server will never serve is not retried forever`() {
+        // 404 is the server's last word on that feed, not a bad moment
+        // to ask again in. Keeping it queued would have the walk retry
+        // a refusal that will never change, and never reach exhausted.
+        pages["/opds"] = feed(book("b0") + navigation("Gone", "/opds/gone"))
+        val found = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(root(), RemoteCredentials.Anonymous, null, emptySet(), 50) {
+                found += it
+            }
+        }
+
+        assertEquals(listOf("Book b0"), found.map { it.title })
+        assertTrue(result.exhausted)
+    }
+
+    @Test
+    fun `a first load-more that cannot even reach the root is the catalog's own answer`() {
+        // Nothing was ever read from this catalog. A permanent refusal of
+        // the root itself is not "no more books"; there is no way to
+        // tell, and the reader has to be told rather than shown an empty
+        // exhausted shelf.
+        var failure: Throwable? = null
+        runBlocking {
+            failure = runCatching {
+                OpdsCatalogClient().loadMore(root(), RemoteCredentials.Anonymous, null, emptySet(), 50) {}
+            }.exceptionOrNull()
+        }
+
+        assertTrue(failure is RemoteHttpFailure)
+    }
+
+    @Test
+    fun `a resumed batch left with only a feed that will never come back is exhausted`() {
+        // The root already succeeded in an earlier run; all that is left
+        // queued is one child feed the server will never serve again.
+        // Losing it permanently is that feed being gone, not the whole
+        // catalog being unreachable, so this run must still be able to
+        // reach exhausted instead of retrying it forever.
+        val resumed = com.chmouel.liseur.data.remote.CatalogContinuation(
+            queue = listOf(com.chmouel.liseur.data.remote.CatalogStep(root() + "/gone", depth = 1)),
+            seen = setOf(root(), root() + "/gone"),
+        )
+        val found = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(root(), RemoteCredentials.Anonymous, resumed, emptySet(), 50) {
+                found += it
+            }
+        }
+
+        assertEquals(emptyList<String>(), found.map { it.title })
+        assertTrue(result.exhausted)
     }
 
     @Test

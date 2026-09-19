@@ -40,6 +40,10 @@ class RemoteRouter(
      */
     fun catalogFor(kind: ServerKind): CatalogSource? = catalogs[kind]
 
+    /** The resumable catalog for a server already in hand, when it has one. */
+    fun resumableCatalogFor(kind: ServerKind): ResumableCatalogSource? =
+        catalogs[kind] as? ResumableCatalogSource
+
     /** The downloader for a server already in hand. See [catalogFor]. */
     fun filesFor(kind: ServerKind): FileSource? = files[kind]
 
