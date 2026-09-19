@@ -819,7 +819,9 @@ See [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
 
 ## Architecture
 
-See `AGENTS.md` for the layered package layout and project conventions.
+`AGENTS.md` contains the short, immediately actionable agent rules. This
+document is the source of truth for the detailed architecture and
+implementation invariants below.
 Key decisions:
 
 - Readium Kotlin Toolkit (`readium-shared`, `readium-streamer`,
@@ -842,6 +844,141 @@ Key decisions:
   conflict rules are written once.
 - Single `:app` module, manual DI composition root, `ViewModel` +
   `StateFlow`, Room + DataStore for persistence.
+
+## Implementation invariants
+
+These rules are intentionally kept with the detailed developer reference
+rather than repeated in the short agent guide. They describe contracts whose
+failure can look correct in a narrow test while corrupting state or changing
+reader behavior.
+
+### Remote providers and reading state
+
+- One server is connected at a time. Provider-specific behavior belongs behind
+  `data/remote/` contracts; callers use `RemoteRouter` rather than branching on
+  `ServerKind`.
+- Reading positions are Readium `Locator`s locally. calibre-web exchanges
+  percentage progression, while Komga and liseur-sync exchange full locators.
+  All providers use `domain/ReadingStateMerge.kt` for conflict rules.
+- `updated_at` is when this device wrote a row and is used for derived sync
+  ids and outgoing client timestamps. `read_at` is when reading happened and
+  must remain the source for Recent and Continue Reading ordering. A row with
+  neither progression nor locator is not a reading.
+- In scrolled reading, Readium's last locator may lag the viewport. Refresh
+  through the current scrolled-place helper before any action that depends on
+  the current position.
+
+### liseur-sync positions and accounts
+
+- liseur-sync is an append-only log, not a current-position store. Apply a
+  changes page and advance `remote_server.sync_cursor_seq` in the same
+  transaction, never before applying the page.
+- Operation and session ids are derived from the device, work, and revision;
+  payload fields come from stored state. A retry must be byte-identical and
+  must not require random ids or a `pending_ops` table.
+- Reconnect with the stored device id. A pasted token that reconnects as a
+  different device can return `conflict`; advance that book's revision
+  conditionally from the revision that was sent before retrying.
+- Naming work is a bounded resource. Hash-based and catalog-based resolution,
+  batch resolution, seed requests, incomplete outcomes, retry decisions, and
+  refusal handling must follow the coordinator rules rather than being
+  reimplemented at call sites.
+- A batch refusal concerns only the named item. Keep unrelated items pending,
+  split oversized batches, and leave unknown refusal codes pending. Persist a
+  session refusal only for a known permanent reason; an unnamed refusal must
+  not settle an arbitrary item.
+- The account key is `liseursync|<url>|<account_id>`. Rekey all peer-scoped
+  tables transactionally in `carryPeerState`, and clear them through
+  `RemoteAccountRepository.forgetSyncPeer()`.
+- Uploads are opt-in through both the server capability and folder
+  capability. Successful upload is adoption: preserve the local `books.url`
+  and only link the remote identity and download URL.
+
+### Settings and statistics
+
+- A synced setting carries the time the reader changed it, not the push time.
+  `SettingsChangeTracker` records edits independently of connectivity; server
+  values are marked applied and are not re-counted as local edits. Preserve
+  the per-account baseline and avoid overwriting a change made after the
+  request was sent.
+- Do not apply a setting that changes the open page while a book is open.
+  Decide this per write with `SyncableSetting.affectsOpenBook`. Device-shaped
+  settings never travel.
+- Settings values must be validated before a batch request. Reject values the
+  server cannot store, cap future timestamps when they are read for sending,
+  and preserve the sentinel used for absence because the server has no delete.
+- Re-check the connected account before every network side effect and again
+  before committing its response. A stale account must neither receive a
+  request nor store its answer.
+- Server statistics are optional decoration. Failures remain null and
+  silent; cross-device counts are shown only when the stored evidence proves
+  the merge, otherwise the local-only result and provenance are used.
+
+### Annotation synchronization
+
+- An annotation id is derived from mutable content only until it becomes
+  editable; thereafter `annotation_sync` stores the server acknowledgement and
+  the exact pending request bytes. Write those bytes before the call and
+  replay them verbatim through `postRaw`.
+- The acknowledged fingerprint excludes request metadata such as `base_rev`
+  and `edition_sha`; the pending fingerprint identifies the request so an
+  answer cannot overwrite a newer local edit.
+- Annotation freshness is ordered by server `seq`, never `rev`, because a
+  recreated annotation can restart its revision at one.
+- Run annotation synchronization in this order: settle, pull, reconcile,
+  push, deletes. The pending set and cursor are account-wide even when a run
+  is book-scoped. Conflicts are server-wins.
+- Reconcile a work before pushing a mark, and push only marks seen in that
+  pass's live set. Use the same `offerable()` predicate for both selection
+  steps. Compare conflicts with the content that was sent, not a newer row.
+- Treat absent, null, empty-string, and empty-object locators as no locator.
+  `BOOK_NOTE` is a standalone note and must stay distinct from a passage
+  `NOTE`. Preserve the known local `bookId` for standalone notes.
+- Annotation URLs must accept opaque ids but decline `.` and `..` as
+  addressable delete targets. Re-read the account and the annotation's home
+  alias inside the transaction that commits each response, and check the
+  account before every network request.
+- Removing a book preserves its annotations and sync rows. Only
+  `BookRemoval.contentReplaced()` clears them when a different file takes
+  over the path.
+
+### Reader behavior
+
+- Bookmark identity comes from `samePage()` and the two locators, not from the
+  rounded stored page number. Resolve duplicate reading-order entries by
+  occurrence; use the stable Readium position for scrolled books.
+- The paginated reflowable footer is display-only. It counts measured
+  screenfuls through `SectionScreenProgress` and `BookScreenEstimate`, keyed
+  by reading-order index. Reset estimates on layout changes, reject stale
+  measurements, and never store or sync the displayed page count.
+- `readingColorScheme()` supplies the Material theme for the entire reader
+  activity. Keep dynamic color outside the reader, use opaque mixes, and keep
+  `surfaceTint` transparent and `scrim` black.
+- Page turning is a three-way `PageTurnStyle` choice. Resolve e-ink and
+  system-motion overrides in `pageTurnStyleOnScreen`; do not duplicate the
+  motion check elsewhere. A dragged lift turn must photograph the publication
+  view, restore with the exact locator, and abandon on lifecycle changes.
+- Reader chrome reaches the screen edge. Keep navigation-bar insets inside
+  `ReadingScrubber`, use its spacer when the panel is absent, and skip edge
+  fades on e-ink.
+- Runtime page repair must write only token-owned attributes. Keep
+  `WideContentFit`, `FootnoteLayout`, and `SelectionHandleFix` idempotent and
+  preserve authored classes and markup.
+
+### Covers, UI, and dependencies
+
+- Resolve a local cover once at import in this order: publication cover,
+  declared SVG `rel=cover`, then an image named `cover`. Draw SVG covers with
+  the existing resolver and isolate external-file state per render.
+- New reading settings belong in the Advanced sheet unless they are changed
+  frequently. Keep the Settings and reader surfaces consistent and use the
+  existing appearance/navigation split.
+- UI strings must be added to English and the five shipped locale resources
+  together. Russian plural resources require `one`, `few`, `many`, and
+  `other`; escape apostrophes as required by Android resources.
+- All dependencies and bundled fonts must remain FOSS and reproducible.
+  `readium-lcp` is prohibited. Never remove the reproducibility-specific
+  dependency metadata or JNI debug-symbol settings from the build.
 
 ## calibre-web protocols
 
