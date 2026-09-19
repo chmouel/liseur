@@ -312,6 +312,113 @@ class OpdsCatalogClientTest {
     }
 
     @Test
+    fun `a retryable failure during the initial walk is not lost from its checkpoint`() {
+        // The initial capped walk does not retry within one run the way
+        // `loadMore()` does, but a feed that only needs asking again
+        // later must not vanish from what gets persisted just because
+        // of that: its URL stays in `seen`, and `seen` is what keeps
+        // `enqueue()` from ever offering it to the queue a second time.
+        pages["/opds"] = feed(book("b0") + navigation("Busy", "/opds/busy"))
+        codes["/opds/busy"] = 503
+        val initial = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val walk = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 100 })
+                .allBooks(root(), RemoteCredentials.Anonymous) { initial += it }
+        }
+
+        assertEquals(listOf("Book b0"), initial.map { it.title })
+        assertFalse(walk.complete)
+        val continuation = walk.continuation
+        assertNotNull(continuation)
+        assertEquals(listOf("http://127.0.0.1:${server.port}/opds/busy"), continuation!!.queue.map { it.url })
+
+        codes.remove("/opds/busy")
+        pages["/opds/busy"] = feed(book("b1"))
+        val more = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                continuation,
+                initial.map { it.remoteId }.toSet(),
+                50,
+            ) { more += it }
+        }
+
+        assertEquals(listOf("Book b1"), more.map { it.title })
+        assertTrue(result.exhausted)
+    }
+
+    @Test
+    fun `a rate-limited feed during the initial walk is kept the same way`() {
+        // 429 is Gutenberg asking to be asked again, not the feed's
+        // last word — the initial walk owes it the same second chance
+        // `loadMore()` already gives it.
+        pages["/opds"] = feed(book("b0") + navigation("Slow down", "/opds/busy"))
+        codes["/opds/busy"] = 429
+        val initial = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val walk = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 100 })
+                .allBooks(root(), RemoteCredentials.Anonymous) { initial += it }
+        }
+
+        assertEquals(listOf("Book b0"), initial.map { it.title })
+        assertFalse(walk.complete)
+        assertEquals(
+            listOf("http://127.0.0.1:${server.port}/opds/busy"),
+            walk.continuation!!.queue.map { it.url },
+        )
+    }
+
+    @Test
+    fun `a feed deferred earlier in the walk is not starved by a page cut short later`() {
+        // A feed that failed retryably was already behind us when a
+        // later page ran the walk out of its shelf. Putting that later
+        // page ahead of the deferred feed would let it eat a whole
+        // batch and requeue itself first every time, so the deferred
+        // feed would never come up for its own retry.
+        pages["/opds"] = feed(
+            navigation("Busy", "/opds/busy") +
+                navigation("Later", "/opds/later"),
+        )
+        codes["/opds/busy"] = 503
+        pages["/opds/later"] = feed((0 until 5).joinToString("") { book("b$it") })
+        val initial = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val walk = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 3 })
+                .allBooks(root(), RemoteCredentials.Anonymous) { initial += it }
+        }
+
+        assertEquals(listOf("Book b0", "Book b1", "Book b2"), initial.map { it.title })
+        val continuation = walk.continuation!!
+        assertEquals(
+            listOf("http://127.0.0.1:${server.port}/opds/busy", "http://127.0.0.1:${server.port}/opds/later"),
+            continuation.queue.map { it.url },
+        )
+
+        // "/opds/busy" answers now, and the next batch is small enough
+        // that only the deferred feed and part of the leftover page
+        // would otherwise fit; the deferred feed must be the one read.
+        codes.remove("/opds/busy")
+        pages["/opds/busy"] = feed(book("busy-book"))
+        val more = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                continuation,
+                initial.map { it.remoteId }.toSet(),
+                1,
+            ) { more += it }
+        }
+
+        assertEquals(listOf("Book busy-book"), more.map { it.title })
+    }
+
+    @Test
     fun `an ordinary catalog is not capped`() {
         pages["/opds"] = feed((0 until 60).joinToString("") { book("b$it") })
 

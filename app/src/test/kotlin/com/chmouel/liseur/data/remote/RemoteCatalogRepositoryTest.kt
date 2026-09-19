@@ -121,6 +121,7 @@ class RemoteCatalogRepositoryTest {
         kind: ServerKind = ServerKind.KOMGA,
         catalogUrl: String? = "https://books.example",
         shelfLimit: Int? = null,
+        addedAt: Long = 0L,
     ) {
         db.remoteServerDao().upsert(
             RemoteServer(
@@ -135,7 +136,7 @@ class RemoteCatalogRepositoryTest {
                 koboTokenCipher = null,
                 canDownload = true,
                 canManageLibrary = kind == ServerKind.LISEUR_SYNC,
-                addedAt = 0L,
+                addedAt = addedAt,
                 catalogSyncedAt = null,
                 positionSyncedAt = null,
                 syncToken = null,
@@ -596,10 +597,12 @@ class RemoteCatalogRepositoryTest {
     }
 
     /**
-     * The walk this comes from runs in the repository's own scope, so
-     * it can still be finishing after the reader has disconnected and
-     * connected somewhere else. Its answer must not be shown as if it
-     * were about the shelf now on screen.
+     * A real walk runs in the repository's own scope, so it can still
+     * be finishing after the reader has disconnected and connected
+     * somewhere else; its answer must not be shown as if it were about
+     * the shelf now on screen. Calling the suspend function directly
+     * rather than through that detached scope tests the same tagging
+     * and filtering without racing a background coroutine.
      */
     @Test
     fun `a load-more result belongs to the account it was read for`() = runTest {
@@ -614,8 +617,7 @@ class RemoteCatalogRepositoryTest {
         }
         val repository = repository(catalog, starterProgressDao = progressDao)
 
-        repository.loadMoreDetached()
-        runCurrent()
+        repository.loadMoreStarterCatalog()
         assertEquals(StarterCatalogMoreResult.Added(3, false), repository.starterMoreResult.first())
 
         // A different shelf connects before the reader ever returns to
@@ -623,6 +625,58 @@ class RemoteCatalogRepositoryTest {
         connect(ServerKind.CUSTOM, catalogUrl = "https://elsewhere.example", shelfLimit = 25)
 
         assertEquals(null, repository.starterMoreResult.first())
+    }
+
+    /**
+     * `accountKey` alone is not enough here either, for the same reason
+     * it is not enough in [forAccount]: a disconnect and a reconnect to
+     * the very same address hash the same.
+     */
+    @Test
+    fun `a load-more result is not shown after a reconnect to the same address either`() = runTest {
+        connect(ServerKind.CUSTOM, shelfLimit = 25, addedAt = 1_000L)
+        val progressDao = db.starterCatalogProgressDao()
+        val catalog = FakeResumableCatalog {
+            CatalogMore(
+                added = 3,
+                exhausted = false,
+                state = CatalogContinuation(queue = emptyList(), seen = emptySet()),
+            )
+        }
+        val repository = repository(catalog, starterProgressDao = progressDao)
+
+        repository.loadMoreStarterCatalog()
+        assertEquals(StarterCatalogMoreResult.Added(3, false), repository.starterMoreResult.first())
+
+        // The reader disconnects and reconnects to the same address
+        // before returning to see that result.
+        connect(ServerKind.CUSTOM, shelfLimit = 25, addedAt = 2_000L)
+
+        assertEquals(null, repository.starterMoreResult.first())
+    }
+
+    /**
+     * `accountKey` alone cannot tell a reconnection to the very same
+     * address apart from the connection it replaced: both hash the
+     * same URL and username. `addedAt` is what changes, since
+     * disconnecting deletes the row outright and connecting again
+     * writes a fresh one.
+     */
+    @Test
+    fun `a page read before a disconnect-and-reconnect to the same address is refused`() = runTest {
+        connect(ServerKind.CUSTOM, addedAt = 1_000L)
+        val catalog = FakeCatalog(complete = true) { onPage ->
+            onPage(listOf(book("b1")))
+            // The reader disconnects and reconnects to the same
+            // address while this walk is still in flight. The row is
+            // rewritten with a new `addedAt`, but the same `accountKey`.
+            connect(ServerKind.CUSTOM, addedAt = 2_000L)
+            onPage(listOf(book("b2")))
+        }
+        repository(catalog).refresh()
+
+        assertNotNull(db.bookDao().getByUrl("custom:b1"))
+        assertEquals(null, db.bookDao().getByUrl("custom:b2"))
     }
 
     @Test

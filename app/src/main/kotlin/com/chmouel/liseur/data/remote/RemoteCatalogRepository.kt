@@ -152,7 +152,9 @@ class RemoteCatalogRepository(
      */
     val starterMoreResult: kotlinx.coroutines.flow.Flow<StarterCatalogMoreResult?> =
         combine(_starterMoreResult, serverDao.observe()) { outcome, server ->
-            outcome?.takeIf { it.accountKey == server?.accountKey }?.result
+            outcome
+                ?.takeIf { it.accountKey == server?.accountKey && it.addedAt == server?.addedAt }
+                ?.result
         }
 
     fun starterMoreResultShown() {
@@ -272,7 +274,7 @@ class RemoteCatalogRepository(
             // so a reader who has since switched accounts is filtered out
             // by [starterMoreResult] rather than shown somebody else's.
             fun tag(result: StarterCatalogMoreResult): StarterCatalogMoreResult {
-                _starterMoreResult.value = StarterMoreOutcome(server.accountKey, result)
+                _starterMoreResult.value = StarterMoreOutcome(server.accountKey, server.addedAt, result)
                 return result
             }
             if (server.kind != ServerKind.CUSTOM || server.shelfLimit == null) {
@@ -808,11 +810,19 @@ class RemoteCatalogRepository(
      * Runs [work] only if [server] is still the connected account, with
      * the check and the work in the same transaction so that nothing can
      * sign out in between.
+     *
+     * Checks `addedAt` alongside `accountKey`: a disconnect deletes the
+     * row outright, so reconnecting the same catalog gets a fresh
+     * `addedAt` even though the key string, built from the address and
+     * username, comes out identical. Without this, an old walk still
+     * running from before that disconnect would pass an accountKey-only
+     * check and write its stale checkpoint into the new connection.
      */
     private suspend fun forAccount(server: RemoteServer, work: suspend () -> Unit) {
         var changed = false
         inTransaction {
-            if (serverDao.get()?.accountKey != server.accountKey) {
+            val current = serverDao.get()
+            if (current?.accountKey != server.accountKey || current.addedAt != server.addedAt) {
                 changed = true
             } else {
                 work()
@@ -932,9 +942,15 @@ private class KnownBooks(books: List<Book>) {
 /**
  * A finished load-more result, tagged with the account it was read
  * for. See [RemoteCatalogRepository.starterMoreResult].
+ *
+ * Tagged with [addedAt] as well as [accountKey], for the same reason
+ * [forAccount] checks both: a disconnect-then-reconnect to the same
+ * catalog carries the same key, and a result read for the connection
+ * before it must not be shown as if it were about the one after.
  */
 private data class StarterMoreOutcome(
     val accountKey: String,
+    val addedAt: Long,
     val result: StarterCatalogMoreResult,
 )
 

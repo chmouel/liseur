@@ -79,6 +79,14 @@ class OpdsCatalogClient(
         // fully read; it is fetched again from the top, since a
         // position in it is not something a later request can trust.
         var leftover: CatalogStep? = null
+        // A non-root feed that answered with something worth trying
+        // again. Its URL stays in `seen`, which would otherwise keep a
+        // persisted continuation from ever revisiting it: `loadMore()`
+        // only skips `enqueue()`'s `seen` check for steps already
+        // sitting in its queue, so this is carried into the
+        // continuation directly rather than left for `enqueue()` to
+        // re-add.
+        val deferred = mutableListOf<CatalogStep>()
 
         while (queue.isNotEmpty()) {
             coroutineContext.ensureActive()
@@ -108,6 +116,12 @@ class OpdsCatalogClient(
                 // a whole picture of the catalog and nothing missing
                 // from it may be read as deleted.
                 complete = false
+                // Worth trying again later, the same as `loadMore()`'s
+                // own distinction, including a 429: Gutenberg asking to
+                // be asked again, not refusing the feed.
+                if (e.reason.worthRetrying || (e.reason as? SyncFailure.ServerError)?.code == 429) {
+                    deferred += CatalogStep(step.url.toString(), step.depth)
+                }
                 continue
             }
             val books = if (shelf == null) page.books else page.books.take(shelf - shelved)
@@ -158,7 +172,7 @@ class OpdsCatalogClient(
             // that can be asked for more books is no longer a rolling
             // top N, so nothing is let go on that reasoning any more.
             if (shelf != null && shelved >= shelf) {
-                if (queue.isEmpty() && books.size == page.books.size) {
+                if (queue.isEmpty() && deferred.isEmpty() && books.size == page.books.size) {
                     Log.i(TAG, "The shelf ran out at $shelved books, inside the $shelf asked for")
                     break
                 }
@@ -174,10 +188,15 @@ class OpdsCatalogClient(
         // needs this recorded: the queue of feeds still owed where the
         // initial capped walk stopped, so the first "Load 50 more" tap
         // carries on rather than reading the root and every feed since
-        // all over again.
+        // all over again. `deferred` goes first: every one of those
+        // feeds was encountered before `leftover`, and putting `leftover`
+        // ahead of them would let a large or changing page consume a
+        // whole batch and requeue itself first on every tap, so the
+        // retryable feed behind it would never come up for another try.
         val continuation = shelf?.let {
             CatalogContinuation(
-                queue = listOfNotNull(leftover) + queue.map { step -> CatalogStep(step.url.toString(), step.depth) },
+                queue = deferred + listOfNotNull(leftover) +
+                    queue.map { step -> CatalogStep(step.url.toString(), step.depth) },
                 seen = seen,
             )
         }

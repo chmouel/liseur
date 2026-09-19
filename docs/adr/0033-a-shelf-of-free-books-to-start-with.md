@@ -189,15 +189,21 @@ what an ordinary refresh would rebuild, and stamping over it would
 throw its progress away.
 
 A capped walk that stops with nothing queued and `complete` still false
-— a feed dropped for its depth, its scope, or a failure this walk does
-not retry the way a resumed load-more would — seeds nothing at all,
-rather than a checkpoint marked exhausted or one with an empty queue.
-Either would leave the wrong thing behind: exhausted would tell the
-reader there is nothing left when this walk never actually reached the
-end, and an empty queue would replay the same `seen` set into
-`loadMore()`'s own fallback of re-fetching the root, which would then
-refuse to re-queue the very feeds this walk could not read, since they
-already read as seen. Leaving nothing seeded lets the first "Load 50
+— every feed left unread was refused for its depth or its scope, none
+of it retryable — seeds nothing at all, rather than a checkpoint marked
+exhausted or one with an empty queue. A feed the walk could ask again
+later, the same worth-retrying-or-429 test the resumed `loadMore()`
+uses, is not one of these: it is carried into the continuation's queue
+under its own name rather than left to only sit in `seen`, so the
+checkpoint this seeds can still offer it to the next run instead of the
+walk's failure being silently thrown away along with everything else it
+did not finish. Either would leave the wrong thing behind: exhausted
+would tell the reader there is nothing left when this walk never
+actually reached the end, and an empty queue would replay the same
+`seen` set into `loadMore()`'s own fallback of re-fetching the root,
+which would then refuse to re-queue the very feeds this walk could not
+read, since they already read as seen. Leaving nothing seeded lets the
+first "Load 50
 more" tap walk from a clean root instead, same as any shelf with no
 continuation at all.
 
@@ -282,6 +288,16 @@ made. It stays on the row across a reconnect that says nothing about
 the size, but only while the connection still points at the same
 catalog: a reader who edits the address to their own server gets an
 ordinary connection back, pruning included.
+
+A write in flight is checked against the account it was read for
+before it lands, and `accountKey` alone cannot always tell that account
+apart from a different connection: it is derived from the address and
+username, so disconnecting and reconnecting to the very same server
+produces the same key. `addedAt` is what changes, because disconnecting
+deletes the row outright rather than editing it, and connecting again
+writes a fresh one. A page read before that reconnect, still arriving
+after it, is checked against both and refused rather than landing on
+the new connection's shelf.
 
 The trailing slash is load-bearing, and the two routes disagree about
 it. Gutenberg answers `403` to the slash-less spelling of
