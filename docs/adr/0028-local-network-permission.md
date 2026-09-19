@@ -71,14 +71,15 @@ table entry would prompt a tailnet reader for nothing. An ISP that hands
 `100.64` out on the LAN still gets the prompt, through the live half,
 which is the honest reason.
 
-The live half reads each non-VPN interface's own addresses, which is the
-rule the platform itself enforces: an IPv6 address puts its prefix on
-the local network, and an IPv4 address puts the whole private range it
-sits in there, so a phone holding `192.168.1.5/24` blocks all of
-`192.168.0.0/16` and not merely its own subnet. VPN transports are left
-out because Android's restriction does not reach what a tunnel carries.
-Every network is read rather than the default one alone, so a Wi-Fi
-library stays reachable while cellular is default.
+The live half reads each Wi-Fi or Ethernet interface's own addresses,
+which is the rule the platform itself enforces: an IPv6 address puts its
+prefix on the local network, and an IPv4 address puts the whole private
+range it sits in there, so a phone holding `192.168.1.5/24` blocks all of
+`192.168.0.0/16` and not merely its own subnet. VPN and cellular
+transports are left out because Android's restriction does not reach what
+those connections carry. Every eligible network is read rather than the
+default one alone, so a Wi-Fi library stays reachable while cellular is
+default.
 
 #### Correction: it is the addresses, not the routes
 

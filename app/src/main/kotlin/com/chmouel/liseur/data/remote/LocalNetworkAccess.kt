@@ -124,10 +124,11 @@ class AndroidLocalNetworkAccess(
      * Whether an address sits on one of this phone's own links.
      *
      * Every network is consulted, not only the default one, because a
-     * library on Wi-Fi is still on Wi-Fi while cellular carries the
-     * rest. VPN transports are left out: Android's restriction does not
-     * reach what a tunnel carries, and a tailnet address must not raise
-     * a prompt for a permission it never needed.
+     * library on Wi-Fi is still on Wi-Fi while another network carries
+     * the rest. VPN and cellular transports are left out: Android's
+     * restriction does not reach what those connections carry, and a
+     * tailnet or mobile address must not raise a prompt for a permission
+     * it never needed.
      *
      * What is read is each interface's own addresses, which is what the
      * platform's own rule is written over. Reading routes instead looks
@@ -157,7 +158,9 @@ class AndroidLocalNetworkAccess(
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
         val links = manager.allNetworks.flatMap { network ->
             val capabilities = manager.getNetworkCapabilities(network)
-            if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) != false) {
+            if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) != false ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+            ) {
                 return@flatMap emptyList()
             }
             manager.getLinkProperties(network)?.linkAddresses.orEmpty().mapNotNull { link ->
