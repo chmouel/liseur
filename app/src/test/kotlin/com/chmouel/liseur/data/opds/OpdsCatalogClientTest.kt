@@ -259,7 +259,7 @@ class OpdsCatalogClientTest {
         val continuation = walk.continuation
         assertNotNull(continuation)
         assertEquals(1, continuation!!.queue.size)
-        assertEquals(3, continuation.queue.single().skippedBooks)
+        assertEquals("http://127.0.0.1:${server.port}/opds", continuation.queue.single().url)
 
         val more = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
         val result = runBlocking {
@@ -273,6 +273,41 @@ class OpdsCatalogClientTest {
         }
 
         assertEquals(listOf("Book b3", "Book b4"), more.map { it.title })
+        assertTrue(result.exhausted)
+    }
+
+    @Test
+    fun `a feed reordered since the last visit does not lose a book behind the old cutoff`() {
+        // Gutenberg's popularity ranking can move entries between
+        // requests. A book that was never delivered can move ahead of
+        // where the walk stopped last time; a resumed walk that trusted
+        // that old position instead of book identity would drop it
+        // forever, since it would never again fall after the cutoff.
+        pages["/opds"] = feed((0 until 5).joinToString("") { book("b$it") })
+        val initial = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val walk = runBlocking {
+            OpdsCatalogClient(shelfLimit = { 3 })
+                .allBooks(root(), RemoteCredentials.Anonymous) { initial += it }
+        }
+        assertEquals(listOf("Book b0", "Book b1", "Book b2"), initial.map { it.title })
+        val continuation = walk.continuation!!
+
+        // b5 is new and has moved ahead of where the walk stopped; b1
+        // was already delivered and has moved behind it.
+        pages["/opds"] = feed(book("b0") + book("b5") + book("b2") + book("b1") + book("b3") + book("b4"))
+
+        val more = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(
+                root(),
+                RemoteCredentials.Anonymous,
+                continuation,
+                initial.map { it.remoteId }.toSet(),
+                50,
+            ) { more += it }
+        }
+
+        assertEquals(setOf("Book b5", "Book b3", "Book b4"), more.map { it.title }.toSet())
         assertTrue(result.exhausted)
     }
 
@@ -484,6 +519,26 @@ class OpdsCatalogClientTest {
 
         assertEquals(listOf("Book b0"), found.map { it.title })
         assertTrue(result.exhausted)
+    }
+
+    @Test
+    fun `a rate-limited feed is kept for the next run, not read as exhausted`() {
+        // A 429 is Gutenberg asking to be asked again later, the same
+        // as a 503 or a timeout — not the server's last word on the
+        // feed, which is what a 404 or a 403 would be.
+        pages["/opds"] = feed(book("b0") + navigation("Slow down", "/opds/busy"))
+        codes["/opds/busy"] = 429
+        val found = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
+
+        val result = runBlocking {
+            OpdsCatalogClient().loadMore(root(), RemoteCredentials.Anonymous, null, emptySet(), 50) {
+                found += it
+            }
+        }
+
+        assertEquals(listOf("Book b0"), found.map { it.title })
+        assertFalse(result.exhausted)
+        assertEquals(listOf("http://127.0.0.1:${server.port}/opds/busy"), result.state.queue.map { it.url })
     }
 
     @Test

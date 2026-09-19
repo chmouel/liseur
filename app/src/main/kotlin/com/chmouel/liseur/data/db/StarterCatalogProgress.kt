@@ -34,7 +34,6 @@ data class StarterCatalogProgress(
                     CatalogStep(
                         url = item.getString("url"),
                         depth = item.getInt("depth"),
-                        skippedBooks = item.optInt("skippedBooks", 0),
                     )
                 }
             },
@@ -60,8 +59,7 @@ data class StarterCatalogProgress(
                     array.put(
                         JSONObject()
                             .put("url", step.url)
-                            .put("depth", step.depth)
-                            .put("skippedBooks", step.skippedBooks),
+                            .put("depth", step.depth),
                     )
                 }
             }.toString(),

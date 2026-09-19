@@ -147,28 +147,30 @@ shelf began.
 
 The continuation is stored in `starter_catalog_progress`, keyed by the
 connected account and the canonical catalog address. It keeps the queue
-of OPDS feeds still owed, the feeds already seen and the point inside a
-feed where a batch stopped. Gutenberg's book lists are not one page of
-books followed by a neat offset; they are pages of navigation entries,
-and each book is another feed. Saving only a `next` URL would lose the
-queued book feeds, and saving no intra-page position would reread the
-same slice every time a batch ended in the middle of a page.
+of OPDS feeds still owed and the feeds already seen. Gutenberg's book
+lists are not one page of books followed by a neat offset; they are
+pages of navigation entries, and each book is another feed. Saving only
+a `next` URL would lose the queued book feeds, so a page a batch cut
+short is put back on the queue as a whole rather than dropped, and
+resuming it re-reads it in full: see the paragraph below on why an
+in-page position is not something this continuation stores.
 
-The walk is finished only when nothing is owed. A feed that answered
-with something worth trying again — a timeout, a server error — stays
-queued for the next run rather than being dropped, so a sub-shelf that
-was briefly unreachable does not turn into "there are no more books". A
-feed the server has given its last word on, such as a 404 or a
-revoked credential, is given up on instead: keeping it queued would
-have the walk retry an answer that will never change and never reach
-exhausted. Losing a feed that way is that feed being gone, not the
-whole catalog going dark, so the run can still end exhausted once
-nothing retryable is left. The root is the one exception: without it
-this run never touched any part of the catalog, so a permanent refusal
-of the root, or any refusal worth retrying still pending when nothing
-else was read, is reported as a failure rather than an empty exhausted
-shelf. Depth and scope limits are permanent and say nothing: a link the
-walk will never follow is not work still owed.
+The walk is finished only when nothing is owed. The feed that answered
+with something worth trying again — a timeout, a server error, or a
+429, which is Gutenberg asking to be asked again later rather than
+refusing the feed — stays queued for the next run rather than being
+dropped, so a sub-shelf that was briefly unreachable does not turn into
+"there are no more books". A feed the server has given its last word
+on, such as a 404 or a revoked credential, is given up on instead:
+keeping it queued would have the walk retry an answer that will never
+change and never reach exhausted. Losing a feed that way is that feed
+being gone, not the whole catalog going dark, so the run can still end
+exhausted once nothing retryable is left. The root is the one
+exception: without it this run never touched any part of the catalog,
+so a permanent refusal of the root, or any refusal worth retrying still
+pending when nothing else was read, is reported as a failure rather
+than an empty exhausted shelf. Depth and scope limits are permanent and
+say nothing: a link the walk will never follow is not work still owed.
 
 The progress row goes when the connection does. Reconnecting the same
 catalog later walks it again from the root rather than inheriting a
@@ -185,6 +187,29 @@ for no reason beyond the shelf being brand new. Seeding never overwrites
 a checkpoint a load-more has already moved past — that row is ahead of
 what an ordinary refresh would rebuild, and stamping over it would
 throw its progress away.
+
+A capped walk that stops with nothing queued and `complete` still false
+— a feed dropped for its depth, its scope, or a failure this walk does
+not retry the way a resumed load-more would — seeds nothing at all,
+rather than a checkpoint marked exhausted or one with an empty queue.
+Either would leave the wrong thing behind: exhausted would tell the
+reader there is nothing left when this walk never actually reached the
+end, and an empty queue would replay the same `seen` set into
+`loadMore()`'s own fallback of re-fetching the root, which would then
+refuse to re-queue the very feeds this walk could not read, since they
+already read as seen. Leaving nothing seeded lets the first "Load 50
+more" tap walk from a clean root instead, same as any shelf with no
+continuation at all.
+
+A page a batch cut short is not resumed by a remembered position in it,
+because Gutenberg's ranking can reorder a feed between visits: a book
+that was never delivered can move ahead of where an earlier walk
+stopped, and one already delivered can move behind it. A cut-short page
+is queued as a whole and re-read from the top when its turn comes
+again, and it is the identities already known, not a position, that
+keeps a book already delivered from being handed out twice — so a
+reordered book is never silently skipped, at the cost of re-reading the
+part of that one page a batch had already gone through.
 
 Only a shelf connected before this state existed has nothing to seed
 from. Its first load-more starts from the catalog root and skips

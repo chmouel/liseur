@@ -47,7 +47,6 @@ interface ResumableCatalogSource {
 data class CatalogStep(
     val url: String,
     val depth: Int,
-    val skippedBooks: Int = 0,
 )
 
 /** The durable part of a resumable catalog walk. */
