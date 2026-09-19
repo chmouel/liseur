@@ -28,8 +28,9 @@ import androidx.sqlite.execSQL
         UploadRefusal::class,
         SessionRefusal::class,
         SessionTransmission::class,
+        StarterCatalogProgress::class,
     ],
-    version = 52,
+    version = 53,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -52,6 +53,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun uploadRefusalDao(): UploadRefusalDao
     abstract fun sessionRefusalDao(): SessionRefusalDao
     abstract fun sessionTransmissionDao(): SessionTransmissionDao
+    abstract fun starterCatalogProgressDao(): StarterCatalogProgressDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1505,6 +1507,25 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Stores where a Gutenberg starter shelf can resume loading more books. */
+        val MIGRATION_52_53 = object : Migration(52, 53) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `starter_catalog_progress` (
+                        `account_key` TEXT NOT NULL,
+                        `catalog_url` TEXT NOT NULL,
+                        `queue_json` TEXT NOT NULL,
+                        `seen_json` TEXT NOT NULL,
+                        `exhausted` INTEGER NOT NULL,
+                        `updated_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`, `catalog_url`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1557,6 +1578,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_49_50,
             MIGRATION_50_51,
             MIGRATION_51_52,
+            MIGRATION_52_53,
         )
     }
 }

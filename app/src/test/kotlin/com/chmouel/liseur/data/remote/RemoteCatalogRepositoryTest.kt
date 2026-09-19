@@ -143,7 +143,6 @@ class RemoteCatalogRepositoryTest {
     /** A catalog that does whatever the test needs it to do. */
     private class FakeCatalog(
         private val complete: Boolean = true,
-        private val shelfWasFilled: Boolean = false,
         private val walk: suspend (suspend (List<RemoteBook>) -> Unit) -> Unit,
     ) : CatalogSource {
         override suspend fun allBooks(
@@ -152,7 +151,7 @@ class RemoteCatalogRepositoryTest {
             onPage: suspend (List<RemoteBook>) -> Unit,
         ): CatalogWalk {
             walk(onPage)
-            return CatalogWalk(complete, shelfWasFilled = shelfWasFilled)
+            return CatalogWalk(complete)
         }
 
         override suspend fun search(
@@ -471,23 +470,25 @@ class RemoteCatalogRepositoryTest {
     }
 
     @Test
-    fun `a shelf read whole prunes what has dropped off it`() = runTest {
-        // A shelf offered at a size is read to that size and no
-        // further, so the catalog behind it is unseen while the shelf
-        // itself is not. Without this the shelf keeps every book that
-        // was ever popular enough to reach it and grows with every
-        // refresh. Twice, because one absence is only a suspicion.
+    fun `a shelf read only in part keeps what it did not see`() = runTest {
+        // A walk that stopped short saw part of the catalog, and a book
+        // it did not reach has not been deleted from the server — it
+        // was simply never asked about. A shelf this app decided the
+        // size of used to be the exception, on the grounds that the
+        // shelf itself had been seen whole; a shelf the reader can ask
+        // for more books is one they are growing, and letting go of a
+        // book because the popularity order moved would undo that.
         connect(ServerKind.KOMGA)
         shelve("b1", progressedTo = 0.4)
         shelve("b2", progressedTo = 0.9)
 
-        val catalog = FakeCatalog(complete = false, shelfWasFilled = true) { onPage ->
+        val catalog = FakeCatalog(complete = false) { onPage ->
             onPage(listOf(book("b1")))
         }
         repository(catalog).refresh()
         repository(catalog).refresh()
 
-        assertEquals(null, db.bookDao().getByUrl("komga:b2"))
+        assertNotNull(db.bookDao().getByUrl("komga:b2"))
         assertNotNull(db.bookDao().getByUrl("komga:b1"))
         // Still only part of the catalog, so it is still not current.
         assertEquals(null, db.remoteServerDao().get()?.catalogSyncedAt)

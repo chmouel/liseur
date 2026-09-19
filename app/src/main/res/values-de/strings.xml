@@ -111,6 +111,14 @@
     <string name="starter_catalog_how_many">Wie viele</string>
     <string name="starter_catalog_how_many_hint">Jedes Buch ist eine eigene Anfrage an einen kostenlosen, spendenfinanzierten Server — ein größeres Regal dauert also länger. Du kannst jederzeit auch eigene Bücher hinzufügen.</string>
     <string name="starter_catalog_start">Bücher holen</string>
+    <string name="starter_catalog_more_hint">Dieses Gutenberg-Regal kann nach der Einrichtung weiter wachsen.</string>
+    <string name="starter_catalog_more_button">50 weitere laden</string>
+    <string name="starter_catalog_more_failed">Weitere Bücher von Project Gutenberg konnten nicht geladen werden. Versuche es später erneut.</string>
+    <string name="starter_catalog_more_exhausted">In diesem Regal wurden keine weiteren Bücher gefunden.</string>
+    <plurals name="starter_catalog_more_added">
+        <item quantity="one">%d neues Buch hinzugefügt.</item>
+        <item quantity="other">%d neue Bücher hinzugefügt.</item>
+    </plurals>
     <string name="starter_category_popular">Am beliebtesten</string>
     <string name="starter_category_best_ever">Beste Bücher aller Zeiten</string>
     <string name="starter_category_science_fiction">Science-Fiction</string>

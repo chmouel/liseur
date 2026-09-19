@@ -110,6 +110,14 @@
     <string name="starter_catalog_how_many">Cuántos</string>
     <string name="starter_catalog_how_many_hint">Cada libro es una petición aparte a un servidor gratuito financiado por donaciones, así que un estante más grande tarda más. Siempre puedes añadir también tus propios libros.</string>
     <string name="starter_catalog_start">Obtener libros</string>
+    <string name="starter_catalog_more_hint">Este estante de Gutenberg puede seguir creciendo después de la configuración inicial.</string>
+    <string name="starter_catalog_more_button">Cargar 50 más</string>
+    <string name="starter_catalog_more_failed">No se pudieron cargar más libros de Project Gutenberg. Inténtalo más tarde.</string>
+    <string name="starter_catalog_more_exhausted">No se encontraron más libros en este estante.</string>
+    <plurals name="starter_catalog_more_added">
+        <item quantity="one">%d libro nuevo añadido.</item>
+        <item quantity="other">%d libros nuevos añadidos.</item>
+    </plurals>
     <string name="starter_category_popular">Más populares</string>
     <string name="starter_category_best_ever">Los mejores de siempre</string>
     <string name="starter_category_science_fiction">Ciencia ficción</string>

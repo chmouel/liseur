@@ -110,6 +110,14 @@
     <string name="starter_catalog_how_many">Combien</string>
     <string name="starter_catalog_how_many_hint">Chaque livre est une requête séparée vers un serveur gratuit financé par des dons, donc une plus grande étagère prend plus de temps. Vous pouvez toujours ajouter vos propres livres aussi.</string>
     <string name="starter_catalog_start">Obtenir les livres</string>
+    <string name="starter_catalog_more_hint">Cette étagère Gutenberg peut continuer à grandir après la première configuration.</string>
+    <string name="starter_catalog_more_button">Charger 50 livres de plus</string>
+    <string name="starter_catalog_more_failed">Impossible de charger plus de livres depuis Project Gutenberg. Réessayez plus tard.</string>
+    <string name="starter_catalog_more_exhausted">Aucun autre livre n\'a été trouvé sur cette étagère.</string>
+    <plurals name="starter_catalog_more_added">
+        <item quantity="one">%d nouveau livre ajouté.</item>
+        <item quantity="other">%d nouveaux livres ajoutés.</item>
+    </plurals>
     <string name="starter_category_popular">Les plus populaires</string>
     <string name="starter_category_best_ever">Les meilleurs livres</string>
     <string name="starter_category_science_fiction">Science-fiction</string>

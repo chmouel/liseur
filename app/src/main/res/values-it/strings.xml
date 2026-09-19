@@ -110,6 +110,14 @@
     <string name="starter_catalog_how_many">Quanti</string>
     <string name="starter_catalog_how_many_hint">Ogni libro è una richiesta separata a un server gratuito finanziato da donazioni, quindi uno scaffale più grande richiede più tempo. Puoi sempre aggiungere anche i tuoi libri.</string>
     <string name="starter_catalog_start">Prendi i libri</string>
+    <string name="starter_catalog_more_hint">Questo scaffale Gutenberg può continuare a crescere dopo la configurazione iniziale.</string>
+    <string name="starter_catalog_more_button">Carica altri 50</string>
+    <string name="starter_catalog_more_failed">Impossibile caricare altri libri da Project Gutenberg. Riprova più tardi.</string>
+    <string name="starter_catalog_more_exhausted">Non sono stati trovati altri libri in questo scaffale.</string>
+    <plurals name="starter_catalog_more_added">
+        <item quantity="one">%d nuovo libro aggiunto.</item>
+        <item quantity="other">%d nuovi libri aggiunti.</item>
+    </plurals>
     <string name="starter_category_popular">I più popolari</string>
     <string name="starter_category_best_ever">I migliori di sempre</string>
     <string name="starter_category_science_fiction">Fantascienza</string>

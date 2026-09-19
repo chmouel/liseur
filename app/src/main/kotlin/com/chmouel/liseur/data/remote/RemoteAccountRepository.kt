@@ -76,6 +76,14 @@ class RemoteAccountRepository(
     private val sessionRefusalDao: SessionRefusalDao? = null,
     private val sessionTransmissionDao: com.chmouel.liseur.data.db.SessionTransmissionDao? = null,
     /**
+     * How far a starter shelf has been explored. The walk belongs to the
+     * catalog the account pointed at, so leaving it throws the progress
+     * away: a shelf reconnected later starts its discovery again rather
+     * than inheriting an "already exhausted" verdict about books it no
+     * longer has. Null in tests that do not exercise a starter shelf.
+     */
+    private val starterProgressDao: com.chmouel.liseur.data.db.StarterCatalogProgressDao? = null,
+    /**
      * What each account agreed the syncable settings were. Peer state
      * like the rest: it moves with a reconnect and goes with a
      * disconnect. Null in tests that do not sync settings.
@@ -798,7 +806,25 @@ class RemoteAccountRepository(
                 // one. A reconnect that says nothing about the size —
                 // an address correction, a refreshed credential — keeps
                 // the shelf the size it was offered at.
-                shelfLimit = shelfLimit ?: existing?.shelfLimit,
+                //
+                // Only while it is the same catalog, though. The size
+                // is about the shelf that was picked, and it is also
+                // what marks a connection as one this app made and
+                // grows rather than prunes; carrying it to a feed the
+                // reader has pointed the connection at instead would
+                // leave their own catalog unable to let go of a book
+                // that was deleted on the server.
+                shelfLimit = shelfLimit ?: existing
+                    ?.takeIf { row ->
+                        val before = row.catalogUrl
+                        val after = capabilities.catalogUrl
+                        if (before == null || after == null) {
+                            before == after
+                        } else {
+                            RemoteUrl.sameAddress(before, after)
+                        }
+                    }
+                    ?.shelfLimit,
             ).let { next -> if (existing != null) carryPeerState(existing, next) else next },
         )
     }
@@ -963,6 +989,10 @@ class RemoteAccountRepository(
         // liseur-sync idea, it is any server's answer, and the row would
         // otherwise outlive the account that produced it.
         uploadRefusalDao?.clearAccount(server.accountKey)
+        // Also before the kind check: a starter shelf is a Custom OPDS
+        // connection, and how far its catalog had been walked is only
+        // true of the account that walked it.
+        starterProgressDao?.deleteForAccount(server.accountKey)
         if (server.kind != ServerKind.LISEUR_SYNC) return
         peerStateDao?.forgetPeer(server.accountKey)
         identityDao?.forgetPeerAliases(server.accountKey)

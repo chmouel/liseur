@@ -114,6 +114,16 @@
     <string name="starter_catalog_how_many">Сколько</string>
     <string name="starter_catalog_how_many_hint">Каждая книга — отдельный запрос к бесплатному серверу на пожертвованиях, поэтому большая полка займёт больше времени. Свои книги можно добавить в любой момент.</string>
     <string name="starter_catalog_start">Получить книги</string>
+    <string name="starter_catalog_more_hint">Эта полка Gutenberg может пополняться после начальной настройки.</string>
+    <string name="starter_catalog_more_button">Загрузить ещё 50</string>
+    <string name="starter_catalog_more_failed">Не удалось загрузить больше книг с Project Gutenberg. Попробуйте позже.</string>
+    <string name="starter_catalog_more_exhausted">На этой полке больше книг не найдено.</string>
+    <plurals name="starter_catalog_more_added">
+        <item quantity="one">Добавлена %d новая книга.</item>
+        <item quantity="few">Добавлены %d новые книги.</item>
+        <item quantity="many">Добавлено %d новых книг.</item>
+        <item quantity="other">Добавлено %d новой книги.</item>
+    </plurals>
     <string name="starter_category_popular">Самые популярные</string>
     <string name="starter_category_best_ever">Лучшие книги всех времён</string>
     <string name="starter_category_science_fiction">Научная фантастика</string>

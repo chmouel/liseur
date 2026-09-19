@@ -19,6 +19,8 @@ import com.chmouel.liseur.data.remote.ServerDeleteResult
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.OpenCatalogOutcome
 import com.chmouel.liseur.data.remote.StarterCatalogOutcome
+import com.chmouel.liseur.data.remote.StarterCatalogMoreResult
+import com.chmouel.liseur.data.remote.StarterCatalogMoreState
 import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
 import com.chmouel.liseur.data.remote.RemoteUrl
@@ -286,6 +288,9 @@ data class LibraryUiState(
      * not asking to be told again on every refresh of the same catalog.
      */
     val showCatalogPartial: Boolean = false,
+    val starterCatalogMoreAvailable: Boolean = false,
+    val starterCatalogMoreLoading: Boolean = false,
+    val starterCatalogMoreExhausted: Boolean = false,
     /**
      * Whether the offer of a shelf of free books is being taken up
      * right now.
@@ -439,6 +444,17 @@ class LibraryViewModel(
      */
     val starterCatalogFallback: Flow<Unit> = _starterCatalogFallback
 
+    /**
+     * Comes from the repository rather than from here: the walk outlives
+     * this screen, so what it came to has to as well, through a rotation
+     * or a moment spent off the library.
+     */
+    val starterCatalogMoreResult: StateFlow<StarterCatalogMoreResult?> = catalog.starterMoreResult
+
+    fun starterCatalogMoreResultShown() {
+        catalog.starterMoreResultShown()
+    }
+
     private val _openImported = MutableStateFlow<ImportedOpen?>(null)
 
     /**
@@ -566,6 +582,8 @@ class LibraryViewModel(
                 refusedByServer,
                 connectingStarterCatalog,
                 appSettings.catalogPartialDismissedFor,
+                catalog.starterMore,
+                catalog.starterMoreLoading,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -599,6 +617,8 @@ class LibraryViewModel(
             val refusedRows = baseValues[10] as Map<String, RefusedBytes>
             val connectingStarter = baseValues[11] as Boolean
             val partialDismissedFor = baseValues[12] as String?
+            val starterMore = baseValues[13] as StarterCatalogMoreState
+            val starterMoreLoading = baseValues[14] as Boolean
             val refused = refusedRows.filterValues { it.stillApplies }.keys
 
             val onTheShelf = books.filter { !it.archived }
@@ -765,10 +785,14 @@ class LibraryViewModel(
                 // be about.
                 showCatalogPartial = catalogStatus is CatalogStatus.Partial &&
                     server?.catalogUrl != null &&
+                    !starterMore.available &&
                     !(
                         partialDismissedFor != null &&
                             RemoteUrl.sameAddress(server.catalogUrl, partialDismissedFor)
                         ),
+                starterCatalogMoreAvailable = starterMore.available,
+                starterCatalogMoreLoading = starterMoreLoading,
+                starterCatalogMoreExhausted = starterMore.exhausted,
                 connectingStarterCatalog = connectingStarter,
                 hasSeries = shelves.isNotEmpty(),
                 seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
@@ -980,6 +1004,10 @@ class LibraryViewModel(
             // asked before this server existed and will not read it.
             refresher.allWhenFree()
         }
+    }
+
+    fun loadMoreStarterCatalog() {
+        catalog.loadMoreDetached()
     }
 
     fun download(book: Book) {

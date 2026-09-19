@@ -193,6 +193,7 @@ class AppContainer(context: Context) {
         uploadRefusalDao = database.uploadRefusalDao(),
         sessionRefusalDao = database.sessionRefusalDao(),
         sessionTransmissionDao = database.sessionTransmissionDao(),
+        starterProgressDao = database.starterCatalogProgressDao(),
         settingsSyncState = settingsSyncState,
         // Declared later in this file, so it is reached through the
         // lambda rather than held: the pairing is only ever touched
@@ -542,6 +543,7 @@ class AppContainer(context: Context) {
         router = remoteRouter,
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
+        starterProgressDao = database.starterCatalogProgressDao(),
         bookRemoval = bookRemoval,
         inTransaction = { work -> database.withTransaction { work() } },
         networkAvailability = networkAvailability,
