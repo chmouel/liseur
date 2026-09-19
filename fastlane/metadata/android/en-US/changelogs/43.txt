@@ -1,0 +1,1 @@
+Liseur can now start an empty library with free Project Gutenberg books, load more books later, sync reading settings with liseur-sync, and change a book server address without disconnecting. EPUB covers, page numbers and reader controls are more reliable, and the app now includes ES,DE,IT,FR,RU translation.
