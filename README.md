@@ -80,7 +80,6 @@ servers and dictionary sources you configure. See the
     <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80" />
   </a>
 </p>
-
 <p align="center">
   <a href="https://github.com/chmouel/liseur/releases">
     <img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png"
@@ -94,7 +93,7 @@ servers and dictionary sources you configure. See the
 ## Related Projects
 
 - [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats. This will give you the best "kindle/just work" experience compared to the other sync servers.
-~- [liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur (abandoned).~
+- ~[liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur (abandoned).~
 
 ## Development
 
