@@ -79,6 +79,9 @@ servers and dictionary sources you configure. See the
   <a href="https://f-droid.org/en/packages/com.chmouel.liseur/">
     <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80" />
   </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/chmouel/liseur/releases">
     <img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png"
          alt="Get it on GitHub" height="80" />
@@ -88,7 +91,6 @@ servers and dictionary sources you configure. See the
          alt="Get it on Obtainium" height="80" />
   </a>
 </p>
-
 ## Related Projects
 
 - [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats. This will give you the best "kindle/just work" experience compared to the other sync servers.
