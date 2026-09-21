@@ -371,6 +371,9 @@ private fun LiseurApp(settings: AppSettings) {
                 onBrightness = { scope.launch { readerPreferences.setBrightness(it) } },
                 onColumnMode = { scope.launch { readerPreferences.setColumnMode(it) } },
                 onFooterMode = { scope.launch { readerPreferences.setFooterMode(it) } },
+                onFooterField = { slot, field ->
+                    scope.launch { readerPreferences.setFooterField(slot, field) }
+                },
                 highlightPalette = settings.highlightPalette,
                 onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
                 onHighlightDefaultTint = {

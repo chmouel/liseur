@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.settings
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
@@ -43,6 +44,8 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
          */
         val LEGACY_PAGE_TURN_ANIMATION = booleanPreferencesKey("page_turn_animation")
         val FOOTER_MODE = stringPreferencesKey("footer_mode")
+        val FOOTER_LEFT = stringPreferencesKey("footer_left")
+        val FOOTER_RIGHT = stringPreferencesKey("footer_right")
         val COLUMN_MODE = stringPreferencesKey("column_mode")
         val AUTO_SCROLL_SPEED = floatPreferencesKey("auto_scroll_speed")
         val TEXT_ALIGN = stringPreferencesKey("text_align")
@@ -71,6 +74,8 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
                 legacyAnimation = p[Keys.LEGACY_PAGE_TURN_ANIMATION],
             ),
             footerMode = FooterMode.fromId(p[Keys.FOOTER_MODE]),
+            footerLeft = FooterField.fromId(p[Keys.FOOTER_LEFT], FooterSlot.LEFT),
+            footerRight = FooterField.fromId(p[Keys.FOOTER_RIGHT], FooterSlot.RIGHT),
             columnMode = ColumnMode.fromId(p[Keys.COLUMN_MODE]),
             autoScrollSpeed = p[Keys.AUTO_SCROLL_SPEED] ?: AutoScrollPreference.DEFAULT_STEP,
             textAlign = ReaderTextAlign.fromId(p[Keys.TEXT_ALIGN]),
@@ -116,6 +121,63 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.FOOTER_MODE] = mode.id }
     }
 
+    /**
+     * Steps the middle of the footer on to its next figure, and says
+     * which one it landed on.
+     *
+     * Read and write in the same [store] edit rather than from the
+     * settings the reader last saw. A tap is answered by DataStore on
+     * a writer of its own, and a reader tapping twice in quick
+     * succession has both taps looking at the same starting figure:
+     * they choose the same successor, the second write says what the
+     * first already said, and a step is lost. What is read here is
+     * whatever the last completed write left behind.
+     *
+     * The choice is handed back for the same reason. The note the
+     * footer raises names the figure the tap chose, and a tap that
+     * worked this out for itself would be working from the settings
+     * the footer was drawn with, which the tap before it has already
+     * moved on.
+     */
+    suspend fun cycleFooterMode(): FooterMode = cycleFooter { mode, left, right ->
+        nextFooterMode(mode, left, right).also { this[Keys.FOOTER_MODE] = it.id }
+    }
+
+    /** Steps one edge on to its next figure, and says which one. */
+    suspend fun cycleFooterField(slot: FooterSlot): FooterField =
+        cycleFooter { mode, left, right ->
+            nextFooterField(slot, mode, left, right).also {
+                this[slot.key] = it.id
+            }
+        }
+
+    /**
+     * One footer step: the three settings as they stand are handed to
+     * [choose], which writes its answer and returns it.
+     *
+     * The answer is picked up from inside the edit rather than read
+     * back afterwards, so it is the value this step wrote and not
+     * whatever a step behind it has written since.
+     */
+    private suspend fun <T : Any> cycleFooter(
+        choose: MutablePreferences.(FooterMode, FooterField, FooterField) -> T,
+    ): T {
+        var chosen: T? = null
+        store.edit { at ->
+            chosen = at.choose(
+                FooterMode.fromId(at[Keys.FOOTER_MODE]),
+                FooterField.fromId(at[Keys.FOOTER_LEFT], FooterSlot.LEFT),
+                FooterField.fromId(at[Keys.FOOTER_RIGHT], FooterSlot.RIGHT),
+            )
+        }
+        return checkNotNull(chosen) { "the footer was stepped on without choosing a figure" }
+    }
+
+    /** What one edge of the reading footer shows. */
+    suspend fun setFooterField(slot: FooterSlot, field: FooterField) {
+        store.edit { it[slot.key] = field.id }
+    }
+
     suspend fun setColumnMode(mode: ColumnMode) {
         store.edit { it[Keys.COLUMN_MODE] = mode.id }
     }
@@ -157,6 +219,13 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
      * would be one more number that has to be told apart from a real
      * one.
      */
+    /** Which stored key an edge of the footer is kept under. */
+    private val FooterSlot.key: Preferences.Key<String>
+        get() = when (this) {
+            FooterSlot.LEFT -> Keys.FOOTER_LEFT
+            FooterSlot.RIGHT -> Keys.FOOTER_RIGHT
+        }
+
     private suspend fun setNullableDouble(key: Preferences.Key<Double>, value: Double?) {
         store.edit {
             if (value == null) it.remove(key) else it[key] = value

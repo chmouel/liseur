@@ -162,6 +162,53 @@
     <string name="footer_screen_compact">%1$d/%2$d</string>
     <string name="footer_page_about">Environ page %1$d sur %2$d</string>
     <string name="footer_percent">%d%%</string>
+    <string name="footer_percent_left">%d%% restants</string>
+    <plurals name="footer_percent_read_a11y">
+        <item quantity="one">%d pour cent lu</item>
+        <item quantity="other">%d pour cent lus</item>
+    </plurals>
+    <plurals name="footer_percent_left_a11y">
+        <item quantity="one">%d pour cent restant</item>
+        <item quantity="other">%d pour cent restants</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_read_a11y">
+        <item quantity="one">%d pour cent du chapitre lu</item>
+        <item quantity="other">%d pour cent du chapitre lus</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_left_a11y">
+        <item quantity="one">%d pour cent du chapitre restant</item>
+        <item quantity="other">%d pour cent du chapitre restants</item>
+    </plurals>
+    <plurals name="footer_pages_left_book">
+        <item quantity="one">%d restante</item>
+        <item quantity="other">%d restantes</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_a11y">
+        <item quantity="one">%d page restante dans le livre</item>
+        <item quantity="other">%d pages restantes dans le livre</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_about_a11y">
+        <item quantity="one">Environ %d page restante dans le livre</item>
+        <item quantity="other">Environ %d pages restantes dans le livre</item>
+    </plurals>
+    <plurals name="footer_pages_left_chapter_short">
+        <item quantity="one">%d restante</item>
+        <item quantity="other">%d restantes</item>
+    </plurals>
+    <string name="footer_last_page_in_chapter_short">Dernière page</string>
+    <string name="footer_page_in_chapter_a11y">Page %1$d sur %2$d dans ce chapitre</string>
+    <string name="footer_location">Empl. %d</string>
+    <string name="footer_location_a11y">Emplacement %1$d sur %2$d</string>
+    <plurals name="footer_battery_a11y">
+        <item quantity="one">Batterie %d pour cent</item>
+        <item quantity="other">Batterie %d pour cent</item>
+    </plurals>
+    <plurals name="footer_battery_charging_a11y">
+        <item quantity="one">Batterie %d pour cent, en charge</item>
+        <item quantity="other">Batterie %d pour cent, en charge</item>
+    </plurals>
+    <string name="footer_clock_a11y">Il est %s</string>
+    <string name="footer_pick_action">Choisir ce que cette partie du pied de page affiche</string>
     <string name="go_to_page_title">Aller à la page</string>
     <string name="go_to_printed_page_title">Aller à la page imprimée</string>
     <string name="go_to_page_position_label">Page affichée dans le pied de page</string>
@@ -636,6 +683,31 @@
     <string name="footer_mode_chapter">Titre du chapitre</string>
     <string name="footer_mode_empty">Rien au milieu</string>
     <string name="footer_mode_none">Masquer le pied de page</string>
+    <string name="footer_slot_left">Gauche du pied de page</string>
+    <string name="footer_slot_middle">Milieu du pied de page</string>
+    <string name="footer_slot_right">Droite du pied de page</string>
+    <string name="footer_pick_left">Ce qu\'affiche la gauche</string>
+    <string name="footer_pick_middle">Ce qu\'affiche le milieu</string>
+    <string name="footer_pick_right">Ce qu\'affiche la droite</string>
+    <string name="footer_pick_hint">Touchez pour faire défiler la liste, ou maintenez pour revenir ici.</string>
+    <string name="footer_note_unknown">%1$s, rien à afficher pour l\'instant</string>
+    <string name="footer_cycle_left">Changer ce qu\'affiche la gauche du pied de page</string>
+    <string name="footer_cycle_middle">Changer ce qu\'affiche le milieu du pied de page</string>
+    <string name="footer_cycle_right">Changer ce qu\'affiche la droite du pied de page</string>
+    <string name="footer_field_percent">Pourcentage lu</string>
+    <string name="footer_field_percent_left">Pourcentage restant</string>
+    <string name="footer_field_page">Page du livre</string>
+    <string name="footer_field_pages_left_book">Pages restantes dans le livre</string>
+    <string name="footer_field_time_book">Temps restant dans le livre</string>
+    <string name="footer_field_location">Emplacement</string>
+    <string name="footer_field_pages_chapter">Pages restantes dans le chapitre</string>
+    <string name="footer_field_page_chapter">Page du chapitre</string>
+    <string name="footer_field_percent_chapter">Pourcentage du chapitre lu</string>
+    <string name="footer_field_percent_left_chapter">Pourcentage du chapitre restant</string>
+    <string name="footer_field_time_chapter">Temps restant dans le chapitre</string>
+    <string name="footer_field_clock">L\'heure</string>
+    <string name="footer_field_battery">Batterie</string>
+    <string name="footer_field_empty">Rien ici</string>
     <string name="settings_reading">Lecture</string>
     <string name="settings_reading_navigation">Lecture et navigation</string>
     <string name="settings_reading_navigation_paged">Paginé. Côtés pour tourner la page : %1$s</string>

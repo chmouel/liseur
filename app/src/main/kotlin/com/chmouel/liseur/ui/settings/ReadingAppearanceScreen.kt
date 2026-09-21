@@ -36,7 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ColumnMode
+import com.chmouel.liseur.data.settings.FooterField
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.FooterSlot
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.fonts.UserFont
@@ -50,7 +52,7 @@ import com.chmouel.liseur.ui.reading.ReadingFontDropdown
 import com.chmouel.liseur.ui.reading.readingFamily
 import com.chmouel.liseur.ui.reading.rememberFontLibrary
 import com.chmouel.liseur.ui.reading.ReadingFontSizeSlider
-import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
+import com.chmouel.liseur.ui.reading.ReadingFooterControls
 import com.chmouel.liseur.ui.reading.ReadingHighlightPaletteControls
 import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.ui.reading.FineTypographyActions
@@ -92,6 +94,7 @@ fun ReadingAppearanceScreen(
     onBrightness: (Float?) -> Unit,
     onColumnMode: (ColumnMode) -> Unit,
     onFooterMode: (FooterMode) -> Unit,
+    onFooterField: (FooterSlot, FooterField) -> Unit,
     highlightPalette: HighlightPalette,
     onHighlightTintToggled: (HighlightTint) -> Unit,
     onHighlightDefaultTint: (HighlightTint) -> Unit,
@@ -192,9 +195,12 @@ fun ReadingAppearanceScreen(
                         css = ReadingCss.Unknown,
                         actions = fineTypography,
                     )
-                    ReadingFooterModeDropdown(
-                        selected = prefs.footerMode,
-                        onSelected = onFooterMode,
+                    ReadingFooterControls(
+                        footerMode = prefs.footerMode,
+                        footerLeft = prefs.footerLeft,
+                        footerRight = prefs.footerRight,
+                        onModeSelected = onFooterMode,
+                        onFieldSelected = onFooterField,
                     )
                     ReadingHighlightPaletteControls(
                         palette = highlightPalette,

@@ -165,6 +165,53 @@
     <string name="footer_screen_compact">%1$d/%2$d</string>
     <string name="footer_page_about">Etwa Seite %1$d von %2$d</string>
     <string name="footer_percent">%d%%</string>
+    <string name="footer_percent_left">%d%% übrig</string>
+    <plurals name="footer_percent_read_a11y">
+        <item quantity="one">%d Prozent gelesen</item>
+        <item quantity="other">%d Prozent gelesen</item>
+    </plurals>
+    <plurals name="footer_percent_left_a11y">
+        <item quantity="one">%d Prozent übrig</item>
+        <item quantity="other">%d Prozent übrig</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_read_a11y">
+        <item quantity="one">%d Prozent des Kapitels gelesen</item>
+        <item quantity="other">%d Prozent des Kapitels gelesen</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_left_a11y">
+        <item quantity="one">%d Prozent des Kapitels übrig</item>
+        <item quantity="other">%d Prozent des Kapitels übrig</item>
+    </plurals>
+    <plurals name="footer_pages_left_book">
+        <item quantity="one">%d übrig</item>
+        <item quantity="other">%d übrig</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_a11y">
+        <item quantity="one">%d Seite im Buch übrig</item>
+        <item quantity="other">%d Seiten im Buch übrig</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_about_a11y">
+        <item quantity="one">Etwa %d Seite im Buch übrig</item>
+        <item quantity="other">Etwa %d Seiten im Buch übrig</item>
+    </plurals>
+    <plurals name="footer_pages_left_chapter_short">
+        <item quantity="one">%d übrig</item>
+        <item quantity="other">%d übrig</item>
+    </plurals>
+    <string name="footer_last_page_in_chapter_short">Letzte Seite</string>
+    <string name="footer_page_in_chapter_a11y">Seite %1$d von %2$d in diesem Kapitel</string>
+    <string name="footer_location">Pos. %d</string>
+    <string name="footer_location_a11y">Position %1$d von %2$d</string>
+    <plurals name="footer_battery_a11y">
+        <item quantity="one">Akku %d Prozent</item>
+        <item quantity="other">Akku %d Prozent</item>
+    </plurals>
+    <plurals name="footer_battery_charging_a11y">
+        <item quantity="one">Akku %d Prozent, lädt</item>
+        <item quantity="other">Akku %d Prozent, lädt</item>
+    </plurals>
+    <string name="footer_clock_a11y">Es ist %s</string>
+    <string name="footer_pick_action">Auswählen, was dieser Teil der Fußzeile zeigt</string>
     <string name="go_to_page_title">Zur Seite</string>
     <string name="go_to_printed_page_title">Zur gedruckten Seite</string>
     <string name="go_to_page_position_label">Seite in der Fußzeile</string>
@@ -646,6 +693,31 @@
     <string name="footer_mode_chapter">Kapiteltitel</string>
     <string name="footer_mode_empty">Nichts in der Mitte</string>
     <string name="footer_mode_none">Fußzeile ausblenden</string>
+    <string name="footer_slot_left">Links in der Fußzeile</string>
+    <string name="footer_slot_middle">Mitte der Fußzeile</string>
+    <string name="footer_slot_right">Rechts in der Fußzeile</string>
+    <string name="footer_pick_left">Was links steht</string>
+    <string name="footer_pick_middle">Was in der Mitte steht</string>
+    <string name="footer_pick_right">Was rechts steht</string>
+    <string name="footer_pick_hint">Tippen Sie, um die Liste durchzugehen, oder halten Sie gedrückt, um hierher zurückzukehren.</string>
+    <string name="footer_note_unknown">%1$s, noch nichts anzuzeigen</string>
+    <string name="footer_cycle_left">Anzeigen links in der Fußzeile wechseln</string>
+    <string name="footer_cycle_middle">Anzeigen in der Mitte der Fußzeile wechseln</string>
+    <string name="footer_cycle_right">Anzeigen rechts in der Fußzeile wechseln</string>
+    <string name="footer_field_percent">Prozent gelesen</string>
+    <string name="footer_field_percent_left">Prozent übrig</string>
+    <string name="footer_field_page">Seite des Buchs</string>
+    <string name="footer_field_pages_left_book">Seiten im Buch übrig</string>
+    <string name="footer_field_time_book">Zeit im Buch übrig</string>
+    <string name="footer_field_location">Position</string>
+    <string name="footer_field_pages_chapter">Seiten im Kapitel übrig</string>
+    <string name="footer_field_page_chapter">Seite des Kapitels</string>
+    <string name="footer_field_percent_chapter">Prozent des Kapitels gelesen</string>
+    <string name="footer_field_percent_left_chapter">Prozent des Kapitels übrig</string>
+    <string name="footer_field_time_chapter">Zeit im Kapitel übrig</string>
+    <string name="footer_field_clock">Die Uhrzeit</string>
+    <string name="footer_field_battery">Akku</string>
+    <string name="footer_field_empty">Nichts hier</string>
 
     <string name="settings_reading">Lesen</string>
     <string name="settings_reading_navigation">Lesen &amp; Navigation</string>

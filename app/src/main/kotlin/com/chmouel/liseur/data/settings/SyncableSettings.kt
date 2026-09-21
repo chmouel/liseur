@@ -124,6 +124,24 @@ fun syncableSettings(
         },
     ),
     SyncableSetting(
+        key = "reader.footer_left",
+        read = { reader.prefs.first().footerLeft.id },
+        write = { raw ->
+            writeById(raw, { FooterField.fromId(it, FooterSlot.LEFT) }, { it.id }) {
+                reader.setFooterField(FooterSlot.LEFT, it)
+            }
+        },
+    ),
+    SyncableSetting(
+        key = "reader.footer_right",
+        read = { reader.prefs.first().footerRight.id },
+        write = { raw ->
+            writeById(raw, { FooterField.fromId(it, FooterSlot.RIGHT) }, { it.id }) {
+                reader.setFooterField(FooterSlot.RIGHT, it)
+            }
+        },
+    ),
+    SyncableSetting(
         key = "reader.text_align",
         read = { reader.prefs.first().textAlign.id },
         write = { raw ->

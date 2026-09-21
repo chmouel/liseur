@@ -57,6 +57,8 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.FooterField
+import com.chmouel.liseur.data.settings.FooterSlot
 import com.chmouel.liseur.data.settings.ReaderFont
 import com.chmouel.liseur.reader.chrome.PinchResize
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -379,48 +381,96 @@ internal fun ReadingFont.readingFamily(imported: List<UserFont>): FontFamily? {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * What each of the reading footer's three slots shows.
+ *
+ * In the order they appear on the page, so that the sheet reads like
+ * the footer does. The two edges share one catalog of figures; the
+ * middle keeps the [FooterMode] it has had since the footer had a
+ * single slot, because the chapter's name and the smart fallback need
+ * room the edges do not have, and because hiding the footer outright
+ * belongs to the slot that cannot then be tapped to bring it back.
+ */
 @Composable
-fun ReadingFooterModeDropdown(selected: FooterMode, onSelected: (FooterMode) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
+fun ReadingFooterControls(
+    footerMode: FooterMode,
+    footerLeft: FooterField,
+    footerRight: FooterField,
+    onModeSelected: (FooterMode) -> Unit,
+    onFieldSelected: (FooterSlot, FooterField) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_progress))
-        ExposedDropdownMenuBox(
+        FooterSlotDropdown(
+            label = stringResource(R.string.footer_slot_left),
+            selected = footerLeft,
+            entries = FooterField.entries,
+            labelOf = { it.label },
+            onSelected = { onFieldSelected(FooterSlot.LEFT, it) },
+        )
+        FooterSlotDropdown(
+            label = stringResource(R.string.footer_slot_middle),
+            selected = footerMode,
+            entries = FooterMode.entries,
+            labelOf = { it.label },
+            onSelected = onModeSelected,
+        )
+        FooterSlotDropdown(
+            label = stringResource(R.string.footer_slot_right),
+            selected = footerRight,
+            entries = FooterField.entries,
+            labelOf = { it.label },
+            onSelected = { onFieldSelected(FooterSlot.RIGHT, it) },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> FooterSlotDropdown(
+    label: String,
+    selected: T,
+    entries: List<T>,
+    labelOf: (T) -> Int,
+    onSelected: (T) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = stringResource(labelOf(selected)),
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(
             expanded = expanded,
-            onExpandedChange = { expanded = it },
+            onDismissRequest = { expanded = false },
         ) {
-            OutlinedTextField(
-                value = stringResource(selected.label),
-                onValueChange = {},
-                readOnly = true,
-                singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                FooterMode.entries.forEach { mode ->
-                    DropdownMenuItem(
-                        text = { Text(stringResource(mode.label)) },
-                        trailingIcon = {
-                            if (mode == selected) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        onClick = {
-                            onSelected(mode)
-                            expanded = false
-                        },
-                    )
-                }
+            entries.forEach { entry ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(labelOf(entry))) },
+                    trailingIcon = {
+                        if (entry == selected) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    },
+                    onClick = {
+                        onSelected(entry)
+                        expanded = false
+                    },
+                )
             }
         }
     }
@@ -724,4 +774,22 @@ val FooterMode.label: Int
         FooterMode.CHAPTER_TITLE -> R.string.footer_mode_chapter
         FooterMode.EMPTY -> R.string.footer_mode_empty
         FooterMode.NONE -> R.string.footer_mode_none
+    }
+
+val FooterField.label: Int
+    get() = when (this) {
+        FooterField.PERCENT_READ -> R.string.footer_field_percent
+        FooterField.PERCENT_LEFT -> R.string.footer_field_percent_left
+        FooterField.PAGE_OF_BOOK -> R.string.footer_field_page
+        FooterField.PAGES_LEFT_BOOK -> R.string.footer_field_pages_left_book
+        FooterField.TIME_LEFT_BOOK -> R.string.footer_field_time_book
+        FooterField.LOCATION -> R.string.footer_field_location
+        FooterField.PAGES_LEFT_CHAPTER -> R.string.footer_field_pages_chapter
+        FooterField.PAGE_IN_CHAPTER -> R.string.footer_field_page_chapter
+        FooterField.PERCENT_READ_CHAPTER -> R.string.footer_field_percent_chapter
+        FooterField.PERCENT_LEFT_CHAPTER -> R.string.footer_field_percent_left_chapter
+        FooterField.TIME_LEFT_CHAPTER -> R.string.footer_field_time_chapter
+        FooterField.CLOCK -> R.string.footer_field_clock
+        FooterField.BATTERY -> R.string.footer_field_battery
+        FooterField.EMPTY -> R.string.footer_field_empty
     }

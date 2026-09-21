@@ -165,12 +165,61 @@
     </plurals>
     <string name="footer_last_page_in_chapter">Last page in chapter</string>
     <string name="footer_cycle">Change what the footer shows</string>
+    <string name="footer_pick_action">Choose what this part of the footer shows</string>
     <string name="footer_page">Page %1$d of %2$d</string>
     <string name="footer_page_compact">%1$d of %2$d</string>
     <!-- Slash form for screenfuls; keep the slash, not "of". -->
     <string name="footer_screen_compact">%1$d/%2$d</string>
     <string name="footer_page_about">About page %1$d of %2$d</string>
     <string name="footer_percent">%d%%</string>
+    <!-- A percentage still to go: of the book on an edge, of the chapter in the chapter fields. -->
+    <string name="footer_percent_left">%d%% left</string>
+    <plurals name="footer_percent_read_a11y">
+        <item quantity="one">%d percent read</item>
+        <item quantity="other">%d percent read</item>
+    </plurals>
+    <plurals name="footer_percent_left_a11y">
+        <item quantity="one">%d percent left</item>
+        <item quantity="other">%d percent left</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_read_a11y">
+        <item quantity="one">%d percent of the chapter read</item>
+        <item quantity="other">%d percent of the chapter read</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_left_a11y">
+        <item quantity="one">%d percent of the chapter left</item>
+        <item quantity="other">%d percent of the chapter left</item>
+    </plurals>
+    <plurals name="footer_pages_left_book">
+        <item quantity="one">%d left</item>
+        <item quantity="other">%d left</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_a11y">
+        <item quantity="one">%d page left in the book</item>
+        <item quantity="other">%d pages left in the book</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_about_a11y">
+        <item quantity="one">About %d page left in the book</item>
+        <item quantity="other">About %d pages left in the book</item>
+    </plurals>
+    <plurals name="footer_pages_left_chapter_short">
+        <item quantity="one">%d left</item>
+        <item quantity="other">%d left</item>
+    </plurals>
+    <string name="footer_last_page_in_chapter_short">Last page</string>
+    <string name="footer_page_in_chapter_a11y">Page %1$d of %2$d in this chapter</string>
+    <!-- "Loc" is short for location, the Readium position; translate to the local shorthand. -->
+    <string name="footer_location">Loc %d</string>
+    <string name="footer_location_a11y">Location %1$d of %2$d</string>
+    <plurals name="footer_battery_a11y">
+        <item quantity="one">Battery %d percent</item>
+        <item quantity="other">Battery %d percent</item>
+    </plurals>
+    <plurals name="footer_battery_charging_a11y">
+        <item quantity="one">Battery %d percent, charging</item>
+        <item quantity="other">Battery %d percent, charging</item>
+    </plurals>
+    <string name="footer_clock_a11y">The time is %s</string>
     <string name="go_to_page_title">Go to page</string>
     <string name="go_to_printed_page_title">Go to printed page</string>
     <string name="go_to_page_position_label">Page shown in the footer</string>
@@ -666,6 +715,32 @@
     <string name="footer_mode_chapter">Chapter title</string>
     <string name="footer_mode_empty">Nothing in the middle</string>
     <string name="footer_mode_none">Hide the footer</string>
+    <string name="footer_slot_left">Left of the footer</string>
+    <string name="footer_slot_middle">Middle of the footer</string>
+    <string name="footer_slot_right">Right of the footer</string>
+    <string name="footer_pick_left">What the left shows</string>
+    <string name="footer_pick_middle">What the middle shows</string>
+    <string name="footer_pick_right">What the right shows</string>
+    <string name="footer_pick_hint">Tap to step through the list, or hold to come back here.</string>
+    <!-- The note a tap on a footer slot raises, naming what the slot now shows. -->
+    <string name="footer_note_unknown">%1$s, nothing to show yet</string>
+    <string name="footer_cycle_left">Change what the left of the footer shows</string>
+    <string name="footer_cycle_middle">Change what the middle of the footer shows</string>
+    <string name="footer_cycle_right">Change what the right of the footer shows</string>
+    <string name="footer_field_percent">Percent read</string>
+    <string name="footer_field_percent_left">Percent left</string>
+    <string name="footer_field_page">Page of the book</string>
+    <string name="footer_field_pages_left_book">Pages left in book</string>
+    <string name="footer_field_time_book">Time left in book</string>
+    <string name="footer_field_location">Location</string>
+    <string name="footer_field_pages_chapter">Pages left in chapter</string>
+    <string name="footer_field_page_chapter">Page of the chapter</string>
+    <string name="footer_field_percent_chapter">Percent of chapter read</string>
+    <string name="footer_field_percent_left_chapter">Percent of chapter left</string>
+    <string name="footer_field_time_chapter">Time left in chapter</string>
+    <string name="footer_field_clock">The time</string>
+    <string name="footer_field_battery">Battery</string>
+    <string name="footer_field_empty">Nothing here</string>
 
     <string name="settings_reading">Reading</string>
     <string name="settings_reading_navigation">Reading &amp; navigation</string>

@@ -28,6 +28,8 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.FooterField
+import com.chmouel.liseur.data.settings.FooterSlot
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReadingCss
@@ -38,7 +40,7 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.FixedLayoutNotice
 import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
-import com.chmouel.liseur.ui.reading.ReadingFooterModeDropdown
+import com.chmouel.liseur.ui.reading.ReadingFooterControls
 import com.chmouel.liseur.ui.reading.ReadingHighlightPaletteControls
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
@@ -94,6 +96,7 @@ fun AdvancedSheet(
     onPageMarginsChanged: (Double?) -> Unit,
     onColumnModeChanged: (ColumnMode) -> Unit,
     onFooterModeChanged: (FooterMode) -> Unit,
+    onFooterFieldChanged: (FooterSlot, FooterField) -> Unit,
     onPageTurnStyleChanged: (PageTurnStyle) -> Unit,
     highlightPalette: HighlightPalette,
     onHighlightTintToggled: (HighlightTint) -> Unit,
@@ -133,9 +136,12 @@ fun AdvancedSheet(
                 css = readingCss,
                 actions = fineTypography,
             )
-            ReadingFooterModeDropdown(
-                selected = prefs.footerMode,
-                onSelected = onFooterModeChanged,
+            ReadingFooterControls(
+                footerMode = prefs.footerMode,
+                footerLeft = prefs.footerLeft,
+                footerRight = prefs.footerRight,
+                onModeSelected = onFooterModeChanged,
+                onFieldSelected = onFooterFieldChanged,
             )
             // Not about the page but about what is done to it, so it
             // sits after everything that shapes the text and before the

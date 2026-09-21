@@ -470,6 +470,8 @@ class ReaderActivity : FragmentActivity() {
                                         ReaderProgressActions(
                                             cycleFooterMode = viewModel::cycleFooterMode,
                                             setFooterMode = viewModel::setFooterMode,
+                                            cycleFooterField = viewModel::cycleFooterField,
+                                            setFooterField = viewModel::setFooterField,
                                             jumpFrom = viewModel::onJump,
                                             dismissJumpBack = viewModel::dismissJumpBack,
                                             acceptCatchUp = viewModel::acceptCatchUp,
