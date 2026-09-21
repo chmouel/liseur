@@ -170,6 +170,73 @@
     <string name="footer_screen_compact">%1$d/%2$d</string>
     <string name="footer_page_about">Около страницы %1$d из %2$d</string>
     <string name="footer_percent">%d%%</string>
+    <string name="footer_percent_left">осталось %d%%</string>
+    <plurals name="footer_percent_read_a11y">
+        <item quantity="one">прочитан %d процент</item>
+        <item quantity="few">прочитано %d процента</item>
+        <item quantity="many">прочитано %d процентов</item>
+        <item quantity="other">прочитано %d процента</item>
+    </plurals>
+    <plurals name="footer_percent_left_a11y">
+        <item quantity="one">остался %d процент</item>
+        <item quantity="few">осталось %d процента</item>
+        <item quantity="many">осталось %d процентов</item>
+        <item quantity="other">осталось %d процента</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_read_a11y">
+        <item quantity="one">прочитан %d процент главы</item>
+        <item quantity="few">прочитано %d процента главы</item>
+        <item quantity="many">прочитано %d процентов главы</item>
+        <item quantity="other">прочитано %d процента главы</item>
+    </plurals>
+    <plurals name="footer_chapter_percent_left_a11y">
+        <item quantity="one">остался %d процент главы</item>
+        <item quantity="few">осталось %d процента главы</item>
+        <item quantity="many">осталось %d процентов главы</item>
+        <item quantity="other">осталось %d процента главы</item>
+    </plurals>
+    <plurals name="footer_pages_left_book">
+        <item quantity="one">ост. %d</item>
+        <item quantity="few">ост. %d</item>
+        <item quantity="many">ост. %d</item>
+        <item quantity="other">ост. %d</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_a11y">
+        <item quantity="one">осталась %d страница книги</item>
+        <item quantity="few">осталось %d страницы книги</item>
+        <item quantity="many">осталось %d страниц книги</item>
+        <item quantity="other">осталось %d страницы книги</item>
+    </plurals>
+    <plurals name="footer_pages_left_book_about_a11y">
+        <item quantity="one">осталась примерно %d страница книги</item>
+        <item quantity="few">осталось примерно %d страницы книги</item>
+        <item quantity="many">осталось примерно %d страниц книги</item>
+        <item quantity="other">осталось примерно %d страницы книги</item>
+    </plurals>
+    <plurals name="footer_pages_left_chapter_short">
+        <item quantity="one">ост. %d</item>
+        <item quantity="few">ост. %d</item>
+        <item quantity="many">ост. %d</item>
+        <item quantity="other">ост. %d</item>
+    </plurals>
+    <string name="footer_last_page_in_chapter_short">Последняя</string>
+    <string name="footer_page_in_chapter_a11y">Страница %1$d из %2$d в этой главе</string>
+    <string name="footer_location">Поз. %d</string>
+    <string name="footer_location_a11y">Позиция %1$d из %2$d</string>
+    <plurals name="footer_battery_a11y">
+        <item quantity="one">Батарея %d процент</item>
+        <item quantity="few">Батарея %d процента</item>
+        <item quantity="many">Батарея %d процентов</item>
+        <item quantity="other">Батарея %d процента</item>
+    </plurals>
+    <plurals name="footer_battery_charging_a11y">
+        <item quantity="one">Батарея %d процент, заряжается</item>
+        <item quantity="few">Батарея %d процента, заряжается</item>
+        <item quantity="many">Батарея %d процентов, заряжается</item>
+        <item quantity="other">Батарея %d процента, заряжается</item>
+    </plurals>
+    <string name="footer_clock_a11y">Сейчас %s</string>
+    <string name="footer_pick_action">Выбрать, что показывает эта часть нижней строки</string>
     <string name="go_to_page_title">Перейти на страницу</string>
     <string name="go_to_printed_page_title">Перейти на печатную страницу</string>
     <string name="go_to_page_position_label">Страница в подвале</string>
@@ -668,6 +735,31 @@
     <string name="footer_mode_chapter">Название главы</string>
     <string name="footer_mode_empty">Ничего посередине</string>
     <string name="footer_mode_none">Скрыть подвал</string>
+    <string name="footer_slot_left">Слева в подвале</string>
+    <string name="footer_slot_middle">В центре подвала</string>
+    <string name="footer_slot_right">Справа в подвале</string>
+    <string name="footer_pick_left">Что показывать слева</string>
+    <string name="footer_pick_middle">Что показывать в центре</string>
+    <string name="footer_pick_right">Что показывать справа</string>
+    <string name="footer_pick_hint">Коснитесь, чтобы перейти к следующему, или удерживайте, чтобы вернуться сюда.</string>
+    <string name="footer_note_unknown">%1$s: пока нечего показать</string>
+    <string name="footer_cycle_left">Изменить, что показано слева в подвале</string>
+    <string name="footer_cycle_middle">Изменить, что показано в центре подвала</string>
+    <string name="footer_cycle_right">Изменить, что показано справа в подвале</string>
+    <string name="footer_field_percent">Прочитано процентов</string>
+    <string name="footer_field_percent_left">Осталось процентов</string>
+    <string name="footer_field_page">Страница книги</string>
+    <string name="footer_field_pages_left_book">Осталось страниц в книге</string>
+    <string name="footer_field_time_book">Осталось времени в книге</string>
+    <string name="footer_field_location">Позиция</string>
+    <string name="footer_field_pages_chapter">Осталось страниц в главе</string>
+    <string name="footer_field_page_chapter">Страница главы</string>
+    <string name="footer_field_percent_chapter">Прочитано процентов главы</string>
+    <string name="footer_field_percent_left_chapter">Осталось процентов главы</string>
+    <string name="footer_field_time_chapter">Осталось времени в главе</string>
+    <string name="footer_field_clock">Время</string>
+    <string name="footer_field_battery">Батарея</string>
+    <string name="footer_field_empty">Ничего</string>
     <string name="settings_reading">Чтение</string>
     <string name="settings_reading_navigation">Чтение и навигация</string>
     <string name="settings_reading_navigation_paged">Постранично. Стороны перелистывания: %1$s</string>

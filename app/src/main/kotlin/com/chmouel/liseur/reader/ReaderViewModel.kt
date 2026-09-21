@@ -39,7 +39,9 @@ import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.DefinitionTarget
+import com.chmouel.liseur.data.settings.FooterField
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.FooterSlot
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReadingPaceRepository
@@ -1867,12 +1869,25 @@ class ReaderViewModel(
     fun setAutoScrollSpeed(step: Float) =
         viewModelScope.launch { prefsRepo.setAutoScrollSpeed(step) }
 
-    fun cycleFooterMode() = viewModelScope.launch {
-        prefsRepo.setFooterMode(prefs.value.footerMode.next())
+    /**
+     * Steps the middle of the footer on, telling [onChosen] what it
+     * landed on so the note can name it. The choice is made inside the
+     * write, so it holds even when a second tap is already on its way.
+     */
+    fun cycleFooterMode(onChosen: (FooterMode) -> Unit) = viewModelScope.launch {
+        onChosen(prefsRepo.cycleFooterMode())
     }
 
     fun setFooterMode(mode: FooterMode) = viewModelScope.launch {
         prefsRepo.setFooterMode(mode)
+    }
+
+    /** Steps one edge of the footer on to the next figure in the catalog. */
+    fun cycleFooterField(slot: FooterSlot, onChosen: (FooterField) -> Unit) =
+        viewModelScope.launch { onChosen(prefsRepo.cycleFooterField(slot)) }
+
+    fun setFooterField(slot: FooterSlot, field: FooterField) = viewModelScope.launch {
+        prefsRepo.setFooterField(slot, field)
     }
 
     override fun onCleared() {

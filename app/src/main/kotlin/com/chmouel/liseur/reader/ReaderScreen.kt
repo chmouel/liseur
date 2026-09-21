@@ -126,7 +126,10 @@ import com.chmouel.liseur.reader.annotations.toDecorations
 import com.chmouel.liseur.reader.dictionary.DefinitionSheet
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.reader.footnotes.FootnoteLayout
+import com.chmouel.liseur.data.settings.FooterField
 import com.chmouel.liseur.data.settings.FooterMode
+import com.chmouel.liseur.data.settings.FooterSlot
+import com.chmouel.liseur.data.settings.footerHasAnythingToSay
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.pageTurnStyleOnScreen
@@ -153,6 +156,11 @@ import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
 import com.chmouel.liseur.reader.chrome.FooterMetrics
+import com.chmouel.liseur.reader.chrome.footerNoteBottom
+import com.chmouel.liseur.reader.chrome.FooterNote
+import com.chmouel.liseur.reader.chrome.FooterPickTarget
+import com.chmouel.liseur.reader.chrome.FooterSlotNote
+import com.chmouel.liseur.reader.chrome.FooterSlotSheet
 import com.chmouel.liseur.reader.chrome.HeldPlace
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
 import com.chmouel.liseur.reader.chrome.visibleWebView
@@ -422,6 +430,22 @@ fun ReaderScreen(
     var goToPercent by remember { mutableStateOf(false) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
     var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
+    // Which footer slot a long press opened a picker for. Its own state
+    // rather than a ReaderSheet: the footer is only ever drawn with the
+    // chrome away, so a picker reached from it is not the chrome's
+    // sheet and closing it must not bring the chrome back.
+    var footerPick by remember { mutableStateOf<FooterPickTarget?>(null) }
+    // Read from a tap's answer, which arrives long after the
+    // composition that sent it, so it has to be the sheet as it stands
+    // and not as it stood when the corner was touched.
+    val footerPickNow by rememberUpdatedState(footerPick)
+    // The word raised by a tap on a footer slot, and the counter that
+    // keeps two taps apart. A second tap replaces whatever is up
+    // rather than queueing behind it: the reader is looking at the
+    // slot they are tapping, and the label that matters is the one for
+    // the tap they just made.
+    var footerNote by remember { mutableStateOf<FooterSlotNote?>(null) }
+    var footerNoteCount by remember { mutableLongStateOf(0L) }
     val chromeVisibleNow by rememberUpdatedState(chromeVisible)
     val prefs by prefsFlow.collectAsStateWithLifecycle()
     val keepScreenOn by keepScreenOnFlow.collectAsStateWithLifecycle()
@@ -2596,6 +2620,18 @@ fun ReaderScreen(
         // there. The two halves have to flip together, and a `scroll`
         // that differs between them invalidates Readium's view pager
         // even in a fixed-layout book, where nothing renders from it.
+        val footerLineHeight = MaterialTheme.typography.labelSmall.lineHeight
+        val footerShowing =
+            footerHasAnythingToSay(prefs.footerMode, prefs.footerLeft, prefs.footerRight)
+        val footerReserve = FooterMetrics.reservedHeightDp(
+            lineHeightDp = with(LocalDensity.current) {
+                if (footerLineHeight.isSp) {
+                    footerLineHeight.toDp().value
+                } else {
+                    FooterMetrics.FALLBACK_LINE_HEIGHT_SP.sp.toDp().value
+                }
+            },
+        ).dp
         key(columnMode, scrollMode, fontKey) {
             // Derived, not measured: the reservation must exist before
             // the page lays out, or the last line is cut in half. The
@@ -2611,17 +2647,6 @@ fun ReaderScreen(
             // the navigator has read the publication, and taking the
             // band back then would reflow the book under the reader on
             // open. An unused 38dp is the cheaper of the two.
-            val footerLineHeight = MaterialTheme.typography.labelSmall.lineHeight
-            val footerShowing = prefs.footerMode != FooterMode.NONE
-            val footerReserve = FooterMetrics.reservedHeightDp(
-                lineHeightDp = with(LocalDensity.current) {
-                    if (footerLineHeight.isSp) {
-                        footerLineHeight.toDp().value
-                    } else {
-                        FooterMetrics.FALLBACK_LINE_HEIGHT_SP.sp.toDp().value
-                    }
-                },
-            ).dp
             AndroidFragment<EpubNavigatorFragment>(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2825,21 +2850,106 @@ fun ReaderScreen(
         // says, and a scrolled page runs under this corner, so a footer
         // left drawn there prints itself over the text. The figures are
         // one tap away with the rest of the chrome.
-        if (!showingEnd && !chromeVisible && !effectiveScrolling &&
-            jumpBack == null && catchUp == null
-        ) {
+        val footerDrawn = footerShowing && !showingEnd && !chromeVisible &&
+            !effectiveScrolling && jumpBack == null && catchUp == null
+        // The clock and the battery are read when the footer is drawn,
+        // and on electronic paper nothing else nudges them, so a page
+        // turn has to. A turn usually shows up as a new position in
+        // [progress], but a book whose positions could not be built has
+        // no progress to change, and a corner holding the clock would
+        // keep the minute it was first drawn at for as long as the book
+        // was read. This counts turns off the navigator instead, where
+        // every book has them.
+        //
+        // Only while a corner is actually showing one of the two, which
+        // is the default footer's way of paying nothing: no collector,
+        // no counting, and no recomposition of the row for a figure
+        // that would have been the same.
+        val footerReadsTheDevice = prefs.footerLeft.readsTheDevice ||
+            prefs.footerRight.readsTheDevice
+        var footerTurn by remember { mutableIntStateOf(0) }
+        LaunchedEffect(navigator, footerDrawn, footerReadsTheDevice) {
+            if (!footerDrawn || !footerReadsTheDevice) return@LaunchedEffect
+            val pages = navigator ?: return@LaunchedEffect
+            pages.currentLocator
+                // The position and the progression are both optional,
+                // and a book that gives only one of them turns pages
+                // all the same, so the page is told apart by whatever
+                // it says about itself.
+                .map { at ->
+                    Triple(
+                        at.href.toString(),
+                        at.locations.position,
+                        at.locations.progression,
+                    )
+                }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { footerTurn += 1 }
+        }
+        // A note is about the tap that raised it, and it outlives its
+        // welcome the moment the footer it explains leaves the screen.
+        // Its five seconds are counted by a composable that goes with
+        // the footer, so a note interrupted by the chrome would keep
+        // its unfinished countdown and finish it whenever the page came
+        // back — an explanation of a tap made an hour ago. The settings
+        // are in the flag too: the picker and a setting arriving from
+        // another device can both empty the footer while a note is up.
+        //
+        // The note is in the key as well as the flag. A tap is answered
+        // by DataStore and names its figure once the write is through,
+        // so a reader who taps and then brings the chrome up can have a
+        // note arrive after the footer has gone; keyed on the flag
+        // alone it would sit there and be shown as new whenever the
+        // page came back.
+        LaunchedEffect(footerDrawn, footerNote) {
+            if (!footerDrawn) footerNote = null
+        }
+        if (footerDrawn) {
             ReadingFooter(
                 progress = progress,
                 reflowable = reflowableText,
                 screens = sectionScreens,
                 bookScreens = bookScreens,
                 mode = prefs.footerMode,
+                left = prefs.footerLeft,
+                right = prefs.footerRight,
+                turn = footerTurn,
                 theme = readingTheme,
                 onCycleMode = onProgressAction.cycleFooterMode,
+                onCycleField = onProgressAction.cycleFooterField,
+                onPickSlot = {
+                    // The sheet is the explanation now, and it covers
+                    // the note while it is open. A note left running
+                    // underneath would come back over a figure the
+                    // reader has since changed by hand.
+                    footerNote = null
+                    footerPick = it
+                },
+                onNote = { label, unknown ->
+                    // Dropped while a sheet is up. The tap names its
+                    // figure once DataStore has written it, so a tap
+                    // followed by a long press can have its note
+                    // arrive after the sheet has opened, and the sheet
+                    // is the fuller explanation of the two.
+                    if (footerPickNow == null) {
+                        footerNoteCount += 1
+                        footerNote = FooterSlotNote(label, unknown, footerNoteCount)
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .then(behindViewer)
                     .padding(bottom = FooterMetrics.BOTTOM_MARGIN_DP.dp),
+            )
+            FooterNote(
+                note = footerNote,
+                theme = readingTheme,
+                onDone = { footerNote = null },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .then(behindViewer)
+                    .padding(bottom = footerNoteBottom(footerReserve)),
             )
         }
 
@@ -3227,6 +3337,7 @@ fun ReaderScreen(
             onPageMarginsChanged = onPrefsAction.setPageMargins,
             onColumnModeChanged = onPrefsAction.setColumnMode,
             onFooterModeChanged = onProgressAction.setFooterMode,
+            onFooterFieldChanged = onProgressAction.setFooterField,
             onPageTurnStyleChanged = onPrefsAction.setPageTurnStyle,
             highlightPalette = highlightPalette,
             onHighlightTintToggled = onHighlightTintToggled,
@@ -3237,6 +3348,26 @@ fun ReaderScreen(
             // Back to typography, not back to the book: this sheet was
             // reached from there, and that is where the reader left off.
             onDismiss = { sheet = ReaderSheet.TYPOGRAPHY },
+        )
+    }
+
+    footerPick?.let { target ->
+        FooterSlotSheet(
+            target = target,
+            field = when (target) {
+                FooterPickTarget.RIGHT -> prefs.footerRight
+                else -> prefs.footerLeft
+            },
+            mode = prefs.footerMode,
+            onFieldSelected = { field ->
+                val slot = when (target) {
+                    FooterPickTarget.RIGHT -> FooterSlot.RIGHT
+                    else -> FooterSlot.LEFT
+                }
+                onProgressAction.setFooterField(slot, field)
+            },
+            onModeSelected = onProgressAction.setFooterMode,
+            onDismiss = { footerPick = null },
         )
     }
 
@@ -3525,8 +3656,10 @@ class ReaderPrefsActions(
 
 /** Bundle of progress and navigation actions for the reader chrome. */
 class ReaderProgressActions(
-    val cycleFooterMode: () -> Unit,
+    val cycleFooterMode: (onChosen: (FooterMode) -> Unit) -> Unit,
     val setFooterMode: (FooterMode) -> Unit,
+    val cycleFooterField: (FooterSlot, onChosen: (FooterField) -> Unit) -> Unit,
+    val setFooterField: (FooterSlot, FooterField) -> Unit,
     val jumpFrom: (Locator?) -> Unit,
     val dismissJumpBack: () -> Unit,
     val acceptCatchUp: (ReaderViewModel.CatchUp?) -> Unit,

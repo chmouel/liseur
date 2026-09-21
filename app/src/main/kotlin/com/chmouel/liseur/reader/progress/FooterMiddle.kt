@@ -81,3 +81,16 @@ private fun pagesLeftInChapter(
     if (!reflowable) return progress.positionsLeftInChapter
     return screens?.let { it.screens - it.screen }
 }
+
+/**
+ * The same count, for a footer edge asking the same question.
+ *
+ * Shared rather than reimplemented so the two slots cannot come to
+ * different answers: a reader who puts the countdown on the right edge
+ * and leaves it in the middle must see one number twice, not two.
+ */
+internal fun chapterPagesLeft(
+    progress: ReaderProgress,
+    reflowable: Boolean,
+    screens: SectionScreens?,
+): Int? = pagesLeftInChapter(progress, reflowable, screens)

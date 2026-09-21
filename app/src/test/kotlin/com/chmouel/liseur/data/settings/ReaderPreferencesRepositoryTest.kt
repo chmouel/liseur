@@ -5,10 +5,13 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -232,5 +235,62 @@ class ReaderPreferencesRepositoryTest {
             ReaderPreferencesRepository(data).prefs.first()
                 .requiresAdvancedStyles(ReadingCss.Default),
         )
+    }
+    @Test
+    fun `stepping an edge on writes the figure it hands back`() = runTest {
+        val data = store()
+        val repo = ReaderPreferencesRepository(data)
+
+        val first = repo.cycleFooterField(FooterSlot.LEFT)
+        assertEquals(
+            nextFooterField(
+                FooterSlot.LEFT,
+                FooterMode.Default,
+                FooterField.PERCENT_READ,
+                FooterField.PAGE_OF_BOOK,
+            ),
+            first,
+        )
+        assertEquals(first.id, data.data.first()[stringPreferencesKey("footer_left")])
+        assertEquals(first, repo.prefs.first().footerLeft)
+
+        val second = repo.cycleFooterField(FooterSlot.LEFT)
+        assertNotEquals(first, second)
+        assertEquals(second, repo.prefs.first().footerLeft)
+        // The other two are the tap's business only insofar as it skips
+        // what they are already showing, and it never writes them.
+        assertEquals(FooterField.PAGE_OF_BOOK, repo.prefs.first().footerRight)
+        assertEquals(FooterMode.Default, repo.prefs.first().footerMode)
+    }
+
+    @Test
+    fun `two taps in the same breath are two steps`() = runTest {
+        // Both taps are answered by the store's own writer, and each
+        // one reads what the write before it left. Working from the
+        // settings the footer was drawn with instead had them choose
+        // the same successor, and the second tap moved nothing.
+        val data = store()
+        val repo = ReaderPreferencesRepository(data)
+
+        val chosen = listOf(
+            async { repo.cycleFooterField(FooterSlot.RIGHT) },
+            async { repo.cycleFooterField(FooterSlot.RIGHT) },
+        ).awaitAll()
+
+        assertNotEquals(chosen[0], chosen[1])
+        assertEquals(setOf(chosen[0], chosen[1]).size, 2)
+        assertEquals(chosen.last(), repo.prefs.first().footerRight)
+    }
+
+    @Test
+    fun `stepping the middle on leaves the edges alone`() = runTest {
+        val data = store()
+        val repo = ReaderPreferencesRepository(data)
+
+        val chosen = repo.cycleFooterMode()
+        assertEquals(chosen.id, data.data.first()[stringPreferencesKey("footer_mode")])
+        assertEquals(chosen, repo.prefs.first().footerMode)
+        assertEquals(FooterField.PERCENT_READ, repo.prefs.first().footerLeft)
+        assertEquals(FooterField.PAGE_OF_BOOK, repo.prefs.first().footerRight)
     }
 }

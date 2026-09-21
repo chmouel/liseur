@@ -105,6 +105,8 @@ class SyncableSettingsTest {
                 "reader.page_margins",
                 "reader.page_turn_style",
                 "reader.footer_mode",
+                "reader.footer_left",
+                "reader.footer_right",
                 "reader.text_align",
                 "reader.font_weight",
                 "reader.hyphens",
@@ -370,6 +372,8 @@ class SyncableSettingsTest {
         r.setParagraphSpacing(0.4)
         r.setTextAlign(ReaderTextAlign.JUSTIFIED)
         r.setFontWeight(ReaderFontWeight.LIGHT)
+        r.setFooterField(FooterSlot.LEFT, FooterField.PAGES_LEFT_CHAPTER)
+        r.setFooterField(FooterSlot.RIGHT, FooterField.CLOCK)
         a.setScrollMode(true)
         a.setResumeLastBook(false)
         a.setDictionaryLookupEnabled(true)

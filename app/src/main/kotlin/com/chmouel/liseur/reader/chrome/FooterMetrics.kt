@@ -34,6 +34,9 @@ object FooterMetrics {
      */
     const val FALLBACK_LINE_HEIGHT_SP = 16f
 
+    /** Air between the footer's top edge and anything floating above it, in dp. */
+    const val ABOVE_GAP_DP = 6f
+
     /**
      * The height, in dp, a page must keep clear for the footer.
      *

@@ -217,8 +217,11 @@ enum class FooterMode(val id: String) {
      * [NONE] is not in the round: it hides the whole footer, and a tap
      * that landed on it would take away the very thing being tapped.
      * Hiding the footer is a decision, and it belongs in the typography
-     * sheet where it can be undone. [EMPTY] is safe in the round — the
-     * edges keep drawing, so the footer stays visible and tappable.
+     * sheet where it can be undone.
+     *
+     * [EMPTY] is in the round, but it reaches the same place by another
+     * route once both edges are empty too, so a tap is offered it
+     * through [nextFooterMode] rather than taken from here directly.
      */
     fun next(): FooterMode {
         val cycle = entries.filter { it != NONE }
@@ -237,6 +240,169 @@ enum class FooterMode(val id: String) {
          */
         fun fromId(id: String?): FooterMode = entries.firstOrNull { it.id == id } ?: Default
     }
+}
+
+/**
+ * Which slot of the reading footer a setting is about.
+ *
+ * The middle is not in here. It is a [FooterMode], which it has been
+ * since the footer had one slot, and it keeps its own catalog: the
+ * chapter title and the smart fallback are long enough to need the
+ * room only the middle has.
+ */
+enum class FooterSlot { LEFT, RIGHT }
+
+/**
+ * What one edge of the reading footer shows.
+ *
+ * The edges used to be fixed — the percentage read on the left and the
+ * page of the book on the right — and [Companion.defaultFor] still
+ * puts those two where they were, so a footer nobody has touched looks
+ * the way it always did.
+ *
+ * Every entry is either a figure the reader already computes for the
+ * page on screen or a figure the device can be asked for. None of them
+ * is stored, sent, or counted as reading; this is a display setting and
+ * the wire is unaffected.
+ */
+enum class FooterField(val id: String) {
+    /** `43%` of the book read. The left edge's long-standing figure. */
+    PERCENT_READ("percent"),
+
+    /** `57% left` of the book, the same figure from the other end. */
+    PERCENT_LEFT("percent_left"),
+
+    /** `137/892`. The right edge's long-standing figure. */
+    PAGE_OF_BOOK("page"),
+
+    /**
+     * `755 left`. Scaled from the same estimate as [PAGE_OF_BOOK], so
+     * it can step at a chapter boundary; see
+     * `docs/adr/0036-the-footer-counts-screens.md`.
+     */
+    PAGES_LEFT_BOOK("pages_left_book"),
+
+    /** How long the book has left at the measured pace. */
+    TIME_LEFT_BOOK("time_book"),
+
+    /**
+     * `Loc 1234`, the stable Readium position.
+     *
+     * The one figure on the footer that does not move when the
+     * typography does, and the one the scrubber, the go-to dialog,
+     * bookmarks and annotation labels all speak in.
+     */
+    LOCATION("location"),
+
+    /** How many pages are left before the next chapter. */
+    PAGES_LEFT_CHAPTER("pages_chapter"),
+
+    /** `4/12` within the chapter. */
+    PAGE_IN_CHAPTER("page_chapter"),
+
+    /** `33%` of the chapter read. */
+    PERCENT_READ_CHAPTER("percent_chapter"),
+
+    /** `67% left` of the chapter. */
+    PERCENT_LEFT_CHAPTER("percent_left_chapter"),
+
+    /** How long the chapter has left at the measured pace. */
+    TIME_LEFT_CHAPTER("time_chapter"),
+
+    /** The time of day, in the device's own 12- or 24-hour format. */
+    CLOCK("clock"),
+
+    /** How much charge is left, drawn with a glyph. */
+    BATTERY("battery"),
+
+    /** Nothing at all, leaving the other slots more room. */
+    EMPTY("empty"),
+    ;
+
+    /**
+     * The next field to show when this edge is tapped.
+     *
+     * Every entry is in the round, including [EMPTY]. Emptying the last
+     * slot that was still drawing would take the footer off the page
+     * and the tapped corner with it, so a tap is offered the round
+     * through [nextFooterField], which steps over that one case. The
+     * round is long, which is what the long press is for.
+     */
+    fun next(): FooterField = entries[(ordinal + 1) % entries.size]
+
+    /**
+     * Whether this figure is read from the device rather than from the
+     * book. The two that are keep their own schedule, and a footer
+     * showing neither takes no readings and needs no nudging.
+     */
+    val readsTheDevice: Boolean get() = this == CLOCK || this == BATTERY
+
+    companion object {
+        /**
+         * What an edge shows when nothing has ever been chosen for it:
+         * the two figures the footer drew before either was a setting.
+         */
+        fun defaultFor(slot: FooterSlot): FooterField = when (slot) {
+            FooterSlot.LEFT -> PERCENT_READ
+            FooterSlot.RIGHT -> PAGE_OF_BOOK
+        }
+
+        fun fromId(id: String?, slot: FooterSlot): FooterField =
+            entries.firstOrNull { it.id == id } ?: defaultFor(slot)
+    }
+}
+
+/**
+ * Whether the footer is worth the room it takes.
+ *
+ * [FooterMode.NONE] hides it outright, as it always has. So does a
+ * footer whose three slots have all been emptied one by one, which
+ * arrives at the same place by a different route and should not leave
+ * a blank band of paper behind to prove it.
+ *
+ * It lives here rather than in the footer because the tap cycles have
+ * to ask it the same question: a tap is never allowed to arrive at a
+ * footer that says nothing, because the tap would go with it.
+ */
+fun footerHasAnythingToSay(mode: FooterMode, left: FooterField, right: FooterField): Boolean {
+    if (mode == FooterMode.NONE) return false
+    val middleEmpty = mode == FooterMode.EMPTY
+    return !(middleEmpty && left == FooterField.EMPTY && right == FooterField.EMPTY)
+}
+
+/**
+ * What a tap on one of the footer's edges chooses, given the rest of
+ * the footer.
+ *
+ * This is [FooterField.next] except when the step would empty the last
+ * slot still drawing. There the footer would go off the page and take
+ * the corner being tapped with it, leaving a setting undoable from the
+ * page it was made on; the round skips that one entry and carries on.
+ * The picker can still reach it, because a reader who goes to a sheet
+ * to empty the footer knows the sheet is where it comes back from.
+ */
+fun nextFooterField(
+    slot: FooterSlot,
+    mode: FooterMode,
+    left: FooterField,
+    right: FooterField,
+): FooterField {
+    val current = when (slot) {
+        FooterSlot.LEFT -> left
+        FooterSlot.RIGHT -> right
+    }
+    val next = current.next()
+    val wouldSay = when (slot) {
+        FooterSlot.LEFT -> footerHasAnythingToSay(mode, next, right)
+        FooterSlot.RIGHT -> footerHasAnythingToSay(mode, left, next)
+    }
+    return if (wouldSay) next else next.next()
+}
+
+/** The same, for the middle, which has its own catalog. */
+fun nextFooterMode(mode: FooterMode, left: FooterField, right: FooterField): FooterMode {
+    val next = mode.next()
+    return if (footerHasAnythingToSay(next, left, right)) next else next.next()
 }
 
 /**
@@ -641,7 +807,9 @@ private fun isRtlLanguage(language: String?): Boolean {
  * @param pageMargins Page margin multiplier (0.5–2.0), null keeps publisher styles.
  * @param brightness Screen brightness override 0.0–1.0, null follows the system.
  * @param pageTurnStyle How a tapped page gets out of the way.
- * @param footerMode What the reading footer shows.
+ * @param footerMode What the reading footer's middle slot shows.
+ * @param footerLeft What the reading footer's left edge shows.
+ * @param footerRight What the reading footer's right edge shows.
  * @param columnMode How many columns of text a wide page is broken into.
  * @param autoScrollSpeed Which notch the auto-scroll slider sits on, from
  *   [AutoScrollPreference.MIN_STEP] to [AutoScrollPreference.MAX_STEP]. Not a
@@ -666,6 +834,8 @@ data class ReaderPrefs(
     val brightness: Float? = null,
     val pageTurnStyle: PageTurnStyle = PageTurnStyle.Default,
     val footerMode: FooterMode = FooterMode.Default,
+    val footerLeft: FooterField = FooterField.defaultFor(FooterSlot.LEFT),
+    val footerRight: FooterField = FooterField.defaultFor(FooterSlot.RIGHT),
     val columnMode: ColumnMode = ColumnMode.Default,
     val autoScrollSpeed: Float = AutoScrollPreference.DEFAULT_STEP,
     val textAlign: ReaderTextAlign = ReaderTextAlign.Default,
