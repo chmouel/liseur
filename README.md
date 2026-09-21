@@ -73,6 +73,9 @@ servers and dictionary sources you configure. See the
 ## Install
 
 <p align="center">
+  <a href="https://play.google.com/store/apps/details?id=com.chmouel.liseur">
+    <img alt="Get it on Google Play" src="https://appure.io/badges/playstore/en.svg" height="80" />
+  </a>
   <a href="https://f-droid.org/en/packages/com.chmouel.liseur/">
     <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80" />
   </a>
