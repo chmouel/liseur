@@ -90,6 +90,7 @@ servers and dictionary sources you configure. See the
          alt="Get it on Obtainium" height="80" />
   </a>
 </p>
+
 ## Related Projects
 
 - [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats. This will give you the best "kindle/just work" experience compared to the other sync servers.
