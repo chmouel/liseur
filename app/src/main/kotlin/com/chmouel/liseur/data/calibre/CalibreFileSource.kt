@@ -17,10 +17,11 @@ import okhttp3.Request
 class CalibreFileSource(private val http: RemoteHttp = RemoteHttp()) : FileSource {
 
     override fun downloadRequest(
-        baseUrl: String,
+        server: com.chmouel.liseur.data.db.RemoteServer,
         credentials: RemoteCredentials,
         book: Book,
     ): Request.Builder? {
+        val baseUrl = server.baseUrl
         val href = book.downloadHref
             ?: book.remoteBookId?.let { "/opds/download/$it/epub/" }
             ?: return null

@@ -60,6 +60,18 @@ enum class ServerKind(
     LISEUR_SYNC("liseur-sync"),
 
     /**
+     * BookOrbit: its own REST API throughout, signed with a renewable
+     * session rather than a long-lived secret.
+     *
+     * A book from BookOrbit carries the server and account it came from
+     * in its identity as well as the id, the way a Custom catalog book
+     * does: BookOrbit numbers its books per installation and starts
+     * again at one, so the same integer names a different book on
+     * another server. See `BookOrbitScope`.
+     */
+    BOOKORBIT("bookorbit"),
+
+    /**
      * A server the reader describes themselves: an OPDS catalog
      * address, a KOReader sync address, or one of the two (ADR-0015).
      *
@@ -98,7 +110,7 @@ enum class ServerKind(
     val linksAreAbsolute: Boolean
         get() = when (this) {
             CUSTOM -> true
-            CALIBRE, KOMGA, LISEUR_SYNC -> false
+            CALIBRE, KOMGA, LISEUR_SYNC, BOOKORBIT -> false
         }
 
     /**
@@ -135,7 +147,10 @@ enum class ServerKind(
             // `RemoteCredentials.Anonymous`, and this asks about the
             // kind rather than about the account.
             CUSTOM -> true
-            KOMGA, LISEUR_SYNC -> false
+            // BookOrbit hands the password in for a renewable session,
+            // the way liseur-sync trades one for a device token, so
+            // neither keeps the password.
+            KOMGA, LISEUR_SYNC, BOOKORBIT -> false
         }
 
     /**
@@ -159,7 +174,7 @@ enum class ServerKind(
     val hostsKosyncPeer: Boolean
         get() = when (this) {
             CUSTOM -> true
-            CALIBRE, KOMGA, LISEUR_SYNC -> false
+            CALIBRE, KOMGA, LISEUR_SYNC, BOOKORBIT -> false
         }
 
     /**
@@ -170,12 +185,18 @@ enum class ServerKind(
      * protocol exchanges a percentage and nothing else, so the page
      * comes back approximately. Komga and liseur-sync exchange a whole
      * locator. OPDS carries no reading position.
+     *
+     * BookOrbit stores an EPUB CFI, which is exact — but Liseur cannot
+     * yet read or write one. Until the CFI bridge lands, promising
+     * [SyncAbility.EXACT] here would be a claim the connected screen
+     * could not keep, and `ServerKindTest` pins the two together on
+     * purpose. Catalog and downloads do not depend on it.
      */
     val syncAbility: SyncAbility
         get() = when (this) {
             CALIBRE -> SyncAbility.PROGRESSION
             KOMGA, LISEUR_SYNC -> SyncAbility.EXACT
-            CUSTOM -> SyncAbility.NONE
+            CUSTOM, BOOKORBIT -> SyncAbility.NONE
         }
 
     companion object {
@@ -186,7 +207,6 @@ enum class ServerKind(
         fun isRemoteUrl(bookUrl: String): Boolean =
             bookUrl.startsWith("grimmory:") ||
                 entries.any { bookUrl.startsWith("${it.urlPrefix}:") }
-
         /**
          * The kind stored under [name], defaulting to [CALIBRE].
          *

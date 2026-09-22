@@ -16,10 +16,11 @@ import okhttp3.Request
 class KomgaFileSource(private val http: RemoteHttp = RemoteHttp()) : FileSource {
 
     override fun downloadRequest(
-        baseUrl: String,
+        server: com.chmouel.liseur.data.db.RemoteServer,
         credentials: RemoteCredentials,
         book: Book,
     ): Request.Builder? {
+        val baseUrl = server.baseUrl
         val id = book.remoteUuid ?: return null
         return http.request(KomgaUrl.api(baseUrl, "/api/v1/books/$id/file"), credentials)
     }

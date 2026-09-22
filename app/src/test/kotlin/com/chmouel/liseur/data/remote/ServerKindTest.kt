@@ -22,9 +22,10 @@ class ServerKindTest {
         assertEquals("calibre", ServerKind.CALIBRE.urlPrefix)
         assertEquals("komga", ServerKind.KOMGA.urlPrefix)
         assertEquals("liseur-sync", ServerKind.LISEUR_SYNC.urlPrefix)
+        assertEquals("bookorbit", ServerKind.BOOKORBIT.urlPrefix)
         assertEquals("custom", ServerKind.CUSTOM.urlPrefix)
         assertEquals(
-            listOf("CALIBRE", "KOMGA", "LISEUR_SYNC", "CUSTOM"),
+            listOf("CALIBRE", "KOMGA", "LISEUR_SYNC", "BOOKORBIT", "CUSTOM"),
             ServerKind.entries.map { it.name },
         )
     }
@@ -53,6 +54,7 @@ class ServerKindTest {
         assertTrue(ServerKind.CUSTOM.signsWithStoredPassword)
         assertFalse(ServerKind.KOMGA.signsWithStoredPassword)
         assertFalse(ServerKind.LISEUR_SYNC.signsWithStoredPassword)
+        assertFalse(ServerKind.BOOKORBIT.signsWithStoredPassword)
     }
 
     @Test
@@ -67,6 +69,10 @@ class ServerKindTest {
         assertEquals(SyncAbility.PROGRESSION, ServerKind.CALIBRE.syncAbility)
         assertEquals(SyncAbility.EXACT, ServerKind.KOMGA.syncAbility)
         assertEquals(SyncAbility.EXACT, ServerKind.LISEUR_SYNC.syncAbility)
+        // BookOrbit stores an exact CFI, but Liseur cannot read or write
+        // one yet, so until the CFI bridge lands the honest answer is
+        // that it carries no position this app can move.
+        assertEquals(SyncAbility.NONE, ServerKind.BOOKORBIT.syncAbility)
         assertEquals(SyncAbility.NONE, ServerKind.CUSTOM.syncAbility)
     }
 
@@ -105,7 +111,7 @@ class ServerKindTest {
             }
         }
         assertEquals(true, ServerKind.CUSTOM.hostsKosyncPeer)
-        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC).forEach {
+        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC, ServerKind.BOOKORBIT).forEach {
             assertEquals("${it.name} must not host a kosync pairing", false, it.hostsKosyncPeer)
         }
     }
@@ -120,7 +126,7 @@ class ServerKindTest {
     @Test
     fun `a link an arbitrary catalog wrote is left where it points`() {
         assertEquals(true, ServerKind.CUSTOM.linksAreAbsolute)
-        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC).forEach {
+        listOf(ServerKind.CALIBRE, ServerKind.KOMGA, ServerKind.LISEUR_SYNC, ServerKind.BOOKORBIT).forEach {
             assertEquals("${it.name} re-roots its links", false, it.linksAreAbsolute)
         }
     }

@@ -22,10 +22,26 @@ class OpdsFileSourceTest {
 
     private fun request(href: String?, root: String = catalog) =
         OpdsFileSource().downloadRequest(
-            baseUrl = root,
+            server = server(root),
             credentials = RemoteCredentials.Basic("ada", "pw"),
             book = book(href),
         )
+
+    private fun server(baseUrl: String) = com.chmouel.liseur.data.db.RemoteServer(
+        kind = com.chmouel.liseur.data.remote.ServerKind.CUSTOM,
+        baseUrl = baseUrl,
+        username = null,
+        passwordCipher = null,
+        apiKeyCipher = null,
+        accountId = null,
+        userId = null,
+        koboTokenCipher = null,
+        canDownload = true,
+        addedAt = 0,
+        catalogSyncedAt = null,
+        positionSyncedAt = null,
+        syncToken = null,
+    )
 
     @Test
     fun `a file on the catalog is downloaded, signed`() {

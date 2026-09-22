@@ -310,6 +310,7 @@ fun ServerAccountScreen(
                     ServerKind.CALIBRE -> R.string.server_password_storage_note
                     ServerKind.KOMGA -> R.string.server_api_key_storage_note
                     ServerKind.LISEUR_SYNC -> R.string.server_token_storage_note
+                    ServerKind.BOOKORBIT -> R.string.server_bookorbit_storage_note
                     // With no catalog connected there is no catalog
                     // password to account for, and the form is not on
                     // screen to offer one either.
@@ -705,7 +706,7 @@ private fun ConnectForm(
         PasswordVisualTransformation()
     }
     when (state.kind) {
-        ServerKind.CALIBRE -> {
+        ServerKind.CALIBRE, ServerKind.BOOKORBIT -> {
             OutlinedTextField(
                 value = state.username,
                 onValueChange = onUsernameChange,
@@ -729,6 +730,12 @@ private fun ConnectForm(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (state.kind == ServerKind.BOOKORBIT) {
+                // BookOrbit offers a native client no scoped key, only
+                // the account password. Say so where it is typed rather
+                // than in a note after the fact.
+                FieldHelp(stringResource(R.string.server_bookorbit_password_help))
+            }
         }
         ServerKind.CUSTOM -> {
             OutlinedTextField(
@@ -856,7 +863,7 @@ private fun ConnectForm(
     Button(
         onClick = { onConnect(false) },
         enabled = !state.connecting && when (state.kind) {
-            ServerKind.CALIBRE ->
+            ServerKind.CALIBRE, ServerKind.BOOKORBIT ->
                 state.url.isNotBlank() &&
                     state.username.isNotBlank() && state.password.isNotBlank()
             ServerKind.KOMGA -> state.url.isNotBlank() && state.apiKey.isNotBlank()
@@ -1065,6 +1072,7 @@ private fun ConnectedCard(
                     ServerKind.CALIBRE -> R.string.server_no_download_right
                     ServerKind.KOMGA -> R.string.server_no_download_right_komga
                     ServerKind.LISEUR_SYNC -> R.string.server_no_download_right_liseur_sync
+                    ServerKind.BOOKORBIT -> R.string.server_no_download_right_bookorbit
                     ServerKind.CUSTOM -> R.string.server_no_download_right_custom
                 },
             ),
@@ -1717,6 +1725,7 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
         ServerKind.CALIBRE -> R.string.server_error_credentials
         ServerKind.KOMGA -> R.string.server_error_credentials_komga
         ServerKind.LISEUR_SYNC -> R.string.server_error_credentials_liseur_sync
+        ServerKind.BOOKORBIT -> R.string.server_error_credentials_bookorbit
         ServerKind.CUSTOM -> R.string.server_error_credentials_custom
     }
     // Only a Custom catalog is ever connected to anonymously, so this
@@ -1730,6 +1739,7 @@ private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
         ServerKind.CALIBRE -> R.string.server_error_not_calibre
         ServerKind.KOMGA -> R.string.server_error_not_komga
         ServerKind.LISEUR_SYNC -> R.string.server_error_not_liseur_sync
+        ServerKind.BOOKORBIT -> R.string.server_error_not_bookorbit
         ServerKind.CUSTOM -> R.string.server_error_not_custom
     }
     AccountError.UNREACHABLE -> R.string.server_error_unreachable

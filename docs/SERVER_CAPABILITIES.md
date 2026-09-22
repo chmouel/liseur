@@ -6,16 +6,16 @@ side.
 
 ## Summary
 
-| Capability     | Komga              | calibre-web       | liseur-sync        | Custom (OPDS)            |
-|----------------|--------------------|-------------------|--------------------|--------------------------|
-| Catalog browse | Implemented        | Implemented       | Implemented        | Implemented              |
-| Search         | Implemented        | Implemented       | Implemented        | Local only               |
-| File download  | Implemented        | Implemented       | Implemented        | Implemented              |
-| Position sync  | Implemented (full) | Implemented (%)   | Implemented (full) | Implemented (%, kosync) |
-| Book upload    | Not possible       | Not feasible      | Implemented        | Not possible             |
-| Book delete    | Not possible       | Implemented       | Implemented        | Not possible             |
-| Series claims  | N/A                | N/A               | Implemented        | N/A                      |
-| Settings sync | Not possible      | Not possible       | Implemented         | Not possible             |
+| Capability     | Komga              | calibre-web       | BookOrbit          | liseur-sync        | Custom (OPDS)            |
+|----------------|--------------------|-------------------|--------------------|--------------------|--------------------------|
+| Catalog browse | Implemented        | Implemented       | Implemented        | Implemented        | Implemented              |
+| Search         | Implemented        | Implemented       | Client only        | Implemented        | Local only               |
+| File download  | Implemented        | Implemented       | Implemented        | Implemented        | Implemented              |
+| Position sync  | Implemented (full) | Implemented (%)   | Not yet (CFI)      | Implemented (full) | Implemented (%, kosync) |
+| Book upload    | Not possible       | Not feasible      | Not implemented    | Implemented        | Not possible             |
+| Book delete    | Not possible       | Implemented       | Not implemented    | Implemented        | Not possible             |
+| Series claims  | N/A                | N/A               | N/A                | Implemented        | N/A                      |
+| Settings sync  | Not possible       | Not possible      | Not implemented    | Implemented        | Not possible             |
 
 For how each kind's position sync measures up against Kindle
 Whispersync, behaviour by behaviour, see
@@ -38,6 +38,35 @@ Whispersync, behaviour by behaviour, see
 **Capability detection:** `KomgaSetupClient` probes `GET /api/v2/users/me`
 and reads roles. Only `FILE_DOWNLOAD` is currently checked; `canUpload`
 is never set to true for Komga.
+
+## BookOrbit
+
+**Auth:** account password exchanged at setup for a renewable session
+(`Authorization: Bearer <access token>`). The password is not kept.
+
+| Feature | Server API | Liseur | Notes |
+|---------|-----------|--------|-------|
+| Catalog browse | `POST /api/v1/books/query` (zero-based pages, up to 200 books, scoped to the account's libraries) | `BookOrbitCatalogClient` | Asks for books holding an EPUB and skips anything with no EPUB file |
+| Search | Same endpoint with `q` | `BookOrbitCatalogClient.search()` | Client is implemented; the library UI still searches its local shelf only |
+| File download | `GET /api/v1/books/files/{fileId}/download` | `BookOrbitFileSource` | Requires `library_download`, checked at setup. No range support, so an interrupted transfer restarts |
+| Position sync | `GET`/`POST /api/v1/books/files/{fileId}/progress`, `PATCH /api/v1/books/{id}/status` | Not implemented | BookOrbit stores an EPUB CFI. Liseur cannot read or write a CFI yet, so a percentage-only write would clear the server's exact position. The bridge comes first |
+| Book upload | `POST /api/v1/libraries/{id}/upload`, chunked `/api/v1/uploads/*` | Not implemented | Requires `library_upload`; a book's bytes would be adopted through the file binding |
+| Book delete | `DELETE /api/v1/books`, `DELETE /api/v1/books/files/{fileId}` | Not implemented | Requires `library_delete_books` |
+| Collections | `/api/v1/collections/*` | Not implemented | |
+| Statistics | `/api/v1/user-statistics/*` | Not implemented | |
+| Settings | `/api/v1/reader/*`, `/api/v1/user-preferences/*` | Not implemented | |
+
+**Capability detection:** `BookOrbitSetupClient` reads the login response, or
+`GET /api/v1/auth/me` after renewing an existing session, and maps
+`permissions` (or `*`) onto the download, upload, delete and metadata-editing
+capabilities. `GET /api/v1/app-info` reports a version but is not required to
+connect.
+
+**Identity:** BookOrbit numbers books per installation, so a book's
+`books.url` and `remote_uuid` carry a digest of the server address and the
+account id in front of the book id (`BookOrbitScope`). The file a book is
+read as is remembered in `book_orbit_binding`, so a rescan that promotes a
+different EPUB does not move an existing reader's place.
 
 ## calibre-web
 

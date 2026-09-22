@@ -99,6 +99,44 @@ data class RemoteServer(
      */
     @ColumnInfo(name = "liseur_account_id") val liseurAccountId: String? = null,
     /**
+     * The BookOrbit access token and the refresh token it is renewed
+     * from, both sealed with the same Keystore key as every other
+     * secret.
+     *
+     * BookOrbit is the first kind whose sign-in secret expires and
+     * rotates: an access token lasts minutes and a refresh token is
+     * replaced every time it is spent. Both are kept because the access
+     * token is what the synchronous paths (a cover request, the
+     * `credentials` getter) can hand out without a refresh, while the
+     * refresh token is what survives a restart.
+     */
+    @ColumnInfo(name = "orbit_access_cipher") val orbitAccessCipher: String? = null,
+    @ColumnInfo(name = "orbit_refresh_cipher") val orbitRefreshCipher: String? = null,
+    /**
+     * When [orbitAccessCipher] stops being accepted, in epoch
+     * milliseconds.
+     *
+     * Not a secret, so it is stored in the clear: it is only ever read
+     * to decide whether the cached access token is worth sending, and a
+     * timestamp that failed to decrypt would cost a refresh round trip
+     * rather than anything worse.
+     */
+    @ColumnInfo(name = "orbit_access_expires", defaultValue = "0") val orbitAccessExpires: Long = 0,
+    /** BookOrbit's own session id, for telling two logins apart in the log. */
+    @ColumnInfo(name = "orbit_session_id") val orbitSessionId: Int? = null,
+    /**
+     * Which published connection the stored tokens belong to.
+     *
+     * Bumped on every connect, disconnect and credential replacement,
+     * and never by a token rotation. A refresh or a request that was
+     * started for the connection before a switch carries the epoch it
+     * was signed in under, and a write that no longer matches it is a
+     * write about somebody else's session. Without it, a refresh that
+     * finished after an account change would overwrite the new account's
+     * tokens with the old account's.
+     */
+    @ColumnInfo(name = "orbit_epoch", defaultValue = "0") val orbitEpoch: Long = 0,
+    /**
      * How far through the liseur-sync op log this device has reconciled.
      *
      * The only irreplaceable sync state: advance it in the same
@@ -170,6 +208,23 @@ data class RemoteServer(
             ServerKind.LISEUR_SYNC ->
                 liseurTokenCipher?.let(CredentialCipher::decrypt)?.let(RemoteCredentials::Bearer)
 
+            // A BookOrbit account signs with an access token that
+            // expires in minutes. The token actually sent is chosen by
+            // `BookOrbitSession`, which can renew it; what this getter
+            // answers is "can this account still be reached at all",
+            // which is what the generic paths ask. The refresh token is
+            // never handed out as a bearer: it is a credential for
+            // minting one, not one to spend.
+            ServerKind.BOOKORBIT -> when {
+                orbitAccessCipher != null ->
+                    CredentialCipher.decrypt(orbitAccessCipher)?.let(RemoteCredentials::Bearer)
+
+                orbitRefreshCipher != null ->
+                    CredentialCipher.decrypt(orbitRefreshCipher)?.let { RemoteCredentials.Deferred }
+
+                else -> null
+            }
+
             // A Custom catalog is often open to anyone, so "no
             // credential needed" has to be sayable. It is a stored
             // username with no stored password that means anonymous,
@@ -203,6 +258,12 @@ data class RemoteServer(
             ServerKind.CALIBRE -> koboTokenCipher != null
             ServerKind.KOMGA, ServerKind.LISEUR_SYNC -> true
             ServerKind.CUSTOM -> false
+            // BookOrbit stores a position, but Liseur cannot read its
+            // CFI yet, so there is nothing it could honestly exchange.
+            // This flips to `orbitRefreshCipher != null` together with
+            // `syncAbility = EXACT` when the CFI bridge lands; the picker
+            // and the connected screen must not disagree in between.
+            ServerKind.BOOKORBIT -> false
         }
 
     /**
@@ -230,6 +291,12 @@ data class RemoteServer(
             // it, so a rotated token no longer reads as a new account.
             ServerKind.LISEUR_SYNC ->
                 "liseursync|$baseUrl|${liseurAccountId ?: accountId ?: username}"
+            // BookOrbit's own user id is stable across a password change
+            // and a token rotation, so it names the account; a username
+            // can be edited. A row from before the id was reported falls
+            // back to the login, which is the best it can do.
+            ServerKind.BOOKORBIT ->
+                "bookorbit|$baseUrl|${accountId ?: username}"
             // The catalog is what a Custom account *is*, so it is what
             // identifies one. Two logins to one OPDS server are two
             // shelves; the same login to two servers likewise. A
@@ -341,6 +408,40 @@ interface RemoteServerDao {
      */
     @Query("UPDATE remote_server SET sync_cursor_seq = :seq WHERE id = :id")
     suspend fun setSyncCursor(seq: Long, id: Long = RemoteServer.SINGLE_ID)
+
+    /**
+     * Moves a BookOrbit session on, but only if it is still the one the
+     * caller was working with.
+     *
+     * A refresh rotates the refresh token, so two refreshes that overlap
+     * cannot both be right. [expected] is the refresh cipher the caller
+     * read before it started, and [epoch] is the published connection it
+     * belongs to; a zero row count means a switch, a reconnect or another
+     * refresh got there first, and the caller must drop its answer rather
+     * than write it back over the newer session. The row count is the
+     * whole point, which is why this returns one instead of being a bare
+     * `UPDATE`.
+     */
+    @Query(
+        "UPDATE remote_server SET orbit_access_cipher = :access, " +
+            "orbit_refresh_cipher = :refresh, orbit_access_expires = :expires, " +
+            "orbit_session_id = :session " +
+            "WHERE id = :id AND kind = 'BOOKORBIT' AND orbit_epoch = :epoch " +
+            "AND orbit_refresh_cipher = :expected",
+    )
+    suspend fun rotateOrbitTokens(
+        access: String?,
+        refresh: String?,
+        expires: Long,
+        session: Int?,
+        epoch: Long,
+        expected: String?,
+        id: Long = RemoteServer.SINGLE_ID,
+    ): Int
+
+    /** Records which published connection the stored tokens belong to. */
+    @Query("UPDATE remote_server SET orbit_epoch = :epoch WHERE id = :id")
+    suspend fun setOrbitEpoch(epoch: Long, id: Long = RemoteServer.SINGLE_ID)
 
     /** Moves the annotation cursor, under the same rule as [setSyncCursor]. */
     @Query("UPDATE remote_server SET annotation_cursor_seq = :seq WHERE id = :id")

@@ -477,6 +477,13 @@ class ServerAccountViewModel(
                     beforePublish = stopDownloads,
                 )
             }
+            ServerKind.BOOKORBIT -> repository.connectBookOrbit(
+                url = current.url,
+                username = current.username.trim(),
+                password = current.password,
+                allowHttp = allowHttp,
+                beforePublish = stopDownloads,
+            )
         }
         if (result is SetupResult.Success) {
             fetchCatalogAndPositions()
@@ -861,6 +868,10 @@ class ServerAccountViewModel(
             LiseurSyncSignIn.PASSWORD -> username.isNotBlank() && password.isNotBlank()
             LiseurSyncSignIn.TOKEN -> deviceToken.isNotBlank()
         }
+        // BookOrbit offers a native client nothing but a password, so
+        // both fields are needed. The password buys a session and is
+        // not kept; the form says so.
+        ServerKind.BOOKORBIT -> username.isNotBlank() && password.isNotBlank()
         // Either address is a connection on its own, and each one's
         // credentials are its own business: an OPDS catalog is often
         // open to anyone, while a kosync server always wants a name and

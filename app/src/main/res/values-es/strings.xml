@@ -274,11 +274,13 @@
     <string name="server_sync_custom">Guarda tu lugar si añades una dirección de sincronización KOReader</string>
     <string name="server_link_calibre">Qué es calibre-web y cómo montar uno</string>
     <string name="server_link_komga">Qué es Komga y cómo montar uno</string>
+    <string name="server_link_bookorbit">Qué es BookOrbit y cómo ejecutar uno</string>
     <string name="server_link_custom">Qué es OPDS</string>
     <string name="server_open_in_browser">Abrir tu servidor en el navegador</string>
     <string name="server_tagline_calibre">Tu biblioteca de calibre, servida por la web</string>
     <string name="server_tagline_komga">Un servidor para cómics, manga y libros</string>
     <string name="server_tagline_liseur_sync">Tus libros en todos los dispositivos — incluso los que solo están en este teléfono</string>
+    <string name="server_tagline_bookorbit">Tus libros, bibliotecas y progreso en tu propio servidor</string>
     <string name="server_tagline_custom">Cualquier catálogo OPDS, cualquier servidor de sincronización KOReader, o ambos</string>
     <string name="server_section_sync">Posiciones de lectura</string>
     <string name="server_api_key">Clave API</string>
@@ -308,7 +310,9 @@
     <string name="server_error_not_calibre">Ningún catálogo calibre-web respondió en esa dirección. Comprueba la dirección, incluida cualquier carpeta desde la que se sirve.</string>
     <string name="server_error_not_komga">Ningún servidor Komga respondió en esa dirección. Comprueba la dirección, incluida cualquier carpeta desde la que se sirve.</string>
     <string name="server_error_credentials_liseur_sync">El servidor no aceptó ese inicio de sesión o token.</string>
+    <string name="server_error_credentials_bookorbit">BookOrbit no aceptó ese usuario o contraseña. Demasiados intentos pueden bloquear la cuenta un rato.</string>
     <string name="server_error_not_liseur_sync">Esa dirección respondió, pero no como un servidor liseur-sync.</string>
+    <string name="server_error_not_bookorbit">Esa dirección respondió, pero no como un servidor BookOrbit.</string>
     <string name="server_error_not_custom">Esa dirección respondió, pero no con un catálogo OPDS. Comprueba la dirección, incluida cualquier carpeta desde la que se sirve.</string>
     <string name="server_error_credentials_custom">Ese usuario o contraseña fue rechazado por el catálogo. Si es una conexión Grimmory migrada, activa primero el servidor OPDS de Grimmory. Deja ambos vacíos si el catálogo es abierto a todo el mundo.</string>
     <string name="server_error_sign_in_custom">El catálogo rechazó la petición. Si es una conexión Grimmory migrada, activa primero el servidor OPDS de Grimmory; si no, y es privado, añade un usuario y contraseña o comprueba la dirección.</string>
@@ -324,7 +328,10 @@
     <string name="server_no_download_right_komga">Esta clave API no puede descargar libros. Pide a quien administre el servidor que dé a tu cuenta el rol de descarga de archivos y comprueba de nuevo.</string>
     <string name="server_no_download_right_custom">Este catálogo no ofrece ningún libro para descargar.</string>
     <string name="server_no_download_right_liseur_sync">Este token no puede leer la biblioteca — los tokens de antes de que liseur-sync sirviera libros no pueden explorarla. Genera uno nuevo con el alcance library-read, o desconecta e inicia sesión de nuevo, y comprueba otra vez.</string>
+    <string name="server_no_download_right_bookorbit">Esta cuenta no puede descargar libros de BookOrbit. Un administrador puede conceder el permiso de descarga; luego comprueba otra vez.</string>
     <string name="server_token_storage_note">El token del dispositivo se guarda solo en este dispositivo, cifrado. Se envía a tu servidor cada vez que Liseur habla con él. Revócalo en el servidor si pierdes el teléfono.</string>
+    <string name="server_bookorbit_storage_note">Tu contraseña no se guarda. Se canjea una vez por una sesión que Liseur renueva por su cuenta y guarda cifrada en este dispositivo. Cerrar sesión en BookOrbit la revoca.</string>
+    <string name="server_bookorbit_password_help">BookOrbit no ofrece a las apps ninguna clave aparte, así que esta es la contraseña de tu cuenta. Se canjea por una sesión de corta duración y nunca se guarda.</string>
     <string name="server_sync_on">Tu posición de lectura te seguirá entre dispositivos.</string>
     <string name="server_sync_off">Las posiciones de lectura no se sincronizan. Puede que el servidor tenga la sincronización Kobo desactivada.</string>
     <string name="server_sync_unsupported_custom">OPDS no puede llevar posiciones de lectura. Añade una dirección de sincronización KOReader en la sección de abajo y tu lugar te seguirá entre dispositivos.</string>

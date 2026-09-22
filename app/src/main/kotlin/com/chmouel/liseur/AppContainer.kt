@@ -180,6 +180,18 @@ class AppContainer(context: Context) {
 
     val settingsSyncState = SettingsSyncRepository(context.applicationContext)
 
+    /**
+     * BookOrbit's session: the one place its access token is minted and
+     * renewed. Built here rather than inside a client so that the
+     * catalog, the download worker and the cover loader all reach the
+     * same one, and a renewal done for any of them is seen by the rest.
+     */
+    val bookOrbitSession = com.chmouel.liseur.data.bookorbit.BookOrbitSession(
+        serverDao = database.remoteServerDao(),
+    )
+
+    private val bookOrbitHttp = com.chmouel.liseur.data.bookorbit.BookOrbitHttp(bookOrbitSession)
+
     val remoteAccount = RemoteAccountRepository(
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
@@ -199,6 +211,8 @@ class AppContainer(context: Context) {
         // lambda rather than held: the pairing is only ever touched
         // after a connection has landed, never while one is being built.
         kosync = { kosyncAccount },
+        bookOrbit = bookOrbitSession,
+        bookOrbitBindingDao = database.bookOrbitBindingDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
@@ -206,6 +220,13 @@ class AppContainer(context: Context) {
             // the server shows it in its device list.
             ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
                 deviceName = { deviceIdentity.current().name },
+            ),
+            // BookOrbit records a device label on the session it issues,
+            // and shows it in its own session list, so it is the same
+            // name the phone goes by elsewhere.
+            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitSetupClient(
+                deviceLabel = { deviceIdentity.current().name },
+                session = bookOrbitSession,
             ),
             ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsSetupClient(),
         ),
@@ -380,12 +401,21 @@ class AppContainer(context: Context) {
                         ?.shelfLimit
                 },
             ),
+            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitCatalogClient(
+                bindings = database.bookOrbitBindingDao(),
+                serverDao = database.remoteServerDao(),
+                http = bookOrbitHttp,
+                inTransaction = { work -> database.withTransaction { work() } },
+            ),
         ),
         files = mapOf(
             ServerKind.CALIBRE to CalibreFileSource(),
             ServerKind.KOMGA to KomgaFileSource(),
             ServerKind.LISEUR_SYNC to LiseurSyncFileSource(),
             ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsFileSource(),
+            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitFileSource(
+                session = bookOrbitSession,
+            ),
         ),
         // Custom has no entry because OPDS has no notion of a reading
         // position. It keeps a place through the KOReader pairing

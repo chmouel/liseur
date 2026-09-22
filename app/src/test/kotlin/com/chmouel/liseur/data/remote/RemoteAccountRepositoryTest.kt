@@ -4,6 +4,9 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.AnnotationSync
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookOrbitBinding
+import com.chmouel.liseur.data.db.BookOrbitBindingState
 import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingSession
@@ -164,6 +167,112 @@ class RemoteAccountRepositoryTest {
         assertTrue("expected the fake setup to succeed, got $result", result is SetupResult.Success)
     }
 
+    /**
+     * A capability refresh is not a different account.
+     *
+     * BookOrbit signs a refresh with the session it already has, so the
+     * credential it offers is not a password and the "username" the
+     * account repository derives from it is the display name rather than
+     * the login. Read as a stranger, that would retire the account on
+     * every refresh: the reading agreements, the file bindings and the
+     * epoch would all be thrown away by a reader who did nothing but
+     * keep using the app.
+     */
+    @Test
+    fun `a bookorbit capability refresh keeps the account`() = runTest {
+        val repository = repositoryUsing(db.remoteServerDao(), BookOrbitSetup())
+        val connected = repository.connectBookOrbit(BASE, "reader", "hunter2")
+        assertTrue("expected the fake setup to succeed, got $connected", connected is SetupResult.Success)
+        val first = repository.current()!!
+        assertEquals("reader", first.username)
+
+        repository.refreshCapabilities()
+
+        val second = repository.current()!!
+        assertEquals(first.addedAt, second.addedAt)
+        assertEquals("7", second.accountId)
+        assertEquals(first.orbitEpoch, second.orbitEpoch)
+        // The session survives: a refresh that said nothing about tokens
+        // must not blank the ones the account is using.
+        assertEquals("access-one", second.orbitAccessCipher?.let(CredentialCipher::decrypt))
+        assertEquals("refresh-one", second.orbitRefreshCipher?.let(CredentialCipher::decrypt))
+    }
+
+    @Test
+    fun `a downloaded book keeps its bookorbit file binding across disconnect`() = runTest {
+        val repository = repositoryUsing(db.remoteServerDao(), BookOrbitSetup())
+        repository.connectBookOrbit(BASE, "reader", "hunter2")
+        val server = repository.current()!!
+        val bookUrl = ServerKind.BOOKORBIT.remoteUrl("bo_scope_113")
+        db.bookOrbitBindingDao().write(
+            BookOrbitBinding(
+                accountKey = server.accountKey,
+                bookUrl = bookUrl,
+                bookId = 113,
+                fileId = 352,
+                fileFormat = "epub",
+                fileSize = 100,
+                fileName = "book.epub",
+                state = BookOrbitBindingState.DOWNLOADED.name,
+                updatedAt = 1,
+            ),
+        )
+        db.bookDao().upsert(
+            Book(
+                url = bookUrl,
+                title = "Downloaded",
+                author = null,
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                localUri = "file:///downloaded.epub",
+                remoteUuid = "bo_scope_113",
+            ),
+        )
+
+        repository.disconnect()
+
+        assertEquals(352L, db.bookOrbitBindingDao().get(server.accountKey, bookUrl)?.fileId)
+    }
+
+    /** A BookOrbit server that answers capability refreshes in its own shape. */
+    private class BookOrbitSetup : ServerSetup {
+        override suspend fun connect(
+            rawUrl: String,
+            credentials: RemoteCredentials,
+            allowHttp: Boolean,
+        ): SetupResult = SetupResult.Success(
+            ServerCapabilities(
+                baseUrl = rawUrl,
+                canDownload = true,
+                accountId = "7",
+                // What `/auth/me` reports, and not the login that was
+                // typed at first connect.
+                displayName = "A Reader",
+                orbitAccessToken = "access-one",
+                orbitRefreshToken = "refresh-one",
+                orbitAccessExpiresAt = 9_999_999_999L,
+                orbitSessionId = 5,
+            ),
+        )
+
+        override suspend fun reconnect(
+            rawUrl: String,
+            credentials: RemoteCredentials,
+            allowHttp: Boolean,
+            prior: PriorConnection,
+        ): SetupResult = SetupResult.Success(
+            ServerCapabilities(
+                baseUrl = rawUrl,
+                canDownload = true,
+                accountId = "7",
+                displayName = "A Reader",
+                // No new tokens: this is a permission re-read.
+            ),
+        )
+    }
+
     @Test
     fun `refreshing an https account does not authorise a plain http retry`() = runTest {
         // A refresh runs unattended, so it cannot be the thing that
@@ -232,10 +341,12 @@ class RemoteAccountRepositoryTest {
         ),
         seriesExtraDao = db.seriesExtraDao(),
         peerStateDao = db.syncPeerStateDao(),
+        bookOrbitBindingDao = db.bookOrbitBindingDao(),
         kosync = { kosync() },
         setups = mapOf(
             ServerKind.CALIBRE to setup,
             ServerKind.KOMGA to setup,
+            ServerKind.BOOKORBIT to setup,
             ServerKind.CUSTOM to setup,
         ),
     )

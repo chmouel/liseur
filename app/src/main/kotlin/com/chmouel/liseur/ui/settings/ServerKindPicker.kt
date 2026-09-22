@@ -153,7 +153,9 @@ internal fun ServerKindSheet(
 private fun ServerKindLogo(kind: ServerKind) {
     val size = Modifier.size(32.dp)
     when (kind) {
-        ServerKind.KOMGA -> Icon(
+        // BookOrbit's mark is not Liseur's to ship either. It gets the
+        // same neutral, tinted glyph, and the picker names it in words.
+        ServerKind.KOMGA, ServerKind.BOOKORBIT -> Icon(
             painter = painterResource(R.drawable.ic_server_generic),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -172,6 +174,7 @@ private fun ServerKind.logoRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.drawable.ic_server_calibre_web
     ServerKind.KOMGA -> R.drawable.ic_server_generic
     ServerKind.LISEUR_SYNC -> R.drawable.ic_server_liseur_sync
+    ServerKind.BOOKORBIT -> R.drawable.ic_server_generic
     ServerKind.CUSTOM -> R.drawable.ic_server_generic
 }
 
@@ -204,6 +207,7 @@ internal fun ServerKind.labelRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_kind_calibre
     ServerKind.KOMGA -> R.string.server_kind_komga
     ServerKind.LISEUR_SYNC -> R.string.server_kind_liseur_sync
+    ServerKind.BOOKORBIT -> R.string.server_kind_bookorbit
     ServerKind.CUSTOM -> R.string.server_kind_custom
 }
 
@@ -211,6 +215,7 @@ internal fun ServerKind.taglineRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_tagline_calibre
     ServerKind.KOMGA -> R.string.server_tagline_komga
     ServerKind.LISEUR_SYNC -> R.string.server_tagline_liseur_sync
+    ServerKind.BOOKORBIT -> R.string.server_tagline_bookorbit
     ServerKind.CUSTOM -> R.string.server_tagline_custom
 }
 
@@ -225,6 +230,7 @@ internal fun ServerKind.homeUrl(): String = when (this) {
     ServerKind.CALIBRE -> "https://github.com/janeczku/calibre-web"
     ServerKind.KOMGA -> "https://komga.org"
     ServerKind.LISEUR_SYNC -> LISEUR_SYNC_SERVER_URL
+    ServerKind.BOOKORBIT -> "https://bookorbit.app"
     // The specification rather than a product: a Custom connection is
     // not a server anyone can go and get, it is whatever the reader
     // already runs.
@@ -235,5 +241,6 @@ internal fun ServerKind.linkRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.string.server_link_calibre
     ServerKind.KOMGA -> R.string.server_link_komga
     ServerKind.LISEUR_SYNC -> R.string.liseur_sync_get_one
+    ServerKind.BOOKORBIT -> R.string.server_link_bookorbit
     ServerKind.CUSTOM -> R.string.server_link_custom
 }
