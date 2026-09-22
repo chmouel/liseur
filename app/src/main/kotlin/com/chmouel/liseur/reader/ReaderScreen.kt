@@ -576,6 +576,10 @@ fun ReaderScreen(
     // started. This gives it a window onto the current value.
     val noteShowing by rememberUpdatedState(footnote != null)
     var selection by remember { mutableStateOf<ActiveSelection?>(null) }
+    // The settled selection drives the action bar, but it intentionally
+    // waits for the WebView's reports to quiet down. Gesture arbitration
+    // cannot wait: a handle can start moving during that window.
+    var selectionActive by remember { mutableStateOf(false) }
     // A tapped mark has no platform selection. A late CLEARED from the
     // web view must not dismiss the controls we just opened for it.
     var tappedSelection by remember { mutableStateOf<ActiveSelection?>(null) }
@@ -946,7 +950,8 @@ fun ReaderScreen(
                 // Chrome up means the scrubber is on the page, and a
                 // drag across it is a seek, not a turn.
                 !chromeDrawn() && !effectiveScrollingNow && reflowableTextNow &&
-                    !isPinching() && selection == null && tappedSelection == null &&
+                    !isPinching() && !selectionActive && selection == null &&
+                    tappedSelection == null &&
                     viewedImageNow == null && !openingImageNow
             },
             interactive = { !eInkNow },
@@ -1630,12 +1635,26 @@ fun ReaderScreen(
     // app hosting a web view has no say over at all.
     LaunchedEffect(navigator, selectionEvents) {
         tappedSelection = null
+        // Cleared for the page being left, not only for the absence of
+        // one. The flow does not replay, so a page swapped for another
+        // one raises its CLEARED with nobody collecting, and a flag left
+        // standing from the old page would hold the new page's drag
+        // turns off for as long as the reader went without selecting
+        // anything else. collectSettledSelection starts the settled
+        // selection from nothing for the same reason.
+        selectionActive = false
         val nav = navigator ?: run {
             selection = null
             return@LaunchedEffect
         }
         selectionEvents.onEach {
-            if (it == SelectionEvent.CHANGED) tappedSelection = null
+            when (it) {
+                SelectionEvent.CHANGED -> {
+                    selectionActive = true
+                    tappedSelection = null
+                }
+                SelectionEvent.CLEARED -> selectionActive = false
+            }
         }.collectSettledSelection(
             settleMs = SELECTION_SETTLE_MS,
             read = { nav.currentSelection() },
