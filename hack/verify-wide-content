@@ -3,6 +3,9 @@
 # Checks that content wider than the page is measured and constrained
 # instead of painting over the page after it (issue #67).
 #
+# This is a desktop CSS/helper check only. It does not validate Android
+# WebSettings text zoom or prove that publisher-defined font sizes grow.
+#
 # The fix is a few lines of JavaScript run inside the book's own document,
 # and none of what it has to get right can be seen from the JVM: whether a
 # table really overflows its column, whether an index that merely looks wide
@@ -140,7 +143,8 @@ function frame(caseName, fontSize, colCount, dir) {
     var base = dir === "rtl" ? "../readium-css/rtl/" : "../readium-css/";
     // column-width acts as a minimum, so readium's 45em default would
     // collapse a two-column request back to one at any tablet width.
-    var vars = "--USER__fontSize:" + fontSize + "%;--RS__colCount:" + colCount + ";" +
+    var vars = (fontSize == null ? "" : "--USER__fontSize:" + fontSize + "%;") +
+               "--RS__colCount:" + colCount + ";" +
                (colCount > 1 ? "--RS__colWidth:auto;" : "") +
                "--USER__view:readium-paged-on;";
     // The overflow rule is readium's own, injected into every resource; it
@@ -267,6 +271,16 @@ TESTS.push(function () {
   return frame("narrow-index.xhtml", 100, 1).then(function (w) {
     run(w);
     log(run(w) === "stable", "untouched page settles to stable");
+  });
+});
+
+TESTS.push(function () {
+  return frame("wide-table.xhtml", null, 1).then(function (w) {
+    var before = measure(w);
+    run(w);
+    var after = measure(w);
+    log(after.bleed <= 0, "wide table fits without a user font-size variable",
+        "before bleed " + before.bleed + " -> after " + after.bleed);
   });
 });
 

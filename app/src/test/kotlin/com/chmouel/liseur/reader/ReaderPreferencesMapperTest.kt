@@ -143,11 +143,11 @@ class ReaderPreferencesMapperTest {
 
     @Test
     fun `settings that Readium applies regardless leave publisher styles alone`() {
-        // Readium CSS applies --USER__fontSize and --USER__pageMargins
-        // whatever the publisher styles say, and font weight rides the
-        // user-properties overrides map with no rule of its own.
-        // EpubPreferencesEditor agrees: it gates fontSize's and
-        // pageMargins' effectiveness on nothing but a reflowable book.
+        // Font resizing is handled by Android's native text zoom instead of
+        // the CSS variable path, so a publisher body rule no longer freezes
+        // the page at its original size. Page margins are still the same
+        // kind of CSS-level preference: they affect the page without
+        // needing publisher styles, but only when the book supports them.
         //
         // Turning advanced styles off for one of them rewrites every
         // heading's size for nothing, so the page reflows far beyond the
@@ -158,6 +158,11 @@ class ReaderPreferencesMapperTest {
             assertNull(ReaderPrefs(pageMargins = 1.5).advancedIn(css))
             assertNull(ReaderPrefs(fontWeight = ReaderFontWeight.BOLD).advancedIn(css))
         }
+    }
+
+    @Test
+    fun `the navigator selects native text zoom for font size`() {
+        assertFalse(epubNavigatorConfigurationBase().useReadiumCssFontSize)
     }
 
     @Test

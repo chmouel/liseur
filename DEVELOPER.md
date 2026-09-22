@@ -133,6 +133,58 @@ There is no instrumented/emulator test suite. Reader interactions
 (gestures, immersive mode, process-death restore, rotation) are verified
 manually on a booted AVD.
 
+### EPUB font-size remediation
+
+Reflowable EPUB font size uses Readium 3.3.0's Android text-zoom path.
+`ReaderPreferencesMapper.epubNavigatorConfiguration()` sets
+`useReadiumCssFontSize = false`; `ReaderPrefs.fontSize` remains the stored
+multiplier passed through `EpubPreferences`. Do not replace this with CSS
+`zoom` or WebView page/pinch zoom. Readium rounds the multiplier to an
+integer percentage for `WebSettings.textZoom`.
+
+Build the diagnostic publication with:
+
+```bash
+hack/make-font-size-book
+```
+
+Import `tmp/books/liseur_font-size-fixture.epub` through the normal local-book
+path on a disposable emulator. Record the explicit `SERIAL`, Android API,
+WebView provider/version, viewport, and system font scale. With advanced
+typography at Default, compare the `MEDIUM`, `ABSOLUTE-BODY`, and
+`ABSOLUTE-DESCENDANT` chapters at 100%, 150%, and 200%; verify visible growth,
+reflow, live changes, a newly opened chapter, and reopening. Also exercise a
+fractional multiplier, global and per-book settings, and one advanced setting.
+Check a fixed-layout book as a control. A saved preference or computed CSS
+value alone is not proof that the rendered text grew.
+
+The fixture is intentionally separate from the seeded demo shelf. Desktop
+`hack/verify-wide-content` and `hack/verify-footnotes` exercise their
+JavaScript layout helpers against Readium CSS, including a 100% case without
+`--USER__fontSize`, but cannot validate Android native text zoom.
+
+#### Validation record
+
+On 2026-09-22, the fixture was imported through the normal `content://`
+handover path on disposable `emulator-5554` (`liseur_phone_api36`, Android
+16/API 36, 1080x2400 at 420 dpi, WebView
+`com.google.android.webview` 133.0.6943.137, system font scale 1.0).
+With advanced typography at Default, the reader was opened at 100%, changed
+live to approximately 200%, and screenshots plus accessibility bounds showed
+the `MEDIUM`, `ABSOLUTE-BODY`, and `ABSOLUTE-DESCENDANT` chapters growing and
+reflowing. For example, the first absolute-body paragraph's visible bounds
+changed from 247px high at 100% to 1113px at 200%; the medium chapter's first
+paragraph changed from 307px to 1371px. The absolute-descendant chapter,
+including its `!important` paragraph, also rendered at the enlarged setting.
+Opening a different chapter created a new WebView with the enlarged text, and
+reopening the imported book rendered the saved enlarged setting again. No
+reader crash was observed.
+
+This run did not cover every matrix combination: 150%, 60%, 250%, fractional
+pinch values, custom fonts, advanced line-height, fixed layout, rotation,
+RTL/CJK, selection, footnotes, and wide-table interactions remain manual
+follow-up coverage.
+
 ### The upload end-to-end check
 
 Sending a local book to liseur-sync is the one path where a unit test

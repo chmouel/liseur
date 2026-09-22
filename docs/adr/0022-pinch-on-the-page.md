@@ -86,6 +86,10 @@ a thing to assume.
 **`fontSize.isEffective` is gated on `layout == REFLOWABLE`.** The row
 already in ADR 20's table, and the reason point 5 exists: on a
 fixed-layout book, committing a new size would change nothing at all.
+For reflowable books Liseur now keeps the preference's multiplier but lets
+Readium apply it as Android WebView text zoom, rounded to an integer
+percentage. The pinch preview and commit therefore target text size, not
+CSS `zoom` or whole-page WebView zoom.
 
 **`EpubNavigatorFragment.evaluateJavascript` answers `null` on a
 fixed-layout book.** Not an error and not `"false"` — nothing at all,
