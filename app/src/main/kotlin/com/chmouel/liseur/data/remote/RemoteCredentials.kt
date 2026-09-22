@@ -67,4 +67,22 @@ sealed interface RemoteCredentials {
         override fun signInto(builder: Request.Builder): Request.Builder =
             builder.header("Authorization", "Bearer $token")
     }
+
+    /**
+     * An account whose credential is minted per request, by a session
+     * the provider owns.
+     *
+     * BookOrbit is the first kind like this: its access token expires in
+     * minutes and its refresh token rotates on every use, so there is no
+     * value that can be handed around as "the credential". Signing is a
+     * no-op on purpose rather than a mistake to be worked around — the
+     * provider's own client asks its session for a token at the moment
+     * it builds the request, and the generic paths use this only to tell
+     * "there is a reachable account" from "there is none". A refresh
+     * token must never travel in an `Authorization` header, which is
+     * exactly what a `Bearer` here would do.
+     */
+    data object Deferred : RemoteCredentials {
+        override fun signInto(builder: Request.Builder): Request.Builder = builder
+    }
 }

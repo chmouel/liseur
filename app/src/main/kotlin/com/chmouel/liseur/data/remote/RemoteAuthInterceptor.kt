@@ -22,10 +22,23 @@ import okhttp3.Response
  */
 class RemoteAuthInterceptor(
     private val credentialsFor: (String) -> RemoteCredentials?,
+    private val requestPolicy: (okhttp3.Request) -> RequestCredentialPolicy = {
+        RequestCredentialPolicy.DEFAULT
+    },
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
+        when (requestPolicy(request)) {
+            RequestCredentialPolicy.PRESERVE -> return chain.proceed(request)
+            RequestCredentialPolicy.STRIP -> {
+                val unsigned = request.newBuilder()
+                    .removeHeader(BASIC_HEADER)
+                    .removeHeader(RemoteCredentials.ApiKey.HEADER)
+                return chain.proceed(unsigned.build())
+            }
+            RequestCredentialPolicy.DEFAULT -> Unit
+        }
         val unsigned = request.newBuilder()
             .removeHeader(BASIC_HEADER)
             .removeHeader(RemoteCredentials.ApiKey.HEADER)
@@ -36,9 +49,33 @@ class RemoteAuthInterceptor(
     companion object {
         private const val BASIC_HEADER = "Authorization"
 
-        fun imageLoaderClient(credentialsFor: (String) -> RemoteCredentials?): OkHttpClient =
-            OkHttpClient.Builder()
-                .addNetworkInterceptor(RemoteAuthInterceptor(credentialsFor))
-                .build()
+        /** Compatibility overload for the existing providers and tests. */
+        fun imageLoaderClient(
+            credentialsFor: (String) -> RemoteCredentials?,
+        ): OkHttpClient = imageLoaderClient(
+            credentialsFor = credentialsFor,
+            bookOrbitAuth = null,
+            requestPolicy = { RequestCredentialPolicy.DEFAULT },
+        )
+
+        fun imageLoaderClient(
+            credentialsFor: (String) -> RemoteCredentials?,
+            bookOrbitAuth: com.chmouel.liseur.data.bookorbit.BookOrbitNetworkAuth? = null,
+            requestPolicy: (okhttp3.Request) -> RequestCredentialPolicy = {
+                RequestCredentialPolicy.DEFAULT
+            },
+        ): OkHttpClient = OkHttpClient.Builder()
+            .apply {
+                if (bookOrbitAuth != null) addInterceptor(bookOrbitAuth)
+            }
+            .addNetworkInterceptor(RemoteAuthInterceptor(credentialsFor, requestPolicy))
+            .build()
     }
+}
+
+/** How the shared cover interceptor handles a provider-owned request. */
+enum class RequestCredentialPolicy {
+    DEFAULT,
+    PRESERVE,
+    STRIP,
 }

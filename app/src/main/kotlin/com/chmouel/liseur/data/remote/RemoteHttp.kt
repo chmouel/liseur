@@ -45,5 +45,21 @@ class RemoteHttp(val client: OkHttpClient = default()) {
             .readTimeout(90, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
+
+        /**
+         * Auth endpoints must not follow 307/308 redirects: those preserve
+         * the POST body, which contains either the account password or a
+         * rotating refresh token. The destination is not allowed to make
+         * that decision for us.
+         *
+         * They must not be retried after a connection failure either: the
+         * server may have spent the refresh token before the reply was
+         * lost, and resending it would end the session.
+         */
+        fun forAuthentication(): OkHttpClient = default().newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .retryOnConnectionFailure(false)
+            .build()
     }
 }

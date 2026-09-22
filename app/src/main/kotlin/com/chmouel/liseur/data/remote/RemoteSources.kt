@@ -121,10 +121,20 @@ interface FileSource {
      * that out is the provider's business, not the download worker's.
      */
     fun downloadRequest(
-        baseUrl: String,
+        server: com.chmouel.liseur.data.db.RemoteServer,
         credentials: RemoteCredentials,
         book: Book,
     ): Request.Builder?
+
+    /**
+     * The transport that executes [downloadRequest].
+     *
+     * Most providers use the shared long-transfer client. A provider
+     * with a renewable session can override it with an interceptor and
+     * authenticator that sign at execution time, after a queued bulk
+     * download has acquired its slot.
+     */
+    fun downloadHttp(): RemoteHttp = RemoteHttp(RemoteHttp.forDownloads())
 }
 
 /** What an account turned out to be able to do on its server. */
@@ -194,6 +204,18 @@ data class ServerCapabilities(
     val koboToken: String? = null,
     /** calibre-web's integer user id, kept for the same reason. */
     val calibreUserId: Int? = null,
+    /**
+     * The BookOrbit session setup minted, if any.
+     *
+     * A password buys an access token that lasts minutes and a refresh
+     * token that lasts a week and is replaced every time it is spent.
+     * Both are carried back so the account row can hold them; the
+     * password itself is never kept, the way liseur-sync's is not.
+     */
+    val orbitAccessToken: String? = null,
+    val orbitRefreshToken: String? = null,
+    val orbitAccessExpiresAt: Long = 0,
+    val orbitSessionId: Int? = null,
     /**
      * Where this account's catalog is, or null when it has none.
      *
@@ -328,6 +350,15 @@ interface ServerSetup {
 data class PriorConnection(
     val baseUrl: String,
     val deviceId: String?,
+    /**
+     * A BookOrbit refresh token the stored account is still holding.
+     *
+     * Offered back so a capability refresh can renew a session whose
+     * access token has expired without asking the reader for their
+     * password again. It is only ever used against [baseUrl]: a refresh
+     * token is minted by one installation and means nothing to another.
+     */
+    val refreshToken: String? = null,
 )
 
 /** How deleting a book from the server went. */

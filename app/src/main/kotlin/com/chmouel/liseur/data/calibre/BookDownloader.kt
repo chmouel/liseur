@@ -1,6 +1,8 @@
 package com.chmouel.liseur.data.calibre
 
 import com.chmouel.liseur.data.remote.RemoteHttp
+import com.chmouel.liseur.data.remote.RemoteHttpFailure
+import com.chmouel.liseur.data.remote.SyncFailure
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +13,9 @@ import kotlin.coroutines.coroutineContext
 
 /** Why a download did not finish, in terms the library can explain. */
 sealed interface DownloadFailure {
+    /** The account session could not be renewed; its permission is unknown. */
+    data object Authentication : DownloadFailure
+
     /** The account is not allowed to download books from this server. */
     data object NotAllowed : DownloadFailure
 
@@ -81,7 +86,8 @@ class BookDownloader(
         try {
             http.client.newCall(call).execute().use { response ->
                 when (response.code) {
-                    401, 403 -> return@withContext DownloadOutcome.Failed(DownloadFailure.NotAllowed)
+                    401 -> return@withContext DownloadOutcome.Failed(DownloadFailure.Authentication)
+                    403 -> return@withContext DownloadOutcome.Failed(DownloadFailure.NotAllowed)
                     404, 410 -> return@withContext DownloadOutcome.Failed(DownloadFailure.Gone)
                     // The book's bytes changed on the server since they
                     // were catalogued (liseur-sync in-place storage): the
@@ -149,6 +155,14 @@ class BookDownloader(
             }
             etagFile.delete()
             DownloadOutcome.Done(target)
+        } catch (e: RemoteHttpFailure) {
+            // Raised before the request left, when the interceptor could
+            // not renew the session. Retrying would only fail again.
+            if (e.reason == SyncFailure.Unauthorised) {
+                DownloadOutcome.Failed(DownloadFailure.Authentication)
+            } else {
+                DownloadOutcome.Failed(DownloadFailure.Network(e.message ?: "The download stopped"))
+            }
         } catch (e: IOException) {
             // A periodic check can be overtaken between two readings,
             // and the filesystem gets the last word either way. Telling

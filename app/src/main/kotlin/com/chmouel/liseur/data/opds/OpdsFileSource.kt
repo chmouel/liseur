@@ -19,10 +19,11 @@ import okhttp3.Request
 class OpdsFileSource(private val http: OpdsHttp = OpdsHttp()) : FileSource {
 
     override fun downloadRequest(
-        baseUrl: String,
+        server: com.chmouel.liseur.data.db.RemoteServer,
         credentials: RemoteCredentials,
         book: Book,
     ): Request.Builder? {
+        val baseUrl = server.baseUrl
         val scope = OpdsScope.of(baseUrl) ?: return null
         // Resolved against the catalog root, which changes nothing for
         // the absolute URLs the walk stores and rescues a row written

@@ -41,6 +41,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
             // an image loader that cannot wait on the database. Read the
             // account now so the first screenful does not have to.
             container.remoteAccount.prime()
+            container.bookOrbitSession.prime()
         }
         PositionSyncWorker.schedulePeriodic(this)
         syncWhenBroughtToTheFore()
@@ -98,7 +99,35 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                     OkHttpNetworkFetcherFactory(
                         callFactory = {
                             RemoteAuthInterceptor.imageLoaderClient(
-                                container.remoteAccount::credentialsForUrl,
+                                bookOrbitAuth = com.chmouel.liseur.data.bookorbit.BookOrbitNetworkAuth(
+                                    container.bookOrbitSession,
+                                    inferCurrentContext = true,
+                                ),
+                                credentialsFor = { url ->
+                                    if (com.chmouel.liseur.data.bookorbit.BookOrbitUrl.isScopedCover(url)) {
+                                        // Do not fall back to the generic
+                                        // current-account signer: a scoped
+                                        // cover that no longer belongs to
+                                        // the current BookOrbit account is
+                                        // an old queued request and must go
+                                        // out unsigned rather than with the
+                                        // new account's token.
+                                        container.bookOrbitSession.cachedCredentialsForUrl(url)
+                                    } else {
+                                        container.remoteAccount.credentialsForUrl(url)
+                                    }
+                                },
+                                requestPolicy = { request ->
+                                    val context = request.tag(
+                                        com.chmouel.liseur.data.bookorbit.BookOrbitRequestContext::class.java,
+                                    )
+                                    when {
+                                        context == null -> com.chmouel.liseur.data.remote.RequestCredentialPolicy.DEFAULT
+                                        context.covers(request.url.toString()) ->
+                                            com.chmouel.liseur.data.remote.RequestCredentialPolicy.PRESERVE
+                                        else -> com.chmouel.liseur.data.remote.RequestCredentialPolicy.STRIP
+                                    }
+                                },
                             )
                         },
                     ),

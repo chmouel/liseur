@@ -29,8 +29,9 @@ import androidx.sqlite.execSQL
         SessionRefusal::class,
         SessionTransmission::class,
         StarterCatalogProgress::class,
+        BookOrbitBinding::class,
     ],
-    version = 53,
+    version = 54,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -54,6 +55,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun sessionRefusalDao(): SessionRefusalDao
     abstract fun sessionTransmissionDao(): SessionTransmissionDao
     abstract fun starterCatalogProgressDao(): StarterCatalogProgressDao
+    abstract fun bookOrbitBindingDao(): BookOrbitBindingDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1526,6 +1528,49 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Gives a BookOrbit account a renewable session and remembers
+         * which file each of its books is read as.
+         *
+         * The session columns are the first kind whose credential
+         * expires and rotates, so both halves of it are stored: the
+         * access token that a synchronous path can hand out, the refresh
+         * token that survives a restart, and an epoch that says which
+         * published connection they belong to. A row that predates this
+         * migration has no BookOrbit account (the kind string was added
+         * in the same release), so the defaults are honest.
+         */
+        val MIGRATION_53_54 = object : Migration(53, 54) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE remote_server ADD COLUMN orbit_access_cipher TEXT")
+                connection.execSQL("ALTER TABLE remote_server ADD COLUMN orbit_refresh_cipher TEXT")
+                connection.execSQL(
+                    "ALTER TABLE remote_server ADD COLUMN orbit_access_expires INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL("ALTER TABLE remote_server ADD COLUMN orbit_session_id INTEGER")
+                connection.execSQL(
+                    "ALTER TABLE remote_server ADD COLUMN orbit_epoch INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_orbit_binding` (
+                        `account_key` TEXT NOT NULL,
+                        `book_url` TEXT NOT NULL,
+                        `book_id` INTEGER NOT NULL,
+                        `file_id` INTEGER,
+                        `file_format` TEXT,
+                        `file_size` INTEGER,
+                        `file_name` TEXT,
+                        `revision` INTEGER NOT NULL DEFAULT 0,
+                        `state` TEXT NOT NULL,
+                        `updated_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`, `book_url`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1579,6 +1624,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_50_51,
             MIGRATION_51_52,
             MIGRATION_52_53,
+            MIGRATION_53_54,
         )
     }
 }

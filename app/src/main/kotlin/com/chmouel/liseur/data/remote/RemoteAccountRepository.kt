@@ -101,6 +101,14 @@ class RemoteAccountRepository(
      * opposite ends of the composition root.
      */
     private val kosync: () -> KosyncPairing = { KosyncPairing.None },
+    /**
+     * BookOrbit's session, so that publishing or dropping an account
+     * takes effect on the tokens the network layer is already holding.
+     * Null in tests that do not exercise a BookOrbit account.
+     */
+    private val bookOrbit: com.chmouel.liseur.data.bookorbit.BookOrbitSession? = null,
+    /** File bindings outlive disconnect only while their downloaded book does. */
+    private val bookOrbitBindingDao: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -310,6 +318,35 @@ class RemoteAccountRepository(
         beforePublish: suspend () -> Unit = {},
     ): SetupResult = connect(
         kind = ServerKind.LISEUR_SYNC,
+        url = url,
+        credentials = RemoteCredentials.Basic(username, password),
+        allowHttp = allowHttp,
+        beforePublish = beforePublish,
+    )
+
+    /**
+     * Signs into a BookOrbit server and keeps the session it mints.
+     *
+     * The password goes no further than the probe. BookOrbit offers a
+     * native client nothing narrower, so it is exchanged once for an
+     * access token that lasts minutes and a refresh token that lasts a
+     * week; neither the password nor anything derived from it is written
+     * down in the clear.
+     */
+    suspend fun connectBookOrbit(
+        url: String,
+        username: String,
+        password: String,
+        allowHttp: Boolean = false,
+        /**
+         * Run once the server has answered and before the account is
+         * written, for work that has to stop before the account it runs
+         * against is retired. Never run when the probe fails, so a
+         * mistyped address costs nothing.
+         */
+        beforePublish: suspend () -> Unit = {},
+    ): SetupResult = connect(
+        kind = ServerKind.BOOKORBIT,
         url = url,
         credentials = RemoteCredentials.Basic(username, password),
         allowHttp = allowHttp,
@@ -640,7 +677,16 @@ class RemoteAccountRepository(
         // Whether the address is the same is the setup's call: it is
         // the one that normalises the typed URL.
         val prior = dao.get()?.takeIf { it.kind == kind }
-            ?.let { PriorConnection(baseUrl = it.baseUrl, deviceId = it.liseurDeviceId) }
+            ?.let {
+                PriorConnection(
+                    baseUrl = it.baseUrl,
+                    deviceId = it.liseurDeviceId,
+                    // Only a BookOrbit refresh token is offered back, and
+                    // only because the setup client checks it against the
+                    // candidate address before spending it.
+                    refreshToken = it.orbitRefreshCipher?.let(CredentialCipher::decrypt),
+                )
+            }
         val result = if (prior != null) {
             setup.reconnect(url, credentials, allowHttp, prior)
         } else {
@@ -709,6 +755,12 @@ class RemoteAccountRepository(
             // token's own name is the honest answer.
             is RemoteCredentials.Bearer ->
                 capabilities.displayName.takeIf { it.isNotBlank() }
+            // A BookOrbit reconnect signs with a session rather than a
+            // password, so the login it was paired with is the honest
+            // name. It comes back from `/auth/me` as the display name;
+            // the stable account id is what actually tells two logins
+            // apart, and it is kept beside this.
+            RemoteCredentials.Deferred -> capabilities.displayName.takeIf { it.isNotBlank() }
             // An open catalog has no user to name. Null rather than
             // the catalog's own title, because this column also tells
             // two logins to one server apart, and a name nobody signed
@@ -717,11 +769,24 @@ class RemoteAccountRepository(
             RemoteCredentials.Anonymous -> null
         }
         val stored = dao.get()
-        // Once both sides carry the stable account id, it alone decides:
-        // a rotated token changes the device id and may carry any name,
-        // and neither must read as a different account.
-        val stableIdentity = stored?.kind == ServerKind.LISEUR_SYNC &&
-            stored.liseurAccountId != null && capabilities.liseurAccountId != null
+        // Once both sides carry a stable account id, it alone decides:
+        // a rotated token changes any lesser name, and a capability
+        // refresh that signs with a session rather than a password
+        // carries the display name instead of the login. Neither must
+        // read as a different account, or a refresh retires everything
+        // the account had agreed.
+        //
+        // liseur-sync gained its stable id in a later release; BookOrbit
+        // has one from the first connect, so the same rule covers both.
+        val stableIdentity = when (stored?.kind) {
+            ServerKind.LISEUR_SYNC ->
+                stored.liseurAccountId != null && capabilities.liseurAccountId != null
+
+            ServerKind.BOOKORBIT ->
+                stored.accountId != null && capabilities.accountId != null
+
+            else -> false
+        }
         // A liseur-sync password names the account itself, so the same
         // login to the same server is the same account whatever device
         // id the mint came back with. Reading a changed one as a
@@ -736,20 +801,29 @@ class RemoteAccountRepository(
             // and reading that as a stranger retires the account and
             // takes every book the server has not been asked for yet.
             RemoteUrl.sameAddress(stored.baseUrl, capabilities.baseUrl) &&
-            if (stableIdentity) {
-                stored.liseurAccountId == capabilities.liseurAccountId
-            } else {
-                // The device id is only a stand-in for an account the
-                // credential cannot name, and it changes for honest
-                // reasons: a server that has forgotten the one it
-                // issued, or one too old to be offered it back.
-                val sameDevice = namedByLogin ||
-                    capabilities.accountId == null ||
+            when {
+                stableIdentity && stored.kind == ServerKind.LISEUR_SYNC ->
+                    stored.liseurAccountId == capabilities.liseurAccountId
+
+                stableIdentity && stored.kind == ServerKind.BOOKORBIT ->
+                    // The id outranks the name, so a renamed account or
+                    // a session-signed refresh is the same person.
                     stored.accountId == capabilities.accountId
-                stored.username == username &&
-                    (stored.userId == capabilities.calibreUserId ||
-                        capabilities.calibreUserId == null) &&
-                    sameDevice
+
+                else -> {
+                    // The device id is only a stand-in for an account
+                    // the credential cannot name, and it changes for
+                    // honest reasons: a server that has forgotten the
+                    // one it issued, or one too old to be offered it
+                    // back.
+                    val sameDevice = namedByLogin ||
+                        capabilities.accountId == null ||
+                        stored.accountId == capabilities.accountId
+                    stored.username == username &&
+                        (stored.userId == capabilities.calibreUserId ||
+                            capabilities.calibreUserId == null) &&
+                        sameDevice
+                }
             }
         val existing = stored?.takeIf { sameAccount }
 
@@ -763,10 +837,9 @@ class RemoteAccountRepository(
         // policy both ask `hostsKosyncPeer` on every run.
         if (!kind.hostsKosyncPeer && !keepsPairing) kosync().forget()
 
-        dao.upsert(
-            RemoteServer(
-                kind = kind,
-                baseUrl = capabilities.baseUrl,
+        val next = RemoteServer(
+            kind = kind,
+            baseUrl = capabilities.baseUrl,
                 catalogUrl = capabilities.catalogUrl,
                 username = username,
                 passwordCipher = (credentials as? RemoteCredentials.Basic)
@@ -784,7 +857,18 @@ class RemoteAccountRepository(
                 canDelete = capabilities.canDelete,
                 canReadInsights = capabilities.canReadInsights,
                 canAdmin = capabilities.canAdmin,
-                addedAt = existing?.addedAt ?: System.currentTimeMillis(),
+                // A new BookOrbit password login is a new published
+                // connection even when it is the same user. Keep the
+                // account's durable state, but give catalog walks and
+                // queued work a way to reject answers from the previous
+                // connection instance.
+                addedAt = if (kind == ServerKind.BOOKORBIT &&
+                    credentials is RemoteCredentials.Basic && existing != null
+                ) {
+                    nextConnectionStamp(existing.addedAt)
+                } else {
+                    existing?.addedAt ?: System.currentTimeMillis()
+                },
                 catalogSyncedAt = existing?.catalogSyncedAt,
                 positionSyncedAt = existing?.positionSyncedAt,
                 syncToken = existing?.syncToken,
@@ -802,6 +886,28 @@ class RemoteAccountRepository(
                 annotationCursorSeq = existing?.annotationCursorSeq ?: 0,
                 liseurAccountId = capabilities.liseurAccountId
                     ?: existing?.liseurAccountId,
+                // BookOrbit's session. A capability refresh that signed
+                // in through `/auth/me` brings no new tokens, so the
+                // stored pair stands; a real sign-in replaces it. The
+                // epoch is kept for the same account — a token rotation
+                // is not a new connection — and minted fresh for a new
+                // one, which is what makes a request or a refresh that
+                // was in flight for the old account unable to write.
+                orbitAccessCipher = RemoteServer.seal(capabilities.orbitAccessToken)
+                    ?: existing?.orbitAccessCipher,
+                orbitRefreshCipher = RemoteServer.seal(capabilities.orbitRefreshToken)
+                    ?: existing?.orbitRefreshCipher,
+                orbitAccessExpires = capabilities.orbitAccessExpiresAt
+                    .takeIf { it > 0 }
+                    ?: existing?.orbitAccessExpires ?: 0,
+                orbitSessionId = capabilities.orbitSessionId ?: existing?.orbitSessionId,
+                orbitEpoch = if (kind == ServerKind.BOOKORBIT &&
+                    credentials is RemoteCredentials.Basic && existing != null
+                ) {
+                    nextConnectionStamp(existing.orbitEpoch)
+                } else {
+                    existing?.orbitEpoch ?: System.currentTimeMillis()
+                },
                 // The reader's choice stands until they make another
                 // one. A reconnect that says nothing about the size —
                 // an address correction, a refreshed credential — keeps
@@ -825,8 +931,42 @@ class RemoteAccountRepository(
                         }
                     }
                     ?.shelfLimit,
-            ).let { next -> if (existing != null) carryPeerState(existing, next) else next },
         )
+        val written = if (existing != null) carryPeerState(existing, next) else next
+        dao.upsert(written)
+        adoptBookOrbit(written)
+    }
+
+    /**
+     * Points the live session at the row that was just published.
+     *
+     * Called after the write rather than before, so a connect that fails
+     * halfway cannot leave the network layer signing with an account the
+     * database does not have. A kind that is not BookOrbit clears
+     * whatever was there, which is what makes an account switch stop
+     * signing for the old server immediately.
+     */
+    private fun adoptBookOrbit(server: RemoteServer) {
+        val session = bookOrbit ?: return
+        if (server.kind != ServerKind.BOOKORBIT) {
+            session.clear()
+            return
+        }
+        val access = server.orbitAccessCipher?.let(CredentialCipher::decrypt) ?: return
+        val refresh = server.orbitRefreshCipher?.let(CredentialCipher::decrypt) ?: return
+        session.adopt(
+            server = server,
+            access = access,
+            accessExpiresAt = server.orbitAccessExpires,
+            refresh = refresh,
+            sessionId = server.orbitSessionId,
+        )
+    }
+
+    /** A monotonic-enough persisted stamp, including same-millisecond reconnects. */
+    private fun nextConnectionStamp(previous: Long): Long {
+        val now = System.currentTimeMillis()
+        return if (now > previous) now else previous + 1
     }
 
     /**
@@ -899,6 +1039,7 @@ class RemoteAccountRepository(
         progressDao.retireAccountState()
         bookRemoval.deleteRemoteNotDownloaded()
         bookDao.unlinkDownloadedFromRemote()
+        bookOrbitBindingDao?.clearOrphans()
         seriesExtraDao.clear()
     }
 
@@ -953,11 +1094,17 @@ class RemoteAccountRepository(
      * loose so it cannot be synced against a different server later on.
      */
     suspend fun disconnect() {
+        // The session is ended on the server before the row that names
+        // it goes, because afterwards there is nothing left to log out
+        // with. Best effort: a server that cannot be reached must not
+        // stop the reader from disconnecting.
+        runCatching { bookOrbit?.close() }
         changingAccount {
             inTransaction {
                 forgetSyncPeer(dao.get())
                 bookRemoval.deleteRemoteNotDownloaded()
                 bookDao.unlinkDownloadedFromRemote()
+                bookOrbitBindingDao?.clearOrphans()
                 // Series summaries belong to the server that wrote them.
                 seriesExtraDao.clear()
                 dao.delete()
@@ -993,6 +1140,14 @@ class RemoteAccountRepository(
         // connection, and how far its catalog had been walked is only
         // true of the account that walked it.
         starterProgressDao?.deleteForAccount(server.accountKey)
+        // The live session goes with the account. File bindings do not:
+        // a downloaded book keeps its URL and bytes across a disconnect,
+        // and the binding is what stops a reconnect from assigning those
+        // bytes to whichever EPUB the server calls primary that day.
+        // Its namespaced book URL means another account cannot inherit it.
+        if (server.kind == ServerKind.BOOKORBIT) {
+            bookOrbit?.clear()
+        }
         if (server.kind != ServerKind.LISEUR_SYNC) return
         peerStateDao?.forgetPeer(server.accountKey)
         identityDao?.forgetPeerAliases(server.accountKey)

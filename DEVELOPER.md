@@ -904,10 +904,18 @@ Key decisions:
   full Readium locator rather than a percentage.
 - One server is connected at a time. `data/remote/` holds provider-neutral
   contracts (`CatalogSource`, `FileSource`, `ServerSetup`,
-  `PositionSync`); `data/calibre/` and `data/komga/` implement them, and
-  `RemoteRouter` picks the implementation from the connected server's
-  `ServerKind`. `domain/ReadingStateMerge.kt` is shared by both, so the
-  conflict rules are written once.
+  `PositionSync`); `data/calibre/`, `data/komga/` and `data/bookorbit/`
+  implement them, and `RemoteRouter` picks the implementation from the
+  connected server's `ServerKind`. `domain/ReadingStateMerge.kt` is shared
+  by all of them, so the conflict rules are written once.
+- BookOrbit integration is BookOrbit's own REST API under `/api/v1`,
+  signed with a session rather than a long-lived secret. It browses with
+  `POST /books/query` and downloads with
+  `GET /books/files/{fileId}/download`; a book's files are chosen once
+  and remembered in `book_orbit_binding`. It carries an exact EPUB CFI,
+  but Liseur cannot read or write one yet, so it ships as browse and
+  download only and advertises no position sync. See
+  [BookOrbit protocol](#bookorbit-protocol).
 - Single `:app` module, manual DI composition root, `ViewModel` +
   `StateFlow`, Room + DataStore for persistence.
 
@@ -926,6 +934,21 @@ reader behavior.
 - Reading positions are Readium `Locator`s locally. calibre-web exchanges
   percentage progression, while Komga and liseur-sync exchange full locators.
   All providers use `domain/ReadingStateMerge.kt` for conflict rules.
+- A renewable credential belongs to one published connection. BookOrbit's
+  access token expires and its refresh token rotates, so `BookOrbitSession`
+  serialises renewal and writes the result only if the row still carries the
+  epoch and refresh token it started from; a renewal that no longer owns the
+  connection is dropped rather than written. The stored access token is
+  almost never the one that signs an API call: token refresh is also expected
+  on downloads and covers, and a token the server has refused is remembered
+  so it is not read back from the row and sent again.
+- A remote file binding is chosen once. `book_orbit_binding` maps an account
+  and a book to the server file its reading belongs to, and a refresh must not
+  move a book to a different file because the server promoted another edition.
+- Provider identity is namespaced when the server's ids are not globally
+  unique. BookOrbit and a Custom OPDS catalog both put a digest of the address
+  and account in front of the id, because a downloaded book keeps its
+  `books.url` across a change of server.
 - `updated_at` is when this device wrote a row and is used for derived sync
   ids and outgoing client timestamps. `read_at` is when reading happened and
   must remain the source for Recent and Continue Reading ordering. Those
@@ -1194,6 +1217,46 @@ deliberately rather than read off the schema.
 - Deleting a book from the server is admin-only
   (`DELETE /books/{id}/file`), so that action is hidden for Komga.
 
+## BookOrbit protocol
+
+BookOrbit is a self-hosted library and reading platform with its own REST
+API under `/api/v1`. Liseur speaks that API directly rather than going
+through its OPDS or KOReader-compatible surfaces, because the native one
+is where the book's files, its personal reading status and (later) its
+CFI live.
+
+- Auth is `Authorization: Bearer <access token>`. A reader signs in once
+  with their account password (`POST /auth/login`, `clientKind: "native"`,
+  `deviceLabel`), and the password is not kept: BookOrbit offers a native
+  client no scoped key, so the password is exchanged for an access token
+  that lasts about fifteen minutes and a refresh token that lasts a week
+  and is replaced on every use (`POST /auth/refresh`). Both are stored
+  sealed, with `orbit_access_expires` and an `orbit_epoch` that names the
+  published connection they belong to. `BookOrbitSession` owns them; see
+  the invariants below.
+- Browsing is `POST /books/query`, zero-based pages of up to two hundred
+  books, already scoped to the libraries the account may see. The walk
+  asks the server for books that hold an EPUB, and skips anything with no
+  EPUB file anyway, because audiobooks, comics and podcasts live on the
+  same shelf.
+- A book has several files and an installation-local integer id.
+  `books.url` and `remote_uuid` therefore carry a scope digest of the
+  address and the account in front of the book id (`BookOrbitScope`), and
+  the file a book is read as is chosen once and remembered in
+  `book_orbit_binding`. A refresh that made a different EPUB primary must
+  not move a reader's place to another edition; a bound file that has gone
+  from the server keeps its identity and loses its download link.
+- Download is `GET /books/files/{fileId}/download`, which is gated on
+  `library_download` and does not implement range requests, so an
+  interrupted transfer restarts. `/serve` supports ranges but skips that
+  permission check, and is deliberately not used.
+- There is **no position sync yet**. BookOrbit records an EPUB CFI, but
+  Liseur's local positions are Readium locators and `ResourceAnchor`
+  discards CFI fragments, so `syncAbility` is `NONE` and `canSync` is
+  false until a CFI bridge exists. Sending a position without a CFI would
+  clear the server's, which is why browse-and-download ships on its own
+  rather than with a lossy writer.
+
 ## liseur-sync protocol
 
 A second kind of partner, and a different shape from the two above.
@@ -1275,8 +1338,9 @@ what lets it sync a book that came off an SD card.
   In particular `readium-lcp` is deliberately absent: it pulls in the
   proprietary liblcp. The list users see is in `LicencesScreen.kt`.
 - No trackers or analytics, and no Google Play services. The only
-  outbound traffic is to the calibre-web or Komga server the user
-  configured, and to a dictionary site when a definition is asked for.
+  outbound traffic is to the calibre-web, Komga, BookOrbit or liseur-sync
+  server the user configured, and to a dictionary site when a definition
+  is asked for.
   That second one is off until switched on in Settings and the site is
   the user's to choose (`DictionaryUrl`), because F-Droid review will
   otherwise treat a hardcoded third-party host as grounds for the

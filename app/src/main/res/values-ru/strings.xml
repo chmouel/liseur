@@ -308,11 +308,13 @@
     <string name="server_sync_custom">Сохраняет место, если добавить адрес синхронизации KOReader</string>
     <string name="server_link_calibre">Что такое calibre-web и как его запустить</string>
     <string name="server_link_komga">Что такое Komga и как его запустить</string>
+    <string name="server_link_bookorbit">Что такое BookOrbit и как его запустить</string>
     <string name="server_link_custom">Что такое OPDS</string>
     <string name="server_open_in_browser">Открыть сервер в браузере</string>
     <string name="server_tagline_calibre">Ваша библиотека calibre в интернете</string>
     <string name="server_tagline_komga">Сервер для комиксов, манги и книг</string>
     <string name="server_tagline_liseur_sync">Ваши книги на каждом устройстве — даже те, что только на этом телефоне</string>
+    <string name="server_tagline_bookorbit">Ваши книги, библиотеки и прогресс чтения на вашем сервере</string>
     <string name="server_tagline_custom">Любой каталог OPDS, любой сервер синхронизации KOReader или оба</string>
     <string name="server_section_sync">Позиции чтения</string>
     <string name="server_api_key">API-ключ</string>
@@ -342,7 +344,9 @@
     <string name="server_error_not_calibre">По этому адресу не ответил каталог calibre-web. Проверьте адрес, включая папку, из которой он отдаётся.</string>
     <string name="server_error_not_komga">По этому адресу не ответил сервер Komga. Проверьте адрес, включая папку, из которой он отдаётся.</string>
     <string name="server_error_credentials_liseur_sync">Сервер не принял этот вход или токен.</string>
+    <string name="server_error_credentials_bookorbit">BookOrbit не принял это имя пользователя или пароль. Слишком много попыток может на время заблокировать аккаунт.</string>
     <string name="server_error_not_liseur_sync">Адрес ответил, но не как сервер liseur-sync.</string>
+    <string name="server_error_not_bookorbit">Адрес ответил, но не как сервер BookOrbit.</string>
     <string name="server_error_not_custom">Адрес ответил, но не каталогом OPDS. Проверьте адрес, включая папку, из которой он отдаётся.</string>
     <string name="server_error_credentials_custom">Каталог отклонил это имя пользователя или пароль. Если это перенесённое подключение Grimmory, сначала включите OPDS-сервер Grimmory. Оставьте оба поля пустыми, если каталог открыт для всех.</string>
     <string name="server_error_sign_in_custom">Каталог отклонил запрос. Если это перенесённое подключение Grimmory, сначала включите OPDS-сервер Grimmory; иначе, если каталог закрытый, добавьте имя пользователя и пароль или проверьте адрес.</string>
@@ -358,7 +362,10 @@
     <string name="server_no_download_right_komga">Этому API-ключу нельзя скачивать книги. Попросите администратора сервера выдать вашей учётной записи роль загрузки файлов, затем проверьте снова.</string>
     <string name="server_no_download_right_custom">Этот каталог не предлагает книги для загрузки.</string>
     <string name="server_no_download_right_liseur_sync">Этому токену нельзя читать библиотеку — токены времён, когда liseur-sync ещё не отдавал книги, не могут её просматривать. Создайте новый с областью library-read или отключитесь и войдите снова, затем проверьте снова.</string>
+    <string name="server_no_download_right_bookorbit">Эта учётная запись не может скачивать книги из BookOrbit. Администратор может выдать разрешение на скачивание, затем проверьте снова.</string>
     <string name="server_token_storage_note">Токен устройства хранится только на этом устройстве, в зашифрованном виде. Он отправляется на сервер при каждом обращении Liseur. Отзовите его на сервере, если потеряете телефон.</string>
+    <string name="server_bookorbit_storage_note">Пароль не сохраняется. Он один раз обменивается на сессию, которую Liseur продлевает сам и хранит зашифрованной на этом устройстве. Выход из BookOrbit отзывает её.</string>
+    <string name="server_bookorbit_password_help">BookOrbit не выдаёт приложениям отдельный ключ, поэтому это пароль вашей учётной записи. Он обменивается на короткоживущую сессию и никогда не сохраняется.</string>
     <string name="server_sync_on">Позиция чтения будет следовать за вами между устройствами.</string>
     <string name="server_sync_off">Позиции чтения не синхронизируются. Возможно, на сервере выключена синхронизация Kobo.</string>
     <string name="server_sync_unsupported_custom">OPDS не умеет передавать позиции чтения. Добавьте адрес синхронизации KOReader в разделе ниже — и место в книге будет следовать за вами между устройствами.</string>

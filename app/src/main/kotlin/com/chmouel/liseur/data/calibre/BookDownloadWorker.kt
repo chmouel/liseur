@@ -8,6 +8,7 @@ import androidx.work.WorkerParameters
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.remote.RemoteHttp
+import com.chmouel.liseur.data.remote.ServerKind
 import org.readium.r2.shared.util.AbsoluteUrl
 
 /**
@@ -57,7 +58,7 @@ class BookDownloadWorker(
         val credentials = server.credentials ?: return give_up("no credentials")
         val files = container.remoteRouter.filesFor(server.kind) ?: return give_up("no file source")
 
-        val request = files.downloadRequest(server.baseUrl, credentials, book)
+        val request = files.downloadRequest(server, credentials, book)
             ?: run {
                 Log.w(TAG, "no download link for $bookUrl")
                 return fail(bookUrl)
@@ -68,7 +69,7 @@ class BookDownloadWorker(
 
         val downloads = container.bookDownloads
         val downloader = BookDownloader(
-            http = RemoteHttp(RemoteHttp.forDownloads()),
+            http = files.downloadHttp(),
             // Bulk work is the only thing that can fill a device on its
             // own, so it is the only thing asked to leave room behind. A
             // single download the reader asked for by name keeps the
@@ -137,8 +138,23 @@ class BookDownloadWorker(
                     bookDao.setDownloadState(bookUrl, DownloadState.QUEUED, null)
                     Result.retry()
                 }
+                DownloadFailure.Authentication -> {
+                    // The session can no longer be renewed. This is not
+                    // evidence that the account lacks download rights,
+                    // so leave the capability alone and let Settings ask
+                    // the reader to sign in again.
+                    fail(bookUrl)
+                }
                 DownloadFailure.NotAllowed -> {
-                    container.database.remoteServerDao().setCanDownload(false)
+                    // BookOrbit answers 403 both when the account lacks
+                    // the global download permission and when the account
+                    // cannot access this particular library/file. A
+                    // single book denial must not turn a valid account
+                    // capability off for the whole shelf. Its setup
+                    // capability is refreshed explicitly instead.
+                    if (server.kind != ServerKind.BOOKORBIT) {
+                        container.database.remoteServerDao().setCanDownload(false)
+                    }
                     fail(bookUrl)
                 }
                 DownloadFailure.Gone -> fail(bookUrl)
