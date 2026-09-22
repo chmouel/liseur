@@ -1,0 +1,47 @@
+[
+  {
+    "fileId": 34,
+    "cfi": null,
+    "pageNumber": null,
+    "positionSeconds": null,
+    "mediaOverlayFragment": null,
+    "mediaOverlaySectionIndex": null,
+    "percentage": 0,
+    "koboLocationSource": null,
+    "koboLocationType": null,
+    "koboLocationValue": null,
+    "koboContentSourceProgressPercent": null,
+    "koreaderProgress": null,
+    "updatedAt": null
+  },
+  {
+    "fileId": 35,
+    "cfi": null,
+    "pageNumber": null,
+    "positionSeconds": null,
+    "mediaOverlayFragment": null,
+    "mediaOverlaySectionIndex": null,
+    "percentage": 0,
+    "koboLocationSource": null,
+    "koboLocationType": null,
+    "koboLocationValue": null,
+    "koboContentSourceProgressPercent": null,
+    "koreaderProgress": null,
+    "updatedAt": null
+  },
+  {
+    "fileId": 36,
+    "cfi": null,
+    "pageNumber": null,
+    "positionSeconds": null,
+    "mediaOverlayFragment": null,
+    "mediaOverlaySectionIndex": null,
+    "percentage": 0,
+    "koboLocationSource": null,
+    "koboLocationType": null,
+    "koboLocationValue": null,
+    "koboContentSourceProgressPercent": null,
+    "koreaderProgress": null,
+    "updatedAt": null
+  }
+]

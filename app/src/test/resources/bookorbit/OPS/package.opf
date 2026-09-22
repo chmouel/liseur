@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="book-id">urn:liseur:bookorbit-acceptance</dc:identifier>
+    <dc:title>CFI acceptance fixture</dc:title>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    <item id="one" href="one.xhtml" media-type="application/xhtml+xml"/>
+    <item id="extra" href="extra.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine id="reading-order">
+    <itemref id="ref-one" idref="one"/>
+    <itemref id="ref-extra" idref="extra" linear="no"/>
+  </spine>
+</package>

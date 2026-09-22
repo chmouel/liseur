@@ -216,6 +216,11 @@ class BookOrbitSession(
         return token(context)
     }
 
+    /** A progress POST is not retried after 401, but its refused token must not be reused. */
+    internal fun noteRejection(token: String) {
+        invalidate(token)
+    }
+
     /**
      * What the image loader can sign a cover with, right now.
      *

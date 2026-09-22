@@ -191,6 +191,10 @@ class AppContainer(context: Context) {
     )
 
     private val bookOrbitHttp = com.chmouel.liseur.data.bookorbit.BookOrbitHttp(bookOrbitSession)
+    val bookOrbitCfis = com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository(database)
+    val bookOrbitEpubInfo = com.chmouel.liseur.data.bookorbit.BookOrbitEpubInfoClient(
+        bookOrbitHttp, bookOrbitCfis,
+    )
 
     val remoteAccount = RemoteAccountRepository(
         dao = database.remoteServerDao(),
@@ -213,6 +217,7 @@ class AppContainer(context: Context) {
         kosync = { kosyncAccount },
         bookOrbit = bookOrbitSession,
         bookOrbitBindingDao = database.bookOrbitBindingDao(),
+        bookOrbitCfiDao = database.bookOrbitCfiDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),

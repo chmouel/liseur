@@ -1,0 +1,58 @@
+[
+  {
+    "status": "unread",
+    "source": "manual",
+    "startedAt": null,
+    "finishedAt": null,
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  },
+  {
+    "status": "want_to_read",
+    "source": "manual",
+    "startedAt": null,
+    "finishedAt": null,
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  },
+  {
+    "status": "reading",
+    "source": "manual",
+    "startedAt": "2026-09-22T10:00:00.000Z",
+    "finishedAt": null,
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  },
+  {
+    "status": "on_hold",
+    "source": "manual",
+    "startedAt": "2026-09-22T10:00:00.000Z",
+    "finishedAt": null,
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  },
+  {
+    "status": "rereading",
+    "source": "manual",
+    "startedAt": "2026-09-22T10:00:00.000Z",
+    "finishedAt": null,
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  },
+  {
+    "status": "read",
+    "source": "manual",
+    "startedAt": "2026-09-22T10:00:00.000Z",
+    "finishedAt": "2026-09-22T10:00:00.000Z",
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  },
+  {
+    "status": "skimmed",
+    "source": "manual",
+    "startedAt": null,
+    "finishedAt": null,
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  },
+  {
+    "status": "abandoned",
+    "source": "manual",
+    "startedAt": null,
+    "finishedAt": null,
+    "updatedAt": "2026-09-22T10:00:00.000Z"
+  }
+]
