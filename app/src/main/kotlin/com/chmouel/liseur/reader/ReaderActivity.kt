@@ -317,10 +317,10 @@ class ReaderActivity : FragmentActivity() {
                                 // with as in the ones submitted later,
                                 // or the book reflows once for nothing
                                 // the moment it opens.
+                                val reflowable = s.publication.metadata.layout != Layout.FIXED
                                 val readingCss = remember(s.publication) {
                                     readingCssFor(
-                                        reflowable =
-                                            s.publication.metadata.layout != Layout.FIXED,
+                                        reflowable = reflowable,
                                         language = s.publication.metadata.language?.code,
                                         metadataRtl =
                                             when (s.publication.metadata.readingProgression) {
@@ -344,7 +344,13 @@ class ReaderActivity : FragmentActivity() {
                                         css = readingCss,
                                     )
                                 }
-                                remember(s.navigatorFactory, columnMode, scrollMode, fontKey) {
+                                remember(
+                                    s.navigatorFactory,
+                                    columnMode,
+                                    scrollMode,
+                                    reflowable,
+                                    fontKey,
+                                ) {
                                     s.navigatorFactory.createFragmentFactory(
                                         initialLocator = restoreTarget,
                                         initialPreferences = initialPreferences,
@@ -376,6 +382,7 @@ class ReaderActivity : FragmentActivity() {
                                         configuration = epubNavigatorConfiguration(
                                             columnMode = columnMode,
                                             scroll = scrollMode,
+                                            reflowable = reflowable,
                                             userFonts = importedFonts,
                                             onTextSelected = viewModel::onTextSelected,
                                             onSelectionCleared = viewModel::onSelectionCleared,
