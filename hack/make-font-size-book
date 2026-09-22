@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Build the EPUB used to reproduce publisher font-size failures.
+
+The book contains separate chapters for publisher body sizes, absolute
+descendant sizes, relative sizes, mixed units, and a wide table. The text is
+original and intentionally repetitive so each chapter spans several screens.
+
+    hack/make-font-size-book [PATH]
+
+Writes to tmp/books/liseur_font-size-fixture.epub by default.
+"""
+
+import os
+import subprocess
+import sys
+import zipfile
+
+
+BOOK_ID = "urn:uuid:7a4e63c1-9c42-4ef1-9b38-liseur-font-size-1276"
+TITLE = "Font size remediation fixture"
+
+
+def paragraphs(label: str, count: int = 18) -> str:
+    text = (
+        f"{label} paragraph {{i}}. A quiet room, a marked passage, and a "
+        "sentence long enough to wrap make this fixture useful for checking "
+        "both text size and pagination. The marker is unique so the same "
+        "place can be found again after a resize."
+    )
+    return "\n".join(f"<p>{text.format(i=i)}</p>" for i in range(1, count + 1))
+
+
+def chapter(title: str, css: str, body: str) -> str:
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head><title>{title}</title><link rel="stylesheet" type="text/css" href="style.css"/>
+<style>{css}</style></head>
+<body><h1>{title}</h1>{body}</body></html>
+"""
+
+
+COMMON_CSS = """
+body { margin: 0 6%; line-height: 1.45; }
+h1 { margin: 1.5em 0; }
+p { margin: 0.8em 0; }
+table { border-collapse: collapse; }
+td, th { border: 1px solid currentColor; padding: 0.4em; }
+td.nowrap { white-space: nowrap; }
+"""
+
+
+CONTAINER = """<?xml version="1.0" encoding="utf-8"?>
+<container version="1.0"
+ xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+ <rootfiles><rootfile full-path="EPUB/package.opf"
+ media-type="application/oebps-package+xml"/></rootfiles>
+</container>
+"""
+
+
+NAV = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+ xmlns:epub="http://www.idpf.org/2007/ops" lang="en">
+<head><title>Contents</title></head><body>
+<nav epub:type="toc"><ol>
+ <li><a href="medium.xhtml">Medium body</a></li>
+ <li><a href="absolute.xhtml">Absolute body</a></li>
+ <li><a href="descendant.xhtml">Absolute descendant</a></li>
+ <li><a href="relative.xhtml">Relative hierarchy</a></li>
+ <li><a href="mixed.xhtml">Mixed units</a></li>
+ <li><a href="plain.xhtml">No author styles</a></li>
+ <li><a href="table.xhtml">Wide table</a></li>
+</ol></nav></body></html>
+"""
+
+
+TABLE = """<table><tr><th>Case marker</th><th>Description</th><th>Value</th></tr>
+<tr><td class="nowrap">TABLE-UNBREAKABLE-0123456789-ABCDEFGHIJKLMNOPQRSTUVWXYZ</td><td>A deliberately unbreakable cell forces overflow so the wide-content repair has work to do after text grows.</td><td>184</td></tr>
+<tr><td>TABLE-TWO</td><td>Columns must not paint across the next page.</td><td>392</td></tr>
+<tr><td>TABLE-THREE</td><td>The surrounding paragraph still reflows normally.</td><td>751</td></tr>
+</table>"""
+
+
+FILES = {
+    "META-INF/container.xml": CONTAINER,
+    "EPUB/nav.xhtml": NAV,
+    "EPUB/style.css": COMMON_CSS,
+    "EPUB/medium.xhtml": chapter(
+        "Medium body",
+        "body { font-size: medium; }",
+        paragraphs("MEDIUM"),
+    ),
+    "EPUB/absolute.xhtml": chapter(
+        "Absolute body",
+        "body { font-size: 14px; }",
+        paragraphs("ABSOLUTE-BODY"),
+    ),
+    "EPUB/descendant.xhtml": chapter(
+        "Absolute descendant",
+        "p { font-size: 14px; } p.important { font-size: 12pt !important; }",
+        paragraphs("ABSOLUTE-DESCENDANT").replace(
+            "<p>ABSOLUTE-DESCENDANT paragraph 3.",
+            '<p class="important">ABSOLUTE-DESCENDANT paragraph 3.',
+        ),
+    ),
+    "EPUB/relative.xhtml": chapter(
+        "Relative hierarchy",
+        "body { font-size: 1.2em; } h2 { font-size: 1.5em; } "
+        "small { font-size: 80%; }",
+        "<h2>RELATIVE-HEADING</h2><small>RELATIVE-SMALL</small>"
+        + paragraphs("RELATIVE"),
+    ),
+    "EPUB/mixed.xhtml": chapter(
+        "Mixed units",
+        "html { font-size: 18px; } body { font-size: 1.1rem; } "
+        "p.em { font-size: 1.4em; } p.rem { font-size: 1.2rem; } "
+        "p.absolute { font-size: 13px; }",
+        '<p class="em">MIXED-EM paragraph with an em size.</p>'
+        '<p class="rem">MIXED-REM paragraph with a rem size.</p>'
+        '<p class="absolute">MIXED-ABSOLUTE paragraph with a pixel size.</p>'
+        + paragraphs("MIXED"),
+    ),
+    "EPUB/plain.xhtml": chapter("No author styles", "", paragraphs("PLAIN")),
+    "EPUB/table.xhtml": chapter("Wide table", "", TABLE + paragraphs("TABLE")),
+}
+
+
+PACKAGE = """<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0"
+ unique-identifier="pub-id">
+ <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:identifier id="pub-id">""" + BOOK_ID + """</dc:identifier>
+  <dc:title>""" + TITLE + """</dc:title>
+  <dc:creator>Liseur</dc:creator>
+  <dc:language>en</dc:language>
+  <meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>
+ </metadata>
+ <manifest>
+  <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml"
+   properties="nav"/>
+  <item id="css" href="style.css" media-type="text/css"/>
+  <item id="medium" href="medium.xhtml" media-type="application/xhtml+xml"/>
+  <item id="absolute" href="absolute.xhtml" media-type="application/xhtml+xml"/>
+  <item id="descendant" href="descendant.xhtml" media-type="application/xhtml+xml"/>
+  <item id="relative" href="relative.xhtml" media-type="application/xhtml+xml"/>
+  <item id="mixed" href="mixed.xhtml" media-type="application/xhtml+xml"/>
+  <item id="plain" href="plain.xhtml" media-type="application/xhtml+xml"/>
+  <item id="table" href="table.xhtml" media-type="application/xhtml+xml"/>
+ </manifest>
+ <spine>
+  <itemref idref="medium"/><itemref idref="absolute"/>
+  <itemref idref="descendant"/><itemref idref="relative"/>
+  <itemref idref="mixed"/><itemref idref="plain"/><itemref idref="table"/>
+ </spine>
+</package>
+"""
+FILES["EPUB/package.opf"] = PACKAGE
+
+
+def default_path() -> str:
+    root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return os.path.join(root, "tmp", "books", "liseur_font-size-fixture.epub")
+
+
+def build(path: str) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    temporary = path + ".part"
+    with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as book:
+        book.writestr(
+            zipfile.ZipInfo("mimetype"),
+            "application/epub+zip",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        for name, text in FILES.items():
+            book.writestr(name, text)
+    os.replace(temporary, path)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 2:
+        print(__doc__, file=sys.stderr)
+        raise SystemExit(2)
+    target = sys.argv[1] if len(sys.argv) == 2 else default_path()
+    build(target)
+    print(target)

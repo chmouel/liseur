@@ -148,6 +148,47 @@ upgrade; `ReadingCssTest` is what will notice.
 
 ## Design
 
+### Font size uses Android text zoom
+
+The CSS variable path is not sufficient for arbitrary EPUBs. Readium CSS
+sets the root `html` size, but a publisher rule such as `body {
+font-size: medium; }` or an absolute `p` rule supplies an independent size
+and prevents descendants from inheriting that change. A body-only CSS
+override would still miss absolute descendants.
+
+Liseur therefore keeps passing `ReaderPrefs.fontSize` through
+`EpubPreferences.fontSize`, but sets
+`EpubNavigatorFragment.Configuration.useReadiumCssFontSize` to `false`.
+Readium 3.3.0 then applies `round(fontSize * 100)` through each chapter
+WebView's `WebSettings.textZoom`. The same path is used when preferences are
+submitted to an open navigator, and newly created fragments inherit the
+current zoom. This is native text zoom, not CSS `zoom`, page zoom, or pinch
+zoom.
+
+Advanced typography remains unchanged. It still disables publisher styles
+when a selected setting requires Readium's advanced stylesheet rules; native
+text zoom only fixes the independent font-size scaling path.
+
+The reproducible fixture is built with `hack/make-font-size-book`. Android
+validation must compare the same passage at 100%, 150%, and 200% with
+advanced typography at Default, then cover an absolute descendant, a
+fractional multiplier, a newly opened chapter, and reopening the book.
+Record the emulator serial, API level, WebView version, viewport, system
+font scale, and any unavailable coverage. The desktop `hack/verify-*`
+scripts remain helper and layout stress tests; they are not evidence that
+native text zoom resizes publisher-defined absolute sizes.
+
+The first rendered validation run used disposable `emulator-5554`
+(`liseur_phone_api36`, Android 16/API 36, WebView 133.0.6943.137,
+1080x2400 at 420 dpi, system font scale 1.0). At 100% and approximately
+200%, the medium-body, absolute-body, and absolute-descendant fixture
+chapters visibly grew and reflowed during a live change; a newly opened
+chapter used the enlarged setting, and reopening the imported book rendered
+the saved enlarged setting. The complete matrix is not claimed: the run did
+not cover 150%, range endpoints, fractional pinch values, custom fonts,
+advanced typography, fixed layout, rotation, RTL/CJK, or the other reader
+integration checks.
+
 Six new nullable fields on `ReaderPrefs`, one DataStore key each,
 absent when null, mapped in `toEpubPreferences`, and rendered by one
 composable used by both surfaces so they cannot drift.

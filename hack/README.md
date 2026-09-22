@@ -103,6 +103,12 @@ target wrapping them. Run `make help` for the short list. See
   Readium's CJK stylesheets, which are what it picks for the book in the
   issue and which nothing else here exercises. Same requirements and same
   reasons for staying out of `make check`. `PORT=` picks another port.
+- `make-font-size-book`: Builds the local EPUB fixture for the publisher
+  absolute-font-size failure. It contains separate chapters for body,
+  descendant, relative, mixed, unstyled, and wide-table cases, and writes
+  `tmp/books/liseur_font-size-fixture.epub` by default. The fixture is for
+  manual Android validation; the desktop verification scripts do not prove
+  native text zoom.
 - `make-notes-book`: Builds the fixture book those notes are reproduced
   with — deliberately badly behaved in the two ways the reporter's edition
   is, and well behaved everywhere else, so a fix can be seen to leave the

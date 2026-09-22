@@ -4,6 +4,9 @@
 # and that a note marker drawn as an image is the size of the words around it
 # (issue #152).
 #
+# This is a desktop CSS/helper check only. It does not validate Android
+# WebSettings text zoom or prove that publisher-defined font sizes grow.
+#
 # Like hack/verify-wide-content, none of what the fix has to get right can be
 # seen from the JVM: whether an aside is actually hidden once Readium's own
 # stylesheets are in front of it, whether a 200-pixel glyph comes down to one
@@ -232,7 +235,8 @@ function frame(caseName, fontSize, variant) {
     // real answer here rather than a missing one.
     var dir = variant === undefined ? "cjk-horizontal" : variant;
     var base = "../readium-css/" + (dir ? dir + "/" : "");
-    var vars = "--USER__fontSize:" + fontSize + "%;--USER__view:readium-paged-on;";
+    var vars = (fontSize == null ? "" : "--USER__fontSize:" + fontSize + "%;") +
+               "--USER__view:readium-paged-on;";
     var head =
       '<link rel="stylesheet" href="' + base + 'ReadiumCSS-before.css"/>' +
       '<style>:root,:root > body{overflow:visible !important}html,body{height:100%}</style>';
@@ -265,6 +269,16 @@ function marker(win) {
 function dom(win) { return win.document.body.innerHTML; }
 
 var TESTS = [];
+
+TESTS.push(function () {
+  return frame("inline-note.xhtml", null).then(function (w) {
+    run(w);
+    var m = marker(w);
+    log(m.h <= m.em * 1.3 && m.h > 0,
+        "the marker fits without a user font-size variable",
+        m.h + "px against a " + m.em + "px line");
+  });
+});
 
 TESTS.push(function () {
   return frame("inline-note.xhtml", 100).then(function (w) {

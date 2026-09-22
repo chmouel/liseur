@@ -214,6 +214,17 @@ fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode = when {
 }
 
 /**
+ * Uses Android text zoom for EPUB font-size preferences.
+ *
+ * Publisher CSS can set an absolute size on `body` or a descendant, which
+ * prevents it from inheriting Readium CSS's root font-size variable.
+ */
+@OptIn(ExperimentalReadiumApi::class)
+internal fun EpubNavigatorFragment.Configuration.configureFontSizeRendering() {
+    useReadiumCssFontSize = false
+}
+
+/**
  * Navigator configuration declaring the bundled reading fonts, served from
  * the app's assets, and taking over what happens when text is selected.
  *
@@ -259,7 +270,7 @@ fun epubNavigatorConfiguration(
     onTextSelected: () -> Unit = {},
     onSelectionCleared: () -> Unit = {},
 ): EpubNavigatorFragment.Configuration =
-    EpubNavigatorFragment.Configuration {
+    epubNavigatorConfigurationBase().apply {
         servedAssets = listOf("fonts/.*")
         disablePageTurnsWhileScrolling = scroll
         readiumCssRsProperties = readingRsProperties(columnMode)
@@ -372,4 +383,11 @@ fun epubNavigatorConfiguration(
                 }
             }
         }
+
+    }
+
+@OptIn(ExperimentalReadiumApi::class)
+internal fun epubNavigatorConfigurationBase(): EpubNavigatorFragment.Configuration =
+    EpubNavigatorFragment.Configuration {
+        configureFontSizeRendering()
     }
