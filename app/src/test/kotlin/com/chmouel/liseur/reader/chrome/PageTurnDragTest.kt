@@ -106,6 +106,17 @@ class PageTurnDragTest {
     }
 
     @Test
+    fun `an active selection leaves the drag to the web view`() {
+        var selectionActive = true
+        val h = Harness(canTurnNow = { !selectionActive })
+        assertFalse(h.drag.offer(pointers = 1, dx = -200f, dy = 4f))
+
+        selectionActive = false
+        h.drag.reset()
+        assertTrue(h.drag.offer(pointers = 1, dx = -200f, dy = 4f))
+    }
+
+    @Test
     fun `electronic paper is left to the navigator`() {
         val h = Harness(interactive = false)
         assertFalse(h.drag.offer(pointers = 1, dx = -200f, dy = 4f))
@@ -374,6 +385,7 @@ class PageTurnDragTest {
     private class Harness(
         style: PageTurnStyle = PageTurnStyle.LIFT,
         canTurn: Boolean = true,
+        canTurnNow: (() -> Boolean)? = null,
         interactive: Boolean = true,
         rtl: Boolean = false,
     ) {
@@ -381,7 +393,7 @@ class PageTurnDragTest {
         val curl = FakeCurl()
         val drag = PageTurnDrag(
             style = { style },
-            canTurn = { canTurn },
+            canTurn = { canTurnNow?.invoke() ?: canTurn },
             interactive = { interactive },
             isRtl = { rtl },
             density = { 1f },
