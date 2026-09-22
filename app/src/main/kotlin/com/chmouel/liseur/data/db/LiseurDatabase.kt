@@ -32,8 +32,9 @@ import androidx.sqlite.execSQL
         BookOrbitBinding::class,
         BookOrbitCfiRecord::class,
         BookOrbitLocalCfi::class,
+        BookOrbitPositionAgreement::class,
     ],
-    version = 56,
+    version = 57,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -60,6 +61,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookOrbitBindingDao(): BookOrbitBindingDao
     abstract fun bookOrbitCfiDao(): BookOrbitCfiDao
     abstract fun bookOrbitLocalCfiDao(): BookOrbitLocalCfiDao
+    abstract fun bookOrbitPositionAgreementDao(): BookOrbitPositionAgreementDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1626,6 +1628,44 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_56_57 = object : Migration(56, 57) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS `book_orbit_position_agreement` (
+                            `account_key` TEXT NOT NULL,
+                            `book_url` TEXT NOT NULL,
+                            `book_id` INTEGER NOT NULL,
+                            `file_id` INTEGER NOT NULL,
+                            `binding_revision` INTEGER NOT NULL,
+                            `connection_epoch` INTEGER NOT NULL,
+                            `base_url` TEXT NOT NULL,
+                            `agreed_local_revision` INTEGER,
+                            `agreed_locator_json` TEXT,
+                            `agreed_remote_cfi` TEXT,
+                            `agreed_remote_percentage` REAL,
+                            `agreed_remote_saved` INTEGER,
+                            `candidate_cfi` TEXT,
+                            `candidate_percentage` REAL,
+                            `candidate_saved` INTEGER,
+                            `candidate_updated_at` TEXT,
+                            `outgoing_bytes` BLOB,
+                            `sent_local_revision` INTEGER,
+                            `sent_locator_json` TEXT,
+                            `preflight_cfi` TEXT,
+                            `preflight_percentage` REAL,
+                            `preflight_saved` INTEGER,
+                            `attempt_state` TEXT,
+                            PRIMARY KEY(`account_key`, `book_url`),
+                            FOREIGN KEY(`account_key`, `book_url`)
+                                REFERENCES `book_orbit_binding`(`account_key`, `book_url`)
+                                ON UPDATE CASCADE ON DELETE CASCADE
+                        )
+                        """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1682,6 +1722,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_53_54,
             MIGRATION_54_55,
             MIGRATION_55_56,
+            MIGRATION_56_57,
         )
     }
 }

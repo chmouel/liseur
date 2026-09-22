@@ -42,12 +42,12 @@ class BookOrbitHttp(
     internal suspend fun postProgress(
         context: BookOrbitRequestContext,
         url: String,
-        json: JSONObject,
+        bytes: ByteArray,
     ): MutationResult = withContext(Dispatchers.IO) {
         val token = session.token(context)
         val bearer = RemoteCredentials.Bearer(token)
         val request = signed(context, url, bearer)
-            .post(json.toString().toRequestBody(JSON)).build()
+            .post(bytes.toRequestBody(JSON)).build()
         try {
             http.client.newBuilder()
                 .followRedirects(false)

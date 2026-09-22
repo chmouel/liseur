@@ -49,10 +49,23 @@ object BookOrbitCfiDom {
         val end = resource.end?.let { walk(root, it, skipWrapper) ?: return null } ?: start
         if (start.node === end.node) {
             if (start.offset > end.offset) return null
-        } else if (start.node.compareDocumentPosition(end.node).toInt() and Node.DOCUMENT_POSITION_FOLLOWING.toInt() == 0) {
+        } else if (!precedes(start.node, end.node)) {
             return null
         }
         return Range(start, end)
+    }
+
+    private fun precedes(start: Node, end: Node): Boolean {
+        var node: Node? = start
+        while (node != null) {
+            if (node === end) return true
+            node = node.firstChild ?: run {
+                var cursor = node
+                while (cursor != null && cursor.nextSibling == null) cursor = cursor.parentNode
+                cursor?.nextSibling
+            }
+        }
+        return false
     }
 
     private sealed interface Slot {

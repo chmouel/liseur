@@ -17,6 +17,9 @@ data class BookOrbitFileProgress(
     val isSaved: Boolean get() = updatedAt != null
     val displayTime: String? get() = lastReadAt ?: textUpdatedAt ?: updatedAt
 
+    fun sameAnchor(other: BookOrbitFileProgress): Boolean =
+        isSaved == other.isSaved && if (isSaved) cfi != null && cfi == other.cfi else true
+
     companion object {
         fun parse(json: JSONObject): BookOrbitFileProgress {
             if (!json.has("cfi")) malformed()
@@ -77,10 +80,15 @@ class BookOrbitProgressMutationTransport(
     suspend fun send(
         context: BookOrbitCfiContext,
         payload: JSONObject,
+    ): BookOrbitHttp.MutationResult = sendBytes(context, payload.toString().toByteArray(Charsets.UTF_8))
+
+    suspend fun sendBytes(
+        context: BookOrbitCfiContext,
+        bytes: ByteArray,
     ): BookOrbitHttp.MutationResult = withContext(Dispatchers.IO) {
         cfis.check(context)
         val url = BookOrbitUrl.api(context.request.baseUrl, "/books/files/${context.fileId}/progress")
-        val result = http.postProgress(context.request, url, payload)
+        val result = http.postProgress(context.request, url, bytes)
         cfis.check(context)
         result
     }

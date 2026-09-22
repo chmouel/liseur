@@ -106,9 +106,22 @@ class BookOrbitCfiDomTest {
         )) {
             assertNull(cfi, BookOrbitCfiDom.resolve(target(cfi), document))
         }
+
         assertNotNull(BookOrbitCfiDom.resolve(
             target("epubcfi(/6[reading-order]/2[ref-one]!/4/2[first]/1:9)"), document,
         ))
+    }
+
+    @Test
+    fun `element start precedes its text endpoint without compareDocumentPosition`() {
+        val document = document()
+        val range = BookOrbitCfiDom.resolve(
+            target("epubcfi(/6[reading-order]/2[ref-one]!/4/2[first],,/1:6)"),
+            document,
+        )
+        assertNotNull(range)
+        assertEquals("p", range!!.start.node.nodeName)
+        assertEquals(6, range.end.offset)
     }
 
     @Test

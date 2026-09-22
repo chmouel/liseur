@@ -29,6 +29,9 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository
 import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
 import com.chmouel.liseur.data.bookorbit.BookOrbitLocalCandidate
 import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
+import com.chmouel.liseur.data.bookorbit.BookOrbitProgressClient
+import com.chmouel.liseur.reader.progress.BookOrbitIncomingAnchor
+import com.chmouel.liseur.reader.ResourceAddress
 import com.chmouel.liseur.data.db.BookScreen
 import com.chmouel.liseur.data.db.BookScreenDao
 import com.chmouel.liseur.data.db.BookReadingMode
@@ -155,6 +158,7 @@ class ReaderViewModel(
     private val seriesExtras: SeriesExtrasRepository,
     private val remoteAccount: RemoteAccountRepository,
     private val bookOrbitCfis: BookOrbitCfiRepository? = null,
+    private val bookOrbitProgress: BookOrbitProgressClient? = null,
     private val userFonts: UserFontRepository,
     sessionManager: ReadingSessionManager,
     private val requestBookSync: (String) -> Unit = {},
@@ -214,6 +218,7 @@ class ReaderViewModel(
             val navigatorFactory: EpubNavigatorFactory,
             val initialLocator: Locator?,
             val openedBookOrbit: BookOrbitOpenedEpub? = null,
+            val bookOrbitFallback: Locator? = null,
         ) : UiState
 
         data class Failure(val message: String) : UiState
@@ -1011,15 +1016,6 @@ class ReaderViewModel(
             // over it would mean nothing.
             settlePreservedConflict(publication, abandonedRun = !syncFinished)
 
-            // From here the position about to be read is on screen for
-            // the whole session, and a sync run still going in the
-            // background — the very one just given up on above — must
-            // not move it under the page. Entering after the bounded
-            // sync and the settlement, not before: those two are meant
-            // to move it.
-            progressDao.openBooks.enter(bookId)
-            readingDeclared = true
-
             val stored = progressDao.get(bookId)
             speed = ReadingSpeedEstimator(
                 learned = readingPace.pace(),
@@ -1038,20 +1034,83 @@ class ReaderViewModel(
                     preview = pulledAutomatically,
                 )
             }
-            val savedLocator = stored?.locatorJson
-                ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
             // Unmarked Readium text may describe the following synthetic
             // position, so it is not treated as exact. What is left of
             // such a locator is still the chapter and the place in it,
             // which is tried before the whole-book progression: that
             // last rung can land in a different chapter altogether when
             // the fraction was written down by the other client.
-            val initialLocator = ResourceAnchor.resumeTarget(
-                saved = savedLocator,
-                totalProgression = stored?.totalProgression,
-                readingOrder = readingOrderPaths(),
-                byProgression = positions::locatorAtOrBeforeProgression,
-            )?.let(::prepareLocator)
+            fun localTargetFor(progress: ReadingProgress?): Locator? {
+                val saved = progress?.locatorJson
+                    ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+                return ResourceAnchor.resumeTarget(
+                    saved = saved,
+                    totalProgression = progress?.totalProgression,
+                    readingOrder = readingOrderPaths(),
+                    byProgression = positions::locatorAtOrBeforeProgression,
+                )?.let(::prepareLocator)
+            }
+            val localTarget = localTargetFor(stored)
+            val safeFallback = localTarget ?: positions.locatorAtOrBeforeProgression(0.0)
+            // Until BookOrbit has durable agreement, a remote place cannot take precedence
+            // over reading already saved on this device.
+            val incoming = if (BookOrbitIncomingAnchor.mayOfferOnOpen(
+                    stored?.locatorJson, stored?.totalProgression,
+                ) &&
+                safeFallback != null && openedBookOrbit != null &&
+                bookOrbitProgress != null && bookOrbitCfis != null
+            ) {
+                try {
+                    withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
+                        withContext(Dispatchers.IO) {
+                            val context = openedBookOrbit.context
+                            val remote = bookOrbitProgress.read(context)
+                            val raw = remote.cfi?.takeIf { remote.isSaved }
+                                ?: return@withContext null
+                            bookOrbitCfis.retain(context, raw)
+                            val resource = com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource.locate(
+                                com.chmouel.liseur.data.bookorbit.BookOrbitCfi.parse(raw),
+                                openedBookOrbit.publication,
+                            ) ?: return@withContext null
+                            val resourcePath = ResourceAddress.canonicalPath(resource.href)
+                                ?: return@withContext null
+                            val link = publication.readingOrder.singleOrNull {
+                                ResourceAddress.canonicalPath(it.url().toString()) == resourcePath
+                            } ?: return@withContext null
+                            val document = bookOrbitCfis.originalDocument(
+                                openedBookOrbit, resource.href, downloads::fileFor,
+                            ) ?: return@withContext null
+                            val target = BookOrbitIncomingAnchor.resolve(
+                                raw, openedBookOrbit.publication, document,
+                            ) ?: return@withContext null
+                            val base = publication.locatorFromLink(link)
+                                ?: return@withContext null
+                            val proposed = BookOrbitIncomingAnchor.mark(base, target)
+                            bookOrbitCfis.check(context)
+                            proposed
+                        }
+                    }
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    throw error
+                } catch (error: IOException) {
+                    Log.w("bookorbit-position", "Could not restore the selected file's progress", error)
+                    null
+                } catch (error: BookOrbitEpubPackage.ParseException) {
+                    Log.w("bookorbit-position", "Could not verify the original EPUB document", error)
+                    null
+                } catch (error: com.chmouel.liseur.data.bookorbit.BookOrbitCfi.ParseException) {
+                    Log.w("bookorbit-position", "Could not resolve the saved BookOrbit CFI", error)
+                    null
+                }
+            } else null
+            // Incoming progress is an opening proposal, not a local write.
+            // A timed-out request must never move an already visible book.
+            progressDao.openBooks.enter(bookId)
+            readingDeclared = true
+            val latestStored = progressDao.get(bookId)
+            val stillCurrent = latestStored == stored
+            val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
+                ?: if (stillCurrent) localTarget else localTargetFor(latestStored)
             lastLocator = initialLocator
             library.markOpened(bookId)
             _state.value = UiState.Ready(
@@ -1059,6 +1118,7 @@ class ReaderViewModel(
                 navigatorFactory = EpubNavigatorFactory(publication),
                 initialLocator = initialLocator,
                 openedBookOrbit = openedBookOrbit,
+                bookOrbitFallback = safeFallback.takeIf { incoming != null && stillCurrent },
             )
             // onResume arrives before a publication has necessarily
             // opened. Only now can foreground time be reading time.
@@ -1988,6 +2048,7 @@ class ReaderViewModel(
                     seriesExtras = container.seriesExtras,
                     remoteAccount = container.remoteAccount,
                     bookOrbitCfis = container.bookOrbitCfis,
+                    bookOrbitProgress = container.bookOrbitProgress,
                     userFonts = container.userFonts,
                     sessionManager = container.readingSessions,
                     requestBookSync = container::requestBookSync,

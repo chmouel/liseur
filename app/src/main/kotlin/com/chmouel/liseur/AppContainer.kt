@@ -192,6 +192,9 @@ class AppContainer(context: Context) {
 
     private val bookOrbitHttp = com.chmouel.liseur.data.bookorbit.BookOrbitHttp(bookOrbitSession)
     val bookOrbitCfis = com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository(database)
+    val bookOrbitProgress = com.chmouel.liseur.data.bookorbit.BookOrbitProgressClient(
+        bookOrbitHttp, bookOrbitCfis,
+    )
     val bookOrbitEpubInfo = com.chmouel.liseur.data.bookorbit.BookOrbitEpubInfoClient(
         bookOrbitHttp, bookOrbitCfis,
     )
@@ -219,6 +222,7 @@ class AppContainer(context: Context) {
         bookOrbitBindingDao = database.bookOrbitBindingDao(),
         bookOrbitCfiDao = database.bookOrbitCfiDao(),
         bookOrbitLocalCfiDao = database.bookOrbitLocalCfiDao(),
+        bookOrbitPositionAgreementDao = database.bookOrbitPositionAgreementDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),

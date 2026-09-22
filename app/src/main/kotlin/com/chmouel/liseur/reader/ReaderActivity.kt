@@ -434,6 +434,8 @@ class ReaderActivity : FragmentActivity() {
                                         viewModel.onLocatorChanged(locator, event, candidate)
                                     },
                                     openedBookOrbit = s.openedBookOrbit,
+                                    bookOrbitFallback = s.bookOrbitFallback
+                                        ?.takeIf { restoreTarget == s.initialLocator },
                                     checkBookOrbitContext = container.bookOrbitCfis::check,
                                     originalBookOrbitDocument = { opened, href ->
                                         container.bookOrbitCfis.originalDocument(
