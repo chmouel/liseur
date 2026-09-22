@@ -723,7 +723,7 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Invertito</string>
     <string name="settings_pinch_to_resize">Pizzica per ridimensionare il testo</string>
-    <string name="settings_pinch_to_resize_detail">Un pizzico a due dita sulla pagina ingrandisce o riduce il testo, senza aprire il menu. Spento finché non lo chiedi, perché una presa che produce tocchi a due dita involontari ridimensionerebbe il testo di ogni libro per sbaglio. Pizzicare un\'immagine per ingrandirla funziona comunque.</string>
+    <string name="settings_pinch_to_resize_detail">Un pizzico a due dita sulla pagina ingrandisce o riduce il testo, senza aprire il menu. Disattivalo se il modo in cui impugni il telefono lo attiva per sbaglio. Pizzicare un\'immagine per ingrandirla funziona comunque.</string>
     <string name="settings_pinch_to_resize_eink">Spento sulla carta elettronica. Il pizzico funziona mostrandoti la dimensione mentre le dita si muovono, e un\'anteprima che si ridisegna molte volte al secondo è ciò che uno schermo del genere gestisce peggio. Senza di essa mireresti alla cieca, e ogni tentativo costa un ridisegno completo della pagina, quindi il cursore Dimensione fa meglio il lavoro. Pizzicare un\'immagine per ingrandirla funziona comunque. Disattiva Schermo e-ink qui sopra se non è quel tipo di schermo.</string>
     <string name="settings_resume">Apri sul libro che stavi leggendo</string>
     <string name="settings_resume_detail">Salta la libreria quando hai lasciato a metà un libro.</string>

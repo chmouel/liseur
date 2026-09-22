@@ -723,7 +723,7 @@
     <string name="tap_zones_standard">Estándar</string>
     <string name="tap_zones_swapped">Intercambiados</string>
     <string name="settings_pinch_to_resize">Pellizcar para cambiar el tamaño del texto</string>
-    <string name="settings_pinch_to_resize_detail">Un pellizco con dos dedos en la página agranda o reduce el texto, sin abrir el menú. Desactivado hasta que lo pidas, porque un agarre que produce toques accidentales con dos dedos cambia el tamaño del texto de todos los libros. Pellizcar una imagen para ampliarla sigue funcionando de cualquier modo.</string>
+    <string name="settings_pinch_to_resize_detail">Un pellizco con dos dedos en la página agranda o reduce el texto, sin abrir el menú. Desactívalo si tu forma de sostener el teléfono lo activa por accidente. Pellizcar una imagen para ampliarla sigue funcionando de cualquier modo.</string>
     <string name="settings_pinch_to_resize_eink">Desactivado en papel electrónico. El pellizco funciona mostrándote el tamaño mientras mueves los dedos, y una vista previa que se redibuja muchas veces por segundo es lo que peor lleva una pantalla así. Sin ella irías a ciegas, y cada intento cuesta un repintado completo de la página, así que el control deslizante de Tamaño hace mejor el trabajo. Pellizcar una imagen para ampliarla sigue funcionando. Desactiva Pantalla de tinta electrónica arriba si no es ese tipo de pantalla.</string>
     <string name="settings_resume">Abrir en el libro que estabas leyendo</string>
     <string name="settings_resume_detail">Sáltate la biblioteca cuando dejaste un libro a medias.</string>

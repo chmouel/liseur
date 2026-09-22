@@ -148,10 +148,10 @@ enum class DefinitionTarget(val id: String) {
  * @param volumeKeysTurnPages Volume keys page forward and back while reading.
  * @param tapZones Which side of a paginated page turns forward.
  * @param pinchToResize A two-finger pinch on the page changes the reading
- *   font size. Off until asked for: a stray two-finger touch changes how
- *   every page looks from then on, and the Size slider is the way in that
- *   nobody triggers by accident. Pinching an image to enlarge it is not
- *   covered: that one is one visible thing, dismissed with a tap.
+ *   font size. On by default; it is here for a grip that produces stray
+ *   two-finger touches, since a stray resize changes how every page looks
+ *   from then on. Pinching an image to enlarge it is not covered: that one
+ *   is one visible thing, dismissed with a tap.
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param keepScreenOn The screen stays awake while a book is open. On by
  *   default for new installs, and can be turned off per reader or per
@@ -188,7 +188,7 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val volumeKeysTurnPages: Boolean = true,
     val tapZones: TapZones = TapZones.Default,
-    val pinchToResize: Boolean = false,
+    val pinchToResize: Boolean = true,
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = true,
     val scrollMode: Boolean = false,
@@ -305,7 +305,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
             volumeKeysTurnPages = p[Keys.VOLUME_KEYS] ?: true,
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
-            pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: false,
+            pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: true,
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: true,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,

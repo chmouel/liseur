@@ -734,7 +734,7 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Vertauscht</string>
     <string name="settings_pinch_to_resize">Ziehen zum Ändern der Textgröße</string>
-    <string name="settings_pinch_to_resize_detail">Ein Zwei-Finger-Ziehen auf der Seite macht den Text größer oder kleiner, ohne das Menü zu öffnen. Aus, bis du es einschaltest, weil ein Griff mit versehentlichen Zwei-Finger-Berührungen den Text jedes Buchs versehentlich ändert. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem.</string>
+    <string name="settings_pinch_to_resize_detail">Ein Zwei-Finger-Ziehen auf der Seite macht den Text größer oder kleiner, ohne das Menü zu öffnen. Schalte es aus, wenn deine Haltung des Geräts es versehentlich auslöst. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem.</string>
     <string name="settings_pinch_to_resize_eink">Auf elektronischem Papier aus. Das Ziehen zeigt die Größe, während die Finger sich bewegen, und eine Vorschau, die viele Male pro Sekunde neu zeichnet, ist das, was so ein Bildschirm am schlechtesten verträgt. Ohne sie würdest du blind zielen, und jeder Versuch kostet ein volles Neuzeichnen der Seite — der Größenregler macht das besser. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem. Schalte E-Ink-Bildschirm oben aus, wenn das nicht so ein Bildschirm ist.</string>
     <string name="settings_resume">Beim Buch öffnen, das du gelesen hast</string>
     <string name="settings_resume_detail">Die Bibliothek überspringen, wenn du mitten im Buch aufgehört hast.</string>

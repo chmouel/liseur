@@ -723,7 +723,7 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Inversé</string>
     <string name="settings_pinch_to_resize">Pincer pour redimensionner le texte</string>
-    <string name="settings_pinch_to_resize_detail">Un pincement à deux doigts sur la page agrandit ou réduit le texte, sans ouvrir le menu. Désactivé tant que vous ne le demandez pas, car une prise qui produit des touches à deux doigts accidentelles redimensionne le texte de tous les livres. Agrandir une image en la pinçant fonctionne dans tous les cas.</string>
+    <string name="settings_pinch_to_resize_detail">Un pincement à deux doigts sur la page agrandit ou réduit le texte, sans ouvrir le menu. Désactivez-le si votre façon de tenir le téléphone le déclenche par accident. Agrandir une image en la pinçant fonctionne dans tous les cas.</string>
     <string name="settings_pinch_to_resize_eink">Désactivé sur l\'encre électronique. Le pincement montre la taille pendant que vos doigts bougent, et un aperçu qui se redessine plusieurs fois par seconde est ce qu\'un tel écran gère le plus mal. Sans cela vous viseriez à l\'aveugle, et chaque tentative coûte un redessin complet de la page, donc le curseur Taille fait mieux le travail. Agrandir une image en la pinçant fonctionne encore. Désactivez Écran e-ink ci-dessus si ce n\'est pas ce type d\'écran.</string>
     <string name="settings_resume">Ouvrir sur le livre que vous lisiez</string>
     <string name="settings_resume_detail">Passer la bibliothèque quand vous aviez quitté un livre en cours.</string>

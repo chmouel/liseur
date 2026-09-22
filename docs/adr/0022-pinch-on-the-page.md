@@ -457,6 +457,11 @@ everyone; the pinch is for the reader who went looking for it. The
 setting had only ever shipped in release candidates, so the default was
 changed without a migration.
 
+Amended again: pinch to resize is **on** by default, matching reader
+expectations for the gesture. Readers who experience accidental resizes can
+turn it off in Settings -> Reading & navigation -> Advanced. No migration is
+run, preserving any choice readers already made.
+
 ### On electronic paper
 
 Deferred to [#153](https://github.com/chmouel/liseur/issues/153) and
