@@ -1272,11 +1272,17 @@ CFI live.
   the opened app-owned EPUB and its original XHTML. Schema 56 can store a
   candidate with its locator and local revision in one transaction,
   invalidating it on later local writes. The reader supplies guarded
-  candidates for local movement, but does not restore foreign CFIs or
-  submit candidates to BookOrbit. `BookOrbitIncomingAnchor` creates a
-  text-anchor proposal from original XHTML; it is not yet verified by
-  an active Readium navigator or used during opening.
-  a live two-way CFI round trip is still outstanding.
+  candidates for local movement, but does not submit them to BookOrbit.
+  Schema 57 adds a BookOrbit-only durable
+  position agreement and exact-byte POST/read-back boundary; it remains
+  opt-in and is not registered with generic position sync.
+  `BookOrbitIncomingAnchor` creates a text-anchor proposal from original
+  XHTML. A book with no saved local position reads the selected file's
+  progress on cold opening and verifies the proposal in the active
+  Readium WebView before accepting its arrival;
+  failure restores the prior local position. It never persists the
+  incoming position or posts it to BookOrbit. Guarded remote adoption,
+  scheduled delivery, and a live two-way round trip remain outstanding.
   Sending a position without a verified CFI would clear
   the server's, which is why browse-and-download ships on its own rather
   than with a lossy writer. See

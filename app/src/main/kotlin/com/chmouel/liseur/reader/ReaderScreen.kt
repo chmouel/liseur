@@ -388,6 +388,7 @@ fun ReaderScreen(
     onLocatorChanged: (Locator, NavigatorPositionEvent) -> Unit,
     onVerifiedLocatorChanged: (Locator, NavigatorPositionEvent, BookOrbitLocalCandidate) -> Unit,
     openedBookOrbit: BookOrbitOpenedEpub?,
+    bookOrbitFallback: Locator?,
     checkBookOrbitContext: suspend (BookOrbitCfiContext) -> Unit,
     originalBookOrbitDocument: suspend (BookOrbitOpenedEpub, String) -> Document?,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
@@ -627,6 +628,11 @@ fun ReaderScreen(
     // navigation has retargeted the gate that is the destination, not
     // the one the book opened on.
     var gateAnchor by remember(navigator) { mutableStateOf(restoreTarget) }
+
+    fun matchesIncomingResource(nav: EpubNavigatorFragment, locator: Locator): Boolean =
+        bookOrbitFallback == null || ResourceAddress.shows(
+            visibleWebView(nav.publicationView)?.url, locator.href.toString(),
+        )
 
     // Point the gate at somewhere the reader is being sent, without
     // releasing it and without moving its deadline. One function so the
@@ -908,7 +914,7 @@ fun ReaderScreen(
         // this replaced.
         if (budgetMs <= 0L) {
             settleLayout()
-            return ExactLocatorAnchor.verify(nav, locator)
+            return matchesIncomingResource(nav, locator) && ExactLocatorAnchor.verify(nav, locator)
         }
         // This is the same asynchronous WebView race as navigate(), but
         // a cold open is the slowest layout the reader asks for. Poll
@@ -921,7 +927,8 @@ fun ReaderScreen(
         return withTimeoutOrNull(budgetMs) {
             repeat(OpeningRestoration.EXACT_OPEN_VERIFY_ATTEMPTS) {
                 settleLayout()
-                if (ExactLocatorAnchor.verify(nav, locator)) return@withTimeoutOrNull true
+                if (matchesIncomingResource(nav, locator) && ExactLocatorAnchor.verify(nav, locator)
+                ) return@withTimeoutOrNull true
             }
             false
         } == true
@@ -1146,7 +1153,8 @@ fun ReaderScreen(
                 val suppressed = wasGated && gate.onEmission(
                     here = native.restorePoint(),
                     anchorVerified = gateAnchor.let {
-                        it != null && ExactLocatorAnchor.isExact(it) &&
+                        it != null && (bookOrbitFallback == null || native.href == it.href) &&
+                            matchesIncomingResource(nav, it) && ExactLocatorAnchor.isExact(it) &&
                             ExactLocatorAnchor.verify(nav, it)
                     },
                     elapsedMs = SystemClock.elapsedRealtime() - gateOpenedAt,
@@ -1433,7 +1441,8 @@ fun ReaderScreen(
         // The chapter before the percentage, for the reason given in
         // navigate(): the whole-book fraction is the only rung that can
         // land in the wrong chapter.
-        val fallback = onProgressAction.resourceTargetFor(requested)
+        val fallback = bookOrbitFallback
+            ?: onProgressAction.resourceTargetFor(requested)
             ?: requested.locations.totalProgression
                 ?.takeIf(ResourceAnchor::isFraction)
                 ?.let(onProgressAction.locatorAtOrBeforeProgression)

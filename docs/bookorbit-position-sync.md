@@ -4,6 +4,131 @@ BookOrbit position synchronization remains disabled. `ServerKind.BOOKORBIT`
 must stay at `syncAbility = NONE` and `canSync = false` until the complete
 round trip and durable reconciliation work is proven.
 
+## Phase 3 bounded agreement boundary
+
+Schema 57 adds `book_orbit_position_agreement`, separate from retained
+foreign CFIs, paired local CFIs, and `reading_progress`'s status/baseline.
+It is keyed by account and local book URL, and records the selected book/file,
+binding revision, connection epoch/address, agreed local revision and locator,
+agreed remote CFI/percentage, latest remote candidate, and an exact UTF-8
+outgoing request with its local revision and remote preflight. Account
+disconnect clears agreements; binding deletion cascades them. Token renewal
+does not change the captured account/epoch and cannot redirect the request.
+A same-account reconnect transfers pending read-back to the new epoch; old
+contexts remain invalid, and the pending request is not replayed.
+
+`BookOrbitPositionAgreementRepository` is an **opt-in, unscheduled**
+boundary. `observe` retains selected-file candidates without adopting an
+unverified CFI or touching reading status. Its exact merge uses the durable
+local revision, not a timestamp or percentage tolerance: a lone local move
+pushes, a lone verified remote move proposes a pull, equal CFIs settle even
+when percentages differ, and different CFIs at the same percentage conflict.
+The incoming `Pull` decision is not an applied reader position: a checked
+Readium locator and a guarded local-pull operation remain to be integrated.
+Unknown or wrong-edition remote anchors are retained, not overwritten.
+An initial saved remote position with no agreement is not assumed to belong
+to this device.
+
+`prepare` reads the selected file, verifies the local CFI still pairs with
+the stored locator and revision, and commits the exact serialized request
+before any delivery. A prepared request cannot be replaced unless the
+reader moved and `discardStalePreparation` atomically confirms it was never
+marked sent. `send` commits `MAY_HAVE_BEEN_SENT` **before** POST and
+uses those persisted bytes verbatim; a successful or ambiguous POST is
+followed by a selected-file GET. Only a matching CFI **and percentage**
+acknowledge the sent revision, so a concurrent page turn remains dirty.
+An in-process read-back cannot pass a pending POST. If the remote still
+matches the preflight, the caller may explicitly prepare afresh, never
+blindly replay the uncertain request. A changed remote CFI is retained as
+an unresolved conflict with the original bytes. A failed read-back leaves
+the request `UNCERTAIN`; `readBack` can settle it after process restart
+without another POST. Explicit 401/403 rejection retains a prepared request
+for a later attempt under the same captured identity. No status column or
+generic sync acknowledgement is changed.
+
+The agreement boundary has no normal-operation caller, no automatic
+retries, and does not enable `canSync` or register `PositionSync`. Unit tests
+use only local MockWebServer, including a simulated lost response; no Phase 3
+write was sent to the live BookOrbit installation. Before enabling a
+provider, wire guarded incoming locator adoption, conflict-resolution
+actions and bounded orchestration, and complete a disposable-book two-way
+reader acceptance check. BookOrbit offers no compare-and-swap: another
+device can still write between preflight and POST or between POST and
+read-back. A matching read-back proves server state, not sole authorship.
+
+### Live outgoing CFI interoperability
+
+On 2026-09-23 the disposable emulator's selected book 90/file 260 had a
+local CFI paired with revision 38 and its saved Readium locator. The same
+test account's selected-file progress was empty. A one-time authenticated
+test request posted that **app-generated** CFI and the local whole-book
+percentage to BookOrbit. A GET returned both values; opening the BookOrbit
+web reader showed the same passage as Liseur at the start of its spread.
+The web reader wrote its own CFI while opening, so equality of the stored
+CFI after opening is not the interoperability check; the rendered passage
+is. Test progress, status and reading attempt were then removed, and their
+counts returned to zero.
+
+This was a **manual test request**, not a call to the Phase 3 durable
+agreement boundary or an app-scheduled POST. It proves that BookOrbit can
+restore a CFI captured by Liseur, while the separate incoming check proves
+that Liseur can restore a web-reader passage. It does not prove automated
+two-way delivery, conflict settlement or uncertain-write recovery on the
+live installation. Keep sync disabled until those gates pass.
+
+## Phase 2 incoming cold-open check
+
+Only a book without a saved local reading place makes a bounded,
+selected-file progress GET while it is still loading, after the ordinary
+foreground sync and before entering `OpenBooks`. It retains the raw CFI under
+the captured connection, account, file and binding revision. An exact
+opening proposal requires the app-owned EPUB opened by Readium, the original
+bounded spine XHTML, a valid CFI endpoint in that document, and a unique matching resource in
+the opened Readium publication. The active WebView must show that resource
+and the proposed text quote in its viewport. The opening gate suppresses
+both pre-layout emissions and the confirming arrival. The local position
+is rechecked after the bounded GET, before opening the book; a concurrent
+local change wins over the incoming proposal. An unverified proposal falls
+back to the previously saved local locator (or the start of the publication
+when none exists), without posting or persisting the
+incoming position. Failed, timed-out, unsupported and unopened responses
+leave ordinary local reopening in place. No BookOrbit position sync
+capability or provider scheduling was enabled.
+
+On 2026-09-23 a disposable API 26 emulator with the selected app-owned
+book 90/file 260 cold-opened after force-stopping the process, using a
+fresh range CFI generated by that book's BookOrbit web reader. Readium's
+active WebView verified the proposed passage, and the local
+`reading_progress.local_revision` remained 38 after opening. The first
+run exposed Android's DOM `compareDocumentPosition` throwing
+`UnsupportedOperationException`; ordered node traversal replaced it,
+and the second cold open verified the CFI. The web-reader CFI was not
+POSTed by Liseur. The account's web-reader visit itself generated
+test-account progress, which was deleted through the selected-file API
+after the check. No other user's progress was touched.
+
+This is **incoming-only**, not a two-way acceptance gate. Without Phase 3
+agreement state, books with an existing saved local position do not pull
+remote progress on opening; no automatic conflict resolution or background
+pull is claimed. The first live opening check above used an existing local
+place before this safety restriction was added. A later check removed only
+the selected book's progress on a disposable emulator, placed a web-reader
+CFI for a later passage on the approved test account, and cold-opened the
+app-owned EPUB. The active WebView verified the passage after process restart;
+the reader showed a text page rather than the cover, and no local progress
+row was created during opening. The emulator's prior paired reading state
+was restored from a private backup. Test-account progress, status and
+reading attempt were removed afterward; all three counts returned to zero.
+This proves fresh-book incoming passage restoration, not a remote position
+merge with existing local reading.
+File provenance and CFI assertions reject mismatched selected files and
+many wrong editions, but a structurally identical, assertion-free CFI cannot cryptographically
+prove publication identity. Neither a remote percentage alone nor an
+unverified CFI is used as a BookOrbit-derived exact location. The opening
+gate still has its existing fail-open deadline, so a stalled navigator
+may eventually report its current position; the normal exact-open
+verification and fallback execute before that deadline.
+
 ## Phase 0 progress transport
 
 `BookOrbitProgressClient.read` fetches only the selected EPUB file in a
@@ -192,8 +317,8 @@ each resolved position. `BookOrbitCfiDom.capture` builds point/range CFIs
 from supplied text nodes, adjusted for split UTF-16 text and optional
 reader wrappers; it returns a CFI only if both endpoints resolve back to
 the same nodes and offsets. Captured Foliate output and synthetic
-altered-DOM tests cover these checks. These helpers are not wired to the
-reader or sync.
+altered-DOM tests cover these checks. The original-document resolver is
+used during reader opening; CFI capture is not wired to remote sync.
 The caller still needs to prove that the document is the selected file,
 and must mark resolution failed if any DOM step cannot be verified.
 
@@ -225,14 +350,13 @@ discard the candidate. For a scrolled book,
 the last measured place may retain a matching candidate until pause;
 otherwise the pause write clears it. The reader still uses its
 Readium locator for local reopening. **No incoming BookOrbit CFI is
-adopted and no outgoing candidate is sent**: reader restoration,
-durable agreement and read-back reconciliation are still required.
-`BookOrbitIncomingAnchor` can turn an original-XHTML CFI endpoint into
-a Readium text-anchor proposal, including a web-reader range whose
-start is an element. Tests cover resource identity and UTF-16 offsets.
-That proposal still needs verification in the active Readium WebView
-before it can be called exact or used for opening; it is not connected
-to progress reads.
+persisted locally and no outgoing candidate is sent**: durable agreement
+and read-back reconciliation are still required.
+`BookOrbitIncomingAnchor` turns an original-XHTML CFI endpoint into a
+Readium text-anchor proposal, including a web-reader range whose start
+is an element. Tests cover resource identity, UTF-16 offsets, a partial
+word and the opening gate. The reader now verifies the proposal in its
+active WebView on cold opening, using the selected-file progress GET.
 The dedicated `copilot` account connected on a disposable API 26 emulator.
 After a catalog refresh and normal download of selected book 90/file 260,
 Readium opened the app-owned EPUB and saved a verified CFI alongside the
@@ -242,9 +366,10 @@ JavaScript syntax unsupported by that WebView and returned an object rather
 than a JSON string. A later guard looked up Readium's resource URL as an
 exact ZIP entry name; resolving it to the selected spine entry fixed that
 rejection. An earlier page turn legitimately lacked a matching anchor, so
-not every movement produces a CFI. This proves local capture and pairing,
-**not** incoming restoration or a remote write. The test account's
-selected-file progress was still unopened at the last server check.
+not every movement produces a CFI. This proves local capture and pairing, **not** an outgoing remote write.
+At that earlier check, the test account's selected-file progress was still
+unopened; the later incoming cold-open check above used a newly generated
+web-reader range CFI.
 Temporary login/download hooks were removed; no test credential is in Git.
 
 During the same live refresh, `BookOrbitHttp.postObject` triggered
@@ -274,22 +399,22 @@ read-back, and retain the exact bytes of any outgoing request durably before
 attempting a mutation. A narration write has different CFI and timestamp
 behavior from a text write; do not generalize the text replacement rule.
 
-The next phase must resolve parsed CFIs only against the EPUB selected by the
-persisted `BookOrbitBinding`; check account key, file id and binding revision
-before accepting any result. A successful parse is not evidence that the CFI
-belongs to that EPUB or to a live DOM.
+Any future reconciliation must keep resolving parsed CFIs only against the
+EPUB selected by the persisted `BookOrbitBinding`; check account key, file
+id and binding revision before accepting any result. A successful parse
+alone is not evidence that the CFI belongs to that EPUB or a live DOM.
 
-Do not use `BookOrbitForeignCfi.parsed` as a `Locator`, reader restore target,
-or POST payload yet. DOM resolution must account for Readium's injected
+Do not use `BookOrbitForeignCfi.parsed` directly as a `Locator` or POST
+payload. DOM resolution must account for Readium's injected
 wrappers, split text nodes and browser UTF-16 offsets. It must preserve both
 range endpoints even when restoring from the start endpoint. A failed exact
 resolution may retain the raw CFI and offer only an explicitly approximate
 fallback; it must never write that fallback back as exact.
 
-Phase 2 must add the live BookOrbit web-reader and Liseur round trip on a
-disposable book. The captured library-output corpus is a starting point,
-not that acceptance test. Update this record with findings, fixture
-provenance and resolver caveats before handing work to the Phase 3 agent.
+The live web-reader-to-Liseur direction now passes on a disposable
+emulator. Liseur-to-web-reader delivery is still blocked on durable
+agreement and read-back; do not treat the one-way check as a full
+round-trip acceptance.
 
 Parser caveats for the resolver:
 
@@ -309,11 +434,12 @@ Parser caveats for the resolver:
   necessarily `/6`, and non-linear itemrefs still occupy CFI indices.
 - A syntactically parsed CFI is still DOM-unverified even when
   `unresolvedReason` is null. That field describes a parser failure only.
-- `BookOrbitCfiDom` takes a DOM supplied by its caller. The checked-file
-  repository can now load original spine XHTML for it, but the reader
-  is not connected to that check. It does not recognize Readium's wrappers.
-  Flatten only known reader-owned wrappers; never flatten an element from
-  the EPUB. Reader wiring and live two-way acceptance are still required.
+- `BookOrbitCfiDom` takes a DOM supplied by its caller. Incoming opening
+  uses the checked original spine XHTML, then verifies the proposed quote
+  in the active Readium WebView. It does not translate the CFI against
+  Readium's altered DOM or recognize its wrappers. Flatten only known
+  reader-owned wrappers; never flatten an element from the EPUB. Live
+  two-way acceptance remains outstanding.
 - Retained foreign CFIs are separate from Phase 3's agreement and outgoing
   bytes. Do not use the retention table as a position acknowledgement or
   outgoing-request queue.

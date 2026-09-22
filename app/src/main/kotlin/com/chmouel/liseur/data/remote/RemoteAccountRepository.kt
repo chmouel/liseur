@@ -111,6 +111,7 @@ class RemoteAccountRepository(
     private val bookOrbitBindingDao: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
     private val bookOrbitCfiDao: com.chmouel.liseur.data.db.BookOrbitCfiDao? = null,
     private val bookOrbitLocalCfiDao: com.chmouel.liseur.data.db.BookOrbitLocalCfiDao? = null,
+    private val bookOrbitPositionAgreementDao: com.chmouel.liseur.data.db.BookOrbitPositionAgreementDao? = null,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -936,6 +937,11 @@ class RemoteAccountRepository(
         )
         val written = if (existing != null) carryPeerState(existing, next) else next
         dao.upsert(written)
+        if (existing?.kind == ServerKind.BOOKORBIT) {
+            bookOrbitPositionAgreementDao?.rebindConnection(
+                written.accountKey, written.orbitEpoch, written.baseUrl,
+            )
+        }
         adoptBookOrbit(written)
     }
 
@@ -1150,6 +1156,7 @@ class RemoteAccountRepository(
         if (server.kind == ServerKind.BOOKORBIT) {
             bookOrbitCfiDao?.clearAccount(server.accountKey)
             bookOrbitLocalCfiDao?.clearAccount(server.accountKey)
+            bookOrbitPositionAgreementDao?.clearAccount(server.accountKey)
             bookOrbit?.clear()
         }
         if (server.kind != ServerKind.LISEUR_SYNC) return

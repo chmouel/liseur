@@ -14,6 +14,9 @@ import org.w3c.dom.Node
 internal object BookOrbitIncomingAnchor {
     data class Target(val href: String, val anchor: ViewportTextAnchor)
 
+    fun mayOfferOnOpen(localLocatorJson: String?, localProgression: Double?): Boolean =
+        localLocatorJson == null && localProgression == null
+
     /** A restore proposal only; the active Readium navigator must verify it after going there. */
     fun mark(base: Locator, target: Target): Locator? {
         val href = ResourceAddress.canonicalPath(base.href.toString())
@@ -47,9 +50,12 @@ internal object BookOrbitIncomingAnchor {
         val selector = selector(body, block) ?: return null
         val offset = textOffset(block, node, position.offset) ?: return null
         val text = block.textContent ?: return null
-        val word = Regex("\\S+").find(text, offset) ?: return null
+        val word = Regex("\\S+").findAll(text).firstOrNull { it.range.last >= offset }
+            ?: return null
         val before = text.substring(0, word.range.first).takeLastCodePoints(32)
         val after = text.substring(word.range.last + 1).takeCodePoints(32)
+        val quote = before + word.value.takeCodePoints(64) + after
+        if (text.indexOf(quote) != text.lastIndexOf(quote)) return null
         return Target(
             href = resource.href,
             anchor = ViewportTextAnchor(

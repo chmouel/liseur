@@ -249,6 +249,37 @@ const val EPSILON = 0.005
 /** Only floating-point noise is ignored once a local revision proves movement. */
 private const val LOCAL_MOVE_EPSILON = 0.000000001
 
+/** BookOrbit's exact position is independent of reading status and percentage rounding. */
+enum class ExactPositionDecision { Settled, Push, Pull, Conflict, Unresolved }
+
+fun reconcileExactPosition(
+    agreedRevision: Long?,
+    agreedLocator: String?,
+    agreedRemoteSaved: Boolean?,
+    agreedRemoteCfi: String?,
+    localRevision: Long?,
+    localLocator: String?,
+    localCfi: String?,
+    remoteSaved: Boolean,
+    remoteCfi: String?,
+    remoteVerified: Boolean,
+): ExactPositionDecision {
+    val localMoved = localRevision != agreedRevision || localLocator != agreedLocator
+    val remoteMoved = agreedRemoteSaved != null &&
+        (remoteSaved != agreedRemoteSaved || (remoteSaved && remoteCfi != agreedRemoteCfi))
+    if (localMoved && localCfi == null) return ExactPositionDecision.Unresolved
+    if (remoteSaved && remoteCfi == null) return ExactPositionDecision.Unresolved
+    if (localCfi != null && remoteSaved && localCfi == remoteCfi) return ExactPositionDecision.Settled
+    if (agreedRemoteSaved == null && remoteSaved) return ExactPositionDecision.Unresolved
+    if (localMoved && !remoteMoved) return ExactPositionDecision.Push
+    if (!localMoved && remoteMoved) {
+        return if (remoteVerified) ExactPositionDecision.Pull else ExactPositionDecision.Unresolved
+    }
+    if (localMoved && remoteMoved) return ExactPositionDecision.Conflict
+    return if (agreedRemoteSaved == null && !remoteSaved && localCfi == null)
+        ExactPositionDecision.Settled else ExactPositionDecision.Unresolved
+}
+
 /**
  * Whether a sync has any reason to touch this book at all.
  *

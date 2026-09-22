@@ -403,6 +403,282 @@ class BookOrbitCfiRepositoryTest {
         assertEquals(0, server.requestCount)
     }
 
+    private fun agreement(): BookOrbitPositionAgreementRepository {
+        val http = BookOrbitHttp(BookOrbitSession(db.remoteServerDao()))
+        return BookOrbitPositionAgreementRepository(
+            db, BookOrbitProgressClient(http, repository),
+            BookOrbitProgressMutationTransport(http, repository),
+        )
+    }
+
+    private suspend fun saveExact(context: BookOrbitCfiContext, cfi: String, at: Long) {
+        val locator = """{"href":"OPS/chapter.xhtml","locations":{"progression":0.25}}"""
+        BookOrbitLocalPositionWriter(db).save(
+            PositionUpdate(
+                bookUrl = context.bookUrl, locatorJson = locator, progression = 0.25,
+                readingSecondsPerPosition = null, readingPaceSamples = null,
+                readingPaceElapsedMs = null, readingPaceEvidence = null,
+                updatedAt = at, bookOrbitCfi = BookOrbitLocalCandidate(
+                    context, "OPS/chapter.xhtml", locator, cfi,
+                ),
+            ), "Reading",
+        )
+    }
+
+    private fun saved(cfi: String, percentage: Double = 25.0): String =
+        JSONObject(fixture("progress-saved.json")).apply {
+            put("cfi", cfi)
+            put("percentage", percentage)
+        }.toString()
+
+    @Test
+    fun `prepared bytes survive reopen and read back acknowledges only sent revision`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, cfi, 10)
+        val localBefore = db.readingProgressDao().get(context.bookUrl)!!
+        db.readingProgressDao().upsert(localBefore.copy(
+            pendingStatus = "Finished", pendingAccount = "another-status-peer",
+        ))
+        val sync = agreement()
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        val prepared = sync.prepare(context)
+        assertEquals(BookOrbitAttempt.PREPARED.name, prepared.attemptState)
+        assertEquals("GET", server.takeRequest().method)
+        val bytes = checkNotNull(prepared.outgoingBytes).clone()
+        assertEquals(25.0, JSONObject(String(bytes)).getDouble("percentage"), 0.0)
+        assertEquals(cfi, JSONObject(String(bytes)).getString("cfi"))
+
+        db.close()
+        db = open()
+        repository = BookOrbitCfiRepository(db)
+        assertArrayEquals(bytes, db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)!!.outgoingBytes)
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(body = saved(cfi, 25.0)))
+        assertEquals(BookOrbitReadBack.Agreed, agreement().send(context))
+        val posted = server.takeRequest()
+        assertEquals("POST", posted.method)
+        assertArrayEquals(bytes, checkNotNull(posted.body).toByteArray())
+        assertEquals("GET", server.takeRequest().method)
+        val row = db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)!!
+        assertEquals(prepared.sentLocalRevision, row.agreedLocalRevision)
+        assertNull(row.outgoingBytes)
+        assertEquals("Reading", db.readingProgressDao().get(context.bookUrl)!!.status)
+        assertNull(db.readingProgressDao().get(context.bookUrl)!!.agreedStatus)
+        assertEquals("Finished", db.readingProgressDao().get(context.bookUrl)!!.pendingStatus)
+        assertEquals("another-status-peer", db.readingProgressDao().get(context.bookUrl)!!.pendingAccount)
+        assertNull(db.bookOrbitCfiDao().get(context.request.accountKey, context.bookUrl))
+    }
+
+    @Test
+    fun `lost POST reads back before allowing a new preflight and never replays`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        server.enqueue(MockResponse.Builder().onResponseStart(SocketEffect.CloseSocket()).build())
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        assertEquals(BookOrbitReadBack.SafeToPrepareAgain, agreement().send(context))
+        assertEquals("POST", server.takeRequest().method)
+        assertEquals("GET", server.takeRequest().method)
+        assertEquals(3, server.requestCount)
+        assertNull(db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)!!.outgoingBytes)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        assertEquals(BookOrbitAttempt.PREPARED.name, agreement().prepare(context).attemptState)
+        server.takeRequest()
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `different remote anchor at same percentage keeps request and conflict`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(body = saved("epubcfi(/6/4!/4/2:4)")))
+        assertEquals(BookOrbitReadBack.Conflict, agreement().send(context))
+        server.takeRequest()
+        server.takeRequest()
+        val row = db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)!!
+        assertEquals(BookOrbitAttempt.UNCERTAIN.name, row.attemptState)
+        assertNotNull(row.outgoingBytes)
+        assertEquals("epubcfi(/6/4!/4/2:4)", row.candidateCfi)
+        assertThrows(BookOrbitPositionUnresolved::class.java) {
+            runBlocking { agreement().prepare(context) }
+        }
+    }
+
+    @Test
+    fun `same remote anchor with different percentage cannot acknowledge sent bytes`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, cfi, 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(body = saved(cfi, 25.01)))
+        assertEquals(BookOrbitReadBack.Conflict, agreement().send(context))
+        server.takeRequest()
+        server.takeRequest()
+        val row = db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)!!
+        assertNull(row.agreedLocalRevision)
+        assertNotNull(row.outgoingBytes)
+    }
+
+    @Test
+    fun `changed preflight percentage with unchanged CFI does not authorize uncertain retry`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        assertEquals(
+            com.chmouel.liseur.domain.ExactPositionDecision.Settled,
+            agreement().observe(context, BookOrbitFileProgress.parse(JSONObject(saved(first)))),
+        )
+        saveExact(context, "epubcfi(/6/4!/4/2:4)", 11)
+        server.enqueue(MockResponse(body = saved(first)))
+        agreement().prepare(context)
+        server.takeRequest()
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(body = saved(first, 26.0)))
+        assertEquals(BookOrbitReadBack.Conflict, agreement().send(context))
+        server.takeRequest()
+        server.takeRequest()
+    }
+
+    @Test
+    fun `token renewal does not change binding but a file or connection switch blocks send`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        db.remoteServerDao().upsert(account.copy(orbitAccessCipher = RemoteServer.seal("renewed")))
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(body = saved("epubcfi(/6/4!/4/2:3)")))
+        assertEquals(BookOrbitReadBack.Agreed, agreement().send(context))
+        assertEquals("Bearer renewed", server.takeRequest().headers["Authorization"])
+        server.takeRequest()
+
+        saveExact(context, "epubcfi(/6/4!/4/2:5)", 11)
+        server.enqueue(MockResponse(body = saved("epubcfi(/6/4!/4/2:3)")))
+        agreement().prepare(context)
+        server.takeRequest()
+        db.bookOrbitBindingDao().write(binding.copy(fileId = 35, revision = 3))
+        assertThrows(BookOrbitIdentityChanged::class.java) { runBlocking { agreement().send(context) } }
+        db.bookOrbitBindingDao().write(binding)
+        db.remoteServerDao().upsert(account.copy(orbitEpoch = 8))
+        assertThrows(BookOrbitIdentityChanged::class.java) { runBlocking { agreement().send(context) } }
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `same account reconnect transfers pending read back without reusing old context`(): Unit = runBlocking {
+        val oldContext = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(oldContext, cfi, 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(oldContext)
+        server.takeRequest()
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(code = 503))
+        assertThrows(RemoteHttpFailure::class.java) { runBlocking { agreement().send(oldContext) } }
+        server.takeRequest()
+        server.takeRequest()
+        val updated = account.copy(orbitEpoch = account.orbitEpoch + 1)
+        db.remoteServerDao().upsert(updated)
+        db.bookOrbitPositionAgreementDao().rebindConnection(
+            oldContext.request.accountKey, updated.orbitEpoch, updated.baseUrl,
+        )
+        val newContext = repository.capture(binding.bookUrl)
+        assertThrows(BookOrbitIdentityChanged::class.java) {
+            runBlocking { agreement().readBack(oldContext) }
+        }
+        server.enqueue(MockResponse(body = saved(cfi)))
+        assertEquals(BookOrbitReadBack.Agreed, agreement().readBack(newContext))
+        assertEquals("GET", server.takeRequest().method)
+    }
+
+    @Test
+    fun `reader moves after prepare before send or during POST`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, cfi, 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        saveExact(context, "epubcfi(/6/4!/4/2:4)", 11)
+        assertThrows(BookOrbitPositionUnresolved::class.java) { runBlocking { agreement().send(context) } }
+        assertEquals(1, server.requestCount)
+
+        // Restore a sent revision, then move the reader in the POST handler.
+        agreement().discardStalePreparation(context)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest): MockResponse {
+                if (request.method == "POST") {
+                    runBlocking { saveExact(context, "epubcfi(/6/4!/4/2:6)", 12) }
+                    return MockResponse(code = 201)
+                }
+                return MockResponse(body = saved("epubcfi(/6/4!/4/2:4)"))
+            }
+        }
+        assertEquals(BookOrbitReadBack.Agreed, agreement().send(context))
+        server.takeRequest()
+        server.takeRequest()
+        val row = db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)!!
+        assertEquals(2L, row.agreedLocalRevision)
+        assertEquals(3L, db.readingProgressDao().get(context.bookUrl)!!.localRevision)
+    }
+
+    @Test
+    fun `read back failure preserves bytes and restart recovers without another POST`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, cfi, 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        val prepared = agreement().prepare(context)
+        server.takeRequest()
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(code = 503))
+        assertThrows(RemoteHttpFailure::class.java) { runBlocking { agreement().send(context) } }
+        assertEquals("POST", server.takeRequest().method)
+        assertEquals("GET", server.takeRequest().method)
+        val uncertain = db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)!!
+        assertEquals(BookOrbitAttempt.UNCERTAIN.name, uncertain.attemptState)
+        assertArrayEquals(prepared.outgoingBytes, uncertain.outgoingBytes)
+        db.close()
+        db = open()
+        repository = BookOrbitCfiRepository(db)
+        server.enqueue(MockResponse(body = saved(cfi)))
+        assertEquals(BookOrbitReadBack.Agreed, agreement().readBack(context))
+        assertEquals("GET", server.takeRequest().method)
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `account cleanup and binding deletion remove agreements but not local reading`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        db.bookOrbitPositionAgreementDao().clearAccount(context.request.accountKey)
+        assertNull(db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl))
+        assertNotNull(db.readingProgressDao().get(context.bookUrl))
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement().prepare(context)
+        server.takeRequest()
+        db.bookOrbitBindingDao().clearBook(context.bookUrl)
+        assertNull(db.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl))
+        assertNotNull(db.readingProgressDao().get(context.bookUrl))
+    }
+
     @Test
     fun `source shaped book progress and eight status values remain distinct`() {
         val rows = JSONArray(fixture("progress-book.json"))
