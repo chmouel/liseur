@@ -20,13 +20,14 @@ import org.readium.r2.navigator.epub.css.ColCount
 import org.readium.r2.navigator.preferences.ColumnCount
 import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
+import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 
 /**
  * Columns are the one reading preference the window gets a veto on, so
  * the veto is checked here rather than by opening a book on a tablet.
  */
-@OptIn(ExperimentalReadiumApi::class)
+@OptIn(ExperimentalReadiumApi::class, DelicateReadiumApi::class)
 class ReaderPreferencesMapperTest {
 
     /** The palette the reader arrived at; irrelevant to these cases. */
@@ -163,6 +164,11 @@ class ReaderPreferencesMapperTest {
     @Test
     fun `the navigator selects native text zoom for font size`() {
         assertFalse(epubNavigatorConfigurationBase().useReadiumCssFontSize)
+    }
+
+    @Test
+    fun `the navigator keeps CSS sizing for fixed-layout books`() {
+        assertTrue(epubNavigatorConfigurationBase(reflowable = false).useReadiumCssFontSize)
     }
 
     @Test

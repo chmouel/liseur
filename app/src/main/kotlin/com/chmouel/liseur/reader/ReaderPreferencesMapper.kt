@@ -25,6 +25,7 @@ import org.readium.r2.navigator.preferences.ColumnCount
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
+import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 
 /**
@@ -219,9 +220,9 @@ fun ColumnMode.effectiveFor(widthClass: WidthClass): ColumnMode = when {
  * Publisher CSS can set an absolute size on `body` or a descendant, which
  * prevents it from inheriting Readium CSS's root font-size variable.
  */
-@OptIn(ExperimentalReadiumApi::class)
-internal fun EpubNavigatorFragment.Configuration.configureFontSizeRendering() {
-    useReadiumCssFontSize = false
+@OptIn(ExperimentalReadiumApi::class, DelicateReadiumApi::class)
+internal fun EpubNavigatorFragment.Configuration.configureFontSizeRendering(reflowable: Boolean) {
+    useReadiumCssFontSize = !reflowable
 }
 
 /**
@@ -266,11 +267,12 @@ internal fun EpubNavigatorFragment.Configuration.configureFontSizeRendering() {
 fun epubNavigatorConfiguration(
     columnMode: ColumnMode = ColumnMode.Default,
     scroll: Boolean = false,
+    reflowable: Boolean = true,
     userFonts: List<UserFont> = emptyList(),
     onTextSelected: () -> Unit = {},
     onSelectionCleared: () -> Unit = {},
 ): EpubNavigatorFragment.Configuration =
-    epubNavigatorConfigurationBase().apply {
+    epubNavigatorConfigurationBase(reflowable).apply {
         servedAssets = listOf("fonts/.*")
         disablePageTurnsWhileScrolling = scroll
         readiumCssRsProperties = readingRsProperties(columnMode)
@@ -386,8 +388,10 @@ fun epubNavigatorConfiguration(
 
     }
 
-@OptIn(ExperimentalReadiumApi::class)
-internal fun epubNavigatorConfigurationBase(): EpubNavigatorFragment.Configuration =
+@OptIn(ExperimentalReadiumApi::class, DelicateReadiumApi::class)
+internal fun epubNavigatorConfigurationBase(
+    reflowable: Boolean = true,
+): EpubNavigatorFragment.Configuration =
     EpubNavigatorFragment.Configuration {
-        configureFontSizeRendering()
+        configureFontSizeRendering(reflowable)
     }
