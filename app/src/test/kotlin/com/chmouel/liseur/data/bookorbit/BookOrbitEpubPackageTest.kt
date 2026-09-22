@@ -42,6 +42,26 @@ class BookOrbitEpubPackageTest {
     }
 
     @Test
+    fun `loads only bounded XHTML from the selected spine`() {
+        val epub = zip(
+            "META-INF/container.xml" to container("OPS/package.opf"),
+            "OPS/package.opf" to
+                """<package xmlns="http://www.idpf.org/2007/opf"><manifest>
+                    <item id="one" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="image" href="image.svg" media-type="image/svg+xml"/>
+                   </manifest><spine><itemref idref="one"/></spine></package>""",
+            "OPS/chapter.xhtml" to
+                """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Passage</p></body></html>""",
+            "OPS/image.svg" to """<svg/>""",
+        )
+        val publication = BookOrbitEpubPackage.parse(epub)
+        val document = BookOrbitEpubPackage.spineDocument(epub, publication, "OPS/chapter.xhtml")
+        assertEquals("Passage", document!!.getElementsByTagNameNS("*", "p").item(0).textContent)
+        assertEquals(null, BookOrbitEpubPackage.spineDocument(epub, publication, "OPS/image.svg"))
+        assertEquals(null, BookOrbitEpubPackage.spineDocument(epub, publication, "OPS/other.xhtml"))
+    }
+
+    @Test
     fun `reads prefixed epub 2 package documents`() {
         val parsed = BookOrbitEpubPackage.parsePackage(
             "OEBPS/content.opf",

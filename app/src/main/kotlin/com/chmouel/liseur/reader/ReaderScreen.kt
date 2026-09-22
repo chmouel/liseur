@@ -2,6 +2,7 @@ package com.chmouel.liseur.reader
 
 import android.app.Activity
 import android.graphics.BitmapFactory
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -97,6 +98,11 @@ import androidx.fragment.compose.AndroidFragment
 import android.graphics.RectF
 import android.view.HapticFeedbackConstants
 import android.view.View
+import com.chmouel.liseur.data.bookorbit.BookOrbitCfiContext
+import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
+import com.chmouel.liseur.data.bookorbit.BookOrbitLocalCandidate
+import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
+import com.chmouel.liseur.reader.progress.BookOrbitViewportCfi
 import android.os.SystemClock
 import android.webkit.WebView
 import org.readium.r2.shared.util.Url
@@ -207,6 +213,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
+import java.io.IOException
+import org.w3c.dom.Document
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -378,6 +386,10 @@ fun ReaderScreen(
     onReachedEndpaper: () -> Unit,
     onLeftEndpaper: () -> Unit,
     onLocatorChanged: (Locator, NavigatorPositionEvent) -> Unit,
+    onVerifiedLocatorChanged: (Locator, NavigatorPositionEvent, BookOrbitLocalCandidate) -> Unit,
+    openedBookOrbit: BookOrbitOpenedEpub?,
+    checkBookOrbitContext: suspend (BookOrbitCfiContext) -> Unit,
+    originalBookOrbitDocument: suspend (BookOrbitOpenedEpub, String) -> Document?,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
     onPageTurnerChanged: (PageTurner?) -> Unit,
     onChromeVisibleChanged: (Boolean) -> Unit = {},
@@ -671,9 +683,74 @@ fun ReaderScreen(
     // moment the reader leaves. Everything that measures one and
     // everything that supersedes one goes through here; see [HeldPlace].
     val heldPlace = remember { HeldPlace() }
+    var cachedBookOrbitCfi by remember(openedBookOrbit) {
+        mutableStateOf<BookOrbitLocalCandidate?>(null)
+    }
 
     suspend fun capture(nav: EpubNavigatorFragment, locator: Locator): Locator =
         onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
+
+    fun publishUnverified(locator: Locator, event: NavigatorPositionEvent) {
+        cachedBookOrbitCfi = null
+        onLocatorChanged(locator, event)
+    }
+
+    suspend fun candidateFor(
+        nav: EpubNavigatorFragment,
+        locator: Locator,
+        expectedNative: Locator? = null,
+    ): BookOrbitLocalCandidate? {
+        val opened = openedBookOrbit ?: return null
+        if (expectedNative != null && nav.currentLocator.value != expectedNative) return null
+        val candidate = try {
+            BookOrbitViewportCfi.capture(
+                navigator = nav,
+                opened = opened,
+                layoutGeneration = { layoutGeneration },
+                isReflowing = { reflow.active },
+                isCurrent = { navigatorNow === nav },
+                checkContext = checkBookOrbitContext,
+                originalDocument = originalBookOrbitDocument,
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: IOException) {
+            Log.w("bookorbit-position", "Could not verify the current viewport CFI", error)
+            null
+        } catch (error: BookOrbitEpubPackage.ParseException) {
+            Log.w("bookorbit-position", "Could not resolve the original EPUB resource", error)
+            null
+        }
+        val anchor = ExactLocatorAnchor.anchorIn(locator)
+        return candidate?.takeIf {
+            it.href == locator.href.toString() &&
+                anchor != null && it.before == anchor.before &&
+                it.word.startsWith(anchor.highlight)
+        }?.let {
+            BookOrbitLocalCandidate(
+                opened.context, it.href, locator.toJSON().toString(), it.raw,
+            )
+        }
+    }
+
+    suspend fun publishCaptured(
+        nav: EpubNavigatorFragment,
+        locator: Locator,
+        event: NavigatorPositionEvent,
+        expectedNative: Locator? = null,
+    ) {
+        val candidate = if (event.persists) candidateFor(nav, locator, expectedNative) else null
+        if (candidate != null) {
+            cachedBookOrbitCfi = candidate
+            onVerifiedLocatorChanged(
+                locator,
+                event,
+                candidate,
+            )
+        } else {
+            publishUnverified(locator, event)
+        }
+    }
 
     /**
      * Where a scrolled chapter has got to, as a locator worth saving.
@@ -737,7 +814,7 @@ fun ReaderScreen(
                 val since = heldPlace.mark()
                 scrolledPlace(nav)?.let {
                     if (!heldPlace.hold(it, since)) return@let false
-                    onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                    publishCaptured(nav, it, NavigatorPositionEvent.LOCAL_JUMP)
                     true
                 } ?: false
             } ?: false
@@ -1117,7 +1194,7 @@ fun ReaderScreen(
                 } else {
                     heldPlace.hold(captured, since)
                 }
-                onLocatorChanged(captured, event)
+                publishCaptured(nav, captured, event, expectedNative = native)
             }
         }
     }
@@ -1442,7 +1519,7 @@ fun ReaderScreen(
                     } else {
                         (reflowAnchor ?: capture(nav, nav.currentLocator.value)).also {
                             reflowAnchor = it
-                            onLocatorChanged(it, NavigatorPositionEvent.PREFERENCE_REFLOW)
+                            publishUnverified(it, NavigatorPositionEvent.PREFERENCE_REFLOW)
                         }
                     }
                     val before = ExactLocatorAnchor.layoutSignature(nav)
@@ -1912,7 +1989,8 @@ fun ReaderScreen(
                                 // the pace estimator and counts as time
                                 // spent, which READER_MOVEMENT is what
                                 // carries.
-                                onLocatorChanged(
+                                publishCaptured(
+                                    nav,
                                     captured,
                                     NavigatorPositionEvent.READER_MOVEMENT,
                                 )
@@ -2047,7 +2125,12 @@ fun ReaderScreen(
                     } catch (_: Exception) {
                         null
                     }
-                    if (captured != null) heldPlace.hold(captured, since)
+                    if (captured != null && heldPlace.hold(captured, since)) {
+                        val candidate = candidateFor(nav, captured)
+                        cachedBookOrbitCfi = candidate?.takeIf {
+                            heldPlace.current()?.toJSON()?.toString() == it.locatorJson
+                        }
+                    }
                 }
                 delay(SCROLL_PLACE_POLL_MS)
             }
@@ -2086,9 +2169,16 @@ fun ReaderScreen(
             // closing reader is not obliged to have.
             val putBack = pageTurner.draggedFrom
             pageTurnDrag.abandon()
-            putBack?.let { onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP) }
+            putBack?.let { publishUnverified(it, NavigatorPositionEvent.LOCAL_JUMP) }
             heldPlace.current()?.let {
-                onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                val candidate = cachedBookOrbitCfi?.takeIf { saved ->
+                    saved.locatorJson == it.toJSON().toString()
+                }
+                if (candidate != null) {
+                    onVerifiedLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP, candidate)
+                } else {
+                    publishUnverified(it, NavigatorPositionEvent.LOCAL_JUMP)
+                }
             }
         }
         lifecycle.addObserver(observer)
@@ -2165,7 +2255,7 @@ fun ReaderScreen(
                 val since = heldPlace.mark()
                 scrolledPlace(nav)?.let {
                     if (heldPlace.hold(it, since)) {
-                        onLocatorChanged(it, NavigatorPositionEvent.READER_MOVEMENT)
+                        publishCaptured(nav, it, NavigatorPositionEvent.READER_MOVEMENT)
                     }
                 }
             }
@@ -2206,7 +2296,7 @@ fun ReaderScreen(
                     val since = heldPlace.mark()
                     scrolledPlace(nav)?.let {
                         if (heldPlace.hold(it, since)) {
-                            onLocatorChanged(it, NavigatorPositionEvent.LOCAL_JUMP)
+                            publishCaptured(nav, it, NavigatorPositionEvent.LOCAL_JUMP)
                         }
                     }
                 }

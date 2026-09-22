@@ -1,14 +1,18 @@
 package com.chmouel.liseur.data.bookorbit
 
+import android.net.Uri
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookOrbitBinding
 import com.chmouel.liseur.data.db.BookOrbitBindingState
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.sync.PositionUpdate
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -18,16 +22,21 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.net.InetAddress
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import javax.crypto.KeyGenerator
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = android.app.Application::class)
 class BookOrbitCfiRepositoryTest {
+    @get:Rule val folder = TemporaryFolder()
     private lateinit var db: LiseurDatabase
     private lateinit var server: MockWebServer
     private lateinit var account: RemoteServer
@@ -128,6 +137,115 @@ class BookOrbitCfiRepositoryTest {
         repository.retain(repository.capture(binding.bookUrl), "epubcfi(/6/4)")
         db.bookOrbitBindingDao().clearBook(binding.bookUrl)
         assertNull(db.bookOrbitCfiDao().get(account.accountKey, binding.bookUrl))
+    }
+
+    @Test
+    fun `opened package must be the selected app-owned download opened by Readium`(): Unit = runBlocking {
+        val file = folder.newFile("selected.epub")
+        ZipOutputStream(file.outputStream()).use { zip ->
+            for ((name, xml) in mapOf(
+                "META-INF/container.xml" to
+                    """<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""",
+                "OPS/book.opf" to
+                    """<package xmlns="http://www.idpf.org/2007/opf"><manifest><item id="one" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="one"/></spine></package>""",
+                "OPS/chapter.xhtml" to
+                    """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Original passage</p></body></html>""",
+            )) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(xml.toByteArray())
+                zip.closeEntry()
+            }
+        }
+        val uri = Uri.fromFile(file).toString()
+        val book = Book(
+            url = binding.bookUrl, title = "Test book", author = null, coverPath = null,
+            source = null, addedAt = 1, lastOpenedAt = null, localUri = uri,
+            remoteUuid = "selected", downloadHref = BookOrbitUrl.downloadHref(34),
+            downloadState = DownloadState.DOWNLOADED,
+        )
+        db.bookDao().upsert(book)
+        val stored = db.bookDao().getByUrl(book.url)!!
+        db.bookOrbitBindingDao().write(binding.copy(fileSize = file.length()))
+        val context = repository.capture(binding.bookUrl)
+        val ownedFile: (String) -> java.io.File = { uuid ->
+            assertEquals("selected", uuid)
+            file
+        }
+        val opened = repository.openedPackage(context, uri, ownedFile)
+        assertEquals("OPS/book.opf", opened.publication.packagePath)
+        assertEquals(
+            opened.publication,
+            repository.openedIfConnected(binding.bookUrl, uri, ownedFile)?.publication,
+        )
+        assertNull(repository.openedIfConnected("file:///local.epub", uri, ownedFile))
+        assertEquals(
+            "Original passage",
+            repository.originalDocument(opened, "OPS/chapter.xhtml", ownedFile)!!
+                .getElementsByTagNameNS("*", "p").item(0).textContent,
+        )
+
+        suspend fun rejected(opened: String = uri, fileFor: (String) -> java.io.File = ownedFile) {
+            assertThrows(BookOrbitIdentityChanged::class.java) {
+                runBlocking { repository.openedPackage(context, opened, fileFor) }
+            }
+        }
+        rejected(opened = "file:///other.epub")
+        rejected(fileFor = { folder.newFile("other.epub") })
+        db.bookDao().upsert(stored.copy(downloadHref = BookOrbitUrl.downloadHref(35)))
+        rejected()
+        db.bookDao().upsert(stored)
+        db.bookOrbitBindingDao().write(binding.copy(fileSize = file.length() + 1))
+        rejected()
+        db.bookOrbitBindingDao().write(binding.copy(fileSize = file.length()))
+        db.bookDao().upsert(stored.copy(downloadState = DownloadState.REMOTE))
+        rejected()
+        assertThrows(BookOrbitIdentityChanged::class.java) {
+            runBlocking { repository.originalDocument(opened, "OPS/chapter.xhtml", ownedFile) }
+        }
+    }
+
+    @Test
+    fun `verified local CFI is paired with one revision and cleared by a later position`() = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val locator = """{"href":"OPS/chapter.xhtml","locations":{"progression":0.3}}"""
+        val update = PositionUpdate(
+            bookUrl = binding.bookUrl, locatorJson = locator, progression = 0.3,
+            readingSecondsPerPosition = null, readingPaceSamples = null,
+            readingPaceElapsedMs = null, readingPaceEvidence = null, updatedAt = 10,
+        )
+        val writer = BookOrbitLocalPositionWriter(db)
+        val candidate = BookOrbitLocalCandidate(
+            context, "OPS/chapter.xhtml", locator, "epubcfi(/6/2!/4/2/1:3)",
+        )
+        writer.save(update.copy(bookOrbitCfi = candidate), "Reading")
+        val saved = db.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)!!
+        val progress = db.readingProgressDao().get(context.bookUrl)!!
+        assertEquals(progress.localRevision, saved.localRevision)
+        assertEquals(progress.locatorJson, saved.locatorJson)
+        assertEquals(candidate.rawCfi, saved.rawCfi)
+
+        writer.save(update.copy(updatedAt = 11), "Reading")
+        assertNull(db.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl))
+        assertEquals(progress.localRevision + 1, db.readingProgressDao().get(context.bookUrl)!!.localRevision)
+
+        db.bookOrbitBindingDao().write(binding.copy(fileId = 35, revision = 3))
+        writer.save(update.copy(updatedAt = 12, bookOrbitCfi = candidate), "Reading")
+        assertNull(db.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl))
+        assertEquals(progress.localRevision + 2, db.readingProgressDao().get(context.bookUrl)!!.localRevision)
+
+        val next = repository.capture(binding.bookUrl)
+        writer.save(update.copy(updatedAt = 13, bookOrbitCfi = candidate.copy(context = next)), "Reading")
+        assertNotNull(db.bookOrbitLocalCfiDao().get(next.request.accountKey, next.bookUrl))
+        db.bookOrbitLocalCfiDao().clearAccount(next.request.accountKey)
+        assertNull(db.bookOrbitLocalCfiDao().get(next.request.accountKey, next.bookUrl))
+        writer.save(update.copy(updatedAt = 14, bookOrbitCfi = candidate.copy(context = next)), "Reading")
+        db.bookOrbitBindingDao().clearBook(next.bookUrl)
+        assertNull(db.bookOrbitLocalCfiDao().get(next.request.accountKey, next.bookUrl))
+
+        db.bookOrbitBindingDao().write(binding.copy(fileId = 35, revision = 3))
+        writer.save(update.copy(updatedAt = 15, bookOrbitCfi = candidate.copy(context = next)), "Reading")
+        db.readingProgressDao().forget(next.bookUrl)
+        assertNull(db.bookOrbitLocalCfiDao().get(next.request.accountKey, next.bookUrl))
     }
 
     @Test

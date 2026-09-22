@@ -110,6 +110,7 @@ class RemoteAccountRepository(
     /** File bindings outlive disconnect only while their downloaded book does. */
     private val bookOrbitBindingDao: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
     private val bookOrbitCfiDao: com.chmouel.liseur.data.db.BookOrbitCfiDao? = null,
+    private val bookOrbitLocalCfiDao: com.chmouel.liseur.data.db.BookOrbitLocalCfiDao? = null,
     private val setups: Map<ServerKind, ServerSetup> = mapOf(
         ServerKind.CALIBRE to CalibreSetupClient(),
         ServerKind.KOMGA to KomgaSetupClient(),
@@ -1148,6 +1149,7 @@ class RemoteAccountRepository(
         // Its namespaced book URL means another account cannot inherit it.
         if (server.kind == ServerKind.BOOKORBIT) {
             bookOrbitCfiDao?.clearAccount(server.accountKey)
+            bookOrbitLocalCfiDao?.clearAccount(server.accountKey)
             bookOrbit?.clear()
         }
         if (server.kind != ServerKind.LISEUR_SYNC) return

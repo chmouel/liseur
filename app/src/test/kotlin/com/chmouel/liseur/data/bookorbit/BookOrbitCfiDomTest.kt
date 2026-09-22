@@ -172,6 +172,19 @@ class BookOrbitCfiDomTest {
     }
 
     @Test
+    fun `web reader range restores an element start and text end`() {
+        val document = document()
+        val range = requireNotNull(BookOrbitCfiDom.resolve(
+            target("epubcfi(/6[reading-order]/2[ref-one]!/4/2[first],,/1:9)"),
+            document,
+        ))
+        assertEquals(document.getElementsByTagName("p").item(0), range.start.node)
+        assertEquals(0, range.start.offset)
+        assertEquals(document.getElementsByTagName("p").item(0).firstChild, range.end.node)
+        assertEquals(9, range.end.offset)
+    }
+
+    @Test
     fun `outgoing capture adjusts split UTF16 text and escapes asserted IDs`() {
         val document = document()
         val paragraphs = document.getElementsByTagName("p")
