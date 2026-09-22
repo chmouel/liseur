@@ -55,26 +55,35 @@ data class BookOrbitEpubPackage(
          */
         fun parse(epub: File): BookOrbitEpubPackage =
             ZipFile(epub).use { zip ->
-                fun read(name: String): ByteArray {
-                    val entry = zip.getEntry(name) ?: throw ParseException("EPUB has no $name")
-                    if (entry.isDirectory) throw ParseException("EPUB entry $name is a directory")
-                    return zip.getInputStream(entry).use { input ->
-                        val out = ByteArrayOutputStream()
-                        val buffer = ByteArray(8192)
-                        var total = 0
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            total += count
-                            if (total > MAX_XML_BYTES) throw ParseException("EPUB entry $name is too large")
-                            out.write(buffer, 0, count)
-                        }
-                        out.toByteArray()
-                    }
-                }
-                val packagePath = parseContainer(read(CONTAINER_PATH))
-                parsePackage(packagePath, read(packagePath))
+                val packagePath = parseContainer(read(zip, CONTAINER_PATH))
+                parsePackage(packagePath, read(zip, packagePath))
             }
+
+        /** Only original spine XHTML can verify a CFI generated from Readium's DOM. */
+        fun spineDocument(epub: File, publication: BookOrbitEpubPackage, href: String): org.w3c.dom.Document? {
+            val item = publication.spine.singleOrNull { it.href == href } ?: return null
+            val manifest = publication.manifest[item.idref] ?: return null
+            if (manifest.mediaType != "application/xhtml+xml") return null
+            return ZipFile(epub).use { zip -> xml(read(zip, href)) }
+        }
+
+        private fun read(zip: ZipFile, name: String): ByteArray {
+            val entry = zip.getEntry(name) ?: throw ParseException("EPUB has no $name")
+            if (entry.isDirectory) throw ParseException("EPUB entry $name is a directory")
+            return zip.getInputStream(entry).use { input ->
+                val out = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    if (total > MAX_XML_BYTES) throw ParseException("EPUB entry $name is too large")
+                    out.write(buffer, 0, count)
+                }
+                out.toByteArray()
+            }
+        }
 
         fun parsePackage(packagePath: String, opf: ByteArray): BookOrbitEpubPackage {
             val normalizedPackagePath = normalize(packagePath)

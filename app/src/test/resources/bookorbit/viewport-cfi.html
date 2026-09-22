@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>BookOrbit viewport CFI browser check</title>
+<iframe src="OPS/one.xhtml" width="600" height="300"></iframe>
+<pre id="result">pending</pre>
+<script>
+(async () => {
+  try {
+    const frame = document.querySelector("iframe");
+    await new Promise((resolve, reject) => {
+      frame.addEventListener("load", resolve, {once: true});
+      frame.addEventListener("error", reject, {once: true});
+    });
+    const source = await (await fetch(
+      "../../../main/kotlin/com/chmouel/liseur/reader/progress/BookOrbitViewportCfi.kt"
+    )).text();
+    const script = source.split('internal val CAPTURE_SCRIPT = """')[1].split('""".trimIndent()')[0];
+    const cfi = frame.contentWindow.eval(script);
+    const first = frame.contentDocument.getElementById("first");
+    const wrapper = frame.contentDocument.createElement("div");
+    first.parentNode.insertBefore(wrapper, first);
+    wrapper.appendChild(first);
+    const hidden = {};
+    for (const [property, value] of [
+      ["display", "none"], ["visibility", "hidden"], ["opacity", "0"]
+    ]) {
+      wrapper.style[property] = value;
+      if (property !== "display") {
+        const rect = first.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+          throw new Error(property + " did not preserve layout rectangles");
+        }
+      }
+      hidden[property] = frame.contentWindow.eval(script);
+      wrapper.style[property] = "";
+    }
+    wrapper.style.opacity = "0";
+    frame.contentDocument.getElementById("escaped,;=[]^").style.visibility = "hidden";
+    hidden.all = frame.contentWindow.eval(script);
+    const expected = "/4/4[escaped^,^;^=^[^]^^]/1:0";
+    if (cfi?.path !== "/4/2[first]/1:0" || cfi.text !== "Before 😀 after café." ||
+      cfi.before !== "" || cfi.word !== "Before" ||
+      hidden.display?.path !== expected || hidden.visibility?.path !== expected ||
+      hidden.opacity?.path !== expected || hidden.all !== null) {
+      throw new Error("Unexpected visible CFI: " + JSON.stringify({cfi, hidden}));
+    }
+    document.getElementById("result").textContent = "PASS: " + JSON.stringify({cfi, hidden});
+  } catch (error) {
+    document.getElementById("result").textContent = "ERROR: " + error.stack;
+  }
+})();
+</script>

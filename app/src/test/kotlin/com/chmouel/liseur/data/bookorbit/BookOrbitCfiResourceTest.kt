@@ -64,4 +64,15 @@ class BookOrbitCfiResourceTest {
         assertEquals("OPS/one.xhtml", target?.href)
         assertNotNull(target?.end)
     }
+
+    @Test
+    fun `web reader range can start at its parent element`() {
+        val target = requireNotNull(BookOrbitCfiResource.locate(
+            BookOrbitCfi.parse("epubcfi(/6[reading-order]/2[ref-one]!/4/2[first],,/1:9)"),
+            publication,
+        ))
+        assertEquals("OPS/one.xhtml", target.href)
+        assertNull(target.start.offset)
+        assertEquals(9, target.end?.offset?.character)
+    }
 }

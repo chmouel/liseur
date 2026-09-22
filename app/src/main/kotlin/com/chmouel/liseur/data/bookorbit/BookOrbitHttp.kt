@@ -6,6 +6,8 @@ import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -41,12 +43,12 @@ class BookOrbitHttp(
         context: BookOrbitRequestContext,
         url: String,
         json: JSONObject,
-    ): MutationResult {
+    ): MutationResult = withContext(Dispatchers.IO) {
         val token = session.token(context)
         val bearer = RemoteCredentials.Bearer(token)
         val request = signed(context, url, bearer)
             .post(json.toString().toRequestBody(JSON)).build()
-        return try {
+        try {
             http.client.newBuilder()
                 .followRedirects(false)
                 .followSslRedirects(false)
@@ -84,13 +86,14 @@ class BookOrbitHttp(
     suspend fun getObjectOrNull(
         context: BookOrbitRequestContext,
         url: String,
-    ): JSONObject? =
+    ): JSONObject? = withContext(Dispatchers.IO) {
         session.authorized(context) { bearer ->
             http.client.newCall(signed(context, url, bearer).build()).execute().use { response ->
                 if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
                 val text = response.body?.string().orEmpty()
                 if (text.isBlank()) null else asObject(text)
             }
+    }
         }
 
     suspend fun postObject(
@@ -98,11 +101,13 @@ class BookOrbitHttp(
         url: String,
         json: JSONObject,
         rejected: Set<Int> = emptySet(),
-    ): JSONObject? = session.authorized(context) { bearer ->
-        val request = signed(context, url, bearer).post(json.toString().toRequestBody(JSON)).build()
-        http.client.newCall(request).execute().use { response ->
-            if (response.code in rejected) return@authorized null
-            asObject(body(response))
+    ): JSONObject? = withContext(Dispatchers.IO) {
+        session.authorized(context) { bearer ->
+            val request = signed(context, url, bearer).post(json.toString().toRequestBody(JSON)).build()
+            http.client.newCall(request).execute().use { response ->
+                if (response.code in rejected) return@authorized null
+                asObject(body(response))
+            }
         }
     }
 
@@ -120,22 +125,26 @@ class BookOrbitHttp(
         method: String,
         json: JSONObject? = null,
         rejected: Set<Int> = emptySet(),
-    ): Int = session.authorized(context) { bearer ->
-        val body = json?.toString()?.toRequestBody(JSON) ?: EMPTY
-        val request = signed(context, url, bearer)
-            .method(method, if (method == "DELETE" && json == null) null else body)
-            .build()
-        http.client.newCall(request).execute().use { response ->
-            if (response.isSuccessful || response.code in rejected) return@authorized response.code
-            throw RemoteHttpFailure(failureForCode(response.code))
+    ): Int = withContext(Dispatchers.IO) {
+        session.authorized(context) { bearer ->
+            val body = json?.toString()?.toRequestBody(JSON) ?: EMPTY
+            val request = signed(context, url, bearer)
+                .method(method, if (method == "DELETE" && json == null) null else body)
+                .build()
+            http.client.newCall(request).execute().use { response ->
+                if (response.isSuccessful || response.code in rejected) return@authorized response.code
+                throw RemoteHttpFailure(failureForCode(response.code))
+            }
         }
     }
 
     private suspend fun get(
         context: BookOrbitRequestContext,
         url: String,
-    ): String = session.authorized(context) { bearer ->
-        body(http.client.newCall(signed(context, url, bearer).build()).execute())
+    ): String = withContext(Dispatchers.IO) {
+        session.authorized(context) { bearer ->
+            body(http.client.newCall(signed(context, url, bearer).build()).execute())
+        }
     }
 
     private fun signed(

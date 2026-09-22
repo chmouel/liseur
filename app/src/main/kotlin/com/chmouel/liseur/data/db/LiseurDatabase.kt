@@ -31,8 +31,9 @@ import androidx.sqlite.execSQL
         StarterCatalogProgress::class,
         BookOrbitBinding::class,
         BookOrbitCfiRecord::class,
+        BookOrbitLocalCfi::class,
     ],
-    version = 55,
+    version = 56,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -58,6 +59,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun starterCatalogProgressDao(): StarterCatalogProgressDao
     abstract fun bookOrbitBindingDao(): BookOrbitBindingDao
     abstract fun bookOrbitCfiDao(): BookOrbitCfiDao
+    abstract fun bookOrbitLocalCfiDao(): BookOrbitLocalCfiDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1594,6 +1596,36 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_55_56 = object : Migration(55, 56) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_orbit_local_cfi` (
+                        `account_key` TEXT NOT NULL,
+                        `book_url` TEXT NOT NULL,
+                        `book_id` INTEGER NOT NULL,
+                        `file_id` INTEGER NOT NULL,
+                        `binding_revision` INTEGER NOT NULL,
+                        `local_revision` INTEGER NOT NULL,
+                        `locator_json` TEXT NOT NULL,
+                        `raw_cfi` TEXT NOT NULL,
+                        PRIMARY KEY(`account_key`, `book_url`),
+                        FOREIGN KEY(`account_key`, `book_url`)
+                            REFERENCES `book_orbit_binding`(`account_key`, `book_url`)
+                            ON UPDATE CASCADE ON DELETE CASCADE,
+                        FOREIGN KEY(`book_url`)
+                            REFERENCES `reading_progress`(`book_url`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_book_orbit_local_cfi_book_url` " +
+                        "ON `book_orbit_local_cfi` (`book_url`)",
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1649,6 +1681,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_52_53,
             MIGRATION_53_54,
             MIGRATION_54_55,
+            MIGRATION_55_56,
         )
     }
 }

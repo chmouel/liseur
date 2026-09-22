@@ -427,7 +427,19 @@ class ReaderActivity : FragmentActivity() {
                                     onContinueNext = viewModel::onContinueNext,
                                     onReachedEndpaper = viewModel::onReachedEndpaper,
                                     onLeftEndpaper = viewModel::onLeftEndpaper,
-                                    onLocatorChanged = viewModel::onLocatorChanged,
+                                    onLocatorChanged = { locator, event ->
+                                        viewModel.onLocatorChanged(locator, event)
+                                    },
+                                    onVerifiedLocatorChanged = { locator, event, candidate ->
+                                        viewModel.onLocatorChanged(locator, event, candidate)
+                                    },
+                                    openedBookOrbit = s.openedBookOrbit,
+                                    checkBookOrbitContext = container.bookOrbitCfis::check,
+                                    originalBookOrbitDocument = { opened, href ->
+                                        container.bookOrbitCfis.originalDocument(
+                                            opened, href, container.bookDownloads::fileFor,
+                                        )
+                                    },
                                     onNavigatorChanged = { navigator = it },
                                     keepScreenOnFlow = viewModel.keepScreenOn,
                                     onKeepScreenOnChanged = viewModel::setKeepScreenOn,

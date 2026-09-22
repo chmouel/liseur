@@ -25,14 +25,22 @@ compare a fresh selected-file GET against the exact sent payload before
 acknowledging or retrying. Never interpret `Uncertain` as rejection. The
 transport does not persist outgoing bytes or make writes on its own.
 
-The `progress-*.json` test bodies are **synthetic, source-shaped examples**,
-not authenticated responses: `progress-unopened.json` follows the literal
-default in BookOrbit v3.0.0 `book.controller.ts`; the saved row follows the
-`readingProgress` row returned by `book.repository.ts`; the multi-file
-example follows `getBookProgress` in `book.service.ts`. The status parser
-preserves all eight names in `user-book-status.constants.ts` and unknown
-future values. MockWebServer tests exercise selected-file identity,
-malformed replies, a lost POST response, and no automatic POST replay.
+The original `progress-*.json` examples are synthetic and source-shaped.
+The `progress-live-*.json` fixtures are sanitized authenticated responses
+from the `copilot` account on `orbit.chmouel.com`, captured on 2026-09-22.
+The deployed arm64 container configuration digest
+`sha256:8b811671dab475336b020ab84cd4f463d2acc04c12c943ba50e6cd53e325f880`
+matches the published `ghcr.io/bookorbit/bookorbit:3.0.0` image. Fixture
+user, file and row IDs and timestamps were replaced with fixed test values;
+the position fields and null/presence shapes were preserved. No private
+book metadata or credentials were included. `BookOrbitLiveProgressTest`
+checks the unopened and saved-zero replies, a three-file progress list,
+and both sides of a replacement POST. Eight sanitized `readStatus` projections
+were captured after PATCHing the same test book through every status, then
+reading its book detail. The parser preserves those names and unknown future
+values; full private book-detail DTOs were deliberately not committed.
+MockWebServer tests exercise selected-file identity, malformed replies,
+a lost POST response, and no automatic POST replay.
 
 Source review of v3.0.0 `book.service.ts` (`resolveTextPosition` and
 `saveProgress`) and `book.repository.ts` (`upsertProgress`) shows that a
@@ -43,14 +51,17 @@ by the sent value. Narration percentage and timestamp are preserved on
 an existing row because `narrationColumns` is empty for a text write;
 `textUpdatedAt` and `updatedAt` advance. A text write may also update read
 status, Kobo state, and sibling EPUB progress through server-side hooks.
-This is source-derived evidence, **not a test against a running BookOrbit
-server**. Before enabling writes, capture sanitized authenticated v3.0.0
-responses for each fixture shape and run a disposable-book text POST with
-preexisting CFI, KOReader, Kobo, narration, and overlay fields; verify each
-read-back and downstream effect. The Phase 0 server replacement-test gate
-is still open. The current environment has no running Docker daemon or
-PostgreSQL, and its Node 22 is below BookOrbit v3.0.0's Node 24 requirement.
-Do not substitute a production server for the disposable-book test.
+The live check used a single-EPUB book that had no prior `copilot` progress,
+status or reading attempt. It saved a zero with a CFI, populated all ten
+fields, established a narration marker behind the text place, then posted
+only `percentage: 30`. GET confirmed that all ten omitted fields were null
+while narration percentage and timestamp stayed unchanged. The account's
+progress was deleted through the API, and the status and reading attempt
+created for this account and book were removed transactionally; post-check
+counts matched the clean baseline. No other user's progress was modified.
+This proves the replacement semantics on the deployed v3.0.0 image, but
+does not test BookOrbit web-reader ↔ Liseur interoperability or prevent
+another device from writing between a GET and POST.
 
 ## Phase 1 acceptance
 
@@ -70,9 +81,8 @@ acceptance criterion.
 | Android XML behavior | Production APK parser smoke on disposable API 26 emulator, 2026-09-22 |
 
 The `/info` test body follows BookOrbit v3.0.0's published DTO; it is not
-a captured authenticated response. No BookOrbit credentials were available
-for this acceptance run. Phase 0's progress reader and mutation transport
-have tests, but its live replacement-field test is still open.
+a captured authenticated response. The Phase 1 run had no BookOrbit
+credentials; Phase 0 later added the live progress fixtures described above.
 
 On 2026-09-22, `make check` passed, the Chromium recapture matched all four
 committed CFI fixtures, and the API 26 smoke passed. One final review of the
@@ -187,8 +197,77 @@ reader or sync.
 The caller still needs to prove that the document is the selected file,
 and must mark resolution failed if any DOM step cannot be verified.
 
-Complete Phase 0's live-server fixture and replacement test before using
-progress reads for reconciliation or the mutation transport for writes.
+`BookOrbitViewportCfi` is a reader-side capture helper. It asks
+the selected Readium navigator for a visible text position and rejects
+stale href, WebView, layout generation, reflow state or selected-file
+context. `BookOrbitCfiRepository.openedPackage` checks the opened URL
+against the app-owned download, selected file ID, binding, and recorded
+file size. `originalDocument` rechecks the file and loads only bounded
+original spine XHTML. The candidate must resolve to the same text slot
+in that document, including split text nodes. A browser fixture covers
+hidden, transparent and absent text; JVM tests cover mismatched files
+and source text. This does not compare a fresh server content hash:
+it relies on download provenance and the app-owned file.
+
+`BookOrbitLocalPositionWriter` now saves a locator and any supplied
+verified CFI in one Room transaction. Schema 56 stores that CFI apart
+from foreign BookOrbit input, paired with the saved locator and local
+revision. Every subsequent local position without a candidate deletes
+the older CFI; a stale account or file binding discards only the
+candidate, not the local reading. Removing a binding, reading progress,
+or account also removes the paired CFI.
+
+Reader opening now attempts that checked-file contract, without
+blocking an EPUB that cannot be verified. A genuine reader movement
+captures its locator and CFI together; their visible word and preceding
+text must agree, and viewport changes during asynchronous verification
+discard the candidate. For a scrolled book,
+the last measured place may retain a matching candidate until pause;
+otherwise the pause write clears it. The reader still uses its
+Readium locator for local reopening. **No incoming BookOrbit CFI is
+adopted and no outgoing candidate is sent**: reader restoration,
+durable agreement and read-back reconciliation are still required.
+`BookOrbitIncomingAnchor` can turn an original-XHTML CFI endpoint into
+a Readium text-anchor proposal, including a web-reader range whose
+start is an element. Tests cover resource identity and UTF-16 offsets.
+That proposal still needs verification in the active Readium WebView
+before it can be called exact or used for opening; it is not connected
+to progress reads.
+The dedicated `copilot` account connected on a disposable API 26 emulator.
+After a catalog refresh and normal download of selected book 90/file 260,
+Readium opened the app-owned EPUB and saved a verified CFI alongside the
+same locator and local revision (38) in `book_orbit_local_cfi` and
+`reading_progress`. Live capture initially failed because the script used
+JavaScript syntax unsupported by that WebView and returned an object rather
+than a JSON string. A later guard looked up Readium's resource URL as an
+exact ZIP entry name; resolving it to the selected spine entry fixed that
+rejection. An earlier page turn legitimately lacked a matching anchor, so
+not every movement produces a CFI. This proves local capture and pairing,
+**not** incoming restoration or a remote write. The test account's
+selected-file progress was still unopened at the last server check.
+Temporary login/download hooks were removed; no test credential is in Git.
+
+During the same live refresh, `BookOrbitHttp.postObject` triggered
+`NetworkOnMainThreadException`. Its blocking HTTP entry points now dispatch
+to `Dispatchers.IO`; the authenticated catalog refresh subsequently
+completed. Keep that dispatch for future position and status calls.
+
+The BookOrbit v3.0.0 web reader was also exercised with the dedicated
+test account. A page turn produced a range CFI with an empty start
+endpoint at its parent element. A private download of that selected EPUB
+was parsed by the production `BookOrbitEpubPackage` and
+`BookOrbitCfiResource` code; `BookOrbitCfiDom` resolved both endpoints
+in the selected XHTML. No book bytes or text were committed. The
+`BookOrbitCfiResourceTest` and `BookOrbitCfiDomTest` now reproduce the
+same range shape using project-authored XHTML. Web-reader progress and
+the account's resulting status and reading attempt were removed after
+the check. This verifies BookOrbit's outgoing CFI against the original
+EPUB, not Readium's modified DOM or Liseur's opening behavior.
+
+The live Phase 0 replacement test is complete; keep the captured source
+separate from a BookOrbit CFI that was actually opened by the web reader.
+Before using progress reads for reconciliation or the mutation transport
+for writes, finish the reader round trip and durable agreement.
 In particular, a 200/201/204 POST only authorizes read-back, never a
 position or status acknowledgement. Recheck the selected binding after
 read-back, and retain the exact bytes of any outgoing request durably before
@@ -230,9 +309,9 @@ Parser caveats for the resolver:
   necessarily `/6`, and non-linear itemrefs still occupy CFI indices.
 - A syntactically parsed CFI is still DOM-unverified even when
   `unresolvedReason` is null. That field describes a parser failure only.
-- `BookOrbitCfiDom` takes a DOM supplied by its caller. It does not parse
-  the selected EPUB itself or recognize Readium's injected wrappers.
-  Outgoing capture has not been connected to the current reader viewport.
+- `BookOrbitCfiDom` takes a DOM supplied by its caller. The checked-file
+  repository can now load original spine XHTML for it, but the reader
+  is not connected to that check. It does not recognize Readium's wrappers.
   Flatten only known reader-owned wrappers; never flatten an element from
   the EPUB. Reader wiring and live two-way acceptance are still required.
 - Retained foreign CFIs are separate from Phase 3's agreement and outgoing

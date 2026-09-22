@@ -218,6 +218,7 @@ class AppContainer(context: Context) {
         bookOrbit = bookOrbitSession,
         bookOrbitBindingDao = database.bookOrbitBindingDao(),
         bookOrbitCfiDao = database.bookOrbitCfiDao(),
+        bookOrbitLocalCfiDao = database.bookOrbitLocalCfiDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
@@ -542,19 +543,7 @@ class AppContainer(context: Context) {
     val readingPositions = ReadingPositionPublisher(
         scope = applicationScope,
         overrideFor = { database.readingProgressDao().get(it)?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE },
-        persist = { update, status ->
-            database.readingProgressDao().recordLocal(
-                bookUrl = update.bookUrl,
-                locatorJson = update.locatorJson,
-                progression = update.progression,
-                readingSecondsPerPosition = update.readingSecondsPerPosition,
-                readingPaceSamples = update.readingPaceSamples,
-                readingPaceElapsedMs = update.readingPaceElapsedMs,
-                readingPaceEvidence = update.readingPaceEvidence,
-                status = status,
-                updatedAt = update.updatedAt,
-            )
-        },
+        persist = com.chmouel.liseur.data.bookorbit.BookOrbitLocalPositionWriter(database)::save,
         refreshFinished = finishedState::refreshFromProgress,
         markFinished = { finishedState.setFinished(it, true) },
         latestSync = latestPositionSync,

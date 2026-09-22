@@ -1,5 +1,6 @@
 package com.chmouel.liseur.sync
 
+import com.chmouel.liseur.data.bookorbit.BookOrbitLocalCandidate
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.readingStatusFor
@@ -22,6 +23,7 @@ data class PositionUpdate(
     val readingPaceElapsedMs: Long?,
     val readingPaceEvidence: Double?,
     val updatedAt: Long,
+    val bookOrbitCfi: BookOrbitLocalCandidate? = null,
 )
 
 /**

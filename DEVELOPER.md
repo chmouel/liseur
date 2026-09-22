@@ -1262,13 +1262,21 @@ CFI live.
   cross-check. The Phase 0 `BookOrbitProgressClient` reads only the selected
   file and distinguishes an unopened default from a saved zero;
   `BookOrbitProgressMutationTransport` classifies single-attempt POST
-  outcomes but is not wired into sync. Authenticated fixtures and the
-  live replacement-field test are still outstanding. None of these
+  outcomes but is not wired into sync. Authenticated v3.0.0 progress
+  fixtures and a test-account replacement-field check are recorded in
+  `docs/bookorbit-position-sync.md`. None of these
   components restores or pushes a position during normal operation.
   Phase 2's `BookOrbitCfiResource` and `BookOrbitCfiDom` can check the OPF
   target, resolve a supplied DOM and generate a DOM-local point/range CFI
-  offline, but viewport capture, reader integration and a live two-way CFI
-  round trip are still outstanding.
+  offline. `BookOrbitViewportCfi` can check a viewport candidate against
+  the opened app-owned EPUB and its original XHTML. Schema 56 can store a
+  candidate with its locator and local revision in one transaction,
+  invalidating it on later local writes. The reader supplies guarded
+  candidates for local movement, but does not restore foreign CFIs or
+  submit candidates to BookOrbit. `BookOrbitIncomingAnchor` creates a
+  text-anchor proposal from original XHTML; it is not yet verified by
+  an active Readium navigator or used during opening.
+  a live two-way CFI round trip is still outstanding.
   Sending a position without a verified CFI would clear
   the server's, which is why browse-and-download ships on its own rather
   than with a lossy writer. See

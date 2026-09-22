@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -24,6 +25,10 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository
+import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
+import com.chmouel.liseur.data.bookorbit.BookOrbitLocalCandidate
+import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
 import com.chmouel.liseur.data.db.BookScreen
 import com.chmouel.liseur.data.db.BookScreenDao
 import com.chmouel.liseur.data.db.BookReadingMode
@@ -122,6 +127,7 @@ import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.use
 import org.readium.r2.streamer.PublicationOpener
 import java.util.UUID
+import java.io.IOException
 
 class ReaderViewModel(
     private val bookUrl: AbsoluteUrl,
@@ -148,6 +154,7 @@ class ReaderViewModel(
     private val downloads: BookDownloadRepository,
     private val seriesExtras: SeriesExtrasRepository,
     private val remoteAccount: RemoteAccountRepository,
+    private val bookOrbitCfis: BookOrbitCfiRepository? = null,
     private val userFonts: UserFontRepository,
     sessionManager: ReadingSessionManager,
     private val requestBookSync: (String) -> Unit = {},
@@ -206,6 +213,7 @@ class ReaderViewModel(
             val publication: Publication,
             val navigatorFactory: EpubNavigatorFactory,
             val initialLocator: Locator?,
+            val openedBookOrbit: BookOrbitOpenedEpub? = null,
         ) : UiState
 
         data class Failure(val message: String) : UiState
@@ -949,6 +957,15 @@ class ReaderViewModel(
                     _state.value = UiState.Failure(it.message)
                     return@launch
                 }
+            val openedBookOrbit = try {
+                bookOrbitCfis?.openedIfConnected(bookId, bookUrl.toString(), downloads::fileFor)
+            } catch (error: IOException) {
+                Log.w("bookorbit-position", "The opened EPUB cannot be matched to its selected file", error)
+                null
+            } catch (error: BookOrbitEpubPackage.ParseException) {
+                Log.w("bookorbit-position", "The selected EPUB package could not be parsed", error)
+                null
+            }
             val beforeSync = progressDao.get(bookId)
             // Ask the server where this book was left before deciding
             // where to open it. Bounded, and the answer is optional: a slow
@@ -1041,6 +1058,7 @@ class ReaderViewModel(
                 publication = publication,
                 navigatorFactory = EpubNavigatorFactory(publication),
                 initialLocator = initialLocator,
+                openedBookOrbit = openedBookOrbit,
             )
             // onResume arrives before a publication has necessarily
             // opened. Only now can foreground time be reading time.
@@ -1058,6 +1076,7 @@ class ReaderViewModel(
     fun onLocatorChanged(
         locator: Locator,
         event: NavigatorPositionEvent = NavigatorPositionEvent.READER_MOVEMENT,
+        bookOrbitCfi: BookOrbitLocalCandidate? = null,
     ) {
         val effectiveEvent = if (event == NavigatorPositionEvent.READER_MOVEMENT) {
             pendingPositionEvent ?: event
@@ -1096,16 +1115,22 @@ class ReaderViewModel(
         // Capture the page's moment before suspendable position writes,
         // so database latency cannot become reading time.
         if (effectiveEvent.recordsReadingTime) sessions.onPageTurned(totalProgression)
+        val locatorJson = prepared.toJSON().toString()
         val accepted = positionPublisher.publish(
             PositionUpdate(
                 bookUrl = bookId,
-                locatorJson = prepared.toJSON().toString(),
+                locatorJson = locatorJson,
                 progression = totalProgression,
                 readingSecondsPerPosition = speed.secondsPerPosition,
                 readingPaceSamples = speed.pace.samples,
                 readingPaceElapsedMs = speed.pace.elapsedMs,
                 readingPaceEvidence = speed.pace.evidence,
                 updatedAt = System.currentTimeMillis(),
+                bookOrbitCfi = bookOrbitCfi?.takeIf {
+                    it.context.bookUrl == bookId &&
+                        it.href == prepared.href.toString() &&
+                        it.locatorJson == locatorJson
+                },
             ),
         )
         if (!accepted) {
@@ -1962,6 +1987,7 @@ class ReaderViewModel(
                     downloads = container.bookDownloads,
                     seriesExtras = container.seriesExtras,
                     remoteAccount = container.remoteAccount,
+                    bookOrbitCfis = container.bookOrbitCfis,
                     userFonts = container.userFonts,
                     sessionManager = container.readingSessions,
                     requestBookSync = container::requestBookSync,
