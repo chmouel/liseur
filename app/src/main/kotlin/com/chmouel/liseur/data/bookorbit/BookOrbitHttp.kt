@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
+import java.io.IOException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -21,16 +22,50 @@ import org.json.JSONObject
  * live token from the session, refuse anything that is not a success,
  * and cope with an answer that is deliberately empty.
  *
- * Signing goes through [BookOrbitSession.authorized], which is what
- * makes a request that met an expired token retry once with a fresh one
- * rather than failing a whole catalog walk. Each call throws
- * [RemoteHttpFailure] because most of them happen inside a loop; the
- * caller wraps the walk in `remoteCall` once.
+ * Repeatable calls use [BookOrbitSession.authorized] to renew a refused
+ * token. Progress mutations use [postProgress] instead: a response lost
+ * after delivery must not cause an automatic second POST.
  */
 class BookOrbitHttp(
     private val session: BookOrbitSession,
     private val http: RemoteHttp = RemoteHttp(),
 ) {
+    /** A progress POST must not be replayed merely because its response was lost. */
+    sealed interface MutationResult {
+        data object ReadBackRequired : MutationResult
+        data class Rejected(val status: Int) : MutationResult
+        data object Uncertain : MutationResult
+    }
+
+    internal suspend fun postProgress(
+        context: BookOrbitRequestContext,
+        url: String,
+        json: JSONObject,
+    ): MutationResult {
+        val token = session.token(context)
+        val bearer = RemoteCredentials.Bearer(token)
+        val request = signed(context, url, bearer)
+            .post(json.toString().toRequestBody(JSON)).build()
+        return try {
+            http.client.newBuilder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .retryOnConnectionFailure(false)
+                .build().newCall(request).execute().use { response ->
+                when {
+                    response.isSuccessful -> MutationResult.ReadBackRequired
+                    response.code == 401 -> {
+                        session.noteRejection(token)
+                        MutationResult.Rejected(response.code)
+                    }
+                    response.code == 403 -> MutationResult.Rejected(response.code)
+                    else -> MutationResult.Uncertain
+                }
+            }
+        } catch (_: IOException) {
+            MutationResult.Uncertain
+        }
+    }
 
     suspend fun getObject(
         context: BookOrbitRequestContext,

@@ -100,6 +100,10 @@ That is worse than not syncing, so the provider advertises
 downloads only". A CFI bridge — parse, resolve, and capture on both sides,
 including complete ranges — is the work that turns this into an exact
 provider, and it is a prerequisite for both positions and annotations.
+Phase 1 includes the parser, EPUB package identity reader, guarded raw-CFI
+retention and a selected-file metadata GET for cross-checking the package.
+It does not restore or push positions. A parsed CFI remains foreign data
+until it has been verified against the bound local EPUB's DOM.
 
 ## Consequences
 

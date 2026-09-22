@@ -30,8 +30,9 @@ import androidx.sqlite.execSQL
         SessionTransmission::class,
         StarterCatalogProgress::class,
         BookOrbitBinding::class,
+        BookOrbitCfiRecord::class,
     ],
-    version = 54,
+    version = 55,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -56,6 +57,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun sessionTransmissionDao(): SessionTransmissionDao
     abstract fun starterCatalogProgressDao(): StarterCatalogProgressDao
     abstract fun bookOrbitBindingDao(): BookOrbitBindingDao
+    abstract fun bookOrbitCfiDao(): BookOrbitCfiDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1571,6 +1573,27 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_54_55 = object : Migration(54, 55) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_orbit_cfi` (
+                        `account_key` TEXT NOT NULL,
+                        `book_url` TEXT NOT NULL,
+                        `book_id` INTEGER NOT NULL,
+                        `file_id` INTEGER NOT NULL,
+                        `binding_revision` INTEGER NOT NULL,
+                        `raw_cfi` TEXT NOT NULL,
+                        PRIMARY KEY(`account_key`, `book_url`),
+                        FOREIGN KEY(`account_key`, `book_url`)
+                            REFERENCES `book_orbit_binding`(`account_key`, `book_url`)
+                            ON UPDATE CASCADE ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1625,6 +1648,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_51_52,
             MIGRATION_52_53,
             MIGRATION_53_54,
+            MIGRATION_54_55,
         )
     }
 }

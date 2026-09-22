@@ -1251,11 +1251,28 @@ CFI live.
   interrupted transfer restarts. `/serve` supports ranges but skips that
   permission check, and is deliberately not used.
 - There is **no position sync yet**. BookOrbit records an EPUB CFI, but
-  Liseur's local positions are Readium locators and `ResourceAnchor`
-  discards CFI fragments, so `syncAbility` is `NONE` and `canSync` is
-  false until a CFI bridge exists. Sending a position without a CFI would
-  clear the server's, which is why browse-and-download ships on its own
-  rather than with a lossy writer.
+  Liseur's local positions are Readium locators, so `syncAbility` is
+  `NONE` and `canSync` is false until the CFI bridge can also resolve and
+  generate verified locations. Phase 1 parses and retains a foreign point
+  or range CFI with its account, file and binding revision
+  (`BookOrbitCfi` and `BookOrbitForeignCfi`), and reads the EPUB package
+  identity (`BookOrbitEpubPackage`). `BookOrbitCfiRepository` retains raw
+  CFIs in schema 55 after transactional account/epoch/file checks, and
+  `BookOrbitEpubInfoClient` reads selected-file metadata for a structural
+  cross-check. The Phase 0 `BookOrbitProgressClient` reads only the selected
+  file and distinguishes an unopened default from a saved zero;
+  `BookOrbitProgressMutationTransport` classifies single-attempt POST
+  outcomes but is not wired into sync. Authenticated fixtures and the
+  live replacement-field test are still outstanding. None of these
+  components restores or pushes a position during normal operation.
+  Phase 2's `BookOrbitCfiResource` and `BookOrbitCfiDom` can check the OPF
+  target, resolve a supplied DOM and generate a DOM-local point/range CFI
+  offline, but viewport capture, reader integration and a live two-way CFI
+  round trip are still outstanding.
+  Sending a position without a verified CFI would clear
+  the server's, which is why browse-and-download ships on its own rather
+  than with a lossy writer. See
+  [the position-sync implementation record](docs/bookorbit-position-sync.md).
 
 ## liseur-sync protocol
 

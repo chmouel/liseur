@@ -231,9 +231,15 @@ class RemoteAccountRepositoryTest {
             ),
         )
 
+        db.bookOrbitCfiDao().write(
+            com.chmouel.liseur.data.db.BookOrbitCfiRecord(
+                server.accountKey, bookUrl, 113, 352, 0, "epubcfi(/6/2)",
+            ),
+        )
         repository.disconnect()
 
         assertEquals(352L, db.bookOrbitBindingDao().get(server.accountKey, bookUrl)?.fileId)
+        assertNull(db.bookOrbitCfiDao().get(server.accountKey, bookUrl))
     }
 
     /** A BookOrbit server that answers capability refreshes in its own shape. */
@@ -342,6 +348,7 @@ class RemoteAccountRepositoryTest {
         seriesExtraDao = db.seriesExtraDao(),
         peerStateDao = db.syncPeerStateDao(),
         bookOrbitBindingDao = db.bookOrbitBindingDao(),
+        bookOrbitCfiDao = db.bookOrbitCfiDao(),
         kosync = { kosync() },
         setups = mapOf(
             ServerKind.CALIBRE to setup,

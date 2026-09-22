@@ -1,0 +1,20 @@
+{
+  "userId": 1,
+  "bookFileId": 34,
+  "cfi": null,
+  "pageNumber": null,
+  "positionSeconds": null,
+  "mediaOverlayFragment": null,
+  "mediaOverlaySectionIndex": null,
+  "percentage": 30,
+  "koboLocationSource": null,
+  "koboLocationType": null,
+  "koboLocationValue": null,
+  "koboContentSourceProgressPercent": null,
+  "koreaderProgress": null,
+  "narrationPercentage": 15,
+  "narrationUpdatedAt": "2026-09-22T10:00:00.000Z",
+  "textUpdatedAt": "2026-09-22T10:00:00.000Z",
+  "lastReadAt": "2026-09-22T10:00:00.000Z",
+  "updatedAt": "2026-09-22T10:00:00.000Z"
+}

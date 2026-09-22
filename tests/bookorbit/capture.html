@@ -1,0 +1,33 @@
+<!doctype html>
+<title>BookOrbit Foliate fixture capture</title>
+<pre id="result">pending</pre>
+<script type="module">
+import * as CFI from './epubcfi.js';
+
+try {
+    const parser = new DOMParser();
+    const opf = parser.parseFromString(await (await fetch('./package.opf')).text(), 'application/xml');
+    const doc = parser.parseFromString(await (await fetch('./one.xhtml')).text(), 'application/xhtml+xml');
+    const prefix = CFI.fromElements([...opf.getElementsByTagName('itemref')])[0];
+    const paragraphs = [...doc.getElementsByTagName('p')];
+    const range = doc.createRange();
+    const records = [];
+    const capture = name => records.push({
+        name, cfi: CFI.joinIndir(prefix, CFI.fromRange(range)),
+        start: range.startOffset, end: range.endOffset,
+    });
+    range.setStart(paragraphs[0].firstChild, 9);
+    range.collapse(true);
+    capture('point-after-surrogate-pair');
+    range.setEnd(paragraphs[0].firstChild, 15);
+    capture('range-in-text');
+    range.setEnd(paragraphs[1].firstChild, 7);
+    capture('range-across-paragraphs');
+    range.setStart(paragraphs[1].firstChild, 3);
+    range.collapse(true);
+    capture('escaped-id');
+    document.getElementById('result').textContent = JSON.stringify(records, null, 2);
+} catch (error) {
+    document.getElementById('result').textContent = 'ERROR: ' + error.stack;
+}
+</script>
