@@ -30,6 +30,8 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
 import com.chmouel.liseur.data.bookorbit.BookOrbitLocalCandidate
 import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
 import com.chmouel.liseur.data.bookorbit.BookOrbitProgressClient
+import com.chmouel.liseur.data.bookorbit.BookOrbitPositionAgreementRepository
+import com.chmouel.liseur.data.bookorbit.BookOrbitPullOffer
 import com.chmouel.liseur.reader.progress.BookOrbitIncomingAnchor
 import com.chmouel.liseur.reader.ResourceAddress
 import com.chmouel.liseur.data.db.BookScreen
@@ -159,6 +161,7 @@ class ReaderViewModel(
     private val remoteAccount: RemoteAccountRepository,
     private val bookOrbitCfis: BookOrbitCfiRepository? = null,
     private val bookOrbitProgress: BookOrbitProgressClient? = null,
+    private val bookOrbitAgreement: BookOrbitPositionAgreementRepository? = null,
     private val userFonts: UserFontRepository,
     sessionManager: ReadingSessionManager,
     private val requestBookSync: (String) -> Unit = {},
@@ -180,6 +183,17 @@ class ReaderViewModel(
     /** Whether [open] got far enough to declare this book being read. */
     @Volatile
     private var readingDeclared = false
+    private var openingPull: BookOrbitPullOffer? = null
+    private var verifiedOpeningPull: BookOrbitPullOffer? = null
+    private var verifiedOpeningEpub: BookOrbitOpenedEpub? = null
+
+    fun onBookOrbitOpeningVerified(locator: Locator) {
+        val offer = openingPull ?: return
+        if (locator.toJSON().toString() == offer.locatorJson) {
+            verifiedOpeningPull = offer
+            verifiedOpeningEpub = (_state.value as? UiState.Ready)?.openedBookOrbit
+        }
+    }
 
     /**
      * What the Define action needs before it opens a card or another app.
@@ -1052,11 +1066,11 @@ class ReaderViewModel(
             }
             val localTarget = localTargetFor(stored)
             val safeFallback = localTarget ?: positions.locatorAtOrBeforeProgression(0.0)
-            // Until BookOrbit has durable agreement, a remote place cannot take precedence
-            // over reading already saved on this device.
-            val incoming = if (BookOrbitIncomingAnchor.mayOfferOnOpen(
-                    stored?.locatorJson, stored?.totalProgression,
-                ) &&
+            val freshBook = BookOrbitIncomingAnchor.mayOfferOnOpen(
+                stored?.locatorJson, stored?.totalProgression,
+            )
+            var pullOffer: BookOrbitPullOffer? = null
+            val incoming = if (
                 safeFallback != null && openedBookOrbit != null &&
                 bookOrbitProgress != null && bookOrbitCfis != null
             ) {
@@ -1065,9 +1079,15 @@ class ReaderViewModel(
                         withContext(Dispatchers.IO) {
                             val context = openedBookOrbit.context
                             val remote = bookOrbitProgress.read(context)
+                            val eligible = !freshBook && stored != null &&
+                                bookOrbitAgreement?.canOfferPull(context, remote) == true
+                            if (!freshBook) bookOrbitAgreement?.observe(context, remote)
                             val raw = remote.cfi?.takeIf { remote.isSaved }
                                 ?: return@withContext null
                             bookOrbitCfis.retain(context, raw)
+                            if (!freshBook && !eligible) {
+                                return@withContext null
+                            }
                             val resource = com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource.locate(
                                 com.chmouel.liseur.data.bookorbit.BookOrbitCfi.parse(raw),
                                 openedBookOrbit.publication,
@@ -1087,6 +1107,13 @@ class ReaderViewModel(
                                 ?: return@withContext null
                             val proposed = BookOrbitIncomingAnchor.mark(base, target)
                             bookOrbitCfis.check(context)
+                            if (eligible && proposed != null && stored != null) {
+                                pullOffer = BookOrbitPullOffer(
+                                    context, remote, stored.localRevision, stored.locatorJson,
+                                    proposed.toJSON().toString(),
+                                    target.href,
+                                )
+                            }
                             proposed
                         }
                     }
@@ -1111,6 +1138,9 @@ class ReaderViewModel(
             val stillCurrent = latestStored == stored
             val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: if (stillCurrent) localTarget else localTargetFor(latestStored)
+            openingPull = pullOffer?.takeIf {
+                stillCurrent && incoming != null && initialLocator != null
+            }?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
             lastLocator = initialLocator
             library.markOpened(bookId)
             _state.value = UiState.Ready(
@@ -1976,6 +2006,8 @@ class ReaderViewModel(
     }
 
     override fun onCleared() {
+        val closingPull = verifiedOpeningPull
+        val closingEpub = verifiedOpeningEpub
         sessions.close()
         (_state.value as? UiState.Ready)?.publication?.close()
         if (readingDeclared) {
@@ -1987,12 +2019,33 @@ class ReaderViewModel(
             // ViewModel, and the fallback covers a queue already closed.
             val queued = positionPublisher.afterQueuedWrites {
                 progressDao.openBooks.leave(bookId)
+                if (closingPull != null && closingEpub != null) CoroutineScope(Dispatchers.IO).launch {
+                    adoptClosedBookOrbit(closingPull, closingEpub)
+                }
             }
             if (!queued) {
                 CoroutineScope(Dispatchers.Default).launch {
                     progressDao.openBooks.leave(bookId)
                 }
             }
+        }
+    }
+
+    private suspend fun adoptClosedBookOrbit(offer: BookOrbitPullOffer, opened: BookOrbitOpenedEpub) {
+        try {
+            if (withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
+                if (bookOrbitCfis?.originalDocument(opened, offer.href, downloads::fileFor) == null) {
+                    Log.w("bookorbit-position", "The verified original EPUB is no longer available")
+                    return@withTimeoutOrNull false
+                }
+                bookOrbitAgreement?.adoptVerifiedClosed(offer)
+            } == null) Log.w("bookorbit-position", "Timed out adopting the verified closed-book place")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: IOException) {
+            Log.w("bookorbit-position", "Could not adopt the verified closed-book place", error)
+        } catch (error: BookOrbitEpubPackage.ParseException) {
+            Log.w("bookorbit-position", "The original EPUB changed before adoption", error)
         }
     }
 
@@ -2049,6 +2102,7 @@ class ReaderViewModel(
                     remoteAccount = container.remoteAccount,
                     bookOrbitCfis = container.bookOrbitCfis,
                     bookOrbitProgress = container.bookOrbitProgress,
+                    bookOrbitAgreement = container.bookOrbitAgreement,
                     userFonts = container.userFonts,
                     sessionManager = container.readingSessions,
                     requestBookSync = container::requestBookSync,

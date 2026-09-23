@@ -1,11 +1,14 @@
 package com.chmouel.liseur.reader.progress
 
+import android.webkit.WebView
 import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
 import org.json.JSONTokener
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
+import kotlin.coroutines.resume
 
 /** A text quote pinned to the first visible word in a reflowable resource. */
 data class ViewportTextAnchor(
@@ -154,8 +157,22 @@ object ExactLocatorAnchor {
     @OptIn(ExperimentalReadiumApi::class)
     suspend fun verify(navigator: EpubNavigatorFragment, locator: Locator): Boolean {
         if (!isExact(locator)) return false
+        return runCatching { navigator.evaluateJavascript(verificationScript(locator))?.trim() == "true" }
+            .getOrDefault(false)
+    }
+
+    suspend fun verify(web: WebView, locator: Locator): Boolean {
+        if (!isExact(locator)) return false
+        return suspendCancellableCoroutine { continuation ->
+            web.evaluateJavascript(verificationScript(locator)) { result ->
+                if (continuation.isActive) continuation.resume(result?.trim() == "true")
+            }
+        }
+    }
+
+    private fun verificationScript(locator: Locator): String {
         val selector = locator.locations.otherLocations[CSS_SELECTOR] as String
-        val script = """
+        return """
             (() => {
               const block = document.querySelector(${JSONObject.quote(selector)});
               if (!block) return false;
@@ -200,8 +217,6 @@ object ExactLocatorAnchor {
               );
             })()
         """.trimIndent()
-        return runCatching { navigator.evaluateJavascript(script)?.trim() == "true" }
-            .getOrDefault(false)
     }
 
     private fun fitsSyncLimit(locator: Locator): Boolean =
