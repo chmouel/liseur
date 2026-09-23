@@ -1321,6 +1321,18 @@ CFI live.
   fence, so an earlier close worker cannot leave the final position unsent.
   Failed exact opening clears the BookOrbit proposal and its verification
   proof, including the choice that suppresses position writes while visible.
+  A percentage-only server place (saved without a CFI) opens as an
+  approximate whole-book fraction through `approximateOffer`: for a book with
+  no local place, for an agreed and untouched local place, or for a local
+  place never matched with BookOrbit that the server is further ahead of.
+  The last two cases offer the way back. The first page turn
+  (`READER_MOVEMENT`) records that percentage as the agreed remote
+  (`adoptApproximateBaseline`), so the move pushes an exact CFI;
+  `BookOrbitLocalPositionWriter` records it in the same transaction as the
+  move, so a restart cannot separate them. Any jump, the way back included,
+  declines the offer, and reading on withdraws the way back, so neither the
+  declined nor the accepted server place is pushed over. A different
+  percentage-only place stays unresolved and is never overwritten.
   Sending a position without a verified CFI would clear
   the server's, which is why browse-and-download ships on its own rather
   than with a lossy writer. See

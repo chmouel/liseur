@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.BookOrbitPositionAgreement
 import com.chmouel.liseur.data.db.BookOrbitLocalCfi
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingProgress
+import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.ExactPositionDecision
 import com.chmouel.liseur.domain.reconcileExactPosition
 import java.io.IOException
@@ -25,6 +26,17 @@ data class BookOrbitPullOffer(
     val expectedLocator: String,
     val locatorJson: String,
     val href: String,
+)
+
+/** A percentage-only place to open at, tied to the local place and agreement it replaces. */
+data class BookOrbitApproximateOffer internal constructor(
+    val context: BookOrbitCfiContext,
+    val remote: BookOrbitFileProgress,
+    val progression: Double,
+    val replacesLocalPlace: Boolean,
+    internal val localRevision: Long?,
+    internal val localLocator: String?,
+    internal val baseline: BookOrbitPositionAgreement,
 )
 
 /** One unresolved answer, tied to the local place and agreement shown to the reader. */
@@ -158,24 +170,6 @@ class BookOrbitPositionAgreementRepository(
                 BookOrbitAttempt.RETRY_REQUIRED.name, BookOrbitAttempt.REJECTED.name,
             )
 
-    private fun BookOrbitPositionAgreement.matchesChoiceBaseline(other: BookOrbitPositionAgreement): Boolean =
-        accountKey == other.accountKey && bookUrl == other.bookUrl &&
-            bookId == other.bookId && fileId == other.fileId &&
-            bindingRevision == other.bindingRevision && connectionEpoch == other.connectionEpoch &&
-            baseUrl == other.baseUrl && agreedLocalRevision == other.agreedLocalRevision &&
-            agreedLocatorJson == other.agreedLocatorJson &&
-            agreedRemoteCfi == other.agreedRemoteCfi &&
-            agreedRemotePercentage == other.agreedRemotePercentage &&
-            agreedRemoteSaved == other.agreedRemoteSaved &&
-            candidateCfi == other.candidateCfi &&
-            candidatePercentage == other.candidatePercentage &&
-            candidateSaved == other.candidateSaved &&
-            candidateUpdatedAt == other.candidateUpdatedAt &&
-            attemptState == other.attemptState && attemptGeneration == other.attemptGeneration &&
-            outgoingBytes.contentEquals(other.outgoingBytes) &&
-            sentLocalRevision == other.sentLocalRevision && sentLocatorJson == other.sentLocatorJson &&
-            preflightCfi == other.preflightCfi && preflightPercentage == other.preflightPercentage &&
-            preflightSaved == other.preflightSaved
 
     private fun outgoingBytes(local: ReadingProgress, cfi: String): ByteArray {
         val percentage = local.totalProgression?.times(100)
@@ -223,6 +217,63 @@ class BookOrbitPositionAgreementRepository(
             local.locatorJson == row.agreedLocatorJson &&
             row.agreedRemoteSaved != null && remote.isSaved && remote.cfi != null &&
             (row.agreedRemoteSaved != remote.isSaved || row.agreedRemoteCfi != remote.cfi)
+    }
+
+    /**
+     * A percentage-only BookOrbit place this device may open at. Nothing is
+     * agreed yet: [adoptApproximateBaseline] records it once the reader moves.
+     * Offered for a book with no local place, for an agreed and untouched
+     * local place the server has since moved away from, or for a local place
+     * never matched with BookOrbit that the server is further ahead of.
+     */
+    suspend fun approximateOffer(
+        context: BookOrbitCfiContext,
+        remote: BookOrbitFileProgress,
+    ): BookOrbitApproximateOffer? = attemptMutex.withLock {
+        database.withTransaction {
+            checkCurrent(context)
+            val row = current(context)
+            val progression = (remote.percentage / 100).takeIf {
+                remote.isSaved && remote.cfi == null && it.isFinite() && it in 0.0..1.0
+            } ?: return@withTransaction null
+            if (row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name))
+                return@withTransaction null
+            val local = database.readingProgressDao().get(context.bookUrl)
+            if (local?.ownerAccount != null && local.ownerAccount != context.request.accountKey)
+                return@withTransaction null
+            val noPlace = local?.locatorJson == null && local?.totalProgression == null
+            val eligible = when {
+                noPlace -> true
+                local == null -> false
+                row.agreedRemoteSaved != null ->
+                    local.positionRevision == row.agreedLocalRevision &&
+                        local.locatorJson == row.agreedLocatorJson &&
+                        !(row.agreedRemoteSaved == true && row.agreedRemoteCfi == null &&
+                            row.agreedRemotePercentage == remote.percentage)
+                else ->
+                    database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl) == null &&
+                        (local.totalProgression ?: 0.0) + EPSILON < progression
+            }
+            if (!eligible) return@withTransaction null
+            val observed = row.copy(
+                candidateCfi = remote.cfi, candidatePercentage = remote.percentage,
+                candidateSaved = remote.isSaved, candidateUpdatedAt = remote.displayTime,
+            )
+            dao.write(observed)
+            BookOrbitApproximateOffer(
+                context, remote, progression, replacesLocalPlace = !noPlace,
+                local?.positionRevision, local?.locatorJson, observed,
+            )
+        }
+    }
+
+    /**
+     * The reader moved on from an approximate opening; see
+     * [adoptApproximateBaselineIn]. The reader itself adopts through the
+     * position write, so the move and its agreement commit together.
+     */
+    suspend fun adoptApproximateBaseline(offer: BookOrbitApproximateOffer): Boolean = attemptMutex.withLock {
+        database.withTransaction { adoptApproximateBaselineIn(database, offer) }
     }
 
     /**
@@ -341,9 +392,9 @@ class BookOrbitPositionAgreementRepository(
                 (local?.ownerAccount == null || local.ownerAccount == context.request.accountKey) }
         val decision = reconcileExactPosition(
             row.agreedLocalRevision, row.agreedLocatorJson,
-            row.agreedRemoteSaved, row.agreedRemoteCfi,
+            row.agreedRemoteSaved, row.agreedRemoteCfi, row.agreedRemotePercentage,
             local?.positionRevision, local?.locatorJson, verified?.rawCfi,
-            remote.isSaved, remote.cfi, remoteVerified,
+            remote.isSaved, remote.cfi, remote.percentage, remoteVerified,
         )
         dao.write(row.copy(
             candidateCfi = remote.cfi, candidatePercentage = remote.percentage,
@@ -390,9 +441,9 @@ class BookOrbitPositionAgreementRepository(
                 ?: throw BookOrbitPositionUnresolved()
             val decision = reconcileExactPosition(
                 row.agreedLocalRevision, row.agreedLocatorJson,
-                row.agreedRemoteSaved, row.agreedRemoteCfi,
+                row.agreedRemoteSaved, row.agreedRemoteCfi, row.agreedRemotePercentage,
                 local.positionRevision, local.locatorJson, verified.rawCfi,
-                remote.isSaved, remote.cfi, false,
+                remote.isSaved, remote.cfi, remote.percentage, false,
             )
             if (decision != ExactPositionDecision.Push) {
                 dao.write(row.copy(
@@ -561,7 +612,9 @@ class BookOrbitPositionAgreementRepository(
             val result = when {
                 remote.isSaved && remote.cfi == sent.getString("cfi") &&
                     remote.percentage == sent.getDouble("percentage") -> BookOrbitReadBack.Agreed
-                remote.sameAnchor(preflight) && remote.percentage == preflight.percentage ->
+                (remote.sameAnchor(preflight) || remote.isSaved && preflight.isSaved &&
+                    remote.cfi == null && preflight.cfi == null) &&
+                    remote.percentage == preflight.percentage ->
                     BookOrbitReadBack.ExplicitRetryRequired
                 else -> BookOrbitReadBack.Conflict
             }
@@ -615,3 +668,55 @@ class BookOrbitPositionAgreementRepository(
 }
 
 class BookOrbitPositionUnresolved : IOException("BookOrbit position needs exact verification or read-back")
+
+private fun BookOrbitPositionAgreement.matchesChoiceBaseline(other: BookOrbitPositionAgreement): Boolean =
+    accountKey == other.accountKey && bookUrl == other.bookUrl &&
+        bookId == other.bookId && fileId == other.fileId &&
+        bindingRevision == other.bindingRevision && connectionEpoch == other.connectionEpoch &&
+        baseUrl == other.baseUrl && agreedLocalRevision == other.agreedLocalRevision &&
+        agreedLocatorJson == other.agreedLocatorJson &&
+        agreedRemoteCfi == other.agreedRemoteCfi &&
+        agreedRemotePercentage == other.agreedRemotePercentage &&
+        agreedRemoteSaved == other.agreedRemoteSaved &&
+        candidateCfi == other.candidateCfi &&
+        candidatePercentage == other.candidatePercentage &&
+        candidateSaved == other.candidateSaved &&
+        candidateUpdatedAt == other.candidateUpdatedAt &&
+        attemptState == other.attemptState && attemptGeneration == other.attemptGeneration &&
+        outgoingBytes.contentEquals(other.outgoingBytes) &&
+        sentLocalRevision == other.sentLocalRevision && sentLocatorJson == other.sentLocatorJson &&
+        preflightCfi == other.preflightCfi && preflightPercentage == other.preflightPercentage &&
+        preflightSaved == other.preflightSaved
+
+/**
+ * The percentage an approximate opening showed becomes the agreed remote,
+ * and the place before opening the agreed local, so the move is pushed as
+ * an exact place. Must run inside a transaction: from
+ * [BookOrbitLocalPositionWriter] it is the one that saved the move. The
+ * whole-row snapshot stands in for the attempt lock, so anything a sync
+ * wrote since the offer, a changed server or a started attempt, refuses it,
+ * as does a move that did not land.
+ */
+internal suspend fun adoptApproximateBaselineIn(
+    database: LiseurDatabase,
+    offer: BookOrbitApproximateOffer,
+): Boolean {
+    val context = offer.context
+    if (!context.request.matches(database.remoteServerDao().get()) ||
+        !context.matches(database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl))
+    ) return false
+    val dao = database.bookOrbitPositionAgreementDao()
+    val row = dao.get(context.request.accountKey, context.bookUrl) ?: return false
+    val local = database.readingProgressDao().get(context.bookUrl)
+    if (local == null || local.positionRevision == offer.localRevision ||
+        row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name) ||
+        !row.matchesChoiceBaseline(offer.baseline) ||
+        local.ownerAccount != null && local.ownerAccount != context.request.accountKey
+    ) return false
+    dao.write(row.copy(
+        agreedLocalRevision = offer.localRevision, agreedLocatorJson = offer.localLocator,
+        agreedRemoteSaved = true, agreedRemoteCfi = null,
+        agreedRemotePercentage = offer.remote.percentage,
+    ))
+    return true
+}

@@ -24,6 +24,9 @@ class BookOrbitLocalPositionWriter(private val database: LiseurDatabase) {
             status = status,
             updatedAt = update.updatedAt,
         )
+        // Agreed in the move's own transaction, so a restart cannot separate them.
+        update.bookOrbitApproximate?.takeIf { it.context.bookUrl == update.bookUrl }
+            ?.let { adoptApproximateBaselineIn(database, it) }
         val localCfis = database.bookOrbitLocalCfiDao()
         localCfis.clearBook(update.bookUrl)
         val candidate = update.bookOrbitCfi ?: return@withTransaction

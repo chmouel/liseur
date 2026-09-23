@@ -8,6 +8,17 @@ import org.junit.Test
 class NavigatorPositionEventTest {
 
     @Test
+    fun `only reading on keeps an approximate opening on offer`() {
+        assertTrue(keepsApproximateOpening(NavigatorPositionEvent.READER_MOVEMENT))
+        // A jump declines it, including one to the page already shown.
+        assertFalse(keepsApproximateOpening(NavigatorPositionEvent.LOCAL_JUMP))
+        // Emissions that save nothing are not a decision either way.
+        NavigatorPositionEvent.entries.filterNot { it.persists }.forEach {
+            assertTrue(it.name, keepsApproximateOpening(it))
+        }
+    }
+
+    @Test
     fun `only genuine reading teaches pace and records reading time`() {
         assertTrue(NavigatorPositionEvent.READER_MOVEMENT.persists)
         assertTrue(NavigatorPositionEvent.READER_MOVEMENT.teachesPace)

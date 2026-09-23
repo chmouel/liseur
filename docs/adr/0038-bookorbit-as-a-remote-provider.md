@@ -91,6 +91,12 @@ outright, including clearing a CFI that was not sent. Pushing a
 percentage-only position would therefore **delete the exact position the
 web reader had recorded**, for every book this phone touched.
 
+A server place that already has no CFI is read, never written. Liseur opens
+at it as an approximate fraction and agrees it on the reader's first saved
+move, which is then pushed with a CFI. A different percentage-only place
+stays unresolved. See
+[percentage-only server places](../bookorbit-position-sync.md#percentage-only-server-places).
+
 The provider initially advertised browsing and downloads only. The verified
 CFI bridge now parses and resolves incoming anchors against the selected
 EPUB and active reader, and pairs outgoing CFIs with the exact saved local

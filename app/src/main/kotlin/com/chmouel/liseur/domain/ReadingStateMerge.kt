@@ -252,23 +252,37 @@ private const val LOCAL_MOVE_EPSILON = 0.000000001
 /** BookOrbit's exact position is independent of reading status and percentage rounding. */
 enum class ExactPositionDecision { Settled, Push, Pull, Conflict, Unresolved }
 
+/**
+ * A percentage-only BookOrbit place (no CFI) is never pulled or overwritten
+ * blind. Once this device has opened at it and recorded it as the agreed
+ * remote, the unchanged percentage is the remote's identity: reading on
+ * from there pushes an exact place, and any other percentage stays
+ * unresolved.
+ */
 fun reconcileExactPosition(
     agreedRevision: Long?,
     agreedLocator: String?,
     agreedRemoteSaved: Boolean?,
     agreedRemoteCfi: String?,
+    agreedRemotePercentage: Double?,
     localRevision: Long?,
     localLocator: String?,
     localCfi: String?,
     remoteSaved: Boolean,
     remoteCfi: String?,
+    remotePercentage: Double?,
     remoteVerified: Boolean,
 ): ExactPositionDecision {
     val localMoved = localRevision != agreedRevision || localLocator != agreedLocator
-    val remoteMoved = agreedRemoteSaved != null &&
-        (remoteSaved != agreedRemoteSaved || (remoteSaved && remoteCfi != agreedRemoteCfi))
+    val remoteMoved = agreedRemoteSaved != null && (
+        remoteSaved != agreedRemoteSaved || remoteSaved && (
+            remoteCfi != agreedRemoteCfi ||
+                remoteCfi == null && remotePercentage != agreedRemotePercentage
+            )
+        )
+    val percentageOnly = remoteSaved && remoteCfi == null
     if (localMoved && localCfi == null) return ExactPositionDecision.Unresolved
-    if (remoteSaved && remoteCfi == null) return ExactPositionDecision.Unresolved
+    if (percentageOnly && (agreedRemoteSaved == null || remoteMoved)) return ExactPositionDecision.Unresolved
     if (localCfi != null && remoteSaved && localCfi == remoteCfi) return ExactPositionDecision.Settled
     if (agreedRemoteSaved == null && remoteSaved) return ExactPositionDecision.Unresolved
     if (localMoved && !remoteMoved) return ExactPositionDecision.Push
@@ -276,6 +290,7 @@ fun reconcileExactPosition(
         return if (remoteVerified) ExactPositionDecision.Pull else ExactPositionDecision.Unresolved
     }
     if (localMoved && remoteMoved) return ExactPositionDecision.Conflict
+    if (percentageOnly) return ExactPositionDecision.Settled
     return if (agreedRemoteSaved == null && !remoteSaved && localCfi == null)
         ExactPositionDecision.Settled else ExactPositionDecision.Unresolved
 }

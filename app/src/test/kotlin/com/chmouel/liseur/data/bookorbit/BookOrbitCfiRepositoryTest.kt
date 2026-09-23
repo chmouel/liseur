@@ -446,6 +446,7 @@ class BookOrbitCfiRepositoryTest {
 
     private suspend fun saveExact(
         context: BookOrbitCfiContext, cfi: String, at: Long, progression: Double = 0.25,
+        approximate: BookOrbitApproximateOffer? = null,
     ) {
         val locator = """{"href":"OPS/chapter.xhtml","locations":{"progression":$progression}}"""
         BookOrbitLocalPositionWriter(db).save(
@@ -456,6 +457,7 @@ class BookOrbitCfiRepositoryTest {
                 updatedAt = at, bookOrbitCfi = BookOrbitLocalCandidate(
                     context, "OPS/chapter.xhtml", locator, cfi,
                 ),
+                bookOrbitApproximate = approximate,
             ), "Reading",
         )
     }
@@ -465,6 +467,177 @@ class BookOrbitCfiRepositoryTest {
             put("cfi", cfi)
             put("percentage", percentage)
         }.toString()
+
+    private fun percentageOnly(percentage: Double): String =
+        JSONObject(fixture("progress-saved.json")).apply {
+            put("cfi", JSONObject.NULL)
+            put("percentage", percentage)
+        }.toString()
+
+    private fun progress(body: String) = BookOrbitFileProgress.parse(JSONObject(body))
+
+    private suspend fun saveApproximate(context: BookOrbitCfiContext, at: Long, progression: Double) {
+        val locator = """{"href":"OPS/chapter.xhtml","locations":{"progression":$progression}}"""
+        BookOrbitLocalPositionWriter(db).save(
+            PositionUpdate(
+                bookUrl = context.bookUrl, locatorJson = locator, progression = progression,
+                readingSecondsPerPosition = null, readingPaceSamples = null,
+                readingPaceElapsedMs = null, readingPaceEvidence = null,
+                updatedAt = at, bookOrbitCfi = null,
+            ), "Reading",
+        )
+    }
+
+    /** Serves [remote] to every GET; a POST replaces it with what was sent. */
+    private fun serveRemote(initial: String): () -> List<String> {
+        var remote = initial
+        val posts = mutableListOf<String>()
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest): MockResponse =
+                when (request.method) {
+                    "GET" -> MockResponse(body = remote)
+                    "POST" -> {
+                        val sent = JSONObject(request.body!!.utf8())
+                        posts += sent.getString("cfi")
+                        remote = saved(sent.getString("cfi"), sent.getDouble("percentage"))
+                        MockResponse(code = 201)
+                    }
+                    else -> error("Unexpected request")
+                }
+        }
+        return { posts.toList() }
+    }
+
+    @Test
+    fun `fresh book opened at a percentage-only place pushes the first exact move over it`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        val posts = serveRemote(percentageOnly(67.624))
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        assertFalse(offer.replacesLocalPlace)
+        assertEquals(0.67624, offer.progression, 0.000001)
+        assertNull(agreement().approximateOffer(context, progress(saved(cfi, 67.0))))
+
+        saveExact(context, cfi, 10, progression = 0.68)
+        assertTrue(agreement().adoptApproximateBaseline(offer))
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(cfi), posts())
+        val agreed = agreement().state(context)
+        assertEquals(cfi, agreed.agreedRemoteCfi)
+        assertEquals(db.readingProgressDao().get(context.bookUrl)!!.positionRevision, agreed.agreedLocalRevision)
+    }
+
+    @Test
+    fun `the move that saves the position agrees the opening in the same write`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        val posts = serveRemote(percentageOnly(67.624))
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        saveExact(context, cfi, 10, progression = 0.68, approximate = offer)
+        val agreed = agreement().state(context)
+        assertEquals(true, agreed.agreedRemoteSaved)
+        assertNull(agreed.agreedRemoteCfi)
+        assertEquals(67.624, agreed.agreedRemotePercentage!!, 0.0)
+        assertNull(agreed.agreedLocalRevision)
+
+        // Later moves still carry the offer; it agrees nothing once agreed.
+        val next = "epubcfi(/6/4!/4/2:9)"
+        saveExact(context, next, 11, progression = 0.69, approximate = offer)
+        assertEquals(agreed.agreedRemotePercentage, agreement().state(context).agreedRemotePercentage)
+        assertNull(agreement().state(context).agreedLocalRevision)
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(next), posts())
+        val pushed = agreement().state(context)
+        saveExact(context, "epubcfi(/6/4!/4/2:12)", 12, progression = 0.7, approximate = offer)
+        assertEquals(next, agreement().state(context).agreedRemoteCfi)
+        assertEquals(pushed.agreedLocalRevision, agreement().state(context).agreedLocalRevision)
+    }
+
+    @Test
+    fun `approximate baseline needs the move to have landed`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveApproximate(context, 10, progression = 0.0039)
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        assertFalse(agreement().adoptApproximateBaseline(offer))
+        assertNull(agreement().state(context).agreedRemoteSaved)
+    }
+
+    @Test
+    fun `a sync that runs before the baseline does not strand the first move`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        val posts = serveRemote(percentageOnly(67.624))
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        saveExact(context, cfi, 10, progression = 0.68)
+        assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+        assertTrue(agreement().adoptApproximateBaseline(offer))
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(cfi), posts())
+    }
+
+    @Test
+    fun `a percentage-only place that changed after opening is never overwritten`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10, progression = 0.68)
+        assertTrue(agreement().adoptApproximateBaseline(offer))
+        val posts = serveRemote(percentageOnly(70.0))
+        assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+        assertEquals(emptyList<String>(), posts())
+        assertEquals(67.624, agreement().state(context).agreedRemotePercentage!!, 0.0)
+    }
+
+    @Test
+    fun `approximate baseline is refused once the server was seen to change`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10, progression = 0.68)
+        agreement().observe(context, progress(percentageOnly(70.0)))
+        assertFalse(agreement().adoptApproximateBaseline(offer))
+        assertNull(agreement().state(context).agreedRemoteSaved)
+    }
+
+    @Test
+    fun `a POST that never landed over a percentage-only place needs an explicit retry`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10, progression = 0.68)
+        assertTrue(agreement().adoptApproximateBaseline(offer))
+        repeat(3) { server.enqueue(MockResponse(body = percentageOnly(67.624))) }
+        server.enqueue(MockResponse(code = 503, headers = okhttp3.Headers.headersOf("Retry-After", "0")))
+        server.enqueue(MockResponse(body = percentageOnly(67.624)))
+        exchange().run(context.bookUrl)
+        assertEquals(listOf("GET", "GET", "GET", "POST", "GET"),
+            (1..5).map { server.takeRequest().method })
+        assertEquals(BookOrbitAttempt.RETRY_REQUIRED.name, agreement().state(context).attemptState)
+    }
+
+    @Test
+    fun `an unmatched local place moves only to a further percentage-only place`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveApproximate(context, 10, progression = 0.0039)
+        assertNull(agreement().approximateOffer(context, progress(percentageOnly(0.5))))
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
+        assertTrue(offer.replacesLocalPlace)
+
+        // A place already read here with an exact passage is never moved blind.
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 11, progression = 0.1)
+        assertNull(agreement().approximateOffer(context, progress(percentageOnly(67.624))))
+    }
+
+    @Test
+    fun `an agreed untouched place follows the server to a percentage-only place`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, cfi, 10)
+        agreement().observe(context, progress(saved(cfi)))
+        assertEquals(true, agreement().state(context).agreedRemoteSaved)
+        val offer = agreement().approximateOffer(context, progress(percentageOnly(10.0)))!!
+        assertTrue(offer.replacesLocalPlace)
+
+        saveExact(context, "epubcfi(/6/4!/4/2:9)", 11, progression = 0.3)
+        assertNull(agreement().approximateOffer(context, progress(percentageOnly(10.0))))
+    }
 
     @Test
     fun `verified remote place is adopted only after closing and without acknowledging status`(): Unit = runBlocking {

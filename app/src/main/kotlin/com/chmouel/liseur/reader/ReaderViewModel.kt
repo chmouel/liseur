@@ -25,6 +25,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.bookorbit.BookOrbitApproximateOffer
 import com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository
 import com.chmouel.liseur.data.bookorbit.BookOrbitConflictPreview
 import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
@@ -189,6 +190,10 @@ class ReaderViewModel(
     @Volatile
     private var readingDeclared = false
     private val bookOrbitOpening = BookOrbitOpening()
+
+    /** Opened at a percentage-only BookOrbit place; agreed on the first saved move. */
+    private var approximateOpening: BookOrbitApproximateOffer? = null
+    private var approximateWayBack: JumpBack? = null
 
     fun onBookOrbitOpeningVerified(locator: Locator) {
         bookOrbitOpening.verify(
@@ -806,6 +811,26 @@ class ReaderViewModel(
         }
     }
 
+    /** The way back after opening at a percentage-only BookOrbit place instead of this device's own. */
+    private fun offerBookOrbitWayBack(local: Locator, opened: Locator, remoteTime: String?) {
+        val positions = bookPositions?.takeIf { it.isUsable } ?: return
+        _jumpBack.value = JumpBack(
+            locator = local,
+            position = positions.resolve(local)?.position,
+            fromSync = true,
+            remoteAt = remoteTime?.let {
+                runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+            },
+            confidence = ResumeConfidence.APPROXIMATE,
+            resumePosition = positions.resolve(opened)?.position,
+        ).also { approximateWayBack = it }
+        jumpBackTimer?.cancel()
+        jumpBackTimer = viewModelScope.launch {
+            delay(JUMP_BACK_TIMEOUT_MS)
+            _jumpBack.value = null
+        }
+    }
+
     /** Navigates to the position that was offered, not a later database snapshot. */
     private suspend fun goToRemotePosition(preview: SyncPreview) {
         val positions = positionsFor(publication ?: return)
@@ -1119,6 +1144,7 @@ class ReaderViewModel(
             )
             var pullOffer: BookOrbitPullOffer? = null
             var choicePreview: BookOrbitConflictPreview? = null
+            var approximate: BookOrbitApproximateOffer? = null
             val incoming = if (
                 safeFallback != null && openedBookOrbit != null &&
                 bookOrbitProgress != null && bookOrbitCfis != null
@@ -1135,10 +1161,17 @@ class ReaderViewModel(
                             if (!freshBook && !eligible) {
                                 choicePreview = bookOrbitAgreement?.previewConflict(context)
                                     ?.takeIf { it.remote == remote }
-                                if (choicePreview == null) return@withContext null
+                                if (choicePreview == null) {
+                                    approximate = bookOrbitAgreement?.approximateOffer(context, remote)
+                                    return@withContext null
+                                }
                             }
-                            val raw = remote.cfi?.takeIf { remote.isSaved }
-                                ?: return@withContext null
+                            val raw = remote.cfi?.takeIf { remote.isSaved } ?: run {
+                                if (freshBook) {
+                                    approximate = bookOrbitAgreement?.approximateOffer(context, remote)
+                                }
+                                return@withContext null
+                            }
                             bookOrbitCfis.retain(context, raw)
                             val resource = com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource.locate(
                                 com.chmouel.liseur.data.bookorbit.BookOrbitCfi.parse(raw),
@@ -1188,7 +1221,16 @@ class ReaderViewModel(
             readingDeclared = true
             val latestStored = progressDao.get(bookId)
             val stillCurrent = latestStored == stored
+            // A percentage-only BookOrbit place has no passage to verify, so
+            // it is opened like any whole-book fraction and agreed only once
+            // the reader moves on from it.
+            val approximateTarget = approximate
+                ?.takeIf { stillCurrent && incoming == null && choicePreview == null }
+                ?.let { positions.locatorAtOrBeforeProgression(it.progression) }
+                ?.let(::prepareLocator)
+            approximateOpening = approximate?.takeIf { approximateTarget != null }
             val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
+                ?: approximateTarget
                 ?: if (stillCurrent) localTarget else localTargetFor(latestStored)
             val openingPull = pullOffer?.takeIf {
                 choicePreview == null && stillCurrent && incoming != null && initialLocator != null
@@ -1199,6 +1241,10 @@ class ReaderViewModel(
                 if (checkedOffer != null || preview.retryRequired) preview to checkedOffer else null
             }
             bookOrbitOpening.propose(openingPull, openingChoice)
+            val replaced = approximateOpening?.takeIf { it.replacesLocalPlace }
+            if (replaced != null && localTarget != null && approximateTarget != null) {
+                offerBookOrbitWayBack(localTarget, approximateTarget, replaced.remote.displayTime)
+            }
             lastLocator = initialLocator
             library.markOpened(bookId)
             _state.value = UiState.Ready(
@@ -1249,6 +1295,9 @@ class ReaderViewModel(
         // Readium recalculates totalProgression for a different viewport,
         // even when its stable resource position has not moved. Keep the
         // display current, but do not turn that layout detail into reading.
+        // Checked before the same-page return: a jump that lands on the page
+        // already shown still turns the opening down.
+        if (!keepsApproximateOpening(effectiveEvent)) approximateOpening = null
         if (samePosition || !effectiveEvent.persists || bookOrbitOpening.choice != null) return
         readingGeneration++
         _catchUp.value = null
@@ -1283,8 +1332,18 @@ class ReaderViewModel(
                         it.href == prepared.href.toString() &&
                         it.locatorJson == locatorJson
                 },
+                // Every page turn carries the opening until one agrees it, so
+                // a write that fails leaves it to the next; the agreement row
+                // refuses it once agreed or once a sync has moved on.
+                bookOrbitApproximate = approximateOpening,
             ),
         )
+        // Reading on accepts the opening, so the way back to the old place
+        // is withdrawn: taking it would push over the place just accepted.
+        if (approximateWayBack != null) {
+            if (_jumpBack.value === approximateWayBack) dismissJumpBack()
+            approximateWayBack = null
+        }
         if (!accepted) {
             _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
         }
@@ -1471,6 +1530,20 @@ class ReaderViewModel(
     fun dismissJumpBack() {
         jumpBackTimer?.cancel()
         _jumpBack.value = null
+    }
+
+    /**
+     * Going back from a percentage-only BookOrbit opening turns that place
+     * down, so the move back must not be agreed with it and pushed over it.
+     */
+    fun takeJumpBack(target: JumpBack): Boolean {
+        // A tap on a frame drawn before the pill was withdrawn: a page turn
+        // may already have accepted the opening, so the way back is gone.
+        if (_jumpBack.value !== target) return false
+        approximateOpening = null
+        approximateWayBack = null
+        dismissJumpBack()
+        return true
     }
 
     /** The locator for a position on the scrubber, numbered from 1. */
