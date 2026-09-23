@@ -422,6 +422,7 @@
     <string name="server_sync_malformed">Сервер ответил чем-то неожиданным; позиции синхронизируются позже.</string>
     <string name="server_sync_stale_identity">Идентификатор книги на сервере изменился; синхронизация повторится.</string>
     <string name="server_sync_position_unresolved">Сохранённую позицию этой книги нужно проверить или выбрать в читалке перед синхронизацией.</string>
+    <string name="server_sync_status_unresolved">BookOrbit не подтвердил изменение статуса. Выберите в Liseur «прочитано» или «не прочитано» ещё раз, чтобы заменить его.</string>
     <string name="server_sync_local_network">Android блокирует доступ Liseur к этому серверу в вашей сети, поэтому позиции не синхронизировались.</string>
     <string name="server_sync_server_error">На сервере возникла проблема; позиции синхронизируются позже.</string>
     <string name="server_sync_never">Позиции чтения ещё не синхронизировались.</string>

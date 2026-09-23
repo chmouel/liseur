@@ -101,12 +101,15 @@ with an access or refresh token can sync positions.
 Normal sync sends through the durable selected-file exchange, with bounded
 account traversal. Remote adoption still needs active-reader proof and
 closed-book identity/revision checks. Generic position-choice methods stay
-disabled. Reading status and annotations are not synchronized.
+disabled. Reading-status synchronization has a separate implementation, but
+automatic writes remain gated until independent-client acceptance. Annotations
+are not synchronized.
 
 ## Consequences
 
 BookOrbit supports browsing, downloads and exact EPUB positions. Settings
-explain conflict resolution and the last-server-write-wins policy.
+explain position conflict resolution and the last-server-write-wins policy.
+Status writes remain disabled until the separate Phase 6 acceptance is complete.
 
 The session machinery is the first of its kind and is the part to keep
 honest. Anything that signs a BookOrbit request has to go through the

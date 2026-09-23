@@ -27,14 +27,14 @@ import org.json.JSONObject
  * and cope with an answer that is deliberately empty.
  *
  * Repeatable calls use [BookOrbitSession.authorized] to renew a refused
- * token. Progress mutations use [postProgress] instead: a response lost
- * after delivery must not cause an automatic second POST.
+ * token. Progress and status mutations are one-shot because a response
+ * lost after delivery must not cause an automatic replay.
  */
 class BookOrbitHttp(
     private val session: BookOrbitSession,
     private val http: RemoteHttp = RemoteHttp(),
 ) {
-    /** A progress POST must not be replayed merely because its response was lost. */
+    /** A mutation must not be replayed merely because its response was lost. */
     sealed interface MutationResult {
         data object ReadBackRequired : MutationResult
         data class Rejected(val status: Int) : MutationResult
@@ -45,10 +45,22 @@ class BookOrbitHttp(
         context: BookOrbitRequestContext,
         url: String,
         bytes: ByteArray,
+    ): MutationResult = mutate(context, url, "POST", bytes)
+
+    internal suspend fun patchStatus(
+        context: BookOrbitRequestContext,
+        url: String,
+        bytes: ByteArray,
+    ): MutationResult = mutate(context, url, "PATCH", bytes)
+
+    private suspend fun mutate(
+        context: BookOrbitRequestContext,
+        url: String,
+        method: String,
+        bytes: ByteArray,
     ): MutationResult = withContext(Dispatchers.IO) {
         val token = session.token(context)
         val bearer = RemoteCredentials.Bearer(token)
-        // retryOnConnectionFailure does not disable a 503 Retry-After: 0 follow-up.
         val body = object : RequestBody() {
             override fun contentType() = JSON
             override fun contentLength() = bytes.size.toLong()
@@ -58,7 +70,7 @@ class BookOrbitHttp(
             }
         }
         val request = signed(context, url, bearer)
-            .post(body).build()
+            .method(method, body).build()
         try {
             http.client.newBuilder()
                 .followRedirects(false)

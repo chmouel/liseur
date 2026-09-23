@@ -83,7 +83,7 @@ class BookOrbitPositionAgreementRepository(
                 local.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
                 verified.bookId != context.bookId || verified.fileId != context.fileId ||
                 verified.bindingRevision != context.bindingRevision ||
-                verified.localRevision != local.localRevision ||
+                verified.localRevision != local.positionRevision ||
                 verified.locatorJson != local.locatorJson ||
                 (row.outgoingBytes == null &&
                     (!remote.isSaved || remote.cfi == null || remote.cfi == verified.rawCfi))
@@ -94,7 +94,7 @@ class BookOrbitPositionAgreementRepository(
             )
             dao.write(observed)
             BookOrbitConflictPreview(
-                context, remote, local.localRevision, local.locatorJson,
+                context, remote, local.positionRevision, local.locatorJson,
                 local.totalProgression, verified.rawCfi, observed,
             )
         }
@@ -124,7 +124,7 @@ class BookOrbitPositionAgreementRepository(
                     !row.matchesChoiceBaseline(preview.baseline) ||
                     !row.matchesCandidate(fresh) ||
                     local.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
-                    local.localRevision != preview.localRevision ||
+                    local.positionRevision != preview.localRevision ||
                     local.locatorJson != preview.localLocator ||
                     local.totalProgression != preview.localProgression ||
                     verified?.bookId != context.bookId || verified.fileId != context.fileId ||
@@ -137,7 +137,7 @@ class BookOrbitPositionAgreementRepository(
                 ) throw BookOrbitPositionUnresolved()
                 row.copy(
                     outgoingBytes = outgoingBytes(local, verified.rawCfi),
-                    sentLocalRevision = local.localRevision,
+                    sentLocalRevision = local.positionRevision,
                     sentLocatorJson = local.locatorJson,
                     preflightCfi = fresh.cfi, preflightPercentage = fresh.percentage,
                     preflightSaved = fresh.isSaved, attemptState = BookOrbitAttempt.PREPARED.name,
@@ -192,7 +192,7 @@ class BookOrbitPositionAgreementRepository(
     ): Boolean =
         outgoingBytes != null && local != null && verified != null &&
             (local.ownerAccount == null || local.ownerAccount == context.request.accountKey) &&
-            local.localRevision == sentLocalRevision && local.locatorJson == sentLocatorJson &&
+            local.positionRevision == sentLocalRevision && local.locatorJson == sentLocatorJson &&
             local.totalProgression?.times(100)?.let { it.isFinite() && it in 0.0..100.0 } == true &&
             verified.bookId == context.bookId && verified.fileId == context.fileId &&
             verified.bindingRevision == context.bindingRevision &&
@@ -219,7 +219,7 @@ class BookOrbitPositionAgreementRepository(
         row.attemptState in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name) &&
             local != null && row.agreedLocalRevision != null &&
             (local.ownerAccount == null || local.ownerAccount == context.request.accountKey) &&
-            local.localRevision == row.agreedLocalRevision &&
+            local.positionRevision == row.agreedLocalRevision &&
             local.locatorJson == row.agreedLocatorJson &&
             row.agreedRemoteSaved != null && remote.isSaved && remote.cfi != null &&
             (row.agreedRemoteSaved != remote.isSaved || row.agreedRemoteCfi != remote.cfi)
@@ -269,7 +269,7 @@ class BookOrbitPositionAgreementRepository(
                 val local = database.readingProgressDao().get(context.bookUrl)
                 if ((preview == null && row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name)) ||
                     (preview != null && !row.canChoose()) ||
-                    local == null || local.localRevision != offer.expectedRevision ||
+                    local == null || local.positionRevision != offer.expectedRevision ||
                     (local.ownerAccount != null && local.ownerAccount != context.request.accountKey) ||
                     local.locatorJson != offer.expectedLocator ||
                     row.candidateCfi != offer.remote.cfi ||
@@ -300,7 +300,7 @@ class BookOrbitPositionAgreementRepository(
                     offer.locatorJson, localProgression, System.currentTimeMillis(),
                 )
                 if (changed != 1) return@withTransaction false
-                val revision = offer.expectedRevision + 1
+                val revision = local.positionRevision + 1
                 database.bookOrbitLocalCfiDao().write(BookOrbitLocalCfi(
                     context.request.accountKey, context.bookUrl, context.bookId,
                     context.fileId, context.bindingRevision, revision,
@@ -337,12 +337,12 @@ class BookOrbitPositionAgreementRepository(
         val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
             ?.takeIf { it.bookId == context.bookId && it.fileId == context.fileId &&
                 it.bindingRevision == context.bindingRevision &&
-                it.localRevision == local?.localRevision && it.locatorJson == local?.locatorJson &&
+                it.localRevision == local?.positionRevision && it.locatorJson == local?.locatorJson &&
                 (local?.ownerAccount == null || local.ownerAccount == context.request.accountKey) }
         val decision = reconcileExactPosition(
             row.agreedLocalRevision, row.agreedLocatorJson,
             row.agreedRemoteSaved, row.agreedRemoteCfi,
-            local?.localRevision, local?.locatorJson, verified?.rawCfi,
+            local?.positionRevision, local?.locatorJson, verified?.rawCfi,
             remote.isSaved, remote.cfi, remoteVerified,
         )
         dao.write(row.copy(
@@ -353,7 +353,7 @@ class BookOrbitPositionAgreementRepository(
             (!remote.isSaved || remote.cfi == verified.rawCfi)
         ) {
             dao.write(current(context).copy(
-                agreedLocalRevision = local.localRevision, agreedLocatorJson = local.locatorJson,
+                agreedLocalRevision = local.positionRevision, agreedLocatorJson = local.locatorJson,
                 agreedRemoteCfi = remote.cfi, agreedRemotePercentage = remote.percentage,
                 agreedRemoteSaved = remote.isSaved,
             ))
@@ -386,12 +386,12 @@ class BookOrbitPositionAgreementRepository(
             val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
                 ?.takeIf { it.bookId == context.bookId && it.fileId == context.fileId &&
                     it.bindingRevision == context.bindingRevision &&
-                    it.localRevision == local.localRevision && it.locatorJson == local.locatorJson }
+                    it.localRevision == local.positionRevision && it.locatorJson == local.locatorJson }
                 ?: throw BookOrbitPositionUnresolved()
             val decision = reconcileExactPosition(
                 row.agreedLocalRevision, row.agreedLocatorJson,
                 row.agreedRemoteSaved, row.agreedRemoteCfi,
-                local.localRevision, local.locatorJson, verified.rawCfi,
+                local.positionRevision, local.locatorJson, verified.rawCfi,
                 remote.isSaved, remote.cfi, false,
             )
             if (decision != ExactPositionDecision.Push) {
@@ -402,7 +402,7 @@ class BookOrbitPositionAgreementRepository(
                 return@withTransaction null
             }
             row.copy(
-                outgoingBytes = outgoingBytes(local, verified.rawCfi), sentLocalRevision = local.localRevision,
+                outgoingBytes = outgoingBytes(local, verified.rawCfi), sentLocalRevision = local.positionRevision,
                 sentLocatorJson = local.locatorJson,
                 preflightCfi = remote.cfi, preflightPercentage = remote.percentage,
                 preflightSaved = remote.isSaved, attemptState = BookOrbitAttempt.PREPARED.name,

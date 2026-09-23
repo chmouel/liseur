@@ -1085,7 +1085,10 @@ class LibraryViewModel(
     }
 
     fun setFinished(book: Book, finished: Boolean) {
-        viewModelScope.launch { finishedState.setFinished(book.url, finished) }
+        viewModelScope.launch {
+            finishedState.setFinished(book.url, finished)
+            positionSync.request(SyncScope.Book(book.url), System.currentTimeMillis())
+        }
     }
 
     /**
@@ -1139,8 +1142,12 @@ class LibraryViewModel(
     /** Marks the whole series read, for a series read before Liseur held it. */
     fun setSeriesFinished(shelf: SeriesShelf, finished: Boolean) {
         viewModelScope.launch {
-            shelf.volumes.filter { it.finished != finished }
+            val changed = shelf.volumes.filter { it.finished != finished }
+            changed
                 .forEach { finishedState.setFinished(it.book.url, finished) }
+            if (changed.isNotEmpty()) {
+                positionSync.request(SyncScope.Full, System.currentTimeMillis())
+            }
         }
     }
 

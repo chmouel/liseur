@@ -1161,7 +1161,7 @@ class ReaderViewModel(
                             bookOrbitCfis.check(context)
                             if ((eligible || choicePreview != null) && proposed != null && stored != null) {
                                 pullOffer = BookOrbitPullOffer(
-                                    context, remote, stored.localRevision, stored.locatorJson,
+                                    context, remote, stored.positionRevision, stored.locatorJson,
                                     proposed.toJSON().toString(),
                                     target.href,
                                 )

@@ -388,6 +388,7 @@
     <string name="server_sync_malformed">El servidor respondió con algo inesperado; las posiciones se sincronizarán más tarde.</string>
     <string name="server_sync_stale_identity">La identidad del libro en el servidor cambió; la sincronización lo reintentará.</string>
     <string name="server_sync_position_unresolved">La posición guardada de este libro debe verificarse o elegirse en el lector antes de sincronizarse.</string>
+    <string name="server_sync_status_unresolved">BookOrbit no confirmó el cambio de estado. Elige de nuevo «leído» o «sin leer» en Liseur para sustituirlo.</string>
     <string name="server_sync_local_network">Android está impidiendo que Liseur llegue a este servidor en tu red, así que las posiciones no se sincronizaron.</string>
     <string name="server_sync_server_error">El servidor tuvo un problema; las posiciones se sincronizarán más tarde.</string>
     <string name="server_sync_never">Las posiciones de lectura aún no se han sincronizado.</string>

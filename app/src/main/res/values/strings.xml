@@ -406,6 +406,7 @@
     <string name="server_sync_malformed">The server answered with something unexpected; positions will sync later.</string>
     <string name="server_sync_stale_identity">The server’s book identity changed; sync will retry.</string>
     <string name="server_sync_position_unresolved">This book’s saved place needs verification or a choice in the reader before it can sync.</string>
+    <string name="server_sync_status_unresolved">BookOrbit did not confirm the status change. Make a new read or unread choice in Liseur to replace it.</string>
     <string name="server_sync_local_network">Android is blocking Liseur from reaching this server on your network, so positions did not sync.</string>
     <string name="server_sync_server_error">The server ran into trouble; positions will sync later.</string>
     <string name="server_sync_never">Reading positions have not synced yet.</string>

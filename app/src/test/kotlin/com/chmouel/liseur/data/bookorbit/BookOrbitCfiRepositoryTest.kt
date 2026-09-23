@@ -483,7 +483,7 @@ class BookOrbitCfiRepositoryTest {
         assertTrue(agreement.canOfferPull(context, changed))
         agreement.observe(context, changed)
         val offer = BookOrbitPullOffer(
-            context, changed, original.localRevision, original.locatorJson,
+            context, changed, original.positionRevision, original.locatorJson,
             """{"href":"OPS/chapter.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":0.65}}""",
             "OPS/chapter.xhtml",
         )
@@ -509,6 +509,68 @@ class BookOrbitCfiRepositoryTest {
         assertEquals(next, db.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)!!.rawCfi)
         assertEquals(adopted.localRevision, agreement.state(context).agreedLocalRevision)
         assertEquals(0, server.requestCount - 2)
+    }
+
+    @Test
+    fun `pull offer keyed on the position revision survives a status change`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        val next = "epubcfi(/6/4!/4/2:9)"
+        saveExact(context, first, 10)
+        val agreement = agreement()
+        agreement.observe(context, BookOrbitFileProgress.parse(JSONObject(saved(first))))
+        // Marking the book read moves local_revision on without touching the passage.
+        db.readingProgressDao().setFinishedOverride(context.bookUrl, 1, "Finished", null, 20)
+        val original = db.readingProgressDao().get(context.bookUrl)!!
+        assertTrue(original.localRevision > original.positionRevision)
+        val changed = BookOrbitFileProgress.parse(JSONObject(saved(next, 70.0)))
+        assertTrue(agreement.canOfferPull(context, changed))
+        agreement.observe(context, changed)
+        // The reader builds its offer from the position revision, as the
+        // adoption guard does; the diverged local_revision must not matter.
+        val offer = BookOrbitPullOffer(
+            context, changed, original.positionRevision, original.locatorJson,
+            """{"href":"OPS/chapter.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":0.65}}""",
+            "OPS/chapter.xhtml",
+        )
+        server.enqueue(MockResponse(body = saved(next, 70.0)))
+        assertTrue(agreement.adoptVerifiedClosed(offer))
+        server.takeRequest()
+        val adopted = db.readingProgressDao().get(context.bookUrl)!!
+        assertEquals(offer.locatorJson, adopted.locatorJson)
+        assertEquals(original.positionRevision + 1, adopted.positionRevision)
+        assertEquals("Finished", adopted.status)
+        assertEquals(1, adopted.finishedOverride)
+        assertEquals(original.statusRevision, adopted.statusRevision)
+        assertEquals(adopted.positionRevision, agreement.state(context).agreedLocalRevision)
+    }
+
+    @Test
+    fun `take-remote choice still applies after a status change diverged the counters`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val next = "epubcfi(/6/4!/4/2:9)"
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
+        db.readingProgressDao().setFinishedOverride(context.bookUrl, 1, "Finished", null, 20)
+        val original = db.readingProgressDao().get(context.bookUrl)!!
+        assertTrue(original.localRevision > original.positionRevision)
+        server.enqueue(MockResponse(body = saved(next, 60.0)))
+        val preview = checkNotNull(agreement().previewConflict(context))
+        server.takeRequest()
+        assertEquals(original.positionRevision, preview.localRevision)
+        val offer = BookOrbitPullOffer(
+            context, preview.remote, original.positionRevision, original.locatorJson,
+            """{"href":"OPS/chapter.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":0.55}}""",
+            "OPS/chapter.xhtml",
+        )
+        server.enqueue(MockResponse(body = saved(next, 60.0)))
+        assertTrue(agreement().adoptChosenVerifiedClosed(preview, offer))
+        server.takeRequest()
+        val adopted = db.readingProgressDao().get(context.bookUrl)!!
+        assertEquals(offer.locatorJson, adopted.locatorJson)
+        assertEquals(original.positionRevision + 1, adopted.positionRevision)
+        assertEquals(original.statusRevision, adopted.statusRevision)
+        assertEquals(1, adopted.finishedOverride)
+        assertEquals(next, agreement().state(context).agreedRemoteCfi)
     }
 
     @Test
