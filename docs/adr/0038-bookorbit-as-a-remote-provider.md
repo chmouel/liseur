@@ -115,7 +115,7 @@ are not synchronized.
 
 BookOrbit supports browsing, downloads and exact EPUB positions. Settings
 explain position conflict resolution and the last-server-write-wins policy.
-Status writes remain disabled until the separate Phase 6 acceptance is complete.
+Automatic status writes stay off until an independent client checks them live.
 
 The session machinery is the first of its kind and is the part to keep
 honest. Anything that signs a BookOrbit request has to go through the
