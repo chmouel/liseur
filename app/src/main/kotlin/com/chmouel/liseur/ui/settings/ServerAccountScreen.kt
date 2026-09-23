@@ -1124,7 +1124,11 @@ private fun ConnectedCard(
     ) {
         Notice(
             text = when {
+                server.canSync && server.kind == ServerKind.BOOKORBIT ->
+                    stringResource(R.string.server_sync_bookorbit)
                 server.canSync -> stringResource(R.string.server_sync_on)
+                server.kind == ServerKind.BOOKORBIT ->
+                    stringResource(R.string.server_sync_off_bookorbit)
 
                 // A pairing is already carrying the position, so telling
                 // the reader to go and set one up sends them looking for

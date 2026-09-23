@@ -913,4 +913,6 @@
     <string name="reader_external_link_body">Este enlace abre %1$s en tu navegador. Liseur no lo seguirá por ti.</string>
     <string name="reader_external_link_open">Abrir</string>
     <string name="reader_external_link_failed">Ninguna app de este dispositivo puede abrir ese enlace.</string>
+    <string name="server_sync_bookorbit">Las posiciones de lectura se sincronizan para los EPUB verificados. Resuelve los conflictos al abrir un libro. Prevalece la última escritura en el servidor; el estado de lectura y las anotaciones no se sincronizan.</string>
+    <string name="server_sync_off_bookorbit">Las posiciones de lectura no se sincronizan con BookOrbit.</string>
 </resources>

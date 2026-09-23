@@ -4,7 +4,7 @@ import com.chmouel.liseur.domain.ExactPositionDecision
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** A single selected-file exchange. Not registered for automatic position sync. */
+/** A single selected-file exchange shared by checked choices and bounded sync. */
 class BookOrbitPositionExchange(
     private val cfis: BookOrbitCfiRepository,
     private val progress: BookOrbitProgressClient,

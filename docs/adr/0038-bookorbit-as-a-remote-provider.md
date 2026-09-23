@@ -82,34 +82,31 @@ back rather than choosing again; a bound file the server no longer offers
 keeps its identity and loses its download link, because the reader's place
 is in a file and quietly pointing it at a different one is not a repair.
 
-### No position sync yet, and the reason is specific
+### Position sync requires a verified CFI
 
-BookOrbit records an EPUB CFI, so it holds an exact position and this app
-does not read one. `ResourceAnchor` deliberately discards CFI fragments
-because this client cannot resolve them, and `ExactLocatorAnchor` is a
-selector plus text quote rather than a CFI.
-
-So a position write from here would carry a percentage and no CFI. In
+BookOrbit records an EPUB CFI. Readium's `ExactLocatorAnchor` uses a
+selector and text quote, so the two need a checked conversion. In
 BookOrbit's `saveProgress`, a text write speaks for the text position
 outright, including clearing a CFI that was not sent. Pushing a
 percentage-only position would therefore **delete the exact position the
 web reader had recorded**, for every book this phone touched.
 
-That is worse than not syncing, so the provider advertises
-`syncAbility = NONE`, `canSync` is false, and the picker says "browsing and
-downloads only". A CFI bridge — parse, resolve, and capture on both sides,
-including complete ranges — is the work that turns this into an exact
-provider, and it is a prerequisite for both positions and annotations.
-Phase 1 includes the parser, EPUB package identity reader, guarded raw-CFI
-retention and a selected-file metadata GET for cross-checking the package.
-It does not restore or push positions. A parsed CFI remains foreign data
-until it has been verified against the bound local EPUB's DOM.
+The provider initially advertised browsing and downloads only. The verified
+CFI bridge now parses and resolves incoming anchors against the selected
+EPUB and active reader, and pairs outgoing CFIs with the exact saved local
+revision. Independent reader and enabled-path fault checks passed on
+2026-09-23. The provider now advertises `syncAbility = EXACT`; an account
+with an access or refresh token can sync positions.
+
+Normal sync sends through the durable selected-file exchange, with bounded
+account traversal. Remote adoption still needs active-reader proof and
+closed-book identity/revision checks. Generic position-choice methods stay
+disabled. Reading status and annotations are not synchronized.
 
 ## Consequences
 
-BookOrbit works for what most readers do first: connect, browse, download,
-read offline. It does not keep their place, and the app says so before they
-choose it rather than after.
+BookOrbit supports browsing, downloads and exact EPUB positions. Settings
+explain conflict resolution and the last-server-write-wins policy.
 
 The session machinery is the first of its kind and is the part to keep
 honest. Anything that signs a BookOrbit request has to go through the
@@ -126,7 +123,7 @@ client can close them:
 - BookOrbit's status route replaces progress-derived fields and there is no
   conditional write on progress, so a percentage-only sync would not only
   be lossy but also unguarded against a concurrent read elsewhere. This is
-  part of why positions wait for the CFI bridge.
+  why position writes require a verified CFI and the policy below.
 
 A CFI and a final selected-file GET do not close the concurrent-write
 gap either: a deterministic race test wrote a different server position
@@ -138,8 +135,8 @@ interval. The last position stored by the server wins, even when a delayed
 write represents older reading or a lower percentage. Preflight conflict
 checks, exact CFI/revision pairing and read-back remain required; an uncertain
 POST is not automatically replayed. Server-side conditional writes are no
-longer a prerequisite. Automatic position pushes still remain disabled until
-independent-device acceptance passes. See the
+longer a prerequisite. Automatic position pushes are enabled after
+independent-device and final-path acceptance. See the
 [approved policy and acceptance handoff](../bookorbit-position-sync.md#approved-write-policy).
 
 Upstream requests worth filing: a client-idempotent annotation create, a

@@ -186,17 +186,17 @@ enum class ServerKind(
      * comes back approximately. Komga and liseur-sync exchange a whole
      * locator. OPDS carries no reading position.
      *
-     * BookOrbit stores an EPUB CFI, which is exact — but Liseur cannot
-     * yet read or write one. Until the CFI bridge lands, promising
-     * [SyncAbility.EXACT] here would be a claim the connected screen
-     * could not keep, and `ServerKindTest` pins the two together on
-     * purpose. Catalog and downloads do not depend on it.
+     * BookOrbit's verified CFI bridge and its routed background provider
+     * share one acceptance gate. Catalog and downloads do not depend on it.
      */
     val syncAbility: SyncAbility
         get() = when (this) {
             CALIBRE -> SyncAbility.PROGRESSION
             KOMGA, LISEUR_SYNC -> SyncAbility.EXACT
-            CUSTOM, BOOKORBIT -> SyncAbility.NONE
+            CUSTOM -> SyncAbility.NONE
+            BOOKORBIT -> if (com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED) {
+                SyncAbility.EXACT
+            } else SyncAbility.NONE
         }
 
     companion object {

@@ -438,11 +438,19 @@ class AppContainer(context: Context) {
         // Custom has no entry because OPDS has no notion of a reading
         // position. It keeps a place through the KOReader pairing
         // instead, which is a peer of its own alongside the catalog.
-        positions = mapOf(
-            ServerKind.CALIBRE to koboSync,
-            ServerKind.KOMGA to komgaSync,
-            ServerKind.LISEUR_SYNC to liseurSync,
-        ),
+        positions = buildMap {
+            put(ServerKind.CALIBRE, koboSync)
+            put(ServerKind.KOMGA, komgaSync)
+            put(ServerKind.LISEUR_SYNC, liseurSync)
+            if (com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED) {
+                put(
+                    ServerKind.BOOKORBIT,
+                    com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync(
+                        database, bookOrbitExchange, accountSync = true, automaticPush = true,
+                    ),
+                )
+            }
+        },
         seriesClaims = mapOf(
             ServerKind.LISEUR_SYNC to LiseurSyncSeriesClient(),
         ),

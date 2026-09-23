@@ -258,12 +258,9 @@ data class RemoteServer(
             ServerKind.CALIBRE -> koboTokenCipher != null
             ServerKind.KOMGA, ServerKind.LISEUR_SYNC -> true
             ServerKind.CUSTOM -> false
-            // BookOrbit stores a position, but Liseur cannot read its
-            // CFI yet, so there is nothing it could honestly exchange.
-            // This flips to `orbitRefreshCipher != null` together with
-            // `syncAbility = EXACT` when the CFI bridge lands; the picker
-            // and the connected screen must not disagree in between.
-            ServerKind.BOOKORBIT -> false
+            ServerKind.BOOKORBIT ->
+                com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED &&
+                    (orbitAccessCipher != null || orbitRefreshCipher != null)
         }
 
     /**

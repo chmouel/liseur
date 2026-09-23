@@ -969,4 +969,6 @@
     <string name="reader_external_link_body">Эта ссылка откроет %1$s в браузере. Liseur не перейдёт по ней сам.</string>
     <string name="reader_external_link_open">Открыть</string>
     <string name="reader_external_link_failed">Ни одно приложение на этом устройстве не может открыть эту ссылку.</string>
+    <string name="server_sync_bookorbit">Позиции чтения синхронизируются для проверенных EPUB. Разрешайте конфликты при открытии книги. Сохраняется последняя запись на сервере; статус чтения и аннотации не синхронизируются.</string>
+    <string name="server_sync_off_bookorbit">Позиции чтения не синхронизируются с BookOrbit.</string>
 </resources>

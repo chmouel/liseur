@@ -19,14 +19,15 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONException
 
 /**
- * Unscheduled, opt-in provider. Account runs only observe or recover pending sends;
- * new POSTs require the separate single-book opt-in. Generic choices stay disabled.
+ * Bounded selected-file exchanges. Automatic pushes require their own acceptance
+ * gate; observation-only callers and generic reader choices remain separate.
  */
 class BookOrbitPositionSync(
     private val database: LiseurDatabase,
     private val exchange: BookOrbitPositionExchange,
     private val manualBookSync: Boolean = false,
     private val accountSync: Boolean = false,
+    private val automaticPush: Boolean = false,
 ) : PositionSync {
     private val turn get() = database.bookOrbitTraversalMutex
     private val cfis = BookOrbitCfiRepository(database)
@@ -72,7 +73,7 @@ class BookOrbitPositionSync(
                     // A removed or rebound member cannot hold a frozen traversal open forever.
                     SyncOutcome.Failure(SyncFailure.PositionUnresolved)
                 } else {
-                    sync(context, allowPush = false)
+                    sync(context, allowPush = automaticPush)
                 }
                 if (result is SyncOutcome.Failure && result.reason.worthRetrying) {
                     return@outcome if (traversal.succeeded) SyncOutcome.Partial(result.reason) else result
@@ -90,7 +91,12 @@ class BookOrbitPositionSync(
                 saveTraversal(request, traversal, finished)
                 traversal = finished
             }
-            traversal.report()
+            traversal.report().also { report ->
+                if (report == SyncOutcome.Success) database.withTransaction {
+                    checkConnection(request)
+                    database.remoteServerDao().setPositionSyncedAt(System.currentTimeMillis())
+                }
+            }
         }
     }
 
@@ -148,9 +154,12 @@ class BookOrbitPositionSync(
             val request = connection() ?: return@outcome SyncOutcome.NotApplicable
             if (database.bookOrbitBindingDao().get(request.accountKey, bookUrl) == null)
                 return@outcome SyncOutcome.NotApplicable
+            // A book gone from the catalog keeps its binding but not its link.
+            if (database.bookDao().getByUrl(bookUrl)?.remoteUuid == null)
+                return@outcome SyncOutcome.NotApplicable
             val context = cfis.capture(bookUrl)
             if (context.request != request) return@outcome SyncOutcome.Failure(SyncFailure.StaleIdentity)
-            sync(context, allowPush = manualBookSync)
+            sync(context, allowPush = manualBookSync || automaticPush)
         }
     }
 
@@ -163,7 +172,12 @@ class BookOrbitPositionSync(
     private suspend fun sync(context: BookOrbitCfiContext, allowPush: Boolean): SyncOutcome =
         outcome {
             cfis.check(context)
-            if (database.readingProgressDao().get(context.bookUrl)?.ownerAccount
+            val position = database.readingProgressDao().get(context.bookUrl)
+            if (automaticPush && position == null &&
+                database.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)
+                    ?.outgoingBytes == null
+            ) return@outcome SyncOutcome.NotApplicable
+            if (position?.ownerAccount
                 ?.let { it != context.request.accountKey } == true
             ) return@outcome SyncOutcome.NotApplicable
             when (val result = exchange.run(context, allowPush)) {
@@ -225,7 +239,8 @@ class BookOrbitPositionSync(
     override suspend fun refreshUnresolved() = Unit
     override suspend fun identity(): SyncIdentity? = null
 
-    internal companion object {
-        const val PAGE_SIZE = 20
+    companion object {
+        const val AUTOMATIC_SYNC_ENABLED = true
+        internal const val PAGE_SIZE = 20
     }
 }

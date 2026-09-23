@@ -1,15 +1,14 @@
 # BookOrbit position synchronization
 
-Automatic BookOrbit position synchronization remains disabled.
-`ServerKind.BOOKORBIT` must stay at `syncAbility = NONE` and
-`canSync = false` until the full acceptance gate passes.
+Automatic BookOrbit position synchronization is enabled for verified EPUBs.
+`ServerKind.BOOKORBIT` advertises `syncAbility = EXACT`; a connected account
+with an access or refresh token has `canSync = true`.
 Last-server-write-wins was approved on 2026-09-23 for the remaining
 post-preflight race; the policy is recorded below.
 
-## Task ledger and next-phase handoff
+## Task ledger
 
-This is the complete phase checklist. "Done" records work already committed;
-it does not mean automatic sync is enabled.
+The final enabled-path checks are recorded immediately below this checklist.
 
 | Task | State | Result or remaining work |
 | --- | --- | --- |
@@ -24,24 +23,69 @@ it does not mean automatic sync is enabled.
 | `phase0-three-reviews` | Done | Three Phase 0 review passes and fixes completed. |
 | `phase2-cfi-bridge` | Done | Incoming CFI resolution and outgoing viewport capture checked. |
 | `phase3-agreement` | Done | Durable position-only agreement, exact bytes, and read-back recovery built. |
-| `phase4-provider` | In progress | Bounded read-back account checks and reader choices implemented. Scheduled pushes remain unwired and disabled. |
-| `phase5-acceptance` | In progress | Independent Android/web passage checks, response loss, process death, result messages and the identity/lifecycle checks below passed. Finish the remaining acceptance and final-path reviews before enabling. |
+| `phase4-provider` | Done | Normal routed account and single-book pushes enabled, with durable bounded continuation and checked reader choices. |
+| `phase5-acceptance` | Done | Independent web/Android and two-Android checks, enabled-path transport faults, live races, stale identities and lifecycle checks passed. |
 
-Remaining steps for the next phase:
+## Enabled-path acceptance
 
-1. Independent Android and web-reader logins now work. Both-direction
-   passage interoperability and stale-choice refusal passed on 2026-09-23,
-   as recorded below. Do not count the separate API logins as reader
-   acceptance or clone a session/database for another device.
-2. Finish the remaining explicit-path checks: a second independently
-   authenticated Android installation, reopening during post-close work,
-   and live competing writes after preflight and before read-back. The
-   identity checks below changed emulator database fields; they do not
-   exercise the account-switch UI or replacement downloads.
-3. Build the normal bounded push orchestration behind a disabled gate,
-   then repeat acceptance through that final path and the bounded reviews.
-   Change `syncAbility`, account `canSync`, routing, UI and tests together
-   only if the gate passes.
+On 2026-09-23, separate API 26 and API 36 Android installations signed in
+normally to the approved disposable account. Neither tokens nor app
+databases were copied between them. Both downloaded book 90/file 260;
+their EPUB SHA-256 was
+`ed79d46102ca8b465db15ee66d0c0b4d6d7858afb6b60b75beacd32b049fbc6c`.
+The explicit reader path first passed both-direction adoption, post-preflight
+and pre-read-back races, and reopening during a held post-close choice.
+
+The same two installations then ran the enabled candidate through
+`RemoteRouter`, the normal coordinator and reader-close scheduling. No
+diagnostic app hook or explicit keep-local action initiated these pushes.
+
+| Check | Observed result |
+| --- | --- |
+| A to B | Closing A acknowledged local revision 55. B verified the incoming anchor and adopted it at revision 5. Both agreements matched the exact server CFI and percentage. |
+| B to A | Closing B acknowledged revision 6 at a different CFI. A adopted it at revision 56, again matching the server exactly. |
+| Lost POST response | The emulator-only proxy dropped a successful upstream response. A acknowledged revision 58 by GET; the proxy counted one POST for this exchange. |
+| Process death after receipt | The proxy force-stopped A after the next successful POST. Revision 60 retained `MAY_HAVE_BEEN_SENT` and outgoing bytes. Restarting acknowledged that same revision, cleared the bytes and left the complete local row unchanged. POST count did not increase. |
+| Competitor after preflight | A separate native session wrote immediately before A's POST. A's later write won and was acknowledged at revision 62. |
+| Competitor before read-back | The other session wrote after A's POST. Revision 64 remained `UNCERTAIN`, with outgoing bytes retained and the prior agreement unchanged. |
+| Stale identity | Changed emulator binding, epoch and account fields refused checked choices without changing local, agreement or server position rows. Original identity fields were restored. |
+| Rotation | Landscape and portrait kept the pending choice and all position rows unchanged at revision 64. |
+| Reopening during post-close work | With a take-remote GET held, A reopened and displayed its WebView before release. Revision 68 and the complete local, agreement and server rows stayed unchanged; no POST occurred. |
+| Account traversal and settings | The normal traversal finished without a recorded failure and saved `positionSyncedAt`. Settings displayed the verified-EPUB, conflict and last-server-write-wins explanation, with no status or annotation claim. |
+
+The settings screenshot is
+`~/tmp/liseur/sshot/bookorbit-automatic-sync-settings.png`.
+The earlier web-reader checks below establish passage interoperability with
+an independently authenticated browser. Identity mutation checks exercise
+the guards, not an account-switch UI flow or replacement-download acceptance.
+The fixtures do not establish compatibility with every EPUB or iOS replay
+behavior; unsupported anchors preserve the local place.
+
+Three final bounded review passes covered reader lifecycle and queue ordering,
+durable exchange and one-shot transport, and routing/paging/capability reporting.
+The reader now signals sync after queued writes release its open-book fence:
+the earlier close worker can run while that fence still blocks a push.
+Verified pulls and explicit choices retain their own post-close paths.
+Provider tests cover automatic sends, unread catalog skipping, a later-page
+push after an earlier conflict across database reopen, and no automatic replay
+of retry-required, rejected or unknown attempts. Generic reader-choice methods
+remain disabled because they cannot provide active-WebView proof.
+
+`make check` passed with automatic routing enabled. The bounded provider still
+allows observation-only callers; enabling normal sync does not change their
+no-POST behavior. Reading status and annotation synchronization are out of scope.
+
+Both apps were force-stopped before cleanup. The approved file's progress was
+deleted through its API, and only the test account's book 90 status and attempt
+rows were removed. All three counts matched the captured empty baseline.
+The emulator proxy setting and trust certificate were removed, the proxy and
+both emulators stopped, and the disposable TLS key and certificate deleted.
+
+## Earlier acceptance and implementation record
+
+The following sections record earlier milestones. References to disabled or
+unscheduled synchronization describe those builds; the enabled-path results
+above supersede their remaining-work lists.
 
 ### Independent Android and web-reader acceptance
 
