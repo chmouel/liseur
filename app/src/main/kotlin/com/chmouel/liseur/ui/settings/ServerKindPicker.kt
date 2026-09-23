@@ -160,7 +160,7 @@ private fun ServerKind.logoRes(): Int = when (this) {
     ServerKind.KOMGA -> R.drawable.ic_server_komga
     ServerKind.LISEUR_SYNC -> R.drawable.ic_server_liseur_sync
     ServerKind.BOOKORBIT -> R.drawable.ic_server_generic
-    ServerKind.CUSTOM -> R.drawable.ic_server_generic
+    ServerKind.CUSTOM -> R.drawable.ic_server_custom
 }
 
 /** What a kind is for, and whether it keeps your place. */
