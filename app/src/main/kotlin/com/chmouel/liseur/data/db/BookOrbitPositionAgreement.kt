@@ -45,6 +45,7 @@ data class BookOrbitPositionAgreement(
     @ColumnInfo(name = "preflight_percentage") val preflightPercentage: Double? = null,
     @ColumnInfo(name = "preflight_saved") val preflightSaved: Boolean? = null,
     @ColumnInfo(name = "attempt_state") val attemptState: String? = null,
+    @ColumnInfo(name = "attempt_generation", defaultValue = "0") val attemptGeneration: Long = 0,
 )
 
 @Dao

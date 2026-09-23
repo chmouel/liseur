@@ -131,11 +131,16 @@ client can close them:
 A CFI and a final selected-file GET do not close the concurrent-write
 gap either: a deterministic race test wrote a different server position
 after Liseur's preflight GET and before its POST. The unconditional POST
-overwrote it and read-back acknowledged Liseur's position. Keep
-automatic position pushes disabled until the server offers a conditional
-progress write, or an explicit last-writer-wins policy replaces this
-guard. Reader-requested keep-local remains an opt-in choice with that
-documented race.
+overwrote it and read-back acknowledged Liseur's position.
+
+On 2026-09-23 the maintainer accepted last-server-write-wins for this
+interval. The last position stored by the server wins, even when a delayed
+write represents older reading or a lower percentage. Preflight conflict
+checks, exact CFI/revision pairing and read-back remain required; an uncertain
+POST is not automatically replayed. Server-side conditional writes are no
+longer a prerequisite. Automatic position pushes still remain disabled until
+independent-device acceptance passes. See the
+[approved policy and acceptance handoff](../bookorbit-position-sync.md#approved-write-policy).
 
 Upstream requests worth filing: a client-idempotent annotation create, a
 conditional progress write, the stored file digest, and a range-capable

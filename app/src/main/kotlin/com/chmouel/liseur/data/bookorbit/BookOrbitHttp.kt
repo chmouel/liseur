@@ -10,8 +10,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okio.BufferedSink
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -46,8 +48,17 @@ class BookOrbitHttp(
     ): MutationResult = withContext(Dispatchers.IO) {
         val token = session.token(context)
         val bearer = RemoteCredentials.Bearer(token)
+        // retryOnConnectionFailure does not disable a 503 Retry-After: 0 follow-up.
+        val body = object : RequestBody() {
+            override fun contentType() = JSON
+            override fun contentLength() = bytes.size.toLong()
+            override fun isOneShot() = true
+            override fun writeTo(sink: BufferedSink) {
+                sink.write(bytes)
+            }
+        }
         val request = signed(context, url, bearer)
-            .post(bytes.toRequestBody(JSON)).build()
+            .post(body).build()
         try {
             http.client.newBuilder()
                 .followRedirects(false)

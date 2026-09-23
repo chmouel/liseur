@@ -33,11 +33,16 @@ import androidx.sqlite.execSQL
         BookOrbitCfiRecord::class,
         BookOrbitLocalCfi::class,
         BookOrbitPositionAgreement::class,
+        BookOrbitPositionTraversal::class,
+        BookOrbitPositionTraversalItem::class,
     ],
-    version = 57,
+    version = 58,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
+    internal val bookOrbitPositionMutex = kotlinx.coroutines.sync.Mutex()
+    internal val bookOrbitTraversalMutex = kotlinx.coroutines.sync.Mutex()
+
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun readingSessionDao(): ReadingSessionDao
     abstract fun syncPeerStateDao(): SyncPeerStateDao
@@ -62,6 +67,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookOrbitCfiDao(): BookOrbitCfiDao
     abstract fun bookOrbitLocalCfiDao(): BookOrbitLocalCfiDao
     abstract fun bookOrbitPositionAgreementDao(): BookOrbitPositionAgreementDao
+    abstract fun bookOrbitPositionTraversalDao(): BookOrbitPositionTraversalDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1666,6 +1672,44 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_57_58 = object : Migration(57, 58) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE book_orbit_position_agreement " +
+                        "ADD COLUMN attempt_generation INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_orbit_position_traversal` (
+                        `account_key` TEXT NOT NULL,
+                        `connection_epoch` INTEGER NOT NULL,
+                        `base_url` TEXT NOT NULL,
+                        `after_url` TEXT,
+                        `succeeded` INTEGER NOT NULL,
+                        `failure` TEXT,
+                        `finished` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_orbit_position_traversal_item` (
+                        `account_key` TEXT NOT NULL,
+                        `book_url` TEXT NOT NULL,
+                        `book_id` INTEGER NOT NULL,
+                        `file_id` INTEGER NOT NULL,
+                        `binding_revision` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`, `book_url`),
+                        FOREIGN KEY(`account_key`)
+                            REFERENCES `book_orbit_position_traversal`(`account_key`)
+                            ON UPDATE CASCADE ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1723,6 +1767,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_54_55,
             MIGRATION_55_56,
             MIGRATION_56_57,
+            MIGRATION_57_58,
         )
     }
 }

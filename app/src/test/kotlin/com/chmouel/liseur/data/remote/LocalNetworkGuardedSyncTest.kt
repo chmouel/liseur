@@ -26,6 +26,7 @@ class LocalNetworkGuardedSyncTest {
         var address: String? = null,
     ) : PeerPositionSync {
         var fullRuns = 0
+        val continuations = mutableListOf<Boolean>()
         val syncedBooks = mutableListOf<String>()
         var previews = 0
 
@@ -34,6 +35,11 @@ class LocalNetworkGuardedSyncTest {
         override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome {
             fullRuns++
             return outcome
+        }
+
+        override suspend fun syncAll(snapshot: SyncSnapshot?, carryingOn: Boolean): SyncOutcome {
+            continuations += carryingOn
+            return syncAll(snapshot)
         }
 
         override suspend fun syncBook(bookUrl: String): SyncOutcome {
@@ -121,6 +127,20 @@ class LocalNetworkGuardedSyncTest {
 
         assertEquals(SyncOutcome.Failure(SyncFailure.LocalNetworkBlocked), outcome)
         assertEquals(0, peer.fullRuns)
+    }
+
+    @Test
+    fun `continuation is guarded and forwarded through the composite`() = runTest {
+        val peer = FakePeer(PeerPositionSync.CATALOG,
+            outcome = SyncOutcome.Failure(SyncFailure.PositionUnresolved, continuation = true))
+        val blocked = guard(peer, SyncReporting(), "http://192.168.1.20:8083")
+        assertEquals(SyncOutcome.Failure(SyncFailure.LocalNetworkBlocked),
+            CompositePositionSync(listOf(blocked)).syncAll(null, carryingOn = true))
+        assertTrue(peer.continuations.isEmpty())
+        val allowed = guard(peer, SyncReporting(), "http://192.168.1.20:8083", emptySet())
+        assertEquals(peer.outcome,
+            CompositePositionSync(listOf(allowed)).syncAll(null, carryingOn = true))
+        assertEquals(listOf(true), peer.continuations)
     }
 
     /**

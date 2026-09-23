@@ -143,6 +143,25 @@ class PositionSyncCoordinatorTest {
     }
 
     @Test
+    fun `unresolved report continues independently and forwards the follow up flag`() = runTest {
+        val sync = FakeSync()
+        val result = SyncOutcome.Partial(
+            com.chmouel.liseur.data.remote.SyncFailure.PositionUnresolved, continuation = true,
+        )
+        sync.outcome = result
+        var carried = 0
+        val coordinator = PositionSyncCoordinator(sync, carryOn = { carried++ })
+        assertEquals(result, coordinator.request(SyncScope.Full))
+        advanceUntilIdle()
+        assertEquals(1, carried)
+        sync.outcome = result.copy(continuation = false)
+        assertEquals(sync.outcome, coordinator.request(SyncScope.Full, carryingOn = true))
+        advanceUntilIdle()
+        assertEquals(1, carried)
+        assertEquals(listOf(false, true), sync.continuations)
+    }
+
+    @Test
     fun `carrying on gives up rather than running for ever`() = runTest {
         // The run only asks when it got somewhere and still owes work,
         // so it should stop by itself. If it ever does not, this is
@@ -231,12 +250,18 @@ class PositionSyncCoordinatorTest {
         val peersResolved = mutableListOf<String?>()
 
         val snapshots = mutableListOf<SyncSnapshot?>()
+        val continuations = mutableListOf<Boolean>()
 
         override suspend fun dialledAddress(): String? = null
 
         override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome {
             snapshots += snapshot
             return run(SyncScope.Full)
+        }
+
+        override suspend fun syncAll(snapshot: SyncSnapshot?, carryingOn: Boolean): SyncOutcome {
+            continuations += carryingOn
+            return syncAll(snapshot)
         }
 
         override suspend fun syncBook(bookUrl: String): SyncOutcome =

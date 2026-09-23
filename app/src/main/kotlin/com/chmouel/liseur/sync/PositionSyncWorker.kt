@@ -36,35 +36,7 @@ class PositionSyncWorker(
         // keeps the common case off the network for longer than it needs.
         val scope = bookUrl?.let { SyncScope.Book(it) } ?: SyncScope.Full
 
-        return when (val outcome = coordinator.request(scope, carryingOn = isBootstrap())) {
-            // Retry schedules a backed-off run, so it is only for things
-            // that might work later. A phone with no calibre-web account
-            // has nothing to sync now and will have nothing in an hour,
-            // and an account the server will not let sync will still be
-            // refused after a backoff — retrying either only spends
-            // battery. A partial run leaves the books it could not settle
-            // marked as owing the server something, so a retry picks them
-            // up when the reason is one that could pass.
-            is SyncOutcome.Failure ->
-                if (outcome.reason.worthRetrying) Result.retry() else Result.failure()
-
-            is SyncOutcome.Partial ->
-                if (outcome.reason.worthRetrying) Result.retry() else Result.failure()
-
-            // The follow-up is not scheduled here. Every way of asking
-            // for a sync goes through the coordinator, and only one of
-            // them is this worker, so the coordinator is where carrying
-            // on belongs — a connection made from Settings has just as
-            // much right to finish itself as one made from a refresh.
-            //
-            // Not a retry either way: a retry is backed off and shares
-            // the failure's escalating delay, and the whole point here
-            // is to carry on promptly.
-            SyncOutcome.Incomplete,
-            SyncOutcome.Success,
-            SyncOutcome.NotApplicable,
-            -> Result.success()
-        }
+        return completedResult(coordinator.request(scope, carryingOn = isBootstrap()))
     }
 
     /**
@@ -77,6 +49,18 @@ class PositionSyncWorker(
     private fun isBootstrap(): Boolean = inputData.getBoolean(KEY_CARRYING_ON, false)
 
     companion object {
+        internal fun completedResult(outcome: SyncOutcome): Result {
+            // The coordinator scheduled the next page. Failing this work would
+            // cancel its appended successor, even though the report is accurate.
+            if (outcome.continuation) return Result.success()
+            val failure = when (outcome) {
+                is SyncOutcome.Failure -> outcome.reason
+                is SyncOutcome.Partial -> outcome.reason
+                else -> return Result.success()
+            }
+            return if (failure.worthRetrying) Result.retry() else Result.failure()
+        }
+
         const val KEY_BOOK_URL = "book_url"
         private const val KEY_CARRYING_ON = "carrying_on"
         private const val FULL_SYNC = "position-sync"

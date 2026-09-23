@@ -223,7 +223,7 @@ class PositionSyncCoordinator(
                 }
                 val outcome = try {
                     when (scope) {
-                        SyncScope.Full -> sync.syncAll(snapshot)
+                        SyncScope.Full -> sync.syncAll(snapshot, carryingOn)
                         is SyncScope.Book -> sync.syncBook(scope.bookUrl)
                     }
                 } catch (e: Throwable) {
@@ -233,7 +233,7 @@ class PositionSyncCoordinator(
                 }
                 clearInFlight(slot)
                 slot.complete(outcome)
-                if (outcome != SyncOutcome.Incomplete) {
+                if (!outcome.continuation) {
                     carriedOn = 0
                 } else if (carriedOn++ < MAX_CARRY_ONS) {
                     carryOn()

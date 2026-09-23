@@ -2,8 +2,9 @@
 
 Automatic BookOrbit position synchronization remains disabled.
 `ServerKind.BOOKORBIT` must stay at `syncAbility = NONE` and
-`canSync = false` until safe automatic writes and the full acceptance
-gate are proven.
+`canSync = false` until the full acceptance gate passes.
+Last-server-write-wins was approved on 2026-09-23 for the remaining
+post-preflight race; the policy is recorded below.
 
 ## Task ledger and next-phase handoff
 
@@ -23,40 +24,269 @@ it does not mean automatic sync is enabled.
 | `phase0-three-reviews` | Done | Three Phase 0 review passes and fixes completed. |
 | `phase2-cfi-bridge` | Done | Incoming CFI resolution and outgoing viewport capture checked. |
 | `phase3-agreement` | Done | Durable position-only agreement, exact bytes, and read-back recovery built. |
-| `phase4-provider` | In progress | Guarded opt-in provider and reader choices exist; a live response-fault check passed. Finish bounded orchestration without enabling normal pushes. |
-| `phase5-acceptance` | Pending | Finish end-to-end and three bounded review passes, then enable only after the write-race policy is settled. |
+| `phase4-provider` | In progress | Bounded read-back account checks and reader choices implemented. Scheduled pushes remain unwired and disabled. |
+| `phase5-acceptance` | In progress | Independent Android/web passage checks, response loss, process death, result messages and the identity/lifecycle checks below passed. Finish the remaining acceptance and final-path reviews before enabling. |
 
 Remaining steps for the next phase:
 
-1. Make `BookOrbitPositionSync` account-scoped and bounded for normal
-   orchestration, without registering or scheduling it yet. A conflict or
-   unverified CFI must remain unresolved and non-retryable, and the
-   generic position-choice API must never adopt an unverified locator.
-   Keep exact-byte pending read-back separate from any new POST.
-2. Resolve the post-preflight write race before enabling automatic
-   pushes: BookOrbit needs a conditional progress write, or the reader
-   must explicitly accept last-writer-wins. The final GET and read-back
-   alone do not protect another device's newer position.
-3. Run bounded acceptance with independent devices for both directions,
-   a network-level lost response, post-close recovery and process death,
-   changed account/file, missing anchors, and the reader's result
-   notification. Review the completed
-   phase three times, update this handoff with findings and caveats,
-   then change `syncAbility`, account `canSync`, routing, UI and tests
-   together only if the gate passes.
+1. Independent Android and web-reader logins now work. Both-direction
+   passage interoperability and stale-choice refusal passed on 2026-09-23,
+   as recorded below. Do not count the separate API logins as reader
+   acceptance or clone a session/database for another device.
+2. Finish the remaining explicit-path checks: a second independently
+   authenticated Android installation, reopening during post-close work,
+   and live competing writes after preflight and before read-back. The
+   identity checks below changed emulator database fields; they do not
+   exercise the account-switch UI or replacement downloads.
+3. Build the normal bounded push orchestration behind a disabled gate,
+   then repeat acceptance through that final path and the bounded reviews.
+   Change `syncAbility`, account `canSync`, routing, UI and tests together
+   only if the gate passes.
 
-### Unscheduled selected-book provider
+### Independent Android and web-reader acceptance
 
-`BookOrbitPositionSync` now wraps the exchange for a single explicitly
-opted-in book; it is not registered in `RemoteRouter`. Its default is inert,
-including the generic preview and choice methods. An opted-in run checks
-the selected binding and account ownership, uses exact agreement/read-back
-for success, and reports a foreign CFI or conflict as a non-retryable
-unresolved position rather than claiming the book is in step. A pending
-uncertain send is read back without another POST. The generic choice
-contract cannot prove a remote locator against the active reader, so
-neither ordinary scheduling nor the generic choice UI may use this
-provider yet. The tests exercise those limits, rejection, and recovery.
+On 2026-09-23, the committed debug build ran on the disposable API 26
+emulator. Android and an isolated Chrome browser each signed in normally
+to the approved disposable account. They did not share tokens or a local
+database. No temporary app hooks were used.
+
+The fixture was book 90/file 260. The catalog contains another book with
+the same displayed title, so the browser used the explicit selected-file
+reader URL. The downloaded EPUB and a fresh authenticated server download
+had identical SHA-256 hashes and lengths (1,200,418 bytes). The EPUB's
+internal title differs from the catalog title; the comparison used the
+selected file and passage anchors.
+
+| Check | Observed result |
+| --- | --- |
+| Web reader to Android | Browser page turns saved `epubcfi(/6/22!/4,/80/1:332,/106/1:326)`. Android verified the preview in the active reader. Taking the server's place closed the reader and persisted an acknowledged agreement at local revision 39 with the exact server CFI and percentage. |
+| Stale choice | While Android's conflict dialog was open, the web reader saved another position. Choosing the old keep-local offer left that competing server position unchanged. This checked the final stored result; it did not count server-facing POST requests. |
+| Android to web reader | A fresh keep-local choice saved `epubcfi(/6/22!/4/158/3:448)` and persisted an acknowledged agreement at revision 40. A new isolated browser session restored that position. Its rendered document matched the Android locator's selector and surrounding text, and the highlighted word's DOM range intersected the visible viewport. |
+| Unusable front-matter anchor | Browser section jumps produced anchors without usable passage text. Android kept its local position and did not offer an unverified take-remote choice. |
+
+These checks cover real reader interoperability and checked post-close
+choices. The later fault checks below cover a network-level response drop
+and termination between send and read-back. The queued-choice and toast
+checks below cover interruption before execution and result messages.
+Rotation and emulator identity-change checks are recorded below.
+Normal scheduled pushes remain
+disabled and require acceptance through their final orchestration path.
+
+After the checks, the selected-file progress was deleted through the API.
+Only this account's book 90 status and reading-attempt rows were removed.
+All three counts returned to their captured empty baseline. The Android
+reader was stopped before cleanup; its local reading position was kept.
+
+### Network response loss and Android process death
+
+The API 26 emulator used a loopback-only fault proxy restricted to the
+approved BookOrbit origin. A disposable certificate was trusted only on
+that emulator; the proxy verified upstream HTTPS normally and used IPv4
+because the host's IPv6 route timed out. The app retained its original
+HTTPS server address. No app transport hook or permissive trust manager
+was added. The proxy recorded request counts and fault events, without
+tokens or payloads.
+
+The first explicit keep-local choice reached the server once. After
+receiving the successful upstream response, the proxy closed the client
+socket without returning that response. Liseur fetched the selected-file
+progress and persisted `ACKNOWLEDGED` at local revision 42. The proxy
+count remained one POST, and the acknowledged CFI matched the server.
+
+For a second choice, the proxy waited for successful server receipt and
+force-stopped the Android app before returning anything to it. A database
+snapshot showed `MAY_HAVE_BEEN_SENT`, attempt generation 3, sent revision
+43, and retained outgoing bytes whose CFI matched the server. The proxy
+had forwarded exactly two POSTs across the two tests.
+
+Restarting the original build exposed a missing recovery call: the reader
+fetched progress but left the matching attempt pending and showed another
+choice. Reader opening now calls `readBackIfPending` before deciding
+whether to offer a remote position. That operation holds the shared
+attempt mutex and only reads back potentially sent attempts. It neither
+sends prepared requests nor retries rejected requests.
+
+Installing the fixed build without clearing its database and reopening
+recovered the actual interrupted attempt. The choice disappeared, the
+agreement became `ACKNOWLEDGED` at revision 43, and the retained request
+was cleared. The proxy still counted two POSTs. Regression tests cover
+all recoverable pending states across database reopen, preservation of
+a newer local position, and leaving prepared, rejected and unknown
+attempts untouched. The focused tests and `make check` passed.
+
+The proxy was stopped, its emulator trust certificate and routing were
+removed, and the disposable private key was deleted. Selected-file
+progress and this account's book 90 status/attempt rows returned to their
+captured empty baseline.
+
+This verifies the explicit reader path. The subsequent check below covers
+process death before queued execution. These results do not qualify the
+still-disabled scheduled push path for enablement.
+
+### Interrupted queued choice and result messages
+
+On 2026-09-23, an approved temporary debug-only pause stopped an accepted
+keep-local choice inside `afterQueuedWrites`, before releasing the
+open-book guard or launching the choice operation. A log marker confirmed
+that boundary before the Android app was force-stopped.
+
+Snapshots before acceptance, at the pause, and after termination contained
+identical complete local progress, agreement and server progress rows.
+Local revision stayed 45 and attempt generation stayed 3. The temporary
+hook and its private trigger were removed, the clean debug build was
+installed without clearing app data, and the book was reopened. It offered
+a fresh conflict choice; all three stored rows still matched. The
+interrupted in-memory choice was not replayed.
+
+Accepting the fresh keep-local choice on the clean build produced the
+visible toast "Reading place saved. Reopen the book to continue." The
+agreement acknowledged revision 45 at generation 4, with CFI and percentage
+matching the server exactly.
+
+For the failure case, the independent web reader moved while a later
+Android choice was visible. Accepting that stale choice displayed
+"The choice could not be confirmed. Reopen the book to check its saved
+place and try again." Complete local progress, agreement and server
+progress rows remained unchanged at local revision 46 and generation 4.
+
+Screenshots are saved locally as
+`~/tmp/liseur/sshot/bookorbit-choice-success-1.png` and
+`~/tmp/liseur/sshot/bookorbit-choice-failure-1.png`.
+These are Android toast messages, not notification-shade entries.
+No diagnostic hook is retained in source or in the final emulator build.
+After stopping the reader, the selected-file progress and this account's
+book 90 status/attempt rows were restored to their captured empty baseline.
+
+### Identity guards, rotation and missing-anchor recovery
+
+On 2026-09-23, the clean API 26 build displayed a checked choice against a
+position saved by the independently authenticated web reader. Each identity
+change below was made directly in the disposable emulator database while
+the choice was visible. The original field values were restored after
+each case. No real server account, file identity or EPUB content was changed.
+
+| Emulator change | Choice | Result |
+| --- | --- | --- |
+| Selected binding file ID replaced with a nonexistent test ID, revision incremented | Keep local; take remote, tested separately | Both choices closed without changing the complete local progress, agreement or server progress rows. |
+| Connection epoch incremented | Keep local | All three position rows stayed unchanged. |
+| Account ID replaced with a nonexistent test identity | Take remote | All three position rows stayed unchanged. |
+
+The refused choices left local revision 48 and attempt generation 4
+unchanged. These tests exercise stale identity guards in the running app;
+they do not establish full account-switch or replacement-download behavior.
+They compare persisted state rather than counting network requests.
+
+With the original identity restored, the open choice was rotated to
+landscape and back to portrait. Both orientations displayed the choice,
+and snapshots matched the complete pre-rotation local progress, agreement
+and server progress rows. The original Android rotation settings were
+restored afterward.
+
+For missing-anchor recovery, the approved test file's progress endpoint
+was given the syntactically valid CFI `epubcfi(/6/22!/4/999998/1:0)`, whose
+element is absent from the original XHTML. Reopening offered no unverified
+choice and preserved the complete local progress row at revision 48.
+Subsequent page turns changed the saved locator and advanced the local
+revision to 49. The server row stayed unchanged, confirming that failed
+anchor resolution did not suppress later local reading.
+
+The reader was stopped before cleanup. The original emulator identity
+fields were verified restored, and the selected-file progress plus this
+account's book 90 status/attempt rows returned to their empty baseline.
+No app code changes or diagnostic hooks were needed for these checks.
+
+### Approved write policy
+
+On 2026-09-23 the maintainer accepted last-write-wins for BookOrbit.
+The last progress write stored by the server wins, regardless of which
+device read most recently or reached the furthest percentage. A delayed
+write can therefore replace another device's newer reading position.
+This accepts the race after the final preflight GET; it does not make
+that GET atomic with the POST.
+
+Liseur still refuses a conflict visible before sending, verifies the local
+CFI/revision pair, and retains account/file guards. Each prepared request
+gets one POST attempt. A lost response is resolved through GET, and a
+write is acknowledged only when read-back matches its exact CFI and stored
+percentage. Another device winning before read-back leaves the request
+unresolved. No device timestamp or highest-percentage rule is introduced.
+
+This matches the verified unconditional
+[BookOrbit server write contract](https://github.com/bookorbit/bookorbit/blob/27cfdc20282eabdc89296c8c45482c578c157c7c/server/src/modules/book/book.service.ts#L2238-L2259).
+The public iOS repository contains support pages rather than sync source;
+exact parity with its client-side conflict and offline-replay rules has
+not been established.
+
+The policy decision removes the requirement to wait for server-side
+conditional writes. It does not enable scheduling or waive independent-device
+acceptance. The account provider remains observation/read-back-only until
+that gate passes.
+
+### Unscheduled bounded provider
+
+`BookOrbitPositionSync` remains inert by default and is not registered in
+`RemoteRouter`. The separate `accountSync` opt-in lets `syncAll` inspect at
+most 20 selected EPUB bindings per call. It reads a database page, captures
+the account/connection and each selected-file revision, and checks them
+before exchange. It skips another account's local positions. A changed
+connection or binding stops the page instead of recapturing a new target.
+
+Schema 58 stores the traversal's frozen binding list, cursor and cumulative
+result. Recreating the provider or worker resumes the same finite walk;
+finishing a continuation does not start another one. A connection change
+invalidates the old walk. A transient failure leaves the failed item for
+retry. Account cleanup removes the traversal and its items.
+
+Conflicts and unverified CFIs produce non-retryable `PositionUnresolved`;
+a later settled page cannot hide an earlier failure. A separate continuation
+flag on failure/partial outcomes lets the coordinator and worker reach later
+pages without relabelling the conflict as retryable or successful. A
+failure-free page with more bindings still returns `Incomplete`. The provider
+remains unregistered, so normal workers do not start these BookOrbit walks.
+
+Account runs only observe candidates and read back potentially sent
+requests. They leave a prepared request unsent, and do not prepare or POST
+when local movement would otherwise authorize a push. An unchanged
+read-back stays unresolved even on another run. `syncBook` follows the
+same rule unless the separate `manualBookSync` opt-in is supplied;
+`syncAll` cannot POST even with both options set. This preserves the
+existing explicit single-book diagnostic path without enabling normal
+pushes.
+
+The generic preview and choice methods remain disabled: their contract
+cannot prove a foreign CFI against the active reader. The reader's
+checked post-close choice remains the only take-remote path. Provider
+tests cover page bounds, continuation, mixed results, account and file
+changes, foreign ownership, unsent preparation, and durable uncertain-send
+recovery with a recreated provider. These are local protocol tests, not
+independent-device or Android process-death acceptance.
+
+On 2026-09-23, the provider tests and the full BookOrbit test selection
+passed. `make check` also passed the complete JVM suite, Android lint,
+debug build, and release-tool checks. No live account or device was changed
+for this orchestration work. Independent-device acceptance remains pending.
+
+### Phase 4 local review passes
+
+Three bounded code-review passes on 2026-09-23 covered:
+
+| Pass | Scope | Result |
+| --- | --- | --- |
+| 1 | Account paging, identity, durable recovery | Confirmed the 20-book bound, cumulative unresolved results and changed-account/file refusal. Added a database-reopen test for `MAY_HAVE_BEEN_SENT`: preserved bytes are acknowledged through GET without POST. |
+| 2 | Reader verification, fallback and close | Found that cold-opening fallback did not clear the pending choice, so subsequent reading positions could remain suppressed. Both failed-anchor paths now clear the proposal and proof. Eight reader-state tests cover failure, replacement navigators, explicit choice, close and recreation. |
+| 3 | HTTP follow-ups and uncertain delivery | Reproduced a second POST after `503 Retry-After: 0` despite `retryOnConnectionFailure(false)`. Progress request bodies are now one-shot. Transport and exchange tests require one POST followed by read-back. |
+
+The reader state keeps an accepted choice and a verified automatic pull
+through view teardown so the queued post-close action can still run.
+A failed exact-anchor check clears them; a pending choice on a replacement
+navigator requires fresh verification. A recreated reader does not inherit
+the old instance's choice.
+
+These passes used local code and JVM tests. Database reopen and reader-state
+recreation do not prove Android process-death behavior. No independent
+second device, live network disconnect or notification check was exercised
+in this continuation. The post-preflight server write race is accepted under
+the policy above; neither routing nor sync capabilities were enabled.
 
 ### Live response-fault check
 
@@ -121,9 +351,9 @@ In a deterministic post-preflight test, another device wrote after the
 last GET but before Liseur's POST. BookOrbit's unconditional POST
 overwrote that newer position, and read-back reported the local write as
 acknowledged. A further client-side GET cannot eliminate this interval.
-Normal automatic pushes must therefore remain off until BookOrbit
-offers a conditional position write, or a different last-writer-wins
-policy is explicitly accepted.
+The maintainer subsequently accepted last-server-write-wins for this
+interval. Normal automatic pushes remain off pending independent-device
+acceptance.
 The selected-file progress was removed through its API and only the test
 account's book 90 status and reading-attempt rows were deleted; all three
 server counts returned to zero. The emulator database was restored at
@@ -142,8 +372,10 @@ the request `MAY_HAVE_BEEN_SENT`; a changed CFI, saved state or percentage
 discards the unsent preparation and retains the changed candidate without
 POSTing. A changed local revision similarly prevents delivery. A lost
 response remains uncertain and the next exchange reads back **without
-POSTing**; a still-unchanged preflight is reported for a separate retry,
-not automatically replayed. An explicit rejection is reported separately.
+POSTing**; a still-unchanged preflight retains the exact request in
+`RETRY_REQUIRED`. Later runs and process restarts cannot prepare another
+POST until the reader explicitly chooses to send again. An explicit
+rejection is reported separately.
 Position agreement does not touch local reading status or another
 provider's pending status action.
 
@@ -157,6 +389,37 @@ The opt-in exchange is a bounded protocol component, not a claim that
 Phase 4 scheduling or the final gate passed. BookOrbit still lacks a
 conditional write, so the final GET cannot exclude a competing write
 immediately before POST.
+
+### Durable explicit retry and pending choices
+
+An unchanged read-back no longer clears an uncertain request. It enters
+`RETRY_REQUIRED` and keeps the exact outgoing bytes and sent revision.
+`UNCERTAIN`, `MAY_HAVE_BEEN_SENT` and `RETRY_REQUIRED` are read-back-only
+on subsequent exchanges, including after database reopen or local movement.
+A rejected request also remains blocked until an explicit choice.
+
+The reader can now resolve these pending attempts. Its fresh preview binds
+the selected account/file, local CFI/revision, remote answer and exact pending
+bytes/state. Schema 58 adds `attempt_generation`, incremented whenever a new
+attempt is prepared. An old choice cannot authorize another retry merely
+because the later attempt returned to the same state with identical bytes.
+Send/read-back checks also bind that generation.
+
+Choosing the verified server place after close atomically adopts it and
+settles the matching pending request. Choosing to send this device's place
+again authorizes one new preparation and POST after fresh checks. If the
+remote anchor is absent or cannot be verified, the dialog offers only the
+explicit send-again action and cancel; it cannot adopt that remote place.
+The retry explanation and action are translated in all six app languages.
+
+Agreement repository instances share a per-database mutex around sends,
+read-back and pending choices. A choice waits for an older in-flight result,
+then rechecks its captured evidence. It cannot replace an attempt while an
+older read-back is still able to settle it. Tests cover that ordering,
+byte-identical retry generations, changed pending bytes/state, rejection,
+checked take-remote, and durable read-back-only behavior after restart.
+These checks do not claim Android process-death or independent-device
+acceptance.
 
 ### Opt-in keep-local conflict choice
 
@@ -331,9 +594,9 @@ followed by a selected-file GET. Only a matching CFI **and percentage**
 acknowledge the sent revision, so a concurrent page turn remains dirty.
 An in-process read-back cannot pass a pending POST. A 401/403 leaves a
 blocked rejected attempt, so a later exchange cannot replay it without
-an explicit resolution path. If the remote still
-matches the preflight, the caller may explicitly prepare afresh, never
-blindly replay the uncertain request. A changed remote CFI is retained as
+an explicit resolution path. If the remote still matches the preflight,
+`RETRY_REQUIRED` preserves the request until a fresh reader preview and
+explicit send-again choice authorize a new attempt. A changed remote CFI is retained as
 an unresolved conflict with the original bytes. A failed read-back leaves
 the request `UNCERTAIN`; `readBack` can settle it after process restart
 without another POST. No status column or

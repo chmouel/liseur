@@ -1279,6 +1279,31 @@ CFI live.
   local pushes and uncertain-POST read-back; it is not registered with generic
   position sync. A second selected-file preflight prevents sending a prepared
   request after remote progress changed.
+  Progress POST bodies are one-shot as well as connection-retry-disabled:
+  OkHttp can otherwise resend a POST after `503 Retry-After: 0`.
+  Unchanged read-back retains exact bytes in `RETRY_REQUIRED`; a later run
+  cannot silently prepare a replacement. Before offering an opening choice,
+  the reader reads back potentially sent requests under the shared attempt
+  mutex. An exact match acknowledges the stored sent revision without a POST
+  or a local position rewrite, including after process death. Requests that
+  remain unresolved require a fresh, checked reader choice.
+  Schema 58 adds an attempt generation so an old
+  choice cannot authorize another byte-identical retry, and repository
+  instances share a database-scoped send/read-back/choice mutex. An
+  unverified remote anchor permits only explicit send-again or cancel.
+  `BookOrbitPositionSync` has an unscheduled account opt-in that processes
+  at most 20 selected EPUB bindings per call. It only observes or reads back
+  uncertain requests; it cannot prepare or POST a new position. Schema 58
+  persists frozen traversal membership, cursor and accumulated failures for
+  the captured connection. A separate continuation flag lets workers reach
+  later pages while retaining non-retryable conflicts. Its generic
+  position-choice methods remain disabled. Explicit single-book
+  pushes use a separate opt-in. The approved policy is last-server-write-wins
+  for the race after final preflight, regardless of reading timestamp or
+  percentage. Keep preflight conflicts, exact read-back and no-replay guards.
+  Automatic writes still require the independent-device acceptance gate in
+  the position-sync record; server-side conditional writes are no longer a
+  prerequisite.
   `BookOrbitIncomingAnchor` creates a text-anchor proposal from original
   XHTML. A book with no saved local position reads the selected file's
   progress on cold opening and verifies the proposal in the active
@@ -1289,8 +1314,10 @@ CFI live.
   CFI during loading, verify it in the active Readium DOM, and adopt the
   locator only after the reader closes and a fresh selected-file GET and
   revision guard succeed. It does not change reading status or POST.
-  First-time conflicts, scheduled delivery, and a live two-way round trip
-  remain outstanding.
+  First-time conflicts use a reader-verified choice after close. Scheduled
+  delivery and independent-device acceptance remain outstanding.
+  Failed exact opening clears the BookOrbit proposal and its verification
+  proof, including the choice that suppresses position writes while visible.
   Sending a position without a verified CFI would clear
   the server's, which is why browse-and-download ships on its own rather
   than with a lossy writer. See

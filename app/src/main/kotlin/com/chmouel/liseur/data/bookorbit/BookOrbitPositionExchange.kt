@@ -27,23 +27,28 @@ class BookOrbitPositionExchange(
     }
 
     suspend fun keepLocal(preview: BookOrbitConflictPreview): Result = turn.withLock {
-        agreement.prepareKeepLocal(preview)
-        delivered(agreement.send(preview.context))
+        delivered(agreement.keepLocal(preview))
     }
 
-    suspend fun run(bookUrl: String): Result = turn.withLock {
-        val context = cfis.capture(bookUrl)
+    suspend fun run(bookUrl: String): Result = run(cfis.capture(bookUrl), allowPush = true)
+
+    internal suspend fun run(context: BookOrbitCfiContext, allowPush: Boolean): Result = turn.withLock {
+        cfis.check(context)
         val pending = agreement.state(context)
         when (pending.attemptState) {
             BookOrbitAttempt.REJECTED.name -> return@withLock Result.Unresolved
-            BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name, BookOrbitAttempt.UNCERTAIN.name ->
+            BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name, BookOrbitAttempt.UNCERTAIN.name,
+            BookOrbitAttempt.RETRY_REQUIRED.name ->
                 return@withLock recovered(agreement.readBack(context))
             BookOrbitAttempt.PREPARED.name -> {
+                if (!allowPush) return@withLock Result.Unresolved
                 if (agreement.preparedStillMatches(context)) {
                     return@withLock delivered(agreement.send(context))
                 }
                 agreement.discardStalePreparation(context)
             }
+            null, BookOrbitAttempt.ACKNOWLEDGED.name -> Unit
+            else -> return@withLock Result.Unresolved
         }
 
         val remote = progress.read(context)
@@ -53,6 +58,7 @@ class BookOrbitPositionExchange(
             ExactPositionDecision.Conflict -> Result.Conflict
             ExactPositionDecision.Unresolved -> Result.Unresolved
             ExactPositionDecision.Push -> {
+                if (!allowPush) return@withLock Result.Unresolved
                 agreement.prepare(context)
                 delivered(agreement.send(context))
             }
@@ -61,7 +67,7 @@ class BookOrbitPositionExchange(
 
     private fun delivered(result: BookOrbitReadBack): Result = when (result) {
         BookOrbitReadBack.Agreed -> Result.Pushed
-        BookOrbitReadBack.SafeToPrepareAgain -> Result.RetryAfterReadBack
+        BookOrbitReadBack.ExplicitRetryRequired -> Result.RetryAfterReadBack
         BookOrbitReadBack.Conflict -> Result.Conflict
         is BookOrbitReadBack.Rejected -> Result.Rejected(result.status)
     }

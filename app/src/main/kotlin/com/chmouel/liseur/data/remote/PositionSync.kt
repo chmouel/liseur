@@ -23,6 +23,9 @@ sealed interface PositionSyncStatus {
  * and scheduling a backed-off retry for it just burns battery.
  */
 sealed interface SyncOutcome {
+    /** More bounded work is ready, independently of the accumulated failure report. */
+    val continuation: Boolean get() = false
+
     /** Positions were exchanged, or both sides already agreed. */
     data object Success : SyncOutcome
 
@@ -39,7 +42,9 @@ sealed interface SyncOutcome {
      * Nothing went wrong, so this is not a failure and must not be
      * reported as one.
      */
-    data object Incomplete : SyncOutcome
+    data object Incomplete : SyncOutcome {
+        override val continuation: Boolean get() = true
+    }
 
     /**
      * Some books settled and some did not. The ones that did not are
@@ -48,7 +53,7 @@ sealed interface SyncOutcome {
      * scheduled and the settings screen does not claim all is well. The
      * reason is the first thing that went wrong.
      */
-    data class Partial(val reason: SyncFailure) : SyncOutcome
+    data class Partial(val reason: SyncFailure, override val continuation: Boolean = false) : SyncOutcome
 
     /** Nothing to do and nothing wrong: no account, no sync, nothing to send. */
     data object NotApplicable : SyncOutcome
@@ -58,7 +63,7 @@ sealed interface SyncOutcome {
      * next: being offline is worth trying again, an account that is not
      * allowed to sync is not.
      */
-    data class Failure(val reason: SyncFailure) : SyncOutcome
+    data class Failure(val reason: SyncFailure, override val continuation: Boolean = false) : SyncOutcome
 }
 
 /** Which way a single book's position went during a run. */
@@ -269,6 +274,9 @@ interface PositionSync {
      * account, the run asks the server itself.
      */
     suspend fun syncAll(snapshot: SyncSnapshot? = null): SyncOutcome
+
+    /** A follow-up may resume a traversal, but must not restart a completed one. */
+    suspend fun syncAll(snapshot: SyncSnapshot?, carryingOn: Boolean): SyncOutcome = syncAll(snapshot)
 
     /** Reconciles one book, for the moments someone is waiting on it. */
     suspend fun syncBook(bookUrl: String): SyncOutcome

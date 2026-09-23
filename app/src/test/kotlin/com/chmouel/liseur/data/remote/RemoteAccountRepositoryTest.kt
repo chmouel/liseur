@@ -185,6 +185,10 @@ class RemoteAccountRepositoryTest {
         assertTrue("expected the fake setup to succeed, got $connected", connected is SetupResult.Success)
         val first = repository.current()!!
         assertEquals("reader", first.username)
+        val traversal = com.chmouel.liseur.data.db.BookOrbitPositionTraversal(
+            first.accountKey, first.orbitEpoch, first.baseUrl, afterUrl = "book",
+        )
+        db.bookOrbitPositionTraversalDao().write(traversal)
 
         repository.refreshCapabilities()
 
@@ -196,6 +200,10 @@ class RemoteAccountRepositoryTest {
         // must not blank the ones the account is using.
         assertEquals("access-one", second.orbitAccessCipher?.let(CredentialCipher::decrypt))
         assertEquals("refresh-one", second.orbitRefreshCipher?.let(CredentialCipher::decrypt))
+        assertEquals(traversal, db.bookOrbitPositionTraversalDao().get(first.accountKey))
+
+        repository.connectBookOrbit(BASE, "reader", "hunter2")
+        assertNull(db.bookOrbitPositionTraversalDao().get(first.accountKey))
     }
 
     @Test
@@ -236,10 +244,18 @@ class RemoteAccountRepositoryTest {
                 server.accountKey, bookUrl, 113, 352, 0, "epubcfi(/6/2)",
             ),
         )
+        db.bookOrbitPositionTraversalDao().write(
+            com.chmouel.liseur.data.db.BookOrbitPositionTraversal(
+                server.accountKey, server.orbitEpoch, server.baseUrl,
+            ),
+        )
+        db.bookOrbitPositionTraversalDao().capture(server.accountKey)
         repository.disconnect()
 
         assertEquals(352L, db.bookOrbitBindingDao().get(server.accountKey, bookUrl)?.fileId)
         assertNull(db.bookOrbitCfiDao().get(server.accountKey, bookUrl))
+        assertNull(db.bookOrbitPositionTraversalDao().get(server.accountKey))
+        assertTrue(db.bookOrbitPositionTraversalDao().page(server.accountKey, null, 20).isEmpty())
     }
 
     /** A BookOrbit server that answers capability refreshes in its own shape. */
@@ -349,6 +365,7 @@ class RemoteAccountRepositoryTest {
         peerStateDao = db.syncPeerStateDao(),
         bookOrbitBindingDao = db.bookOrbitBindingDao(),
         bookOrbitCfiDao = db.bookOrbitCfiDao(),
+        bookOrbitPositionTraversalDao = db.bookOrbitPositionTraversalDao(),
         kosync = { kosync() },
         setups = mapOf(
             ServerKind.CALIBRE to setup,

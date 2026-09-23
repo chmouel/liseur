@@ -85,6 +85,9 @@ class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
         router.positionSync()?.syncAll(snapshot) ?: SyncOutcome.NotApplicable
 
+    override suspend fun syncAll(snapshot: SyncSnapshot?, carryingOn: Boolean): SyncOutcome =
+        router.positionSync()?.syncAll(snapshot, carryingOn) ?: SyncOutcome.NotApplicable
+
     override suspend fun syncBook(bookUrl: String): SyncOutcome =
         router.positionSync()?.syncBook(bookUrl) ?: SyncOutcome.NotApplicable
 
