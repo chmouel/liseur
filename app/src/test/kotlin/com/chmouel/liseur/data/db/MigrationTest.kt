@@ -1430,10 +1430,69 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `status revision is added without invalidating the agreed position`() {
+        helper.createDatabase(TEST_DB, 58).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO reading_progress (
+                    book_url, locator_json, total_progression, updated_at, local_revision,
+                    finished_override
+                ) VALUES (
+                    'bookorbit:one', '{"href":"chapter.xhtml"}', 0.42, 100, 9, 1
+                )
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO book_orbit_binding (
+                    account_key, book_url, book_id, file_id, file_format, revision, state, updated_at
+                ) VALUES ('orbit', 'bookorbit:one', 12, 34, 'epub', 2, 'DOWNLOADED', 1)
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO book_orbit_position_agreement (
+                    account_key, book_url, book_id, file_id, binding_revision,
+                    connection_epoch, base_url, agreed_local_revision, agreed_locator_json
+                ) VALUES (
+                    'orbit', 'bookorbit:one', 12, 34, 2,
+                    7, 'https://books.example', 9, '{"href":"chapter.xhtml"}'
+                )
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT local_revision, status_revision, position_revision " +
+                        "FROM reading_progress WHERE book_url = 'bookorbit:one'",
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(9L, it.getLong(0))
+                    assertEquals(0L, it.getLong(1))
+                    assertEquals(9L, it.getLong(2))
+                }
+                db.query(
+                    "SELECT agreed_local_revision, agreed_locator_json " +
+                        "FROM book_orbit_position_agreement WHERE account_key = 'orbit'",
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(9L, it.getLong(0))
+                    assertEquals("""{"href":"chapter.xhtml"}""", it.getString(1))
+                }
+                db.query("SELECT COUNT(*) FROM book_orbit_status_agreement").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(0, it.getInt(0))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 58
+        const val LATEST = 59
     }
 }

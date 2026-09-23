@@ -263,7 +263,7 @@ class LiseurSyncServerSetup(
             SyncFailure.InsecureTransport -> SetupFailure.InsecureTransport
             // Position-sync answers cannot come from setup.
             SyncFailure.NotFound, SyncFailure.Malformed, SyncFailure.StaleIdentity,
-            SyncFailure.PositionUnresolved ->
+            SyncFailure.PositionUnresolved, SyncFailure.StatusUnresolved ->
                 SetupFailure.WrongServer
             SyncFailure.Offline, SyncFailure.Timeout ->
                 SetupFailure.Unreachable("No answer", httpMayWork = false)

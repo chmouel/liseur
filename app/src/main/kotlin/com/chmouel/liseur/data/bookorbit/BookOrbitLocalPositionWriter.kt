@@ -52,7 +52,7 @@ class BookOrbitLocalPositionWriter(private val database: LiseurDatabase) {
                 bookId = context.bookId,
                 fileId = context.fileId,
                 bindingRevision = context.bindingRevision,
-                localRevision = local.localRevision,
+                localRevision = local.positionRevision,
                 locatorJson = local.locatorJson,
                 rawCfi = candidate.rawCfi,
             ),

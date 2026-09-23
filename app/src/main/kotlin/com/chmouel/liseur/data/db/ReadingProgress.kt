@@ -24,6 +24,10 @@ import com.chmouel.liseur.reader.progress.ReadingPace
  *   reading the server has not seen — exactly when the first exceeds the
  *   second. Timestamps cannot do this job: wall clocks move backwards,
  *   and the server stamps its own.
+ * - **Independent change counters.** [positionRevision] changes only
+ *   when the passage changes; [statusRevision] changes only when someone
+ *   changes reading status. Exact-position sync can therefore retain its
+ *   verified CFI when a reader marks a book read or unread.
  * - **The baseline** ([agreedProgression], [agreedStatus]). The last
  *   state both sides agreed on. Without it, deliberately going back to
  *   reread is indistinguishable from the other device being further on.
@@ -93,6 +97,12 @@ data class ReadingProgress(
      */
     @ColumnInfo(name = "finished_override", defaultValue = "0")
     val finishedOverride: Int = 0,
+    /** Changes only when someone explicitly changes the reading status. */
+    @ColumnInfo(name = "status_revision", defaultValue = "0")
+    val statusRevision: Long = 0,
+    /** Changes only when the saved passage changes, not when status changes. */
+    @ColumnInfo(name = "position_revision", defaultValue = "0")
+    val positionRevision: Long = 0,
 ) {
     /** True when this device has read on since the server last confirmed. */
     val isDirty: Boolean get() = localRevision > ackedRevision
@@ -156,8 +166,9 @@ abstract class ReadingProgressDao {
             locator_json = :locatorJson,
             total_progression = :progression,
             updated_at = :now,
-            local_revision = local_revision + 1
-        WHERE book_url = :bookUrl AND local_revision = :expectedRevision
+            local_revision = local_revision + 1,
+            position_revision = position_revision + 1
+        WHERE book_url = :bookUrl AND position_revision = :expectedRevision
             AND locator_json = :expectedLocator
         """,
     )
@@ -261,7 +272,8 @@ abstract class ReadingProgressDao {
             updated_at = :updatedAt,
             read_at = :updatedAt,
             status = :status,
-            local_revision = local_revision + 1
+            local_revision = local_revision + 1,
+            position_revision = position_revision + 1
         WHERE book_url = :bookUrl
         """,
     )
@@ -283,12 +295,13 @@ abstract class ReadingProgressDao {
             book_url, locator_json, total_progression, reading_speed,
             reading_seconds_per_position, reading_pace_samples,
             reading_pace_elapsed_ms, reading_pace_evidence,
-            updated_at, read_at, status, synced_at, local_revision, acked_revision
+            updated_at, read_at, status, synced_at, local_revision, acked_revision,
+            position_revision
         )
         VALUES (:bookUrl, :locatorJson, :progression, NULL,
                 :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
                 COALESCE(:readingPaceElapsedMs, 0), COALESCE(:readingPaceEvidence, 0),
-                :updatedAt, :updatedAt, :status, NULL, 1, 0)
+                :updatedAt, :updatedAt, :status, NULL, 1, 0, 1)
         """,
     )
     abstract suspend fun insertLocal(
@@ -502,6 +515,7 @@ abstract class ReadingProgressDao {
             agreed_account = :account,
             owner_account = :account,
             local_revision = local_revision + 1,
+            position_revision = position_revision + 1,
             acked_revision = local_revision + 1
         WHERE book_url = :bookUrl AND local_revision = :expectedRevision
         """,
@@ -791,7 +805,8 @@ abstract class ReadingProgressDao {
             read_at = :readAt,
             synced_at = :now,
             remote_updated_at = :remoteUpdatedAt,
-            local_revision = local_revision + 1
+            local_revision = local_revision + 1,
+            position_revision = position_revision + 1
         WHERE book_url = :bookUrl AND local_revision = :expectedRevision
         """,
     )
@@ -848,6 +863,7 @@ abstract class ReadingProgressDao {
         UPDATE reading_progress SET
             status = :status,
             finished_override = :override,
+            status_revision = status_revision + 1,
             updated_at = :now,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl
@@ -864,9 +880,9 @@ abstract class ReadingProgressDao {
         """
         INSERT OR IGNORE INTO reading_progress (
             book_url, locator_json, total_progression, updated_at,
-            status, finished_override, local_revision, acked_revision
+            status, finished_override, status_revision, local_revision, acked_revision
         )
-        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 0)
+        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 1, 0)
         """,
     )
     abstract suspend fun insertFinishedOverride(
@@ -901,6 +917,67 @@ abstract class ReadingProgressDao {
             )
         }
     }
+
+    @Transaction
+    open suspend fun adoptFinishedOverride(
+        bookUrl: String,
+        expectedStatusRevision: Long,
+        account: String,
+        override: Int,
+        status: String,
+        progression: Double?,
+        now: Long,
+    ): Boolean {
+        val existing = get(bookUrl)
+        if (existing == null) {
+            if (expectedStatusRevision != 0L) return false
+            return insertRemoteFinishedOverride(
+                bookUrl, override, status, progression, now,
+            ) != -1L
+        }
+        if (existing.statusRevision != expectedStatusRevision) return false
+        return updateFinishedOverrideIfUnchanged(
+            bookUrl, expectedStatusRevision, account, override, status, now,
+        ) > 0
+    }
+
+    @Query(
+        """
+        UPDATE reading_progress SET
+            status = :status,
+            finished_override = :override,
+            status_revision = status_revision + 1,
+            updated_at = :now,
+            local_revision = local_revision + 1
+        WHERE book_url = :bookUrl AND status_revision = :expectedStatusRevision
+            AND (owner_account IS NULL OR owner_account = :account)
+        """,
+    )
+    protected abstract suspend fun updateFinishedOverrideIfUnchanged(
+        bookUrl: String,
+        expectedStatusRevision: Long,
+        account: String,
+        override: Int,
+        status: String,
+        now: Long,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO reading_progress (
+            book_url, locator_json, total_progression, updated_at,
+            status, finished_override, status_revision, local_revision, acked_revision
+        )
+        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 1, 0)
+        """,
+    )
+    protected abstract suspend fun insertRemoteFinishedOverride(
+        bookUrl: String,
+        override: Int,
+        status: String,
+        progression: Double?,
+        now: Long,
+    ): Long
 
     @Query("SELECT finished_override FROM reading_progress WHERE book_url = :bookUrl")
     abstract suspend fun overrideFor(bookUrl: String): Int?

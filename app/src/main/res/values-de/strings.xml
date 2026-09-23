@@ -391,6 +391,7 @@
     <string name="server_sync_malformed">Der Server hat etwas Unerwartetes geantwortet; Positionen synchronisieren später.</string>
     <string name="server_sync_stale_identity">Die Buchidentität des Servers hat sich geändert; Sync wird erneut versucht.</string>
     <string name="server_sync_position_unresolved">Die gespeicherte Lesestelle dieses Buchs muss vor dem Abgleich im Reader geprüft oder ausgewählt werden.</string>
+    <string name="server_sync_status_unresolved">BookOrbit hat die Statusänderung nicht bestätigt. Wähle in Liseur erneut „Gelesen“ oder „Ungelesen“, um sie zu ersetzen.</string>
     <string name="server_sync_local_network">Android blockiert Liseur den Zugang zu diesem Server in deinem Netzwerk, deshalb wurden Positionen nicht synchronisiert.</string>
     <string name="server_sync_server_error">Der Server hatte Probleme; Positionen synchronisieren später.</string>
     <string name="server_sync_never">Lesepositionen wurden noch nicht synchronisiert.</string>

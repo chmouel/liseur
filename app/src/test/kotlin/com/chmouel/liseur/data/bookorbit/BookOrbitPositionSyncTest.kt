@@ -88,6 +88,7 @@ class BookOrbitPositionSyncTest {
         manual: Boolean = false,
         accountSync: Boolean = false,
         automaticPush: Boolean = false,
+        syncStatuses: Boolean = false,
     ): BookOrbitPositionSync {
         val cfis = BookOrbitCfiRepository(database)
         val http = BookOrbitHttp(BookOrbitSession(database.remoteServerDao()))
@@ -102,6 +103,38 @@ class BookOrbitPositionSyncTest {
             manualBookSync = manual,
             accountSync = accountSync,
             automaticPush = automaticPush,
+            statusSync = if (syncStatuses) {
+                BookOrbitStatusSync(
+                    database,
+                    BookOrbitStatusClient(http, cfis),
+                    com.chmouel.liseur.data.library.FinishedState(
+                        database.bookDao(), database.readingProgressDao(),
+                    ),
+                )
+            } else null,
+        )
+    }
+
+    @Test
+    fun `account sync reads book status without reading or posting file progress`() = runBlocking {
+        web.enqueue(
+            MockResponse(
+                body = """{"id":12,"readStatus":{"status":"reading","source":"auto"}}""",
+            ),
+        )
+
+        assertEquals(
+            SyncOutcome.Success,
+            provider(accountSync = true, automaticPush = true, syncStatuses = true).syncBook(bookUrl),
+        )
+
+        val request = web.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/api/v1/books/12", request.url.encodedPath)
+        assertEquals(1, web.requestCount)
+        assertEquals(
+            "reading",
+            database.bookOrbitStatusAgreementDao().get(account.accountKey, bookUrl)?.agreedRemoteStatus,
         )
     }
 
@@ -294,6 +327,18 @@ class BookOrbitPositionSyncTest {
 
         assertEquals(SyncOutcome.NotApplicable, sync.syncAll())
         assertEquals(SyncOutcome.NotApplicable, sync.syncBook("bookorbit:unlinked"))
+        assertEquals(0, web.requestCount)
+    }
+
+    @Test
+    fun `automatic sync skips a status-only row without reading progress`(): Unit = runBlocking {
+        database.readingProgressDao().insertFinishedOverride(
+            bookUrl, 1, com.chmouel.liseur.domain.ReadingStatus.FINISHED.name, null, 1,
+        )
+        val sync = provider(accountSync = true, automaticPush = true)
+
+        assertEquals(SyncOutcome.NotApplicable, sync.syncAll())
+        assertEquals(SyncOutcome.NotApplicable, sync.syncBook(bookUrl))
         assertEquals(0, web.requestCount)
     }
 

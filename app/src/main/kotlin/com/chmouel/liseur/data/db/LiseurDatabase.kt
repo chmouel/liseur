@@ -35,13 +35,15 @@ import androidx.sqlite.execSQL
         BookOrbitPositionAgreement::class,
         BookOrbitPositionTraversal::class,
         BookOrbitPositionTraversalItem::class,
+        BookOrbitStatusAgreement::class,
     ],
-    version = 58,
+    version = 59,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
     internal val bookOrbitPositionMutex = kotlinx.coroutines.sync.Mutex()
     internal val bookOrbitTraversalMutex = kotlinx.coroutines.sync.Mutex()
+    internal val bookOrbitStatusMutex = kotlinx.coroutines.sync.Mutex()
 
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun readingSessionDao(): ReadingSessionDao
@@ -68,6 +70,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookOrbitLocalCfiDao(): BookOrbitLocalCfiDao
     abstract fun bookOrbitPositionAgreementDao(): BookOrbitPositionAgreementDao
     abstract fun bookOrbitPositionTraversalDao(): BookOrbitPositionTraversalDao
+    abstract fun bookOrbitStatusAgreementDao(): BookOrbitStatusAgreementDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1710,6 +1713,48 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_58_59 = object : Migration(58, 59) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE reading_progress ADD COLUMN status_revision INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE reading_progress ADD COLUMN position_revision INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "UPDATE reading_progress SET position_revision = local_revision",
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `book_orbit_status_agreement` (
+                        `account_key` TEXT NOT NULL,
+                        `book_url` TEXT NOT NULL,
+                        `book_id` INTEGER NOT NULL,
+                        `binding_revision` INTEGER NOT NULL,
+                        `connection_epoch` INTEGER NOT NULL,
+                        `base_url` TEXT NOT NULL,
+                        `agreed_local_status_revision` INTEGER NOT NULL DEFAULT 0,
+                        `agreed_local_override` INTEGER NOT NULL DEFAULT 0,
+                        `agreed_remote_status` TEXT,
+                        `agreed_remote_source` TEXT,
+                        `outgoing_bytes` BLOB,
+                        `sent_status` TEXT,
+                        `sent_local_status_revision` INTEGER,
+                        `sent_local_override` INTEGER,
+                        `preflight_remote_status` TEXT,
+                        `preflight_remote_source` TEXT,
+                        `attempt_state` TEXT,
+                        `attempt_generation` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`account_key`, `book_url`),
+                        FOREIGN KEY(`account_key`, `book_url`)
+                            REFERENCES `book_orbit_binding`(`account_key`, `book_url`)
+                            ON UPDATE CASCADE ON DELETE CASCADE
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1768,6 +1813,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_55_56,
             MIGRATION_56_57,
             MIGRATION_57_58,
+            MIGRATION_58_59,
         )
     }
 }

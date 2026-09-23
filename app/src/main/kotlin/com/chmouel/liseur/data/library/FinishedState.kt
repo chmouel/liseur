@@ -34,17 +34,55 @@ class FinishedState(
      */
     suspend fun setFinished(bookUrl: String, finished: Boolean) {
         val override = if (finished) FinishedOverride.FINISHED else FinishedOverride.UNREAD
+        setStatus(bookUrl, override, null)
+    }
+
+    /**
+     * Applies a status from a partner as a new local state without moving the passage,
+     * unless the row now belongs to another account.
+     */
+    suspend fun adoptRemoteStatus(
+        bookUrl: String,
+        expectedStatusRevision: Long,
+        account: String,
+        override: FinishedOverride,
+        status: ReadingStatus,
+    ): Boolean {
         val at = now()
+        var applied = false
         inTransaction {
             val progression = progressDao.get(bookUrl)?.totalProgression
-            progressDao.setFinishedOverride(
+            applied = progressDao.adoptFinishedOverride(
                 bookUrl = bookUrl,
+                expectedStatusRevision = expectedStatusRevision,
+                account = account,
                 override = override.ordinal,
-                status = readingStatusFor(progression, override).wireName,
+                status = status.wireName,
                 progression = progression,
                 now = at,
             )
-            applyFlag(bookUrl, finished, at)
+            if (applied) applyFlag(bookUrl, status == ReadingStatus.FINISHED, at)
+        }
+        return applied
+    }
+
+    private suspend fun setStatus(
+        bookUrl: String,
+        override: FinishedOverride,
+        requestedStatus: ReadingStatus?,
+    ) {
+        val at = now()
+        inTransaction {
+            val progression = progressDao.get(bookUrl)?.totalProgression
+            val status = requestedStatus ?: readingStatusFor(progression, override)
+            progressDao.setFinishedOverride(
+                bookUrl = bookUrl,
+                override = override.ordinal,
+                status = status.wireName,
+                progression = progression,
+                now = at,
+            )
+            applyFlag(bookUrl, status == ReadingStatus.FINISHED, at)
         }
     }
 

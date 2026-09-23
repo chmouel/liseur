@@ -28,6 +28,7 @@ class BookOrbitPositionSync(
     private val manualBookSync: Boolean = false,
     private val accountSync: Boolean = false,
     private val automaticPush: Boolean = false,
+    private val statusSync: BookOrbitStatusSync? = null,
 ) : PositionSync {
     private val turn get() = database.bookOrbitTraversalMutex
     private val cfis = BookOrbitCfiRepository(database)
@@ -118,6 +119,7 @@ class BookOrbitPositionSync(
         val reason = failure?.let { stored ->
             when (stored) {
                 "unresolved" -> SyncFailure.PositionUnresolved
+                "status_unresolved" -> SyncFailure.StatusUnresolved
                 "unauthorised" -> SyncFailure.Unauthorised
                 "forbidden" -> SyncFailure.Forbidden
                 "not_found" -> SyncFailure.NotFound
@@ -140,6 +142,7 @@ class BookOrbitPositionSync(
 
     private fun SyncFailure.stored(): String = when (this) {
         SyncFailure.PositionUnresolved -> "unresolved"
+        SyncFailure.StatusUnresolved -> "status_unresolved"
         SyncFailure.Unauthorised -> "unauthorised"
         SyncFailure.Forbidden -> "forbidden"
         SyncFailure.NotFound -> "not_found"
@@ -169,39 +172,68 @@ class BookOrbitPositionSync(
                 (it.orbitAccessCipher != null || it.orbitRefreshCipher != null)
         }?.let(BookOrbitRequestContext::from)
 
-    private suspend fun sync(context: BookOrbitCfiContext, allowPush: Boolean): SyncOutcome =
-        outcome {
-            cfis.check(context)
-            val position = database.readingProgressDao().get(context.bookUrl)
-            if (automaticPush && position == null &&
-                database.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)
-                    ?.outgoingBytes == null
-            ) return@outcome SyncOutcome.NotApplicable
-            if (position?.ownerAccount
-                ?.let { it != context.request.accountKey } == true
-            ) return@outcome SyncOutcome.NotApplicable
-            when (val result = exchange.run(context, allowPush)) {
-                BookOrbitPositionExchange.Result.Agreed,
-                BookOrbitPositionExchange.Result.Pushed,
-                BookOrbitPositionExchange.Result.Recovered -> database.withTransaction {
-                    cfis.check(context)
-                    val local = database.readingProgressDao().get(context.bookUrl)
-                    val agreed = database.bookOrbitPositionAgreementDao()
-                        .get(context.request.accountKey, context.bookUrl)
-                    if (local?.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
-                        local != null && (agreed?.agreedLocalRevision != local.localRevision ||
-                            agreed.agreedLocatorJson != local.locatorJson)
-                    ) SyncOutcome.Failure(SyncFailure.StaleIdentity) else SyncOutcome.Success
+    private suspend fun sync(context: BookOrbitCfiContext, allowPush: Boolean): SyncOutcome {
+        val position = syncPosition(context, allowPush)
+        val status = statusSync?.let { syncStatus(context, it) } ?: SyncOutcome.NotApplicable
+        return when {
+            position is SyncOutcome.Failure && status is SyncOutcome.Failure ->
+                when {
+                    position.reason.worthRetrying -> position
+                    status.reason.worthRetrying -> status
+                    else -> position
                 }
-                is BookOrbitPositionExchange.Result.Rejected -> SyncOutcome.Failure(
-                    if (result.status == 401) SyncFailure.Unauthorised else SyncFailure.Forbidden,
-                )
-                BookOrbitPositionExchange.Result.Conflict,
-                BookOrbitPositionExchange.Result.Unresolved,
-                BookOrbitPositionExchange.Result.RetryAfterReadBack ->
-                    SyncOutcome.Failure(SyncFailure.PositionUnresolved)
-            }
+            position is SyncOutcome.Failure -> position
+            status is SyncOutcome.Failure -> status
+            position == SyncOutcome.Success || status == SyncOutcome.Success -> SyncOutcome.Success
+            position == SyncOutcome.Incomplete || status == SyncOutcome.Incomplete -> SyncOutcome.Incomplete
+            else -> SyncOutcome.NotApplicable
         }
+    }
+
+    private suspend fun syncPosition(
+        context: BookOrbitCfiContext,
+        allowPush: Boolean,
+    ): SyncOutcome = outcome {
+        cfis.check(context)
+        val position = database.readingProgressDao().get(context.bookUrl)
+        // Marking a book read or unread leaves a row with no place in it.
+        if (automaticPush && (position == null || position.locatorJson == NO_PLACE) &&
+            database.bookOrbitPositionAgreementDao().get(context.request.accountKey, context.bookUrl)
+                ?.outgoingBytes == null
+        ) return@outcome SyncOutcome.NotApplicable
+        if (position?.ownerAccount
+            ?.let { it != context.request.accountKey } == true
+        ) return@outcome SyncOutcome.NotApplicable
+        when (val result = exchange.run(context, allowPush)) {
+            BookOrbitPositionExchange.Result.Agreed,
+            BookOrbitPositionExchange.Result.Pushed,
+            BookOrbitPositionExchange.Result.Recovered -> database.withTransaction {
+                cfis.check(context)
+                val local = database.readingProgressDao().get(context.bookUrl)
+                val agreed = database.bookOrbitPositionAgreementDao()
+                    .get(context.request.accountKey, context.bookUrl)
+                if (local?.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
+                    local != null && (agreed?.agreedLocalRevision != local.positionRevision ||
+                        agreed.agreedLocatorJson != local.locatorJson)
+                ) SyncOutcome.Failure(SyncFailure.StaleIdentity) else SyncOutcome.Success
+            }
+            is BookOrbitPositionExchange.Result.Rejected -> SyncOutcome.Failure(
+                if (result.status == 401) SyncFailure.Unauthorised else SyncFailure.Forbidden,
+            )
+            BookOrbitPositionExchange.Result.Conflict,
+            BookOrbitPositionExchange.Result.Unresolved,
+            BookOrbitPositionExchange.Result.RetryAfterReadBack ->
+                SyncOutcome.Failure(SyncFailure.PositionUnresolved)
+        }
+    }
+
+    private suspend fun syncStatus(
+        context: BookOrbitCfiContext,
+        sync: BookOrbitStatusSync,
+    ): SyncOutcome = outcome {
+        cfis.check(context)
+        sync.sync(context)
+    }
 
     private suspend fun outcome(block: suspend () -> SyncOutcome): SyncOutcome =
         try {
@@ -242,5 +274,6 @@ class BookOrbitPositionSync(
     companion object {
         const val AUTOMATIC_SYNC_ENABLED = true
         internal const val PAGE_SIZE = 20
+        private const val NO_PLACE = "{}"
     }
 }

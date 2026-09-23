@@ -25,6 +25,7 @@ The final enabled-path checks are recorded immediately below this checklist.
 | `phase3-agreement` | Done | Durable position-only agreement, exact bytes, and read-back recovery built. |
 | `phase4-provider` | Done | Normal routed account and single-book pushes enabled, with durable bounded continuation and checked reader choices. |
 | `phase5-acceptance` | Done | Independent web/Android and two-Android checks, enabled-path transport faults, live races, stale identities and lifecycle checks passed. |
+| `phase6-reading-status` | In progress | Status protocol, separate status revisions, and guarded status-only writes are implemented and covered by focused tests. Live independent-client acceptance is still required; automatic status sync remains gated. |
 
 ## Enabled-path acceptance
 
@@ -80,6 +81,45 @@ deleted through its API, and only the test account's book 90 status and attempt
 rows were removed. All three counts matched the captured empty baseline.
 The emulator proxy setting and trust certificate were removed, the proxy and
 both emulators stopped, and the disposable TLS key and certificate deleted.
+
+## Phase 6: reading-status synchronization (gated)
+
+Reading status means whether a book is unread, being read or finished.
+Reading position is the exact passage where the reader stopped. Phase 4
+syncs the position. Status sync uses BookOrbit's `readStatus` from
+`GET /api/v1/books/{id}` and its status-only
+`PATCH /api/v1/books/{id}/status` route. The patch sends only a status,
+leaving file progress and its exact CFI untouched.
+
+Liseur's explicit finished and unread marks map to BookOrbit's `read` and
+`unread`. Manual BookOrbit `read` and `unread` map back to Liseur. A manual
+`reading` maps only when the local passage already falls in Liseur's
+reading range. Auto statuses remain derived from position. Liseur preserves
+`want_to_read`, `on_hold`, `rereading`, `skimmed`, `abandoned` and unknown
+values on BookOrbit rather than flattening them.
+
+Status agreements live separately from BookOrbit's position agreements.
+`status_revision` tracks status actions, while `position_revision` tracks
+passage changes. The position exchange therefore keeps its verified CFI
+when a status changes. Liseur persists the exact PATCH bytes before sending
+once, then reads the status back. It never replays an uncertain write.
+If Liseur has a newer explicit status action, that choice replaces the
+pending attempt. If only BookOrbit changed since the last agreement, Liseur
+adopts a representable manual status. A status write that cannot be
+confirmed remains unresolved until a new local status action.
+
+Focused JVM tests cover the mapping, both directions, preservation of the
+locator and progression, independent account sync, and no replay after an
+uncertain response. Automatic status sync remains disabled until an
+independent-client acceptance verifies BookOrbit's live detail and PATCH
+behavior, competing edits, interrupted requests and position preservation.
+The available disposable account has no status row in its captured
+baseline, and the public API has no operation to remove one after a test.
+No live status mutation was made, so the baseline remains intact. Settings
+continue to say that reading status is not synchronized.
+
+Annotation and highlight synchronization is a separate future feature,
+not part of this phase.
 
 ## Earlier acceptance and implementation record
 

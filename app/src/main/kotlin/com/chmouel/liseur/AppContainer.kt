@@ -202,6 +202,11 @@ class AppContainer(context: Context) {
     val bookOrbitExchange = com.chmouel.liseur.data.bookorbit.BookOrbitPositionExchange(
         bookOrbitCfis, bookOrbitProgress, bookOrbitAgreement,
     )
+    private val bookOrbitStatusSync = com.chmouel.liseur.data.bookorbit.BookOrbitStatusSync(
+        database,
+        com.chmouel.liseur.data.bookorbit.BookOrbitStatusClient(bookOrbitHttp, bookOrbitCfis),
+        finishedState,
+    )
     val bookOrbitEpubInfo = com.chmouel.liseur.data.bookorbit.BookOrbitEpubInfoClient(
         bookOrbitHttp, bookOrbitCfis,
     )
@@ -231,6 +236,7 @@ class AppContainer(context: Context) {
         bookOrbitLocalCfiDao = database.bookOrbitLocalCfiDao(),
         bookOrbitPositionAgreementDao = database.bookOrbitPositionAgreementDao(),
         bookOrbitPositionTraversalDao = database.bookOrbitPositionTraversalDao(),
+        bookOrbitStatusAgreementDao = database.bookOrbitStatusAgreementDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
@@ -447,6 +453,9 @@ class AppContainer(context: Context) {
                     ServerKind.BOOKORBIT,
                     com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync(
                         database, bookOrbitExchange, accountSync = true, automaticPush = true,
+                        statusSync = if (
+                            com.chmouel.liseur.data.bookorbit.BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED
+                        ) bookOrbitStatusSync else null,
                     ),
                 )
             }
