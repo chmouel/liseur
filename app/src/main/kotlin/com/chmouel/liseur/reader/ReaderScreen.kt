@@ -902,6 +902,7 @@ fun ReaderScreen(
         // whole-book fraction can move them to a different chapter
         // entirely, because that fraction may have been computed by the
         // other client, which does not compute it the same way.
+        if (bookOrbitFallback != null) onBookOrbitOpeningFailed()
         val fallback = onProgressAction.resourceTargetFor(locator)
             ?: locator.locations.totalProgression
                 ?.takeIf(ResourceAnchor::isFraction)
@@ -915,7 +916,6 @@ fun ReaderScreen(
             nowMs = SystemClock.elapsedRealtime(),
         )
         if (!nav.go(fallback, animated = false)) moves.cancel(fallbackToken)
-        else if (bookOrbitFallback != null) onBookOrbitOpeningFailed()
         onProgressAction.onApproximateResume()
     }
 
@@ -1454,6 +1454,7 @@ fun ReaderScreen(
             if (bookOrbitFallback != null) onBookOrbitOpeningVerified(requested)
             return@LaunchedEffect
         }
+        if (bookOrbitFallback != null) onBookOrbitOpeningFailed()
         // The chapter before the percentage, for the reason given in
         // navigate(): the whole-book fraction is the only rung that can
         // land in the wrong chapter.

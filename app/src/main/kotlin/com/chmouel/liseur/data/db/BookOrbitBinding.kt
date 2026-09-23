@@ -84,6 +84,14 @@ interface BookOrbitBindingDao {
     @Query("SELECT * FROM book_orbit_binding WHERE account_key = :accountKey")
     suspend fun forAccount(accountKey: String): List<BookOrbitBinding>
 
+    @Query(
+        "SELECT * FROM book_orbit_binding WHERE account_key = :accountKey " +
+            "AND (:afterUrl IS NULL OR book_url > :afterUrl) " +
+            "AND file_id IS NOT NULL AND LOWER(file_format) = 'epub' " +
+            "AND state IN ('SELECTED', 'DOWNLOADED') ORDER BY book_url LIMIT :limit",
+    )
+    suspend fun positionPage(accountKey: String, afterUrl: String?, limit: Int): List<BookOrbitBinding>
+
     @Query("SELECT book_url FROM book_orbit_binding WHERE account_key = :accountKey")
     suspend fun bookUrls(accountKey: String): List<String>
 

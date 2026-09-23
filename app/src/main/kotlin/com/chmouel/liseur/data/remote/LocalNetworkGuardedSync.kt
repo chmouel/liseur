@@ -43,6 +43,9 @@ class LocalNetworkGuardedSync(
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
         if (blocked()) refuse() else delegate.syncAll(snapshot)
 
+    override suspend fun syncAll(snapshot: SyncSnapshot?, carryingOn: Boolean): SyncOutcome =
+        if (blocked()) refuse() else delegate.syncAll(snapshot, carryingOn)
+
     override suspend fun syncBook(bookUrl: String): SyncOutcome =
         if (blocked()) refuse() else delegate.syncBook(bookUrl)
 

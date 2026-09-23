@@ -381,6 +381,9 @@
     <string name="reader_sync_book_title">Two reading positions</string>
     <string name="reader_bookorbit_choice_help">The server saved a different place. This page is a verified preview. Choosing a side closes the reader while it checks the choice. Wait for confirmation before reopening. Cancel closes without saving this preview.</string>
     <string name="reader_bookorbit_take">Keep the server\'s place</string>
+    <string name="reader_bookorbit_retry">Send this device\'s place again</string>
+    <string name="reader_bookorbit_retry_help">An earlier send needs your decision. This page shows the verified server position. You can keep it or send this device\'s saved position again, replacing the server position. The reader will close; wait for confirmation before reopening. Cancel leaves the request unresolved.</string>
+    <string name="reader_bookorbit_retry_only_help">An earlier send needs your decision. The server position could not be verified, so you are viewing this device\'s place. Sending again may replace a position saved by another device. The reader will close; wait for confirmation before reopening. Cancel leaves the request unresolved.</string>
     <string name="reader_bookorbit_choice_saved">Reading place saved. Reopen the book to continue.</string>
     <string name="reader_bookorbit_choice_failed">The choice could not be confirmed. Reopen the book to check its saved place and try again.</string>
     <string name="reader_sync_book_ahead">Another device has read further than this one. Which position would you like to keep?</string>

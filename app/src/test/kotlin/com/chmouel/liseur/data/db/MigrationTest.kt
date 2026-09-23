@@ -1389,10 +1389,51 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `bookorbit attempt generation starts at zero without changing the retained attempt`() {
+        helper.createDatabase(TEST_DB, 57).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO book_orbit_binding (
+                    account_key, book_url, book_id, file_id, file_format, revision, state, updated_at
+                ) VALUES ('orbit', 'bookorbit:one', 12, 34, 'epub', 2, 'DOWNLOADED', 1)
+                """.trimIndent(),
+            )
+            old.execSQL(
+                """
+                INSERT INTO book_orbit_position_agreement (
+                    account_key, book_url, book_id, file_id, binding_revision,
+                    connection_epoch, base_url, attempt_state, outgoing_bytes, sent_local_revision
+                ) VALUES (
+                    'orbit', 'bookorbit:one', 12, 34, 2,
+                    7, 'https://books.example', 'UNCERTAIN', X'010203', 9
+                )
+                """.trimIndent(),
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query(
+                "SELECT attempt_generation, attempt_state, hex(outgoing_bytes), sent_local_revision " +
+                    "FROM book_orbit_position_agreement WHERE account_key = 'orbit'",
+            ).use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0L, it.getLong(0))
+                assertEquals("UNCERTAIN", it.getString(1))
+                assertEquals("010203", it.getString(2))
+                assertEquals(9L, it.getLong(3))
+                assertFalse(it.moveToNext())
+            }
+            db.query("SELECT COUNT(*) FROM book_orbit_position_traversal").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 57
+        const val LATEST = 58
     }
 }

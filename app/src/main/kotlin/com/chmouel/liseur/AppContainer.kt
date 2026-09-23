@@ -230,6 +230,7 @@ class AppContainer(context: Context) {
         bookOrbitCfiDao = database.bookOrbitCfiDao(),
         bookOrbitLocalCfiDao = database.bookOrbitLocalCfiDao(),
         bookOrbitPositionAgreementDao = database.bookOrbitPositionAgreementDao(),
+        bookOrbitPositionTraversalDao = database.bookOrbitPositionTraversalDao(),
         setups = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
             ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),

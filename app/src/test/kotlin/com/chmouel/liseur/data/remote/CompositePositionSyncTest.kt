@@ -99,12 +99,12 @@ class CompositePositionSyncTest {
     }
 
     @Test
-    fun `everybody failing is a failure with the first reason`() = runTest {
+    fun `a retryable failure is not hidden behind a permanent refusal`() = runTest {
         val one = FakePeer("one", outcome = SyncOutcome.Failure(SyncFailure.Unauthorised))
         val two = FakePeer("two", outcome = SyncOutcome.Failure(SyncFailure.Offline))
 
         assertEquals(
-            SyncOutcome.Failure(SyncFailure.Unauthorised),
+            SyncOutcome.Failure(SyncFailure.Offline),
             composite(one, two).syncBook("file:///b"),
         )
     }
@@ -164,8 +164,10 @@ class CompositePositionSyncTest {
         val settling = FakePeer("settling", outcome = SyncOutcome.Incomplete)
         val refused = FakePeer("refused", outcome = SyncOutcome.Failure(SyncFailure.Unauthorised))
 
-        assertEquals(SyncOutcome.Incomplete, composite(settling, refused).syncAll())
-        assertEquals(SyncOutcome.Incomplete, composite(refused, settling).syncAll())
+        assertEquals(SyncOutcome.Partial(SyncFailure.Unauthorised, continuation = true),
+            composite(settling, refused).syncAll())
+        assertEquals(SyncOutcome.Partial(SyncFailure.Unauthorised, continuation = true),
+            composite(refused, settling).syncAll())
     }
 
     @Test
@@ -186,6 +188,23 @@ class CompositePositionSyncTest {
         val one = FakePeer("one", outcome = SyncOutcome.Partial(SyncFailure.Timeout))
 
         assertEquals(SyncOutcome.Partial(SyncFailure.Timeout), composite(one).syncAll())
+    }
+
+    @Test
+    fun `continuation retains the failure when no peer succeeded`() = runTest {
+        val result = SyncOutcome.Failure(SyncFailure.PositionUnresolved, continuation = true)
+        assertEquals(result, composite(FakePeer("orbit", result)).syncAll())
+    }
+
+    @Test
+    fun `transient peer failure backs off without masking ongoing conflict traversal`() = runTest {
+        val conflict = FakePeer("orbit",
+            SyncOutcome.Partial(SyncFailure.PositionUnresolved, continuation = true))
+        val offline = FakePeer("offline", SyncOutcome.Failure(SyncFailure.Offline))
+        assertEquals(SyncOutcome.Partial(SyncFailure.Offline), composite(conflict, offline).syncAll())
+        offline.outcome = SyncOutcome.Success
+        assertEquals(SyncOutcome.Partial(SyncFailure.PositionUnresolved, continuation = true),
+            composite(conflict, offline).syncAll())
     }
 
     @Test

@@ -366,6 +366,9 @@
     <string name="reader_sync_book_title">Zwei Lesepositionen</string>
     <string name="reader_bookorbit_choice_help">Der Server hat eine andere Lesestelle gespeichert. Diese Seite ist eine geprüfte Vorschau. Die Auswahl schließt den Reader, während sie geprüft wird. Warte auf die Bestätigung, bevor du das Buch erneut öffnest. Abbrechen schließt, ohne diese Vorschau zu speichern.</string>
     <string name="reader_bookorbit_take">Lesestelle des Servers behalten</string>
+    <string name="reader_bookorbit_retry">Lesestelle dieses Geräts erneut senden</string>
+    <string name="reader_bookorbit_retry_help">Ein früherer Sendeversuch erfordert deine Entscheidung. Diese Seite zeigt die geprüfte Lesestelle des Servers. Du kannst sie behalten oder die gespeicherte Lesestelle dieses Geräts erneut senden und damit die des Servers ersetzen. Der Reader schließt sich; warte auf die Bestätigung, bevor du das Buch erneut öffnest. Abbrechen lässt die Anfrage offen.</string>
+    <string name="reader_bookorbit_retry_only_help">Ein früherer Sendeversuch erfordert deine Entscheidung. Die Lesestelle des Servers konnte nicht geprüft werden, daher siehst du die dieses Geräts. Erneutes Senden kann eine von einem anderen Gerät gespeicherte Lesestelle ersetzen. Der Reader schließt sich; warte auf die Bestätigung, bevor du das Buch erneut öffnest. Abbrechen lässt die Anfrage offen.</string>
     <string name="reader_bookorbit_choice_saved">Lesestelle gespeichert. Öffne das Buch erneut, um weiterzulesen.</string>
     <string name="reader_bookorbit_choice_failed">Die Auswahl konnte nicht bestätigt werden. Öffne das Buch erneut, prüfe die gespeicherte Lesestelle und versuche es noch einmal.</string>
     <string name="reader_sync_book_ahead">Ein anderes Gerät ist weiter als dieses. Welche Position möchtest du behalten?</string>

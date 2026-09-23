@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.bookorbit
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.BookOrbitBinding
 import com.chmouel.liseur.data.db.BookOrbitBindingDao
+import com.chmouel.liseur.data.db.BookOrbitBindingState
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.remote.RemoteCredentials
@@ -297,6 +298,16 @@ class BookOrbitCatalogClientTest {
 
         override suspend fun forAccount(accountKey: String): List<BookOrbitBinding> =
             rows.values.filter { it.accountKey == accountKey }
+
+        override suspend fun positionPage(
+            accountKey: String,
+            afterUrl: String?,
+            limit: Int,
+        ): List<BookOrbitBinding> = forAccount(accountKey).filter {
+            (afterUrl == null || it.bookUrl > afterUrl) && it.fileId != null &&
+                it.fileFormat.equals("epub", ignoreCase = true) &&
+                it.stateValue in setOf(BookOrbitBindingState.SELECTED, BookOrbitBindingState.DOWNLOADED)
+        }.sortedBy { it.bookUrl }.take(limit)
 
         override suspend fun bookUrls(accountKey: String): List<String> =
             rows.values.filter { it.accountKey == accountKey }.map { it.bookUrl }

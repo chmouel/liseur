@@ -35,6 +35,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitPositionAgreementRepository
 import com.chmouel.liseur.data.bookorbit.BookOrbitPositionExchange
 import com.chmouel.liseur.data.bookorbit.BookOrbitPullOffer
 import com.chmouel.liseur.reader.progress.BookOrbitIncomingAnchor
+import com.chmouel.liseur.reader.progress.BookOrbitOpening
 import com.chmouel.liseur.reader.ResourceAddress
 import com.chmouel.liseur.data.db.BookScreen
 import com.chmouel.liseur.data.db.BookScreenDao
@@ -187,31 +188,25 @@ class ReaderViewModel(
     /** Whether [open] got far enough to declare this book being read. */
     @Volatile
     private var readingDeclared = false
-    private var openingPull: BookOrbitPullOffer? = null
-    private var verifiedOpeningPull: BookOrbitPullOffer? = null
-    private var verifiedOpeningEpub: BookOrbitOpenedEpub? = null
-    private var openingChoice: Pair<BookOrbitConflictPreview, BookOrbitPullOffer>? = null
-    private var chosenBookOrbit: Pair<BookOrbitConflictPreview, Boolean>? = null
+    private val bookOrbitOpening = BookOrbitOpening()
 
     fun onBookOrbitOpeningVerified(locator: Locator) {
-        openingChoice?.takeIf { (_, offer) ->
-            locator.toJSON().toString() == offer.locatorJson
-        }?.let { (preview, _) ->
-            verifiedOpeningEpub = (_state.value as? UiState.Ready)?.openedBookOrbit
+        bookOrbitOpening.verify(
+            locator.toJSON().toString(), (_state.value as? UiState.Ready)?.openedBookOrbit,
+        )?.let { preview ->
             _bookSync.value = BookSync.BookOrbitChoice(preview)
-            return
-        }
-        val offer = openingPull ?: return
-        if (locator.toJSON().toString() == offer.locatorJson) {
-            verifiedOpeningPull = offer
-            verifiedOpeningEpub = (_state.value as? UiState.Ready)?.openedBookOrbit
         }
     }
 
     fun onBookOrbitOpeningFailed() {
-        openingChoice = null
-        if (_bookSync.value == BookSync.Asking && chosenBookOrbit == null) {
+        val retry = bookOrbitOpening.choice?.first?.takeIf { it.retryRequired }
+        bookOrbitOpening.failed()
+        if (_bookSync.value == BookSync.Asking || _bookSync.value is BookSync.BookOrbitChoice) {
             _bookSync.value = BookSync.Idle
+        }
+        if (retry != null) {
+            bookOrbitOpening.propose(null, retry to null)
+            _bookSync.value = BookSync.BookOrbitChoice(retry, canTakeRemote = false)
         }
         val ready = _state.value as? UiState.Ready ?: return
         if (ready.bookOrbitChoicePending) {
@@ -220,8 +215,8 @@ class ReaderViewModel(
     }
 
     fun onBookOrbitNavigatorLost() {
-        if (openingChoice != null && chosenBookOrbit == null) {
-            verifiedOpeningEpub = null
+        bookOrbitOpening.navigatorLost()
+        if (bookOrbitOpening.choice?.second != null && bookOrbitOpening.chosen == null) {
             _bookSync.value = BookSync.Asking
         }
     }
@@ -476,7 +471,10 @@ class ReaderViewModel(
             val preview: SyncPreview,
         ) : BookSync
 
-        data class BookOrbitChoice(val preview: BookOrbitConflictPreview) : BookSync
+        data class BookOrbitChoice(
+            val preview: BookOrbitConflictPreview,
+            val canTakeRemote: Boolean = true,
+        ) : BookSync
 
         /** Nothing left to do: a message, and then out of the way. */
         data class Note(val messageRes: Int) : BookSync
@@ -650,14 +648,10 @@ class ReaderViewModel(
     fun resolveBookSync(takeRemote: Boolean): Boolean {
         val bookOrbit = _bookSync.value as? BookSync.BookOrbitChoice
         if (bookOrbit != null) {
-            val choice = openingChoice
-            if (choice?.first != bookOrbit.preview ||
-                (takeRemote && verifiedOpeningEpub == null)
-            ) {
+            if (!bookOrbitOpening.choose(bookOrbit.preview, takeRemote)) {
                 _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
                 return false
             }
-            chosenBookOrbit = bookOrbit.preview to takeRemote
             _bookSync.value = BookSync.Asking
             return true
         }
@@ -1133,18 +1127,19 @@ class ReaderViewModel(
                     withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
                         withContext(Dispatchers.IO) {
                             val context = openedBookOrbit.context
+                            bookOrbitAgreement?.readBackIfPending(context)
                             val remote = bookOrbitProgress.read(context)
                             val eligible = !freshBook && stored != null &&
                                 bookOrbitAgreement?.canOfferPull(context, remote) == true
                             if (!freshBook) bookOrbitAgreement?.observe(context, remote)
-                            val raw = remote.cfi?.takeIf { remote.isSaved }
-                                ?: return@withContext null
-                            bookOrbitCfis.retain(context, raw)
                             if (!freshBook && !eligible) {
                                 choicePreview = bookOrbitAgreement?.previewConflict(context)
                                     ?.takeIf { it.remote == remote }
                                 if (choicePreview == null) return@withContext null
                             }
+                            val raw = remote.cfi?.takeIf { remote.isSaved }
+                                ?: return@withContext null
+                            bookOrbitCfis.retain(context, raw)
                             val resource = com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource.locate(
                                 com.chmouel.liseur.data.bookorbit.BookOrbitCfi.parse(raw),
                                 openedBookOrbit.publication,
@@ -1195,14 +1190,15 @@ class ReaderViewModel(
             val stillCurrent = latestStored == stored
             val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: if (stillCurrent) localTarget else localTargetFor(latestStored)
-            openingPull = pullOffer?.takeIf {
+            val openingPull = pullOffer?.takeIf {
                 choicePreview == null && stillCurrent && incoming != null && initialLocator != null
             }?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
-            openingChoice = choicePreview?.let { preview ->
-                pullOffer?.takeIf { stillCurrent && incoming != null && initialLocator != null }
+            val openingChoice = choicePreview?.takeIf { stillCurrent }?.let { preview ->
+                val checkedOffer = pullOffer?.takeIf { incoming != null && initialLocator != null }
                     ?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
-                    ?.let { preview to it }
+                if (checkedOffer != null || preview.retryRequired) preview to checkedOffer else null
             }
+            bookOrbitOpening.propose(openingPull, openingChoice)
             lastLocator = initialLocator
             library.markOpened(bookId)
             _state.value = UiState.Ready(
@@ -1211,8 +1207,11 @@ class ReaderViewModel(
                 initialLocator = initialLocator,
                 openedBookOrbit = openedBookOrbit,
                 bookOrbitFallback = safeFallback.takeIf { incoming != null && stillCurrent },
-                bookOrbitChoicePending = openingChoice != null,
+                bookOrbitChoicePending = bookOrbitOpening.choice?.second != null,
             )
+            if (openingChoice != null && openingChoice.second == null) {
+                _bookSync.value = BookSync.BookOrbitChoice(openingChoice.first, canTakeRemote = false)
+            }
             // onResume arrives before a publication has necessarily
             // opened. Only now can foreground time be reading time.
             sessions.onReaderReady()
@@ -1250,7 +1249,7 @@ class ReaderViewModel(
         // Readium recalculates totalProgression for a different viewport,
         // even when its stable resource position has not moved. Keep the
         // display current, but do not turn that layout detail into reading.
-        if (samePosition || !effectiveEvent.persists || openingChoice != null) return
+        if (samePosition || !effectiveEvent.persists || bookOrbitOpening.choice != null) return
         readingGeneration++
         _catchUp.value = null
         val totalProgression = stable?.progression ?: return
@@ -2069,10 +2068,10 @@ class ReaderViewModel(
     }
 
     override fun onCleared() {
-        val closingPull = verifiedOpeningPull
-        val closingEpub = verifiedOpeningEpub
-        val closingChoice = chosenBookOrbit
-        val choiceOffer = openingChoice?.second
+        val closingPull = bookOrbitOpening.verifiedPull
+        val closingEpub = bookOrbitOpening.verifiedEpub
+        val closingChoice = bookOrbitOpening.chosen
+        val choiceOffer = bookOrbitOpening.choice?.second
         sessions.close()
         (_state.value as? UiState.Ready)?.publication?.close()
         if (readingDeclared) {

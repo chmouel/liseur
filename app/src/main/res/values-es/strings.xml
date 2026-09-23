@@ -363,6 +363,9 @@
     <string name="reader_sync_book_title">Dos posiciones de lectura</string>
     <string name="reader_bookorbit_choice_help">El servidor guardó otra posición. Esta página es una vista previa verificada. Al elegir una posición se cierra el lector mientras se comprueba la elección. Espera la confirmación antes de volver a abrir el libro. Cancelar cierra sin guardar esta vista previa.</string>
     <string name="reader_bookorbit_take">Conservar la posición del servidor</string>
+    <string name="reader_bookorbit_retry">Volver a enviar la posición de este dispositivo</string>
+    <string name="reader_bookorbit_retry_help">Un envío anterior requiere tu decisión. Esta página muestra la posición verificada del servidor. Puedes conservarla o volver a enviar la posición guardada en este dispositivo, reemplazando la del servidor. El lector se cerrará; espera la confirmación antes de volver a abrir el libro. Cancelar deja la solicitud pendiente.</string>
+    <string name="reader_bookorbit_retry_only_help">Un envío anterior requiere tu decisión. No se pudo verificar la posición del servidor, así que ves la de este dispositivo. Volver a enviarla puede reemplazar una posición guardada por otro dispositivo. El lector se cerrará; espera la confirmación antes de volver a abrir el libro. Cancelar deja la solicitud pendiente.</string>
     <string name="reader_bookorbit_choice_saved">Posición de lectura guardada. Vuelve a abrir el libro para continuar.</string>
     <string name="reader_bookorbit_choice_failed">No se pudo confirmar la elección. Vuelve a abrir el libro para comprobar su posición y reintentar.</string>
     <string name="reader_sync_book_ahead">Otro dispositivo ha leído más que este. ¿Qué posición quieres conservar?</string>

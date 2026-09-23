@@ -52,6 +52,9 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
     override suspend fun syncAll(snapshot: SyncSnapshot?): SyncOutcome =
         fold(peers.map { it.syncAll(snapshot) })
 
+    override suspend fun syncAll(snapshot: SyncSnapshot?, carryingOn: Boolean): SyncOutcome =
+        fold(peers.map { it.syncAll(snapshot, carryingOn) })
+
     override suspend fun syncBook(bookUrl: String): SyncOutcome =
         fold(peers.map { it.syncBook(bookUrl) })
 
@@ -188,30 +191,25 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
      * finished, or a connection still finding its feet would look
      * complete because the peer beside it had nothing to do. A failure
      * worth retrying wins over it: that retry covers the shortfall too.
-     * One that is not worth retrying does not, and must not — the
-     * outcome decides nothing else for such a reason, since a partial
-     * run that will not be retried and a run carrying on both end the
-     * worker without a backoff, and letting it through would leave a
-     * fresh connection half-named for as long as some unrelated
-     * account stayed locked out.
+     * A permanent failure remains in the report without preventing
+     * another peer's continuation. Retryable failures take precedence
+     * so an earlier refusal cannot accidentally suppress a needed retry.
      */
     private fun fold(outcomes: List<SyncOutcome>): SyncOutcome {
         if (outcomes.isEmpty()) return SyncOutcome.NotApplicable
-        val reason = outcomes.firstNotNullOfOrNull {
+        val failures = outcomes.mapNotNull {
             when (it) {
                 is SyncOutcome.Failure -> it.reason
                 is SyncOutcome.Partial -> it.reason
                 else -> null
             }
         }
-        val anyIncomplete = outcomes.any { it == SyncOutcome.Incomplete }
+        val reason = failures.firstOrNull { it.worthRetrying } ?: failures.firstOrNull()
+        val anyIncomplete = outcomes.any { it.continuation }
         val anySuccess = outcomes.any {
             it == SyncOutcome.Success || it == SyncOutcome.Incomplete || it is SyncOutcome.Partial
         }
-        val retryable = outcomes.any {
-            it is SyncOutcome.Failure && it.reason.worthRetrying ||
-                it is SyncOutcome.Partial && it.reason.worthRetrying
-        }
+        val retryable = failures.any { it.worthRetrying }
         return when {
             reason == null -> when {
                 anyIncomplete -> SyncOutcome.Incomplete
@@ -219,9 +217,8 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
                 else -> SyncOutcome.NotApplicable
             }
 
-            anyIncomplete && !retryable -> SyncOutcome.Incomplete
-            anySuccess -> SyncOutcome.Partial(reason)
-            else -> SyncOutcome.Failure(reason)
+            anySuccess -> SyncOutcome.Partial(reason, continuation = anyIncomplete && !retryable)
+            else -> SyncOutcome.Failure(reason, continuation = anyIncomplete && !retryable)
         }
     }
 }
