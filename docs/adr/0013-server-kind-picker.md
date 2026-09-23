@@ -146,6 +146,16 @@ This is a licensing fact about one upstream project, not a rule about
 the picker. If Komga relicenses the icon, `ServerKindLogo` gains a
 branch and loses one.
 
+### Komga glyph update
+
+On 2026-09-23, Komga's upstream README still credited Freepik/Flaticon
+for its icon. Liseur therefore continues to exclude that artwork.
+The generic server racks have been replaced with an original illustration
+of overlapping comic books, using red, blue and yellow. The front cover's
+panels identify a comic library without imitating Komga's official mark.
+This replaces the monochrome-placeholder decision above; the restriction
+on copying upstream's icon remains.
+
 ## Addendum: the fifth kind did have a layout consequence
 
 [Issue #179](https://github.com/chmouel/liseur/issues/179). The decision

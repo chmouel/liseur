@@ -1,0 +1,19 @@
+<!-- Original comic-library glyph for Liseur, not the Komga brand logo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#E34445"
+        android:pathData="M4,2H15A1.5,1.5 0,0 1,16.5 3.5V19H4A1.5,1.5 0,0 1,2.5 17.5V3.5A1.5,1.5 0,0 1,4 2Z" />
+    <path
+        android:fillColor="#2468BD"
+        android:pathData="M8,5H20A1.5,1.5 0,0 1,21.5 6.5V20.5A1.5,1.5 0,0 1,20 22H8A1.5,1.5 0,0 1,6.5 20.5V6.5A1.5,1.5 0,0 1,8 5Z" />
+    <path
+        android:fillColor="#FFD34D"
+        android:pathData="M9,7.5H19V13H9Z" />
+    <path
+        android:fillColor="#FFF5DE"
+        android:pathData="M9,15H13V19.5H9ZM15,15H19V19.5H15Z" />
+</vector>
