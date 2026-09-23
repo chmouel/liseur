@@ -220,8 +220,8 @@ class ReaderActivity : FragmentActivity() {
                     val bookSync by viewModel.bookSync.collectAsStateWithLifecycle()
                     BookSyncDialog(
                         state = bookSync,
-                        onResolve = viewModel::resolveBookSync,
-                        onDismiss = viewModel::dismissBookSync,
+                        onResolve = { if (viewModel.resolveBookSync(it)) finish() },
+                        onDismiss = { if (viewModel.dismissBookSync()) finish() },
                     )
                     // Only over a book that is actually on screen. Asked
                     // during the spinner it would be a question about a
@@ -292,7 +292,8 @@ class ReaderActivity : FragmentActivity() {
                                     scrollMode,
                                     fontKey,
                                 ) {
-                                    viewModel.lastLocator ?: s.initialLocator
+                                    if (s.bookOrbitChoicePending) s.initialLocator
+                                    else viewModel.lastLocator ?: s.initialLocator
                                 }
                                 // Every move the reader is sent on, counted
                                 // where both the screen and the link listener
@@ -435,15 +436,23 @@ class ReaderActivity : FragmentActivity() {
                                     },
                                     openedBookOrbit = s.openedBookOrbit,
                                     bookOrbitFallback = s.bookOrbitFallback
-                                        ?.takeIf { restoreTarget == s.initialLocator },
+                                        ?.takeIf {
+                                            s.bookOrbitChoicePending || restoreTarget == s.initialLocator
+                                        },
                                     onBookOrbitOpeningVerified = viewModel::onBookOrbitOpeningVerified,
+                                    onBookOrbitOpeningFailed = viewModel::onBookOrbitOpeningFailed,
                                     checkBookOrbitContext = container.bookOrbitCfis::check,
                                     originalBookOrbitDocument = { opened, href ->
                                         container.bookOrbitCfis.originalDocument(
                                             opened, href, container.bookDownloads::fileFor,
                                         )
                                     },
-                                    onNavigatorChanged = { navigator = it },
+                                    onNavigatorChanged = {
+                                        if (it == null && navigator != null) {
+                                            viewModel.onBookOrbitNavigatorLost()
+                                        }
+                                        navigator = it
+                                    },
                                     keepScreenOnFlow = viewModel.keepScreenOn,
                                     onKeepScreenOnChanged = viewModel::setKeepScreenOn,
                                     scrollModeFlow = viewModel.scrollMode,

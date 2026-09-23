@@ -1713,9 +1713,9 @@ private fun CatalogFailureNotice(
         SyncFailure.NotFound -> R.string.catalog_failed_not_found
         SyncFailure.Malformed -> R.string.catalog_failed_malformed
         SyncFailure.InsecureTransport -> R.string.catalog_failed_insecure
-        // A catalog fetch never produces this one; the notice still has
-        // to answer for it.
-        SyncFailure.StaleIdentity -> R.string.catalog_failed_server_error
+        // A catalog fetch never produces position-sync failures.
+        SyncFailure.StaleIdentity, SyncFailure.PositionUnresolved ->
+            R.string.catalog_failed_server_error
         SyncFailure.LocalNetworkBlocked -> R.string.catalog_failed_local_network
         is SyncFailure.ServerError -> R.string.catalog_failed_server_error
     }

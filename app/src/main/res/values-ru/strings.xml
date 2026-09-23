@@ -395,6 +395,10 @@
     <string name="reader_sync_book_moved">Пока это было открыто, что-то изменилось, поэтому ничего не изменено. Попробуйте синхронизировать книгу снова.</string>
     <string name="reader_sync_book_kept">Оставлена позиция этого устройства. Она уйдёт на сервер при следующей синхронизации.</string>
     <string name="reader_sync_book_title">Две позиции чтения</string>
+    <string name="reader_bookorbit_choice_help">На сервере сохранена другая позиция. Эта страница проверена и показана для выбора. После выбора читалка закроется для проверки. Дождитесь подтверждения, прежде чем снова открыть книгу. Отмена закроет читалку без сохранения этого места.</string>
+    <string name="reader_bookorbit_take">Оставить позицию сервера</string>
+    <string name="reader_bookorbit_choice_saved">Позиция чтения сохранена. Откройте книгу снова, чтобы продолжить.</string>
+    <string name="reader_bookorbit_choice_failed">Не удалось подтвердить выбор. Откройте книгу снова, проверьте сохранённую позицию и повторите попытку.</string>
     <string name="reader_sync_book_ahead">На другом устройстве прочитано дальше, чем здесь. Какую позицию оставить?</string>
     <string name="reader_sync_book_behind">Другое устройство отстаёт от этого. Какую позицию оставить?</string>
     <string name="reader_sync_book_same_page">Оба устройства на одной странице, но не в одном месте. Какую оставить?</string>
@@ -414,6 +418,7 @@
     <string name="server_sync_insecure">Этот сервер не принимает учётные данные по обычному HTTP. Используйте адрес https://.</string>
     <string name="server_sync_malformed">Сервер ответил чем-то неожиданным; позиции синхронизируются позже.</string>
     <string name="server_sync_stale_identity">Идентификатор книги на сервере изменился; синхронизация повторится.</string>
+    <string name="server_sync_position_unresolved">Сохранённую позицию этой книги нужно проверить или выбрать в читалке перед синхронизацией.</string>
     <string name="server_sync_local_network">Android блокирует доступ Liseur к этому серверу в вашей сети, поэтому позиции не синхронизировались.</string>
     <string name="server_sync_server_error">На сервере возникла проблема; позиции синхронизируются позже.</string>
     <string name="server_sync_never">Позиции чтения ещё не синхронизировались.</string>

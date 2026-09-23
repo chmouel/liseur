@@ -1,13 +1,11 @@
 package com.chmouel.liseur.data.bookorbit
 
-import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.domain.ExactPositionDecision
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** A single selected-file exchange. Not registered for automatic position sync. */
 class BookOrbitPositionExchange(
-    private val database: LiseurDatabase,
     private val cfis: BookOrbitCfiRepository,
     private val progress: BookOrbitProgressClient,
     private val agreement: BookOrbitPositionAgreementRepository,
@@ -24,6 +22,15 @@ class BookOrbitPositionExchange(
         data class Rejected(val status: Int) : Result
     }
 
+    suspend fun previewConflict(bookUrl: String): BookOrbitConflictPreview? = turn.withLock {
+        agreement.previewConflict(cfis.capture(bookUrl))
+    }
+
+    suspend fun keepLocal(preview: BookOrbitConflictPreview): Result = turn.withLock {
+        agreement.prepareKeepLocal(preview)
+        delivered(agreement.send(preview.context))
+    }
+
     suspend fun run(bookUrl: String): Result = turn.withLock {
         val context = cfis.capture(bookUrl)
         val pending = agreement.state(context)
@@ -32,8 +39,7 @@ class BookOrbitPositionExchange(
             BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name, BookOrbitAttempt.UNCERTAIN.name ->
                 return@withLock recovered(agreement.readBack(context))
             BookOrbitAttempt.PREPARED.name -> {
-                val revision = database.readingProgressDao().get(bookUrl)?.localRevision
-                if (revision == pending.sentLocalRevision) {
+                if (agreement.preparedStillMatches(context)) {
                     return@withLock delivered(agreement.send(context))
                 }
                 agreement.discardStalePreparation(context)

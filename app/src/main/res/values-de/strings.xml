@@ -364,6 +364,10 @@
     <string name="reader_sync_book_moved">Während das offen war, hat sich etwas bewegt, deshalb wurde nichts geändert. Versuche, dieses Buch erneut zu synchronisieren.</string>
     <string name="reader_sync_book_kept">Position dieses Geräts behalten. Sie geht beim nächsten Sync zum Server.</string>
     <string name="reader_sync_book_title">Zwei Lesepositionen</string>
+    <string name="reader_bookorbit_choice_help">Der Server hat eine andere Lesestelle gespeichert. Diese Seite ist eine geprüfte Vorschau. Die Auswahl schließt den Reader, während sie geprüft wird. Warte auf die Bestätigung, bevor du das Buch erneut öffnest. Abbrechen schließt, ohne diese Vorschau zu speichern.</string>
+    <string name="reader_bookorbit_take">Lesestelle des Servers behalten</string>
+    <string name="reader_bookorbit_choice_saved">Lesestelle gespeichert. Öffne das Buch erneut, um weiterzulesen.</string>
+    <string name="reader_bookorbit_choice_failed">Die Auswahl konnte nicht bestätigt werden. Öffne das Buch erneut, prüfe die gespeicherte Lesestelle und versuche es noch einmal.</string>
     <string name="reader_sync_book_ahead">Ein anderes Gerät ist weiter als dieses. Welche Position möchtest du behalten?</string>
     <string name="reader_sync_book_behind">Ein anderes Gerät liegt hinter diesem. Welche Position möchtest du behalten?</string>
     <string name="reader_sync_book_same_page">Beide Geräte sind auf derselben Seite, aber nicht an derselben Stelle. Welche möchtest du behalten?</string>
@@ -383,6 +387,7 @@
     <string name="server_sync_insecure">Dieser Server nimmt Anmeldedaten nicht über normales HTTP an. Verwende eine https://-Adresse.</string>
     <string name="server_sync_malformed">Der Server hat etwas Unerwartetes geantwortet; Positionen synchronisieren später.</string>
     <string name="server_sync_stale_identity">Die Buchidentität des Servers hat sich geändert; Sync wird erneut versucht.</string>
+    <string name="server_sync_position_unresolved">Die gespeicherte Lesestelle dieses Buchs muss vor dem Abgleich im Reader geprüft oder ausgewählt werden.</string>
     <string name="server_sync_local_network">Android blockiert Liseur den Zugang zu diesem Server in deinem Netzwerk, deshalb wurden Positionen nicht synchronisiert.</string>
     <string name="server_sync_server_error">Der Server hatte Probleme; Positionen synchronisieren später.</string>
     <string name="server_sync_never">Lesepositionen wurden noch nicht synchronisiert.</string>
