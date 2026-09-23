@@ -156,6 +156,13 @@ panels identify a comic library without imitating Komga's official mark.
 This replaces the monochrome-placeholder decision above; the restriction
 on copying upstream's icon remains.
 
+### Custom connection glyph
+
+Custom uses an original purple book with a teal plug and an amber bookmark.
+The plug represents a user-configured OPDS catalog or KOReader sync connection,
+including setups with both. It replaces the generic server racks without
+implying that Custom is a particular server product.
+
 ## Addendum: the fifth kind did have a layout consequence
 
 [Issue #179](https://github.com/chmouel/liseur/issues/179). The decision

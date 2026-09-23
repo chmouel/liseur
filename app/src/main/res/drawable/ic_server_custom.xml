@@ -1,0 +1,24 @@
+<!-- Original book-and-plug glyph for user-configured connections. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#7855B7"
+        android:pathData="M5,3H13A1,1 0,0 1,14 4V20H5A2.5,2.5 0,0 1,2.5 17.5V5.5A2.5,2.5 0,0 1,5 3Z" />
+    <path
+        android:fillColor="#FFF5DE"
+        android:pathData="M5,16.5H12V18.5H5A1,1 0,0 1,5 16.5Z" />
+    <path
+        android:fillColor="#F4C35C"
+        android:pathData="M6,3H9V10L7.5,8.5 6,10Z" />
+    <path
+        android:pathData="M17,7V10M20,7V10M18.5,16V18C18.5,20 17,21 15,21"
+        android:strokeColor="#16877D"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#16877D"
+        android:pathData="M15.5,10H21.5V13.5A3,3 0,0 1,15.5 13.5Z" />
+</vector>
