@@ -2906,8 +2906,9 @@ fun ReaderScreen(
                         resumePosition = target.resumePosition,
                         theme = readingTheme,
                         onJumpBack = {
-                            onProgressAction.dismissJumpBack()
-                            navigateLater(target.locator, NavigatorPositionEvent.LOCAL_JUMP)
+                            if (onProgressAction.takeJumpBack(target)) {
+                                navigateLater(target.locator, NavigatorPositionEvent.LOCAL_JUMP)
+                            }
                         },
                         onDismiss = onProgressAction.dismissJumpBack,
                     )
@@ -3797,6 +3798,7 @@ class ReaderProgressActions(
     val setFooterField: (FooterSlot, FooterField) -> Unit,
     val jumpFrom: (Locator?) -> Unit,
     val dismissJumpBack: () -> Unit,
+    val takeJumpBack: (ReaderViewModel.JumpBack) -> Boolean,
     val acceptCatchUp: (ReaderViewModel.CatchUp?) -> Unit,
     var prepareCatchUp: suspend () -> Boolean = { true },
     val dismissCatchUp: () -> Unit,

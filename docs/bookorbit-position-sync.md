@@ -121,6 +121,64 @@ continue to say that reading status is not synchronized.
 Annotation and highlight synchronization is a separate future feature,
 not part of this phase.
 
+## Percentage-only server places
+
+BookOrbit can hold a place with a percentage and no CFI. Imports and some
+clients write them; on the maintainer's server 21 of 29 rows had no CFI.
+Earlier builds treated every such row as unresolved, so those books
+neither pulled nor pushed, and an account traversal that met one stopped
+reporting success.
+
+Liseur still never writes a percentage-only place and never overwrites one
+blind. It opens at one as an approximate whole-book fraction in three
+cases:
+
+| Local place | Condition | Opening |
+| --- | --- | --- |
+| None | Any percentage-only server place | Server percentage |
+| Agreed with BookOrbit and unchanged since | Server moved to a different percentage-only place | Server percentage, with the way back |
+| Never matched with BookOrbit and no verified CFI | Server percentage is further ahead | Server percentage, with the way back |
+
+Opening records nothing. The first page turn records the opened
+percentage as the agreed remote place and the place before opening as the
+agreed local one, so that move is pushed with an exact CFI through the
+usual preflight, POST and read-back. The recording is refused if the server
+was seen to change or an attempt started meanwhile. Closing without moving
+records nothing, and the next opening makes the same offer. Taking the way
+back, or any other jump such as a bookmark, the contents or the scrubber,
+turns the server place down: nothing is recorded, the book stays
+unresolved, and the server place is not overwritten. Reading on accepts
+the opening and withdraws the way back, so it cannot later push the old
+place over the one just accepted; a tap on a pill already withdrawn does
+nothing. The recording commits in the same database transaction as the
+move, so a restart cannot keep one without the other. Every later page
+turn of the session carries the offer, so a failed first write leaves it
+to the next one; once agreed, or once a sync has changed the agreement
+row, it records nothing more.
+
+`reconcileExactPosition` compares the percentage when both the agreed and
+the current server places have no CFI. A different percentage-only place,
+with or without local movement, stays unresolved and receives no POST. A
+lost POST over an unchanged percentage-only place reads back as
+`RETRY_REQUIRED`, as it does for an exact place.
+
+On 2026-09-23 the approved disposable account checked all three cases on
+an API 36 emulator with book 90/file 260:
+
+| Check | Observed result |
+| --- | --- |
+| No local place, server at 42% without CFI | Opened at 41%. The first page turn recorded the baseline; closing pushed `epubcfi(/6/68!/4/22/1:536)` at 41.058174% and acknowledged it. |
+| Agreed place, server moved to 55% without CFI | Opened at position 565 with the way back to 422. A reopening without a saved move made the same offer. After a page turn, closing pushed 54.033783% with a CFI. |
+| Unmatched place at 54%, server at 20% without CFI | Opened at the local place; nothing was sent. |
+| Same place, server at 80% without CFI | Opened at position 821 with the way back to 555. Taking the way back sent nothing and the server kept 80%. A later review found that this move had recorded the baseline, so a page turn with a CFI would have pushed over 80%. |
+| Same check after the fix | Opened at position 821 with the way back to 555. After taking it and three page turns with a verified CFI at 54.28%, closing recorded no baseline and sent nothing; the server kept 80%. |
+| Unmatched place at 54%, server at 80% without CFI, reading on | Opened at position 821 with the way back to 557. The first page turn withdrew the way back and recorded the baseline in the same write as the move; closing pushed `epubcfi(/6/142!/4/22/1:152)` at 79.200005% and acknowledged it. |
+| Unmatched place at 89%, server at 90% without CFI, same-page jump | Go to page on the page already shown, then three page turns: no baseline was recorded and closing sent nothing; the server kept 90%. Reopening and turning a page without a jump pushed `epubcfi(/6/160!/4/22/1:220)` at 89.15681% and acknowledged it. |
+
+The test progress was deleted through the API and the session revoked.
+BookOrbit's automatic `reading` status row and one reading attempt for the
+test account remain on the server; the API cannot remove them.
+
 ## Earlier acceptance and implementation record
 
 The following sections record earlier milestones. References to disabled or

@@ -69,3 +69,12 @@ fun classifyNavigatorEmission(
     },
     markerSurvives = requested != null && suppressed && !landed,
 )
+
+/**
+ * Whether an approximate BookOrbit opening is still on offer after [event].
+ * Only reading on accepts it; any other saved move, a bookmark, the
+ * contents, the scrubber or the way back, turns it down, so the jumped-to
+ * place is never pushed over the server's.
+ */
+fun keepsApproximateOpening(event: NavigatorPositionEvent): Boolean =
+    !event.persists || event == NavigatorPositionEvent.READER_MOVEMENT

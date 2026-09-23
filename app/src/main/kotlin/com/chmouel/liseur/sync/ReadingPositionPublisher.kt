@@ -1,5 +1,6 @@
 package com.chmouel.liseur.sync
 
+import com.chmouel.liseur.data.bookorbit.BookOrbitApproximateOffer
 import com.chmouel.liseur.data.bookorbit.BookOrbitLocalCandidate
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.FinishedOverride
@@ -24,6 +25,8 @@ data class PositionUpdate(
     val readingPaceEvidence: Double?,
     val updatedAt: Long,
     val bookOrbitCfi: BookOrbitLocalCandidate? = null,
+    /** An approximate BookOrbit opening this move accepts, agreed in the same write. */
+    val bookOrbitApproximate: BookOrbitApproximateOffer? = null,
 )
 
 /**

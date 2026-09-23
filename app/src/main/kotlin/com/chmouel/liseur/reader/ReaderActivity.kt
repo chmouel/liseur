@@ -505,6 +505,7 @@ class ReaderActivity : FragmentActivity() {
                                             setFooterField = viewModel::setFooterField,
                                             jumpFrom = viewModel::onJump,
                                             dismissJumpBack = viewModel::dismissJumpBack,
+                                            takeJumpBack = viewModel::takeJumpBack,
                                             acceptCatchUp = viewModel::acceptCatchUp,
                                             dismissCatchUp = viewModel::dismissCatchUp,
                                             chapterTicks = viewModel::chapterTicks,
