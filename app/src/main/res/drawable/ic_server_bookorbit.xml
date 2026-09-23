@@ -1,0 +1,21 @@
+<!-- Original provider glyph for Liseur, not the BookOrbit brand logo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M5,9.5C2.5,11.5 1.2,14 2.3,15.6C3.2,16.9 5.8,17 8.7,16.1M16.8,7.8C19.2,7 21.1,7.2 21.7,8.4C22.8,10.5 18.8,14.2 14.7,16.2"
+        android:strokeColor="#16877D"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M12,8C10.5,6.8 8.5,6.3 6,6.5V15C8.5,14.8 10.5,15.3 12,16.5C13.5,15.3 15.5,14.8 18,15V6.5C15.5,6.3 13.5,6.8 12,8ZM12,8V16.5"
+        android:strokeColor="#3976D2"
+        android:strokeWidth="1.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#C17A13"
+        android:pathData="M20,3.5a1.5,1.5 0,1 0,0 3a1.5,1.5 0,1 0,0 -3" />
+</vector>

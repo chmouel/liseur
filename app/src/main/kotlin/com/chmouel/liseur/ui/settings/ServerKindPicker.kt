@@ -138,28 +138,18 @@ internal fun ServerKindSheet(
 @Composable
 private fun ServerKindLogo(kind: ServerKind) {
     val size = Modifier.size(32.dp)
-    when (kind) {
-        // BookOrbit retains its neutral placeholder.
-        ServerKind.BOOKORBIT -> Icon(
-            painter = painterResource(R.drawable.ic_server_generic),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = size,
-        )
-
-        else -> Image(
-            painter = painterResource(kind.logoRes()),
-            contentDescription = null,
-            modifier = size,
-        )
-    }
+    Image(
+        painter = painterResource(kind.logoRes()),
+        contentDescription = null,
+        modifier = size,
+    )
 }
 
 private fun ServerKind.logoRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.drawable.ic_server_calibre_web
     ServerKind.KOMGA -> R.drawable.ic_server_komga
     ServerKind.LISEUR_SYNC -> R.drawable.ic_server_liseur_sync
-    ServerKind.BOOKORBIT -> R.drawable.ic_server_generic
+    ServerKind.BOOKORBIT -> R.drawable.ic_server_bookorbit
     ServerKind.CUSTOM -> R.drawable.ic_server_custom
 }
 
