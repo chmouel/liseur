@@ -128,6 +128,15 @@ client can close them:
   be lossy but also unguarded against a concurrent read elsewhere. This is
   part of why positions wait for the CFI bridge.
 
+A CFI and a final selected-file GET do not close the concurrent-write
+gap either: a deterministic race test wrote a different server position
+after Liseur's preflight GET and before its POST. The unconditional POST
+overwrote it and read-back acknowledged Liseur's position. Keep
+automatic position pushes disabled until the server offers a conditional
+progress write, or an explicit last-writer-wins policy replaces this
+guard. Reader-requested keep-local remains an opt-in choice with that
+documented race.
+
 Upstream requests worth filing: a client-idempotent annotation create, a
 conditional progress write, the stored file digest, and a range-capable
 download that still checks `library_download`.

@@ -80,6 +80,25 @@ fun BookSyncDialog(
                 }
             },
         )
+
+        is ReaderViewModel.BookSync.BookOrbitChoice -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.reader_sync_book_title)) },
+            text = { Text(stringResource(R.string.reader_bookorbit_choice_help)) },
+            confirmButton = {
+                Column {
+                    TextButton(onClick = { onResolve(true) }) {
+                        Text(stringResource(R.string.reader_bookorbit_take))
+                    }
+                    TextButton(onClick = { onResolve(false) }) {
+                        Text(stringResource(R.string.reader_sync_keep_mine))
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.reader_sync_cancel))
+                    }
+                }
+            },
+        )
     }
 }
 

@@ -391,6 +391,7 @@ fun ReaderScreen(
     openedBookOrbit: BookOrbitOpenedEpub?,
     bookOrbitFallback: Locator?,
     onBookOrbitOpeningVerified: (Locator) -> Unit,
+    onBookOrbitOpeningFailed: () -> Unit,
     checkBookOrbitContext: suspend (BookOrbitCfiContext) -> Unit,
     originalBookOrbitDocument: suspend (BookOrbitOpenedEpub, String) -> Document?,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
@@ -914,6 +915,7 @@ fun ReaderScreen(
             nowMs = SystemClock.elapsedRealtime(),
         )
         if (!nav.go(fallback, animated = false)) moves.cancel(fallbackToken)
+        else if (bookOrbitFallback != null) onBookOrbitOpeningFailed()
         onProgressAction.onApproximateResume()
     }
 

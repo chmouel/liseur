@@ -361,6 +361,10 @@
     <string name="reader_sync_book_moved">Qualcosa è cambiato mentre era aperto, quindi non è stato modificato nulla. Prova a sincronizzare di nuovo questo libro.</string>
     <string name="reader_sync_book_kept">Mantenuta la posizione di questo dispositivo. Andrà al server alla prossima sync.</string>
     <string name="reader_sync_book_title">Due posizioni di lettura</string>
+    <string name="reader_bookorbit_choice_help">Il server ha salvato una posizione diversa. Questa pagina è un\'anteprima verificata. Scegliere una posizione chiude il lettore durante la verifica. Attendi la conferma prima di riaprire il libro. Annulla chiude senza salvare questa anteprima.</string>
+    <string name="reader_bookorbit_take">Mantieni la posizione del server</string>
+    <string name="reader_bookorbit_choice_saved">Posizione di lettura salvata. Riapri il libro per continuare.</string>
+    <string name="reader_bookorbit_choice_failed">La scelta non è stata confermata. Riapri il libro per controllare la posizione salvata e riprovare.</string>
     <string name="reader_sync_book_ahead">Un altro dispositivo ha letto più avanti di questo. Quale posizione vuoi tenere?</string>
     <string name="reader_sync_book_behind">Un altro dispositivo è indietro rispetto a questo. Quale posizione vuoi tenere?</string>
     <string name="reader_sync_book_same_page">Entrambi i dispositivi sono sulla stessa pagina, ma non nello stesso punto. Quale vuoi tenere?</string>
@@ -380,6 +384,7 @@
     <string name="server_sync_insecure">Questo server rifiuta le credenziali su HTTP in chiaro. Usa un indirizzo https://.</string>
     <string name="server_sync_malformed">Il server ha risposto in modo inatteso; le posizioni si sincronizzeranno dopo.</string>
     <string name="server_sync_stale_identity">L\'identità del libro sul server è cambiata; la sync riproverà.</string>
+    <string name="server_sync_position_unresolved">La posizione salvata di questo libro va verificata o scelta nel lettore prima della sincronizzazione.</string>
     <string name="server_sync_local_network">Android impedisce a Liseur di raggiungere questo server sulla tua rete, quindi le posizioni non si sono sincronizzate.</string>
     <string name="server_sync_server_error">Il server ha avuto un problema; le posizioni si sincronizzeranno dopo.</string>
     <string name="server_sync_never">Le posizioni di lettura non sono ancora state sincronizzate.</string>

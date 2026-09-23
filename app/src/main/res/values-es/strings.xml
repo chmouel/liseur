@@ -361,6 +361,10 @@
     <string name="reader_sync_book_moved">Algo se movió mientras eso estaba abierto, así que no se cambió nada. Intenta sincronizar este libro de nuevo.</string>
     <string name="reader_sync_book_kept">Se mantuvo la posición de este dispositivo. Irá al servidor en la próxima sincronización.</string>
     <string name="reader_sync_book_title">Dos posiciones de lectura</string>
+    <string name="reader_bookorbit_choice_help">El servidor guardó otra posición. Esta página es una vista previa verificada. Al elegir una posición se cierra el lector mientras se comprueba la elección. Espera la confirmación antes de volver a abrir el libro. Cancelar cierra sin guardar esta vista previa.</string>
+    <string name="reader_bookorbit_take">Conservar la posición del servidor</string>
+    <string name="reader_bookorbit_choice_saved">Posición de lectura guardada. Vuelve a abrir el libro para continuar.</string>
+    <string name="reader_bookorbit_choice_failed">No se pudo confirmar la elección. Vuelve a abrir el libro para comprobar su posición y reintentar.</string>
     <string name="reader_sync_book_ahead">Otro dispositivo ha leído más que este. ¿Qué posición quieres conservar?</string>
     <string name="reader_sync_book_behind">Otro dispositivo va por detrás de este. ¿Qué posición quieres conservar?</string>
     <string name="reader_sync_book_same_page">Ambos dispositivos están en la misma página, pero no en el mismo sitio. ¿Cuál quieres conservar?</string>
@@ -380,6 +384,7 @@
     <string name="server_sync_insecure">Este servidor se niega a recibir credenciales por HTTP sin cifrar. Usa una dirección https://.</string>
     <string name="server_sync_malformed">El servidor respondió con algo inesperado; las posiciones se sincronizarán más tarde.</string>
     <string name="server_sync_stale_identity">La identidad del libro en el servidor cambió; la sincronización lo reintentará.</string>
+    <string name="server_sync_position_unresolved">La posición guardada de este libro debe verificarse o elegirse en el lector antes de sincronizarse.</string>
     <string name="server_sync_local_network">Android está impidiendo que Liseur llegue a este servidor en tu red, así que las posiciones no se sincronizaron.</string>
     <string name="server_sync_server_error">El servidor tuvo un problema; las posiciones se sincronizarán más tarde.</string>
     <string name="server_sync_never">Las posiciones de lectura aún no se han sincronizado.</string>

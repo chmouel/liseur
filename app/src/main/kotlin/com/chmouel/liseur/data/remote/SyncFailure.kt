@@ -61,6 +61,9 @@ sealed interface SyncFailure {
      */
     data object StaleIdentity : SyncFailure
 
+    /** A BookOrbit position needs a reader-verified choice, not a timed retry. */
+    data object PositionUnresolved : SyncFailure
+
     /**
      * The phone is refusing to let the app reach this server at all.
      *
@@ -82,7 +85,8 @@ sealed interface SyncFailure {
         get() = when (this) {
             Offline, Timeout, Malformed, StaleIdentity -> true
             is ServerError -> code >= 500
-            Unauthorised, Forbidden, NotFound, InsecureTransport, LocalNetworkBlocked -> false
+            Unauthorised, Forbidden, NotFound, InsecureTransport, LocalNetworkBlocked,
+            PositionUnresolved -> false
         }
 
     /** A short tag for the log. Never contains a URL or a token. */
@@ -97,6 +101,7 @@ sealed interface SyncFailure {
             Malformed -> "malformed response"
             InsecureTransport -> "https required"
             StaleIdentity -> "stale identity"
+            PositionUnresolved -> "position unresolved"
             LocalNetworkBlocked -> "local network blocked"
         }
 }

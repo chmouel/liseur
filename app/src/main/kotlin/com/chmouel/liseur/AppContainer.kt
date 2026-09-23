@@ -199,6 +199,9 @@ class AppContainer(context: Context) {
         database, bookOrbitProgress,
         com.chmouel.liseur.data.bookorbit.BookOrbitProgressMutationTransport(bookOrbitHttp, bookOrbitCfis),
     )
+    val bookOrbitExchange = com.chmouel.liseur.data.bookorbit.BookOrbitPositionExchange(
+        bookOrbitCfis, bookOrbitProgress, bookOrbitAgreement,
+    )
     val bookOrbitEpubInfo = com.chmouel.liseur.data.bookorbit.BookOrbitEpubInfoClient(
         bookOrbitHttp, bookOrbitCfis,
     )

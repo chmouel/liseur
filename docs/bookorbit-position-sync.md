@@ -1,8 +1,134 @@
 # BookOrbit position synchronization
 
-BookOrbit position synchronization remains disabled. `ServerKind.BOOKORBIT`
-must stay at `syncAbility = NONE` and `canSync = false` until the complete
-round trip and durable reconciliation work is proven.
+Automatic BookOrbit position synchronization remains disabled.
+`ServerKind.BOOKORBIT` must stay at `syncAbility = NONE` and
+`canSync = false` until safe automatic writes and the full acceptance
+gate are proven.
+
+## Task ledger and next-phase handoff
+
+This is the complete phase checklist. "Done" records work already committed;
+it does not mean automatic sync is enabled.
+
+| Task | State | Result or remaining work |
+| --- | --- | --- |
+| `acceptance-handoff` | Done | Phase 1 checks and handoff recorded. |
+| `fixtures-runtime` | Done | Pinned CFI corpus, parser smoke, and build checks passed. |
+| `identity-retention` | Done | CFIs retained against account, selected file, and binding revision. |
+| `package-crosscheck` | Done | Selected-file EPUB package and spine checked. |
+| `mutation-outcome` | Done | Rejection, uncertain delivery, and read-back distinguished. |
+| `phase0-handoff` | Done | Protocol evidence and live-fixture limits recorded. |
+| `progress-read` | Done | Strict selected-file and multi-file progress readers built. |
+| `phase0-live-evidence` | Done | Test-account protocol samples and targeted cleanup verified. |
+| `phase0-three-reviews` | Done | Three Phase 0 review passes and fixes completed. |
+| `phase2-cfi-bridge` | Done | Incoming CFI resolution and outgoing viewport capture checked. |
+| `phase3-agreement` | Done | Durable position-only agreement, exact bytes, and read-back recovery built. |
+| `phase4-provider` | In progress | Guarded opt-in provider and reader choices exist; a live response-fault check passed. Finish bounded orchestration without enabling normal pushes. |
+| `phase5-acceptance` | Pending | Finish end-to-end and three bounded review passes, then enable only after the write-race policy is settled. |
+
+Remaining steps for the next phase:
+
+1. Make `BookOrbitPositionSync` account-scoped and bounded for normal
+   orchestration, without registering or scheduling it yet. A conflict or
+   unverified CFI must remain unresolved and non-retryable, and the
+   generic position-choice API must never adopt an unverified locator.
+   Keep exact-byte pending read-back separate from any new POST.
+2. Resolve the post-preflight write race before enabling automatic
+   pushes: BookOrbit needs a conditional progress write, or the reader
+   must explicitly accept last-writer-wins. The final GET and read-back
+   alone do not protect another device's newer position.
+3. Run bounded acceptance with independent devices for both directions,
+   a network-level lost response, post-close recovery and process death,
+   changed account/file, missing anchors, and the reader's result
+   notification. Review the completed
+   phase three times, update this handoff with findings and caveats,
+   then change `syncAbility`, account `canSync`, routing, UI and tests
+   together only if the gate passes.
+
+### Unscheduled selected-book provider
+
+`BookOrbitPositionSync` now wraps the exchange for a single explicitly
+opted-in book; it is not registered in `RemoteRouter`. Its default is inert,
+including the generic preview and choice methods. An opted-in run checks
+the selected binding and account ownership, uses exact agreement/read-back
+for success, and reports a foreign CFI or conflict as a non-retryable
+unresolved position rather than claiming the book is in step. A pending
+uncertain send is read back without another POST. The generic choice
+contract cannot prove a remote locator against the active reader, so
+neither ordinary scheduling nor the generic choice UI may use this
+provider yet. The tests exercise those limits, rejection, and recovery.
+
+### Live response-fault check
+
+On 2026-09-23 the disposable app sent one paired local CFI to the
+approved test account's selected file. A one-time diagnostic hook
+discarded the successful HTTP response *after* the server accepted
+the POST, so the exchange saw an uncertain result and read the file
+back. It returned `Pushed`, acknowledged local revision 38, and a
+separate authenticated GET confirmed the exact local CFI and stored
+float percentage. This tests live-server read-back after client-side
+response loss; it does **not** simulate a network-level disconnect or
+prove a second POST was impossible on every transport. The socket-drop
+unit test below verifies the one-POST property for that failure.
+The selected-file progress was deleted through the API; test-account
+book status and reading-attempt rows were deleted in a targeted
+transaction, with all three server counts zero. The emulator database
+was restored at revision 38 without an agreement, and the temporary
+code, private markers and backup were removed. No diagnostic hook is
+part of the app.
+
+### Reader-facing checked choice (normal sync still disabled)
+
+An unresolved first-time or two-sided conflict now proposes the saved
+BookOrbit place while the reader opens, but only when the local locator
+and CFI were paired at the same revision and the selected EPUB's original
+XHTML resolves the server CFI. The active WebView must then verify that
+place before a choice is shown. Until that check, the candidate is
+provisional and the local reading position is not rewritten. An invalid
+opening falls back to the local place; replacing the navigator rechecks
+the proposal. The dialog does not compare percentages from different
+position scales.
+
+Taking the server's place or keeping this device's place closes the
+reader. Only after queued position writes finish and the open-book fence
+is released does the checked choice run: take-remote revalidates the
+original EPUB, fresh server answer, local revision, pairing and preview
+before an atomic local adoption; keep-local prepares an exact request,
+preflights the server again and reads back its POST. A success or failure
+notification tells the reader when it is safe to reopen. Cancelling
+closes without applying either side. A choice interrupted by process
+death before this post-close step is lost, not replayed; the unchanged
+position can be offered again on opening. An unresolvable CFI has no
+take-remote button. The generic `PositionSync` choice and capability
+remain disabled.
+
+On the disposable API 26 emulator, the approved account's book 90/file
+260 showed the choice after active-view verification with a different
+remote CFI. While the book was open, local revision stayed 38. Taking
+the server's place advanced it to 39 only after close; the agreement
+recorded the server percentage separately from the local Readium
+progression. A fresh first-time choice kept the local CFI and confirmed
+the selected-file POST by read-back at revision 38. A competing write
+to the same selected file while the dialog was open made a stale
+keep-local choice fail without POST; the other write remained on the
+server. Rotating out and back kept the local revision unchanged and
+required another active-view check before the choice reappeared.
+A dialog capture is in `~/tmp/liseur/sshot/bookorbit-conflict-choice.png`.
+These tests used another session on the same approved account as the
+competitor, not an independent second device; BookOrbit still has no
+compare-and-swap for a write after the final GET.
+In a deterministic post-preflight test, another device wrote after the
+last GET but before Liseur's POST. BookOrbit's unconditional POST
+overwrote that newer position, and read-back reported the local write as
+acknowledged. A further client-side GET cannot eliminate this interval.
+Normal automatic pushes must therefore remain off until BookOrbit
+offers a conditional position write, or a different last-writer-wins
+policy is explicitly accepted.
+The selected-file progress was removed through its API and only the test
+account's book 90 status and reading-attempt rows were deleted; all three
+server counts returned to zero. The emulator database was restored at
+revision 38 without a test agreement, and the temporary login hook,
+private trigger and backup were removed.
 
 ## Phase 4 bounded exchange (not scheduled)
 
@@ -21,27 +147,74 @@ not automatically replayed. An explicit rejection is reported separately.
 Position agreement does not touch local reading status or another
 provider's pending status action.
 
-This is **not** a `PositionSync` implementation or a `RemoteRouter` entry.
-Normal sync, reader opening and background workers do not call it; an
-opt-in live POST is documented below. A remote CFI with no verified
-local Readium locator is retained as unsupported, not adopted or pushed
-over. There is no verified manual take/keep resolution for a first-time
-disagreement or concurrent local and remote movement.
-Registering a provider now would either move an open book without proof,
-silently treat these unresolved books as synced, or expose an action that
-cannot safely resolve them. The opt-in exchange is a bounded protocol
-component, not a claim that Phase 4 scheduling or the final gate passed.
-BookOrbit still lacks compare-and-swap, so the final GET cannot exclude
-a competing write immediately before POST.
+The exchange is **not** itself a `PositionSync` implementation or a
+`RemoteRouter` entry. The checked reader choice calls `keepLocal` after
+closing; normal sync and background workers do not call it. A remote CFI
+with no verified local Readium locator is retained as unsupported, not
+adopted or pushed over. The reader choice handles a verified first-time
+or two-sided disagreement; it does not make the generic choice API safe.
+The opt-in exchange is a bounded protocol component, not a claim that
+Phase 4 scheduling or the final gate passed. BookOrbit still lacks a
+conditional write, so the final GET cannot exclude a competing write
+immediately before POST.
 
-Next phase owner: keep this acceptance record current with your own live
-findings and caveats before handing it on. Do three bounded review passes
-between phase boundaries. App-managed delivery and read-back of a
-simulated uncertain attempt passed on the selected file; now implement
-checked conflict choices for books with unsent local changes. Revalidate
-account, binding, local revision/locator, candidate CFI/percentage, and
-active-reader state at the final choice. Do not register normal scheduling
-or enable the capability/UI while these paths are unproven.
+### Opt-in keep-local conflict choice
+
+`BookOrbitPositionExchange.previewConflict(bookUrl)` now reads the selected
+file and records a choice fingerprint only when the local locator and CFI
+are paired at the same revision, the position belongs to this account (or
+has no owner), and the remote has a different saved CFI. The fingerprint
+holds the captured account/connection/file, local revision, locator,
+progression, paired CFI, agreement baseline, and the remote CFI,
+percentage, and timestamps. It is a snapshot of a first-time
+disagreement or two-sided movement, not permission to post by itself.
+
+An explicit `keepLocal(preview)` rereads that remote answer, checks that
+the candidate, baseline, local position, selected file, and account still
+match, and prepares exact request bytes only while the book is closed.
+The normal final preflight also rejects an open reader, a changed
+percentage, CFI, or displayed reading time, a new local position, and
+another account's local ownership before marking the attempt possibly
+sent. It then uses the existing read-back and blocked-rejection rules.
+A changed answer is reported as unresolved without POST; it must be
+previewed again, not silently replaced with the current remote candidate.
+
+On 2026-09-23 the first live keep-local diagnostic offered a valid choice
+but was refused before POST because the app had automatically resumed the
+same book while the test was running; its prepared request remained unsent.
+After restoring the disposable emulator's pre-test database, a cold launch
+that kept the reader closed offered the choice again. The app sent the
+locally paired CFI and acknowledged it by selected-file read-back at local
+revision 38. This verifies the guarded keep-local path with the approved
+test account and file, not a reader-facing choice. A MockWebServer test
+also applies one POST and drops its response: read-back acknowledges the
+same request without a second POST. It is not a real network-loss test.
+The test account's selected-file progress was deleted through the API,
+and its book status and reading attempt were removed in a targeted
+transaction; all three server counts returned to zero. The emulator
+database was restored, the temporary login hook was removed, and the
+private trigger and backup were deleted.
+
+The reader now calls these choice methods after an active-WebView
+verification and after closing; the coordinator and normal sync do not.
+`adoptChosenVerifiedClosed(preview, offer)` accepts a caller-verified
+opening offer only when it matches the saved choice.
+After a fresh GET and a closed-book fence, its transaction rechecks the
+candidate, baseline, local locator/revision/progression, paired local
+CFI, account, and selected file before storing the remote locator and
+CFI together. The unit tests cover stale choices, an open reader, and
+another account's locally owned place; the live reader check above
+covers an explicit choice, the original EPUB, and active-WebView proof.
+Never call the transaction with an unverified locator. A keep-local POST
+still has BookOrbit's unconditional-write race after final GET.
+
+An app-managed keep-local choice and the reader-facing take/keep choices
+passed on the disposable account, as did a stale-choice refusal. A
+dropped-response socket test recovered without replay. The UI's
+post-close intent is in memory: process death before it runs leaves the
+choice unapplied, so reopen and choose again. The ledger above names the
+remaining recovery, orchestration, race, and review work for the next
+phase.
 
 ### Guarded existing-local adoption
 
@@ -110,13 +283,14 @@ returned to zero. The disposable emulator database and original app
 build were restored, with no test agreement or temporary login hook left.
 
 This automatic path is deliberately limited to a clean BookOrbit baseline;
-there is no choice UI for unsent local movement. A lost WebView verification
-or process death before the reader closes leaves the candidate unadopted.
+a paired, unsent local movement can instead offer the checked reader
+choice described above. A lost WebView verification or process death
+before the reader closes leaves the candidate unadopted.
 The selected-file check relies on the app-owned download provenance and
 size/mtime, not a cryptographic server content hash. The first live
 rendered-passage discrepancy remains unexplained despite a successful
-second check; multi-device races have not been exercised. Neither this
-guarded path nor the opt-in exchange enables scheduled sync.
+second check; an independent-device race has not been exercised.
+Neither this guarded path nor the opt-in exchange enables scheduled sync.
 
 ## Phase 3 bounded agreement boundary
 
@@ -454,8 +628,9 @@ each resolved position. `BookOrbitCfiDom.capture` builds point/range CFIs
 from supplied text nodes, adjusted for split UTF-16 text and optional
 reader wrappers; it returns a CFI only if both endpoints resolve back to
 the same nodes and offsets. Captured Foliate output and synthetic
-altered-DOM tests cover these checks. The original-document resolver is
-used during reader opening; CFI capture is not wired to remote sync.
+altered-DOM tests cover these checks. The original-document resolver is used during reader opening. At this
+phase boundary, CFI capture was not yet wired to remote sync; the later
+guarded exchange uses it.
 The caller still needs to prove that the document is the selected file,
 and must mark resolution failed if any DOM step cannot be verified.
 
