@@ -163,6 +163,13 @@ The plug represents a user-configured OPDS catalog or KOReader sync connection,
 including setups with both. It replaces the generic server racks without
 implying that Custom is a particular server product.
 
+### liseur-sync logo update
+
+The picker now uses liseur-sync's small-size open-book logo from
+`internal/webui/static/favicon.svg`, converted to a VectorDrawable.
+It keeps the project's violet background and purple and gold sync arrows.
+The Licences screen includes its MIT notice and licence text.
+
 ## Addendum: the fifth kind did have a layout consequence
 
 [Issue #179](https://github.com/chmouel/liseur/issues/179). The decision

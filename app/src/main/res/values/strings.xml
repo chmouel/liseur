@@ -278,7 +278,7 @@
     <string name="server_title">Book server</string>
     <string name="connect_server">Connect a book server</string>
     <string name="connect_server_short">Connect a server</string>
-    <string name="server_kind">Which kind of server?</string>
+    <string name="server_kind">Server type</string>
     <!-- Product names; keep the spelling used by those projects. -->
     <string name="server_kind_calibre" translatable="false">calibre-web</string>
     <string name="server_kind_komga" translatable="false">Komga</string>
@@ -286,20 +286,20 @@
     <string name="server_kind_bookorbit" translatable="false">BookOrbit</string>
     <string name="server_kind_custom">Custom</string>
     <string name="server_kind_change">Change the kind of server</string>
-    <string name="server_sync_exact">Keeps your exact place in a book across devices</string>
-    <string name="server_sync_progression">Keeps how far through a book you are across devices</string>
-    <string name="server_sync_none">Browsing and downloads only — it cannot keep your place</string>
-    <string name="server_sync_custom">Keeps your place if you add a KOReader sync address</string>
+    <string name="server_sync_exact">Syncs your exact reading position</string>
+    <string name="server_sync_progression">Syncs reading progress as a percentage</string>
+    <string name="server_sync_none">Browsing and downloads only</string>
+    <string name="server_sync_custom">Syncs your place when KOReader sync is configured</string>
     <string name="server_link_calibre">What calibre-web is, and how to run one</string>
     <string name="server_link_komga">What Komga is, and how to run one</string>
     <string name="server_link_bookorbit">What BookOrbit is, and how to run one</string>
     <string name="server_link_custom">What OPDS is</string>
     <string name="server_open_in_browser">Open your server in a browser</string>
-    <string name="server_tagline_calibre">Your calibre library, served over the web</string>
-    <string name="server_tagline_komga">A server for comics, manga and books</string>
-    <string name="server_tagline_liseur_sync">Your books on every device — even books only on this phone</string>
-    <string name="server_tagline_bookorbit">Your books, libraries and reading progress on your own server</string>
-    <string name="server_tagline_custom">Any OPDS catalog, any KOReader sync server, or both</string>
+    <string name="server_tagline_calibre">Your calibre library online</string>
+    <string name="server_tagline_komga">Comics, manga and ebooks</string>
+    <string name="server_tagline_liseur_sync">An ebook server with sync for local books</string>
+    <string name="server_tagline_bookorbit">A self-hosted ebook library</string>
+    <string name="server_tagline_custom">An OPDS catalog, a KOReader sync server, or both</string>
     <string name="server_section_sync">Reading positions</string>
     <string name="server_api_key">API key</string>
     <string name="server_api_key_help">In Komga, open your account settings and create an API key. Pasting the whole page address is fine — Liseur finds the server from it.</string>

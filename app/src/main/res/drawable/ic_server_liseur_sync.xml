@@ -1,31 +1,35 @@
-<!--
-    liseur-sync's mark: a bookmark inside a sync ring. Drawn for this project.
--->
+<!-- From liseur-sync/internal/webui/static/favicon.svg. MIT; see assets/licences/liseur-sync.txt. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="512"
-    android:viewportHeight="512">
+    android:viewportWidth="32"
+    android:viewportHeight="32">
     <path
-        android:fillColor="#7A4A2B"
-        android:pathData="M116,0H396A116,116 0,0 1,512 116V396A116,116 0,0 1,396 512H116A116,116 0,0 1,0 396V116A116,116 0,0 1,116 0Z" />
+        android:fillColor="#1D1526"
+        android:pathData="M7,0H25A7,7 0,0 1,32 7V25A7,7 0,0 1,25 32H7A7,7 0,0 1,0 25V7A7,7 0,0 1,7 0Z" />
     <path
-        android:pathData="M88.6,226.5A170,170 0,0 1,423.4 226.5"
-        android:strokeColor="#F6F1EA"
-        android:strokeWidth="38"
-        android:strokeLineCap="butt" />
+        android:pathData="M6,11A11,11 0,0 1,25 9"
+        android:strokeColor="#C9AEEB"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
     <path
-        android:pathData="M423.4,285.5A170,170 0,0 1,88.6 285.5"
-        android:strokeColor="#F6F1EA"
-        android:strokeWidth="38"
-        android:strokeLineCap="butt" />
+        android:fillColor="#C9AEEB"
+        android:pathData="M22,9l4,2V6Z" />
     <path
-        android:fillColor="#F6F1EA"
-        android:pathData="M433.5,283.6L460.8,219.9 386,233.1Z" />
+        android:pathData="M26,21A11,11 0,0 1,7 23"
+        android:strokeColor="#F5D291"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
     <path
-        android:fillColor="#F6F1EA"
-        android:pathData="M78.5,228.4L51.2,292.1 126,278.9Z" />
+        android:fillColor="#F5D291"
+        android:pathData="M10,23l-4,-2v5Z" />
     <path
-        android:fillColor="#F6F1EA"
-        android:pathData="M206,178H306V334L256,288 206,334Z" />
+        android:fillColor="#FFFBEE"
+        android:pathData="M8,11Q12,11 16,14V23Q12,20 8,20Z" />
+    <path
+        android:fillColor="#A583D6"
+        android:pathData="M24,11Q20,11 16,14V23Q20,20 24,20Z" />
+    <path
+        android:fillColor="#F6EFFF"
+        android:pathData="M16,14Q18,11 21,10V19Q18,20 16,23Z" />
 </vector>
