@@ -134,28 +134,13 @@ internal fun ServerKindSheet(
     }
 }
 
-/**
- * A kind's own logo, where we are allowed to ship it.
- *
- * Komga's is not: its repository is MIT, but the icon is, by their own
- * README, "based on an icon made by Freepik from flaticon.com", whose
- * licence is neither transferable nor sublicensable — so Komga cannot
- * pass it on to us and F-Droid, which requires every bundled asset to
- * be redistributable, would not take it. Drawing a lookalike would be
- * worse than either shipping theirs or shipping none, since it puts an
- * invented mark under their name. So Komga gets the neutral glyph, and
- * it is tinted rather than left in its own colours to read as a
- * placeholder rather than as a brand.
- *
- * If Komga ever relicenses the icon, this is a one-line change.
- */
+/** Redistributable logos or original provider glyphs, without copying restricted artwork. */
 @Composable
 private fun ServerKindLogo(kind: ServerKind) {
     val size = Modifier.size(32.dp)
     when (kind) {
-        // BookOrbit's mark is not Liseur's to ship either. It gets the
-        // same neutral, tinted glyph, and the picker names it in words.
-        ServerKind.KOMGA, ServerKind.BOOKORBIT -> Icon(
+        // BookOrbit retains its neutral placeholder.
+        ServerKind.BOOKORBIT -> Icon(
             painter = painterResource(R.drawable.ic_server_generic),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -172,7 +157,7 @@ private fun ServerKindLogo(kind: ServerKind) {
 
 private fun ServerKind.logoRes(): Int = when (this) {
     ServerKind.CALIBRE -> R.drawable.ic_server_calibre_web
-    ServerKind.KOMGA -> R.drawable.ic_server_generic
+    ServerKind.KOMGA -> R.drawable.ic_server_komga
     ServerKind.LISEUR_SYNC -> R.drawable.ic_server_liseur_sync
     ServerKind.BOOKORBIT -> R.drawable.ic_server_generic
     ServerKind.CUSTOM -> R.drawable.ic_server_generic
