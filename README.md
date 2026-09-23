@@ -60,10 +60,9 @@ pick a category and how many books you want, and they are there before
 there is anything to connect to. Once that shelf is populated, you can
 ask for 50 more books at a time from the same category and language.
 
-Reading position syncs across devices through [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org/) or
-[liseur-sync](https://github.com/chmouel/liseur-sync), down to the exact sentence on the last two.
-[BookOrbit](https://bookorbit.app) is connected for browsing and downloads today;
-its exact positions wait on an EPUB CFI bridge, and the app says so in the picker.
+Reading position syncs across devices through [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org/),
+[BookOrbit](https://bookorbit.app) or [liseur-sync](https://github.com/chmouel/liseur-sync),
+down to the exact sentence on the last three. BookOrbit positions travel as EPUB CFIs.
 A Custom connection can be an [OPDS](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) address, a kosync address, or both, so a plain catalog and a sync server that know nothing about each other still add up to a library that follows you. What each server can and cannot do is in [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
 With liseur-sync you get extras, like settings sync, and better insights of your reading progress across devices.

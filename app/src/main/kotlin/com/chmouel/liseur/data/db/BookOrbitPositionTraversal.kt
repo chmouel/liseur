@@ -50,12 +50,18 @@ interface BookOrbitPositionTraversalDao {
     @Query("DELETE FROM book_orbit_position_traversal WHERE account_key = :accountKey")
     suspend fun clearAccount(accountKey: String)
 
+    /**
+     * Bindings outlive a book that left the catalog, so only those whose
+     * book is still linked to the server are asked about.
+     */
     @Query(
         "INSERT INTO book_orbit_position_traversal_item " +
             "(account_key, book_url, book_id, file_id, binding_revision) " +
             "SELECT account_key, book_url, book_id, file_id, revision FROM book_orbit_binding " +
             "WHERE account_key = :accountKey AND file_id IS NOT NULL " +
-            "AND LOWER(file_format) = 'epub' AND state IN ('SELECTED', 'DOWNLOADED')",
+            "AND LOWER(file_format) = 'epub' AND state IN ('SELECTED', 'DOWNLOADED') " +
+            "AND EXISTS (SELECT 1 FROM books WHERE books.url = book_orbit_binding.book_url " +
+            "AND books.remote_uuid IS NOT NULL)",
     )
     suspend fun capture(accountKey: String)
 

@@ -2083,6 +2083,10 @@ class ReaderViewModel(
             // ViewModel, and the fallback covers a queue already closed.
             val queued = positionPublisher.afterQueuedWrites {
                 progressDao.openBooks.leave(bookId)
+                if (com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED &&
+                    (_state.value as? UiState.Ready)?.openedBookOrbit != null &&
+                    closingPull == null && bookOrbitOpening.choice == null
+                ) requestBookSync(bookId)
                 if (closingPull != null && closingEpub != null) CoroutineScope(Dispatchers.IO).launch {
                     adoptClosedBookOrbit(closingPull, closingEpub)
                 }

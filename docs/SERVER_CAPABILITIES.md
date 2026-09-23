@@ -11,7 +11,7 @@ side.
 | Catalog browse | Implemented        | Implemented       | Implemented        | Implemented        | Implemented              |
 | Search         | Implemented        | Implemented       | Client only        | Implemented        | Local only               |
 | File download  | Implemented        | Implemented       | Implemented        | Implemented        | Implemented              |
-| Position sync  | Implemented (full) | Implemented (%)   | Not yet (CFI)      | Implemented (full) | Implemented (%, kosync) |
+| Position sync  | Implemented (full) | Implemented (%)   | Implemented (CFI)  | Implemented (full) | Implemented (%, kosync) |
 | Book upload    | Not possible       | Not feasible      | Not implemented    | Implemented        | Not possible             |
 | Book delete    | Not possible       | Implemented       | Not implemented    | Implemented        | Not possible             |
 | Series claims  | N/A                | N/A               | N/A                | Implemented        | N/A                      |

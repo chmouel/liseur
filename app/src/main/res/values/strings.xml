@@ -956,4 +956,6 @@
     <string name="reader_external_link_body">This link opens %1$s in your browser. Liseur will not follow it for you.</string>
     <string name="reader_external_link_open">Open</string>
     <string name="reader_external_link_failed">No app on this device can open that link.</string>
+    <string name="server_sync_bookorbit">Reading places sync for verified EPUBs. Resolve conflicts when you open a book. The last server write wins; reading status and annotations are not synced.</string>
+    <string name="server_sync_off_bookorbit">Reading places are not synced with BookOrbit.</string>
 </resources>

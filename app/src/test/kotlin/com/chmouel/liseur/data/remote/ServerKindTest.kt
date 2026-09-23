@@ -69,11 +69,17 @@ class ServerKindTest {
         assertEquals(SyncAbility.PROGRESSION, ServerKind.CALIBRE.syncAbility)
         assertEquals(SyncAbility.EXACT, ServerKind.KOMGA.syncAbility)
         assertEquals(SyncAbility.EXACT, ServerKind.LISEUR_SYNC.syncAbility)
-        // BookOrbit stores an exact CFI, but Liseur cannot read or write
-        // one yet, so until the CFI bridge lands the honest answer is
-        // that it carries no position this app can move.
-        assertEquals(SyncAbility.NONE, ServerKind.BOOKORBIT.syncAbility)
+        assertEquals(SyncAbility.EXACT, ServerKind.BOOKORBIT.syncAbility)
         assertEquals(SyncAbility.NONE, ServerKind.CUSTOM.syncAbility)
+    }
+
+    @Test
+    fun `BookOrbit requires a renewable or current session for account sync`() {
+        val account = fullyCredentialed(ServerKind.BOOKORBIT)
+        assertTrue(account.canSync)
+        assertTrue(account.copy(orbitAccessCipher = null).canSync)
+        assertTrue(account.copy(orbitRefreshCipher = null).canSync)
+        assertFalse(account.copy(orbitAccessCipher = null, orbitRefreshCipher = null).canSync)
     }
 
     @Test
@@ -154,5 +160,7 @@ class ServerKindTest {
         positionSyncedAt = null,
         syncToken = null,
         liseurTokenCipher = "cipher",
+        orbitAccessCipher = "cipher",
+        orbitRefreshCipher = "cipher",
     )
 }

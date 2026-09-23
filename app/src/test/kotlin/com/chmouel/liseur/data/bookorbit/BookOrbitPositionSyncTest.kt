@@ -3,8 +3,10 @@ package com.chmouel.liseur.data.bookorbit
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookOrbitBinding
 import com.chmouel.liseur.data.db.BookOrbitBindingState
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.PreviewOutcome
@@ -61,6 +63,16 @@ class BookOrbitPositionSyncTest {
             account.accountKey, bookUrl, 12, 34, "epub", null, null, 2,
             BookOrbitBindingState.DOWNLOADED.name, 1,
         ))
+        link(bookUrl)
+    }
+
+    /** Catalog rows are what keep a binding in the account walk. */
+    private suspend fun link(url: String) {
+        database.bookDao().upsert(Book(
+            url = url, title = url, author = null, coverPath = null, source = null,
+            addedAt = 1, lastOpenedAt = null, localUri = null, remoteUuid = url,
+            downloadState = DownloadState.REMOTE,
+        ))
     }
 
     @After
@@ -72,7 +84,11 @@ class BookOrbitPositionSyncTest {
             .deleteDatabase("orbit-position-sync-test")
     }
 
-    private fun provider(manual: Boolean = false, accountSync: Boolean = false): BookOrbitPositionSync {
+    private fun provider(
+        manual: Boolean = false,
+        accountSync: Boolean = false,
+        automaticPush: Boolean = false,
+    ): BookOrbitPositionSync {
         val cfis = BookOrbitCfiRepository(database)
         val http = BookOrbitHttp(BookOrbitSession(database.remoteServerDao()))
         val progress = BookOrbitProgressClient(http, cfis)
@@ -85,6 +101,7 @@ class BookOrbitPositionSyncTest {
             ),
             manualBookSync = manual,
             accountSync = accountSync,
+            automaticPush = automaticPush,
         )
     }
 
@@ -107,7 +124,7 @@ class BookOrbitPositionSyncTest {
     }
 
     @Test
-    fun `normal provider never dials or exposes unresolved choices`(): Unit = runBlocking {
+    fun `unconfigured provider never dials or exposes unresolved choices`(): Unit = runBlocking {
         val provider = provider()
         assertNull(provider.dialledAddress())
         assertFalse(provider.canSync(bookUrl))
@@ -218,6 +235,143 @@ class BookOrbitPositionSyncTest {
     private suspend fun addBinding(url: String, fileId: Long = 35) {
         val binding = database.bookOrbitBindingDao().get(account.accountKey, bookUrl)!!
         database.bookOrbitBindingDao().write(binding.copy(bookUrl = url, fileId = fileId))
+        link(url)
+    }
+
+    @Test
+    fun `automatic account push acknowledges exact bytes and keeps generic choices disabled`(): Unit = runBlocking {
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(cfi)
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 201))
+        web.enqueue(MockResponse(body = JSONObject(fixture("progress-saved.json"))
+            .put("cfi", cfi).put("percentage", 25.0).toString()))
+        val sync = provider(accountSync = true, automaticPush = true)
+        assertEquals(SyncOutcome.Success, sync.syncAll())
+        assertEquals(listOf("GET", "GET", "GET", "POST", "GET"),
+            (1..5).map { web.takeRequest().method })
+        val row = database.bookOrbitPositionAgreementDao().get(account.accountKey, bookUrl)!!
+        assertEquals(BookOrbitAttempt.ACKNOWLEDGED.name, row.attemptState)
+        assertEquals(cfi, row.agreedRemoteCfi)
+        assertNotNull(database.remoteServerDao().get()!!.positionSyncedAt)
+        assertFalse(sync.canSync(bookUrl))
+        assertEquals(PreviewOutcome.NotSynced, sync.previewBook(bookUrl))
+        assertEquals(ResolveOutcome.Superseded, sync.takeRemotePosition(bookUrl, 0))
+        assertEquals(ResolveOutcome.Superseded, sync.keepLocalPosition(bookUrl))
+    }
+
+    @Test
+    fun `automatic book worker pushes without manual opt in`(): Unit = runBlocking {
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(cfi)
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 201))
+        web.enqueue(MockResponse(body = JSONObject(fixture("progress-saved.json"))
+            .put("cfi", cfi).put("percentage", 25.0).toString()))
+        assertEquals(SyncOutcome.Success,
+            provider(accountSync = true, automaticPush = true).syncBook(bookUrl))
+        assertEquals(listOf("GET", "GET", "GET", "POST", "GET"),
+            (1..5).map { web.takeRequest().method })
+    }
+
+    @Test
+    fun `automatic traversal skips unread catalog entries without network requests`(): Unit = runBlocking {
+        assertEquals(SyncOutcome.NotApplicable,
+            provider(accountSync = true, automaticPush = true).syncAll())
+        assertEquals(0, web.requestCount)
+        assertNull(database.remoteServerDao().get()!!.positionSyncedAt)
+    }
+
+    @Test
+    fun `automatic traversal skips books that left the catalog`(): Unit = runBlocking {
+        addBinding("bookorbit:deleted", 36)
+        addBinding("bookorbit:unlinked", 37)
+        saveExact("epubcfi(/6/4!/4/2:3)", "bookorbit:deleted")
+        saveExact("epubcfi(/6/4!/4/2:3)", "bookorbit:unlinked")
+        database.bookDao().deleteByUrls(listOf("bookorbit:deleted"))
+        database.bookDao().unlinkFromRemote(listOf("bookorbit:unlinked"))
+        val sync = provider(accountSync = true, automaticPush = true)
+
+        assertEquals(SyncOutcome.NotApplicable, sync.syncAll())
+        assertEquals(SyncOutcome.NotApplicable, sync.syncBook("bookorbit:unlinked"))
+        assertEquals(0, web.requestCount)
+    }
+
+    @Test
+    fun `automatic second page pushes after first page conflict across database reopen`(): Unit = runBlocking {
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(cfi)
+        repeat(BookOrbitPositionSync.PAGE_SIZE) { index ->
+            addBinding("bookorbit:z${index.toString().padStart(2, '0')}", 100L + index)
+        }
+        saveExact(cfi, "bookorbit:z19")
+        web.enqueue(MockResponse(body = JSONObject(fixture("progress-saved.json"))
+            .put("cfi", "epubcfi(/6/4!/4/2:9)").toString()))
+        assertEquals(SyncOutcome.Failure(SyncFailure.PositionUnresolved, continuation = true),
+            provider(accountSync = true, automaticPush = true).syncAll())
+        assertEquals(1, web.requestCount)
+        database.close()
+        database = Room.databaseBuilder(
+            ApplicationProvider.getApplicationContext<android.app.Application>(),
+            LiseurDatabase::class.java, "orbit-position-sync-test",
+        ).build()
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 201))
+        web.enqueue(MockResponse(body = JSONObject(fixture("progress-saved.json"))
+            .put("bookFileId", 119).put("cfi", cfi).put("percentage", 25.0).toString()))
+        assertEquals(SyncOutcome.Partial(SyncFailure.PositionUnresolved),
+            provider(accountSync = true, automaticPush = true).syncAll(null, carryingOn = true))
+        assertEquals(listOf("GET", "GET", "GET", "GET", "POST", "GET"),
+            (1..6).map { web.takeRequest().method })
+        assertEquals(BookOrbitAttempt.ACKNOWLEDGED.name,
+            database.bookOrbitPositionAgreementDao().get(account.accountKey, "bookorbit:z19")?.attemptState)
+        assertNull(database.remoteServerDao().get()!!.positionSyncedAt)
+    }
+
+    @Test
+    fun `automatic runs cannot replay unconfirmed request after local movement`(): Unit = runBlocking {
+        saveExact("epubcfi(/6/4!/4/2:3)")
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 201))
+        web.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        assertEquals(SyncOutcome.Failure(SyncFailure.PositionUnresolved),
+            provider(accountSync = true, automaticPush = true).syncAll())
+        val pending = database.bookOrbitPositionAgreementDao().get(account.accountKey, bookUrl)!!
+        assertEquals(BookOrbitAttempt.RETRY_REQUIRED.name, pending.attemptState)
+        saveExact("epubcfi(/6/4!/4/2:7)")
+        repeat(2) {
+            web.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+            assertEquals(SyncOutcome.Failure(SyncFailure.PositionUnresolved),
+                provider(accountSync = true, automaticPush = true).syncAll())
+        }
+        assertEquals(listOf("GET", "GET", "GET", "POST", "GET", "GET", "GET"),
+            (1..7).map { web.takeRequest().method })
+        assertArrayEquals(pending.outgoingBytes,
+            database.bookOrbitPositionAgreementDao().get(account.accountKey, bookUrl)?.outgoingBytes)
+    }
+
+    @Test
+    fun `automatic runs leave rejected and unknown attempts blocked`(): Unit = runBlocking {
+        saveExact("epubcfi(/6/4!/4/2:3)")
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 403))
+        val sync = provider(accountSync = true, automaticPush = true)
+        assertEquals(SyncOutcome.Failure(SyncFailure.Forbidden), sync.syncBook(bookUrl))
+        val dao = database.bookOrbitPositionAgreementDao()
+        val rejected = dao.get(account.accountKey, bookUrl)!!
+        assertEquals(BookOrbitAttempt.REJECTED.name, rejected.attemptState)
+        for (state in listOf(BookOrbitAttempt.REJECTED.name, "future-attempt-state")) {
+            dao.write(rejected.copy(attemptState = state))
+            assertEquals(SyncOutcome.Failure(SyncFailure.PositionUnresolved), sync.syncAll())
+            assertEquals(SyncOutcome.Failure(SyncFailure.PositionUnresolved), sync.syncBook(bookUrl))
+            val retained = dao.get(account.accountKey, bookUrl)!!
+            assertEquals(state, retained.attemptState)
+            assertArrayEquals(rejected.outgoingBytes, retained.outgoingBytes)
+            assertEquals(rejected.attemptGeneration, retained.attemptGeneration)
+        }
+        assertEquals(listOf("GET", "GET", "GET", "POST"),
+            (1..4).map { web.takeRequest().method })
+        assertEquals(4, web.requestCount)
     }
 
     @Test
