@@ -1274,15 +1274,23 @@ CFI live.
   invalidating it on later local writes. The reader supplies guarded
   candidates for local movement, but does not submit them to BookOrbit.
   Schema 57 adds a BookOrbit-only durable
-  position agreement and exact-byte POST/read-back boundary; it remains
-  opt-in and is not registered with generic position sync.
+  position agreement and exact-byte POST/read-back boundary. The opt-in
+  `BookOrbitPositionExchange` performs selected-file reconciliation, guarded
+  local pushes and uncertain-POST read-back; it is not registered with generic
+  position sync. A second selected-file preflight prevents sending a prepared
+  request after remote progress changed.
   `BookOrbitIncomingAnchor` creates a text-anchor proposal from original
   XHTML. A book with no saved local position reads the selected file's
   progress on cold opening and verifies the proposal in the active
   Readium WebView before accepting its arrival;
   failure restores the prior local position. It never persists the
-  incoming position or posts it to BookOrbit. Guarded remote adoption,
-  scheduled delivery, and a live two-way round trip remain outstanding.
+  incoming position or posts it to BookOrbit. An existing-local book with
+  an unchanged BookOrbit position agreement can propose a changed remote
+  CFI during loading, verify it in the active Readium DOM, and adopt the
+  locator only after the reader closes and a fresh selected-file GET and
+  revision guard succeed. It does not change reading status or POST.
+  First-time conflicts, scheduled delivery, and a live two-way round trip
+  remain outstanding.
   Sending a position without a verified CFI would clear
   the server's, which is why browse-and-download ships on its own rather
   than with a lossy writer. See

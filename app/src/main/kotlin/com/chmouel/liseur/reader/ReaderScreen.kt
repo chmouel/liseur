@@ -2,6 +2,7 @@ package com.chmouel.liseur.reader
 
 import android.app.Activity
 import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -389,6 +390,7 @@ fun ReaderScreen(
     onVerifiedLocatorChanged: (Locator, NavigatorPositionEvent, BookOrbitLocalCandidate) -> Unit,
     openedBookOrbit: BookOrbitOpenedEpub?,
     bookOrbitFallback: Locator?,
+    onBookOrbitOpeningVerified: (Locator) -> Unit,
     checkBookOrbitContext: suspend (BookOrbitCfiContext) -> Unit,
     originalBookOrbitDocument: suspend (BookOrbitOpenedEpub, String) -> Document?,
     onNavigatorChanged: (EpubNavigatorFragment?) -> Unit,
@@ -629,10 +631,21 @@ fun ReaderScreen(
     // the one the book opened on.
     var gateAnchor by remember(navigator) { mutableStateOf(restoreTarget) }
 
-    fun matchesIncomingResource(nav: EpubNavigatorFragment, locator: Locator): Boolean =
-        bookOrbitFallback == null || ResourceAddress.shows(
-            visibleWebView(nav.publicationView)?.url, locator.href.toString(),
-        )
+    suspend fun verifyOpeningTarget(nav: EpubNavigatorFragment, locator: Locator): Boolean {
+        if (bookOrbitFallback == null) return ExactLocatorAnchor.verify(nav, locator)
+        val root = nav.publicationView
+        val web = visibleWebView(root) ?: return false
+        val origin = IntArray(2)
+        val bounds = Rect()
+        fun isCurrent(): Boolean {
+            root.getLocationOnScreen(origin)
+            return web === visibleWebView(root) &&
+                web.getGlobalVisibleRect(bounds) &&
+                bounds.contains(origin[0] + root.width / 2, origin[1] + root.height / 2) &&
+                ResourceAddress.shows(web.url, locator.href.toString())
+        }
+        return isCurrent() && ExactLocatorAnchor.verify(web, locator) && isCurrent()
+    }
 
     // Point the gate at somewhere the reader is being sent, without
     // releasing it and without moving its deadline. One function so the
@@ -914,7 +927,7 @@ fun ReaderScreen(
         // this replaced.
         if (budgetMs <= 0L) {
             settleLayout()
-            return matchesIncomingResource(nav, locator) && ExactLocatorAnchor.verify(nav, locator)
+            return verifyOpeningTarget(nav, locator)
         }
         // This is the same asynchronous WebView race as navigate(), but
         // a cold open is the slowest layout the reader asks for. Poll
@@ -927,8 +940,7 @@ fun ReaderScreen(
         return withTimeoutOrNull(budgetMs) {
             repeat(OpeningRestoration.EXACT_OPEN_VERIFY_ATTEMPTS) {
                 settleLayout()
-                if (matchesIncomingResource(nav, locator) && ExactLocatorAnchor.verify(nav, locator)
-                ) return@withTimeoutOrNull true
+                if (verifyOpeningTarget(nav, locator)) return@withTimeoutOrNull true
             }
             false
         } == true
@@ -1154,8 +1166,7 @@ fun ReaderScreen(
                     here = native.restorePoint(),
                     anchorVerified = gateAnchor.let {
                         it != null && (bookOrbitFallback == null || native.href == it.href) &&
-                            matchesIncomingResource(nav, it) && ExactLocatorAnchor.isExact(it) &&
-                            ExactLocatorAnchor.verify(nav, it)
+                            ExactLocatorAnchor.isExact(it) && verifyOpeningTarget(nav, it)
                     },
                     elapsedMs = SystemClock.elapsedRealtime() - gateOpenedAt,
                 ) == OpeningRestorationVerdict.SUPPRESS
@@ -1437,7 +1448,10 @@ fun ReaderScreen(
         // opening emissions move it out from under this check.
         val requested = restoreTarget ?: return@LaunchedEffect
         if (!ExactLocatorAnchor.isExact(requested)) return@LaunchedEffect
-        if (openingExactAnchorArrived(nav, requested)) return@LaunchedEffect
+        if (openingExactAnchorArrived(nav, requested)) {
+            if (bookOrbitFallback != null) onBookOrbitOpeningVerified(requested)
+            return@LaunchedEffect
+        }
         // The chapter before the percentage, for the reason given in
         // navigate(): the whole-book fraction is the only rung that can
         // land in the wrong chapter.

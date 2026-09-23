@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.bookorbit
 
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.BookOrbitPositionAgreement
+import com.chmouel.liseur.data.db.BookOrbitLocalCfi
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.domain.ExactPositionDecision
 import com.chmouel.liseur.domain.reconcileExactPosition
@@ -10,8 +11,20 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import org.readium.r2.shared.publication.Locator
 
-enum class BookOrbitAttempt { PREPARED, MAY_HAVE_BEEN_SENT, UNCERTAIN, ACKNOWLEDGED }
+enum class BookOrbitAttempt { PREPARED, MAY_HAVE_BEEN_SENT, UNCERTAIN, REJECTED, ACKNOWLEDGED }
+
+/** An opening proposal; only the active navigator can verify its locator. */
+data class BookOrbitPullOffer(
+    val context: BookOrbitCfiContext,
+    val remote: BookOrbitFileProgress,
+    val expectedRevision: Long,
+    val expectedLocator: String,
+    val locatorJson: String,
+    val href: String,
+)
 
 sealed interface BookOrbitReadBack {
     data object Agreed : BookOrbitReadBack
@@ -32,6 +45,87 @@ class BookOrbitPositionAgreementRepository(
     private val dao get() = database.bookOrbitPositionAgreementDao()
     private val attemptMutex = Mutex()
 
+    suspend fun state(context: BookOrbitCfiContext): BookOrbitPositionAgreement =
+        database.withTransaction {
+            checkCurrent(context)
+            current(context)
+        }
+
+    /** Only a previously agreed, unchanged local place can be offered automatically. */
+    suspend fun canOfferPull(
+        context: BookOrbitCfiContext,
+        remote: BookOrbitFileProgress,
+    ): Boolean = database.withTransaction {
+        checkCurrent(context)
+        val row = current(context)
+        val local = database.readingProgressDao().get(context.bookUrl)
+        row.attemptState in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name) &&
+            local != null && row.agreedLocalRevision != null &&
+            (local.ownerAccount == null || local.ownerAccount == context.request.accountKey) &&
+            local.localRevision == row.agreedLocalRevision &&
+            local.locatorJson == row.agreedLocatorJson &&
+            row.agreedRemoteSaved != null && remote.isSaved && remote.cfi != null &&
+            (row.agreedRemoteSaved != remote.isSaved || row.agreedRemoteCfi != remote.cfi)
+    }
+
+    /**
+     * Called only after the original EPUB and active Readium DOM verified the offer.
+     * A fresh GET and a closed-book fence precede the atomic revision-guarded write.
+     * Status, generic sync baselines and acknowledgements are deliberately untouched.
+     */
+    suspend fun adoptVerifiedClosed(offer: BookOrbitPullOffer): Boolean {
+        val context = offer.context
+        val localProgression = runCatching {
+            Locator.fromJSON(JSONObject(offer.locatorJson))?.locations?.totalProgression
+        }.getOrNull()?.takeIf { it.isFinite() && it in 0.0..1.0 }
+            ?: throw BookOrbitPositionUnresolved()
+        val fresh = progress.read(context)
+        if (!fresh.isSaved || fresh.cfi != offer.remote.cfi ||
+            fresh.percentage != offer.remote.percentage
+        ) {
+            observe(context, fresh)
+            return false
+        }
+        return database.readingProgressDao().openBooks.unlessOpen(context.bookUrl) {
+            database.withTransaction {
+                checkCurrent(context)
+                val row = current(context)
+                val local = database.readingProgressDao().get(context.bookUrl)
+                if (row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name) ||
+                    local == null || local.localRevision != offer.expectedRevision ||
+                    (local.ownerAccount != null && local.ownerAccount != context.request.accountKey) ||
+                    local.locatorJson != offer.expectedLocator ||
+                    row.agreedLocalRevision != offer.expectedRevision ||
+                    row.agreedLocatorJson != offer.expectedLocator ||
+                    row.agreedRemoteSaved == null ||
+                    (row.agreedRemoteSaved == fresh.isSaved && row.agreedRemoteCfi == fresh.cfi) ||
+                    row.candidateCfi != offer.remote.cfi ||
+                    row.candidatePercentage != offer.remote.percentage ||
+                    row.candidateSaved != offer.remote.isSaved
+                ) return@withTransaction false
+                val changed = database.readingProgressDao().adoptBookOrbitPosition(
+                    context.bookUrl, offer.expectedRevision, offer.expectedLocator,
+                    offer.locatorJson, localProgression, System.currentTimeMillis(),
+                )
+                if (changed != 1) return@withTransaction false
+                val revision = offer.expectedRevision + 1
+                database.bookOrbitLocalCfiDao().write(BookOrbitLocalCfi(
+                    context.request.accountKey, context.bookUrl, context.bookId,
+                    context.fileId, context.bindingRevision, revision,
+                    offer.locatorJson, checkNotNull(fresh.cfi),
+                ))
+                dao.write(row.copy(
+                    agreedLocalRevision = revision, agreedLocatorJson = offer.locatorJson,
+                    agreedRemoteCfi = fresh.cfi, agreedRemotePercentage = fresh.percentage,
+                    agreedRemoteSaved = true,
+                    candidateCfi = fresh.cfi, candidatePercentage = fresh.percentage,
+                    candidateSaved = true, candidateUpdatedAt = fresh.displayTime,
+                ))
+                true
+            }
+        } ?: false
+    }
+
     suspend fun observe(
         context: BookOrbitCfiContext,
         remote: BookOrbitFileProgress,
@@ -41,7 +135,7 @@ class BookOrbitPositionAgreementRepository(
         val row = current(context)
         if (row.attemptState in listOf(
                 BookOrbitAttempt.PREPARED.name, BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name,
-                BookOrbitAttempt.UNCERTAIN.name,
+                BookOrbitAttempt.UNCERTAIN.name, BookOrbitAttempt.REJECTED.name,
             )
         ) return@withTransaction ExactPositionDecision.Unresolved
         val local = database.readingProgressDao().get(context.bookUrl)
@@ -77,7 +171,7 @@ class BookOrbitPositionAgreementRepository(
             checkCurrent(context)
             if (current(context).attemptState in listOf(
                     BookOrbitAttempt.PREPARED.name, BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name,
-                    BookOrbitAttempt.UNCERTAIN.name,
+                    BookOrbitAttempt.UNCERTAIN.name, BookOrbitAttempt.REJECTED.name,
                 )
             ) throw BookOrbitPositionUnresolved()
         }
@@ -87,7 +181,7 @@ class BookOrbitPositionAgreementRepository(
             val row = current(context)
             if (row.attemptState in listOf(
                     BookOrbitAttempt.PREPARED.name, BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name,
-                    BookOrbitAttempt.UNCERTAIN.name,
+                    BookOrbitAttempt.UNCERTAIN.name, BookOrbitAttempt.REJECTED.name,
                 )
             ) throw BookOrbitPositionUnresolved()
             val local = database.readingProgressDao().get(context.bookUrl) ?: throw BookOrbitPositionUnresolved()
@@ -111,7 +205,8 @@ class BookOrbitPositionAgreementRepository(
             }
             val percentage = local.totalProgression?.times(100)
                 ?.takeIf { it.isFinite() && it in 0.0..100.0 } ?: throw BookOrbitPositionUnresolved()
-            val bytes = """{"percentage":$percentage,"cfi":${org.json.JSONObject.quote(verified.rawCfi)}}"""
+            val storedPercentage = percentage.toFloat().toString()
+            val bytes = """{"percentage":$storedPercentage,"cfi":${org.json.JSONObject.quote(verified.rawCfi)}}"""
                 .toByteArray(Charsets.UTF_8)
             row.copy(
                 outgoingBytes = bytes, sentLocalRevision = local.localRevision,
@@ -149,12 +244,33 @@ class BookOrbitPositionAgreementRepository(
     }
 
     private suspend fun sendLocked(context: BookOrbitCfiContext): BookOrbitReadBack {
+        val before = state(context)
+        if (before.attemptState != BookOrbitAttempt.PREPARED.name ||
+            before.outgoingBytes == null
+        ) throw BookOrbitPositionUnresolved()
+        if (database.readingProgressDao().get(context.bookUrl)?.localRevision != before.sentLocalRevision)
+            throw BookOrbitPositionUnresolved()
+        val preflight = progress.read(context)
         val row = database.withTransaction {
             checkCurrent(context)
             val pending = current(context)
             if (pending.attemptState != BookOrbitAttempt.PREPARED.name ||
-                pending.outgoingBytes == null || pending.sentLocalRevision == null
+                pending.outgoingBytes == null || pending.sentLocalRevision == null ||
+                !pending.outgoingBytes.contentEquals(before.outgoingBytes)
             ) throw BookOrbitPositionUnresolved()
+            if (preflight.isSaved != pending.preflightSaved ||
+                preflight.cfi != pending.preflightCfi ||
+                preflight.percentage != pending.preflightPercentage
+            ) {
+                dao.write(pending.copy(
+                    attemptState = null, outgoingBytes = null, sentLocalRevision = null,
+                    sentLocatorJson = null, preflightCfi = null,
+                    preflightPercentage = null, preflightSaved = null,
+                    candidateCfi = preflight.cfi, candidatePercentage = preflight.percentage,
+                    candidateSaved = preflight.isSaved, candidateUpdatedAt = preflight.displayTime,
+                ))
+                return@withTransaction null
+            }
             val local = database.readingProgressDao().get(context.bookUrl)
             val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
             if (local?.localRevision != pending.sentLocalRevision ||
@@ -164,7 +280,7 @@ class BookOrbitPositionAgreementRepository(
             ) throw BookOrbitPositionUnresolved()
             pending.copy(attemptState = BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name)
                 .also { dao.write(it) }
-        }
+        } ?: throw BookOrbitPositionUnresolved()
         val result = transport.sendBytes(context, checkNotNull(row.outgoingBytes))
         if (result is BookOrbitHttp.MutationResult.Rejected) {
             database.withTransaction {
@@ -173,7 +289,7 @@ class BookOrbitPositionAgreementRepository(
                 if (pending.attemptState != BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name ||
                     !pending.outgoingBytes.contentEquals(row.outgoingBytes)
                 ) throw BookOrbitPositionUnresolved()
-                dao.write(pending.copy(attemptState = BookOrbitAttempt.PREPARED.name))
+                dao.write(pending.copy(attemptState = BookOrbitAttempt.REJECTED.name))
             }
             return BookOrbitReadBack.Rejected(result.status)
         }

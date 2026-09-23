@@ -150,6 +150,26 @@ abstract class ReadingProgressDao {
     @Query("SELECT * FROM reading_progress WHERE book_url = :bookUrl")
     abstract suspend fun get(bookUrl: String): ReadingProgress?
 
+    @Query(
+        """
+        UPDATE reading_progress SET
+            locator_json = :locatorJson,
+            total_progression = :progression,
+            updated_at = :now,
+            local_revision = local_revision + 1
+        WHERE book_url = :bookUrl AND local_revision = :expectedRevision
+            AND locator_json = :expectedLocator
+        """,
+    )
+    abstract suspend fun adoptBookOrbitPosition(
+        bookUrl: String,
+        expectedRevision: Long,
+        expectedLocator: String,
+        locatorJson: String,
+        progression: Double,
+        now: Long,
+    ): Int
+
     @Query("SELECT * FROM reading_progress WHERE book_url = :bookUrl")
     abstract fun observe(bookUrl: String): kotlinx.coroutines.flow.Flow<ReadingProgress?>
 
