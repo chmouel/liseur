@@ -32,6 +32,8 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.FontFamily
 import androidx.glance.text.FontWeight
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
@@ -193,7 +195,10 @@ internal fun StatsBars(
     val peak = max(1L, figures.peakMs)
     val chunk = barChunkSize(figures.bars.size)
     val gap = if (chunk < figures.bars.size) 1.dp else 2.dp
-    Column(modifier = modifier) {
+    val described = stats.chartDescription?.let { spoken ->
+        modifier.semantics { contentDescription = spoken }
+    } ?: modifier
+    Column(modifier = described) {
         stats.peakLabel?.let { label ->
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 Spacer(GlanceModifier.defaultWeight())

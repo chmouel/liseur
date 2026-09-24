@@ -1128,6 +1128,8 @@ network or a connected server, and they ignore a remote cover URL.
   redraw is enqueued as unique one-off work (`requestRedraw`, which
   replaces a request still waiting). Do not start receiver work in a
   process-local scope and return.
+- The chart carries one TalkBack description listing the days read, in
+  the same words the in-app chart speaks for each bar.
 - On a device without `FEATURE_APP_WIDGETS` the updater does nothing:
   there is no `AppWidgetManager`, and Glance's id lookup would throw.
 - Glance truncates a container after ten children. The chart splits its
