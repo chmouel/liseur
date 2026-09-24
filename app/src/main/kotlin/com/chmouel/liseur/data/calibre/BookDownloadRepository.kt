@@ -451,7 +451,7 @@ class BookDownloadRepository(
         val files = ownedFilesOf(sent)
         val stamp = stampOf(files) to sourceStampOf(sent)
         val verifiable = stamp.second != UNVERIFIABLE
-        val result = deleter.delete(server.baseUrl, credentials, book, forgetReading)
+        val result = deleter.delete(server.baseUrl, credentials, sent, forgetReading)
         if (result !is ServerDeleteResult.Deleted) return result
         var removed = false
         inTransaction {
