@@ -54,8 +54,9 @@ class BookOrbitAdoptedSource(
                 if (!cursor.moveToFirst()) return@use null
                 val size = cursor.getColumnIndex(OpenableColumns.SIZE)
                     .takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)
+                // Zero is how a provider says it does not know.
                 val modified = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
-                    .takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)
+                    .takeIf { it >= 0 && !cursor.isNull(it) }?.let(cursor::getLong)?.takeIf { it > 0 }
                 Stamp(size, modified)
             }
         }.getOrNull()

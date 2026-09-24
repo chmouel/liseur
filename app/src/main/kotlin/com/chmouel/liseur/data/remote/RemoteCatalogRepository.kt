@@ -519,7 +519,7 @@ class RemoteCatalogRepository(
                 // the dead, so the whole answer is dropped instead.
                 seedStarterCatalogProgress(server, catalogUrl, walk)
                 forAccount(server) {
-                    if (server.shelfLimit == null) reconcileVanished(seen)
+                    if (server.shelfLimit == null) reconcileVanished(seen, server.accountKey)
                     serverDao.setCatalogSyncedAt(System.currentTimeMillis())
                 }
                 _status.value = CatalogStatus.Idle
@@ -773,7 +773,7 @@ class RemoteCatalogRepository(
      * extra refresh showing a book that has gone is a moment's
      * confusion, and the alternative is unrecoverable.
      */
-    private suspend fun reconcileVanished(seenUuids: Set<String>) {
+    private suspend fun reconcileVanished(seenUuids: Set<String>, accountKey: String) {
         val remote = bookDao.allRemote()
         val gone = remote.filter { it.remoteUuid !in seenUuids }
         val (confirmed, suspected) = gone.partition { it.catalogMissingSince != null }
@@ -786,7 +786,7 @@ class RemoteCatalogRepository(
         // began before the upload cannot have seen its id, which is
         // one more reason a single absence only marks it.
         val (catalogRows, uploaded) = confirmed.partition { ServerKind.isRemoteUrl(it.url) }
-        uploaded.map { it.url }.chunkedForSql { bookRemoval.unlinkVanishedUploads(it) }
+        uploaded.map { it.url }.chunkedForSql { bookRemoval.unlinkVanishedUploads(it, accountKey) }
         // Only a book with a file of its own is worth keeping. One that
         // was queued or failed has nothing to read, so it goes with the
         // rest rather than staying as a row that can never be opened.

@@ -1,14 +1,19 @@
 package com.chmouel.liseur.data.bookorbit
 
 import android.net.Uri
+import android.provider.DocumentsContract
+import android.provider.OpenableColumns
+import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -99,9 +104,39 @@ class BookOrbitAdoptedSourceTest {
     }
 
     @Test
+    fun `a document dated zero has no known modification time`() {
+        Robolectric.buildContentProvider(Undated::class.java).create(UNDATED)
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
+        val stamp = BookOrbitAdoptedSource(context).stamp(Uri.parse("content://$UNDATED/document/one"))
+
+        assertEquals(BookOrbitAdoptedSource.Stamp(size = 10L, modifiedAt = null), stamp)
+    }
+
+    /** A provider that knows the size and answers zero, "unknown", for the time. */
+    class Undated : android.content.ContentProvider() {
+        override fun onCreate() = true
+        override fun query(
+            uri: Uri, projection: Array<out String>?, selection: String?,
+            args: Array<out String>?, sort: String?,
+        ): android.database.Cursor = android.database.MatrixCursor(
+            arrayOf(OpenableColumns.SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED),
+        ).apply { addRow(arrayOf<Any>(10L, 0L)) }
+
+        override fun getType(uri: Uri): String? = null
+        override fun insert(uri: Uri, values: android.content.ContentValues?): Uri? = null
+        override fun delete(uri: Uri, s: String?, a: Array<out String>?) = 0
+        override fun update(uri: Uri, v: android.content.ContentValues?, s: String?, a: Array<out String>?) = 0
+    }
+
+    @Test
     fun `another expected digest is not answered from the remembered one`() = runBlocking {
         assertTrue(source.holds("book", uri, expected))
 
         assertFalse(source.holds("book", uri, "0".repeat(64)))
+    }
+
+    private companion object {
+        const val UNDATED = "com.chmouel.liseur.test.undated"
     }
 }
