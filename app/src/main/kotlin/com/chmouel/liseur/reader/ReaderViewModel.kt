@@ -451,6 +451,12 @@ class ReaderViewModel(
         val downloads: Map<String, DownloadSnapshot>,
     )
 
+    private data class BookOrbitCatchUpFound(
+        val pull: BookOrbitPullOffer,
+        val excerpt: String?,
+        val approximate: BookOrbitApproximateOffer?,
+    )
+
     /** An offer to continue where another device has read further. */
     data class CatchUp(
         val progression: Double,
@@ -462,6 +468,8 @@ class ReaderViewModel(
         val preview: SyncPreview?,
         /** A BookOrbit server place, already resolved to a passage in this book. */
         val bookOrbit: BookOrbitPullOffer? = null,
+        /** Set when [bookOrbit] was saved without a CFI, so it is only a fraction of the book. */
+        val bookOrbitApproximate: BookOrbitApproximateOffer? = null,
     ) {
         internal suspend fun resolve(bookId: String, coordinator: PositionSyncCoordinator): ResolveOutcome? {
             val preview = preview ?: return null
@@ -1017,6 +1025,13 @@ class ReaderViewModel(
      * already in the air cannot bring back the offer just answered.
      */
     private var bookOrbitOfferAnswers = 0
+
+    /**
+     * A percentage-only BookOrbit place followed from the catch-up pill, until
+     * reading on agrees it. A jump away from it instead keeps this device's
+     * place, as dismissing the pill would have.
+     */
+    private var approximateCatchUp: BookOrbitPullOffer? = null
     private var bookOrbitCatchUpArrival: CompletableDeferred<Boolean>? = null
     private val _bookOrbitGoTo = MutableSharedFlow<Locator>(extraBufferCapacity = 1)
 
@@ -1469,7 +1484,11 @@ class ReaderViewModel(
         // display current, but do not turn that layout detail into reading.
         // Checked before the same-page return: a jump that lands on the page
         // already shown still turns the opening down.
-        if (!keepsApproximateOpening(effectiveEvent)) approximateOpening = null
+        if (!keepsApproximateOpening(effectiveEvent)) {
+            approximateOpening = null
+            approximateCatchUp?.let { bookOrbitDeclinedPending = it }
+            approximateCatchUp = null
+        }
         if (samePosition || !effectiveEvent.persists || bookOrbitOpening.choice != null ||
             bookOrbitCatchUpApplying != null
         ) return
@@ -1520,6 +1539,7 @@ class ReaderViewModel(
                 bookOrbitDeclined = declinedBookOrbit,
             ),
         )
+        if (effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT) approximateCatchUp = null
         // Reading on accepts the opening, so the way back to the old place
         // is withdrawn: taking it would push over the place just accepted.
         if (approximateWayBack != null) {
@@ -1663,7 +1683,8 @@ class ReaderViewModel(
         val offer = offered ?: return
         _catchUp.value = null
         offer.bookOrbit?.let {
-            acceptBookOrbitCatchUp(it)
+            val approximate = offer.bookOrbitApproximate
+            if (approximate != null) followApproximateBookOrbitPlace(it, approximate) else acceptBookOrbitCatchUp(it)
             return
         }
         val acceptedGeneration = readingGeneration
@@ -1708,8 +1729,9 @@ class ReaderViewModel(
 
     /**
      * Offers the place BookOrbit holds when someone else moved it while
-     * this book was open, as the pill that liseur-sync uses. Only an exact
-     * place is offered; every failure is silence.
+     * this book was open, as the pill that liseur-sync uses. A place saved
+     * without a CFI is offered as an approximate page; every failure is
+     * silence.
      */
     private fun maybeOfferBookOrbitCatchUp() {
         val opened = (_state.value as? UiState.Ready)?.openedBookOrbit ?: return
@@ -1725,37 +1747,65 @@ class ReaderViewModel(
                 val offer = withContext(Dispatchers.IO) {
                     withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS * 2) {
                         val remote = agreement.catchUpOffer(opened.context) ?: return@withTimeoutOrNull null
-                        val raw = remote.cfi ?: return@withTimeoutOrNull null
+                        val raw = remote.cfi ?: run {
+                            // Saved without a CFI: offered like an approximate
+                            // opening, at the page that fraction of the book falls on.
+                            val approximate = agreement.approximateCatchUp(opened.context, remote)
+                                ?: return@withTimeoutOrNull null
+                            val target = bookPositions?.takeIf { it.isUsable }
+                                ?.locatorAtOrBeforeProgression(approximate.progression)
+                                ?.let(::prepareLocator) ?: return@withTimeoutOrNull null
+                            return@withTimeoutOrNull BookOrbitCatchUpFound(
+                                BookOrbitPullOffer(
+                                    opened.context, remote, approximate.localRevision ?: 0L,
+                                    approximate.localLocator.orEmpty(), target.toJSON().toString(),
+                                    target.href.toString(),
+                                ),
+                                excerpt = null, approximate = approximate,
+                            )
+                        }
                         // The page this reader opened at, not yet read past.
                         if (raw == bookOrbitOpening.verifiedPull?.remote?.cfi) return@withTimeoutOrNull null
                         val local = progressDao.get(bookId) ?: return@withTimeoutOrNull null
                         val (proposed, target) = locateBookOrbitPlace(opened, publication, raw)
                             ?: return@withTimeoutOrNull null
-                        BookOrbitPullOffer(
-                            opened.context, remote, local.positionRevision, local.locatorJson,
-                            prepareLocator(proposed).toJSON().toString(), target.href,
-                        ) to target
+                        val locatorJson = prepareLocator(proposed).toJSON().toString()
+                        BookOrbitCatchUpFound(
+                            BookOrbitPullOffer(
+                                opened.context, remote, local.positionRevision, local.locatorJson,
+                                locatorJson, target.href,
+                            ),
+                            excerpt = ExactLocatorAnchor.excerpt(locatorJson)
+                                ?: target.anchor.highlight.takeIf { it.isNotBlank() },
+                            approximate = null,
+                        )
                     }
                 } ?: return@launch
                 if (!readerActive || bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null ||
                     answers != bookOrbitOfferAnswers
                 ) return@launch
-                val (pull, target) = offer
+                // The percentage-only place this book just opened at, not yet read past.
+                if (offer.approximate != null && approximateOpening != null) return@launch
+                val pull = offer.pull
                 val locator = runCatching { Locator.fromJSON(JSONObject(pull.locatorJson)) }.getOrNull()
                     ?: return@launch
                 if (lastLocator?.sameReadingPositionAs(locator) == true) return@launch
+                val position = progressAt(locator)?.position
+                if (offer.approximate != null && position != null &&
+                    position == lastLocator?.let(::progressAt)?.position
+                ) return@launch
                 bookOrbitDeclinedPending = null
                 _catchUp.value = CatchUp(
                     progression = pull.remote.percentage / 100,
-                    position = progressAt(locator)?.position,
-                    excerpt = ExactLocatorAnchor.excerpt(pull.locatorJson)
-                        ?: target.anchor.highlight.takeIf { it.isNotBlank() },
+                    position = position,
+                    excerpt = offer.excerpt,
                     remoteAt = pull.remote.displayTime?.let {
                         runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
                     },
-                    confidence = ResumeConfidence.EXACT,
+                    confidence = if (offer.approximate != null) ResumeConfidence.APPROXIMATE else ResumeConfidence.EXACT,
                     preview = null,
                     bookOrbit = pull,
+                    bookOrbitApproximate = offer.approximate,
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -1769,6 +1819,38 @@ class ReaderViewModel(
                 bookOrbitCatchUpChecking = false
             }
         }
+    }
+
+    /**
+     * Goes to a BookOrbit place saved without a CFI. There is no passage to
+     * verify, so it is followed like an approximate opening: the page turn
+     * that reads on from it agrees it and pushes the new page, and the way
+     * back (or any other jump) keeps this device's place instead.
+     */
+    private fun followApproximateBookOrbitPlace(pull: BookOrbitPullOffer, offer: BookOrbitApproximateOffer) {
+        if (bookOrbitCatchUpApplying != null) return
+        val target = runCatching { Locator.fromJSON(JSONObject(pull.locatorJson)) }.getOrNull() ?: return
+        bookOrbitOfferAnswers++
+        bookOrbitDeclinedPending = null
+        onJump()
+        _jumpBack.value?.let { back ->
+            _jumpBack.value = back.copy(
+                fromSync = true,
+                remoteAt = pull.remote.displayTime?.let {
+                    runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+                },
+                confidence = ResumeConfidence.APPROXIMATE,
+                resumePosition = progressAt(target)?.position,
+            ).also { approximateWayBack = it }
+        }
+        // The arrival is the server's place, not reading: it is neither
+        // written nor allowed to turn the offer down.
+        pendingPositionEvent = NavigatorPositionEvent.REMOTE_ADOPTION
+        approximateOpening = offer
+        approximateCatchUp = pull
+        lastLocator = target
+        _progress.value = progressAt(target)
+        _goTo.tryEmit(target)
     }
 
     /**

@@ -93,9 +93,10 @@ web reader had recorded**, for every book this phone touched.
 
 A server place that already has no CFI is read, never written. Liseur opens
 at it as an approximate fraction and agrees it on the reader's first saved
-move, which is then pushed with a CFI. A different percentage-only place
-stays unresolved. See
-[percentage-only server places](../bookorbit-position-sync.md#percentage-only-server-places).
+move, which is then pushed with a CFI. Any other percentage-only place is
+offered to the open reader as an approximate catch-up, and is pushed over
+once the reader follows or declines it. See
+[percentage-only openings](../../DEVELOPER.md#percentage-only-openings).
 
 The provider initially advertised browsing and downloads only. The verified
 CFI bridge now parses and resolves incoming anchors against the selected
@@ -149,7 +150,7 @@ checks, exact CFI/revision pairing and read-back remain required; an uncertain
 POST is not automatically replayed. Server-side conditional writes are no
 longer a prerequisite. Automatic position pushes are enabled after
 independent-device and final-path acceptance. See the
-[approved policy and acceptance handoff](../bookorbit-position-sync.md#approved-write-policy).
+[BookOrbit protocol](../../DEVELOPER.md#bookorbit-protocol).
 
 Upstream requests worth filing: a client-idempotent annotation create, a
 conditional progress write, the stored file digest, and a range-capable
