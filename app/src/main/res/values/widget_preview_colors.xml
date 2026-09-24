@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget palette for the picker previews, which are plain layouts and
+     cannot read the Glance colour providers. Keep in step with
+     ui/widget/WidgetComponents.kt. -->
+<resources>
+    <color name="widget_preview_card">#F0EBE3</color>
+    <color name="widget_preview_tile">#FCFAF7</color>
+    <color name="widget_preview_rule">#D3CCC1</color>
+    <color name="widget_preview_ink">#15110C</color>
+    <color name="widget_preview_fill">#7A4A2B</color>
+    <!-- The fill at 40% over the card, as past days are drawn. -->
+    <color name="widget_preview_past">#C1AB99</color>
+    <color name="widget_preview_cover">#5C3018</color>
+</resources>

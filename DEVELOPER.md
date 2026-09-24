@@ -1089,6 +1089,48 @@ reader behavior.
   `readium-lcp` is prohibited. Never remove the reproducibility-specific
   dependency metadata or JNI debug-symbol settings from the build.
 
+### Home-screen widgets
+
+The three Glance widgets in `ui/widget/` (current cover, reading stats,
+cover and stats) read only this device's Room data. They never touch the
+network or a connected server, and they ignore a remote cover URL.
+
+- One trigger redraws them: `AppContainer` collects
+  `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
+  `WIDGET_TABLES` (`books`, `reading_progress`, `reading_sessions`). A new
+  table that changes what a widget shows goes into that list. Do not add
+  refresh callbacks to repositories or view models.
+- `WidgetUpdater.schedule` feeds `RefreshCoalescer`: a redraw runs after 3 s
+  of quiet or 15 s after the first unserved request, whichever comes first.
+  A page turn writes progress, so this is what bounds the cost while
+  reading. A request that lands during a redraw earns exactly one more.
+- Glance recomposes a running session on `update()` without calling
+  `provideGlance` again, so anything loaded there would go stale.
+  `LiveSnapshot` reloads the snapshot whenever the updater's generation or
+  the widget's period changes. Each placed widget loads its own snapshot;
+  there is no shared cache.
+- The stats period (today, this week, this month) is per widget. It lives
+  in the widget's Glance preferences under `WidgetPeriodKey` and is set by
+  `WidgetConfigActivity`, which only accepts an id belonging to one of
+  Liseur's two stats providers. The streak always counts the full session
+  history, which is why the repository reads every session.
+- The hourly `WidgetRefreshWorker` exists only while a widget is placed.
+  `reconcilePeriodic` enqueues or cancels it from app start, the receivers'
+  `onEnabled`/`onDisabled`, and the worker itself. Manifest receivers do not
+  get `DATE_CHANGED` on Android 8 and later, so this job is what rolls the
+  day and week over. `TIME_SET`, `TIMEZONE_CHANGED` and `LOCALE_CHANGED`
+  redraw at once, since the labels and the week start are drawn in.
+- On a device without `FEATURE_APP_WIDGETS` the updater does nothing:
+  there is no `AppWidgetManager`, and Glance's id lookup would throw.
+- Glance truncates a container after ten children. The chart splits its
+  bars into rows sized by `barChunkSize`, and bars under 6 dp are not drawn
+  by the launcher, so an empty day uses that minimum.
+- Covers are decoded at most 256 px on the long edge in `RGB_565`, which
+  keeps the RemoteViews bitmap well under the binder transaction limit.
+- The picker previews are static layouts (`layout/widget_preview_*`, Android
+  12 and later) with PNG fallbacks in `drawable-nodpi`. Their colours in
+  `widget_preview_colors.xml` must follow `WidgetComponents.kt`.
+
 ## calibre-web protocols
 
 Verified against a real calibre-web install (behind Caddy + Cloudflare) and

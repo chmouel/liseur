@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_cover_stats_description"
+    android:configure="com.chmouel.liseur.ui.widget.WidgetConfigActivity"
+    android:initialLayout="@layout/widget_loading"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:previewImage="@drawable/widget_preview_image_cover_stats"
+    android:previewLayout="@layout/widget_preview_cover_stats"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />

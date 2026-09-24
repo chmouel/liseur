@@ -214,6 +214,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
