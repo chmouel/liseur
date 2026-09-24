@@ -348,9 +348,15 @@ class BookOrbitUploadClient(
             .filter { it.isEpub && it.sizeBytes == sent.size }
         val file = when {
             candidates.size == 1 -> candidates.single()
-            candidates.size in 2..MAX_HASHED_CANDIDATES -> candidates
-                .filter { digestOf(context, it.id) == sent.sha256 }
-                .singleOrNull()
+            candidates.size in 2..MAX_HASHED_CANDIDATES -> try {
+                candidates.filter { digestOf(context, it.id) == sent.sha256 }.singleOrNull()
+            } catch (e: RemoteHttpFailure) {
+                // An account may upload without being allowed to
+                // download. That will not change on a retry, and the
+                // upload itself is done.
+                if (e.reason != SyncFailure.Forbidden) throw e
+                null
+            }
             else -> null
         } ?: return ServerUploadResult.UploadedUnlinked(null)
         val remoteUuid = BookOrbitScope.remoteId(context.baseUrl, accountId, bookId)

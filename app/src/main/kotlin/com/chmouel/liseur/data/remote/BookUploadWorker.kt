@@ -227,10 +227,13 @@ class BookUploadWorker(
             // must not delete its rows, link its books or turn its
             // capabilities on and off.
             if (container.remoteAccount.current()?.accountKey != account) return@withTransaction
-            // A row the library replaced or re-read while the bytes were
-            // in the air is not the one they were read from.
+            // A row the library replaced, re-read or rehomed while the
+            // bytes were in the air is not the one they were read from.
+            // A watched-folder row has no local_uri and opens through its
+            // folder, so the whole opened address has to match.
             val current = dao.getByUrl(book.url) ?: return@withTransaction
             if (current.id != book.id || current.localUri != book.localUri ||
+                current.openableUri() != book.openableUri() ||
                 current.fileModifiedAt != book.fileModifiedAt
             ) return@withTransaction
             val duplicates = dao.byRemoteUuids(listOf(result.remoteUuid))

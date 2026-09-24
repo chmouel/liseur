@@ -236,6 +236,22 @@ class BookOrbitUploadClientTest {
     }
 
     @Test
+    fun `an account that may not download leaves a completed upload unlinked`() = runBlocking {
+        val file = book()
+        server.enqueue(capabilities())
+        server.enqueue(session("completed", 10, 10, bookId = 5))
+        server.enqueue(
+            json(
+                """{"id":5,"files":[{"id":8,"format":"epub","sizeBytes":10},
+                   {"id":9,"format":"epub","sizeBytes":10}]}""",
+            ),
+        )
+        server.enqueue(MockResponse(code = 403))
+
+        assertEquals(ServerUploadResult.UploadedUnlinked(null), send(file))
+    }
+
+    @Test
     fun `an upload whose file cannot be proved is not linked`() = runBlocking {
         val file = book()
         server.enqueue(capabilities())
