@@ -1,6 +1,8 @@
 package com.chmouel.liseur.data.remote
 
 import android.util.Log
+import com.chmouel.liseur.data.bookorbit.BookOrbitScope
+import com.chmouel.liseur.data.bookorbit.BookOrbitUrl
 import com.chmouel.liseur.data.calibre.CalibreParsing
 import com.chmouel.liseur.data.calibre.CalibreSetupClient
 import com.chmouel.liseur.data.calibre.CredentialCipher
@@ -952,7 +954,44 @@ class RemoteAccountRepository(
                 written.accountKey, written.orbitEpoch, written.baseUrl,
             )
         }
+        if (written.kind == ServerKind.BOOKORBIT) relinkUploads(written)
         adoptBookOrbit(written)
+    }
+
+    /**
+     * Gives uploaded books their server link back when the account that
+     * took them signs in again.
+     *
+     * A disconnect cuts every book loose and keeps the binding of any
+     * book that stays on the device. A downloaded book finds its way
+     * back through its URL, which is spelled from the server id. An
+     * uploaded one keeps its own URL, so without this the catalog would
+     * bring it in a second time and offer the local copy for upload
+     * again. Bindings are keyed by account, so only the account that
+     * took the upload can relink it. Two local books bound to one server
+     * book, or a server id some row already holds, are left alone.
+     */
+    private suspend fun relinkUploads(server: RemoteServer) {
+        val bindings = bookOrbitBindingDao ?: return
+        val accountId = server.accountId ?: return
+        val unlinked = bindings.unlinkedUploads(server.accountKey)
+            .groupBy { it.bookId }
+            .values
+            .mapNotNull { it.singleOrNull() }
+            .associateWith { BookOrbitScope.remoteId(server.baseUrl, accountId, it.bookId) }
+        if (unlinked.isEmpty()) return
+        val held = bookDao.byRemoteUuids(unlinked.values.toList()).mapNotNullTo(HashSet()) { it.remoteUuid }
+        unlinked.forEach { (binding, remoteUuid) ->
+            val fileId = binding.fileId ?: return@forEach
+            if (remoteUuid in held) return@forEach
+            bookDao.linkToRemote(
+                url = binding.bookUrl,
+                remoteUuid = remoteUuid,
+                downloadHref = BookOrbitUrl.downloadHref(fileId),
+                coverUrl = null,
+                remoteUpdatedAt = System.currentTimeMillis(),
+            )
+        }
     }
 
     /**

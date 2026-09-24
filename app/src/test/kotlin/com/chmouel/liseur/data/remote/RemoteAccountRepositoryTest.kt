@@ -258,6 +258,45 @@ class RemoteAccountRepositoryTest {
         assertTrue(db.bookOrbitPositionTraversalDao().page(server.accountKey, null, 20).isEmpty())
     }
 
+    @Test
+    fun `an uploaded book is linked again when the same bookorbit account reconnects`() = runTest {
+        val repository = repositoryUsing(db.remoteServerDao(), BookOrbitSetup())
+        repository.connectBookOrbit(BASE, "reader", "hunter2")
+        val server = repository.current()!!
+        val remoteUuid = com.chmouel.liseur.data.bookorbit.BookOrbitScope
+            .remoteId(server.baseUrl, server.accountId!!, 113)
+        suspend fun uploaded(url: String, bookId: Long, linked: String?) {
+            db.bookOrbitBindingDao().write(
+                BookOrbitBinding(
+                    accountKey = server.accountKey, bookUrl = url, bookId = bookId, fileId = 352,
+                    fileFormat = "epub", fileSize = 100, fileName = null,
+                    state = BookOrbitBindingState.DOWNLOADED.name, updatedAt = 1,
+                    localSha256 = "a".repeat(64),
+                ),
+            )
+            db.bookDao().upsert(
+                Book(
+                    url = url, title = url, author = null, coverPath = null, source = null,
+                    addedAt = 1, lastOpenedAt = null, localUri = url, remoteUuid = linked,
+                ),
+            )
+        }
+        uploaded("file:///local/one.epub", 113, remoteUuid)
+        // Two local copies bound to one server book: neither is chosen.
+        uploaded("file:///local/two.epub", 114, null)
+        uploaded("file:///local/three.epub", 114, null)
+
+        repository.disconnect()
+        assertNull(db.bookDao().getByUrl("file:///local/one.epub")!!.remoteUuid)
+        repository.connectBookOrbit(BASE, "reader", "hunter2")
+
+        val relinked = db.bookDao().getByUrl("file:///local/one.epub")!!
+        assertEquals(remoteUuid, relinked.remoteUuid)
+        assertEquals("/api/v1/books/files/352/download", relinked.downloadHref)
+        assertNull(db.bookDao().getByUrl("file:///local/two.epub")!!.remoteUuid)
+        assertNull(db.bookDao().getByUrl("file:///local/three.epub")!!.remoteUuid)
+    }
+
     /** A BookOrbit server that answers capability refreshes in its own shape. */
     private class BookOrbitSetup : ServerSetup {
         override suspend fun connect(

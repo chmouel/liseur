@@ -374,6 +374,8 @@ class BookOrbitCatalogClientTest {
 
         override suspend fun clearOrphans() = Unit
 
+        override suspend fun unlinkedUploads(accountKey: String): List<BookOrbitBinding> = emptyList()
+
         override suspend fun write(binding: BookOrbitBinding) {
             rows[binding.accountKey to binding.bookUrl] = binding
         }

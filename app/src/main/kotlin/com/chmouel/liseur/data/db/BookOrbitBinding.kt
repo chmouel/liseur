@@ -114,6 +114,14 @@ interface BookOrbitBindingDao {
     @Query("DELETE FROM book_orbit_binding WHERE book_url = :bookUrl")
     suspend fun clearBook(bookUrl: String)
 
+    /** Bindings of uploaded books for [accountKey] whose local row has lost its server id. */
+    @Query(
+        "SELECT b.* FROM book_orbit_binding b JOIN books k ON k.url = b.book_url " +
+            "WHERE b.account_key = :accountKey AND b.local_sha256 IS NOT NULL " +
+            "AND b.file_id IS NOT NULL AND k.remote_uuid IS NULL",
+    )
+    suspend fun unlinkedUploads(accountKey: String): List<BookOrbitBinding>
+
     /** Drops bindings whose remote-only book was removed during account cleanup. */
     @Query(
         "DELETE FROM book_orbit_binding WHERE NOT EXISTS " +
