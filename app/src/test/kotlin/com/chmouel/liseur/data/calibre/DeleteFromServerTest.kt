@@ -205,6 +205,27 @@ class DeleteFromServerTest {
     }
 
     @Test
+    fun `a folder book the server deleted stays here unlinked with its file`() = runBlocking {
+        val source = java.io.File.createTempFile("folder", ".epub").apply { writeText("the book"); deleteOnExit() }
+        val book = Book(
+            url = "file://${source.path}", title = "One", author = null, coverPath = null, source = null,
+            addedAt = 1, lastOpenedAt = 5, localUri = "file://${source.path}",
+            remoteUuid = "bo_scope_9", downloadState = DownloadState.DOWNLOADED,
+        )
+        db.bookDao().upsert(book)
+        val deleter = Deleter()
+
+        assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
+
+        val kept = db.bookDao().getByUrl(book.url)
+        assertNotNull(kept)
+        assertNull(kept!!.remoteUuid)
+        assertEquals(5L, kept.lastOpenedAt)
+        assertTrue(source.exists())
+        assertEquals(listOf(book.url to server.accountKey), deleter.forgotten)
+    }
+
+    @Test
     fun `a document whose size and time cannot be read is kept unlinked after a server delete`() = runBlocking {
         Robolectric.buildContentProvider(Silent::class.java).create(SILENT)
         val book = Book(

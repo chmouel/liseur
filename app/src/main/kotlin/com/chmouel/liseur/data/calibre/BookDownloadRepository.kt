@@ -432,7 +432,9 @@ class BookDownloadRepository(
      * [forgetReading] asks the server to forget the caller's own reading
      * of the book too, and is the reader's to answer. The local reading
      * goes regardless, below: with the book gone for every device, hours
-     * kept here would be an entry with nothing behind it.
+     * kept here would be an entry with nothing behind it. A book whose
+     * file the app does not own, such as one in a watched folder, stays
+     * here with its reading and loses only its link to the server.
      */
     suspend fun deleteFromServer(
         book: Book,
@@ -451,10 +453,11 @@ class BookDownloadRepository(
         val files = ownedFilesOf(sent)
         val stamp = stampOf(files) to sourceStampOf(sent)
         val verifiable = stamp.second != UNVERIFIABLE
+        val foreign = opensForeignFile(sent)
         val result = deleter.delete(server.baseUrl, credentials, sent, forgetReading)
         if (result !is ServerDeleteResult.Deleted) return result
         var removed = false
-        inTransaction {
+        if (!foreign) inTransaction {
             val now = bookDao.getByUrl(book.url) ?: return@inTransaction
             if (accountKey() != account) return@inTransaction
             if (now.remoteUuid != sent.remoteUuid || now.localUri != sent.localUri) {
@@ -473,7 +476,7 @@ class BookDownloadRepository(
         if (removed) {
             files.forEach { it.delete() }
         } else {
-            Log.w(TAG, "${book.url} changed while it was deleted from the server; kept here")
+            if (!foreign) Log.w(TAG, "${book.url} changed while it was deleted from the server; kept here")
             unlinkDeleted(book.url, sent.remoteUuid, account, deleter)
         }
         return result
@@ -495,6 +498,20 @@ class BookDownloadRepository(
             deleter.forgetDeleted(url, account)
             bookDao.unlinkFromRemote(listOf(url))
         }
+    }
+
+    /**
+     * Whether the entry opens a file the app does not own, such as a
+     * document in a watched folder. Removing the entry would leave that
+     * file behind, and the next scan would bring the book back without
+     * its reading history, so such an entry is kept and only unlinked.
+     */
+    private suspend fun opensForeignFile(book: Book): Boolean = withContext(Dispatchers.IO) {
+        val uri = book.openableUri()?.toUri() ?: return@withContext false
+        if (uri.scheme != "file") return@withContext true
+        val file = uri.path?.let { runCatching { File(it).canonicalFile }.getOrNull() }
+            ?: return@withContext true
+        ownedFilesOf(book).none { runCatching { it.canonicalFile }.getOrNull() == file }
     }
 
     /**
