@@ -12,7 +12,8 @@ import org.w3c.dom.Node
 
 /** A foreign CFI's original-XHTML passage, pending verification in Readium's DOM. */
 internal object BookOrbitIncomingAnchor {
-    data class Target(val href: String, val anchor: ViewportTextAnchor)
+    /** [progression] is how far into the resource's text the passage starts, for showing a page. */
+    data class Target(val href: String, val anchor: ViewportTextAnchor, val progression: Double? = null)
 
     fun mayOfferOnOpen(localLocatorJson: String?, localProgression: Double?): Boolean =
         localLocatorJson == null && localProgression == null
@@ -21,7 +22,10 @@ internal object BookOrbitIncomingAnchor {
     fun mark(base: Locator, target: Target): Locator? {
         val href = ResourceAddress.canonicalPath(base.href.toString())
         if (href == null || href != ResourceAddress.canonicalPath(target.href)) return null
-        return ExactLocatorAnchor.mark(base, target.anchor).takeIf(ExactLocatorAnchor::isExact)
+        val placed = target.progression?.let {
+            base.copy(locations = base.locations.copy(progression = it))
+        } ?: base
+        return ExactLocatorAnchor.mark(placed, target.anchor).takeIf(ExactLocatorAnchor::isExact)
     }
 
     fun resolve(
@@ -56,8 +60,13 @@ internal object BookOrbitIncomingAnchor {
         val after = text.substring(word.range.last + 1).takeCodePoints(32)
         val quote = before + word.value.takeCodePoints(64) + after
         if (text.indexOf(quote) != text.lastIndexOf(quote)) return null
+        val whole = body.textContent.orEmpty().length
+        val progression = textOffset(body, node, position.offset)
+            ?.takeIf { whole > 0 }
+            ?.let { (it.toDouble() / whole).coerceIn(0.0, 1.0) }
         return Target(
             href = resource.href,
+            progression = progression,
             anchor = ViewportTextAnchor(
                 cssSelector = selector,
                 before = before,

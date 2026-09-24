@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
 import com.chmouel.liseur.reader.ResourceAddress
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONTokener
@@ -90,6 +91,49 @@ internal object BookOrbitViewportCfi {
             visibleWebView(root) !== web || !ResourceAddress.shows(web.url, href)
         ) return null
         return Candidate(context, href, raw, before, word)
+    }
+
+    /**
+     * The first capture that [matches], trying up to [attempts] times with
+     * [retryDelayMs] between tries while [stillWanted]. A capture that is
+     * null and one that names another place are both retried.
+     */
+    suspend fun <T : Any> firstMatching(
+        attempts: Int,
+        retryDelayMs: Long,
+        stillWanted: () -> Boolean,
+        capture: suspend () -> T?,
+        matches: (T) -> Boolean,
+    ): T? {
+        repeat(attempts) { tries ->
+            if (!stillWanted()) return null
+            if (tries > 0) delay(retryDelayMs)
+            if (!stillWanted()) return null
+            capture()?.takeIf(matches)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Whether [candidate] starts at the word [anchor] quotes. The anchor takes word-like
+     * segments and the candidate whole tokens, so the anchor can begin inside the token:
+     * after an opening quote, or at "Madrid" when "Rio-" ended the previous page.
+     */
+    fun startsAt(candidate: Candidate, anchor: ViewportTextAnchor): Boolean {
+        val word = candidate.word
+        return (0 until word.length).any { split ->
+            !(split > 0 && word[split - 1].isHighSurrogate()) &&
+                word.startsWith(anchor.highlight, split) &&
+                (candidate.before + word.substring(0, split)).takeLastCodePoints(
+                    ExactLocatorAnchor.MAX_BEFORE,
+                ) == anchor.before
+        }
+    }
+
+    private fun String.takeLastCodePoints(count: Int): String {
+        val size = codePointCount(0, length)
+        if (size <= count) return this
+        return substring(offsetByCodePoints(0, size - count))
     }
 
     internal fun parseJavascriptResult(result: String?): JSONObject? {
@@ -183,6 +227,7 @@ internal object BookOrbitViewportCfi {
             const words = /\S+/gu;
             let word;
             while ((word = words.exec(node.data))) {
+              if (!/[\p{L}\p{N}]/u.test(word[0])) continue;
               const offset = word.index;
               const range = document.createRange();
               range.setStart(node, offset);

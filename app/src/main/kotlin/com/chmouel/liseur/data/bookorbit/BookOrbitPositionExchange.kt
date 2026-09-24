@@ -26,8 +26,11 @@ class BookOrbitPositionExchange(
         agreement.previewConflict(cfis.capture(bookUrl))
     }
 
-    suspend fun keepLocal(preview: BookOrbitConflictPreview): Result = turn.withLock {
-        delivered(agreement.keepLocal(preview))
+    suspend fun keepLocal(
+        preview: BookOrbitConflictPreview,
+        inReader: Boolean = false,
+    ): Result = turn.withLock {
+        delivered(agreement.keepLocal(preview, inReader))
     }
 
     suspend fun run(bookUrl: String): Result = run(cfis.capture(bookUrl), allowPush = true)

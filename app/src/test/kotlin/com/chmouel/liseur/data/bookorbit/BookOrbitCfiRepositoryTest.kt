@@ -446,7 +446,8 @@ class BookOrbitCfiRepositoryTest {
 
     private suspend fun saveExact(
         context: BookOrbitCfiContext, cfi: String, at: Long, progression: Double = 0.25,
-        approximate: BookOrbitApproximateOffer? = null,
+        approximate: BookOrbitApproximateOffer? = null, pull: BookOrbitPullOffer? = null,
+        declined: BookOrbitPullOffer? = null,
     ) {
         val locator = """{"href":"OPS/chapter.xhtml","locations":{"progression":$progression}}"""
         BookOrbitLocalPositionWriter(db).save(
@@ -457,7 +458,7 @@ class BookOrbitCfiRepositoryTest {
                 updatedAt = at, bookOrbitCfi = BookOrbitLocalCandidate(
                     context, "OPS/chapter.xhtml", locator, cfi,
                 ),
-                bookOrbitApproximate = approximate,
+                bookOrbitApproximate = approximate, bookOrbitPull = pull, bookOrbitDeclined = declined,
             ), "Reading",
         )
     }
@@ -685,6 +686,316 @@ class BookOrbitCfiRepositoryTest {
     }
 
     @Test
+    fun `reading on from an opened server place agrees it and pushes the move`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        val theirs = "epubcfi(/6/4!/4/2:9)"
+        saveExact(context, first, 10)
+        val agreement = agreement()
+        agreement.observe(context, progress(saved(first)))
+        val original = db.readingProgressDao().get(context.bookUrl)!!
+        val changed = progress(saved(theirs, 70.0))
+        assertTrue(agreement.canOfferPull(context, changed))
+        agreement.observe(context, changed)
+        val offer = BookOrbitPullOffer(
+            context, changed, original.positionRevision, original.locatorJson,
+            """{"href":"OPS/chapter.xhtml","locations":{"progression":0.7}}""", "OPS/chapter.xhtml",
+        )
+
+        val read = "epubcfi(/6/4!/4/2:12)"
+        saveExact(context, read, 11, progression = 0.71, pull = offer)
+        val agreed = agreement.state(context)
+        assertEquals(theirs, agreed.agreedRemoteCfi)
+        assertEquals(70.0, agreed.agreedRemotePercentage!!, 0.0)
+        assertEquals(original.positionRevision, agreed.agreedLocalRevision)
+
+        val posts = serveRemote(saved(theirs, 70.0))
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(read), posts())
+
+        // Later moves still carry the offer; once agreed on, it changes nothing.
+        saveExact(context, "epubcfi(/6/4!/4/2:15)", 12, progression = 0.72, pull = offer)
+        assertEquals(read, agreement.state(context).agreedRemoteCfi)
+    }
+
+    @Test
+    fun `a fresh book opened at the server's place pushes the first move`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val theirs = "epubcfi(/6/4!/4/2:9)"
+        val remote = progress(saved(theirs, 11.5))
+        agreement().observe(context, remote)
+        val offer = BookOrbitPullOffer(
+            context, remote, 0L, "",
+            """{"href":"OPS/chapter.xhtml","locations":{"progression":0.1}}""", "OPS/chapter.xhtml",
+            fresh = true,
+        )
+        val read = "epubcfi(/6/4!/4/2:12)"
+        saveExact(context, read, 11, progression = 0.14, pull = offer)
+        assertEquals(theirs, agreement().state(context).agreedRemoteCfi)
+        assertNull(agreement().state(context).agreedLocalRevision)
+        val posts = serveRemote(saved(theirs, 11.5))
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(read), posts())
+    }
+
+    @Test
+    fun `a fresh opening is refused once something was agreed`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        val remote = progress(saved("epubcfi(/6/4!/4/2:9)", 70.0))
+        agreement().observe(context, remote)
+        val offer = BookOrbitPullOffer(
+            context, remote, 0L, "",
+            """{"href":"OPS/chapter.xhtml","locations":{"progression":0.7}}""", "OPS/chapter.xhtml",
+            fresh = true,
+        )
+        saveExact(context, "epubcfi(/6/4!/4/2:12)", 11, progression = 0.71, pull = offer)
+        assertEquals(first, agreement().state(context).agreedRemoteCfi)
+    }
+
+    @Test
+    fun `an opening pull is not agreed once the server moved again`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        val agreement = agreement()
+        agreement.observe(context, progress(saved(first)))
+        val original = db.readingProgressDao().get(context.bookUrl)!!
+        val changed = progress(saved("epubcfi(/6/4!/4/2:9)", 70.0))
+        agreement.observe(context, changed)
+        val offer = BookOrbitPullOffer(
+            context, changed, original.positionRevision, original.locatorJson,
+            """{"href":"OPS/chapter.xhtml","locations":{"progression":0.7}}""", "OPS/chapter.xhtml",
+        )
+        agreement.observe(context, progress(saved("epubcfi(/6/4!/4/2:20)", 80.0)))
+        saveExact(context, "epubcfi(/6/4!/4/2:12)", 11, progression = 0.71, pull = offer)
+        assertEquals(first, agreement.state(context).agreedRemoteCfi)
+    }
+
+    /** This device read to [first] and pushed it; then [served] was saved elsewhere. */
+    private suspend fun movedElsewhere(first: String, served: String): () -> List<String> {
+        val context = repository.capture(binding.bookUrl)
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        return serveRemote(saved(served, 70.0))
+    }
+
+    private suspend fun catchUp(context: BookOrbitCfiContext, remote: BookOrbitFileProgress): BookOrbitPullOffer {
+        val local = db.readingProgressDao().get(context.bookUrl)!!
+        return BookOrbitPullOffer(
+            context, remote, local.positionRevision, local.locatorJson,
+            """{"href":"OPS/chapter.xhtml","type":"application/xhtml+xml","locations":{"progression":0.7,"totalProgression":0.7}}""",
+            "OPS/chapter.xhtml",
+        )
+    }
+
+    @Test
+    fun `a place saved elsewhere while reading is offered and adopted in the open reader`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val theirs = "epubcfi(/6/4!/4/2:9)"
+        val posts = movedElsewhere("epubcfi(/6/4!/4/2:3)", theirs)
+        // This device read on too: both sides moved since the agreement.
+        saveExact(context, "epubcfi(/6/4!/4/2:5)", 11, progression = 0.3)
+        assertEquals(BookOrbitPositionExchange.Result.Conflict, exchange().run(context.bookUrl))
+        assertTrue(agreement().state(context).serverMovedAway())
+
+        val remote = agreement().catchUpOffer(context)!!
+        assertEquals(theirs, remote.cfi)
+        val offer = catchUp(context, remote)
+        db.readingProgressDao().openBooks.enter(context.bookUrl)
+        assertTrue(agreement().adoptCaughtUpInReader(offer))
+        val adopted = db.readingProgressDao().get(context.bookUrl)!!
+        assertEquals(offer.locatorJson, adopted.locatorJson)
+        assertEquals(theirs, agreement().state(context).agreedRemoteCfi)
+        assertFalse(agreement().state(context).serverMovedAway())
+        assertEquals(emptyList<String>(), posts())
+    }
+
+    @Test
+    fun `a catch-up is refused once this device moved after it was offered`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        movedElsewhere("epubcfi(/6/4!/4/2:3)", "epubcfi(/6/4!/4/2:9)")
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        saveExact(context, "epubcfi(/6/4!/4/2:5)", 11, progression = 0.3)
+        db.readingProgressDao().openBooks.enter(context.bookUrl)
+        assertFalse(agreement().adoptCaughtUpInReader(offer))
+        assertEquals(offer.expectedRevision + 1, db.readingProgressDao().get(context.bookUrl)!!.positionRevision)
+    }
+
+    @Test
+    fun `declining a catch-up lets this device's next move overwrite the server`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val posts = movedElsewhere("epubcfi(/6/4!/4/2:3)", "epubcfi(/6/4!/4/2:9)")
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        assertTrue(agreement().declineServerPlace(offer))
+        assertFalse(agreement().state(context).serverMovedAway())
+        assertNull(agreement().catchUpOffer(context))
+
+        val mine = "epubcfi(/6/4!/4/2:12)"
+        saveExact(context, mine, 11, progression = 0.71)
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(mine), posts())
+    }
+
+    @Test
+    fun `reading on past a catch-up declines it in the same write`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val posts = movedElsewhere("epubcfi(/6/4!/4/2:3)", "epubcfi(/6/4!/4/2:9)")
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        val mine = "epubcfi(/6/4!/4/2:12)"
+        saveExact(context, mine, 11, progression = 0.71, declined = offer)
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(mine), posts())
+    }
+
+    @Test
+    fun `a decline already applied is harmless when the next move carries it too`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val posts = movedElsewhere("epubcfi(/6/4!/4/2:3)", "epubcfi(/6/4!/4/2:9)")
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        assertTrue(agreement().declineServerPlace(offer))
+        val mine = "epubcfi(/6/4!/4/2:12)"
+        saveExact(context, mine, 11, progression = 0.71, declined = offer)
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(mine), posts())
+    }
+
+    /**
+     * This device agreed [first], read on to [mine] and sent it; [theirs]
+     * was saved elsewhere between that POST and its read-back.
+     */
+    private suspend fun overwrittenInFlight(
+        context: BookOrbitCfiContext, first: String, mine: String, theirs: String,
+    ): () -> List<String> {
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        saveExact(context, mine, 11, progression = 0.3)
+        var remote = saved(first)
+        val posts = mutableListOf<String>()
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest): MockResponse =
+                when (request.method) {
+                    "GET" -> MockResponse(body = remote)
+                    "POST" -> {
+                        val sent = JSONObject(request.body!!.utf8())
+                        posts += sent.getString("cfi")
+                        remote = if (posts.size == 1) saved(theirs, 70.0)
+                        else saved(sent.getString("cfi"), sent.getDouble("percentage"))
+                        MockResponse(code = 201)
+                    }
+                    else -> error("Unexpected request")
+                }
+        }
+        assertEquals(BookOrbitPositionExchange.Result.Conflict, exchange().run(context.bookUrl))
+        assertEquals(BookOrbitAttempt.UNCERTAIN.name, agreement().state(context).attemptState)
+        return { posts.toList() }
+    }
+
+    @Test
+    fun `a place saved elsewhere during this device's send is offered and adopted in the reader`(): Unit =
+        runBlocking {
+            val context = repository.capture(binding.bookUrl)
+            val mine = "epubcfi(/6/4!/4/2:5)"
+            val theirs = "epubcfi(/6/4!/4/2:9)"
+            val posts = overwrittenInFlight(context, "epubcfi(/6/4!/4/2:3)", mine, theirs)
+            // Reading on does not replay the uncertain request.
+            assertEquals(BookOrbitPositionExchange.Result.Conflict, exchange().run(context.bookUrl))
+            assertTrue(agreement().state(context).serverMovedAway())
+
+            val remote = agreement().catchUpOffer(context)!!
+            assertEquals(theirs, remote.cfi)
+            val offer = catchUp(context, remote)
+            db.readingProgressDao().openBooks.enter(context.bookUrl)
+            assertTrue(agreement().adoptCaughtUpInReader(offer))
+            val row = agreement().state(context)
+            assertEquals(BookOrbitAttempt.ACKNOWLEDGED.name, row.attemptState)
+            assertNull(row.outgoingBytes)
+            assertEquals(theirs, row.agreedRemoteCfi)
+            assertEquals(offer.locatorJson, db.readingProgressDao().get(context.bookUrl)!!.locatorJson)
+            assertEquals(listOf(mine), posts())
+        }
+
+    @Test
+    fun `declining a place saved during this device's send starts a new request`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val mine = "epubcfi(/6/4!/4/2:5)"
+        val posts = overwrittenInFlight(context, "epubcfi(/6/4!/4/2:3)", mine, "epubcfi(/6/4!/4/2:9)")
+        val uncertain = agreement().state(context)
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        assertTrue(agreement().declineServerPlace(offer))
+        val declined = agreement().state(context)
+        assertNull(declined.attemptState)
+        assertNull(declined.outgoingBytes)
+        assertFalse(declined.serverMovedAway())
+
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(mine, mine), posts())
+        assertEquals(uncertain.attemptGeneration + 1, agreement().state(context).attemptGeneration)
+    }
+
+    @Test
+    fun `reading on past a place saved during this device's send pushes the new page`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val mine = "epubcfi(/6/4!/4/2:5)"
+        val posts = overwrittenInFlight(context, "epubcfi(/6/4!/4/2:3)", mine, "epubcfi(/6/4!/4/2:9)")
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        val next = "epubcfi(/6/4!/4/2:7)"
+        saveExact(context, next, 12, progression = 0.35, declined = offer)
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(mine, next), posts())
+    }
+
+    @Test
+    fun `a place saved during this device's send is not declined once the server moved again`(): Unit =
+        runBlocking {
+            val context = repository.capture(binding.bookUrl)
+            val posts = overwrittenInFlight(
+                context, "epubcfi(/6/4!/4/2:3)", "epubcfi(/6/4!/4/2:5)", "epubcfi(/6/4!/4/2:9)",
+            )
+            val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+            serveRemote(saved("epubcfi(/6/4!/4/2:11)", 80.0))
+            assertEquals(BookOrbitPositionExchange.Result.Conflict, exchange().run(context.bookUrl))
+            assertFalse(agreement().declineServerPlace(offer))
+            assertEquals(BookOrbitAttempt.UNCERTAIN.name, agreement().state(context).attemptState)
+            db.readingProgressDao().openBooks.enter(context.bookUrl)
+            assertFalse(agreement().adoptCaughtUpInReader(offer))
+            assertEquals(1, posts().size)
+        }
+
+    @Test
+    fun `a read-back that could not be made is never offered as someone else's place`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        saveExact(context, "epubcfi(/6/4!/4/2:5)", 11, progression = 0.3)
+        server.enqueue(MockResponse(body = saved(first)))
+        agreement().prepare(context)
+        server.enqueue(MockResponse(body = saved(first)))
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(code = 503))
+        assertThrows(RemoteHttpFailure::class.java) { runBlocking { agreement().send(context) } }
+        val row = agreement().state(context)
+        assertEquals(BookOrbitAttempt.UNCERTAIN.name, row.attemptState)
+        assertFalse(row.serverMovedAway())
+    }
+
+    @Test
+    fun `this device's own sent place is never offered back`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        serveRemote(saved(first))
+        saveExact(context, "epubcfi(/6/4!/4/2:5)", 11, progression = 0.3)
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertFalse(agreement().state(context).serverMovedAway())
+        assertNull(agreement().catchUpOffer(context))
+    }
+
+    @Test
     fun `pull offer keyed on the position revision survives a status change`(): Unit = runBlocking {
         val context = repository.capture(binding.bookUrl)
         val first = "epubcfi(/6/4!/4/2:3)"
@@ -777,6 +1088,71 @@ class BookOrbitCfiRepositoryTest {
         assertEquals(original.ackedRevision, adopted.ackedRevision)
         assertEquals(next, agreement().state(context).agreedRemoteCfi)
         assertEquals(next, db.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)!!.rawCfi)
+    }
+
+    @Test
+    fun `take-remote choice applies only in the reader that holds the book open`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val next = "epubcfi(/6/4!/4/2:9)"
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
+        val original = db.readingProgressDao().get(context.bookUrl)!!
+        server.enqueue(MockResponse(body = saved(next, 60.0)))
+        val preview = checkNotNull(agreement().previewConflict(context))
+        server.takeRequest()
+        val offer = BookOrbitPullOffer(
+            context, preview.remote, preview.localRevision, preview.localLocator,
+            """{"href":"OPS/chapter.xhtml","type":"application/xhtml+xml","locations":{"totalProgression":0.55}}""",
+            "OPS/chapter.xhtml",
+        )
+        server.enqueue(MockResponse(body = saved(next, 60.0)))
+        assertFalse(agreement().adoptChosenVerifiedInReader(preview, offer))
+        server.takeRequest()
+        assertEquals(original.localRevision, db.readingProgressDao().get(context.bookUrl)!!.localRevision)
+        db.readingProgressDao().openBooks.enter(context.bookUrl)
+        server.enqueue(MockResponse(body = saved(next, 60.0)))
+        assertTrue(agreement().adoptChosenVerifiedInReader(preview, offer))
+        server.takeRequest()
+        db.readingProgressDao().openBooks.leave(context.bookUrl)
+        val adopted = db.readingProgressDao().get(context.bookUrl)!!
+        assertEquals(offer.locatorJson, adopted.locatorJson)
+        assertEquals(original.positionRevision + 1, adopted.positionRevision)
+        val agreed = agreement().state(context)
+        assertEquals(adopted.positionRevision, agreed.agreedLocalRevision)
+        assertEquals(next, agreed.agreedRemoteCfi)
+        assertEquals(next, db.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)!!.rawCfi)
+    }
+
+    @Test
+    fun `keep-local choice is sent only from the reader that holds the book open`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val localCfi = "epubcfi(/6/4!/4/2:3)"
+        val remoteCfi = "epubcfi(/6/4!/4/2:9)"
+        saveExact(context, localCfi, 10)
+        val local = db.readingProgressDao().get(context.bookUrl)!!
+        val choice = exchange()
+        server.enqueue(MockResponse(body = saved(remoteCfi, 60.0)))
+        val preview = checkNotNull(choice.previewConflict(context.bookUrl))
+        server.takeRequest()
+        server.enqueue(MockResponse(body = saved(remoteCfi, 60.0)))
+        assertThrows(BookOrbitPositionUnresolved::class.java) {
+            runBlocking { choice.keepLocal(preview, inReader = true) }
+        }
+        server.takeRequest()
+        assertNull(agreement().state(context).outgoingBytes)
+        db.readingProgressDao().openBooks.enter(context.bookUrl)
+        server.enqueue(MockResponse(body = saved(remoteCfi, 60.0)))
+        server.enqueue(MockResponse(body = saved(remoteCfi, 60.0)))
+        server.enqueue(MockResponse(code = 201))
+        server.enqueue(MockResponse(body = saved(localCfi, 25.0)))
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, choice.keepLocal(preview, inReader = true))
+        db.readingProgressDao().openBooks.leave(context.bookUrl)
+        val requests = (1..4).map { server.takeRequest() }
+        assertEquals(listOf("GET", "GET", "POST", "GET"), requests.map { it.method })
+        assertEquals(localCfi, JSONObject(requests[2].body!!.utf8()).getString("cfi"))
+        val agreed = agreement().state(context)
+        assertEquals(local.positionRevision, agreed.agreedLocalRevision)
+        assertEquals(localCfi, agreed.agreedRemoteCfi)
+        assertNull(agreed.outgoingBytes)
     }
 
     @Test
@@ -1188,25 +1564,28 @@ class BookOrbitCfiRepositoryTest {
     }
 
     @Test
-    fun `reader opening after an explicit choice prevents delivery at final preflight`(): Unit = runBlocking {
+    fun `a book held open does not stop its place being sent`(): Unit = runBlocking {
         val context = repository.capture(binding.bookUrl)
-        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
-        val remote = saved("epubcfi(/6/4!/4/2:9)")
-        server.enqueue(MockResponse(body = remote))
-        val preview = checkNotNull(agreement().previewConflict(context))
-        server.takeRequest()
-        server.enqueue(MockResponse(body = remote))
-        agreement().prepareKeepLocal(preview)
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, cfi, 10, progression = 0.25)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        val prepared = agreement().prepare(context)
         server.takeRequest()
         db.readingProgressDao().openBooks.enter(context.bookUrl)
-        server.enqueue(MockResponse(body = remote))
-        assertThrows(BookOrbitPositionUnresolved::class.java) {
-            runBlocking { agreement().send(context) }
+        try {
+            server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+            server.enqueue(MockResponse(code = 201))
+            server.enqueue(MockResponse(body = saved(cfi, 25.0)))
+            assertEquals(BookOrbitReadBack.Agreed, agreement().send(context))
+            assertEquals("GET", server.takeRequest().method)
+            assertArrayEquals(prepared.outgoingBytes, checkNotNull(server.takeRequest().body).toByteArray())
+            assertEquals("GET", server.takeRequest().method)
+            val row = agreement().state(context)
+            assertEquals(BookOrbitAttempt.ACKNOWLEDGED.name, row.attemptState)
+            assertEquals(prepared.sentLocalRevision, row.agreedLocalRevision)
+        } finally {
+            db.readingProgressDao().openBooks.leave(context.bookUrl)
         }
-        assertEquals("GET", server.takeRequest().method)
-        assertEquals(3, server.requestCount)
-        assertEquals(BookOrbitAttempt.PREPARED.name, agreement().state(context).attemptState)
-        db.readingProgressDao().openBooks.leave(context.bookUrl)
     }
 
     @Test

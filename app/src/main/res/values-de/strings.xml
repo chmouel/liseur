@@ -364,13 +364,13 @@
     <string name="reader_sync_book_moved">Während das offen war, hat sich etwas bewegt, deshalb wurde nichts geändert. Versuche, dieses Buch erneut zu synchronisieren.</string>
     <string name="reader_sync_book_kept">Position dieses Geräts behalten. Sie geht beim nächsten Sync zum Server.</string>
     <string name="reader_sync_book_title">Zwei Lesepositionen</string>
-    <string name="reader_bookorbit_choice_help">Der Server hat eine andere Lesestelle gespeichert. Diese Seite ist eine geprüfte Vorschau. Die Auswahl schließt den Reader, während sie geprüft wird. Warte auf die Bestätigung, bevor du das Buch erneut öffnest. Abbrechen schließt, ohne diese Vorschau zu speichern.</string>
+    <string name="reader_bookorbit_choice_help">Dieses Gerät und der Server haben verschiedene Lesestellen gespeichert. Die Seite dahinter zeigt die des Servers. Wähle, wo du weiterlesen möchtest, dann wird die andere Seite aktualisiert. Abbrechen bringt dich zur Lesestelle dieses Geräts zurück und ändert nichts.</string>
     <string name="reader_bookorbit_take">Lesestelle des Servers behalten</string>
     <string name="reader_bookorbit_retry">Lesestelle dieses Geräts erneut senden</string>
-    <string name="reader_bookorbit_retry_help">Ein früherer Sendeversuch erfordert deine Entscheidung. Diese Seite zeigt die geprüfte Lesestelle des Servers. Du kannst sie behalten oder die gespeicherte Lesestelle dieses Geräts erneut senden und damit die des Servers ersetzen. Der Reader schließt sich; warte auf die Bestätigung, bevor du das Buch erneut öffnest. Abbrechen lässt die Anfrage offen.</string>
-    <string name="reader_bookorbit_retry_only_help">Ein früherer Sendeversuch erfordert deine Entscheidung. Die Lesestelle des Servers konnte nicht geprüft werden, daher siehst du die dieses Geräts. Erneutes Senden kann eine von einem anderen Gerät gespeicherte Lesestelle ersetzen. Der Reader schließt sich; warte auf die Bestätigung, bevor du das Buch erneut öffnest. Abbrechen lässt die Anfrage offen.</string>
-    <string name="reader_bookorbit_choice_saved">Lesestelle gespeichert. Öffne das Buch erneut, um weiterzulesen.</string>
-    <string name="reader_bookorbit_choice_failed">Die Auswahl konnte nicht bestätigt werden. Öffne das Buch erneut, prüfe die gespeicherte Lesestelle und versuche es noch einmal.</string>
+    <string name="reader_bookorbit_retry_help">Ein früherer Sendeversuch wurde nicht bestätigt. Die Seite dahinter zeigt die Lesestelle des Servers. Behalte sie, oder sende die Lesestelle dieses Geräts erneut, um sie zu ersetzen. Abbrechen bringt dich zur Lesestelle dieses Geräts zurück und lässt den Sendeversuch offen.</string>
+    <string name="reader_bookorbit_retry_only_help">Ein früherer Sendeversuch wurde nicht bestätigt, und die Lesestelle des Servers konnte nicht geprüft werden, daher bist du bei der dieses Geräts. Erneutes Senden kann eine von einem anderen Gerät gespeicherte Lesestelle ersetzen. Abbrechen lässt den Sendeversuch offen.</string>
+    <string name="reader_bookorbit_choice_saved">Lesestelle gespeichert.</string>
+    <string name="reader_bookorbit_choice_failed">Die Auswahl konnte nicht bestätigt werden. Du wirst beim nächsten Öffnen des Buchs erneut gefragt.</string>
     <string name="reader_sync_book_ahead">Ein anderes Gerät ist weiter als dieses. Welche Position möchtest du behalten?</string>
     <string name="reader_sync_book_behind">Ein anderes Gerät liegt hinter diesem. Welche Position möchtest du behalten?</string>
     <string name="reader_sync_book_same_page">Beide Geräte sind auf derselben Seite, aber nicht an derselben Stelle. Welche möchtest du behalten?</string>
@@ -926,6 +926,6 @@
     <string name="reader_external_link_body">Dieser Link öffnet %1$s in deinem Browser. Liseur folgt ihm nicht für dich.</string>
     <string name="reader_external_link_open">Öffnen</string>
     <string name="reader_external_link_failed">Keine App auf diesem Gerät kann diesen Link öffnen.</string>
-    <string name="server_sync_bookorbit">Lesepositionen werden für überprüfte EPUBs synchronisiert. Löse Konflikte beim Öffnen eines Buchs. Der letzte Schreibvorgang auf dem Server gewinnt; Lesestatus und Anmerkungen werden nicht synchronisiert.</string>
+    <string name="server_sync_bookorbit">Lesepositionen werden bei jeder Seite für überprüfte EPUBs synchronisiert, und eine anderswo gespeicherte Position wird dir beim Lesen angeboten. Der letzte Schreibvorgang auf dem Server gewinnt. Gelesen- und Ungelesen-Markierungen werden ebenfalls synchronisiert, Anmerkungen nicht.</string>
     <string name="server_sync_off_bookorbit">Lesepositionen werden nicht mit BookOrbit synchronisiert.</string>
 </resources>

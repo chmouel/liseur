@@ -268,7 +268,7 @@ class BookOrbitStatusSync(
         private const val UNCERTAIN = "UNCERTAIN"
         private const val REJECTED = "REJECTED"
         private const val REJECTED_UNAUTHORISED = "REJECTED_UNAUTHORISED"
-        /** Turn on only after independent-client and write-race acceptance. */
-        const val AUTOMATIC_SYNC_ENABLED = false
+        /** Only manual statuses are adopted; the server's automatic ones are ignored. */
+        const val AUTOMATIC_SYNC_ENABLED = true
     }
 }

@@ -6,6 +6,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Query
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 /** BookOrbit-only position baseline and one durable, exact request; never status agreement. */
 @Entity(
@@ -52,6 +53,9 @@ data class BookOrbitPositionAgreement(
 interface BookOrbitPositionAgreementDao {
     @Query("SELECT * FROM book_orbit_position_agreement WHERE account_key = :accountKey AND book_url = :bookUrl")
     suspend fun get(accountKey: String, bookUrl: String): BookOrbitPositionAgreement?
+
+    @Query("SELECT * FROM book_orbit_position_agreement WHERE account_key = :accountKey AND book_url = :bookUrl")
+    fun observe(accountKey: String, bookUrl: String): Flow<BookOrbitPositionAgreement?>
 
     @Upsert
     suspend fun write(row: BookOrbitPositionAgreement)

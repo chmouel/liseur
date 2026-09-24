@@ -35,6 +35,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitProgressClient
 import com.chmouel.liseur.data.bookorbit.BookOrbitPositionAgreementRepository
 import com.chmouel.liseur.data.bookorbit.BookOrbitPositionExchange
 import com.chmouel.liseur.data.bookorbit.BookOrbitPullOffer
+import com.chmouel.liseur.data.bookorbit.serverMovedAway
 import com.chmouel.liseur.reader.progress.BookOrbitIncomingAnchor
 import com.chmouel.liseur.reader.progress.BookOrbitOpening
 import com.chmouel.liseur.reader.ResourceAddress
@@ -100,6 +101,7 @@ import com.chmouel.liseur.reader.progress.StableBookProgress
 import com.chmouel.liseur.reader.progress.namesItsPage
 import com.chmouel.liseur.reader.progress.samePage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -167,7 +169,6 @@ class ReaderViewModel(
     private val bookOrbitProgress: BookOrbitProgressClient? = null,
     private val bookOrbitAgreement: BookOrbitPositionAgreementRepository? = null,
     private val bookOrbitExchange: BookOrbitPositionExchange? = null,
-    private val notifyChoiceResult: (Boolean) -> Unit,
     private val userFonts: UserFontRepository,
     sessionManager: ReadingSessionManager,
     private val requestBookSync: (String) -> Unit = {},
@@ -195,15 +196,21 @@ class ReaderViewModel(
     private var approximateOpening: BookOrbitApproximateOffer? = null
     private var approximateWayBack: JumpBack? = null
 
+    /** When this device saved the place a BookOrbit choice offers to keep. */
+    private var bookOrbitChoiceLocalAt: Long? = null
+
     fun onBookOrbitOpeningVerified(locator: Locator) {
+        // A choice being applied has already been verified and answered.
+        if (bookOrbitOpening.chosen != null) return
         bookOrbitOpening.verify(
             locator.toJSON().toString(), (_state.value as? UiState.Ready)?.openedBookOrbit,
         )?.let { preview ->
-            _bookSync.value = BookSync.BookOrbitChoice(preview)
+            _bookSync.value = bookOrbitChoice(preview, bookOrbitOpening.choice?.second)
         }
     }
 
     fun onBookOrbitOpeningFailed() {
+        if (bookOrbitOpening.chosen != null) return
         val retry = bookOrbitOpening.choice?.first?.takeIf { it.retryRequired }
         bookOrbitOpening.failed()
         if (_bookSync.value == BookSync.Asking || _bookSync.value is BookSync.BookOrbitChoice) {
@@ -211,12 +218,54 @@ class ReaderViewModel(
         }
         if (retry != null) {
             bookOrbitOpening.propose(null, retry to null)
-            _bookSync.value = BookSync.BookOrbitChoice(retry, canTakeRemote = false)
+            _bookSync.value = bookOrbitChoice(retry, offer = null)
         }
+        clearBookOrbitChoicePending()
+    }
+
+    private fun clearBookOrbitChoicePending() {
         val ready = _state.value as? UiState.Ready ?: return
         if (ready.bookOrbitChoicePending) {
             _state.value = ready.copy(bookOrbitChoicePending = false)
         }
+    }
+
+    /** Both places of a BookOrbit choice, in the terms the reader sees on the page. */
+    private fun bookOrbitChoice(
+        preview: BookOrbitConflictPreview,
+        offer: BookOrbitPullOffer?,
+    ): BookSync.BookOrbitChoice {
+        fun locatorOf(json: String?) =
+            json?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+        val remotePercent = preview.remote.percentage / 100
+        return BookSync.BookOrbitChoice(
+            preview = preview,
+            canTakeRemote = offer != null,
+            here = pointAt(
+                locatorOf(preview.localLocator), preview.localProgression ?: 0.0,
+                bookOrbitChoiceLocalAt,
+            ),
+            there = pointAt(
+                locatorOf(offer?.locatorJson), remotePercent,
+                preview.remote.displayTime?.let {
+                    runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+                },
+            ),
+        )
+    }
+
+    /** A verified place is exact; without one only the percentage is known. */
+    private fun pointAt(locator: Locator?, progression: Double, at: Long?): SyncPoint {
+        val shown = locator?.let(::progressAt)
+            ?: return point(progression, at = at).copy(chapter = locator?.title)
+        return SyncPoint(
+            progression = progression,
+            page = shown.position,
+            totalPages = shown.totalPositions,
+            at = at,
+            chapter = shown.chapterTitle ?: locator?.title,
+            confidence = ResumeConfidence.EXACT,
+        )
     }
 
     fun onBookOrbitNavigatorLost() {
@@ -409,16 +458,21 @@ class ReaderViewModel(
         val excerpt: String?,
         val remoteAt: Long?,
         val confidence: ResumeConfidence,
-        val preview: SyncPreview,
+        /** The generic sync's answer; null for a BookOrbit place. */
+        val preview: SyncPreview?,
+        /** A BookOrbit server place, already resolved to a passage in this book. */
+        val bookOrbit: BookOrbitPullOffer? = null,
     ) {
-        internal suspend fun resolve(bookId: String, coordinator: PositionSyncCoordinator): ResolveOutcome =
-            coordinator.resolve(
+        internal suspend fun resolve(bookId: String, coordinator: PositionSyncCoordinator): ResolveOutcome? {
+            val preview = preview ?: return null
+            return coordinator.resolve(
                 bookUrl = bookId,
                 takeRemote = true,
                 atRevision = preview.localRevision ?: 0,
                 expecting = preview.fingerprint(),
                 peerId = preview.peerId,
             )
+        }
     }
 
     private val _catchUp = MutableStateFlow<CatchUp?>(null)
@@ -478,7 +532,9 @@ class ReaderViewModel(
 
         data class BookOrbitChoice(
             val preview: BookOrbitConflictPreview,
-            val canTakeRemote: Boolean = true,
+            val canTakeRemote: Boolean,
+            val here: SyncPoint,
+            val there: SyncPoint,
         ) : BookSync
 
         /** Nothing left to do: a message, and then out of the way. */
@@ -495,6 +551,8 @@ class ReaderViewModel(
         /** A few words from around the anchor, when one travelled. */
         val excerpt: String? = null,
         val confidence: ResumeConfidence = ResumeConfidence.APPROXIMATE,
+        /** The chapter the place is in, when it is known. */
+        val chapter: String? = null,
     )
 
     private val _bookSync = MutableStateFlow<BookSync>(BookSync.Idle)
@@ -650,17 +708,17 @@ class ReaderViewModel(
      * reader there straight away, because that is the whole point of
      * having asked.
      */
-    fun resolveBookSync(takeRemote: Boolean): Boolean {
+    fun resolveBookSync(takeRemote: Boolean) {
         val bookOrbit = _bookSync.value as? BookSync.BookOrbitChoice
         if (bookOrbit != null) {
             if (!bookOrbitOpening.choose(bookOrbit.preview, takeRemote)) {
-                _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
-                return false
+                declineBookOrbitChoice(R.string.reader_sync_book_moved)
+                return
             }
-            _bookSync.value = BookSync.Asking
-            return true
+            applyBookOrbitChoice(bookOrbit.preview, takeRemote)
+            return
         }
-        val asked = _bookSync.value as? BookSync.Choice ?: return false
+        val asked = _bookSync.value as? BookSync.Choice ?: return
         val preview = asked.preview
         _bookSync.value = BookSync.Asking
         viewModelScope.launch {
@@ -685,7 +743,78 @@ class ReaderViewModel(
                 }
             }
         }
-        return false
+    }
+
+    /**
+     * Applies a BookOrbit choice with the reader still open on it.
+     *
+     * The reader's own position writes stay paused until the choice has
+     * landed or failed, which is what lets it write under the open book.
+     * Keeping this device's place goes back there at once; taking the
+     * server's stays on the verified page already shown, and returns to
+     * this device's place only if the server moved meanwhile.
+     */
+    private fun applyBookOrbitChoice(preview: BookOrbitConflictPreview, takeRemote: Boolean) {
+        val offer = bookOrbitOpening.choice?.second
+        val opened = bookOrbitOpening.verifiedEpub
+        _bookSync.value = BookSync.Asking
+        if (!takeRemote && offer != null) returnToLocalPlace(preview)
+        viewModelScope.launch {
+            val saved = try {
+                positionPublisher.flush(bookId) && withContext(Dispatchers.IO) {
+                    withTimeoutOrNull(CHOICE_SYNC_TIMEOUT_MS) {
+                        if (takeRemote) {
+                            offer != null && opened != null &&
+                                bookOrbitCfis?.originalDocument(opened, offer.href, downloads::fileFor) != null &&
+                                bookOrbitAgreement?.adoptChosenVerifiedInReader(preview, offer) == true
+                        } else {
+                            bookOrbitExchange?.keepLocal(preview, inReader = true) ==
+                                BookOrbitPositionExchange.Result.Pushed
+                        }
+                    } == true
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IOException) {
+                Log.w("bookorbit-position", "Could not apply the position choice", error)
+                false
+            } catch (error: BookOrbitEpubPackage.ParseException) {
+                Log.w("bookorbit-position", "The original EPUB changed before applying the choice", error)
+                false
+            }
+            if (!saved) {
+                Log.w("bookorbit-position", "The position choice was not applied")
+                if (takeRemote) returnToLocalPlace(preview)
+            }
+            finishBookOrbitChoice(
+                if (saved) R.string.reader_bookorbit_choice_saved else R.string.reader_bookorbit_choice_failed,
+            )
+        }
+    }
+
+    /** Leaves the choice unanswered and puts the reader back on this device's place. */
+    private fun declineBookOrbitChoice(noteRes: Int?) {
+        val preview = bookOrbitOpening.choice?.first
+        if (preview != null && bookOrbitOpening.choice?.second != null) returnToLocalPlace(preview)
+        finishBookOrbitChoice(noteRes)
+    }
+
+    private fun finishBookOrbitChoice(noteRes: Int?) {
+        bookOrbitOpening.resolved()
+        clearBookOrbitChoicePending()
+        _bookSync.value = noteRes?.let { BookSync.Note(it) } ?: BookSync.Idle
+    }
+
+    /**
+     * Moves off the server's preview back to where this device was. The
+     * reader is told it is already there, so arriving is not a page turn.
+     */
+    private fun returnToLocalPlace(preview: BookOrbitConflictPreview) {
+        val local = runCatching { Locator.fromJSON(JSONObject(preview.localLocator)) }.getOrNull() ?: return
+        val target = prepareLocator(local)
+        lastLocator = target
+        _progress.value = progressAt(target)
+        _goTo.tryEmit(target)
     }
 
     /**
@@ -730,13 +859,12 @@ class ReaderViewModel(
     }
 
     /** Puts the question away, leaving the server's answer on disk for later. */
-    fun dismissBookSync(): Boolean {
+    fun dismissBookSync() {
         if (_bookSync.value is BookSync.BookOrbitChoice) {
-            _bookSync.value = BookSync.Idle
-            return true
+            declineBookOrbitChoice(null)
+            return
         }
         _bookSync.value = BookSync.Idle
-        return false
     }
 
     /**
@@ -871,6 +999,29 @@ class ReaderViewModel(
     private var jumpBackTimer: Job? = null
     private var catchUpChecking = false
     private var catchUpDeclined: Double? = null
+    private var bookOrbitCatchUpChecking = false
+    private var bookOrbitWatch: Job? = null
+
+    /** A BookOrbit catch-up being applied; the reader's own writes wait for it. */
+    private var bookOrbitCatchUpApplying: BookOrbitPullOffer? = null
+
+    /**
+     * A BookOrbit catch-up just turned down, until the next page write
+     * carries it: that write and the refusal then land together, before
+     * the write's own sync can mistake the server's place for a conflict.
+     */
+    private var bookOrbitDeclinedPending: BookOrbitPullOffer? = null
+
+    /**
+     * Bumped whenever the reader answers a BookOrbit offer, so a check
+     * already in the air cannot bring back the offer just answered.
+     */
+    private var bookOrbitOfferAnswers = 0
+    private var bookOrbitCatchUpArrival: CompletableDeferred<Boolean>? = null
+    private val _bookOrbitGoTo = MutableSharedFlow<Locator>(extraBufferCapacity = 1)
+
+    /** A BookOrbit place to go to and verify, reported to [onBookOrbitCatchUpArrived]. */
+    val bookOrbitGoTo: SharedFlow<Locator> = _bookOrbitGoTo.asSharedFlow()
     private var readerActive = false
     private var pendingPositionEvent: NavigatorPositionEvent? = null
 
@@ -1172,31 +1323,23 @@ class ReaderViewModel(
                                 }
                                 return@withContext null
                             }
-                            bookOrbitCfis.retain(context, raw)
-                            val resource = com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource.locate(
-                                com.chmouel.liseur.data.bookorbit.BookOrbitCfi.parse(raw),
-                                openedBookOrbit.publication,
-                            ) ?: return@withContext null
-                            val resourcePath = ResourceAddress.canonicalPath(resource.href)
+                            val (proposed, target) = locateBookOrbitPlace(openedBookOrbit, publication, raw)
                                 ?: return@withContext null
-                            val link = publication.readingOrder.singleOrNull {
-                                ResourceAddress.canonicalPath(it.url().toString()) == resourcePath
-                            } ?: return@withContext null
-                            val document = bookOrbitCfis.originalDocument(
-                                openedBookOrbit, resource.href, downloads::fileFor,
-                            ) ?: return@withContext null
-                            val target = BookOrbitIncomingAnchor.resolve(
-                                raw, openedBookOrbit.publication, document,
-                            ) ?: return@withContext null
-                            val base = publication.locatorFromLink(link)
-                                ?: return@withContext null
-                            val proposed = BookOrbitIncomingAnchor.mark(base, target)
-                            bookOrbitCfis.check(context)
-                            if ((eligible || choicePreview != null) && proposed != null && stored != null) {
+                            if ((eligible || choicePreview != null) && stored != null) {
                                 pullOffer = BookOrbitPullOffer(
                                     context, remote, stored.positionRevision, stored.locatorJson,
                                     proposed.toJSON().toString(),
                                     target.href,
+                                )
+                            } else if (freshBook) {
+                                // Nothing of this device's own to weigh it
+                                // against: the first move agrees the opened
+                                // place and is pushed over it.
+                                bookOrbitAgreement?.observe(context, remote)
+                                pullOffer = BookOrbitPullOffer(
+                                    context, remote, stored?.positionRevision ?: 0L,
+                                    stored?.locatorJson.orEmpty(), proposed.toJSON().toString(),
+                                    target.href, fresh = true,
                                 )
                             }
                             proposed
@@ -1241,6 +1384,7 @@ class ReaderViewModel(
                 if (checkedOffer != null || preview.retryRequired) preview to checkedOffer else null
             }
             bookOrbitOpening.propose(openingPull, openingChoice)
+            bookOrbitChoiceLocalAt = latestStored?.updatedAt
             val replaced = approximateOpening?.takeIf { it.replacesLocalPlace }
             if (replaced != null && localTarget != null && approximateTarget != null) {
                 offerBookOrbitWayBack(localTarget, approximateTarget, replaced.remote.displayTime)
@@ -1256,8 +1400,9 @@ class ReaderViewModel(
                 bookOrbitChoicePending = bookOrbitOpening.choice?.second != null,
             )
             if (openingChoice != null && openingChoice.second == null) {
-                _bookSync.value = BookSync.BookOrbitChoice(openingChoice.first, canTakeRemote = false)
+                _bookSync.value = bookOrbitChoice(openingChoice.first, offer = null)
             }
+            openedBookOrbit?.let(::watchBookOrbitServer)
             // onResume arrives before a publication has necessarily
             // opened. Only now can foreground time be reading time.
             sessions.onReaderReady()
@@ -1269,6 +1414,33 @@ class ReaderViewModel(
     fun prepareLocator(locator: Locator): Locator {
         val stable = bookPositions?.resolve(locator) ?: return locator
         return ExactLocatorAnchor.withStableProgression(locator, stable.progression)
+    }
+
+    /**
+     * Where a BookOrbit CFI points in this book, checked against the
+     * original EPUB, as a Readium locator carrying the passage's text.
+     */
+    private suspend fun locateBookOrbitPlace(
+        opened: BookOrbitOpenedEpub,
+        publication: Publication,
+        raw: String,
+    ): Pair<Locator, BookOrbitIncomingAnchor.Target>? {
+        val cfis = bookOrbitCfis ?: return null
+        val context = opened.context
+        cfis.retain(context, raw)
+        val resource = com.chmouel.liseur.data.bookorbit.BookOrbitCfiResource.locate(
+            com.chmouel.liseur.data.bookorbit.BookOrbitCfi.parse(raw), opened.publication,
+        ) ?: return null
+        val resourcePath = ResourceAddress.canonicalPath(resource.href) ?: return null
+        val link = publication.readingOrder.singleOrNull {
+            ResourceAddress.canonicalPath(it.url().toString()) == resourcePath
+        } ?: return null
+        val document = cfis.originalDocument(opened, resource.href, downloads::fileFor) ?: return null
+        val target = BookOrbitIncomingAnchor.resolve(raw, opened.publication, document) ?: return null
+        val base = publication.locatorFromLink(link) ?: return null
+        val proposed = BookOrbitIncomingAnchor.mark(base, target)
+        cfis.check(context)
+        return proposed?.let { it to target }
     }
 
     fun onLocatorChanged(
@@ -1298,8 +1470,13 @@ class ReaderViewModel(
         // Checked before the same-page return: a jump that lands on the page
         // already shown still turns the opening down.
         if (!keepsApproximateOpening(effectiveEvent)) approximateOpening = null
-        if (samePosition || !effectiveEvent.persists || bookOrbitOpening.choice != null) return
+        if (samePosition || !effectiveEvent.persists || bookOrbitOpening.choice != null ||
+            bookOrbitCatchUpApplying != null
+        ) return
         readingGeneration++
+        // Reading on past a BookOrbit offer keeps this device's place.
+        val declinedBookOrbit = _catchUp.value?.bookOrbit ?: bookOrbitDeclinedPending
+        bookOrbitDeclinedPending = null
         _catchUp.value = null
         val totalProgression = stable?.progression ?: return
         if (effectiveEvent.teachesPace) {
@@ -1336,6 +1513,11 @@ class ReaderViewModel(
                 // a write that fails leaves it to the next; the agreement row
                 // refuses it once agreed or once a sync has moved on.
                 bookOrbitApproximate = approximateOpening,
+                // Reading on from a verified server place accepts it; like
+                // the approximate opening, every move carries it until one
+                // agrees it, and the agreement refuses it afterwards.
+                bookOrbitPull = bookOrbitOpening.verifiedPull,
+                bookOrbitDeclined = declinedBookOrbit,
             ),
         )
         // Reading on accepts the opening, so the way back to the old place
@@ -1424,6 +1606,7 @@ class ReaderViewModel(
         readerActive = true
         sessions.onResumed()
         maybeOfferCatchUp()
+        maybeOfferBookOrbitCatchUp()
     }
 
     /**
@@ -1478,22 +1661,197 @@ class ReaderViewModel(
     /** Takes the offer: the further position wins, and the page turns. */
     fun acceptCatchUp(offered: CatchUp? = _catchUp.value) {
         val offer = offered ?: return
-        val acceptedGeneration = readingGeneration
         _catchUp.value = null
+        offer.bookOrbit?.let {
+            acceptBookOrbitCatchUp(it)
+            return
+        }
+        val acceptedGeneration = readingGeneration
         viewModelScope.launch {
             if (!positionPublisher.flush(bookId) || readingGeneration != acceptedGeneration) return@launch
             val outcome = offer.resolve(bookId, positionSync)
             // Anything but a clean adoption leaves the book where it is;
             // the offer will simply be made again if it still stands.
             if (outcome != ResolveOutcome.Done || readingGeneration != acceptedGeneration) return@launch
-            goToRemotePosition(offer.preview)
+            goToRemotePosition(offer.preview ?: return@launch)
         }
     }
 
     /** Declines the offer, until the other device reads further still. */
     fun dismissCatchUp() {
-        catchUpDeclined = _catchUp.value?.progression
+        val offer = _catchUp.value
         _catchUp.value = null
+        offer?.bookOrbit?.let {
+            bookOrbitOfferAnswers++
+            bookOrbitDeclinedPending = it
+            declineBookOrbitCatchUp(it)
+            return
+        }
+        catchUpDeclined = offer?.progression
+    }
+
+    /**
+     * Watches this book's BookOrbit agreement while it is open. Every page
+     * turn reads the server before sending, so a place saved elsewhere
+     * shows up here as soon as the next page is turned.
+     */
+    private fun watchBookOrbitServer(opened: BookOrbitOpenedEpub) {
+        val agreement = bookOrbitAgreement ?: return
+        bookOrbitWatch?.cancel()
+        bookOrbitWatch = viewModelScope.launch {
+            agreement.observe(opened.context)
+                .map { row -> row?.takeIf { it.serverMovedAway() }?.let { it.candidateCfi to it.candidatePercentage } }
+                .distinctUntilChanged()
+                .collect { moved -> if (moved != null) maybeOfferBookOrbitCatchUp() }
+        }
+    }
+
+    /**
+     * Offers the place BookOrbit holds when someone else moved it while
+     * this book was open, as the pill that liseur-sync uses. Only an exact
+     * place is offered; every failure is silence.
+     */
+    private fun maybeOfferBookOrbitCatchUp() {
+        val opened = (_state.value as? UiState.Ready)?.openedBookOrbit ?: return
+        val publication = publication ?: return
+        if (bookOrbitCatchUpChecking || bookOrbitCatchUpApplying != null) return
+        val agreement = bookOrbitAgreement ?: return
+        bookOrbitCatchUpChecking = true
+        val answers = bookOrbitOfferAnswers
+        viewModelScope.launch {
+            try {
+                if (!readerActive || bookOrbitOpening.choice != null) return@launch
+                if (!positionPublisher.flush(bookId)) return@launch
+                val offer = withContext(Dispatchers.IO) {
+                    withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS * 2) {
+                        val remote = agreement.catchUpOffer(opened.context) ?: return@withTimeoutOrNull null
+                        val raw = remote.cfi ?: return@withTimeoutOrNull null
+                        // The page this reader opened at, not yet read past.
+                        if (raw == bookOrbitOpening.verifiedPull?.remote?.cfi) return@withTimeoutOrNull null
+                        val local = progressDao.get(bookId) ?: return@withTimeoutOrNull null
+                        val (proposed, target) = locateBookOrbitPlace(opened, publication, raw)
+                            ?: return@withTimeoutOrNull null
+                        BookOrbitPullOffer(
+                            opened.context, remote, local.positionRevision, local.locatorJson,
+                            prepareLocator(proposed).toJSON().toString(), target.href,
+                        ) to target
+                    }
+                } ?: return@launch
+                if (!readerActive || bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null ||
+                    answers != bookOrbitOfferAnswers
+                ) return@launch
+                val (pull, target) = offer
+                val locator = runCatching { Locator.fromJSON(JSONObject(pull.locatorJson)) }.getOrNull()
+                    ?: return@launch
+                if (lastLocator?.sameReadingPositionAs(locator) == true) return@launch
+                bookOrbitDeclinedPending = null
+                _catchUp.value = CatchUp(
+                    progression = pull.remote.percentage / 100,
+                    position = progressAt(locator)?.position,
+                    excerpt = ExactLocatorAnchor.excerpt(pull.locatorJson)
+                        ?: target.anchor.highlight.takeIf { it.isNotBlank() },
+                    remoteAt = pull.remote.displayTime?.let {
+                        runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+                    },
+                    confidence = ResumeConfidence.EXACT,
+                    preview = null,
+                    bookOrbit = pull,
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IOException) {
+                Log.w("bookorbit-position", "Could not check the server's place", error)
+            } catch (error: BookOrbitEpubPackage.ParseException) {
+                Log.w("bookorbit-position", "Could not verify the original EPUB document", error)
+            } catch (error: com.chmouel.liseur.data.bookorbit.BookOrbitCfi.ParseException) {
+                Log.w("bookorbit-position", "Could not resolve the server's BookOrbit CFI", error)
+            } finally {
+                bookOrbitCatchUpChecking = false
+            }
+        }
+    }
+
+    /**
+     * Goes to the server's place, and adopts it once the passage is seen on
+     * screen. This device's own writes wait meanwhile, so the place it had
+     * is still the one the adoption replaces. Anything that does not land
+     * goes back to it.
+     */
+    private fun acceptBookOrbitCatchUp(offered: BookOrbitPullOffer) {
+        if (bookOrbitCatchUpApplying != null) return
+        bookOrbitOfferAnswers++
+        bookOrbitDeclinedPending = null
+        val opened = (_state.value as? UiState.Ready)?.openedBookOrbit ?: return
+        val from = lastLocator ?: return
+        bookOrbitCatchUpApplying = offered
+        viewModelScope.launch {
+            var adopted = false
+            var moved = false
+            try {
+                if (!positionPublisher.flush(bookId)) return@launch
+                val local = progressDao.get(bookId) ?: return@launch
+                val offer = offered.copy(
+                    expectedRevision = local.positionRevision, expectedLocator = local.locatorJson,
+                )
+                bookOrbitCatchUpApplying = offer
+                val target = runCatching { Locator.fromJSON(JSONObject(offer.locatorJson)) }.getOrNull()
+                    ?: return@launch
+                val arrival = CompletableDeferred<Boolean>()
+                bookOrbitCatchUpArrival = arrival
+                onJump(from)
+                moved = true
+                lastLocator = target
+                _progress.value = progressAt(target)
+                _bookOrbitGoTo.emit(target)
+                val verified = withTimeoutOrNull(CHOICE_SYNC_TIMEOUT_MS) { arrival.await() } == true
+                if (!verified) return@launch
+                adopted = withContext(Dispatchers.IO) {
+                    withTimeoutOrNull(CHOICE_SYNC_TIMEOUT_MS) {
+                        bookOrbitCfis?.originalDocument(opened, offer.href, downloads::fileFor) != null &&
+                            bookOrbitAgreement?.adoptCaughtUpInReader(offer) == true
+                    } == true
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IOException) {
+                Log.w("bookorbit-position", "Could not follow the server's place", error)
+            } catch (error: BookOrbitEpubPackage.ParseException) {
+                Log.w("bookorbit-position", "The original EPUB changed before catching up", error)
+            } finally {
+                bookOrbitCatchUpArrival = null
+                bookOrbitCatchUpApplying = null
+                if (!adopted) {
+                    if (moved) {
+                        dismissJumpBack()
+                        lastLocator = from
+                        _progress.value = progressAt(from)
+                        _goTo.tryEmit(from)
+                    }
+                    _bookSync.value = BookSync.Note(R.string.reader_bookorbit_choice_failed)
+                }
+            }
+        }
+    }
+
+    /** Reports whether the passage a BookOrbit catch-up went to is the one on screen. */
+    fun onBookOrbitCatchUpArrived(locator: Locator, verified: Boolean) {
+        val applying = bookOrbitCatchUpApplying ?: return
+        if (locator.toJSON().toString() != applying.locatorJson) return
+        bookOrbitCatchUpArrival?.complete(verified)
+    }
+
+    /** Keeps this device's place; its next move goes over the server's. */
+    private fun declineBookOrbitCatchUp(offer: BookOrbitPullOffer) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { bookOrbitAgreement?.declineServerPlace(offer) }
+                if (bookOrbitDeclinedPending === offer) bookOrbitDeclinedPending = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IOException) {
+                Log.w("bookorbit-position", "Could not keep this device's place", error)
+            }
+        }
     }
 
     /**
@@ -2141,10 +2499,10 @@ class ReaderViewModel(
     }
 
     override fun onCleared() {
-        val closingPull = bookOrbitOpening.verifiedPull
+        // Reading on from the opened server place already agreed it with
+        // the first move, so only an untouched opening is adopted on close.
+        val closingPull = bookOrbitOpening.verifiedPull?.takeIf { readingGeneration == 0L && !it.fresh }
         val closingEpub = bookOrbitOpening.verifiedEpub
-        val closingChoice = bookOrbitOpening.chosen
-        val choiceOffer = bookOrbitOpening.choice?.second
         sessions.close()
         (_state.value as? UiState.Ready)?.publication?.close()
         if (readingDeclared) {
@@ -2163,53 +2521,10 @@ class ReaderViewModel(
                 if (closingPull != null && closingEpub != null) CoroutineScope(Dispatchers.IO).launch {
                     adoptClosedBookOrbit(closingPull, closingEpub)
                 }
-                if (closingChoice != null) CoroutineScope(Dispatchers.IO).launch {
-                    applyClosedBookOrbitChoice(
-                        closingChoice.first, closingChoice.second, choiceOffer, closingEpub,
-                    )
-                }
             }
             if (!queued) {
-                CoroutineScope(Dispatchers.Default).launch {
-                    progressDao.openBooks.leave(bookId)
-                    if (closingChoice != null) {
-                        Log.w("bookorbit-position", "The closed-book choice could not reach the position queue")
-                        withContext(Dispatchers.Main) { notifyChoiceResult(false) }
-                    }
-                }
+                CoroutineScope(Dispatchers.Default).launch { progressDao.openBooks.leave(bookId) }
             }
-        }
-    }
-
-    private suspend fun applyClosedBookOrbitChoice(
-        preview: BookOrbitConflictPreview,
-        takeRemote: Boolean,
-        offer: BookOrbitPullOffer?,
-        opened: BookOrbitOpenedEpub?,
-    ) {
-        try {
-            val result = withTimeoutOrNull(CHOICE_SYNC_TIMEOUT_MS) {
-                if (takeRemote) {
-                    if (offer == null || opened == null ||
-                        bookOrbitCfis?.originalDocument(opened, offer.href, downloads::fileFor) == null
-                    ) return@withTimeoutOrNull false
-                    bookOrbitAgreement?.adoptChosenVerifiedClosed(preview, offer) == true
-                } else {
-                    bookOrbitExchange?.keepLocal(preview) == BookOrbitPositionExchange.Result.Pushed
-                }
-            }
-            if (result != true) {
-                Log.w("bookorbit-position", "The closed-book position choice was not applied")
-            }
-            withContext(Dispatchers.Main) { notifyChoiceResult(result == true) }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: IOException) {
-            Log.w("bookorbit-position", "Could not apply the closed-book position choice", error)
-            withContext(Dispatchers.Main) { notifyChoiceResult(false) }
-        } catch (error: BookOrbitEpubPackage.ParseException) {
-            Log.w("bookorbit-position", "The original EPUB changed before applying the choice", error)
-            withContext(Dispatchers.Main) { notifyChoiceResult(false) }
         }
     }
 
@@ -2288,14 +2603,6 @@ class ReaderViewModel(
                     bookOrbitProgress = container.bookOrbitProgress,
                     bookOrbitAgreement = container.bookOrbitAgreement,
                     bookOrbitExchange = container.bookOrbitExchange,
-                    notifyChoiceResult = { saved ->
-                        android.widget.Toast.makeText(
-                            application,
-                            if (saved) R.string.reader_bookorbit_choice_saved
-                            else R.string.reader_bookorbit_choice_failed,
-                            android.widget.Toast.LENGTH_LONG,
-                        ).show()
-                    },
                     userFonts = container.userFonts,
                     sessionManager = container.readingSessions,
                     requestBookSync = container::requestBookSync,
