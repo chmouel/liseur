@@ -1358,7 +1358,10 @@ CFI live.
   `BookDownloadRepository.deleteFromServer` captures the entry and its
   owned files before the request and removes them afterwards only if the
   account, `remote_uuid`, `local_uri` and file size and time are
-  unchanged. A document whose provider reports no size or time is kept.
+  unchanged. An entry whose file the app does not own, such as a book in
+  a watched folder, is always kept with its reading history, since the
+  next scan would bring the file back as a new book. A document whose
+  provider reports no size or time is kept too.
   Files go after the transaction commits. A copy kept this way loses its
   binding and its `remote_uuid` when it still carries the deleted id, so
   it neither syncs against a book the server no longer has nor gets
