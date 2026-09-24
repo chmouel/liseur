@@ -67,6 +67,9 @@ A Custom connection can be an [OPDS](https://en.wikipedia.org/wiki/Open_Publicat
 
 With liseur-sync you get extras, like settings sync, and better insights of your reading progress across devices.
 
+Home-screen widgets show the cover of the book you are reading, how long
+you have read today, this week or this month, or both side by side.
+
 No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
 servers and dictionary sources you configure. See the
 [privacy policy](https://chmouel.github.io/liseur/PRIVACY).

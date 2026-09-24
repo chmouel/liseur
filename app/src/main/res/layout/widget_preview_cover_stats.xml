@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Picker preview for the cover and stats widget (Android 12 and later). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_preview_card"
+    android:baselineAligned="false"
+    android:orientation="horizontal"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="96dp"
+        android:layout_height="match_parent"
+        android:background="@drawable/widget_preview_cover"
+        android:gravity="bottom|center_horizontal"
+        android:orientation="vertical"
+        android:paddingBottom="18dp">
+
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="7dp"
+            android:background="@drawable/widget_preview_block"
+            android:backgroundTint="@color/widget_preview_card" />
+
+        <FrameLayout
+            android:layout_width="32dp"
+            android:layout_height="4dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/widget_preview_block"
+            android:backgroundTint="@color/widget_preview_card" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:layout_width="70dp"
+            android:layout_height="6dp"
+            android:background="@drawable/widget_preview_block"
+            android:backgroundTint="@color/widget_preview_fill" />
+
+        <FrameLayout
+            android:layout_width="100dp"
+            android:layout_height="12dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/widget_preview_block"
+            android:backgroundTint="@color/widget_preview_ink" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/widget_preview_block"
+            android:backgroundTint="@color/widget_preview_rule" />
+
+        <FrameLayout
+            android:layout_width="80dp"
+            android:layout_height="8dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/widget_preview_block"
+            android:backgroundTint="@color/widget_preview_ink" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:layout_marginTop="10dp"
+            android:baselineAligned="false"
+            android:gravity="bottom"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="4dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_preview_block"
+                android:backgroundTint="@color/widget_preview_rule" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="16dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_preview_block"
+                android:backgroundTint="@color/widget_preview_past" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="4dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_preview_block"
+                android:backgroundTint="@color/widget_preview_rule" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="12dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_preview_block"
+                android:backgroundTint="@color/widget_preview_past" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="14dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_preview_block"
+                android:backgroundTint="@color/widget_preview_past" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="9dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_preview_block"
+                android:backgroundTint="@color/widget_preview_past" />
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="24dp"
+                android:layout_marginHorizontal="2dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_preview_block"
+                android:backgroundTint="@color/widget_preview_fill" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

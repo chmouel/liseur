@@ -67,6 +67,8 @@ import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.ui.eink.EInkDisplay
 import com.chmouel.liseur.ui.eink.OnyxEInkDisplay
+import com.chmouel.liseur.ui.widget.WidgetUpdater
+import com.chmouel.liseur.ui.widget.widgetInputs
 import com.chmouel.liseur.sync.SyncScope
 import android.util.Log
 import org.readium.r2.shared.util.asset.AssetRetriever
@@ -112,6 +114,12 @@ class AppContainer(context: Context) {
     val database = Room.databaseBuilder(context, LiseurDatabase::class.java, "liseur.db")
         .addMigrations(*LiseurDatabase.MIGRATIONS)
         .build()
+
+    init {
+        applicationScope.launch {
+            database.widgetInputs().collect { WidgetUpdater.schedule(context.applicationContext) }
+        }
+    }
 
     val readingSessions = ReadingSessionManager(
         dao = database.readingSessionDao(),

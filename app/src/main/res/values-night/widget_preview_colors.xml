@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_preview_card">#362F26</color>
+    <color name="widget_preview_tile">#1B1712</color>
+    <color name="widget_preview_rule">#4A4238</color>
+    <color name="widget_preview_ink">#EBE1D0</color>
+    <color name="widget_preview_fill">#E5A87C</color>
+    <color name="widget_preview_past">#7C5F48</color>
+    <color name="widget_preview_cover">#4A3324</color>
+</resources>

@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.remote.RemoteAuthInterceptor
 import com.chmouel.liseur.domain.shouldSyncOnForeground
 import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.SyncScope
+import com.chmouel.liseur.ui.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,6 +45,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
             container.bookOrbitSession.prime()
         }
         PositionSyncWorker.schedulePeriodic(this)
+        WidgetUpdater.reconcilePeriodic(this)
         syncWhenBroughtToTheFore()
     }
 
