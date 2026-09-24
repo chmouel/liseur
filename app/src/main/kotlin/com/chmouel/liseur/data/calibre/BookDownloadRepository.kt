@@ -487,26 +487,31 @@ class BookDownloadRepository(
         ownedCopyOf(book)?.let(::add)
     }.distinct()
 
-    private fun stampOf(files: List<File>): List<Pair<Long, Long>> =
+    private suspend fun stampOf(files: List<File>): List<Pair<Long, Long>> = withContext(Dispatchers.IO) {
         files.map { it.length() to it.lastModified() }
+    }
 
     /**
      * The size and modification time of the file the entry opens, which
      * for a book in a watched folder is a document the app does not own
      * and anything on the phone can replace.
      */
-    private fun sourceStampOf(book: Book): BookOrbitAdoptedSource.Stamp? {
-        val uri = book.openableUri()?.toUri() ?: return null
+    private suspend fun sourceStampOf(book: Book): BookOrbitAdoptedSource.Stamp? = withContext(Dispatchers.IO) {
+        val uri = book.openableUri()?.toUri() ?: return@withContext null
         if (uri.scheme == "file") {
-            val file = uri.path?.let(::File) ?: return UNVERIFIABLE
+            val file = uri.path?.let(::File) ?: return@withContext UNVERIFIABLE
             // A file that is not there is a fact, and one a replacement
             // would change.
-            return if (file.isFile) BookOrbitAdoptedSource.Stamp(file.length(), file.lastModified()) else MISSING
+            return@withContext if (file.isFile) {
+                BookOrbitAdoptedSource.Stamp(file.length(), file.lastModified())
+            } else {
+                MISSING
+            }
         }
         // A document whose provider will not say its size and time could
         // be replaced without this noticing, so it is never proved
         // unchanged.
-        return BookOrbitAdoptedSource(context).stamp(uri)
+        BookOrbitAdoptedSource(context).stamp(uri)
             ?.takeIf { it.size != null && it.modifiedAt != null }
             ?: UNVERIFIABLE
     }
