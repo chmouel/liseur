@@ -1216,7 +1216,7 @@ class ReaderViewModel(
                     return@launch
                 }
             val openedBookOrbit = try {
-                bookOrbitCfis?.openedIfConnected(bookId, bookUrl.toString(), downloads::fileFor)
+                bookOrbitCfis?.openedIfConnected(bookId, bookUrl.toString(), downloads::fileFor, ::ownEpub)
             } catch (error: IOException) {
                 Log.w("bookorbit-position", "The opened EPUB cannot be matched to its selected file", error)
                 null
@@ -2580,6 +2580,24 @@ class ReaderViewModel(
         prefsRepo.setFooterField(slot, field)
     }
 
+    private val epubOwnership = Any()
+    private var ownedEpub: BookOrbitOpenedEpub? = null
+    private var epubsReleased = false
+
+    /**
+     * Takes the opened EPUB as soon as it exists, on whichever thread
+     * opened it. The open can still be under way, or its result lost to
+     * cancellation, when this ViewModel is cleared; a copy arriving after
+     * that is released at once.
+     */
+    private fun ownEpub(opened: BookOrbitOpenedEpub) {
+        val late = synchronized(epubOwnership) {
+            if (!epubsReleased) ownedEpub = opened
+            epubsReleased
+        }
+        if (late) bookOrbitCfis?.release(opened)
+    }
+
     override fun onCleared() {
         // Reading on from the opened server place already agreed it with
         // the first move, so only an untouched opening is adopted on close.
@@ -2587,7 +2605,13 @@ class ReaderViewModel(
         val closingEpub = bookOrbitOpening.verifiedEpub
         // An uploaded book read from a document was parsed from a private
         // copy, which goes once nothing left here can still read it.
-        val openedEpubs = listOfNotNull((_state.value as? UiState.Ready)?.openedBookOrbit, closingEpub).distinct()
+        val owned = synchronized(epubOwnership) {
+            epubsReleased = true
+            ownedEpub
+        }
+        val openedEpubs = listOfNotNull(
+            (_state.value as? UiState.Ready)?.openedBookOrbit, closingEpub, owned,
+        ).distinct()
         val releaseEpubs = {
             if (openedEpubs.isNotEmpty()) CoroutineScope(Dispatchers.IO).launch {
                 openedEpubs.forEach { bookOrbitCfis?.release(it) }

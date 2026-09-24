@@ -260,20 +260,26 @@ class BookOrbitCfiRepositoryTest {
             }
 
             assertTrue(opened.spooled)
-            assertEquals(listOf(opened.file), spool.listFiles()!!.toList())
+            assertEquals(listOf(opened.file), spool.walkTopDown().filter { it.isFile }.toList())
+            // The startup sweep runs alongside opening and must not take
+            // this process's copy.
+            val earlier = java.io.File(spool, "p-earlier").apply { mkdirs() }
+            java.io.File(earlier, "left-behind.epub").writeText("x")
+            repository.sweepSpools()
+            assertFalse(earlier.exists())
+            assertTrue(opened.file.isFile)
             AdoptedDocs.modified = 2_000
             assertThrows(BookOrbitIdentityChanged::class.java) {
                 runBlocking { repository.originalDocument(opened, "OPS/chapter.xhtml", noDownload) }
             }
-            assertTrue(spool.listFiles()!!.isEmpty())
+            assertTrue(spool.walkTopDown().none { it.isFile })
 
             AdoptedDocs.modified = 1_000
-            val again = repository.openedPackage(context, uri, noDownload)
+            var owned: BookOrbitOpenedEpub? = null
+            val again = repository.openedPackage(context, uri, noDownload) { owned = it }
+            assertEquals(again, owned)
             repository.release(again)
-            assertTrue(spool.listFiles()!!.isEmpty())
-            java.io.File(spool, "left-behind.epub").writeText("x")
-            repository.sweepSpools()
-            assertTrue(spool.listFiles()!!.isEmpty())
+            assertTrue(spool.walkTopDown().none { it.isFile })
         }
 
     @Test
