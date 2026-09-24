@@ -97,6 +97,9 @@ class ReaderActivity : FragmentActivity() {
     /** A just-shelved book waiting for the reader to answer for it. */
     private var pendingOffer by mutableStateOf<Book?>(null)
 
+    /** The account [pendingOffer] was asked about, so a later yes goes there or nowhere. */
+    private var offerAccount: String? = null
+
     /** The title of a book on its way up, while the note about it shows. */
     private var sendingNote by mutableStateOf<String?>(null)
 
@@ -230,7 +233,7 @@ class ReaderActivity : FragmentActivity() {
                         pendingOffer?.let { book ->
                             UploadBookOfferDialog(
                                 title = book.title,
-                                onSend = { sendUp(book); pendingOffer = null },
+                                onSend = { sendUp(book, offerAccount); pendingOffer = null },
                                 onAlways = { sendUpAlways(book); pendingOffer = null },
                                 onDismiss = { declineUpload(book); pendingOffer = null },
                             )
@@ -603,17 +606,22 @@ class ReaderActivity : FragmentActivity() {
                 alreadyAnswered = container.uploadPrompts.wasAnswered(book.url),
             )
         ) {
-            UploadDecision.SEND -> sendUp(book)
+            UploadDecision.SEND -> sendUp(book, server?.accountKey)
             // Held rather than shown: the reader tapped a book to read
             // it, so the book gets the screen first. The composition
             // raises this once the publication is actually up.
-            UploadDecision.ASK -> pendingOffer = book
+            UploadDecision.ASK -> {
+                offerAccount = server?.accountKey
+                pendingOffer = book
+            }
             UploadDecision.NOTHING -> Unit
         }
     }
 
-    private fun sendUp(book: Book) {
-        container.bookUploads.enqueue(book)
+    private fun sendUp(book: Book, accountKey: String?) {
+        // The worker drops the job if another account is connected by
+        // the time it runs.
+        container.bookUploads.enqueue(book, accountKey = accountKey)
         container.uploadPrompts.answer(book.url)
         // "Sending", not "sent": this is queued work that may wait for a
         // network and may retry, and the note should not claim an
@@ -625,7 +633,7 @@ class ReaderActivity : FragmentActivity() {
         lifecycleScope.launch {
             container.appSettings.setUploadPolicy(UploadPolicy.ALWAYS)
         }
-        sendUp(book)
+        sendUp(book, offerAccount)
     }
 
     private fun declineUpload(book: Book) {
