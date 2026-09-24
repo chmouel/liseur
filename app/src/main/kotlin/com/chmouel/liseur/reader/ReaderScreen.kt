@@ -936,6 +936,17 @@ fun ReaderScreen(
         onProgressAction.onApproximateResume()
     }
 
+    // Puts the reader back where a reflow found them. A restore to the
+    // place already on screen is never reported, so the marker it arms
+    // would be left for the reader's next page turn, which would then
+    // be taken for the reflow and not saved. Anything reported before
+    // the scope closes is a reflow whether or not it claims the marker.
+    suspend fun restoreAfterReflow(nav: EpubNavigatorFragment, anchor: Locator) {
+        navigate(nav, anchor, NavigatorPositionEvent.PREFERENCE_REFLOW, verify = true)
+        settleLayout()
+        if (pendingPositionEvent == NavigatorPositionEvent.PREFERENCE_REFLOW) pendingPositionEvent = null
+    }
+
     suspend fun openingExactAnchorArrived(nav: EpubNavigatorFragment, locator: Locator): Boolean {
         val elapsedMs = SystemClock.elapsedRealtime() - gateOpenedAt
         val budgetMs = OpeningRestoration.exactOpenVerifyBudgetMs(elapsedMs)
@@ -1587,12 +1598,7 @@ fun ReaderScreen(
                     // are what the reader asked for — and only the
                     // reader's place is left where they put it.
                     if (anchor != null && moves.unchangedSince(since)) {
-                        navigate(
-                            nav = nav,
-                            locator = anchor,
-                            event = NavigatorPositionEvent.PREFERENCE_REFLOW,
-                            verify = true,
-                        )
+                        restoreAfterReflow(nav, anchor)
                     }
                 }
             }
@@ -1695,12 +1701,7 @@ fun ReaderScreen(
                     // restoring the wrong chapter moves the reader out
                     // of the chapter they are in.
                     if (anchor != null && stillFitting()) {
-                        navigate(
-                            nav = nav,
-                            locator = anchor,
-                            event = NavigatorPositionEvent.PREFERENCE_REFLOW,
-                            verify = true,
-                        )
+                        restoreAfterReflow(nav, anchor)
                     }
                 }
             }
