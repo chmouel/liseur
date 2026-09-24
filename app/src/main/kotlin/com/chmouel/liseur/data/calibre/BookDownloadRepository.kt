@@ -450,6 +450,7 @@ class BookDownloadRepository(
             ?: return ServerDeleteResult.Failed(null)
         val files = ownedFilesOf(sent)
         val stamp = stampOf(files) to sourceStampOf(sent)
+        val verifiable = stamp.second != UNVERIFIABLE
         val result = deleter.delete(server.baseUrl, credentials, book, forgetReading)
         if (result !is ServerDeleteResult.Deleted) return result
         var removed = false
@@ -459,7 +460,7 @@ class BookDownloadRepository(
             if (now.remoteUuid != sent.remoteUuid || now.localUri != sent.localUri) {
                 return@inTransaction
             }
-            if (stampOf(ownedFilesOf(now)) to sourceStampOf(now) != stamp) return@inTransaction
+            if (!verifiable || stampOf(ownedFilesOf(now)) to sourceStampOf(now) != stamp) return@inTransaction
             deleter.forgetDeleted(book.url, account)
             // The book is gone from the server too, so this is not a
             // copy being freed up: nothing is coming back, and the
@@ -494,8 +495,21 @@ class BookDownloadRepository(
      * for a book in a watched folder is a document the app does not own
      * and anything on the phone can replace.
      */
-    private fun sourceStampOf(book: Book): BookOrbitAdoptedSource.Stamp? =
-        book.openableUri()?.toUri()?.let(BookOrbitAdoptedSource(context)::stamp)
+    private fun sourceStampOf(book: Book): BookOrbitAdoptedSource.Stamp? {
+        val uri = book.openableUri()?.toUri() ?: return null
+        if (uri.scheme == "file") {
+            val file = uri.path?.let(::File) ?: return UNVERIFIABLE
+            // A file that is not there is a fact, and one a replacement
+            // would change.
+            return if (file.isFile) BookOrbitAdoptedSource.Stamp(file.length(), file.lastModified()) else MISSING
+        }
+        // A document whose provider will not say its size and time could
+        // be replaced without this noticing, so it is never proved
+        // unchanged.
+        return BookOrbitAdoptedSource(context).stamp(uri)
+            ?.takeIf { it.size != null && it.modifiedAt != null }
+            ?: UNVERIFIABLE
+    }
 
     /**
      * Removes a book that came from a folder or a single import.
@@ -561,6 +575,10 @@ class BookDownloadRepository(
         const val KEY_STOOD_DOWN = "stood_down"
         const val BOOK_TAG_PREFIX = "book:"
         private const val BATCH_TAG_PREFIX = "batch:"
+
+        /** What a source stamp says when there is no file, or no way to tell. */
+        private val MISSING = BookOrbitAdoptedSource.Stamp(-1, -1)
+        private val UNVERIFIABLE = BookOrbitAdoptedSource.Stamp(null, null)
 
         /**
          * How many requests to send before letting the thread breathe.
