@@ -30,7 +30,7 @@ import com.chmouel.liseur.R
 import kotlinx.coroutines.coroutineScope
 
 class WeekStatsWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Responsive(setOf(StatsCompact, StatsRoomy))
+    override val sizeMode = SizeMode.Responsive(setOf(StatsCompact, StatsMedium, StatsRoomy))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) = coroutineScope {
         val live = LiveSnapshot.start(context, id, this, WidgetContent.STATS)
@@ -53,20 +53,35 @@ class WeekStatsWidget : GlanceAppWidget() {
 private fun StatsContent(context: Context, stats: WidgetStats) {
     val figures = stats.figures
     val roomy = sizeAtLeast(StatsRoomy)
+    val medium = !roomy && sizeAtLeast(StatsMedium)
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .padding(if (roomy) 14.dp else 8.dp)
+            .padding(if (roomy || medium) 14.dp else 8.dp)
             .background(widgetCard),
     ) {
         HeroTime(
             label = context.getString(figures.period.headingRes),
             value = stats.totalLabel,
             modifier = GlanceModifier.fillMaxWidth(),
-            compact = !roomy,
+            compact = !roomy && !medium,
         )
         Spacer(GlanceModifier.height(if (roomy) 10.dp else 6.dp))
-        if (roomy) {
+        if (medium) {
+            // Two rows on many launchers: the tiles give way to one line
+            // of figures so the chart still fits.
+            CompactTally(
+                left = figures.streakDays.toString(),
+                leftLabel = context.getString(R.string.reading_stats_streak),
+                right = figures.sessions.toString(),
+                rightLabel = context.getString(R.string.reading_stats_sessions),
+            )
+            if (figures.bars.isNotEmpty()) {
+                Spacer(GlanceModifier.height(8.dp))
+                Spacer(GlanceModifier.defaultWeight())
+                StatsBars(stats = stats, barsHeight = 40.dp)
+            }
+        } else if (roomy) {
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 StatTile(
                     label = context.getString(R.string.reading_stats_streak),

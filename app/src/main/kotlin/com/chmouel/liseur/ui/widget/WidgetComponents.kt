@@ -47,10 +47,13 @@ import kotlin.math.max
 
 internal val CoverSmall = DpSize(110.dp, 165.dp)
 internal val CoverLarge = DpSize(180.dp, 270.dp)
+// Each layout's height leaves room for what it draws at the default font
+// scale plus some headroom; a breakpoint below that clips the chart.
 internal val StatsCompact = DpSize(180.dp, 110.dp)
-internal val StatsRoomy = DpSize(250.dp, 180.dp)
+internal val StatsMedium = DpSize(250.dp, 180.dp)
+internal val StatsRoomy = DpSize(250.dp, 230.dp)
 internal val CoverStatsCompact = DpSize(250.dp, 110.dp)
-internal val CoverStatsRoomy = DpSize(320.dp, 160.dp)
+internal val CoverStatsRoomy = DpSize(320.dp, 190.dp)
 
 /** Glance's ColorProviders stop at surfaceVariant; paper card tint maps there. */
 internal val widgetCard = ColorProvider(day = PaperHighest, night = NightSurfaceHighest)
