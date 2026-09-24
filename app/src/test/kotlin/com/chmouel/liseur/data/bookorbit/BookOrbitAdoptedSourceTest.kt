@@ -93,7 +93,20 @@ class BookOrbitAdoptedSourceTest {
     }
 
     @Test
-    fun `a failed read forgets the earlier match`() = runBlocking {
+    fun `a mismatch is remembered too while the stamp is unchanged`() = runBlocking {
+        file.writeText("the look")
+        file.setLastModified(1_700_000_000_000L)
+        assertFalse(source.holds("book", uri, expected))
+        file.writeText("the book")
+        file.setLastModified(1_700_000_000_000L)
+
+        assertFalse(source.holds("book", uri, expected))
+        clock += 5 * 60_000L
+        assertTrue(source.holds("book", uri, expected))
+    }
+
+    @Test
+    fun `a mismatch under another stamp replaces the earlier match`() = runBlocking {
         assertTrue(source.holds("book", uri, expected))
         file.writeText("the look")
         file.setLastModified(1_700_000_060_000L)

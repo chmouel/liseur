@@ -1353,10 +1353,12 @@ CFI live.
   swept at startup. Before a position is prepared or sent, and before any
   status is read or written, the source is checked against the digest
   (`BookOrbitAdoptedSource.holdsUploaded`), and checked again after the
-  network read that precedes the write. A match is remembered for five
-  minutes while the size and modification time are unchanged, because a
-  full hash on every page turn is too slow; a replacement that keeps both
-  is caught by the next process or after that window.
+  network read that precedes the write. The answer, match or mismatch,
+  is remembered for five minutes while the size and modification time
+  are unchanged, because a full hash on every page turn is too slow; a
+  replacement that keeps both is caught by the next process or after
+  that window. A zero modification time from a document provider means
+  unknown and is never remembered.
 - Delete (`BookOrbitDeleteClient`, `library_delete_books`) is
   `DELETE /books` with `{"bookIds":[id]}` and removes the whole book for
   every reader. The id comes from the entry's scoped `remote_uuid` and

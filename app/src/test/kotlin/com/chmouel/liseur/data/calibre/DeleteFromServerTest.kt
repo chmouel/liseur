@@ -178,6 +178,17 @@ class DeleteFromServerTest {
         }
 
     @Test
+    fun `an entry removed while the delete was out still loses its binding`() = runBlocking {
+        val book = downloaded("bo_scope_21")
+        val deleter = Deleter(during = { db.bookDao().deleteByUrls(listOf(book.url)) })
+
+        assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
+
+        assertNull(db.bookDao().getByUrl(book.url))
+        assertEquals(listOf(book.url to server.accountKey), deleter.forgotten)
+    }
+
+    @Test
     fun `a book relinked while the delete was out keeps its new link`() = runBlocking {
         val book = downloaded("bo_scope_20")
         val deleter = Deleter(during = {
