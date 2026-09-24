@@ -152,6 +152,16 @@ longer a prerequisite. Automatic position pushes are enabled after
 independent-device and final-path acceptance. See the
 [BookOrbit protocol](../../DEVELOPER.md#bookorbit-protocol).
 
+Uploading a phone-local book and deleting a server book were added later,
+behind `library_upload` and `library_delete_books`. An upload keeps the
+local entry's URL and links it to the server file only when that file is
+proved; the proof is stored as `book_orbit_binding.local_sha256`, which
+the CFI bridge and the position push check against the local bytes. A
+delete removes the whole BookOrbit book for every reader, not one file,
+and the dialog says so. BookOrbit does not deduplicate uploads by
+digest, so a book already on the server is usually refused as a
+destination conflict and stays local.
+
 Upstream requests worth filing: a client-idempotent annotation create, a
 conditional progress write, the stored file digest, and a range-capable
 download that still checks `library_download`.

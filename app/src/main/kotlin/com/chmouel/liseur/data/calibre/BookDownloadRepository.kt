@@ -122,6 +122,7 @@ class BookDownloadRepository(
      */
     private val accountKey: suspend () -> String? = { null },
     private val bulkTransferGate: BulkTransferGate = BulkTransferGate(),
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     private val workManager get() = WorkManager.getInstance(context)
 
@@ -439,17 +440,53 @@ class BookDownloadRepository(
         forgetReading: Boolean = false,
     ): ServerDeleteResult {
         val credentials = server.credentials ?: return ServerDeleteResult.Failed(null)
+        val account = server.accountKey
+        // What the request is about, taken before it leaves. The answer
+        // may come back after the reader has switched account, relinked
+        // the entry or replaced its file, and a "deleted" about the book
+        // as it was is no licence to remove the one that is there now.
+        val sent = bookDao.getByUrl(book.url)?.takeIf { it.remoteUuid == book.remoteUuid }
+            ?: return ServerDeleteResult.Failed(null)
+        val files = ownedFilesOf(sent)
+        val stamp = stampOf(files)
         val result = deleter.delete(server.baseUrl, credentials, book, forgetReading)
-        if (result is ServerDeleteResult.Deleted) {
-            book.remoteUuid?.let { fileFor(it).delete() }
-            deleteOwnedCopy(book)
+        if (result !is ServerDeleteResult.Deleted) return result
+        var removed = false
+        inTransaction {
+            val now = bookDao.getByUrl(book.url) ?: return@inTransaction
+            if (accountKey() != account) return@inTransaction
+            if (now.remoteUuid != sent.remoteUuid || now.localUri != sent.localUri) {
+                return@inTransaction
+            }
+            if (stampOf(ownedFilesOf(now)) != stamp) return@inTransaction
+            deleter.forgetDeleted(book.url, account)
             // The book is gone from the server too, so this is not a
             // copy being freed up: nothing is coming back, and the
             // hours are no longer about anything.
             bookRemoval.deleteByUrls(listOf(book.url))
+            removed = true
+        }
+        // Files after the rows: a file deleted for a transaction that
+        // then did not commit is a book whose entry points at nothing.
+        if (removed) {
+            files.forEach { it.delete() }
+        } else {
+            Log.w(TAG, "${book.url} changed while it was deleted from the server; kept here")
         }
         return result
     }
+
+    /**
+     * The files deleting this book here would remove: the download named
+     * after its server id, and a private copy in the app's own store.
+     */
+    private fun ownedFilesOf(book: Book): List<File> = buildList {
+        book.remoteUuid?.let { add(fileFor(it)) }
+        ownedCopyOf(book)?.let(::add)
+    }.distinct()
+
+    private fun stampOf(files: List<File>): List<Pair<Long, Long>> =
+        files.map { it.length() to it.lastModified() }
 
     /**
      * Removes a book that came from a folder or a single import.
@@ -492,10 +529,14 @@ class BookDownloadRepository(
      * left alone.
      */
     private fun deleteOwnedCopy(book: Book) {
-        val local = book.localUri?.takeIf { it.startsWith("file:") } ?: return
-        val file = runCatching { File(URI(local)).canonicalFile }.getOrNull() ?: return
-        val owned = runCatching { booksDir().canonicalFile }.getOrNull() ?: return
-        if (file.parentFile == owned) file.delete()
+        ownedCopyOf(book)?.delete()
+    }
+
+    private fun ownedCopyOf(book: Book): File? {
+        val local = book.localUri?.takeIf { it.startsWith("file:") } ?: return null
+        val file = runCatching { File(URI(local)).canonicalFile }.getOrNull() ?: return null
+        val owned = runCatching { booksDir().canonicalFile }.getOrNull() ?: return null
+        return file.takeIf { it.parentFile == owned }
     }
 
     fun fileFor(uuid: String): File = File(booksDir(), "$uuid.epub")

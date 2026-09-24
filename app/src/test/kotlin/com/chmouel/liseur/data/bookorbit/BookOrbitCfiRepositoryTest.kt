@@ -30,6 +30,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.net.InetAddress
@@ -209,6 +210,142 @@ class BookOrbitCfiRepositoryTest {
             runBlocking { repository.originalDocument(opened, "OPS/chapter.xhtml", ownedFile) }
         }
     }
+
+    @Test
+    fun `an uploaded book in the app's store is read where it is, and only while it is the sent file`(): Unit =
+        runBlocking {
+            val file = folder.newFile("uploaded.epub").also { writeEpub(it, "Sent passage") }
+            val uri = Uri.fromFile(file).toString()
+            adopt(uri, file.readBytes())
+            val sources = BookOrbitAdoptedSource(ApplicationProvider.getApplicationContext())
+            repository = BookOrbitCfiRepository(db, sources, folder.newFolder("spool"))
+            val context = repository.capture(binding.bookUrl)
+            val noDownload: (String) -> java.io.File = { error("an uploaded book has no download") }
+
+            val opened = repository.openedPackage(context, uri, noDownload)
+
+            assertEquals(file, opened.file)
+            assertFalse(opened.spooled)
+            assertEquals("Sent passage", passage(repository.originalDocument(opened, "OPS/chapter.xhtml", noDownload)))
+            assertThrows(BookOrbitIdentityChanged::class.java) {
+                runBlocking { repository.openedPackage(context, "file:///somewhere/else.epub", noDownload) }
+            }
+            // Different bytes are not the server's file, whatever they are called.
+            writeEpub(file, "Other passage")
+            assertThrows(BookOrbitIdentityChanged::class.java) {
+                runBlocking { repository.openedPackage(context, uri, noDownload) }
+            }
+            assertTrue(file.isFile)
+        }
+
+    @Test
+    fun `an uploaded document is copied once, and the copy goes when it stops being the sent file`(): Unit =
+        runBlocking {
+            val bytes = folder.newFile("source.epub").also { writeEpub(it, "Sent passage") }.readBytes()
+            AdoptedDocs.bytes = bytes
+            AdoptedDocs.modified = 1_000
+            Robolectric.buildContentProvider(AdoptedDocs::class.java).create(ADOPTED_AUTHORITY)
+            val uri = "content://$ADOPTED_AUTHORITY/document/book"
+            adopt(uri, bytes)
+            val spool = folder.newFolder("spool")
+            repository = BookOrbitCfiRepository(
+                db, BookOrbitAdoptedSource(ApplicationProvider.getApplicationContext()), spool,
+            )
+            val context = repository.capture(binding.bookUrl)
+            val noDownload: (String) -> java.io.File = { error("an uploaded book has no download") }
+
+            val opened = repository.openedPackage(context, uri, noDownload)
+            repeat(2) {
+                assertEquals("Sent passage", passage(repository.originalDocument(opened, "OPS/chapter.xhtml", noDownload)))
+            }
+
+            assertTrue(opened.spooled)
+            assertEquals(listOf(opened.file), spool.listFiles()!!.toList())
+            AdoptedDocs.modified = 2_000
+            assertThrows(BookOrbitIdentityChanged::class.java) {
+                runBlocking { repository.originalDocument(opened, "OPS/chapter.xhtml", noDownload) }
+            }
+            assertTrue(spool.listFiles()!!.isEmpty())
+
+            AdoptedDocs.modified = 1_000
+            val again = repository.openedPackage(context, uri, noDownload)
+            repository.release(again)
+            assertTrue(spool.listFiles()!!.isEmpty())
+            java.io.File(spool, "left-behind.epub").writeText("x")
+            repository.sweepSpools()
+            assertTrue(spool.listFiles()!!.isEmpty())
+        }
+
+    @Test
+    fun `a stored place is not sent for an uploaded file that has been replaced`(): Unit = runBlocking {
+        val file = folder.newFile("uploaded.epub").also { writeEpub(it, "Sent passage") }
+        val sent = file.readBytes()
+        adopt(Uri.fromFile(file).toString(), sent)
+        val context = repository.capture(binding.bookUrl)
+        saveExact(context, "epubcfi(/6/4!/4/2:3)", 10)
+        val modified = file.lastModified()
+        // Same size, same time, different bytes: only the digest tells.
+        file.writeBytes(sent.copyOf().also { it[it.size - 1] = (it.last() + 1).toByte() })
+        file.setLastModified(modified)
+
+        assertThrows(BookOrbitPositionUnresolved::class.java) {
+            runBlocking { agreement(BookOrbitAdoptedSource(ApplicationProvider.getApplicationContext())).prepare(context) }
+        }
+        assertEquals(0, server.requestCount)
+
+        file.writeBytes(sent)
+        file.setLastModified(modified)
+        server.enqueue(MockResponse(body = fixture("progress-unopened.json")))
+        agreement(BookOrbitAdoptedSource(ApplicationProvider.getApplicationContext())).prepare(context)
+        server.takeRequest()
+
+        // A prepared send resumed in a later process checks again.
+        file.writeBytes(sent.copyOf().also { it[it.size - 1] = (it.last() + 1).toByte() })
+        file.setLastModified(modified)
+        assertThrows(BookOrbitPositionUnresolved::class.java) {
+            runBlocking { agreement(BookOrbitAdoptedSource(ApplicationProvider.getApplicationContext())).send(context) }
+        }
+        assertEquals(1, server.requestCount)
+        assertEquals(BookOrbitAttempt.PREPARED.name, agreement().state(context).attemptState)
+    }
+
+    /** The shelf row and binding an upload adoption leaves behind for [uri]. */
+    private suspend fun adopt(uri: String, bytes: ByteArray) {
+        db.bookDao().upsert(
+            Book(
+                url = binding.bookUrl, title = "Uploaded", author = null, coverPath = null,
+                source = null, addedAt = 1, lastOpenedAt = null, localUri = uri,
+                remoteUuid = BookOrbitScope.remoteId(account.baseUrl, "1", 12),
+                downloadHref = BookOrbitUrl.downloadHref(34), downloadState = DownloadState.DOWNLOADED,
+            ),
+        )
+        db.bookOrbitBindingDao().write(
+            binding.copy(
+                fileSize = bytes.size.toLong(),
+                localSha256 = BookOrbitUploadClient.sha256Of(bytes.inputStream()),
+            ),
+        )
+    }
+
+    private fun writeEpub(file: java.io.File, text: String) {
+        ZipOutputStream(file.outputStream()).use { zip ->
+            for ((name, xml) in mapOf(
+                "META-INF/container.xml" to
+                    """<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""",
+                "OPS/book.opf" to
+                    """<package xmlns="http://www.idpf.org/2007/opf"><manifest><item id="one" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="one"/></spine></package>""",
+                "OPS/chapter.xhtml" to
+                    """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>$text</p></body></html>""",
+            )) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(xml.toByteArray())
+                zip.closeEntry()
+            }
+        }
+    }
+
+    private fun passage(document: org.w3c.dom.Document?): String? =
+        document?.getElementsByTagNameNS("*", "p")?.item(0)?.textContent
 
     @Test
     fun `verified local CFI is paired with one revision and cleared by a later position`() = runBlocking {
@@ -425,11 +562,13 @@ class BookOrbitCfiRepositoryTest {
         assertEquals(0, server.requestCount)
     }
 
-    private fun agreement(): BookOrbitPositionAgreementRepository {
+    private fun agreement(
+        sources: BookOrbitAdoptedSource = BookOrbitAdoptedSource(null),
+    ): BookOrbitPositionAgreementRepository {
         val http = BookOrbitHttp(BookOrbitSession(db.remoteServerDao()))
         return BookOrbitPositionAgreementRepository(
             db, BookOrbitProgressClient(http, repository),
-            BookOrbitProgressMutationTransport(http, repository),
+            BookOrbitProgressMutationTransport(http, repository), sources,
         )
     }
 
@@ -2268,5 +2407,32 @@ class BookOrbitCfiRepositoryTest {
           "manifest":[{"id":"one","href":"OPS/one.xhtml","mediaType":"application/xhtml+xml","size":123}],
           "spine":[{"idref":"one","href":"OPS/one.xhtml","mediaType":"application/xhtml+xml","linear":true}],
           "optionalFiles":[],"toc":null,"metadata":{},"coverPath":null}"""
+        const val ADOPTED_AUTHORITY = "com.chmouel.liseur.test.adopted"
+    }
+
+    /** One document, as a folder provider would serve it. */
+    class AdoptedDocs : android.content.ContentProvider() {
+        override fun onCreate() = true
+        override fun query(
+            uri: Uri, projection: Array<out String>?, selection: String?,
+            args: Array<out String>?, sort: String?,
+        ): android.database.Cursor = android.database.MatrixCursor(
+            arrayOf(android.provider.OpenableColumns.SIZE, android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED),
+        ).apply { addRow(arrayOf<Any>(bytes.size.toLong(), modified)) }
+
+        override fun openFile(uri: Uri, mode: String): android.os.ParcelFileDescriptor {
+            val file = java.io.File.createTempFile("served", ".epub").apply { writeBytes(bytes); deleteOnExit() }
+            return android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+        }
+
+        override fun getType(uri: Uri): String? = null
+        override fun insert(uri: Uri, values: android.content.ContentValues?): Uri? = null
+        override fun delete(uri: Uri, s: String?, a: Array<out String>?) = 0
+        override fun update(uri: Uri, v: android.content.ContentValues?, s: String?, a: Array<out String>?) = 0
+
+        companion object {
+            var bytes = ByteArray(0)
+            var modified = 0L
+        }
     }
 }

@@ -841,6 +841,7 @@ private fun LibraryRoute(
             ConfirmServerDeleteDialog(
                 book = book,
                 canForgetReading = state.canForgetServerReading,
+                deletesWholeBook = state.serverDeletesWholeBook,
                 onConfirm = { forgetReading ->
                     viewModel.deleteFromServer(book, forgetReading)
                     seriesServerDelete = null

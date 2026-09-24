@@ -43,6 +43,14 @@ class BookOrbitCatalogClient(
     private val serverDao: RemoteServerDao,
     private val http: BookOrbitHttp,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
+    /**
+     * The library URL already holding each of these remote ids.
+     *
+     * A book uploaded from this device keeps its own URL and only gains
+     * the server's id, so its binding lives under that URL rather than
+     * the one this client would derive. Asked once per page.
+     */
+    private val localUrls: suspend (List<String>) -> Map<String, String> = { emptyMap() },
 ) : CatalogSource {
 
     override suspend fun allBooks(
@@ -85,8 +93,9 @@ class BookOrbitCatalogClient(
                 complete = true
                 break
             }
+            val held = heldUrls(context, server, answer.cards)
             val mapped = answer.cards.mapNotNull { card ->
-                cardFor(context, server, card, persistBinding = true)?.also { cards += it.ref }
+                cardFor(context, server, card, persistBinding = true, held)?.also { cards += it.ref }
                     ?.let { it.book }
             }
             books += mapped
@@ -116,14 +125,27 @@ class BookOrbitCatalogClient(
         val context = BookOrbitRequestContext.from(server)
             ?.takeIf { com.chmouel.liseur.data.remote.RemoteUrl.sameAddress(it.baseUrl, baseUrl) }
             ?: throw RemoteHttpFailure(SyncFailure.Unauthorised)
-        return BookOrbitBooks.parsePage(
+        val found = BookOrbitBooks.parsePage(
             fetchPage(context, page = 0, qi = query, size = SEARCH_SIZE, filtered = false),
-        ).cards.mapNotNull { card ->
+        ).cards
+        val held = heldUrls(context, server, found)
+        return found.mapNotNull { card ->
             // A search result is not in the library yet. Looking at one
             // must not choose an edition that a later adoption is forced
             // to keep.
-            cardFor(context, server, card, persistBinding = false)?.book
+            cardFor(context, server, card, persistBinding = false, held)?.book
         }
+    }
+
+    /** See [localUrls]. Empty without a stable account id, like [cardFor]. */
+    private suspend fun heldUrls(
+        context: BookOrbitRequestContext,
+        server: RemoteServer,
+        cards: List<BookOrbitCard>,
+    ): Map<String, String> {
+        val accountId = server.accountId ?: return emptyMap()
+        val ids = cards.map { BookOrbitScope.remoteId(context.baseUrl, accountId, it.bookId) }
+        return if (ids.isEmpty()) emptyMap() else localUrls(ids)
     }
 
     /**
@@ -140,6 +162,7 @@ class BookOrbitCatalogClient(
         server: RemoteServer,
         card: BookOrbitCard,
         persistBinding: Boolean,
+        held: Map<String, String> = emptyMap(),
     ): CardResult? {
         val offered = BookOrbitBooks.chosenFile(card) ?: return null
         val accountId = server.accountId
@@ -151,7 +174,7 @@ class BookOrbitCatalogClient(
             // than given one that could be adopted by somebody else.
             return null
         }
-        val bookUrl = ServerKind.BOOKORBIT.remoteUrl(remoteId)
+        val bookUrl = held[remoteId] ?: ServerKind.BOOKORBIT.remoteUrl(remoteId)
         var binding = bindings.get(server.accountKey, bookUrl)
         if (binding == null && persistBinding) {
             val proposed = BookOrbitBinding(

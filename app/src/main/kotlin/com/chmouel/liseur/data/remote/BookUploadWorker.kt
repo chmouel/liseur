@@ -80,9 +80,16 @@ class BookUploadWorker(
                 folderId = folderId,
                 file = snapshot.file,
                 filename = filenameFor(book.title, book.author),
+                bookUrl = book.url,
+                sha256 = snapshot.fingerprint.sha256,
             )) {
                 is ServerUploadResult.Uploaded ->
-                    adopt(container, account, book, snapshot, result.remoteBookId)
+                    adopt(container, account, book, snapshot, uploader, result)
+                is ServerUploadResult.UploadedUnlinked -> record(
+                    container, account, book,
+                    UploadRefusal.UNLINKED, result.reason, snapshot,
+                    "$bookUrl is on the server but could not be tied to it",
+                )
                 // The bytes are safe but the server had not catalogued
                 // them when it answered. Coming back is how the id is
                 // learnt: the server keys on the book's digest, so the
@@ -179,7 +186,8 @@ class BookUploadWorker(
         account: String,
         book: Book,
         snapshot: Snapshot,
-        remoteBookId: String,
+        uploader: BookUploader,
+        result: ServerUploadResult.Uploaded,
     ): Result {
         // The bytes the server answered about. If the file underneath
         // has moved on since — a library folder is somebody else's to
@@ -191,10 +199,12 @@ class BookUploadWorker(
         }
         val dao = container.database.bookDao()
         var linked = false
+        var blocked = false
         // A catalog pass that ran between the upload and this line has
         // already introduced the server's copy under its own URL. That
-        // row is minutes old and holds no reading, while this one holds
-        // all of it, so the catalog's is the one that goes.
+        // row is normally minutes old and holds no reading, while this
+        // one holds all of it, so the catalog's is the one that goes;
+        // but only if it really holds nothing, or the link is not made.
         //
         // Looking and linking are one transaction: a pass landing
         // between the two would otherwise insert the row just after it
@@ -206,22 +216,39 @@ class BookUploadWorker(
             // capabilities on and off.
             if (container.remoteAccount.current()?.accountKey != account) return@withTransaction
             if (dao.getByUrl(book.url) == null) return@withTransaction
-            dao.byRemoteUuids(listOf(remoteBookId))
+            val duplicates = dao.byRemoteUuids(listOf(result.remoteUuid))
                 .map { it.url }
                 .filter { it != book.url }
-                .takeIf { it.isNotEmpty() }
-                ?.let { dao.deleteByUrls(it) }
+            val clear = container.bookRemoval.dropUntouchedCatalogDuplicates(
+                duplicates,
+                result.remoteUuid,
+            ) { urls ->
+                val bindings = container.database.bookOrbitBindingDao()
+                urls.forEach { bindings.clearBook(it) }
+            }
+            if (!clear) {
+                blocked = true
+                return@withTransaction
+            }
             dao.linkToRemote(
                 url = book.url,
-                remoteUuid = remoteBookId,
-                downloadHref = "/v1/books/$remoteBookId/download",
+                remoteUuid = result.remoteUuid,
+                downloadHref = result.downloadHref,
                 coverUrl = null,
                 remoteUpdatedAt = System.currentTimeMillis(),
             )
+            uploader.adopted(book.url, account, result, snapshot.fingerprint.sha256)
             // A book that went up is one this account has: whatever it
             // once refused about these bytes is spent.
             container.database.uploadRefusalDao().clear(book.url, account)
             linked = true
+        }
+        if (blocked) {
+            return record(
+                container, account, book,
+                UploadRefusal.UNLINKED, null, snapshot,
+                "${book.url}: another entry for the server copy holds reading",
+            )
         }
         if (!linked) return giveUp("${book.url}: nothing left to link it to")
         container.remoteCatalog.refreshDetached()

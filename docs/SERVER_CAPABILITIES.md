@@ -50,8 +50,8 @@ is never set to true for Komga.
 | Search | Same endpoint with `q` | `BookOrbitCatalogClient.search()` | Client is implemented; the library UI still searches its local shelf only |
 | File download | `GET /api/v1/books/files/{fileId}/download` | `BookOrbitFileSource` | Requires `library_download`, checked at setup. No range support, so an interrupted transfer restarts |
 | Position and status sync | `GET`/`POST /api/v1/books/files/{fileId}/progress`, `GET /api/v1/books/{id}`, `PATCH /api/v1/books/{id}/status` | Exact EPUB position sync and finished/unread status sync enabled | Position sync retains exact CFIs and selected-file identity. Status uses a separate agreement and one-shot status-only PATCH. `syncAbility = EXACT` describes positions |
-| Book upload | `POST /api/v1/libraries/{id}/upload`, chunked `/api/v1/uploads/*` | Not implemented | Requires `library_upload`; a book's bytes would be adopted through the file binding |
-| Book delete | `DELETE /api/v1/books`, `DELETE /api/v1/books/files/{fileId}` | Not implemented | Requires `library_delete_books` |
+| Book upload | `GET /api/v1/uploads/capabilities`, resumable `/api/v1/uploads` sessions (create, chunks, complete) | `BookOrbitUploadClient` | Requires `library_upload`. Goes to the first library that takes EPUB. The local entry keeps its URL and is linked to the server file only when that file is proved by size, or by digest when several fit; otherwise the book is marked as uploaded but unlinked |
+| Book delete | `DELETE /api/v1/books` | `BookOrbitDeleteClient` | Requires `library_delete_books`. Deletes the whole book on the server: every format, the cover, and every reader's progress. The confirmation dialog says so. Per-file delete is not used |
 | Collections | `/api/v1/collections/*` | Not implemented | |
 | Statistics | `/api/v1/user-statistics/*` | Not implemented | |
 | Settings | `/api/v1/reader/*`, `/api/v1/user-preferences/*` | Not implemented | |

@@ -93,6 +93,8 @@ class LiseurSyncUploadClient(
         folderId: String,
         file: File,
         filename: String,
+        bookUrl: String,
+        sha256: String,
     ): ServerUploadResult = withContext(Dispatchers.IO) {
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)

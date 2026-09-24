@@ -1300,6 +1300,53 @@ CFI live.
 - Reading status has its own agreements and exact-byte PATCH, keyed on
   `status_revision` so a status change keeps the verified CFI. Automatic
   writes are on (`BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED`).
+- Upload (`BookOrbitUploadClient`, `library_upload`) uses the resumable
+  `/uploads` session API against the first library whose
+  `allowedFormats` is empty or includes EPUB. The idempotency key is
+  `liseur-<digest>-gN`: the digest covers the scope, the local book URL,
+  the library, the file name, the size and the content sha256, so two
+  local entries with identical bytes never share a session. The client
+  acts only on the session state the server reports: `receiving` resumes
+  from `receivedBytes` (an offset mismatch is settled by reading the
+  session back), `processing` is `Pending` even with a `bookId`,
+  `completed` is adopted, and `expired`, `cancelled`, an unexplained
+  `failed` or a rejected whole-file checksum move to the next generation,
+  at most five. Coded refusals are read from every answer, because
+  `complete` rethrows the original code while storing the session as
+  `failed`. Server messages are never shown or logged; they can carry
+  disk paths.
+- An uploaded book keeps its local URL. The catalog finds its binding
+  through `remote_uuid` (`localUrls`), so the binding lives under that
+  URL. The server file is named only when it is proved: a single EPUB of
+  the sent size in the returned book, or, when a `book_per_folder`
+  library joined an existing book, the one candidate (of at most three)
+  whose downloaded bytes match the sent digest. Otherwise the worker
+  records an `UNLINKED` refusal for those bytes and does not link. Empty
+  catalog duplicates of the adopted book are removed only when every one
+  is untouched (`BookRemoval.dropUntouchedCatalogDuplicates`); one
+  holding anything keeps them all and the book stays unlinked.
+- The adoption writes `book_orbit_binding.local_sha256` (schema 60), and
+  nothing else does. It is what lets an uploaded book's own file stand
+  for the server file when a CFI is computed. `BookOrbitCfiRepository`
+  reads an app-owned file in place and copies a document URI once into a
+  private spool; the bytes parsed must hash to `local_sha256`, and the
+  source's size and modification time are checked again on every use.
+  The spool is deleted when a check fails and when the reader closes, and
+  swept at startup. Before a position is prepared or sent,
+  `BookOrbitPositionAgreementRepository` checks the source against the
+  digest (`BookOrbitAdoptedSource.holds`). A match is remembered for five
+  minutes while the size and modification time are unchanged, because a
+  full hash on every page turn is too slow; a replacement that keeps both
+  is caught by the next process or after that window.
+- Delete (`BookOrbitDeleteClient`, `library_delete_books`) is
+  `DELETE /books` with `{"bookIds":[id]}` and removes the whole book for
+  every reader. The id comes from the entry's scoped `remote_uuid` and
+  must have been issued for this address and account; a binding naming
+  another book refuses. 204 and 404 are deleted, 403 is not allowed.
+  `BookDownloadRepository.deleteFromServer` captures the entry and its
+  owned files before the request and removes them afterwards only if the
+  account, `remote_uuid`, `local_uri` and file size and time are
+  unchanged; files go after the transaction commits.
 
 ### What the BookOrbit server does
 

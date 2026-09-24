@@ -390,6 +390,13 @@ interface BookDeleter {
         book: Book,
         forgetReading: Boolean = false,
     ): ServerDeleteResult
+
+    /**
+     * Drops what this provider kept about [bookUrl] once the server has
+     * deleted it, inside the caller's transaction and after its checks.
+     * Most providers keep nothing beyond the library row.
+     */
+    suspend fun forgetDeleted(bookUrl: String, accountKey: String) {}
 }
 
 /** A folder on the server that a book could be uploaded into. */
@@ -407,7 +414,32 @@ sealed interface ServerUploadResult {
      * transfer was needed. Both are successes and the caller treats
      * them the same; they differ only in what it is honest to say.
      */
-    data class Uploaded(val remoteBookId: String, val alreadyThere: Boolean) : ServerUploadResult
+    data class Uploaded(
+        val remoteBookId: String,
+        val alreadyThere: Boolean,
+        /** What `books.remote_uuid` becomes; a provider may scope the id. */
+        val remoteUuid: String = remoteBookId,
+        /** What `books.download_href` becomes. */
+        val downloadHref: String = "/v1/books/$remoteBookId/download",
+        /**
+         * The server file the bytes became, for a provider that tells a
+         * book's files apart from the book. Null for the others.
+         */
+        val fileId: Long? = null,
+        val fileSize: Long? = null,
+    ) : ServerUploadResult
+
+    /**
+     * The bytes are on the server, but this copy cannot be tied to them.
+     *
+     * Either the server's answer does not prove which of its files is
+     * the one sent, or the library already holds another entry for that
+     * server book with reading on it. Linking would then attach this
+     * book's place to a file nobody can vouch for, or throw away the
+     * other entry's; neither is done. The book stays on the device,
+     * unlinked, and is not offered again for these bytes.
+     */
+    data class UploadedUnlinked(val reason: String?) : ServerUploadResult
 
     /**
      * The bytes arrived and are safe, but the server has not catalogued
@@ -453,13 +485,33 @@ interface BookUploader {
         credentials: RemoteCredentials,
     ): List<RemoteUploadTarget>
 
+    /**
+     * Sends [file], which hashes to [sha256], on behalf of the library
+     * entry [bookUrl]. Both are only what the worker already knows; a
+     * provider that resumes an interrupted transfer uses them to name it.
+     */
     suspend fun upload(
         baseUrl: String,
         credentials: RemoteCredentials,
         folderId: String,
         file: java.io.File,
         filename: String,
+        bookUrl: String,
+        sha256: String,
     ): ServerUploadResult
+
+    /**
+     * Records what this provider needs about an adopted book, inside the
+     * worker's adoption transaction and after its account check, once
+     * the row has been linked. Most providers need nothing beyond the
+     * link itself.
+     */
+    suspend fun adopted(
+        bookUrl: String,
+        accountKey: String,
+        result: ServerUploadResult.Uploaded,
+        sha256: String,
+    ) {}
 }
 
 data class SeriesLayers(

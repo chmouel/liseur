@@ -48,7 +48,7 @@ data class UploadRefusal(
     @ColumnInfo(name = "book_url") val bookUrl: String,
     @ColumnInfo(name = "account_key") val accountKey: String,
     @ColumnInfo(name = "refused_at") val refusedAt: Long,
-    /** [SERVER_REFUSED], [TOO_LARGE] or [FILE_UNREADABLE]. */
+    /** [SERVER_REFUSED], [TOO_LARGE], [FILE_UNREADABLE] or [UNLINKED]. */
     val kind: String,
     /** What the server said, already bounded and sanitised, or null. */
     val reason: String?,
@@ -71,6 +71,14 @@ data class UploadRefusal(
          * and nothing about the book was ever wrong.
          */
         const val FILE_UNREADABLE = "file_unreadable"
+
+        /**
+         * The server has these bytes, but this entry could not be tied to
+         * its copy. Not a refusal of the book: it is recorded the same way
+         * so the same bytes are not sent again, and so the reader can see
+         * why the book still reads as only on this device.
+         */
+        const val UNLINKED = "unlinked"
     }
 }
 

@@ -321,6 +321,7 @@ fun LibraryScreen(
     val refusedBecause = stringResource(R.string.upload_refused_reason)
     val refusedTooLarge = stringResource(R.string.upload_refused_too_large)
     val refusedUnreadable = stringResource(R.string.upload_refused_unreadable)
+    val refusedUnlinked = stringResource(R.string.upload_unlinked)
     // Read through the composition rather than closed over: this effect
     // is keyed on the flow, so it starts once and never restarts, and a
     // plain capture would pin the shelf as it was when the screen was
@@ -336,6 +337,7 @@ fun LibraryScreen(
                     refusal.kind == UploadRefusal.TOO_LARGE -> refusedTooLarge.format(title)
                     refusal.kind == UploadRefusal.FILE_UNREADABLE ->
                         refusedUnreadable.format(title)
+                    refusal.kind == UploadRefusal.UNLINKED -> refusedUnlinked.format(title)
                     refusal.reason != null -> refusedBecause.format(title, refusal.reason)
                     else -> refusedNoReason.format(title)
                 },
@@ -823,6 +825,7 @@ fun LibraryScreen(
         ConfirmServerDeleteDialog(
             book = book,
             canForgetReading = state.canForgetServerReading,
+            deletesWholeBook = state.serverDeletesWholeBook,
             onConfirm = { forgetReading ->
                 onDeleteFromServer(book, forgetReading)
                 confirmServerDelete = null
@@ -1014,11 +1017,18 @@ internal fun ConfirmServerDeleteDialog(
     onConfirm: (forgetReading: Boolean) -> Unit,
     onDismiss: () -> Unit,
     canForgetReading: Boolean = false,
+    deletesWholeBook: Boolean = false,
 ) {
     var forgetReading by rememberSaveable { mutableStateOf(false) }
     ConfirmBookActionDialog(
         title = stringResource(R.string.delete_from_server),
-        warning = stringResource(R.string.delete_from_server_warning, book.title),
+        // BookOrbit deletes the book, not a file of it: every format goes,
+        // and with it what every one of its readers had got to.
+        warning = if (deletesWholeBook) {
+            stringResource(R.string.delete_from_server_warning_whole_book, book.title)
+        } else {
+            stringResource(R.string.delete_from_server_warning, book.title)
+        },
         confirmLabel = stringResource(R.string.delete),
         destructive = true,
         onConfirm = { onConfirm(forgetReading) },
@@ -1294,6 +1304,8 @@ internal fun BookActionsSheet(
                                 stringResource(R.string.upload_refused_here_too_large)
                             it.kind == UploadRefusal.FILE_UNREADABLE ->
                                 stringResource(R.string.upload_refused_here_unreadable)
+                            it.kind == UploadRefusal.UNLINKED ->
+                                stringResource(R.string.upload_unlinked_here)
                             it.reason != null ->
                                 stringResource(R.string.upload_refused_here_reason, it.reason)
                             else -> stringResource(R.string.upload_refused_here)
