@@ -1333,7 +1333,8 @@ CFI live.
 - An uploaded book the server later loses goes through the same two
   finished walks as any other. After the second, the entry and its
   reading stay and `BookRemoval.unlinkVanishedUploads` clears
-  `remote_uuid` and the binding, so a reconnect cannot relink it.
+  `remote_uuid` and that account's binding, so a reconnect cannot relink
+  it. Bindings other accounts kept across a disconnect stay.
 - A disconnect clears `remote_uuid` but keeps the bindings of books that
   stay. When the same account (same `accountKey`) signs in again,
   `RemoteAccountRepository.relinkUploads` restores `remote_uuid` on

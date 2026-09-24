@@ -106,10 +106,12 @@ class BookRemoval(
      * BookOrbit binding, whose recorded digest would otherwise tie the
      * book back to the vanished id on the next sign-in.
      */
-    suspend fun unlinkVanishedUploads(bookUrls: List<String>) {
+    suspend fun unlinkVanishedUploads(bookUrls: List<String>, accountKey: String) {
         if (bookUrls.isEmpty()) return
         bookDao.unlinkFromRemote(bookUrls)
-        bookOrbitBindings?.let { bindings -> bookUrls.forEach { bindings.clearBook(it) } }
+        // Only the account whose catalog lost the book. Another account's
+        // binding, kept across a disconnect, is still true of its server.
+        bookOrbitBindings?.let { bindings -> bookUrls.forEach { bindings.delete(accountKey, it) } }
     }
 
     /**

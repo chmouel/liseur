@@ -513,6 +513,12 @@ class RemoteCatalogRepositoryTest {
                 updatedAt = 1, localSha256 = "a".repeat(64),
             ),
         )
+        val elsewhere = BookOrbitBinding(
+            accountKey = "bookorbit|https://other.example|1", bookUrl = mine, bookId = 7, fileId = 3,
+            fileFormat = "epub", fileSize = 10, fileName = null,
+            state = BookOrbitBindingState.DOWNLOADED.name, updatedAt = 1, localSha256 = "b".repeat(64),
+        )
+        db.bookOrbitBindingDao().write(elsewhere)
         val without = FakeCatalog { onPage -> onPage(listOf(book("b1"))) }
         val with = FakeCatalog { onPage -> onPage(listOf(book("b1"), book("uploaded"))) }
 
@@ -528,6 +534,7 @@ class RemoteCatalogRepositoryTest {
         assertNull(kept!!.remoteUuid)
         assertEquals(5L, kept.lastOpenedAt)
         assertNull(db.bookOrbitBindingDao().get(account, mine))
+        assertEquals("another account's binding went too", elsewhere, db.bookOrbitBindingDao().get(elsewhere.accountKey, mine))
     }
 
     @Test
