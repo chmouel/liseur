@@ -495,7 +495,9 @@ class BookDownloadRepository(
     private suspend fun unlinkDeleted(url: String, remoteUuid: String?, account: String, deleter: BookDeleter) {
         if (remoteUuid == null) return
         inTransaction {
-            val now = bookDao.getByUrl(url) ?: return@inTransaction
+            // An entry removed meanwhile still leaves the binding, which a
+            // book re-added at the same address could be relinked through.
+            val now = bookDao.getByUrl(url) ?: return@inTransaction deleter.forgetDeleted(url, account)
             if (now.remoteUuid != remoteUuid) return@inTransaction
             if (now.localUri == null && now.downloadState != DownloadState.DOWNLOADED) return@inTransaction
             deleter.forgetDeleted(url, account)

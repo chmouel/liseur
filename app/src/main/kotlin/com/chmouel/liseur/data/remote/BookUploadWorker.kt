@@ -141,11 +141,12 @@ class BookUploadWorker(
         // when the file changes. A file that changed while it was being
         // sent would be stamped with bytes it no longer holds, and its
         // new contents would never be offered.
-        if (snapshot != null) {
-            val latest = container.database.bookDao().getByUrl(book.url)
-            if (latest == null || !snapshot.stillDescribes(latest)) {
-                return giveUp("${book.url} changed while it was being sent")
-            }
+        val latest = if (snapshot != null) {
+            container.database.bookDao().getByUrl(book.url)
+                ?.takeIf { snapshot.stillDescribes(it) }
+                ?: return giveUp("${book.url} changed while it was being sent")
+        } else {
+            null
         }
         container.database.withTransaction {
             // Re-read inside the transaction: an account switch or a
@@ -153,7 +154,15 @@ class BookUploadWorker(
             // overwritten by an answer about the world as it was.
             if (container.remoteAccount.current()?.accountKey != account) return@withTransaction
             val current = container.database.bookDao().getByUrl(book.url) ?: return@withTransaction
-            if (snapshot != null && current.fileModifiedAt != book.fileModifiedAt) return@withTransaction
+            // The row the digest was checked against, down to the address
+            // it opens: a watched-folder row rehomed in between would be
+            // stamped with bytes from its old location.
+            if (latest != null && (
+                    current.id != latest.id || current.localUri != latest.localUri ||
+                        current.openableUri() != latest.openableUri() ||
+                        current.fileModifiedAt != book.fileModifiedAt
+                    )
+            ) return@withTransaction
             // The digest is what makes this refusal expire on its own,
             // so it has to be one the library can compare against later
             // — and the only digest anybody has just computed is this

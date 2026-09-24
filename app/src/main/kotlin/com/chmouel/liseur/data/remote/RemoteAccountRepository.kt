@@ -994,7 +994,9 @@ class RemoteAccountRepository(
         inTransaction {
             if (dao.get()?.accountKey != server.accountKey) return@inTransaction
             val ids = verified.associateWith { BookOrbitScope.remoteId(server.baseUrl, accountId, it.bookId) }
-            val taken = bookDao.byRemoteUuids(ids.values.toList()).mapNotNullTo(HashSet()) { it.remoteUuid }
+            val taken = ids.values.toList().chunked(SQL_CHUNK)
+                .flatMap { bookDao.byRemoteUuids(it) }
+                .mapNotNullTo(HashSet()) { it.remoteUuid }
             ids.forEach { (binding, remoteUuid) ->
                 val fileId = binding.fileId ?: return@forEach
                 if (remoteUuid in taken) return@forEach
@@ -1264,5 +1266,8 @@ class RemoteAccountRepository(
          * later anyway.
          */
         const val LOAD_ATTEMPTS = 3
+
+        /** Under SQLite's bound-argument limit, as elsewhere. */
+        const val SQL_CHUNK = 900
     }
 }

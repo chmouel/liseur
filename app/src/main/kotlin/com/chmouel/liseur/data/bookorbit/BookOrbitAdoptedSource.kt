@@ -27,9 +27,9 @@ import kotlinx.coroutines.withContext
  * this is the one place that compares a file against it.
  *
  * A digest is a full read of the book. A position is pushed on every page
- * turn, so a match is remembered for [VERIFIED_FOR_MS] while the file's
- * size and modification time stay the same; any change to either, or a
- * new process, reads the file again.
+ * turn, so an answer, match or not, is remembered for [VERIFIED_FOR_MS]
+ * while the file's size and modification time stay the same; any change
+ * to either, or a new process, reads the file again.
  */
 class BookOrbitAdoptedSource(
     private val context: Context?,
@@ -38,7 +38,13 @@ class BookOrbitAdoptedSource(
     /** What can be learnt about a file without reading it. */
     data class Stamp(val size: Long?, val modifiedAt: Long?)
 
-    private data class Verified(val uri: String, val sha256: String, val stamp: Stamp, val at: Long)
+    private data class Verified(
+        val uri: String,
+        val sha256: String,
+        val stamp: Stamp,
+        val at: Long,
+        val matches: Boolean,
+    )
 
     private val verified = ConcurrentHashMap<String, Verified>()
 
@@ -73,9 +79,9 @@ class BookOrbitAdoptedSource(
     /**
      * Whether [uri] holds the bytes that hash to [expected].
      *
-     * Remembered only against the stamp it was read under, and only
-     * for a while: a stamp that could not be read, or that changed, is
-     * read again in full.
+     * Remembered, either way, only against the stamp it was read under,
+     * and only for a while: a stamp that could not be read, or that
+     * changed, is read again in full.
      */
     suspend fun holds(bookUrl: String, uri: Uri, expected: String): Boolean =
         withContext(Dispatchers.IO) {
@@ -84,15 +90,19 @@ class BookOrbitAdoptedSource(
             if (known != null && known.uri == uri.toString() && known.sha256 == expected &&
                 known.stamp == before && before.size != null && before.modifiedAt != null &&
                 now() - known.at < VERIFIED_FOR_MS
-            ) return@withContext true
+            ) return@withContext known.matches
             val actual = try {
                 open(uri)?.use(BookOrbitUploadClient::sha256Of)
             } catch (_: IOException) {
                 null
             }
-            val matches = actual == expected && stamp(uri) == before
-            if (matches) {
-                verified[bookUrl] = Verified(uri.toString(), expected, before, now())
+            val after = stamp(uri)
+            val matches = actual == expected && after == before
+            // A replaced file is remembered too, so a sync on every page
+            // turn does not read it in full each time. A read that failed
+            // or raced a write says nothing about the bytes and is not.
+            if (actual != null && after == before) {
+                verified[bookUrl] = Verified(uri.toString(), expected, before, now(), matches)
             } else {
                 verified.remove(bookUrl)
             }
