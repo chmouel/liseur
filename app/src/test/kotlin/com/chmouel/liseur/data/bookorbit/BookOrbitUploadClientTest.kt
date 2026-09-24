@@ -295,6 +295,15 @@ class BookOrbitUploadClientTest {
     }
 
     @Test
+    fun `a session that failed on its library is tried again after the libraries are listed`() = runBlocking {
+        server.enqueue(capabilities())
+        server.enqueue(session("failed", 10, 10, errorCode = "UPLOAD_TARGET_INVALID"))
+
+        assertEquals(ServerUploadResult.Failed("upload target"), send(book()))
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
     fun `an expired or unexplained session is left for the next key`() = runBlocking {
         server.enqueue(capabilities())
         server.enqueue(session("expired", 4, 10))

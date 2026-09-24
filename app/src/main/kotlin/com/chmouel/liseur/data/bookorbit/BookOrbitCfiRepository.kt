@@ -221,7 +221,13 @@ class BookOrbitCfiRepository(
         try {
             val adopted = adoptedSource(opened.context, opened.openedUrl) ?: stale()
             if (adopted.uri.toString() != opened.source) stale()
-            if (sources.stamp(adopted.uri) != opened.sourceStamp) stale()
+            val stamp = sources.stamp(adopted.uri)
+            if (stamp != opened.sourceStamp) stale()
+            // A provider that reports neither size nor time says nothing
+            // by staying the same; only the bytes can tell.
+            if ((stamp?.size == null || stamp.modifiedAt == null) &&
+                !sources.holds(opened.context.bookUrl, adopted.uri, adopted.sha256)
+            ) stale()
             if (!opened.file.isFile || opened.file.length() != opened.length ||
                 opened.file.lastModified() != opened.modifiedAt
             ) stale()
