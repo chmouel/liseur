@@ -347,6 +347,34 @@ class BookOrbitPositionAgreementRepository(
         }
     }
 
+    /**
+     * A [catchUpOffer] saved without a CFI, as a place the open reader can
+     * go to like an approximate opening: nothing is agreed until the reader
+     * moves on from it, and [adoptApproximateBaselineIn] refuses it once
+     * anything changed since.
+     */
+    suspend fun approximateCatchUp(
+        context: BookOrbitCfiContext,
+        remote: BookOrbitFileProgress,
+    ): BookOrbitApproximateOffer? = attemptMutex.withLock {
+        database.withTransaction {
+            checkCurrent(context)
+            val row = current(context)
+            val progression = (remote.percentage / 100).takeIf {
+                remote.isSaved && remote.cfi == null && it.isFinite() && it in 0.0..1.0
+            } ?: return@withTransaction null
+            val local = database.readingProgressDao().get(context.bookUrl)
+            if (!row.serverMovedAway() || !row.matchesCandidate(remote) || local == null ||
+                local.ownerAccount != null && local.ownerAccount != context.request.accountKey
+            ) return@withTransaction null
+            BookOrbitApproximateOffer(
+                context, remote, progression,
+                replacesLocalPlace = local.locatorJson != null || local.totalProgression != null,
+                local.positionRevision, local.locatorJson, row,
+            )
+        }
+    }
+
     /** The reader kept its own place over [offer]; see [declineServerPlaceIn]. */
     suspend fun declineServerPlace(offer: BookOrbitPullOffer): Boolean = attemptMutex.withLock {
         database.withTransaction { declineServerPlaceIn(database, offer) }
@@ -370,7 +398,7 @@ class BookOrbitPositionAgreementRepository(
         }.getOrNull()?.takeIf { it.isFinite() && it in 0.0..1.0 }
             ?: throw BookOrbitPositionUnresolved()
         val fresh = progress.read(context)
-        if (!fresh.isSaved || fresh.cfi != offer.remote.cfi ||
+        if (!fresh.isSaved || fresh.cfi == null || fresh.cfi != offer.remote.cfi ||
             fresh.percentage != offer.remote.percentage ||
             preview != null && fresh != preview.remote
         ) {
@@ -786,16 +814,26 @@ internal suspend fun adoptApproximateBaselineIn(
     val dao = database.bookOrbitPositionAgreementDao()
     val row = dao.get(context.request.accountKey, context.bookUrl) ?: return false
     val local = database.readingProgressDao().get(context.bookUrl)
+    val uncertain = row.attemptState == BookOrbitAttempt.UNCERTAIN.name && row.serverMovedAway()
     if (local == null || local.positionRevision == offer.localRevision ||
-        row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name) ||
+        row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name) && !uncertain ||
         !row.matchesChoiceBaseline(offer.baseline) ||
         local.ownerAccount != null && local.ownerAccount != context.request.accountKey
     ) return false
-    dao.write(row.copy(
+    val agreed = row.copy(
         agreedLocalRevision = offer.localRevision, agreedLocatorJson = offer.localLocator,
         agreedRemoteSaved = true, agreedRemoteCfi = null,
         agreedRemotePercentage = offer.remote.percentage,
-    ))
+    )
+    // Followed from the reader after someone else wrote over this device's
+    // request: that request is dropped rather than sent again.
+    dao.write(
+        if (!uncertain) agreed else agreed.copy(
+            attemptState = null, outgoingBytes = null, sentLocalRevision = null,
+            sentLocatorJson = null, preflightCfi = null, preflightPercentage = null,
+            preflightSaved = null,
+        ),
+    )
     return true
 }
 
@@ -848,10 +886,17 @@ internal suspend fun agreeOpeningPullIn(
  * follows the server's place or keeps its own, which starts a new one.
  */
 fun BookOrbitPositionAgreement.serverMovedAway(): Boolean {
-    if (candidateSaved != true || candidateCfi == null) return false
+    if (candidateSaved != true) return false
     return when (attemptState) {
-        null, BookOrbitAttempt.ACKNOWLEDGED.name ->
-            agreedRemoteSaved != null && (agreedRemoteSaved != true || agreedRemoteCfi != candidateCfi)
+        null, BookOrbitAttempt.ACKNOWLEDGED.name -> when {
+            candidateCfi != null ->
+                agreedRemoteSaved != null && (agreedRemoteSaved != true || agreedRemoteCfi != candidateCfi)
+            // A place saved without a CFI is never pushed over unasked, so
+            // one never agreed is offered too; otherwise it would hold this
+            // book's sync forever.
+            else -> agreedRemoteSaved != true || agreedRemoteCfi != null ||
+                agreedRemotePercentage != candidatePercentage
+        }
         BookOrbitAttempt.UNCERTAIN.name -> {
             val sent = outgoingBytes?.let {
                 runCatching { JSONObject(String(it, Charsets.UTF_8)).getString("cfi") }.getOrNull()

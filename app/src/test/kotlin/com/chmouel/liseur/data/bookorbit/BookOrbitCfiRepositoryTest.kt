@@ -868,6 +868,7 @@ class BookOrbitCfiRepositoryTest {
      */
     private suspend fun overwrittenInFlight(
         context: BookOrbitCfiContext, first: String, mine: String, theirs: String,
+        intruder: String = saved(theirs, 70.0),
     ): () -> List<String> {
         saveExact(context, first, 10)
         agreement().observe(context, progress(saved(first)))
@@ -881,7 +882,7 @@ class BookOrbitCfiRepositoryTest {
                     "POST" -> {
                         val sent = JSONObject(request.body!!.utf8())
                         posts += sent.getString("cfi")
-                        remote = if (posts.size == 1) saved(theirs, 70.0)
+                        remote = if (posts.size == 1) intruder
                         else saved(sent.getString("cfi"), sent.getDouble("percentage"))
                         MockResponse(code = 201)
                     }
@@ -980,6 +981,111 @@ class BookOrbitCfiRepositoryTest {
         val row = agreement().state(context)
         assertEquals(BookOrbitAttempt.UNCERTAIN.name, row.attemptState)
         assertFalse(row.serverMovedAway())
+    }
+
+    @Test
+    fun `a place saved without a CFI while reading is offered and reading on from it pushes`(): Unit =
+        runBlocking {
+            val context = repository.capture(binding.bookUrl)
+            val first = "epubcfi(/6/4!/4/2:3)"
+            saveExact(context, first, 10)
+            agreement().observe(context, progress(saved(first)))
+            val posts = serveRemote(percentageOnly(70.0))
+            saveExact(context, "epubcfi(/6/4!/4/2:5)", 11, progression = 0.3)
+            assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+            assertTrue(agreement().state(context).serverMovedAway())
+
+            val remote = agreement().catchUpOffer(context)!!
+            assertNull(remote.cfi)
+            val offer = agreement().approximateCatchUp(context, remote)!!
+            assertEquals(0.7, offer.progression, 1e-9)
+            // Followed, then the reader turns a page from there.
+            val next = "epubcfi(/6/4!/4/2:12)"
+            saveExact(context, next, 12, progression = 0.71, approximate = offer)
+            assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+            assertEquals(listOf(next), posts())
+        }
+
+    @Test
+    fun `declining a place saved without a CFI lets this device's place overwrite it`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        val posts = serveRemote(percentageOnly(70.0))
+        val mine = "epubcfi(/6/4!/4/2:5)"
+        saveExact(context, mine, 11, progression = 0.3)
+        assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        assertTrue(agreement().declineServerPlace(offer))
+        assertFalse(agreement().state(context).serverMovedAway())
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(mine), posts())
+    }
+
+    @Test
+    fun `a place saved without a CFI never agreed with is offered instead of holding sync`(): Unit =
+        runBlocking {
+            val context = repository.capture(binding.bookUrl)
+            val mine = "epubcfi(/6/4!/4/2:5)"
+            saveExact(context, mine, 10, progression = 0.3)
+            val posts = serveRemote(percentageOnly(40.0))
+            assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+            assertTrue(agreement().state(context).serverMovedAway())
+            val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+            saveExact(context, "epubcfi(/6/4!/4/2:7)", 11, progression = 0.35, declined = offer)
+            assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+            assertEquals(listOf("epubcfi(/6/4!/4/2:7)"), posts())
+        }
+
+    @Test
+    fun `a place saved without a CFI during this device's send is offered and followed`(): Unit =
+        runBlocking {
+            val context = repository.capture(binding.bookUrl)
+            val mine = "epubcfi(/6/4!/4/2:5)"
+            val posts = overwrittenInFlight(
+                context, "epubcfi(/6/4!/4/2:3)", mine, "unused", intruder = percentageOnly(70.0),
+            )
+            assertTrue(agreement().state(context).serverMovedAway())
+            val remote = agreement().catchUpOffer(context)!!
+            assertNull(remote.cfi)
+            val offer = agreement().approximateCatchUp(context, remote)!!
+            val next = "epubcfi(/6/4!/4/2:12)"
+            saveExact(context, next, 12, progression = 0.71, approximate = offer)
+            val agreed = agreement().state(context)
+            assertNull(agreed.attemptState)
+            assertNull(agreed.outgoingBytes)
+            assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+            assertEquals(listOf(mine, next), posts())
+        }
+
+    @Test
+    fun `a place saved without a CFI is not agreed once the server moved again`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        serveRemote(percentageOnly(70.0))
+        saveExact(context, "epubcfi(/6/4!/4/2:5)", 11, progression = 0.3)
+        val offer = agreement().approximateCatchUp(context, agreement().catchUpOffer(context)!!)!!
+        val posts = serveRemote(percentageOnly(80.0))
+        assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+        saveExact(context, "epubcfi(/6/4!/4/2:12)", 12, progression = 0.71, approximate = offer)
+        assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+        assertEquals(emptyList<String>(), posts())
+        assertTrue(agreement().state(context).serverMovedAway())
+    }
+
+    @Test
+    fun `a place saved without a CFI cannot be adopted as an exact catch-up`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        serveRemote(percentageOnly(70.0))
+        val offer = catchUp(context, agreement().catchUpOffer(context)!!)
+        db.readingProgressDao().openBooks.enter(context.bookUrl)
+        assertFalse(agreement().adoptCaughtUpInReader(offer))
     }
 
     @Test
