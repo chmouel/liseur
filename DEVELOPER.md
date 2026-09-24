@@ -1362,10 +1362,10 @@ CFI live.
   a watched folder, is always kept with its reading history, since the
   next scan would bring the file back as a new book. A document whose
   provider reports no size or time is kept too.
-  Files go after the transaction commits. A copy kept this way loses its
-  binding and its `remote_uuid` when it still carries the deleted id, so
-  it neither syncs against a book the server no longer has nor gets
-  relinked to it on reconnect. An entry relinked to another id during the
+  Files go after the transaction commits. A copy kept this way loses the
+  deleting account's binding when it still carries the deleted id, so a
+  reconnect cannot relink it, and loses its `remote_uuid` too while that
+  account is still connected. An entry relinked to another id during the
   request keeps that link.
 
 ### What the BookOrbit server does
