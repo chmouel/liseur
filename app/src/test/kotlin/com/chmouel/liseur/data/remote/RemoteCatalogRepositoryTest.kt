@@ -4,6 +4,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookOrbitBinding
+import com.chmouel.liseur.data.db.BookOrbitBindingState
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
@@ -223,6 +225,7 @@ class RemoteCatalogRepositoryTest {
             db.readingProgressDao(),
             db.annotationDao(),
             db.annotationSyncDao(),
+            bookOrbitBindings = db.bookOrbitBindingDao(),
         ),
         starterProgressDao = starterProgressDao,
         localNetwork = localNetwork,
@@ -479,6 +482,52 @@ class RemoteCatalogRepositoryTest {
         val kept = db.bookDao().getByUrl(mine)
         assertEquals("the uploaded book was deleted", mine, kept?.url)
         assertEquals("uploaded", kept?.remoteUuid)
+    }
+
+    /**
+     * A book the reader uploaded and the server later lost is theirs to
+     * keep. Two finished walks without it cut the link and the binding
+     * that could relink it; the entry and its reading stay.
+     */
+    @Test
+    fun `an uploaded book the server lost stays here unlinked after two walks`() = runTest {
+        connect(ServerKind.LISEUR_SYNC)
+        val mine = "content://tree/primary%3ABooks/document/mine.epub"
+        db.bookDao().upsertAll(
+            listOf(
+                Book(
+                    url = mine, title = "Mine", author = "Me", coverPath = null, source = null,
+                    addedAt = 0, lastOpenedAt = 5, localUri = null,
+                ),
+            ),
+        )
+        db.bookDao().linkToRemote(
+            url = mine, remoteUuid = "uploaded", downloadHref = "/v1/books/uploaded/download",
+            coverUrl = null, remoteUpdatedAt = 1L,
+        )
+        val account = db.remoteServerDao().get()!!.accountKey
+        db.bookOrbitBindingDao().write(
+            BookOrbitBinding(
+                accountKey = account, bookUrl = mine, bookId = 5, fileId = 9, fileFormat = "epub",
+                fileSize = 10, fileName = null, state = BookOrbitBindingState.DOWNLOADED.name,
+                updatedAt = 1, localSha256 = "a".repeat(64),
+            ),
+        )
+        val without = FakeCatalog { onPage -> onPage(listOf(book("b1"))) }
+        val with = FakeCatalog { onPage -> onPage(listOf(book("b1"), book("uploaded"))) }
+
+        repository(without).refresh()
+        repository(with).refresh()
+        repository(without).refresh()
+        assertEquals("a walk that named it clears the mark", "uploaded", db.bookDao().getByUrl(mine)?.remoteUuid)
+
+        repository(without).refresh()
+
+        val kept = db.bookDao().getByUrl(mine)
+        assertNotNull(kept)
+        assertNull(kept!!.remoteUuid)
+        assertEquals(5L, kept.lastOpenedAt)
+        assertNull(db.bookOrbitBindingDao().get(account, mine))
     }
 
     @Test

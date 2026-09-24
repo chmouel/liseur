@@ -101,6 +101,18 @@ class BookRemoval(
     }
 
     /**
+     * Cuts uploaded books loose from a server that no longer has them.
+     * The entries and their reading stay; the link goes, and so does the
+     * BookOrbit binding, whose recorded digest would otherwise tie the
+     * book back to the vanished id on the next sign-in.
+     */
+    suspend fun unlinkVanishedUploads(bookUrls: List<String>) {
+        if (bookUrls.isEmpty()) return
+        bookDao.unlinkFromRemote(bookUrls)
+        bookOrbitBindings?.let { bindings -> bookUrls.forEach { bindings.clearBook(it) } }
+    }
+
+    /**
      * Clears out what described the book that used to be at a path,
      * when a different one has taken it over.
      *

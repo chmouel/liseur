@@ -1327,7 +1327,13 @@ CFI live.
   catalog duplicates of the adopted book are removed only when every one
   is untouched (`BookRemoval.dropUntouchedCatalogDuplicates`); one
   holding anything keeps them all and the book stays unlinked. A
-  candidate download that fails fails the attempt, which is retried.
+  candidate download that fails fails the attempt, which is retried,
+  except a 403: an account allowed to upload but not to download cannot
+  prove the file, so the upload ends unlinked.
+- An uploaded book the server later loses goes through the same two
+  finished walks as any other. After the second, the entry and its
+  reading stay and `BookRemoval.unlinkVanishedUploads` clears
+  `remote_uuid` and the binding, so a reconnect cannot relink it.
 - A disconnect clears `remote_uuid` but keeps the bindings of books that
   stay. When the same account (same `accountKey`) signs in again,
   `RemoteAccountRepository.relinkUploads` restores `remote_uuid` on
