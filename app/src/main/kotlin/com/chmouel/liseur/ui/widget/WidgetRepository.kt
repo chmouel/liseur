@@ -23,6 +23,8 @@ import com.chmouel.liseur.ui.stats.durationParts
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -63,6 +65,8 @@ data class WidgetStats(
     val totalLabel: String,
     /** The tallest bar's time, drawn as the chart's scale; null when nothing was read. */
     val peakLabel: String?,
+    /** What the bars say, read out by TalkBack; null when nothing was read. */
+    val chartDescription: String? = null,
 )
 
 /**
@@ -156,7 +160,22 @@ fun PeriodStats.toWidgetStats(context: Context): WidgetStats = WidgetStats(
     figures = this,
     totalLabel = formatReadingDuration(context, totalMs),
     peakLabel = peakMs.takeIf { it > 0 }?.let { formatCompactDuration(context, it) },
+    chartDescription = chartDescription(context),
 )
+
+/** The days read, in the words the in-app chart speaks for each bar. */
+private fun PeriodStats.chartDescription(context: Context): String? {
+    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
+    return bars.filter { it.totalMs > 0 }
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString("; ") { bar ->
+            context.getString(
+                R.string.reading_stats_period_read,
+                formatReadingDuration(context, bar.totalMs),
+                format.format(bar.date),
+            )
+        }
+}
 
 fun formatCompactDuration(context: Context, millis: Long): String = when (val parts = compactDuration(millis)) {
     CompactDuration.UnderMinute -> context.getString(R.string.widget_duration_under_minute)

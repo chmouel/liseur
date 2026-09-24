@@ -61,6 +61,7 @@ class WidgetRepositoryTest {
         assertEquals(0, snapshot.stats!!.figures.sessions)
         assertEquals(context.getString(com.chmouel.liseur.R.string.duration_none), snapshot.stats!!.totalLabel)
         assertNull(snapshot.stats!!.peakLabel)
+        assertNull(snapshot.stats!!.chartDescription)
     }
 
     @Test
@@ -107,6 +108,17 @@ class WidgetRepositoryTest {
         assertEquals(1, snapshot.stats!!.figures.booksRead)
         assertEquals(7, snapshot.stats!!.figures.bars.size)
         assertEquals("1h", snapshot.stats!!.peakLabel)
+        assertEquals(
+            context.getString(
+                com.chmouel.liseur.R.string.reading_stats_period_read,
+                formatReadingDuration(context, TimeUnit.HOURS.toMillis(1)),
+                java.time.format.DateTimeFormatter
+                    .ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)
+                    .withLocale(java.util.Locale.getDefault())
+                    .format(today.minusDays(3)),
+            ),
+            snapshot.stats!!.chartDescription,
+        )
     }
 
     @Test
