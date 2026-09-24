@@ -1324,7 +1324,13 @@ CFI live.
   records an `UNLINKED` refusal for those bytes and does not link. Empty
   catalog duplicates of the adopted book are removed only when every one
   is untouched (`BookRemoval.dropUntouchedCatalogDuplicates`); one
-  holding anything keeps them all and the book stays unlinked.
+  holding anything keeps them all and the book stays unlinked. A
+  candidate download that fails fails the attempt, which is retried.
+- A disconnect clears `remote_uuid` but keeps the bindings of books that
+  stay. When the same account (same `accountKey`) signs in again,
+  `RemoteAccountRepository.relinkUploads` restores `remote_uuid` on
+  uploaded books from their binding, so the catalog does not bring them
+  in twice. Two local books bound to one server book stay unlinked.
 - The adoption writes `book_orbit_binding.local_sha256` (schema 60), and
   nothing else does. It is what lets an uploaded book's own file stand
   for the server file when a CFI is computed. `BookOrbitCfiRepository`
@@ -1332,9 +1338,9 @@ CFI live.
   private spool; the bytes parsed must hash to `local_sha256`, and the
   source's size and modification time are checked again on every use.
   The spool is deleted when a check fails and when the reader closes, and
-  swept at startup. Before a position is prepared or sent,
-  `BookOrbitPositionAgreementRepository` checks the source against the
-  digest (`BookOrbitAdoptedSource.holds`). A match is remembered for five
+  swept at startup. Before a position is prepared or sent, and before any
+  status is read or written, the source is checked against the digest
+  (`BookOrbitAdoptedSource.holdsUploaded`). A match is remembered for five
   minutes while the size and modification time are unchanged, because a
   full hash on every page turn is too slow; a replacement that keeps both
   is caught by the next process or after that window.
@@ -1346,7 +1352,8 @@ CFI live.
   `BookDownloadRepository.deleteFromServer` captures the entry and its
   owned files before the request and removes them afterwards only if the
   account, `remote_uuid`, `local_uri` and file size and time are
-  unchanged; files go after the transaction commits.
+  unchanged. A document whose provider reports no size or time is kept.
+  Files go after the transaction commits.
 
 ### What the BookOrbit server does
 
