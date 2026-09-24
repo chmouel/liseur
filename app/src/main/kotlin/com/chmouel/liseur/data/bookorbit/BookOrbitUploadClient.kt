@@ -358,15 +358,14 @@ class BookOrbitUploadClient(
         )
     }
 
-    private suspend fun digestOf(context: BookOrbitRequestContext, fileId: Long): String? =
-        try {
-            http.stream(context, BookOrbitUrl.api(context.baseUrl, "books/files/$fileId/download")) {
-                sha256Of(it)
-            }
-        } catch (_: RemoteHttpFailure) {
-            null
-        } catch (_: IOException) {
-            null
+    /**
+     * A failed read is thrown rather than taken as a mismatch: a file
+     * that could not be read might be the match, and a choice made
+     * without it would not be proved.
+     */
+    private suspend fun digestOf(context: BookOrbitRequestContext, fileId: Long): String =
+        http.stream(context, BookOrbitUrl.api(context.baseUrl, "books/files/$fileId/download")) {
+            sha256Of(it)
         }
 
     private suspend fun capabilities(context: BookOrbitRequestContext): Capabilities {

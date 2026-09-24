@@ -5,6 +5,9 @@ import android.net.Uri
 import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import androidx.core.net.toUri
+import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.library.openableUri
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -94,6 +97,20 @@ class BookOrbitAdoptedSource(
             }
             matches
         }
+
+    /**
+     * For a book adopted from an upload, whether its file still holds the
+     * bytes the server took. A book downloaded from BookOrbit has no
+     * recorded digest and always passes; a missing binding or book does not.
+     */
+    suspend fun holdsUploaded(database: LiseurDatabase, context: BookOrbitCfiContext): Boolean? {
+        val binding = database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl)
+            ?: return null
+        val expected = binding.localSha256 ?: return true
+        val book = database.bookDao().getByUrl(context.bookUrl) ?: return null
+        val source = book.openableUri()?.toUri() ?: return false
+        return holds(context.bookUrl, source, expected)
+    }
 
     /** A private copy of [uri] in [dir], or null. The caller deletes it. */
     fun spool(uri: Uri, dir: File): File? {
