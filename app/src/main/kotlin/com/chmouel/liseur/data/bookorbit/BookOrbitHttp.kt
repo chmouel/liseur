@@ -32,8 +32,18 @@ import org.json.JSONObject
  */
 class BookOrbitHttp(
     private val session: BookOrbitSession,
-    private val http: RemoteHttp = RemoteHttp(),
+    http: RemoteHttp = RemoteHttp(),
 ) {
+    /**
+     * Never follows a redirect: the bearer and any request body would go
+     * wherever the server pointed, without [BookOrbitRequestContext.covers]
+     * seeing the new address.
+     */
+    private val client = http.client.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
     /** A mutation must not be replayed merely because its response was lost. */
     sealed interface MutationResult {
         data object ReadBackRequired : MutationResult
@@ -72,9 +82,7 @@ class BookOrbitHttp(
         val request = signed(context, url, bearer)
             .method(method, body).build()
         try {
-            http.client.newBuilder()
-                .followRedirects(false)
-                .followSslRedirects(false)
+            client.newBuilder()
                 .retryOnConnectionFailure(false)
                 .build().newCall(request).execute().use { response ->
                 when {
@@ -111,7 +119,7 @@ class BookOrbitHttp(
         url: String,
     ): JSONObject? = withContext(Dispatchers.IO) {
         session.authorized(context) { bearer ->
-            http.client.newCall(signed(context, url, bearer).build()).execute().use { response ->
+            client.newCall(signed(context, url, bearer).build()).execute().use { response ->
                 if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
                 val text = response.body?.string().orEmpty()
                 if (text.isBlank()) null else asObject(text)
@@ -127,7 +135,7 @@ class BookOrbitHttp(
     ): JSONObject? = withContext(Dispatchers.IO) {
         session.authorized(context) { bearer ->
             val request = signed(context, url, bearer).post(json.toString().toRequestBody(JSON)).build()
-            http.client.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 if (response.code in rejected) return@authorized null
                 asObject(body(response))
             }
@@ -154,7 +162,7 @@ class BookOrbitHttp(
             val request = signed(context, url, bearer)
                 .method(method, if (method == "DELETE" && json == null) null else body)
                 .build()
-            http.client.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 if (response.isSuccessful || response.code in rejected) return@authorized response.code
                 throw RemoteHttpFailure(failureForCode(response.code))
             }
@@ -166,7 +174,7 @@ class BookOrbitHttp(
         url: String,
     ): String = withContext(Dispatchers.IO) {
         session.authorized(context) { bearer ->
-            body(http.client.newCall(signed(context, url, bearer).build()).execute())
+            body(client.newCall(signed(context, url, bearer).build()).execute())
         }
     }
 

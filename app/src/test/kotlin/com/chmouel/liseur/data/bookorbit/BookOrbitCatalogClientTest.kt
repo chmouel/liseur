@@ -101,6 +101,25 @@ class BookOrbitCatalogClientTest {
         """.trimIndent()
 
     @Test
+    fun `an API call does not follow a redirect with the bearer or body`() = runBlocking {
+        val dao = FakeServerDao(account())
+        val http = BookOrbitHttp(BookOrbitSession(dao, RemoteHttp(), now = { 1_000L }))
+        val context = BookOrbitRequestContext.from(account())!!
+        repeat(2) {
+            server.enqueue(MockResponse(code = 307, headers = okhttp3.Headers.headersOf("Location", "/elsewhere")))
+        }
+
+        val get = runCatching { http.getObject(context, "${address()}/api/v1/books/1") }
+        val post = runCatching {
+            http.postObject(context, "${address()}/api/v1/books/query", org.json.JSONObject().put("q", "x"))
+        }
+
+        assertTrue(get.exceptionOrNull() is com.chmouel.liseur.data.remote.RemoteHttpFailure)
+        assertTrue(post.exceptionOrNull() is com.chmouel.liseur.data.remote.RemoteHttpFailure)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
     fun `a book with no epub is not put on the shelf`() = runBlocking {
         val dao = FakeServerDao(account())
         server.enqueue(
