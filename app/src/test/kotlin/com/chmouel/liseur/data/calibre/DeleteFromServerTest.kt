@@ -28,6 +28,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -184,5 +185,44 @@ class DeleteFromServerTest {
 
         assertNotNull(db.bookDao().getByUrl(book.url))
         assertTrue(deleter.forgotten.isEmpty())
+    }
+
+    @Test
+    fun `a document whose size and time cannot be read is kept after a server delete`() = runBlocking {
+        Robolectric.buildContentProvider(Silent::class.java).create(SILENT)
+        val book = Book(
+            url = "content://$SILENT/document/one", title = "One", author = null, coverPath = null,
+            source = null, addedAt = 1, lastOpenedAt = null, localUri = "content://$SILENT/document/one",
+            remoteUuid = "bo_scope_8", downloadState = DownloadState.DOWNLOADED,
+        )
+        db.bookDao().upsert(book)
+        val deleter = Deleter()
+
+        assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
+
+        assertNotNull(db.bookDao().getByUrl(book.url))
+        assertTrue(deleter.forgotten.isEmpty())
+    }
+
+    /** A provider that answers without the size or modification time. */
+    class Silent : android.content.ContentProvider() {
+        override fun onCreate() = true
+        override fun query(
+            uri: android.net.Uri, projection: Array<out String>?, selection: String?,
+            args: Array<out String>?, sort: String?,
+        ): android.database.Cursor = android.database.MatrixCursor(arrayOf("_display_name")).apply {
+            addRow(arrayOf<Any>("one.epub"))
+        }
+
+        override fun getType(uri: android.net.Uri): String? = null
+        override fun insert(uri: android.net.Uri, values: android.content.ContentValues?): android.net.Uri? = null
+        override fun delete(uri: android.net.Uri, s: String?, a: Array<out String>?) = 0
+        override fun update(
+            uri: android.net.Uri, v: android.content.ContentValues?, s: String?, a: Array<out String>?,
+        ) = 0
+    }
+
+    private companion object {
+        const val SILENT = "com.chmouel.liseur.test.silent"
     }
 }
