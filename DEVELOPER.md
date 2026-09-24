@@ -1321,7 +1321,9 @@ CFI live.
   the sent size in the returned book, or, when a `book_per_folder`
   library joined an existing book, the one candidate (of at most three)
   whose downloaded bytes match the sent digest. Otherwise the worker
-  records an `UNLINKED` refusal for those bytes and does not link. Empty
+  records an `UNLINKED` refusal for those bytes and does not link. That
+  refusal survives a disconnect, unlike the others, so the same account
+  is not offered the same bytes again. Empty
   catalog duplicates of the adopted book are removed only when every one
   is untouched (`BookRemoval.dropUntouchedCatalogDuplicates`); one
   holding anything keeps them all and the book stays unlinked. A

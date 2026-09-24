@@ -12,6 +12,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.db.UploadRefusal
 import com.chmouel.liseur.data.db.SessionRefusal
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
@@ -791,6 +792,28 @@ class RemoteAccountRepositoryTest {
         sessionTransmissionDao = db.sessionTransmissionDao(),
         setups = mapOf(ServerKind.LISEUR_SYNC to liseurSyncSetup),
     )
+
+    @Test
+    fun `a disconnect keeps only the note that the server already has the bytes`() = runTest {
+        val repository = fullRepository(db.remoteServerDao(), UpgradingLiseurSync())
+        repository.connectLiseurSync(BASE, "ada", "pw")
+        val peer = db.remoteServerDao().get()!!.accountKey
+        listOf("file:///refused.epub" to UploadRefusal.SERVER_REFUSED, "file:///unlinked.epub" to UploadRefusal.UNLINKED)
+            .forEach { (url, kind) ->
+                db.bookDao().upsert(
+                    Book(
+                        url = url, title = url, author = null, coverPath = null, source = null,
+                        addedAt = 1, lastOpenedAt = null, localUri = url,
+                    ),
+                )
+                db.uploadRefusalDao().upsert(UploadRefusal(url, peer, 1, kind, null, "a".repeat(64)))
+            }
+
+        repository.disconnect()
+
+        assertNull(db.uploadRefusalDao().get("file:///refused.epub", peer))
+        assertEquals(UploadRefusal.UNLINKED, db.uploadRefusalDao().get("file:///unlinked.epub", peer)?.kind)
+    }
 
     @Test
     fun `forgetting unreadable account clears transmission evidence and retains unknown local history`() = runTest {

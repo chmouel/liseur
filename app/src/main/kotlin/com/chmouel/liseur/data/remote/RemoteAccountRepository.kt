@@ -1209,7 +1209,7 @@ class RemoteAccountRepository(
         // Before the kind check, and deliberately: a refusal is not a
         // liseur-sync idea, it is any server's answer, and the row would
         // otherwise outlive the account that produced it.
-        uploadRefusalDao?.clearAccount(server.accountKey)
+        uploadRefusalDao?.clearAccountExceptUnlinked(server.accountKey)
         // Also before the kind check: a starter shelf is a Custom OPDS
         // connection, and how far its catalog had been walked is only
         // true of the account that walked it.

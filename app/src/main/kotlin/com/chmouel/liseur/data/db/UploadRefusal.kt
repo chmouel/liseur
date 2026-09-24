@@ -148,6 +148,18 @@ interface UploadRefusalDao {
     suspend fun clearAccount(accountKey: String)
 
     /**
+     * Everything for [accountKey] except [UploadRefusal.UNLINKED].
+     *
+     * That one says the server already holds these bytes with no link
+     * back to this copy. It stays true after a disconnect, and sending
+     * the bytes again when the same account returns could leave a second
+     * copy on the server. It is still keyed by account and still expires
+     * when the file changes.
+     */
+    @Query("DELETE FROM upload_refusal WHERE account_key = :accountKey AND kind != 'unlinked'")
+    suspend fun clearAccountExceptUnlinked(accountKey: String)
+
+    /**
      * Renames an account's refusals when the account's key changes
      * spelling. A refusal already under [to] is the same verdict from
      * the same server and can stand; the old-key copy goes.
