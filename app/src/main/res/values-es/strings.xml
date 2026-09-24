@@ -533,7 +533,7 @@
     <string name="delete_file">Eliminar archivo</string>
     <string name="delete_from_server">Eliminar del servidor</string>
     <string name="delete_from_server_warning">“%1$s” se eliminará del propio servidor, para todos los dispositivos. Esto no se puede deshacer.</string>
-    <string name="delete_from_server_warning_whole_book">“%1$s” se eliminará del propio servidor, con todos sus formatos y el progreso de todos los lectores. Esto no se puede deshacer.</string>
+    <string name="delete_from_server_warning_whole_book">“%1$s” se eliminará del propio servidor, con todos sus formatos, su portada y el progreso de todos los lectores. Esto no se puede deshacer.</string>
     <string name="delete_from_server_forget_reading">Eliminar también mi historial de lectura en el servidor</string>
     <string name="delete_from_server_forget_reading_hint">Tu posición y el tiempo de lectura se guardan en el servidor para que otro dispositivo los pueda retomar. Esto solo afecta a tu propia lectura, nunca a la de nadie más.</string>
     <string name="server_delete_needs_reconnect">Esta conexión no puede eliminar libros del servidor. Vuelve a iniciar sesión en el servidor para pedir ese permiso.</string>

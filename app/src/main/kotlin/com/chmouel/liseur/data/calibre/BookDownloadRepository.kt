@@ -474,8 +474,27 @@ class BookDownloadRepository(
             files.forEach { it.delete() }
         } else {
             Log.w(TAG, "${book.url} changed while it was deleted from the server; kept here")
+            unlinkDeleted(book.url, sent.remoteUuid, account, deleter)
         }
         return result
+    }
+
+    /**
+     * Cuts a kept copy loose from the server book that was just deleted.
+     * Left linked, it would sync against an id the server no longer knows,
+     * and a reconnect could bind it to that id again. An entry relinked to
+     * another server book during the request is left alone, and so is one
+     * with no copy here, which the next catalog walk clears.
+     */
+    private suspend fun unlinkDeleted(url: String, remoteUuid: String?, account: String, deleter: BookDeleter) {
+        if (remoteUuid == null) return
+        inTransaction {
+            val now = bookDao.getByUrl(url) ?: return@inTransaction
+            if (now.remoteUuid != remoteUuid) return@inTransaction
+            if (now.localUri == null && now.downloadState != DownloadState.DOWNLOADED) return@inTransaction
+            deleter.forgetDeleted(url, account)
+            bookDao.unlinkFromRemote(listOf(url))
+        }
     }
 
     /**

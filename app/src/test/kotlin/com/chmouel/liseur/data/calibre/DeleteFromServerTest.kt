@@ -151,10 +151,9 @@ class DeleteFromServerTest {
     }
 
     @Test
-    fun `a book that changed while the delete was out stays here`() = runBlocking {
+    fun `a book that changed while the delete was out stays here unlinked`() = runBlocking {
         val changes = listOf<suspend (Book) -> Unit>(
             { connected = "another account" },
-            { db.bookDao().upsert(db.bookDao().getByUrl(it.url)!!.copy(remoteUuid = "bo_scope_6")) },
             { downloads.fileFor(it.remoteUuid!!).writeText("a different, longer book") },
         )
         for ((index, change) in changes.withIndex()) {
@@ -164,14 +163,30 @@ class DeleteFromServerTest {
 
             assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
 
-            assertNotNull("change $index", db.bookDao().getByUrl(book.url))
+            val kept = db.bookDao().getByUrl(book.url)
+            assertNotNull("change $index", kept)
+            assertNull("change $index", kept!!.remoteUuid)
             assertTrue("change $index", downloads.fileFor(book.remoteUuid!!).exists())
-            assertTrue("change $index", deleter.forgotten.isEmpty())
+            assertEquals("change $index", listOf(book.url to server.accountKey), deleter.forgotten)
         }
     }
 
     @Test
-    fun `a folder book whose file was replaced while the delete was out stays here`() = runBlocking {
+    fun `a book relinked while the delete was out keeps its new link`() = runBlocking {
+        val book = downloaded("bo_scope_20")
+        val deleter = Deleter(during = {
+            db.bookDao().upsert(db.bookDao().getByUrl(book.url)!!.copy(remoteUuid = "bo_scope_6"))
+        })
+
+        assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
+
+        assertEquals("bo_scope_6", db.bookDao().getByUrl(book.url)?.remoteUuid)
+        assertTrue(downloads.fileFor(book.remoteUuid!!).exists())
+        assertTrue(deleter.forgotten.isEmpty())
+    }
+
+    @Test
+    fun `a folder book whose file was replaced while the delete was out stays here unlinked`() = runBlocking {
         val source = java.io.File.createTempFile("folder", ".epub").apply { writeText("the book"); deleteOnExit() }
         val book = Book(
             url = "file://${source.path}", title = "One", author = null, coverPath = null, source = null,
@@ -183,12 +198,14 @@ class DeleteFromServerTest {
 
         assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
 
-        assertNotNull(db.bookDao().getByUrl(book.url))
-        assertTrue(deleter.forgotten.isEmpty())
+        val kept = db.bookDao().getByUrl(book.url)
+        assertNotNull(kept)
+        assertNull(kept!!.remoteUuid)
+        assertEquals(listOf(book.url to server.accountKey), deleter.forgotten)
     }
 
     @Test
-    fun `a document whose size and time cannot be read is kept after a server delete`() = runBlocking {
+    fun `a document whose size and time cannot be read is kept unlinked after a server delete`() = runBlocking {
         Robolectric.buildContentProvider(Silent::class.java).create(SILENT)
         val book = Book(
             url = "content://$SILENT/document/one", title = "One", author = null, coverPath = null,
@@ -200,8 +217,10 @@ class DeleteFromServerTest {
 
         assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
 
-        assertNotNull(db.bookDao().getByUrl(book.url))
-        assertTrue(deleter.forgotten.isEmpty())
+        val kept = db.bookDao().getByUrl(book.url)
+        assertNotNull(kept)
+        assertNull(kept!!.remoteUuid)
+        assertEquals(listOf(book.url to server.accountKey), deleter.forgotten)
     }
 
     /** A provider that answers without the size or modification time. */
