@@ -105,17 +105,20 @@ revision. Independent reader and enabled-path fault checks passed on
 with an access or refresh token can sync positions.
 
 Normal sync sends through the durable selected-file exchange, with bounded
-account traversal. Remote adoption still needs active-reader proof and
-closed-book identity/revision checks. Generic position-choice methods stay
-disabled. Reading-status synchronization has a separate implementation, but
-automatic writes remain gated until independent-client acceptance. Annotations
-are not synchronized.
+account traversal. On 2026-09-24 the maintainer asked for sync as eager as
+liseur-sync: every page turn and pause now sends while the book is open,
+and a server place saved elsewhere is offered as an in-reader catch-up.
+Remote adoption still needs active-reader proof and identity/revision
+checks. Generic position-choice methods stay disabled. Reading-status
+synchronization has its own agreements and is on. Annotations are not
+synchronized.
 
 ## Consequences
 
 BookOrbit supports browsing, downloads and exact EPUB positions. Settings
 explain position conflict resolution and the last-server-write-wins policy.
-Automatic status writes stay off until an independent client checks them live.
+Status writes are on. Each sync adds a status GET, and every position POST
+still runs BookOrbit's own read-status and Kobo hooks, now once per page.
 
 The session machinery is the first of its kind and is the part to keep
 honest. Anything that signs a BookOrbit request has to go through the

@@ -53,4 +53,17 @@ class OpenBooks {
         lock.withLock {
             if (bookUrl in reading) null else apply()
         }
+
+    /**
+     * Runs [apply] for the reader that holds [bookUrl] open, and answers
+     * null when nobody does.
+     *
+     * Only for a write the reader on screen asked for while its own
+     * position writes are paused, so nothing it shows can be written over.
+     * Like [unlessOpen], it holds the lock for the write alone.
+     */
+    suspend fun <T> whileHeld(bookUrl: String, apply: suspend () -> T): T? =
+        lock.withLock {
+            if (bookUrl in reading) apply() else null
+        }
 }

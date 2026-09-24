@@ -11,6 +11,7 @@ import com.chmouel.liseur.domain.reconcileExactPosition
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -26,6 +27,8 @@ data class BookOrbitPullOffer(
     val expectedLocator: String,
     val locatorJson: String,
     val href: String,
+    /** Opened with no place of this device's own, so nothing was agreed before. */
+    val fresh: Boolean = false,
 )
 
 /** A percentage-only place to open at, tied to the local place and agreement it replaces. */
@@ -71,6 +74,10 @@ class BookOrbitPositionAgreementRepository(
     private val dao get() = database.bookOrbitPositionAgreementDao()
     private val attemptMutex get() = database.bookOrbitPositionMutex
 
+    /** The agreement row as it changes; the reader watches it for places saved elsewhere. */
+    fun observe(context: BookOrbitCfiContext): Flow<BookOrbitPositionAgreement?> =
+        dao.observe(context.request.accountKey, context.bookUrl)
+
     suspend fun state(context: BookOrbitCfiContext): BookOrbitPositionAgreement =
         database.withTransaction {
             checkCurrent(context)
@@ -114,18 +121,29 @@ class BookOrbitPositionAgreementRepository(
 
     /** Explicit keep-local choice only; [send] still preflights and reads back before agreement. */
     suspend fun prepareKeepLocal(preview: BookOrbitConflictPreview): BookOrbitPositionAgreement =
-        attemptMutex.withLock { prepareKeepLocalLocked(preview) }
+        attemptMutex.withLock { prepareKeepLocalLocked(preview, inReader = false) }
 
-    suspend fun keepLocal(preview: BookOrbitConflictPreview): BookOrbitReadBack = attemptMutex.withLock {
-        prepareKeepLocalLocked(preview)
+    /**
+     * @param inReader The reader showing [preview] asks, with its own
+     * position writes paused, so the book must be held open rather than
+     * closed for the choice to apply.
+     */
+    suspend fun keepLocal(
+        preview: BookOrbitConflictPreview,
+        inReader: Boolean = false,
+    ): BookOrbitReadBack = attemptMutex.withLock {
+        prepareKeepLocalLocked(preview, inReader)
         sendLocked(preview.context)
     }
 
-    private suspend fun prepareKeepLocalLocked(preview: BookOrbitConflictPreview): BookOrbitPositionAgreement {
+    private suspend fun prepareKeepLocalLocked(
+        preview: BookOrbitConflictPreview,
+        inReader: Boolean,
+    ): BookOrbitPositionAgreement {
         val context = preview.context
         val fresh = progress.read(context)
         if (fresh != preview.remote) throw BookOrbitPositionUnresolved()
-        return database.readingProgressDao().openBooks.unlessOpen(context.bookUrl) {
+        return fenced(context.bookUrl, inReader) {
             database.withTransaction {
                 checkCurrent(context)
                 val row = current(context)
@@ -290,9 +308,55 @@ class BookOrbitPositionAgreementRepository(
         offer: BookOrbitPullOffer,
     ): Boolean = attemptMutex.withLock { adoptClosed(offer, preview) }
 
+    /** The same choice, made in the reader that shows the verified offer; see [keepLocal]. */
+    suspend fun adoptChosenVerifiedInReader(
+        preview: BookOrbitConflictPreview,
+        offer: BookOrbitPullOffer,
+    ): Boolean = attemptMutex.withLock { adoptClosed(offer, preview, inReader = true) }
+
+    /**
+     * The server moved while the book was open, and the reader accepted the
+     * offer to follow it; see [catchUpOffer]. The reader has verified the
+     * passage on screen and holds its own writes, so this device's place
+     * must still be the one the offer replaces, even if it moved since the
+     * agreement: accepting is the answer to that disagreement.
+     */
+    suspend fun adoptCaughtUpInReader(offer: BookOrbitPullOffer): Boolean =
+        attemptMutex.withLock { adoptClosed(offer, null, inReader = true, caughtUp = true) }
+
+    /**
+     * Where the server moved since the agreement, read fresh, if the reader
+     * may offer to follow it: an exact place, no request of this device's
+     * own that explains it, and not the place this device is already on;
+     * see [serverMovedAway].
+     */
+    suspend fun catchUpOffer(context: BookOrbitCfiContext): BookOrbitFileProgress? = attemptMutex.withLock {
+        readBackIfPendingLocked(context)
+        val remote = progress.read(context)
+        observe(context, remote)
+        database.withTransaction {
+            checkCurrent(context)
+            val row = current(context)
+            val local = database.readingProgressDao().get(context.bookUrl)
+            val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
+            remote.takeIf {
+                row.serverMovedAway() && row.matchesCandidate(remote) && local != null &&
+                    (local.ownerAccount == null || local.ownerAccount == context.request.accountKey) &&
+                    (verified?.localRevision != local.positionRevision || verified.rawCfi != remote.cfi)
+            }
+        }
+    }
+
+    /** The reader kept its own place over [offer]; see [declineServerPlaceIn]. */
+    suspend fun declineServerPlace(offer: BookOrbitPullOffer): Boolean = attemptMutex.withLock {
+        database.withTransaction { declineServerPlaceIn(database, offer) }
+    }
+
     private suspend fun adoptClosed(
         offer: BookOrbitPullOffer,
         preview: BookOrbitConflictPreview?,
+        inReader: Boolean = false,
+        caughtUp: Boolean = false,
     ): Boolean {
         val context = offer.context
         if (preview != null && (
@@ -313,12 +377,13 @@ class BookOrbitPositionAgreementRepository(
             observe(context, fresh)
             return false
         }
-        return database.readingProgressDao().openBooks.unlessOpen(context.bookUrl) {
+        return fenced(context.bookUrl, inReader) {
             database.withTransaction {
                 checkCurrent(context)
                 val row = current(context)
                 val local = database.readingProgressDao().get(context.bookUrl)
-                if ((preview == null && row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name)) ||
+                if ((preview == null && !caughtUp &&
+                        row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name)) ||
                     (preview != null && !row.canChoose()) ||
                     local == null || local.positionRevision != offer.expectedRevision ||
                     (local.ownerAccount != null && local.ownerAccount != context.request.accountKey) ||
@@ -326,7 +391,8 @@ class BookOrbitPositionAgreementRepository(
                     row.candidateCfi != offer.remote.cfi ||
                     row.candidatePercentage != offer.remote.percentage ||
                     row.candidateSaved != offer.remote.isSaved ||
-                    (preview == null && (
+                    (caughtUp && !row.serverMovedAway()) ||
+                    (preview == null && !caughtUp && (
                         row.agreedLocalRevision != offer.expectedRevision ||
                             row.agreedLocatorJson != offer.expectedLocator ||
                             row.agreedRemoteSaved == null ||
@@ -491,6 +557,12 @@ class BookOrbitPositionAgreementRepository(
         }
     }
 
+    /**
+     * Not fenced by [com.chmouel.liseur.data.remote.OpenBooks]: a send
+     * writes only the agreement row and never moves the page on screen, so
+     * the book being read is exactly the one worth sending. A page turned
+     * meanwhile is a newer revision that stays dirty for the next send.
+     */
     private suspend fun sendLocked(context: BookOrbitCfiContext): BookOrbitReadBack {
         val before = state(context)
         if (before.attemptState != BookOrbitAttempt.PREPARED.name ||
@@ -498,36 +570,34 @@ class BookOrbitPositionAgreementRepository(
         ) throw BookOrbitPositionUnresolved()
         if (!preparedStillMatches(context)) throw BookOrbitPositionUnresolved()
         val preflight = progress.read(context)
-        val row = database.readingProgressDao().openBooks.unlessOpen(context.bookUrl) {
-            database.withTransaction {
-                checkCurrent(context)
-                val pending = current(context)
-                if (pending.attemptState != BookOrbitAttempt.PREPARED.name ||
-                    pending.outgoingBytes == null || pending.sentLocalRevision == null ||
-                    pending.attemptGeneration != before.attemptGeneration ||
-                    !pending.outgoingBytes.contentEquals(before.outgoingBytes)
-                ) throw BookOrbitPositionUnresolved()
-                if (preflight.isSaved != pending.preflightSaved ||
-                    preflight.cfi != pending.preflightCfi ||
-                    preflight.percentage != pending.preflightPercentage ||
-                    preflight.displayTime != pending.candidateUpdatedAt
-                ) {
-                    dao.write(pending.copy(
-                        attemptState = null, outgoingBytes = null, sentLocalRevision = null,
-                        sentLocatorJson = null, preflightCfi = null,
-                        preflightPercentage = null, preflightSaved = null,
-                        candidateCfi = preflight.cfi, candidatePercentage = preflight.percentage,
-                        candidateSaved = preflight.isSaved, candidateUpdatedAt = preflight.displayTime,
-                    ))
-                    return@withTransaction null
-                }
-                val local = database.readingProgressDao().get(context.bookUrl)
-                val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
-                if (!pending.matchesPreparedLocal(context, local, verified))
-                    throw BookOrbitPositionUnresolved()
-                pending.copy(attemptState = BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name)
-                    .also { dao.write(it) }
+        val row = database.withTransaction {
+            checkCurrent(context)
+            val pending = current(context)
+            if (pending.attemptState != BookOrbitAttempt.PREPARED.name ||
+                pending.outgoingBytes == null || pending.sentLocalRevision == null ||
+                pending.attemptGeneration != before.attemptGeneration ||
+                !pending.outgoingBytes.contentEquals(before.outgoingBytes)
+            ) throw BookOrbitPositionUnresolved()
+            if (preflight.isSaved != pending.preflightSaved ||
+                preflight.cfi != pending.preflightCfi ||
+                preflight.percentage != pending.preflightPercentage ||
+                preflight.displayTime != pending.candidateUpdatedAt
+            ) {
+                dao.write(pending.copy(
+                    attemptState = null, outgoingBytes = null, sentLocalRevision = null,
+                    sentLocatorJson = null, preflightCfi = null,
+                    preflightPercentage = null, preflightSaved = null,
+                    candidateCfi = preflight.cfi, candidatePercentage = preflight.percentage,
+                    candidateSaved = preflight.isSaved, candidateUpdatedAt = preflight.displayTime,
+                ))
+                return@withTransaction null
             }
+            val local = database.readingProgressDao().get(context.bookUrl)
+            val verified = database.bookOrbitLocalCfiDao().get(context.request.accountKey, context.bookUrl)
+            if (!pending.matchesPreparedLocal(context, local, verified))
+                throw BookOrbitPositionUnresolved()
+            pending.copy(attemptState = BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name)
+                .also { dao.write(it) }
         } ?: throw BookOrbitPositionUnresolved()
         val result = transport.sendBytes(context, checkNotNull(row.outgoingBytes))
         if (result is BookOrbitHttp.MutationResult.Rejected) {
@@ -549,14 +619,16 @@ class BookOrbitPositionAgreementRepository(
 
     /** Also handles a MAY_HAVE_BEEN_SENT row after process death, without replaying it. */
     suspend fun readBackIfPending(context: BookOrbitCfiContext): BookOrbitReadBack? =
-        attemptMutex.withLock {
-            if (state(context).attemptState !in listOf(
-                    BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name, BookOrbitAttempt.UNCERTAIN.name,
-                    BookOrbitAttempt.RETRY_REQUIRED.name,
-                )
-            ) return@withLock null
-            readBackLocked(context)
-        }
+        attemptMutex.withLock { readBackIfPendingLocked(context) }
+
+    private suspend fun readBackIfPendingLocked(context: BookOrbitCfiContext): BookOrbitReadBack? {
+        if (state(context).attemptState !in listOf(
+                BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name, BookOrbitAttempt.UNCERTAIN.name,
+                BookOrbitAttempt.RETRY_REQUIRED.name,
+            )
+        ) return null
+        return readBackLocked(context)
+    }
 
     suspend fun readBack(context: BookOrbitCfiContext): BookOrbitReadBack {
         attemptMutex.lock()
@@ -645,6 +717,12 @@ class BookOrbitPositionAgreementRepository(
         }
     }
 
+    /** A closed book normally; the open one when its reader made the choice. */
+    private suspend fun <T> fenced(bookUrl: String, inReader: Boolean, apply: suspend () -> T): T? {
+        val books = database.readingProgressDao().openBooks
+        return if (inReader) books.whileHeld(bookUrl, apply) else books.unlessOpen(bookUrl, apply)
+    }
+
     private suspend fun current(context: BookOrbitCfiContext): BookOrbitPositionAgreement {
         val row = dao.get(context.request.accountKey, context.bookUrl)
             ?: return BookOrbitPositionAgreement(
@@ -718,5 +796,106 @@ internal suspend fun adoptApproximateBaselineIn(
         agreedRemoteSaved = true, agreedRemoteCfi = null,
         agreedRemotePercentage = offer.remote.percentage,
     ))
+    return true
+}
+
+/**
+ * The reader moved on from a verified server place it opened at. That place
+ * becomes the agreed remote one in the move's own transaction, so the move
+ * is pushed instead of looking like movement on both sides. The pull was
+ * offered only because the local place was the agreed one; anything else,
+ * or an agreement that has since moved on, refuses it.
+ */
+internal suspend fun agreeOpeningPullIn(
+    database: LiseurDatabase,
+    offer: BookOrbitPullOffer,
+): Boolean {
+    val context = offer.context
+    if (!context.request.matches(database.remoteServerDao().get()) ||
+        !context.matches(database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl))
+    ) return false
+    val dao = database.bookOrbitPositionAgreementDao()
+    val row = dao.get(context.request.accountKey, context.bookUrl) ?: return false
+    val local = database.readingProgressDao().get(context.bookUrl) ?: return false
+    val baseline = if (offer.fresh) {
+        row.agreedRemoteSaved == null && row.agreedLocalRevision == null && row.agreedLocatorJson == null
+    } else {
+        row.agreedLocalRevision == offer.expectedRevision && row.agreedLocatorJson == offer.expectedLocator
+    }
+    if (local.positionRevision == offer.expectedRevision ||
+        local.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
+        row.attemptState !in listOf(null, BookOrbitAttempt.ACKNOWLEDGED.name) ||
+        !baseline ||
+        !offer.remote.isSaved || offer.remote.cfi == null ||
+        row.agreedRemoteSaved == true && row.agreedRemoteCfi == offer.remote.cfi ||
+        row.candidateCfi != offer.remote.cfi ||
+        row.candidatePercentage != offer.remote.percentage ||
+        row.candidateSaved != offer.remote.isSaved
+    ) return false
+    dao.write(row.copy(
+        agreedRemoteCfi = offer.remote.cfi, agreedRemotePercentage = offer.remote.percentage,
+        agreedRemoteSaved = true,
+    ))
+    return true
+}
+
+/**
+ * The server holds an exact place this device has not agreed with, and no
+ * request of this device's own explains it: someone else read on (or back)
+ * since the agreement. That includes a request whose read-back found
+ * neither the place it sent nor the one seen before sending, when someone
+ * else wrote in between. That request is never sent again; the reader
+ * follows the server's place or keeps its own, which starts a new one.
+ */
+fun BookOrbitPositionAgreement.serverMovedAway(): Boolean {
+    if (candidateSaved != true || candidateCfi == null) return false
+    return when (attemptState) {
+        null, BookOrbitAttempt.ACKNOWLEDGED.name ->
+            agreedRemoteSaved != null && (agreedRemoteSaved != true || agreedRemoteCfi != candidateCfi)
+        BookOrbitAttempt.UNCERTAIN.name -> {
+            val sent = outgoingBytes?.let {
+                runCatching { JSONObject(String(it, Charsets.UTF_8)).getString("cfi") }.getOrNull()
+            } ?: return false
+            candidateCfi != sent && (
+                preflightSaved != true || preflightCfi != candidateCfi ||
+                    preflightPercentage != candidatePercentage
+                )
+        }
+        else -> false
+    }
+}
+
+/**
+ * The reader saw the server's place and kept its own. That place becomes
+ * the agreed remote one, so this device's next move is pushed over it: the
+ * last write wins. Refused unless it is still the place last seen.
+ */
+internal suspend fun declineServerPlaceIn(
+    database: LiseurDatabase,
+    offer: BookOrbitPullOffer,
+): Boolean {
+    val context = offer.context
+    if (!context.request.matches(database.remoteServerDao().get()) ||
+        !context.matches(database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl))
+    ) return false
+    val dao = database.bookOrbitPositionAgreementDao()
+    val row = dao.get(context.request.accountKey, context.bookUrl) ?: return false
+    if (!row.serverMovedAway() ||
+        row.candidateCfi != offer.remote.cfi ||
+        row.candidatePercentage != offer.remote.percentage
+    ) return false
+    val agreed = row.copy(
+        agreedRemoteCfi = offer.remote.cfi, agreedRemotePercentage = offer.remote.percentage,
+        agreedRemoteSaved = true,
+    )
+    // An uncertain request is dropped, not replayed: the next send prepares
+    // this device's current place afresh, with its own preflight.
+    dao.write(
+        if (row.attemptState != BookOrbitAttempt.UNCERTAIN.name) agreed else agreed.copy(
+            attemptState = null, outgoingBytes = null, sentLocalRevision = null,
+            sentLocatorJson = null, preflightCfi = null, preflightPercentage = null,
+            preflightSaved = null,
+        ),
+    )
     return true
 }

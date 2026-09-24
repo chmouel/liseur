@@ -53,6 +53,9 @@ internal class BookOrbitOpening {
         return true
     }
 
+    /** The choice was applied or declined; nothing is left to offer. */
+    fun resolved() = failed()
+
     fun failed() {
         pull = null
         choice = null

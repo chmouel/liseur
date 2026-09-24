@@ -379,13 +379,13 @@
     <string name="reader_sync_book_moved">Something moved while that was open, so nothing was changed. Try syncing this book again.</string>
     <string name="reader_sync_book_kept">Kept this device\'s position. It will go to the server on the next sync.</string>
     <string name="reader_sync_book_title">Two reading positions</string>
-    <string name="reader_bookorbit_choice_help">The server saved a different place. This page is a verified preview. Choosing a side closes the reader while it checks the choice. Wait for confirmation before reopening. Cancel closes without saving this preview.</string>
+    <string name="reader_bookorbit_choice_help">This device and the server saved different places. The page behind shows the server\'s place. Choose the one to keep reading from, and the other side is updated. Cancel takes you back to this device\'s place and changes nothing.</string>
     <string name="reader_bookorbit_take">Keep the server\'s place</string>
     <string name="reader_bookorbit_retry">Send this device\'s place again</string>
-    <string name="reader_bookorbit_retry_help">An earlier send needs your decision. This page shows the verified server position. You can keep it or send this device\'s saved position again, replacing the server position. The reader will close; wait for confirmation before reopening. Cancel leaves the request unresolved.</string>
-    <string name="reader_bookorbit_retry_only_help">An earlier send needs your decision. The server position could not be verified, so you are viewing this device\'s place. Sending again may replace a position saved by another device. The reader will close; wait for confirmation before reopening. Cancel leaves the request unresolved.</string>
-    <string name="reader_bookorbit_choice_saved">Reading place saved. Reopen the book to continue.</string>
-    <string name="reader_bookorbit_choice_failed">The choice could not be confirmed. Reopen the book to check its saved place and try again.</string>
+    <string name="reader_bookorbit_retry_help">An earlier send was not confirmed. The page behind shows the server\'s place. Keep it, or send this device\'s place again to replace it. Cancel takes you back to this device\'s place and leaves the send unresolved.</string>
+    <string name="reader_bookorbit_retry_only_help">An earlier send was not confirmed, and the server\'s place could not be checked, so you are on this device\'s place. Sending it again may replace a place saved by another device. Cancel leaves the send unresolved.</string>
+    <string name="reader_bookorbit_choice_saved">Reading place saved.</string>
+    <string name="reader_bookorbit_choice_failed">The choice could not be confirmed. You will be asked again the next time you open the book.</string>
     <string name="reader_sync_book_ahead">Another device has read further than this one. Which position would you like to keep?</string>
     <string name="reader_sync_book_behind">Another device is behind this one. Which position would you like to keep?</string>
     <string name="reader_sync_book_same_page">Both devices are on the same page, but not in the same spot. Which one would you like to keep?</string>
@@ -957,6 +957,6 @@
     <string name="reader_external_link_body">This link opens %1$s in your browser. Liseur will not follow it for you.</string>
     <string name="reader_external_link_open">Open</string>
     <string name="reader_external_link_failed">No app on this device can open that link.</string>
-    <string name="server_sync_bookorbit">Reading places sync for verified EPUBs. Resolve conflicts when you open a book. The last server write wins; reading status and annotations are not synced.</string>
+    <string name="server_sync_bookorbit">Reading places sync on every page for verified EPUBs, and places saved elsewhere are offered while you read. The last server write wins. Finished and unread marks sync too; annotations do not.</string>
     <string name="server_sync_off_bookorbit">Reading places are not synced with BookOrbit.</string>
 </resources>

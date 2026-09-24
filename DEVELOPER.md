@@ -1270,10 +1270,21 @@ CFI live.
   from authorizing a byte-identical retry. Sends, read-backs and choices
   share `database.bookOrbitPositionMutex`. The race after the final
   preflight follows the approved last-server-write-wins policy.
-- Remote places are adopted only after the reader closes, behind a fresh
-  GET and a transaction that rechecks account, binding, agreement and the
-  exact local revision and locator. First-time conflicts use a
-  reader-verified choice after close. `BookOrbitPositionSync` walks at
+- Pushes run on every saved page turn and on pause while the book is
+  open; only adoption is fenced by `OpenBooks`. A verified server place
+  the book opened at is agreed by the first page turn in the move's
+  transaction (`agreeOpeningPullIn`), so that move pushes. A server place
+  saved elsewhere while reading is offered as a catch-up pill; accepting
+  adopts it once the WebView shows it (`adoptCaughtUpInReader`), and
+  dismissing or reading on records it as agreed so the next move
+  overwrites it. A place written by someone else between this device's
+  POST and its read-back is offered the same way; declining drops the
+  uncertain attempt instead of replaying it.
+- Remote places found while the book is closed are adopted after close,
+  behind a fresh GET and a transaction that rechecks account, binding,
+  agreement and the exact local revision and locator. First-time conflicts use a
+  reader-verified choice applied in the open reader while its position
+  writes are paused (`OpenBooks.whileHeld`). `BookOrbitPositionSync` walks at
   most 20 bindings per call over a persisted traversal (schema 58); its
   generic choice methods stay disabled.
 - A percentage-only server place opens as an approximate fraction
@@ -1281,9 +1292,8 @@ CFI live.
   remote place in the same transaction as the move, so that move pushes
   an exact CFI; any jump declines it and leaves the server place alone.
 - Reading status has its own agreements and exact-byte PATCH, keyed on
-  `status_revision` so a status change keeps the verified CFI. Its
-  automatic writes stay off (`BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED`)
-  until an independent client checks it live. See
+  `status_revision` so a status change keeps the verified CFI. Automatic
+  writes are on (`BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED`). See
   [the position-sync notes](docs/bookorbit-position-sync.md).
 
 ## liseur-sync protocol

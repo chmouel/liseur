@@ -220,8 +220,8 @@ class ReaderActivity : FragmentActivity() {
                     val bookSync by viewModel.bookSync.collectAsStateWithLifecycle()
                     BookSyncDialog(
                         state = bookSync,
-                        onResolve = { if (viewModel.resolveBookSync(it)) finish() },
-                        onDismiss = { if (viewModel.dismissBookSync()) finish() },
+                        onResolve = viewModel::resolveBookSync,
+                        onDismiss = viewModel::dismissBookSync,
                     )
                     // Only over a book that is actually on screen. Asked
                     // during the spinner it would be a question about a
@@ -553,6 +553,8 @@ class ReaderActivity : FragmentActivity() {
                                     footnoteFlow = viewModel.footnote,
                                     onDismissFootnote = viewModel::dismissFootnote,
                                     goTo = viewModel.goTo,
+                                    bookOrbitGoTo = viewModel.bookOrbitGoTo,
+                                    onBookOrbitCatchUpArrived = viewModel::onBookOrbitCatchUpArrived,
                                     onBookSyncAction = remember {
                                         ReaderBookSyncActions(
                                             start = viewModel::syncThisBook,

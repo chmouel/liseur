@@ -2,6 +2,8 @@ package com.chmouel.liseur.reader.chrome
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -85,12 +87,16 @@ fun BookSyncDialog(
             onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.reader_sync_book_title)) },
             text = {
-                Text(stringResource(
-                    if (state.preview.retryRequired) {
-                        if (state.canTakeRemote) R.string.reader_bookorbit_retry_help
-                        else R.string.reader_bookorbit_retry_only_help
-                    } else R.string.reader_bookorbit_choice_help,
-                ))
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(stringResource(
+                        if (state.preview.retryRequired) {
+                            if (state.canTakeRemote) R.string.reader_bookorbit_retry_help
+                            else R.string.reader_bookorbit_retry_only_help
+                        } else R.string.reader_bookorbit_choice_help,
+                    ))
+                    Side(R.string.reader_sync_here, state.here)
+                    Side(R.string.reader_sync_there, state.there)
+                }
             },
             confirmButton = {
                 Column {
@@ -115,9 +121,10 @@ fun BookSyncDialog(
 }
 
 /**
- * One side, said in pages where the book has been laid out and as a
- * percentage where it has not — a page number is what a reader can place
- * themselves by, but it is not known until the book has been measured.
+ * One side, said in pages and as a percentage where the book has been
+ * laid out, and as a percentage alone where it has not — a page number is
+ * what a reader can place themselves by, but it is not known until the
+ * book has been measured. The chapter follows when it is known.
  *
  * The excerpt is the server's text, so it is drawn as text and nothing
  * else: no markup is interpreted, its length is capped, and it is held
@@ -134,22 +141,33 @@ private fun Side(labelRes: Int, point: ReaderViewModel.SyncPoint) {
         )
         val page = point.page
         val total = point.totalPages
+        val percent = stringResource(
+            R.string.reader_sync_percent,
+            (point.progression * 100).roundToInt(),
+        )
         val place = if (page != null && total != null && total > 0) {
-            if (point.confidence == ResumeConfidence.EXACT) {
+            val pages = if (point.confidence == ResumeConfidence.EXACT) {
                 stringResource(R.string.reader_sync_page, page, total)
             } else {
                 stringResource(R.string.reader_sync_near_page, page, total)
             }
+            "$pages · $percent"
         } else {
-            stringResource(
-                R.string.reader_sync_percent,
-                (point.progression * 100).roundToInt(),
-            )
+            percent
         }
         Text(
             text = relativeAge(point.at)?.let { "$place · $it" } ?: place,
             style = MaterialTheme.typography.bodyLarge,
         )
+        val chapter = point.chapter?.takeIf { it.isNotBlank() }
+        if (chapter != null) {
+            Text(
+                text = chapter,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         val excerpt = point.excerpt?.takeIf { it.isNotBlank() }
         if (excerpt != null) {
             Text(

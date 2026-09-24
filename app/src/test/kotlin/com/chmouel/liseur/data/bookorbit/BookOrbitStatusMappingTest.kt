@@ -3,14 +3,14 @@ package com.chmouel.liseur.data.bookorbit
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingStatus
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BookOrbitStatusMappingTest {
     @Test
-    fun `automatic status sync stays gated until live acceptance`() {
-        assertFalse(BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED)
+    fun `automatic status sync is on`() {
+        assertTrue(BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED)
     }
 
     @Test

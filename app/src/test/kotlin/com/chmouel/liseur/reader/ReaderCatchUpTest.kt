@@ -85,7 +85,7 @@ class ReaderCatchUpTest {
         assertEquals(listOf(7L), offered.adoptions)
         assertTrue(other.adoptions.isEmpty())
         assertEquals(original.copy(peerId = offered.peerId), catchUp.preview)
-        assertSame(original.remoteLocatorJson, catchUp.preview.remoteLocatorJson)
+        assertSame(original.remoteLocatorJson, catchUp.preview!!.remoteLocatorJson)
     }
 
     @Test

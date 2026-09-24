@@ -361,13 +361,13 @@
     <string name="reader_sync_book_moved">Algo se movió mientras eso estaba abierto, así que no se cambió nada. Intenta sincronizar este libro de nuevo.</string>
     <string name="reader_sync_book_kept">Se mantuvo la posición de este dispositivo. Irá al servidor en la próxima sincronización.</string>
     <string name="reader_sync_book_title">Dos posiciones de lectura</string>
-    <string name="reader_bookorbit_choice_help">El servidor guardó otra posición. Esta página es una vista previa verificada. Al elegir una posición se cierra el lector mientras se comprueba la elección. Espera la confirmación antes de volver a abrir el libro. Cancelar cierra sin guardar esta vista previa.</string>
+    <string name="reader_bookorbit_choice_help">Este dispositivo y el servidor guardaron posiciones distintas. La página de fondo muestra la del servidor. Elige desde cuál seguir leyendo y el otro lado se actualizará. Cancelar te devuelve a la posición de este dispositivo sin cambiar nada.</string>
     <string name="reader_bookorbit_take">Conservar la posición del servidor</string>
     <string name="reader_bookorbit_retry">Volver a enviar la posición de este dispositivo</string>
-    <string name="reader_bookorbit_retry_help">Un envío anterior requiere tu decisión. Esta página muestra la posición verificada del servidor. Puedes conservarla o volver a enviar la posición guardada en este dispositivo, reemplazando la del servidor. El lector se cerrará; espera la confirmación antes de volver a abrir el libro. Cancelar deja la solicitud pendiente.</string>
-    <string name="reader_bookorbit_retry_only_help">Un envío anterior requiere tu decisión. No se pudo verificar la posición del servidor, así que ves la de este dispositivo. Volver a enviarla puede reemplazar una posición guardada por otro dispositivo. El lector se cerrará; espera la confirmación antes de volver a abrir el libro. Cancelar deja la solicitud pendiente.</string>
-    <string name="reader_bookorbit_choice_saved">Posición de lectura guardada. Vuelve a abrir el libro para continuar.</string>
-    <string name="reader_bookorbit_choice_failed">No se pudo confirmar la elección. Vuelve a abrir el libro para comprobar su posición y reintentar.</string>
+    <string name="reader_bookorbit_retry_help">Un envío anterior no se confirmó. La página de fondo muestra la posición del servidor. Consérvala o vuelve a enviar la de este dispositivo para reemplazarla. Cancelar te devuelve a la posición de este dispositivo y deja el envío pendiente.</string>
+    <string name="reader_bookorbit_retry_only_help">Un envío anterior no se confirmó y no se pudo verificar la posición del servidor, así que estás en la de este dispositivo. Volver a enviarla puede reemplazar una posición guardada por otro dispositivo. Cancelar deja el envío pendiente.</string>
+    <string name="reader_bookorbit_choice_saved">Posición de lectura guardada.</string>
+    <string name="reader_bookorbit_choice_failed">No se pudo confirmar la elección. Se te volverá a preguntar la próxima vez que abras el libro.</string>
     <string name="reader_sync_book_ahead">Otro dispositivo ha leído más que este. ¿Qué posición quieres conservar?</string>
     <string name="reader_sync_book_behind">Otro dispositivo va por detrás de este. ¿Qué posición quieres conservar?</string>
     <string name="reader_sync_book_same_page">Ambos dispositivos están en la misma página, pero no en el mismo sitio. ¿Cuál quieres conservar?</string>
@@ -914,6 +914,6 @@
     <string name="reader_external_link_body">Este enlace abre %1$s en tu navegador. Liseur no lo seguirá por ti.</string>
     <string name="reader_external_link_open">Abrir</string>
     <string name="reader_external_link_failed">Ninguna app de este dispositivo puede abrir ese enlace.</string>
-    <string name="server_sync_bookorbit">Las posiciones de lectura se sincronizan para los EPUB verificados. Resuelve los conflictos al abrir un libro. Prevalece la última escritura en el servidor; el estado de lectura y las anotaciones no se sincronizan.</string>
+    <string name="server_sync_bookorbit">Las posiciones de lectura se sincronizan en cada página para los EPUB verificados, y se te ofrece una posición guardada en otro lugar mientras lees. Prevalece la última escritura en el servidor. Las marcas de leído y no leído también se sincronizan; las anotaciones, no.</string>
     <string name="server_sync_off_bookorbit">Las posiciones de lectura no se sincronizan con BookOrbit.</string>
 </resources>

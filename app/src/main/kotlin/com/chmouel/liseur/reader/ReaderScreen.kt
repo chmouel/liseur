@@ -255,6 +255,8 @@ private const val CHROME_ANIM_MS = 300
 private const val REFLOW_START_POLLS = 8
 private const val REFLOW_SETTLE_POLLS = 30
 private const val VERIFY_ATTEMPTS = 3
+private const val CFI_CAPTURE_ATTEMPTS = 4
+private const val CFI_CAPTURE_RETRY_MS = 200L
 
 // How long a run of selection reports has to go quiet before the passage
 // is read back. Long enough to swallow the second report every action
@@ -429,6 +431,8 @@ fun ReaderScreen(
     // otherwise carry on scrolling behind one.
     blockedByDialog: Boolean = false,
     goTo: SharedFlow<Locator>,
+    bookOrbitGoTo: SharedFlow<Locator>,
+    onBookOrbitCatchUpArrived: (Locator, Boolean) -> Unit,
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
 ) {
@@ -632,8 +636,9 @@ fun ReaderScreen(
     // the one the book opened on.
     var gateAnchor by remember(navigator) { mutableStateOf(restoreTarget) }
 
-    suspend fun verifyOpeningTarget(nav: EpubNavigatorFragment, locator: Locator): Boolean {
-        if (bookOrbitFallback == null) return ExactLocatorAnchor.verify(nav, locator)
+    // A BookOrbit place is adopted only once its passage is on the page
+    // that is actually shown, in the resource it names.
+    suspend fun showsBookOrbitPlace(nav: EpubNavigatorFragment, locator: Locator): Boolean {
         val root = nav.publicationView
         val web = visibleWebView(root) ?: return false
         val origin = IntArray(2)
@@ -646,6 +651,11 @@ fun ReaderScreen(
                 ResourceAddress.shows(web.url, locator.href.toString())
         }
         return isCurrent() && ExactLocatorAnchor.verify(web, locator) && isCurrent()
+    }
+
+    suspend fun verifyOpeningTarget(nav: EpubNavigatorFragment, locator: Locator): Boolean {
+        if (bookOrbitFallback == null) return ExactLocatorAnchor.verify(nav, locator)
+        return showsBookOrbitPlace(nav, locator)
     }
 
     // Point the gate at somewhere the reader is being sent, without
@@ -721,8 +731,7 @@ fun ReaderScreen(
         expectedNative: Locator? = null,
     ): BookOrbitLocalCandidate? {
         val opened = openedBookOrbit ?: return null
-        if (expectedNative != null && nav.currentLocator.value != expectedNative) return null
-        val candidate = try {
+        suspend fun attempt(): BookOrbitViewportCfi.Candidate? = try {
             BookOrbitViewportCfi.capture(
                 navigator = nav,
                 opened = opened,
@@ -741,12 +750,20 @@ fun ReaderScreen(
             Log.w("bookorbit-position", "Could not resolve the original EPUB resource", error)
             null
         }
-        val anchor = ExactLocatorAnchor.anchorIn(locator)
-        return candidate?.takeIf {
-            it.href == locator.href.toString() &&
-                anchor != null && it.before == anchor.before &&
-                it.word.startsWith(anchor.highlight)
-        }?.let {
+        val anchor = ExactLocatorAnchor.anchorIn(locator) ?: return null
+        // A turn into the next chapter is published while the pager is
+        // still sliding to its WebView: the first page of a chapter can
+        // answer with nothing, or with the page being left. It is asked
+        // again once the page has had a moment to arrive, for as long as
+        // the navigator is still on the place that was published.
+        val candidate = BookOrbitViewportCfi.firstMatching(
+            attempts = if (expectedNative == null) 1 else CFI_CAPTURE_ATTEMPTS,
+            retryDelayMs = CFI_CAPTURE_RETRY_MS,
+            stillWanted = { expectedNative == null || nav.currentLocator.value == expectedNative },
+            capture = { attempt() },
+            matches = { it.href == locator.href.toString() && BookOrbitViewportCfi.startsAt(it, anchor) },
+        )
+        return candidate?.let {
             BookOrbitLocalCandidate(
                 opened.context, it.href, locator.toJSON().toString(), it.raw,
             )
@@ -3583,6 +3600,30 @@ fun ReaderScreen(
                     verify = true,
                 )
             }
+        }
+    }
+
+    // Following BookOrbit while the book is open: the view model adopts
+    // the server's place only if its passage is seen here.
+    LaunchedEffect(bookOrbitGoTo) {
+        bookOrbitGoTo.collect { locator ->
+            showingEnd = false
+            onLeftEndpaper()
+            showToc = false
+            chromeVisible = false
+            val nav = navigatorNow
+            if (nav == null) {
+                onBookOrbitCatchUpArrived(locator, false)
+                return@collect
+            }
+            navigate(nav = nav, locator = locator, event = NavigatorPositionEvent.REMOTE_ADOPTION)
+            var shown = false
+            repeat(VERIFY_ATTEMPTS) {
+                if (shown) return@repeat
+                settleLayout()
+                shown = showsBookOrbitPlace(nav, locator)
+            }
+            onBookOrbitCatchUpArrived(locator, shown)
         }
     }
 

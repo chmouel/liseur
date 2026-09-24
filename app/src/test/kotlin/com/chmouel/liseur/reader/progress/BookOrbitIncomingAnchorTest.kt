@@ -57,6 +57,7 @@ class BookOrbitIncomingAnchorTest {
         ))
         val proposal = BookOrbitIncomingAnchor.mark(base, target)!!
         assertEquals("Before", ExactLocatorAnchor.anchorIn(proposal)?.highlight)
+        assertEquals(target.progression, proposal.locations.progression)
         val other = requireNotNull(Locator.fromJSON(
             JSONObject("""{"href":"https://example.com/OPS/other.xhtml","type":"application/xhtml+xml","locations":{}}"""),
         ))
@@ -72,6 +73,10 @@ class BookOrbitIncomingAnchorTest {
         )!!
         assertEquals("after", target.anchor.highlight)
         assertEquals("Before 😀 ", target.anchor.before)
+        val start = BookOrbitIncomingAnchor.resolve(
+            "epubcfi(/6[reading-order]/2[ref-one]!/4/2[first]/1:0)", publication, document(),
+        )!!
+        assertTrue(start.progression!! < target.progression!!)
     }
 
     @Test

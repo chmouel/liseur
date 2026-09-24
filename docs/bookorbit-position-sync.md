@@ -4,9 +4,8 @@ Liseur syncs the reading position of verified EPUBs with BookOrbit.
 `ServerKind.BOOKORBIT` advertises `syncAbility = EXACT`, and an account
 with an access or refresh token has `canSync = true`
 (`BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED`). Reading-status sync is
-implemented but its automatic writes stay off
-(`BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED`) until an independent client
-has checked it live. Annotations are not synchronized.
+on as well (`BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED`). Annotations are
+not synchronized.
 
 This file describes the protocol and the rules the code relies on. The
 dated work log that led here is in the git history of this file.
@@ -144,7 +143,13 @@ states:
 4. `UNCERTAIN`, `MAY_HAVE_BEEN_SENT`, `RETRY_REQUIRED` and `REJECTED` are
    read-back-only on every later run. Only an explicit reader choice can
    prepare a new attempt, and the attempt generation stops an old choice
-   from authorizing a byte-identical retry.
+   from authorizing a byte-identical retry. When the read-back of an
+   `UNCERTAIN` attempt finds an exact place that is neither the one sent
+   nor the one seen at preflight, someone else wrote in between, and an
+   open reader offers that place as a catch-up (below). Following it
+   adopts the place and clears the attempt. Declining it drops the
+   attempt, so the next send prepares this device's place afresh with its
+   own preflight. A read-back that failed is never offered this way.
 
 Sends, read-backs and choices share `database.bookOrbitPositionMutex`.
 Every write re-reads the agreement row inside its own transaction.
@@ -154,20 +159,61 @@ Every write re-reads the agreement row inside its own transaction.
 - Opening a book first reads back any potentially sent request, so an
   interrupted save is acknowledged instead of offered again.
 - A book with no local place reads its file's progress while loading and
-  opens at a verified server CFI. Failure falls back to the start.
+  opens at a verified server CFI. Failure falls back to the start. The
+  first page turn records that server place as agreed, provided nothing
+  was agreed before (`BookOrbitPullOffer.fresh`), so the move pushes.
 - A book whose local place is unchanged since the last agreement may open
-  at a newer verified server CFI. The local row changes only after the
-  reader closes, a fresh GET confirms the same place, and a transaction
-  rechecks account, binding, attempt, agreement, candidate and the exact
-  local revision and locator.
+  at a newer verified server CFI. The first page turn agrees that place in
+  the same transaction as the move (`agreeOpeningPullIn`), provided the
+  agreement still holds the local revision and locator the book opened
+  with and the candidate is still the offered CFI. That move then pushes.
+  A reader closed without turning a page adopts it after close instead:
+  a fresh GET confirms the same place and a transaction rechecks account,
+  binding, attempt, agreement, candidate and the exact local revision and
+  locator.
+- Every saved page turn signals a sync while the book is open, so the
+  server follows each page, as with liseur-sync. Sending never moves the
+  page on screen, so `sendLocked` is not fenced by `OpenBooks`; adoption
+  still is. `LatestPositionSync` keeps one request in flight and a turn
+  made during a send stays dirty for the next one. Pausing the reader
+  republishes the held place, so locking the phone or switching apps sends
+  the last page too.
+- The outgoing CFI is captured on every paginated page. The capture skips
+  tokens without letters or digits, as the Readium anchor does, and
+  accepts an anchor that starts inside the captured token (an opening
+  quote, or a hyphenated word broken across the page). The first page of
+  a chapter is published while the pager is still sliding to its WebView,
+  so the capture is retried briefly while the navigator stays on that
+  page, both when it finds nothing and when it finds the page being left. A page without text, such as an image, still sends nothing.
+- While a book is open, Liseur watches the agreement row and checks the
+  server on resume. When someone else moved the server since the
+  agreement (`serverMovedAway`) and the place resolves to a verified
+  passage, the catch-up pill offers it with its page, excerpt and save
+  time. Accepting flushes pending writes, goes there, waits for the
+  WebView to show the passage and adopts it through the guarded
+  in-reader path (`adoptCaughtUpInReader`). Dismissing records that
+  server place as agreed (`declineServerPlaceIn`), and so does turning a
+  page while the pill is shown. A dismissal is also carried by the next
+  page write, so a page turned right after dismissing cannot sync before
+  the dismissal lands. Either way the next move overwrites the server's
+  place (last write wins). A percentage-only server place is not
+  offered, and neither is this device's own last verified CFI.
 - A first-time disagreement, or movement on both sides, shows a choice
-  once the active WebView has verified the server place. Taking the
-  server's place or keeping this device's runs after the reader closes
-  and its queued writes land. A server CFI that cannot be verified offers
-  only "send this device's place again" or cancel. A choice interrupted
-  by process death is dropped and offered again on the next opening.
-- Closing the reader signals another sync after queued writes release
-  the open-book fence, so the last page is not left unsent.
+  once the active WebView has verified the server place. The dialog
+  gives each side's page, percentage, chapter and save time. The choice
+  applies with the reader still open: its own position writes stay paused
+  until the choice lands, and `OpenBooks.whileHeld` replaces the
+  closed-book fence for that one write. Taking the server's place stays on
+  the verified page and adopts it through the same guarded transaction as
+  a closed-book pull. Keeping this device's place goes back to it and sends
+  it with the usual preflight, POST and read-back. A server that moved
+  meanwhile refuses the choice and returns the reader to this device's
+  place. Cancel also returns there and records nothing, so the next
+  opening asks again. A server CFI that cannot be verified offers only
+  "send this device's place again" or cancel. A choice interrupted by
+  process death is dropped and offered again on the next opening.
+- Closing the reader signals another sync after queued writes land, so
+  the last page is not left unsent.
 - A failed exact opening clears the proposal and its proof.
 
 ## Percentage-only server places
@@ -247,10 +293,10 @@ pending attempt. When only BookOrbit changed since the agreement, Liseur
 adopts a status it can represent. An unconfirmed write stays unresolved
 until the next local status action.
 
-Before enabling automatic status writes, check live on a disposable
-account: detail and PATCH behavior, competing edits, interrupted requests
-and that the position survives. The public API cannot delete a status row
-after a test, so plan the cleanup in the database.
+Automatic status writes are on. On 2026-09-24 "Mark as read" on the
+disposable account stored `read` with source `manual` on BookOrbit, and
+the exact position stayed in place. The public API cannot delete a status
+row after a test, so plan the cleanup in the database.
 
 ## Acceptance
 
