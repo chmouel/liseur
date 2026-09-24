@@ -57,15 +57,15 @@ class WidgetRepositoryTest {
     fun `empty shelf has no book and zero week`() = runBlocking {
         val snapshot = repository().load(context, WidgetPeriod.WEEK)
         assertNull(snapshot.book)
-        assertEquals(0L, snapshot.stats.figures.totalMs)
-        assertEquals(0, snapshot.stats.figures.sessions)
-        assertEquals(context.getString(com.chmouel.liseur.R.string.duration_none), snapshot.stats.totalLabel)
-        assertNull(snapshot.stats.peakLabel)
+        assertEquals(0L, snapshot.stats!!.figures.totalMs)
+        assertEquals(0, snapshot.stats!!.figures.sessions)
+        assertEquals(context.getString(com.chmouel.liseur.R.string.duration_none), snapshot.stats!!.totalLabel)
+        assertNull(snapshot.stats!!.peakLabel)
     }
 
     @Test
     fun `a widget with no stored period shows today`() = runBlocking {
-        assertEquals(WidgetPeriod.DAY, repository().load(context).stats.figures.period)
+        assertEquals(WidgetPeriod.DAY, repository().load(context).stats!!.figures.period)
         assertEquals(WidgetPeriod.DAY, WidgetPeriod.fromId(null))
         assertEquals(WidgetPeriod.DAY, WidgetPeriod.fromId("fortnight"))
         assertEquals(WidgetPeriod.MONTH, WidgetPeriod.fromId("month"))
@@ -102,11 +102,43 @@ class WidgetRepositoryTest {
         insertSession("file:///a.epub", today.minusDays(4), TimeUnit.HOURS.toMillis(2))
 
         val snapshot = repository().load(context, WidgetPeriod.WEEK)
-        assertEquals(TimeUnit.HOURS.toMillis(1), snapshot.stats.figures.totalMs)
-        assertEquals(1, snapshot.stats.figures.sessions)
-        assertEquals(1, snapshot.stats.figures.booksRead)
-        assertEquals(7, snapshot.stats.figures.bars.size)
-        assertEquals("1h", snapshot.stats.peakLabel)
+        assertEquals(TimeUnit.HOURS.toMillis(1), snapshot.stats!!.figures.totalMs)
+        assertEquals(1, snapshot.stats!!.figures.sessions)
+        assertEquals(1, snapshot.stats!!.figures.booksRead)
+        assertEquals(7, snapshot.stats!!.figures.bars.size)
+        assertEquals("1h", snapshot.stats!!.peakLabel)
+    }
+
+    @Test
+    fun `each widget loads only what it draws`() = runBlocking {
+        db.bookDao().upsert(
+            Book(
+                url = "file:///a.epub",
+                title = "A",
+                author = "Author",
+                coverPath = "/covers/a.jpg",
+                source = null,
+                addedAt = 1_000L,
+                lastOpenedAt = 1_000L,
+            ),
+        )
+        insertSession("file:///a.epub", today, TimeUnit.MINUTES.toMillis(5))
+        val decoded = mutableListOf<String>()
+        val repository = repository(decodeCover = { decoded += it; null })
+
+        val cover = repository.load(context, content = WidgetContent.COVER)
+        assertNull(cover.stats)
+        assertEquals(listOf("/covers/a.jpg"), decoded)
+
+        decoded.clear()
+        val stats = repository.load(context, content = WidgetContent.STATS)
+        assertEquals("file:///a.epub", stats.book?.url)
+        assertEquals(TimeUnit.MINUTES.toMillis(5), stats.stats!!.figures.totalMs)
+        assertTrue(decoded.isEmpty())
+
+        val both = repository.load(context, content = WidgetContent.COVER_AND_STATS)
+        assertEquals(TimeUnit.MINUTES.toMillis(5), both.stats!!.figures.totalMs)
+        assertEquals(listOf("/covers/a.jpg"), decoded)
     }
 
     @Test
@@ -189,14 +221,14 @@ class WidgetRepositoryTest {
         }
     }
 
-    private fun repository() = WidgetRepository(
+    private fun repository(decodeCover: (String) -> Bitmap? = { null }) = WidgetRepository(
         bookDao = db.bookDao(),
         progressDao = db.readingProgressDao(),
         sessionDao = db.readingSessionDao(),
         zone = { zone },
         today = { today },
         weekStart = { weekStart },
-        decodeCover = { null },
+        decodeCover = decodeCover,
     )
 
     private suspend fun insertBook(url: String, title: String, openedAt: Long) {

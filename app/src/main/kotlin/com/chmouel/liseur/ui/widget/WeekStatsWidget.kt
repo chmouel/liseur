@@ -33,15 +33,16 @@ class WeekStatsWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(StatsCompact, StatsRoomy))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) = coroutineScope {
-        val live = LiveSnapshot.start(context, id, this)
+        val live = LiveSnapshot.start(context, id, this, WidgetContent.STATS)
         provideContent {
             GlanceTheme(colors = LiseurGlanceColorScheme.colors) {
                 val snapshot = live.observe()
+                val stats = snapshot.stats ?: return@GlanceTheme
                 val onClick = snapshot.book?.openIntent
                     ?: Intent(context, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 WidgetScaffold(onClick = onClick) {
-                    StatsContent(context = context, stats = snapshot.stats)
+                    StatsContent(context = context, stats = stats)
                 }
             }
         }

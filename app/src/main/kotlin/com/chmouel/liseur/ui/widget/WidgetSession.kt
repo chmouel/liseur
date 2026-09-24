@@ -32,10 +32,11 @@ import kotlinx.coroutines.launch
 internal class LiveSnapshot private constructor(
     private val context: Context,
     private val repository: WidgetRepository,
+    private val content: WidgetContent,
     initial: WidgetSnapshot,
+    private val initialPeriod: WidgetPeriod,
     private val initialGeneration: Long,
 ) {
-    private val initialPeriod = initial.stats.figures.period
     private val period = MutableStateFlow(initialPeriod)
     private val current = MutableStateFlow(initial)
     val snapshot: StateFlow<WidgetSnapshot> = current.asStateFlow()
@@ -45,7 +46,7 @@ internal class LiveSnapshot private constructor(
             .withIndex()
             .collectLatest { (index, key) ->
                 if (index == 0 && key == initialPeriod to initialGeneration) return@collectLatest
-                current.value = repository.load(context, key.first)
+                current.value = repository.load(context, key.first, content)
             }
     }
 
@@ -59,11 +60,17 @@ internal class LiveSnapshot private constructor(
     }
 
     companion object {
-        suspend fun start(context: Context, id: GlanceId, scope: CoroutineScope): LiveSnapshot {
+        suspend fun start(
+            context: Context,
+            id: GlanceId,
+            scope: CoroutineScope,
+            content: WidgetContent,
+        ): LiveSnapshot {
             val repository = widgetRepository(context)
             val generation = WidgetUpdater.generation.value
-            val initial = repository.load(context, storedPeriod(context, id))
-            return LiveSnapshot(context, repository, initial, generation).also { live ->
+            val period = storedPeriod(context, id)
+            val initial = repository.load(context, period, content)
+            return LiveSnapshot(context, repository, content, initial, period, generation).also { live ->
                 scope.launch { live.follow() }
             }
         }

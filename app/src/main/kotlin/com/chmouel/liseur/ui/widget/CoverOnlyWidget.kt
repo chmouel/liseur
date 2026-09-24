@@ -16,7 +16,7 @@ class CoverOnlyWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(CoverSmall, CoverLarge))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) = coroutineScope {
-        val live = LiveSnapshot.start(context, id, this)
+        val live = LiveSnapshot.start(context, id, this, WidgetContent.COVER)
         provideContent {
             GlanceTheme(colors = LiseurGlanceColorScheme.colors) {
                 val book = live.observe().book
