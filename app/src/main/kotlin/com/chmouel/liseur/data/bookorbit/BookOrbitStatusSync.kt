@@ -132,6 +132,7 @@ class BookOrbitStatusSync(
     ): SyncOutcome {
         val remote = client.read(context)
         cfis.check(context)
+        uploadedBytesChanged(context)?.let { return it }
         val target = agreement.sentStatus
             ?: return SyncOutcome.Failure(SyncFailure.StatusUnresolved)
         val sentRevision = agreement.sentLocalStatusRevision

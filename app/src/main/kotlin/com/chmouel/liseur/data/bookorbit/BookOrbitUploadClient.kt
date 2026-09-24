@@ -253,6 +253,9 @@ class BookOrbitUploadClient(
                 }
                 STATUS_FAILED -> {
                     val code = session.stringOrNull("errorCode")
+                    // The library went, as in [refusal]; another key
+                    // would aim at the same one.
+                    if (code == ERROR_TARGET) return done(ServerUploadResult.Failed("upload target"))
                     // A code that says what is wrong with the book is an
                     // answer. An import that failed for no stated reason
                     // may not fail again, and the next generation is how
