@@ -487,7 +487,10 @@ class BookDownloadRepository(
      * Left linked, it would sync against an id the server no longer knows,
      * and a reconnect could bind it to that id again. An entry relinked to
      * another server book during the request is left alone, and so is one
-     * with no copy here, which the next catalog walk clears.
+     * with no copy here, which the next catalog walk clears. The deleting
+     * account's binding always goes; the row's link only while that
+     * account is still the connected one, since after a switch it is the
+     * new account's to keep or clear.
      */
     private suspend fun unlinkDeleted(url: String, remoteUuid: String?, account: String, deleter: BookDeleter) {
         if (remoteUuid == null) return
@@ -496,7 +499,7 @@ class BookDownloadRepository(
             if (now.remoteUuid != remoteUuid) return@inTransaction
             if (now.localUri == null && now.downloadState != DownloadState.DOWNLOADED) return@inTransaction
             deleter.forgetDeleted(url, account)
-            bookDao.unlinkFromRemote(listOf(url))
+            if (accountKey() == account) bookDao.unlinkFromRemote(listOf(url))
         }
     }
 

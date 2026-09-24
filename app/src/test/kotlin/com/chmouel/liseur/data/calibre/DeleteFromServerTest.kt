@@ -151,25 +151,31 @@ class DeleteFromServerTest {
     }
 
     @Test
-    fun `a book that changed while the delete was out stays here unlinked`() = runBlocking {
-        val changes = listOf<suspend (Book) -> Unit>(
-            { connected = "another account" },
-            { downloads.fileFor(it.remoteUuid!!).writeText("a different, longer book") },
-        )
-        for ((index, change) in changes.withIndex()) {
-            connected = server.accountKey
-            val book = downloaded("bo_scope_1$index")
-            val deleter = Deleter(during = { change(book) })
+    fun `a book whose file changed while the delete was out stays here unlinked`() = runBlocking {
+        val book = downloaded("bo_scope_10")
+        val deleter = Deleter(during = { downloads.fileFor(book.remoteUuid!!).writeText("a different, longer book") })
+
+        assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
+
+        val kept = db.bookDao().getByUrl(book.url)
+        assertNotNull(kept)
+        assertNull(kept!!.remoteUuid)
+        assertTrue(downloads.fileFor(book.remoteUuid!!).exists())
+        assertEquals(listOf(book.url to server.accountKey), deleter.forgotten)
+    }
+
+    @Test
+    fun `after an account switch the old binding goes and the row's link is left to the new account`() =
+        runBlocking {
+            val book = downloaded("bo_scope_11")
+            val deleter = Deleter(during = { connected = "another account" })
 
             assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
 
-            val kept = db.bookDao().getByUrl(book.url)
-            assertNotNull("change $index", kept)
-            assertNull("change $index", kept!!.remoteUuid)
-            assertTrue("change $index", downloads.fileFor(book.remoteUuid!!).exists())
-            assertEquals("change $index", listOf(book.url to server.accountKey), deleter.forgotten)
+            assertEquals(book.remoteUuid, db.bookDao().getByUrl(book.url)?.remoteUuid)
+            assertTrue(downloads.fileFor(book.remoteUuid!!).exists())
+            assertEquals(listOf(book.url to server.accountKey), deleter.forgotten)
         }
-    }
 
     @Test
     fun `a book relinked while the delete was out keeps its new link`() = runBlocking {
