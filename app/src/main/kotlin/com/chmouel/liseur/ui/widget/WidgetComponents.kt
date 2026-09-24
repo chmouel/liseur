@@ -149,6 +149,7 @@ internal fun BookCoverImage(
             } else {
                 Text(
                     text = book.initials,
+                    modifier = GlanceModifier.semantics { contentDescription = book.title },
                     style = TextStyle(
                         color = GlanceTheme.colors.onPrimaryContainer,
                         fontSize = 28.sp,
