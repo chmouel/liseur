@@ -115,7 +115,7 @@ class BookOrbitUploadClientTest {
 
     private suspend fun send(file: File, bookUrl: String = "file:///books/one.epub") = uploader().upload(
         account.baseUrl, RemoteCredentials.Bearer("unused"), "library:3", file, "Ada - One.epub",
-        bookUrl = bookUrl, sha256 = sha256(file),
+        bookUrl = bookUrl, sha256 = sha256(file), accountKey = account.accountKey,
     )
 
     private fun sha256(file: File) = file.inputStream().use(BookOrbitUploadClient::sha256Of)
@@ -315,6 +315,19 @@ class BookOrbitUploadClientTest {
         server.enqueue(coded(507, "UPLOAD_STORAGE_FULL"))
 
         assertTrue(send(book()) is ServerUploadResult.Failed)
+    }
+
+    @Test
+    fun `a book is never sent as a different account than the one checked`() = runBlocking {
+        val file = book()
+
+        val result = uploader().upload(
+            account.baseUrl, RemoteCredentials.Bearer("unused"), "library:3", file, "Ada - One.epub",
+            bookUrl = "file:///books/one.epub", sha256 = sha256(file), accountKey = "another reader",
+        )
+
+        assertTrue(result is ServerUploadResult.Failed)
+        assertEquals(0, server.requestCount)
     }
 
     @Test

@@ -489,6 +489,10 @@ interface BookUploader {
      * Sends [file], which hashes to [sha256], on behalf of the library
      * entry [bookUrl]. Both are only what the worker already knows; a
      * provider that resumes an interrupted transfer uses them to name it.
+     *
+     * [accountKey] is the account the worker checked. A provider that
+     * signs with the connection it looks up, rather than [credentials],
+     * must refuse when that connection is another account.
      */
     suspend fun upload(
         baseUrl: String,
@@ -498,6 +502,7 @@ interface BookUploader {
         filename: String,
         bookUrl: String,
         sha256: String,
+        accountKey: String,
     ): ServerUploadResult
 
     /**

@@ -86,12 +86,17 @@ class BookOrbitUploadClient(
         filename: String,
         bookUrl: String,
         sha256: String,
+        accountKey: String,
     ): ServerUploadResult {
         val libraryId = folderId.removePrefix(TARGET_PREFIX).toLongOrNull()
             ?.takeIf { folderId.startsWith(TARGET_PREFIX) && it > 0 }
             ?: return ServerUploadResult.Failed("not a BookOrbit library: $folderId")
         val (context, server) = connection(baseUrl)
             ?: return ServerUploadResult.Failed("no BookOrbit connection for this address")
+        // Every request below signs as the account in this context, so
+        // this is the one check that keeps the book out of another
+        // reader's library on the same server.
+        if (server.accountKey != accountKey) return ServerUploadResult.Failed("the account changed")
         val accountId = server.accountId ?: return ServerUploadResult.Failed("no account id")
         val size = file.length()
         if (size <= 0L) return ServerUploadResult.Rejected(null)

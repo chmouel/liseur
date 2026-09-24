@@ -15,6 +15,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.await
+import com.chmouel.liseur.data.bookorbit.BookOrbitAdoptedSource
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
@@ -448,7 +449,7 @@ class BookDownloadRepository(
         val sent = bookDao.getByUrl(book.url)?.takeIf { it.remoteUuid == book.remoteUuid }
             ?: return ServerDeleteResult.Failed(null)
         val files = ownedFilesOf(sent)
-        val stamp = stampOf(files)
+        val stamp = stampOf(files) to sourceStampOf(sent)
         val result = deleter.delete(server.baseUrl, credentials, book, forgetReading)
         if (result !is ServerDeleteResult.Deleted) return result
         var removed = false
@@ -458,7 +459,7 @@ class BookDownloadRepository(
             if (now.remoteUuid != sent.remoteUuid || now.localUri != sent.localUri) {
                 return@inTransaction
             }
-            if (stampOf(ownedFilesOf(now)) != stamp) return@inTransaction
+            if (stampOf(ownedFilesOf(now)) to sourceStampOf(now) != stamp) return@inTransaction
             deleter.forgetDeleted(book.url, account)
             // The book is gone from the server too, so this is not a
             // copy being freed up: nothing is coming back, and the
@@ -487,6 +488,14 @@ class BookDownloadRepository(
 
     private fun stampOf(files: List<File>): List<Pair<Long, Long>> =
         files.map { it.length() to it.lastModified() }
+
+    /**
+     * The size and modification time of the file the entry opens, which
+     * for a book in a watched folder is a document the app does not own
+     * and anything on the phone can replace.
+     */
+    private fun sourceStampOf(book: Book): BookOrbitAdoptedSource.Stamp? =
+        book.openableUri()?.toUri()?.let(BookOrbitAdoptedSource(context)::stamp)
 
     /**
      * Removes a book that came from a folder or a single import.

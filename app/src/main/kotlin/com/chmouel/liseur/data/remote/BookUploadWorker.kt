@@ -82,6 +82,7 @@ class BookUploadWorker(
                 filename = filenameFor(book.title, book.author),
                 bookUrl = book.url,
                 sha256 = snapshot.fingerprint.sha256,
+                accountKey = account,
             )) {
                 is ServerUploadResult.Uploaded ->
                     adopt(container, account, book, snapshot, uploader, result)

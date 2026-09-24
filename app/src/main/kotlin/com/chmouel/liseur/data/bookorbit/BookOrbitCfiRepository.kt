@@ -59,11 +59,12 @@ class BookOrbitCfiRepository(
         bookUrl: String,
         openedUrl: String,
         fileFor: (String) -> File,
+        own: (BookOrbitOpenedEpub) -> Unit = {},
     ): BookOrbitOpenedEpub? {
         val request = database.remoteServerDao().get()?.let(BookOrbitRequestContext::from)
             ?: return null
         if (database.bookOrbitBindingDao().get(request.accountKey, bookUrl) == null) return null
-        return openedPackage(capture(bookUrl), openedUrl, fileFor)
+        return openedPackage(capture(bookUrl), openedUrl, fileFor, own)
     }
 
     suspend fun capture(bookUrl: String): BookOrbitCfiContext = database.withTransaction {
@@ -86,8 +87,16 @@ class BookOrbitCfiRepository(
         context: BookOrbitCfiContext,
         openedUrl: String,
         fileFor: (String) -> File,
+        /**
+         * Handed a private copy the moment it is verified, before this
+         * returns: a caller cancelled on the way back never sees the
+         * result, and would otherwise leave the copy behind.
+         */
+        own: (BookOrbitOpenedEpub) -> Unit = {},
     ): BookOrbitOpenedEpub = withContext(Dispatchers.IO) {
-        adoptedSource(context, openedUrl)?.let { return@withContext openedAdopted(context, openedUrl, it) }
+        adoptedSource(context, openedUrl)?.let {
+            return@withContext openedAdopted(context, openedUrl, it, own)
+        }
         val file = openedFile(context, openedUrl, fileFor)
         val length = file.length()
         val modified = file.lastModified()
@@ -125,9 +134,15 @@ class BookOrbitCfiRepository(
         if (opened.spooled) opened.file.delete()
     }
 
+    /**
+     * This process's copies live in a folder of their own, so the sweep
+     * of earlier processes' copies can run alongside a book being opened.
+     */
+    private val processSpool: File? = spoolDir?.let { File(it, "p-${java.util.UUID.randomUUID()}") }
+
     /** Clears copies left by a process that ended with a book open. */
     fun sweepSpools() {
-        spoolDir?.listFiles()?.forEach { it.delete() }
+        spoolDir?.listFiles()?.filter { it != processSpool }?.forEach { it.deleteRecursively() }
     }
 
     private data class Adopted(val uri: Uri, val sha256: String, val size: Long?)
@@ -167,11 +182,12 @@ class BookOrbitCfiRepository(
         context: BookOrbitCfiContext,
         openedUrl: String,
         adopted: Adopted,
+        own: (BookOrbitOpenedEpub) -> Unit,
     ): BookOrbitOpenedEpub {
         val stamp = sources.stamp(adopted.uri) ?: stale()
         val spooled = adopted.uri.scheme != "file"
         val file = if (spooled) {
-            sources.spool(adopted.uri, spoolDir ?: stale()) ?: stale()
+            sources.spool(adopted.uri, processSpool ?: stale()) ?: stale()
         } else {
             adopted.uri.path?.let(::File)?.takeIf { it.isFile } ?: stale()
         }
@@ -186,6 +202,7 @@ class BookOrbitCfiRepository(
                 source = adopted.uri.toString(), sourceStamp = stamp, spooled = spooled,
             )
             checkAdopted(opened)
+            own(opened)
             return opened
         } catch (error: Throwable) {
             if (spooled) file.delete()

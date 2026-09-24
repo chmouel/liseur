@@ -168,4 +168,21 @@ class DeleteFromServerTest {
             assertTrue("change $index", deleter.forgotten.isEmpty())
         }
     }
+
+    @Test
+    fun `a folder book whose file was replaced while the delete was out stays here`() = runBlocking {
+        val source = java.io.File.createTempFile("folder", ".epub").apply { writeText("the book"); deleteOnExit() }
+        val book = Book(
+            url = "file://${source.path}", title = "One", author = null, coverPath = null, source = null,
+            addedAt = 1, lastOpenedAt = null, localUri = "file://${source.path}",
+            remoteUuid = "bo_scope_7", downloadState = DownloadState.DOWNLOADED,
+        )
+        db.bookDao().upsert(book)
+        val deleter = Deleter(during = { source.writeText("a different, longer book") })
+
+        assertEquals(ServerDeleteResult.Deleted, downloads.deleteFromServer(book, deleter, server))
+
+        assertNotNull(db.bookDao().getByUrl(book.url))
+        assertTrue(deleter.forgotten.isEmpty())
+    }
 }
