@@ -1,7 +1,5 @@
 package com.chmouel.liseur.data.bookorbit
 
-import androidx.core.net.toUri
-import com.chmouel.liseur.data.library.openableUri
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.BookOrbitPositionAgreement
 import com.chmouel.liseur.data.db.BookOrbitLocalCfi
@@ -791,12 +789,11 @@ class BookOrbitPositionAgreementRepository(
      * Nothing is sent and nothing is marked as possibly sent.
      */
     private suspend fun requireUploadedBytes(context: BookOrbitCfiContext) {
-        val binding = database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl)
-            ?: throw BookOrbitIdentityChanged()
-        val expected = binding.localSha256 ?: return
-        val book = database.bookDao().getByUrl(context.bookUrl) ?: throw BookOrbitIdentityChanged()
-        val source = book.openableUri()?.toUri() ?: throw BookOrbitPositionUnresolved()
-        if (!sources.holds(context.bookUrl, source, expected)) throw BookOrbitPositionUnresolved()
+        when (sources.holdsUploaded(database, context)) {
+            null -> throw BookOrbitIdentityChanged()
+            false -> throw BookOrbitPositionUnresolved()
+            true -> Unit
+        }
     }
 }
 

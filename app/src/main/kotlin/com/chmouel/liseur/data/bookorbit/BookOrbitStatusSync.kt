@@ -15,6 +15,7 @@ class BookOrbitStatusSync(
     private val database: LiseurDatabase,
     private val client: BookOrbitStatusClient,
     private val finishedState: FinishedState,
+    private val sources: BookOrbitAdoptedSource = BookOrbitAdoptedSource(null),
 ) {
     private val cfis = BookOrbitCfiRepository(database)
     private val agreements get() = database.bookOrbitStatusAgreementDao()
@@ -23,6 +24,13 @@ class BookOrbitStatusSync(
     suspend fun sync(context: BookOrbitCfiContext): SyncOutcome =
         database.bookOrbitStatusMutex.withLock {
             cfis.check(context)
+            // An uploaded book whose file was replaced is no longer the
+            // server's book: neither its status nor the server's crosses.
+            when (sources.holdsUploaded(database, context)) {
+                null -> return@withLock SyncOutcome.Failure(SyncFailure.StaleIdentity)
+                false -> return@withLock SyncOutcome.Failure(SyncFailure.StatusUnresolved)
+                true -> Unit
+            }
             var agreement = agreements.get(context.request.accountKey, context.bookUrl)
                 ?.takeIf { it.bookId == context.bookId }
                 ?.forContext(context)

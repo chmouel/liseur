@@ -215,6 +215,7 @@ class AppContainer(context: Context) {
         database,
         com.chmouel.liseur.data.bookorbit.BookOrbitStatusClient(bookOrbitHttp, bookOrbitCfis),
         finishedState,
+        bookOrbitSources,
     )
     val bookOrbitEpubInfo = com.chmouel.liseur.data.bookorbit.BookOrbitEpubInfoClient(
         bookOrbitHttp, bookOrbitCfis,
