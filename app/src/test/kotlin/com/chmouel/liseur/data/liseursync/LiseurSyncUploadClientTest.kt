@@ -262,6 +262,7 @@ class LiseurSyncUploadClientTest {
         book.writeBytes(ByteArray(64) { it.toByte() })
         return LiseurSyncUploadClient().upload(
             base(), token(), "f-2", book, "Ada - Notes.epub",
+            bookUrl = "file:///books/notes.epub", sha256 = "0".repeat(64),
         )
     }
 

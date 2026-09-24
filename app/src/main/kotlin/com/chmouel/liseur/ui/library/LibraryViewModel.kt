@@ -215,6 +215,11 @@ data class LibraryUiState(
      */
     val canForgetServerReading: Boolean = false,
     /**
+     * Whether deleting takes the whole server book, every format and
+     * every reader's progress with it, which the warning has to say.
+     */
+    val serverDeletesWholeBook: Boolean = false,
+    /**
      * Whether a book the reader added here can be sent up to the server.
      * True only where the account holds the permission and the server is
      * one that takes uploads at all.
@@ -752,6 +757,7 @@ class LibraryViewModel(
                 serverDeleteNeedsReconnect = deleteNeedsReconnect(server, router),
                 canForgetServerReading = canDeleteFrom(server, router) &&
                     server?.kind == ServerKind.LISEUR_SYNC,
+                serverDeletesWholeBook = server?.kind == ServerKind.BOOKORBIT,
                 canUploadToServer = canUploadTo(server, router),
                 uploading = uploading,
                 // Kept whether or not it still suppresses the offer: the
@@ -1569,8 +1575,8 @@ internal fun canUploadTo(server: RemoteServer?, router: RemoteRouter): Boolean =
 /**
  * Whether a book on the server could be deleted from it.
  *
- * The kind must have a deleter, and — for liseur-sync only — the
- * connection must carry the capability (ADR-0025). calibre-web keeps
+ * The kind must have a deleter, and — for liseur-sync and BookOrbit —
+ * the connection must carry the capability (ADR-0025). calibre-web keeps
  * the gate it has always had: its permission is not a stored flag, and
  * requiring one would silently switch the action off for every server
  * paired before that column existed.
@@ -1587,10 +1593,12 @@ internal fun canDeleteFrom(server: RemoteServer?, router: RemoteRouter): Boolean
  * never had: its permission is the login, which is checked when the
  * delete is attempted. Reading the stored flag for it would turn the
  * action off for every server paired before the column existed, since
- * nothing re-runs setup on an upgrade.
+ * nothing re-runs setup on an upgrade. BookOrbit reports the
+ * `library_delete_books` permission at sign-in, and that answer is the
+ * stored flag.
  */
 internal fun RemoteServer.holdsDeletePermission(): Boolean =
-    kind != ServerKind.LISEUR_SYNC || canDelete
+    (kind != ServerKind.LISEUR_SYNC && kind != ServerKind.BOOKORBIT) || canDelete
 
 /**
  * Whether deleting is off only because this connection is older than
@@ -1603,6 +1611,9 @@ internal fun RemoteServer.holdsDeletePermission(): Boolean =
  */
 internal fun deleteNeedsReconnect(server: RemoteServer?, router: RemoteRouter): Boolean =
     server != null &&
+        // BookOrbit's permission is the administrator's to grant, and a
+        // reader without it is the ordinary case, not an old token.
+        server.kind == ServerKind.LISEUR_SYNC &&
         router.deleterFor(server.kind) != null &&
         !server.holdsDeletePermission()
 

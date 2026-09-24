@@ -171,6 +171,49 @@ class BookRemoval(
     }
 
     /**
+     * Drops catalog entries that an upload's adoption would make a second
+     * name for [remoteUuid], but only if every one of them is untouched.
+     *
+     * A catalog pass that ran while a book was on its way up has already
+     * shelved the server's copy under its own URL. That row is normally
+     * minutes old and empty, and the uploaded entry is the one holding the
+     * reading. "Normally" is not "always": the reader can have opened it,
+     * downloaded it or marked it in the meantime. So this is all or
+     * nothing: if any of them holds anything [dropUntouchedDuplicates]
+     * would protect, or a file of its own, none is removed and the caller
+     * must not link.
+     *
+     * [forgetExtra] runs for the removed URLs in the same transaction, for
+     * provider state keyed by them. Returns whether the way is clear.
+     */
+    suspend fun dropUntouchedCatalogDuplicates(
+        bookUrls: List<String>,
+        remoteUuid: String,
+        forgetExtra: suspend (List<String>) -> Unit = {},
+    ): Boolean {
+        if (bookUrls.isEmpty()) return true
+        var clear = false
+        inTransaction {
+            val rows = bookUrls.distinct().mapNotNull { bookDao.getByUrl(it) }
+            val removable = rows.all { row ->
+                row.remoteUuid == remoteUuid &&
+                    row.localUri == null &&
+                    row.downloadState == DownloadState.REMOTE &&
+                    blank(row.copy(remoteUuid = null, remoteBookId = null)) &&
+                    untouched(row.url)
+            }
+            if (!removable) return@inTransaction
+            val urls = rows.map { it.url }
+            if (urls.isNotEmpty()) {
+                forgetExtra(urls)
+                forget(urls)
+            }
+            clear = true
+        }
+        return clear
+    }
+
+    /**
      * Whether the row itself says nothing that the other one will not.
      *
      * Reading history is not the only thing a duplicate can be carrying.

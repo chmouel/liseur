@@ -37,7 +37,7 @@ import androidx.sqlite.execSQL
         BookOrbitPositionTraversalItem::class,
         BookOrbitStatusAgreement::class,
     ],
-    version = 59,
+    version = 60,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1755,6 +1755,18 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * The digest of the bytes an upload sent, for a BookOrbit book
+         * that was adopted from this device rather than downloaded.
+         * Nullable and absent for every existing row: nothing before this
+         * version was ever uploaded to BookOrbit.
+         */
+        val MIGRATION_59_60 = object : Migration(59, 60) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE book_orbit_binding ADD COLUMN local_sha256 TEXT")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1814,6 +1826,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_56_57,
             MIGRATION_57_58,
             MIGRATION_58_59,
+            MIGRATION_59_60,
         )
     }
 }

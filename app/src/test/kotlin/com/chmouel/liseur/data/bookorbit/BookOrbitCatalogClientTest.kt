@@ -79,6 +79,7 @@ class BookOrbitCatalogClientTest {
     private fun client(
         serverDao: RemoteServerDao,
         bindings: BookOrbitBindingDao,
+        localUrls: suspend (List<String>) -> Map<String, String> = { emptyMap() },
         inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     ): BookOrbitCatalogClient {
         val session = BookOrbitSession(serverDao, RemoteHttp(), now = { 1_000L })
@@ -87,6 +88,7 @@ class BookOrbitCatalogClientTest {
             serverDao,
             BookOrbitHttp(session),
             inTransaction,
+            localUrls,
         )
     }
 
@@ -280,6 +282,33 @@ class BookOrbitCatalogClientTest {
         runCatching { catalog.allBooks(address(), RemoteCredentials.Deferred) }
 
         assertTrue(bindings.rows.isEmpty())
+    }
+
+    /**
+     * A book sent from this phone keeps its own URL. Its binding lives
+     * there too, and a refresh must find it rather than start a second
+     * one under the URL the catalog would have made up.
+     */
+    @Test
+    fun `an uploaded book keeps its binding under its own address`() = runBlocking {
+        val dao = FakeServerDao(account())
+        val bindings = FakeBindingDao()
+        val remoteId = BookOrbitScope.remoteId(address(), "1", 113)
+        val local = "file:///books/horde.epub"
+        val adopted = BookOrbitBinding(
+            accountKey = dao.row!!.accountKey, bookUrl = local, bookId = 113, fileId = 352,
+            fileFormat = "epub", fileSize = 1925282, fileName = null, revision = 0,
+            state = BookOrbitBindingState.SELECTED.name, updatedAt = 1, localSha256 = "ab".repeat(32),
+        )
+        bindings.write(adopted)
+        val asked = mutableListOf<List<String>>()
+        server.enqueue(page(epubCard(352)))
+
+        client(dao, bindings, localUrls = { ids -> asked += ids; mapOf(remoteId to local) })
+            .allBooks(address(), RemoteCredentials.Deferred)
+
+        assertEquals(listOf(listOf(remoteId)), asked)
+        assertEquals(listOf(adopted), bindings.rows.values.toList())
     }
 
     private class FakeServerDao(var row: RemoteServer?) : RemoteServerDao {

@@ -50,6 +50,16 @@ data class BookOrbitBinding(
     @ColumnInfo(name = "revision", defaultValue = "0") val revision: Long = 0,
     @ColumnInfo(name = "state") val state: String,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /**
+     * The SHA-256 of the bytes this device uploaded and proved to be
+     * [fileId], for a book adopted from an upload rather than downloaded.
+     *
+     * Written by the upload adoption alone and never by a catalog pass or
+     * the fingerprint cache: it is what says the local copy, which keeps
+     * its own URL and file, is the server's file byte for byte. Null for
+     * every downloaded book, whose bytes are the app's own download.
+     */
+    @ColumnInfo(name = "local_sha256") val localSha256: String? = null,
 ) {
     val stateValue: BookOrbitBindingState get() = BookOrbitBindingState.fromStored(state)
 }

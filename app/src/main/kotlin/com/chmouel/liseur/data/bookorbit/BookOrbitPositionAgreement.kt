@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.bookorbit
 
+import androidx.core.net.toUri
+import com.chmouel.liseur.data.library.openableUri
 import androidx.room.withTransaction
 import com.chmouel.liseur.data.db.BookOrbitPositionAgreement
 import com.chmouel.liseur.data.db.BookOrbitLocalCfi
@@ -70,6 +72,7 @@ class BookOrbitPositionAgreementRepository(
     private val database: LiseurDatabase,
     private val progress: BookOrbitProgressClient,
     private val transport: BookOrbitProgressMutationTransport,
+    private val sources: BookOrbitAdoptedSource = BookOrbitAdoptedSource(null),
 ) {
     private val dao get() = database.bookOrbitPositionAgreementDao()
     private val attemptMutex get() = database.bookOrbitPositionMutex
@@ -508,6 +511,7 @@ class BookOrbitPositionAgreementRepository(
 
     /** Reads a fresh preflight and persists the exact UTF-8 bytes before any POST. */
     suspend fun prepare(context: BookOrbitCfiContext): BookOrbitPositionAgreement {
+        requireUploadedBytes(context)
         database.withTransaction {
             checkCurrent(context)
             if (current(context).attemptState in listOf(
@@ -597,6 +601,10 @@ class BookOrbitPositionAgreementRepository(
             before.outgoingBytes == null
         ) throw BookOrbitPositionUnresolved()
         if (!preparedStillMatches(context)) throw BookOrbitPositionUnresolved()
+        // Also for a send resumed after a restart, which never reopens
+        // the book: the stored CFI was computed in bytes that must still
+        // be the ones on the device.
+        requireUploadedBytes(context)
         val preflight = progress.read(context)
         val row = database.withTransaction {
             checkCurrent(context)
@@ -770,6 +778,25 @@ class BookOrbitPositionAgreementRepository(
         if (!context.request.matches(database.remoteServerDao().get()) ||
             !context.matches(database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl))
         ) throw BookOrbitIdentityChanged()
+    }
+
+    /**
+     * For a book adopted from an upload, refuses to go on unless its file
+     * still holds the bytes the server took.
+     *
+     * A CFI names a place in particular bytes. An uploaded book keeps its
+     * own file, which can be replaced without the reader opening the book
+     * again; sending a place computed in the old bytes would move every
+     * other device to a place in a book that is no longer this one.
+     * Nothing is sent and nothing is marked as possibly sent.
+     */
+    private suspend fun requireUploadedBytes(context: BookOrbitCfiContext) {
+        val binding = database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl)
+            ?: throw BookOrbitIdentityChanged()
+        val expected = binding.localSha256 ?: return
+        val book = database.bookDao().getByUrl(context.bookUrl) ?: throw BookOrbitIdentityChanged()
+        val source = book.openableUri()?.toUri() ?: throw BookOrbitPositionUnresolved()
+        if (!sources.holds(context.bookUrl, source, expected)) throw BookOrbitPositionUnresolved()
     }
 }
 

@@ -75,6 +75,7 @@ import org.readium.r2.streamer.parser.DefaultPublicationParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -191,13 +192,21 @@ class AppContainer(context: Context) {
     )
 
     private val bookOrbitHttp = com.chmouel.liseur.data.bookorbit.BookOrbitHttp(bookOrbitSession)
-    val bookOrbitCfis = com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository(database)
+    private val bookOrbitSources = com.chmouel.liseur.data.bookorbit.BookOrbitAdoptedSource(
+        context.applicationContext,
+    )
+    val bookOrbitCfis = com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository(
+        database,
+        bookOrbitSources,
+        java.io.File(context.applicationContext.cacheDir, "bookorbit-opened"),
+    ).also { cfis -> applicationScope.launch(Dispatchers.IO) { cfis.sweepSpools() } }
     val bookOrbitProgress = com.chmouel.liseur.data.bookorbit.BookOrbitProgressClient(
         bookOrbitHttp, bookOrbitCfis,
     )
     val bookOrbitAgreement = com.chmouel.liseur.data.bookorbit.BookOrbitPositionAgreementRepository(
         database, bookOrbitProgress,
         com.chmouel.liseur.data.bookorbit.BookOrbitProgressMutationTransport(bookOrbitHttp, bookOrbitCfis),
+        bookOrbitSources,
     )
     val bookOrbitExchange = com.chmouel.liseur.data.bookorbit.BookOrbitPositionExchange(
         bookOrbitCfis, bookOrbitProgress, bookOrbitAgreement,
@@ -264,6 +273,7 @@ class AppContainer(context: Context) {
         scope = applicationScope,
         bulkStore = bulkDownloads,
         accountKey = { database.remoteServerDao().get()?.accountKey },
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 
     val bookUploads = BookUploadRepository(context.applicationContext)
@@ -430,6 +440,14 @@ class AppContainer(context: Context) {
                 serverDao = database.remoteServerDao(),
                 http = bookOrbitHttp,
                 inTransaction = { work -> database.withTransaction { work() } },
+                localUrls = { ids ->
+                    // Two rows under one id is a duplicate adoption left
+                    // alone on purpose; neither is chosen over the other.
+                    database.bookDao().byRemoteUuids(ids)
+                        .groupBy { it.remoteUuid }
+                        .mapNotNull { (id, rows) -> id?.let { rows.singleOrNull()?.let { row -> id to row.url } } }
+                        .toMap()
+                },
             ),
         ),
         files = mapOf(
@@ -469,17 +487,30 @@ class AppContainer(context: Context) {
         // have written — a book in a folder marked as accepting uploads
         // (ADR-0025) — and says so per book, so the entry here is a
         // promise the route exists, not that any given book will go.
+        // BookOrbit deletes the whole book, for an account holding
+        // `library_delete_books`.
         deleters = mapOf(
             ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreBookDeleter(),
             ServerKind.LISEUR_SYNC to LiseurSyncDeleteClient(),
+            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitDeleteClient(
+                http = bookOrbitHttp,
+                serverDao = database.remoteServerDao(),
+                bindings = database.bookOrbitBindingDao(),
+            ),
         ),
-        // liseur-sync is the only one that takes a book, and only into a
-        // folder an administrator marked (ADR-0023). Komga and
-        // calibre-web have upload routes of their own; they are not
-        // wired here because the app has nothing to say to them yet, and
-        // an entry in this map is a promise that the action works.
+        // liseur-sync takes a book only into a folder an administrator
+        // marked (ADR-0023); BookOrbit into a library, for an account
+        // holding `library_upload`. Komga and calibre-web have upload
+        // routes of their own; they are not wired here because the app
+        // has nothing to say to them yet, and an entry in this map is a
+        // promise that the action works.
         uploaders = mapOf(
             ServerKind.LISEUR_SYNC to LiseurSyncUploadClient(),
+            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitUploadClient(
+                http = bookOrbitHttp,
+                serverDao = database.remoteServerDao(),
+                bindings = database.bookOrbitBindingDao(),
+            ),
         ),
         live = mapOf(
             ServerKind.LISEUR_SYNC to LiseurSyncLive(

@@ -1489,10 +1489,37 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `binding gains an empty upload digest and keeps its choice`() {
+        helper.createDatabase(TEST_DB, 59).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO book_orbit_binding (
+                    account_key, book_url, book_id, file_id, file_format, revision, state, updated_at
+                ) VALUES ('orbit', 'bookorbit:one', 12, 34, 'epub', 2, 'SELECTED', 1)
+                """.trimIndent(),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query(
+                    "SELECT file_id, revision, state, local_sha256 FROM book_orbit_binding " +
+                        "WHERE account_key = 'orbit' AND book_url = 'bookorbit:one'",
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(34L, it.getLong(0))
+                    assertEquals(2L, it.getLong(1))
+                    assertEquals("SELECTED", it.getString(2))
+                    assertTrue(it.isNull(3))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 59
+        const val LATEST = 60
     }
 }

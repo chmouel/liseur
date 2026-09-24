@@ -1,10 +1,17 @@
 package com.chmouel.liseur.ui.library
 
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.remote.BookDeleter
+import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.RemoteRouter
+import com.chmouel.liseur.data.remote.ServerDeleteResult
 import com.chmouel.liseur.data.remote.ServerKind
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.reflect.Proxy
 
 /**
  * Which connections carry the right to delete a book from the server.
@@ -41,6 +48,33 @@ class CanDeleteFromTest {
         assertTrue(needsReconnect(ServerKind.LISEUR_SYNC, canDelete = false))
         assertFalse(needsReconnect(ServerKind.LISEUR_SYNC, canDelete = true))
         assertFalse(needsReconnect(ServerKind.CALIBRE, canDelete = false))
+    }
+
+    /**
+     * BookOrbit's permission is an administrator's grant reported at
+     * sign-in. Without it the reader is simply not allowed, and a
+     * reconnect would change nothing, so none is suggested.
+     */
+    @Test
+    fun `BookOrbit asks the permission it signed in with`() {
+        val deleter = object : BookDeleter {
+            override suspend fun delete(
+                baseUrl: String,
+                credentials: RemoteCredentials,
+                book: Book,
+                forgetReading: Boolean,
+            ) = ServerDeleteResult.Deleted
+        }
+        val dao = Proxy.newProxyInstance(
+            RemoteServerDao::class.java.classLoader, arrayOf(RemoteServerDao::class.java),
+        ) { _, _, _ -> error("not asked") } as RemoteServerDao
+        val router = RemoteRouter(
+            dao, emptyMap(), emptyMap(), emptyMap(), deleters = mapOf(ServerKind.BOOKORBIT to deleter),
+        )
+
+        assertTrue(canDeleteFrom(server(ServerKind.BOOKORBIT, canDelete = true), router))
+        assertFalse(canDeleteFrom(server(ServerKind.BOOKORBIT, canDelete = false), router))
+        assertFalse(deleteNeedsReconnect(server(ServerKind.BOOKORBIT, canDelete = false), router))
     }
 
     private fun needsReconnect(kind: ServerKind, canDelete: Boolean): Boolean =

@@ -533,6 +533,7 @@
     <string name="delete_file">Supprimer le fichier</string>
     <string name="delete_from_server">Supprimer du serveur</string>
     <string name="delete_from_server_warning">« %1$s » sera supprimé du serveur lui-même, pour tous les appareils. Cette action est irréversible.</string>
+    <string name="delete_from_server_warning_whole_book">« %1$s » sera supprimé du serveur lui-même, avec tous ses formats et la progression de tous les lecteurs. Cette action est irréversible.</string>
     <string name="delete_from_server_forget_reading">Supprimer aussi mon historique de lecture sur le serveur</string>
     <string name="delete_from_server_forget_reading_hint">Votre position et votre temps de lecture sont conservés sur le serveur pour qu\'un autre appareil puisse les reprendre. Cela ne concerne que votre propre lecture, jamais celle des autres.</string>
     <string name="server_delete_needs_reconnect">Cette connexion ne peut pas supprimer des livres du serveur. Reconnectez-vous au serveur pour demander cette permission.</string>
@@ -570,10 +571,12 @@
     <string name="upload_refused_reason">Votre serveur n\'a pas accepté %1$s : %2$s</string>
     <string name="upload_refused_too_large">%1$s est plus gros que ce que votre serveur accepte. Il reste sur cet appareil.</string>
     <string name="upload_refused_unreadable">%1$s n\'a pas pu être lu pour l\'envoyer.</string>
+    <string name="upload_unlinked">%1$s est déjà sur votre serveur, mais n\'a pas pu être associé à cette copie. Il reste sur cet appareil.</string>
     <string name="upload_refused_here">Votre serveur n\'a pas accepté ce livre. Il reste sur cet appareil.</string>
     <string name="upload_refused_here_reason">Votre serveur n\'a pas accepté ce livre : %1$s</string>
     <string name="upload_refused_here_too_large">Ce livre est plus gros que ce que votre serveur accepte. Il reste sur cet appareil.</string>
     <string name="upload_refused_here_unreadable">Ce fichier n\'a pas pu être lu pour l\'envoyer. Vérifiez que le dossier est encore disponible, puis réessayez.</string>
+    <string name="upload_unlinked_here">Ce livre est déjà sur votre serveur, mais n\'a pas pu être associé à cette copie. Il reste sur cet appareil.</string>
     <string name="upload_policy">Livres ajoutés sur cet appareil</string>
     <string name="upload_policy_ask">Demander avant d\'envoyer</string>
     <string name="upload_policy_ask_detail">On vous demande à chaque fois, et vous pouvez refuser.</string>

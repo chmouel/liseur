@@ -533,6 +533,7 @@
     <string name="delete_file">Elimina file</string>
     <string name="delete_from_server">Elimina dal server</string>
     <string name="delete_from_server_warning">“%1$s” verrà eliminato dal server stesso, per ogni dispositivo. Non si può annullare.</string>
+    <string name="delete_from_server_warning_whole_book">“%1$s” verrà eliminato dal server stesso, con tutti i suoi formati e i progressi di ogni lettore. Non si può annullare.</string>
     <string name="delete_from_server_forget_reading">Elimina anche la mia cronologia di lettura sul server</string>
     <string name="delete_from_server_forget_reading_hint">La posizione e il tempo di lettura restano sul server così un altro dispositivo può riprenderli. Questo riguarda solo la tua lettura, mai quella degli altri.</string>
     <string name="server_delete_needs_reconnect">Questa connessione non può eliminare libri dal server. Accedi di nuovo al server per chiedere quel permesso.</string>
@@ -570,10 +571,12 @@
     <string name="upload_refused_reason">Il server non ha accettato %1$s: %2$s</string>
     <string name="upload_refused_too_large">%1$s è più grande di quanto il server accetti. Resta su questo dispositivo.</string>
     <string name="upload_refused_unreadable">%1$s non è stato leggibile per inviarlo.</string>
+    <string name="upload_unlinked">%1$s è già sul server, ma non è stato possibile associarlo a questa copia. Resta su questo dispositivo.</string>
     <string name="upload_refused_here">Il server non ha accettato questo libro. Resta su questo dispositivo.</string>
     <string name="upload_refused_here_reason">Il server non ha accettato questo libro: %1$s</string>
     <string name="upload_refused_here_too_large">Questo libro è più grande di quanto il server accetti. Resta su questo dispositivo.</string>
     <string name="upload_refused_here_unreadable">Questo file non è stato leggibile per inviarlo. Controlla che la cartella sia ancora disponibile, poi riprova.</string>
+    <string name="upload_unlinked_here">Questo libro è già sul server, ma non è stato possibile associarlo a questa copia. Resta su questo dispositivo.</string>
     <string name="upload_policy">Libri aggiunti su questo dispositivo</string>
     <string name="upload_policy_ask">Chiedi prima di inviare</string>
     <string name="upload_policy_ask_detail">Ti viene chiesto ogni volta, e puoi rifiutare.</string>

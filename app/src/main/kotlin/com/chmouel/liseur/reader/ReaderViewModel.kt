@@ -2585,6 +2585,14 @@ class ReaderViewModel(
         // the first move, so only an untouched opening is adopted on close.
         val closingPull = bookOrbitOpening.verifiedPull?.takeIf { readingGeneration == 0L && !it.fresh }
         val closingEpub = bookOrbitOpening.verifiedEpub
+        // An uploaded book read from a document was parsed from a private
+        // copy, which goes once nothing left here can still read it.
+        val openedEpubs = listOfNotNull((_state.value as? UiState.Ready)?.openedBookOrbit, closingEpub).distinct()
+        val releaseEpubs = {
+            if (openedEpubs.isNotEmpty()) CoroutineScope(Dispatchers.IO).launch {
+                openedEpubs.forEach { bookOrbitCfis?.release(it) }
+            }
+        }
         sessions.close()
         (_state.value as? UiState.Ready)?.publication?.close()
         if (readingDeclared) {
@@ -2600,13 +2608,24 @@ class ReaderViewModel(
                     (_state.value as? UiState.Ready)?.openedBookOrbit != null &&
                     closingPull == null && bookOrbitOpening.choice == null
                 ) requestBookSync(bookId)
-                if (closingPull != null && closingEpub != null) CoroutineScope(Dispatchers.IO).launch {
-                    adoptClosedBookOrbit(closingPull, closingEpub)
+                if (closingPull != null && closingEpub != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            adoptClosedBookOrbit(closingPull, closingEpub)
+                        } finally {
+                            releaseEpubs()
+                        }
+                    }
+                } else {
+                    releaseEpubs()
                 }
             }
             if (!queued) {
                 CoroutineScope(Dispatchers.Default).launch { progressDao.openBooks.leave(bookId) }
+                releaseEpubs()
             }
+        } else {
+            releaseEpubs()
         }
     }
 

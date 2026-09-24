@@ -6,6 +6,7 @@ import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -43,6 +44,79 @@ class BookOrbitHttp(
         .followRedirects(false)
         .followSslRedirects(false)
         .build()
+
+    /**
+     * The same client, allowed to take its time over a book's bytes.
+     *
+     * A chunk is up to 16 MiB going out over a phone's uplink, and a
+     * whole EPUB can be read back to prove it is ours. The ordinary read
+     * timeout is sized for JSON.
+     */
+    private val transfers = client.newBuilder()
+        .readTimeout(TRANSFER_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .writeTimeout(TRANSFER_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        .build()
+
+    /** A status and a bounded JSON body, for routes whose refusals carry a code. */
+    internal data class Answer(val code: Int, val body: JSONObject?) {
+        val isSuccessful: Boolean get() = code in 200..299
+    }
+
+    /**
+     * A call whose answer matters whatever its status.
+     *
+     * The upload routes say why they refused in the body, and the reason
+     * decides whether to try again, start afresh or give up; a bare
+     * failure would lose it. Only 401 is treated as a failure here, so
+     * [BookOrbitSession.authorized] can renew the token and ask once
+     * more. [body] is called for each attempt, because a streamed body
+     * can only be written once.
+     */
+    internal suspend fun exchange(
+        context: BookOrbitRequestContext,
+        url: String,
+        method: String,
+        body: (() -> RequestBody)? = null,
+        headers: Map<String, String> = emptyMap(),
+        transfer: Boolean = false,
+    ): Answer = withContext(Dispatchers.IO) {
+        session.authorized(context) { bearer ->
+            val builder = signed(context, url, bearer)
+            headers.forEach { (name, value) -> builder.header(name, value) }
+            val payload = body?.invoke() ?: if (method == "GET" || method == "DELETE") null else EMPTY
+            builder.method(method, payload)
+            (if (transfer) transfers else client).newCall(builder.build()).execute().use { response ->
+                if (response.code == 401) throw RemoteHttpFailure(SyncFailure.Unauthorised)
+                val text = response.peekBody(MAX_ANSWER_BYTES).string()
+                val json = if (text.isBlank()) {
+                    null
+                } else {
+                    try {
+                        JSONObject(text)
+                    } catch (_: JSONException) {
+                        null
+                    }
+                }
+                Answer(response.code, json)
+            }
+        }
+    }
+
+    /** Reads a successful GET's bytes through [read], without holding them. */
+    internal suspend fun <T> stream(
+        context: BookOrbitRequestContext,
+        url: String,
+        read: (java.io.InputStream) -> T,
+    ): T = withContext(Dispatchers.IO) {
+        session.authorized(context) { bearer ->
+            val request = signed(context, url, bearer).header("Accept", "*/*").build()
+            transfers.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
+                val body = response.body ?: throw RemoteHttpFailure(SyncFailure.Malformed)
+                body.byteStream().use(read)
+            }
+        }
+    }
 
     /** A mutation must not be replayed merely because its response was lost. */
     sealed interface MutationResult {
@@ -209,6 +283,8 @@ class BookOrbitHttp(
     }
 
     private companion object {
+        const val TRANSFER_TIMEOUT_SECONDS = 120L
+        const val MAX_ANSWER_BYTES = 64L * 1024
         val JSON = "application/json; charset=utf-8".toMediaType()
         val EMPTY = ByteArray(0).toRequestBody(null)
     }

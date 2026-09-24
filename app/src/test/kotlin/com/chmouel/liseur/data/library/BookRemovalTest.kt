@@ -627,6 +627,52 @@ class BookRemovalTest {
     }
 
     @Test
+    fun `an empty catalog entry for an uploaded book gives way to the local copy`() = runTest {
+        db.bookDao().upsert(book("catalog-1", remoteUuid = "bo_x_5").copy(remoteBookId = 5))
+        db.bookDao().upsert(book("catalog-2", remoteUuid = "bo_x_5"))
+        val forgotten = mutableListOf<String>()
+
+        assertTrue(
+            removal.dropUntouchedCatalogDuplicates(listOf("catalog-1", "catalog-2"), "bo_x_5") {
+                forgotten += it
+            },
+        )
+
+        assertEquals(listOf("catalog-1", "catalog-2"), forgotten)
+        assertNull(db.bookDao().getByUrl("catalog-1"))
+        assertNull(db.bookDao().getByUrl("catalog-2"))
+    }
+
+    @Test
+    fun `one catalog entry holding anything keeps every entry and the link`() = runTest {
+        val kept = listOf(
+            book("other-book", remoteUuid = "bo_x_6"),
+            book("downloaded", remoteUuid = "bo_x_5").copy(downloadState = DownloadState.DOWNLOADED),
+            book("with-file", remoteUuid = "bo_x_5").copy(localUri = "file:///books/x.epub"),
+            book("opened", remoteUuid = "bo_x_5").copy(lastOpenedAt = 1),
+            book("hidden", remoteUuid = "bo_x_5").copy(hiddenAt = 1),
+            book("read", remoteUuid = "bo_x_5"),
+        )
+        kept.forEach { db.bookDao().upsert(it) }
+        db.readingProgressDao().upsert(
+            ReadingProgress(bookUrl = "read", locatorJson = "{}", totalProgression = 0.4, updatedAt = 1L),
+        )
+
+        for (row in kept) {
+            db.bookDao().upsert(book("empty", remoteUuid = "bo_x_5"))
+            var forgot = false
+            assertEquals(
+                row.url,
+                false,
+                removal.dropUntouchedCatalogDuplicates(listOf("empty", row.url), "bo_x_5") { forgot = true },
+            )
+            assertEquals(row.url, false, forgot)
+            assertNotNull(row.url, db.bookDao().getByUrl(row.url))
+            assertNotNull(row.url, db.bookDao().getByUrl("empty"))
+        }
+    }
+
+    @Test
     fun `taking a book off the shelf keeps every part of it`() = runTest {
         // The reader is told the book can be put back, so putting it
         // back has to give them all of it, not a stranger with the same
