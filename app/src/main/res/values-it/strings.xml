@@ -533,7 +533,7 @@
     <string name="delete_file">Elimina file</string>
     <string name="delete_from_server">Elimina dal server</string>
     <string name="delete_from_server_warning">“%1$s” verrà eliminato dal server stesso, per ogni dispositivo. Non si può annullare.</string>
-    <string name="delete_from_server_warning_whole_book">“%1$s” verrà eliminato dal server stesso, con tutti i suoi formati e i progressi di ogni lettore. Non si può annullare.</string>
+    <string name="delete_from_server_warning_whole_book">“%1$s” verrà eliminato dal server stesso, con tutti i suoi formati, la copertina e i progressi di ogni lettore. Non si può annullare.</string>
     <string name="delete_from_server_forget_reading">Elimina anche la mia cronologia di lettura sul server</string>
     <string name="delete_from_server_forget_reading_hint">La posizione e il tempo di lettura restano sul server così un altro dispositivo può riprenderli. Questo riguarda solo la tua lettura, mai quella degli altri.</string>
     <string name="server_delete_needs_reconnect">Questa connessione non può eliminare libri dal server. Accedi di nuovo al server per chiedere quel permesso.</string>
