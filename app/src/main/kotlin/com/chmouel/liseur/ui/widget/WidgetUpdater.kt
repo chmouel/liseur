@@ -128,7 +128,7 @@ object WidgetUpdater {
         val manager = GlanceAppWidgetManager(context)
         val placed = widgets().sumOf { manager.getGlanceIds(it.javaClass).size }
         val work = WorkManager.getInstance(context)
-        when (periodicRefreshFor(placed)) {
+        val operation = when (periodicRefreshFor(placed)) {
             PeriodicRefresh.Enqueue -> work.enqueueUniquePeriodicWork(
                 PERIODIC_REFRESH,
                 ExistingPeriodicWorkPolicy.KEEP,
@@ -136,6 +136,7 @@ object WidgetUpdater {
             )
             PeriodicRefresh.Cancel -> work.cancelUniqueWork(PERIODIC_REFRESH)
         }
+        operation.await()
     }
 
     private const val TAG = "WidgetUpdater"
