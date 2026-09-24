@@ -146,6 +146,37 @@ class BookOrbitStatusSyncTest {
     }
 
     @Test
+    fun `a file replaced while the server status is read sends nothing`() = runBlocking {
+        val sent = "the bytes that went up"
+        val file = java.io.File.createTempFile("uploaded", ".epub").apply {
+            writeText(sent)
+            deleteOnExit()
+        }
+        database.bookDao().upsert(
+            com.chmouel.liseur.data.db.Book(
+                url = bookUrl, title = "Up", author = null, coverPath = null, source = null,
+                addedAt = 1, lastOpenedAt = null,
+                localUri = android.net.Uri.fromFile(file).toString(),
+            ),
+        )
+        database.bookOrbitBindingDao().write(
+            database.bookOrbitBindingDao().get(account.accountKey, bookUrl)!!
+                .copy(localSha256 = BookOrbitUploadClient.sha256Of(sent.byteInputStream())),
+        )
+        FinishedState(database.bookDao(), database.readingProgressDao())
+            .setFinished(bookUrl, true)
+        web.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                file.writeText("a different book entirely")
+                return MockResponse(body = detail("unread", "auto"))
+            }
+        }
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.StatusUnresolved), runSync())
+        assertEquals(1, web.requestCount)
+    }
+
+    @Test
     fun `local finished intent patches only status and confirms manual readback`() = runBlocking {
         database.readingProgressDao().upsert(
             ReadingProgress(

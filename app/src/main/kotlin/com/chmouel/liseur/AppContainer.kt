@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.library.AnnotationBackupRepository
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -126,6 +127,7 @@ class AppContainer(context: Context) {
         annotationDao = database.annotationDao(),
         annotationSyncDao = database.annotationSyncDao(),
         inTransaction = { work -> database.withTransaction { work() } },
+        bookOrbitBindings = database.bookOrbitBindingDao(),
     )
 
     /**
@@ -242,6 +244,12 @@ class AppContainer(context: Context) {
         kosync = { kosyncAccount },
         bookOrbit = bookOrbitSession,
         bookOrbitBindingDao = database.bookOrbitBindingDao(),
+        uploadStillHeld = { url, sha256 ->
+            val source = database.bookDao().getByUrl(url)
+                ?.openableUri()
+                ?.let(android.net.Uri::parse)
+            source != null && bookOrbitSources.holds(url, source, sha256)
+        },
         bookOrbitCfiDao = database.bookOrbitCfiDao(),
         bookOrbitLocalCfiDao = database.bookOrbitLocalCfiDao(),
         bookOrbitPositionAgreementDao = database.bookOrbitPositionAgreementDao(),

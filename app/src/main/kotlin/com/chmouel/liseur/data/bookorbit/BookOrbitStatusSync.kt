@@ -24,13 +24,7 @@ class BookOrbitStatusSync(
     suspend fun sync(context: BookOrbitCfiContext): SyncOutcome =
         database.bookOrbitStatusMutex.withLock {
             cfis.check(context)
-            // An uploaded book whose file was replaced is no longer the
-            // server's book: neither its status nor the server's crosses.
-            when (sources.holdsUploaded(database, context)) {
-                null -> return@withLock SyncOutcome.Failure(SyncFailure.StaleIdentity)
-                false -> return@withLock SyncOutcome.Failure(SyncFailure.StatusUnresolved)
-                true -> Unit
-            }
+            uploadedBytesChanged(context)?.let { return@withLock it }
             var agreement = agreements.get(context.request.accountKey, context.bookUrl)
                 ?.takeIf { it.bookId == context.bookId }
                 ?.forContext(context)
@@ -59,6 +53,7 @@ class BookOrbitStatusSync(
 
             val remote = client.read(context)
             cfis.check(context)
+            uploadedBytesChanged(context)?.let { return@withLock it }
             val latestLocal = progress.get(context.bookUrl)
             if (latestLocal?.statusRevision != local?.statusRevision ||
                 latestLocal?.finishedOverride != local?.finishedOverride ||
@@ -117,6 +112,18 @@ class BookOrbitStatusSync(
                 local?.finishedOverride ?: FinishedOverride.NONE.ordinal,
             )
             SyncOutcome.Success
+        }
+
+    /**
+     * An uploaded book whose file was replaced is no longer the server's
+     * book: neither its status nor the server's crosses. Checked before
+     * and after the read, so a replacement during it stops both ways.
+     */
+    private suspend fun uploadedBytesChanged(context: BookOrbitCfiContext): SyncOutcome? =
+        when (sources.holdsUploaded(database, context)) {
+            null -> SyncOutcome.Failure(SyncFailure.StaleIdentity)
+            false -> SyncOutcome.Failure(SyncFailure.StatusUnresolved)
+            true -> null
         }
 
     private suspend fun recover(

@@ -1330,7 +1330,10 @@ CFI live.
   stay. When the same account (same `accountKey`) signs in again,
   `RemoteAccountRepository.relinkUploads` restores `remote_uuid` on
   uploaded books from their binding, so the catalog does not bring them
-  in twice. Two local books bound to one server book stay unlinked.
+  in twice. It relinks only a file that still hashes to `local_sha256`,
+  read outside the transaction. Two local books bound to one server book
+  stay unlinked. `BookRemoval.contentReplaced` drops the binding with the
+  rest of what described the old file.
 - The adoption writes `book_orbit_binding.local_sha256` (schema 60), and
   nothing else does. It is what lets an uploaded book's own file stand
   for the server file when a CFI is computed. `BookOrbitCfiRepository`
@@ -1340,7 +1343,8 @@ CFI live.
   The spool is deleted when a check fails and when the reader closes, and
   swept at startup. Before a position is prepared or sent, and before any
   status is read or written, the source is checked against the digest
-  (`BookOrbitAdoptedSource.holdsUploaded`). A match is remembered for five
+  (`BookOrbitAdoptedSource.holdsUploaded`), and checked again after the
+  network read that precedes the write. A match is remembered for five
   minutes while the size and modification time are unchanged, because a
   full hash on every page turn is too slow; a replacement that keeps both
   is caught by the next process or after that window.

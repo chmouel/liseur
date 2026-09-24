@@ -65,6 +65,7 @@ class BookRemovalTest {
             annotationDao = db.annotationDao(),
             annotationSyncDao = db.annotationSyncDao(),
             inTransaction = { work -> db.withTransaction { work() } },
+            bookOrbitBindings = db.bookOrbitBindingDao(),
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
@@ -538,8 +539,19 @@ class BookRemovalTest {
             ),
         )
 
+        db.bookOrbitBindingDao().write(
+            com.chmouel.liseur.data.db.BookOrbitBinding(
+                "bookorbit|x|1", "gone", 12, 34, "epub", 10, null, 1,
+                com.chmouel.liseur.data.db.BookOrbitBindingState.DOWNLOADED.name, 1,
+                localSha256 = "a".repeat(64),
+            ),
+        )
+
         removal.contentReplaced("gone")
 
+        // The binding named the old bytes on the server; kept, a
+        // reconnect would link the new book to the old server book.
+        assertNull(db.bookOrbitBindingDao().get("bookorbit|x|1", "gone"))
         // Here the marks really are gone — they anchored into a file
         // that is not there any more. The agreements have to go in the
         // same transaction: a sync row with no annotation behind it

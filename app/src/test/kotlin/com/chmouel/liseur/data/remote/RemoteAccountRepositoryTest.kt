@@ -260,7 +260,10 @@ class RemoteAccountRepositoryTest {
 
     @Test
     fun `an uploaded book is linked again when the same bookorbit account reconnects`() = runTest {
-        val repository = repositoryUsing(db.remoteServerDao(), BookOrbitSetup())
+        val replaced = "file:///local/four.epub"
+        val repository = repositoryUsing(db.remoteServerDao(), BookOrbitSetup()) { url, sha256 ->
+            url != replaced && sha256 == "a".repeat(64)
+        }
         repository.connectBookOrbit(BASE, "reader", "hunter2")
         val server = repository.current()!!
         val remoteUuid = com.chmouel.liseur.data.bookorbit.BookOrbitScope
@@ -285,6 +288,8 @@ class RemoteAccountRepositoryTest {
         // Two local copies bound to one server book: neither is chosen.
         uploaded("file:///local/two.epub", 114, null)
         uploaded("file:///local/three.epub", 114, null)
+        // Replaced while disconnected: its bytes are not the ones sent.
+        uploaded(replaced, 115, null)
 
         repository.disconnect()
         assertNull(db.bookDao().getByUrl("file:///local/one.epub")!!.remoteUuid)
@@ -295,6 +300,7 @@ class RemoteAccountRepositoryTest {
         assertEquals("/api/v1/books/files/352/download", relinked.downloadHref)
         assertNull(db.bookDao().getByUrl("file:///local/two.epub")!!.remoteUuid)
         assertNull(db.bookDao().getByUrl("file:///local/three.epub")!!.remoteUuid)
+        assertNull(db.bookDao().getByUrl(replaced)!!.remoteUuid)
     }
 
     /** A BookOrbit server that answers capability refreshes in its own shape. */
@@ -387,7 +393,11 @@ class RemoteAccountRepositoryTest {
 
     private fun repository(dao: RemoteServerDao) = repositoryUsing(dao, AlwaysConnects)
 
-    private fun repositoryUsing(dao: RemoteServerDao, setup: ServerSetup) = RemoteAccountRepository(
+    private fun repositoryUsing(
+        dao: RemoteServerDao,
+        setup: ServerSetup,
+        uploadStillHeld: (suspend (String, String) -> Boolean)? = null,
+    ) = RemoteAccountRepository(
         dao = dao,
         bookDao = db.bookDao(),
         progressDao = db.readingProgressDao(),
@@ -403,6 +413,7 @@ class RemoteAccountRepositoryTest {
         seriesExtraDao = db.seriesExtraDao(),
         peerStateDao = db.syncPeerStateDao(),
         bookOrbitBindingDao = db.bookOrbitBindingDao(),
+        uploadStillHeld = uploadStillHeld,
         bookOrbitCfiDao = db.bookOrbitCfiDao(),
         bookOrbitPositionTraversalDao = db.bookOrbitPositionTraversalDao(),
         kosync = { kosync() },
