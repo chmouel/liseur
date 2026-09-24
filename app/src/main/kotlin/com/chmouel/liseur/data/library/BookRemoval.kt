@@ -29,6 +29,7 @@ class BookRemoval(
     private val annotationDao: BookAnnotationDao,
     private val annotationSyncDao: AnnotationSyncDao,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
+    private val bookOrbitBindings: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
@@ -134,6 +135,7 @@ class BookRemoval(
             // sync and catalog lookups would address the server's copy of
             // the book that used to be here as if it were the new one.
             bookDao.unlinkFromRemote(listOf(bookUrl))
+            bookOrbitBindings?.clearBook(bookUrl)
             bookDao.forgetReadingHistory(bookUrl)
             bookDao.clearSeriesForReplacedWork(bookUrl)
         }

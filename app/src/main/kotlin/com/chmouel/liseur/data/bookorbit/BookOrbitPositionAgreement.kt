@@ -601,9 +601,11 @@ class BookOrbitPositionAgreementRepository(
         if (!preparedStillMatches(context)) throw BookOrbitPositionUnresolved()
         // Also for a send resumed after a restart, which never reopens
         // the book: the stored CFI was computed in bytes that must still
-        // be the ones on the device.
+        // be the ones on the device. Again after the preflight, so a file
+        // replaced while it was in the air is caught before the send.
         requireUploadedBytes(context)
         val preflight = progress.read(context)
+        requireUploadedBytes(context)
         val row = database.withTransaction {
             checkCurrent(context)
             val pending = current(context)

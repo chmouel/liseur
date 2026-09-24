@@ -111,6 +111,11 @@ class RemoteAccountRepository(
     private val bookOrbit: com.chmouel.liseur.data.bookorbit.BookOrbitSession? = null,
     /** File bindings outlive disconnect only while their downloaded book does. */
     private val bookOrbitBindingDao: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
+    /**
+     * Whether the file of the book at a URL still hashes to a digest.
+     * Without it, uploaded books are never relinked after a reconnect.
+     */
+    private val uploadStillHeld: (suspend (bookUrl: String, sha256: String) -> Boolean)? = null,
     private val bookOrbitCfiDao: com.chmouel.liseur.data.db.BookOrbitCfiDao? = null,
     private val bookOrbitLocalCfiDao: com.chmouel.liseur.data.db.BookOrbitLocalCfiDao? = null,
     private val bookOrbitPositionAgreementDao: com.chmouel.liseur.data.db.BookOrbitPositionAgreementDao? = null,
@@ -725,6 +730,7 @@ class RemoteAccountRepository(
         capabilities: ServerCapabilities,
     ) {
         changingAccount { inTransaction { storeLocked(kind, credentials, capabilities) } }
+        relinkUploads()
     }
 
     private suspend fun storeLocked(
@@ -954,7 +960,6 @@ class RemoteAccountRepository(
                 written.accountKey, written.orbitEpoch, written.baseUrl,
             )
         }
-        if (written.kind == ServerKind.BOOKORBIT) relinkUploads(written)
         adoptBookOrbit(written)
     }
 
@@ -968,29 +973,41 @@ class RemoteAccountRepository(
      * uploaded one keeps its own URL, so without this the catalog would
      * bring it in a second time and offer the local copy for upload
      * again. Bindings are keyed by account, so only the account that
-     * took the upload can relink it. Two local books bound to one server
-     * book, or a server id some row already holds, are left alone.
+     * took the upload can relink it, and only a file that still holds
+     * the bytes that were sent is relinked: one replaced while nobody
+     * was connected names a different book. The files are read outside
+     * the transaction, which then checks nothing moved in the meantime.
+     * Two local books bound to one server book, or a server id some row
+     * already holds, are left alone.
      */
-    private suspend fun relinkUploads(server: RemoteServer) {
+    private suspend fun relinkUploads() {
+        val stillHeld = uploadStillHeld ?: return
         val bindings = bookOrbitBindingDao ?: return
+        val server = dao.get()?.takeIf { it.kind == ServerKind.BOOKORBIT } ?: return
         val accountId = server.accountId ?: return
-        val unlinked = bindings.unlinkedUploads(server.accountKey)
+        val verified = bindings.unlinkedUploads(server.accountKey)
             .groupBy { it.bookId }
             .values
             .mapNotNull { it.singleOrNull() }
-            .associateWith { BookOrbitScope.remoteId(server.baseUrl, accountId, it.bookId) }
-        if (unlinked.isEmpty()) return
-        val held = bookDao.byRemoteUuids(unlinked.values.toList()).mapNotNullTo(HashSet()) { it.remoteUuid }
-        unlinked.forEach { (binding, remoteUuid) ->
-            val fileId = binding.fileId ?: return@forEach
-            if (remoteUuid in held) return@forEach
-            bookDao.linkToRemote(
-                url = binding.bookUrl,
-                remoteUuid = remoteUuid,
-                downloadHref = BookOrbitUrl.downloadHref(fileId),
-                coverUrl = null,
-                remoteUpdatedAt = System.currentTimeMillis(),
-            )
+            .filter { binding -> binding.localSha256?.let { stillHeld(binding.bookUrl, it) } == true }
+        if (verified.isEmpty()) return
+        inTransaction {
+            if (dao.get()?.accountKey != server.accountKey) return@inTransaction
+            val ids = verified.associateWith { BookOrbitScope.remoteId(server.baseUrl, accountId, it.bookId) }
+            val taken = bookDao.byRemoteUuids(ids.values.toList()).mapNotNullTo(HashSet()) { it.remoteUuid }
+            ids.forEach { (binding, remoteUuid) ->
+                val fileId = binding.fileId ?: return@forEach
+                if (remoteUuid in taken) return@forEach
+                if (bindings.get(server.accountKey, binding.bookUrl) != binding) return@forEach
+                if (bookDao.getByUrl(binding.bookUrl)?.let { it.remoteUuid == null } != true) return@forEach
+                bookDao.linkToRemote(
+                    url = binding.bookUrl,
+                    remoteUuid = remoteUuid,
+                    downloadHref = BookOrbitUrl.downloadHref(fileId),
+                    coverUrl = null,
+                    remoteUpdatedAt = System.currentTimeMillis(),
+                )
+            }
         }
     }
 
