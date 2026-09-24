@@ -764,7 +764,8 @@ class RemoteCatalogRepository(
      * So absence must be seen by two finished walks running. The first
      * marks; the second acts, and does what this always did — a book
      * with no file goes, one on the device keeps its file and loses its
-     * link. Being named again at any point clears the mark, including by
+     * link. A book the reader uploaded always keeps its entry and only
+     * loses the link. Being named again at any point clears the mark, including by
      * a walk that never finished, which is done as the page is stored.
      *
      * The cost is that a book genuinely deleted on the server lingers
@@ -773,21 +774,23 @@ class RemoteCatalogRepository(
      * confusion, and the alternative is unrecoverable.
      */
     private suspend fun reconcileVanished(seenUuids: Set<String>) {
+        val remote = bookDao.allRemote()
+        val gone = remote.filter { it.remoteUuid !in seenUuids }
+        val (confirmed, suspected) = gone.partition { it.catalogMissingSince != null }
         // Only rows the catalog itself introduced are the catalog's to
-        // forget. A book of the reader's own that was uploaded and
+        // delete. A book of the reader's own that was uploaded and
         // linked is not one: its file is its URL rather than a
         // download, so the test below would read it as having nothing
-        // to open, and a walk that began before the upload cannot have
-        // seen its id. Between them they would delete the book and
-        // every page ever read of it.
-        val remote = bookDao.allRemote()
-        val gone = remote
-            .filter { it.remoteUuid !in seenUuids && ServerKind.isRemoteUrl(it.url) }
-        val (confirmed, suspected) = gone.partition { it.catalogMissingSince != null }
+        // to open, and deleting it would take every page ever read of
+        // it. It keeps its entry and only loses the link. A walk that
+        // began before the upload cannot have seen its id, which is
+        // one more reason a single absence only marks it.
+        val (catalogRows, uploaded) = confirmed.partition { ServerKind.isRemoteUrl(it.url) }
+        uploaded.map { it.url }.chunkedForSql { bookRemoval.unlinkVanishedUploads(it) }
         // Only a book with a file of its own is worth keeping. One that
         // was queued or failed has nothing to read, so it goes with the
         // rest rather than staying as a row that can never be opened.
-        val (onDevice, noFile) = confirmed.partition { it.localUri != null }
+        val (onDevice, noFile) = catalogRows.partition { it.localUri != null }
         noFile.map { it.url }.chunkedForSql { bookRemoval.deleteByUrls(it) }
         // A book that is here but no longer there keeps its file and loses
         // its link: syncing it would keep asking the server about an id it
