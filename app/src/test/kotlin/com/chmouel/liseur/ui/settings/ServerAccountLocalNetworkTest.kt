@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.settings
 
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.work.Configuration
 import androidx.work.WorkManager
@@ -38,6 +39,8 @@ import javax.crypto.KeyGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -73,6 +76,7 @@ class ServerAccountLocalNetworkTest {
 
     private lateinit var db: LiseurDatabase
     private val connects = mutableListOf<Triple<String, String, Boolean>>()
+    private val models = mutableListOf<ServerAccountViewModel>()
     private val kosyncPairings = mutableListOf<String>()
     private var blocked = mutableSetOf<String>()
     private var permitted = false
@@ -115,6 +119,9 @@ class ServerAccountLocalNetworkTest {
         try {
             body()
         } finally {
+            // A collector still running would hand Room's IO-thread
+            // emissions to Main while it is being reset.
+            models.forEach { it.viewModelScope.coroutineContext.job.cancelAndJoin() }
             Dispatchers.resetMain()
         }
     }
@@ -521,7 +528,7 @@ class ServerAccountLocalNetworkTest {
             bookDao = db.bookDao(),
             kosyncAccount = KosyncAccountRepository(db.kosyncPeerDao(), db.syncPeerStateDao()),
             localNetwork = FakeAccess(gated),
-        )
+        ).also(models::add)
     }
 
     /** A gate whose answers the test writes rather than the platform. */
