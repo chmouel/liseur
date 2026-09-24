@@ -137,12 +137,23 @@ class BookUploadWorker(
         snapshot: Snapshot?,
         why: String,
     ): Result {
+        // The digest is stored as the file's and expires the refusal only
+        // when the file changes. A file that changed while it was being
+        // sent would be stamped with bytes it no longer holds, and its
+        // new contents would never be offered.
+        if (snapshot != null) {
+            val latest = container.database.bookDao().getByUrl(book.url)
+            if (latest == null || !snapshot.stillDescribes(latest)) {
+                return giveUp("${book.url} changed while it was being sent")
+            }
+        }
         container.database.withTransaction {
             // Re-read inside the transaction: an account switch or a
             // book removed while the request was in the air must not be
             // overwritten by an answer about the world as it was.
             if (container.remoteAccount.current()?.accountKey != account) return@withTransaction
             val current = container.database.bookDao().getByUrl(book.url) ?: return@withTransaction
+            if (snapshot != null && current.fileModifiedAt != book.fileModifiedAt) return@withTransaction
             // The digest is what makes this refusal expire on its own,
             // so it has to be one the library can compare against later
             // — and the only digest anybody has just computed is this
