@@ -73,8 +73,11 @@ class BookOrbitUploadClient(
         val (context, _) = connection(baseUrl) ?: throw RemoteHttpFailure(SyncFailure.Unauthorised)
         val caps = capabilities(context)
         if (!caps.canUpload) return emptyList()
+        // The worker sends to the first one and the library is part of the
+        // upload's key, so a retry must see the same first library.
         return caps.libraries
             .filter { it.takesEpub }
+            .sortedBy { it.id }
             .map { RemoteUploadTarget(folderId = "$TARGET_PREFIX${it.id}", name = it.name) }
     }
 

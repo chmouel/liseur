@@ -123,14 +123,14 @@ class BookOrbitUploadClientTest {
     private fun takeAll(): List<RecordedRequest> = List(server.requestCount) { server.takeRequest() }
 
     @Test
-    fun `only libraries that take an EPUB are offered`() = runBlocking {
+    fun `only libraries that take an EPUB are offered, in a stable order`() = runBlocking {
         server.enqueue(
             json(
                 """
                 {"maxFileSizeBytes":10,"chunkSizeBytes":10,"canUploadToLibrary":true,"libraries":[
+                  {"id":3,"name":"Books","allowedFormats":["EPUB","pdf"],"folders":[]},
                   {"id":1,"name":"Comics","allowedFormats":["cbz"],"folders":[]},
-                  {"id":2,"name":"Anything","allowedFormats":[],"folders":[]},
-                  {"id":3,"name":"Books","allowedFormats":["EPUB","pdf"],"folders":[]}]}
+                  {"id":2,"name":"Anything","allowedFormats":[],"folders":[]}]}
                 """.trimIndent(),
             ),
         )
