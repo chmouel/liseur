@@ -28,14 +28,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * What every homescreen widget needs, read once per update.
+ * What a homescreen widget draws, read once per update.
  *
- * Device-local only: the widget never waits on the network.
+ * Device-local only: the widget never waits on the network. [stats] is
+ * null when the widget did not ask for it.
  */
 data class WidgetSnapshot(
     val book: WidgetBook?,
-    val stats: WidgetStats,
+    val stats: WidgetStats?,
 )
+
+/**
+ * What a widget draws, so a load reads only that: the cover alone needs no
+ * session history, and the stats alone need no cover bitmap.
+ */
+enum class WidgetContent(val cover: Boolean, val stats: Boolean) {
+    COVER(cover = true, stats = false),
+    STATS(cover = false, stats = true),
+    COVER_AND_STATS(cover = true, stats = true),
+}
 
 data class WidgetBook(
     val url: String,
@@ -74,17 +85,21 @@ class WidgetRepository(
     suspend fun load(
         context: Context,
         period: WidgetPeriod = WidgetPeriod.Default,
+        content: WidgetContent = WidgetContent.COVER_AND_STATS,
     ): WidgetSnapshot = withContext(Dispatchers.IO) {
-        val zone = zone()
-        val today = today(zone)
-        val weekStart = weekStart()
         val book = bookDao.mostRecentlyOpened()
         val progress = book?.let { progressDao.get(it.url)?.totalProgression }
-        val sessions = sessionDao.allOnce()
-        val books = bookDao.allOnce()
+        WidgetSnapshot(
+            book = book?.toWidgetBook(context, progress, withCover = content.cover),
+            stats = if (content.stats) loadStats(period).toWidgetStats(context) else null,
+        )
+    }
+
+    private suspend fun loadStats(period: WidgetPeriod): PeriodStats {
+        val zone = zone()
         val progressions = progressDao.getAll()
             .associateBy({ it.bookUrl }, { it.totalProgression })
-        val statsBooks = books.associate { row ->
+        val statsBooks = bookDao.allOnce().associate { row ->
             row.url to StatsBook(
                 bookUrl = row.url,
                 title = row.displayTitle,
@@ -95,7 +110,7 @@ class WidgetRepository(
                 coverUrl = row.coverUrl,
             )
         }
-        val spans = sessions.map { session ->
+        val spans = sessionDao.allOnce().map { session ->
             SessionSpan(
                 bookUrl = session.bookUrl,
                 startedAt = session.startedAt,
@@ -106,21 +121,17 @@ class WidgetRepository(
                 endProgression = session.endProgression,
             )
         }
-        val stats = periodStats(
+        return periodStats(
             sessions = spans,
             books = statsBooks,
             zone = zone,
-            today = today,
-            weekStart = weekStart,
+            today = today(zone),
+            weekStart = weekStart(),
             period = period,
-        )
-        WidgetSnapshot(
-            book = book?.toWidgetBook(context, progress),
-            stats = stats.toWidgetStats(context),
         )
     }
 
-    private fun Book.toWidgetBook(context: Context, progression: Double?): WidgetBook {
+    private fun Book.toWidgetBook(context: Context, progression: Double?, withCover: Boolean): WidgetBook {
         val fileUrl = openableUri()
         val open = if (fileUrl != null) {
             ReaderActivity.intent(context, fileUrl, url)
@@ -134,7 +145,7 @@ class WidgetRepository(
             title = displayTitle,
             author = displayAuthor,
             progression = progression,
-            cover = coverPath?.let(decodeCover),
+            cover = if (withCover) coverPath?.let(decodeCover) else null,
             initials = coverInitials(displayTitle),
             openIntent = open,
         )

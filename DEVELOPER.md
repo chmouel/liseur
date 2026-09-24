@@ -1108,7 +1108,9 @@ network or a connected server, and they ignore a remote cover URL.
   `provideGlance` again, so anything loaded there would go stale.
   `LiveSnapshot` reloads the snapshot whenever the updater's generation or
   the widget's period changes. Each placed widget loads its own snapshot;
-  there is no shared cache.
+  there is no shared cache. `WidgetContent` limits a load to what the
+  widget draws: the cover widget reads no session history, and the stats
+  widget decodes no cover.
 - The stats period (today, this week, this month) is per widget. It lives
   in the widget's Glance preferences under `WidgetPeriodKey` and is set by
   `WidgetConfigActivity`, which only accepts an id belonging to one of

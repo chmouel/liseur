@@ -32,11 +32,12 @@ class CoverStatsWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(CoverStatsCompact, CoverStatsRoomy))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) = coroutineScope {
-        val live = LiveSnapshot.start(context, id, this)
+        val live = LiveSnapshot.start(context, id, this, WidgetContent.COVER_AND_STATS)
         provideContent {
             GlanceTheme(colors = LiseurGlanceColorScheme.colors) {
                 val snapshot = live.observe()
                 val book = snapshot.book
+                val stats = snapshot.stats ?: return@GlanceTheme
                 if (book == null) {
                     EmptyShelf(context)
                 } else {
@@ -44,7 +45,7 @@ class CoverStatsWidget : GlanceAppWidget() {
                         CoverStatsContent(
                             context = context,
                             book = book,
-                            stats = snapshot.stats,
+                            stats = stats,
                         )
                     }
                 }
