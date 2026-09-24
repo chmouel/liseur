@@ -2,7 +2,13 @@ package com.chmouel.liseur.ui.widget
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * What the three Liseur receivers share: the hourly refresh follows
@@ -11,9 +17,13 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
  * change redraws too: the labels and the week start were baked in when
  * the widget was last drawn.
  *
+ * Any of these broadcasts may have started the process on its own, and
+ * Android can kill it as soon as the receiver is done, so each one holds
+ * the broadcast open until its work is handed to WorkManager.
+ *
  * The receivers are exported for the launcher, so any app can send them
- * these actions. They only ask for a coalesced redraw, which is cheap and
- * does nothing when no widget is placed.
+ * these actions. A redraw request replaces the one still waiting, so a
+ * burst of them costs one redraw, and nothing when no widget is placed.
  */
 abstract class LiseurWidgetReceiver : GlanceAppWidgetReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -22,7 +32,7 @@ abstract class LiseurWidgetReceiver : GlanceAppWidgetReceiver() {
             Intent.ACTION_TIMEZONE_CHANGED,
             Intent.ACTION_LOCALE_CHANGED,
             -> {
-                WidgetUpdater.schedule(context)
+                holdingBroadcast { WidgetUpdater.requestRedraw(context) }
                 return
             }
         }
@@ -31,11 +41,31 @@ abstract class LiseurWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        WidgetUpdater.reconcilePeriodic(context)
+        holdingBroadcast { WidgetUpdater.reconcilePeriodicNow(context) }
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        WidgetUpdater.reconcilePeriodic(context)
+        holdingBroadcast { WidgetUpdater.reconcilePeriodicNow(context) }
+    }
+
+    private fun holdingBroadcast(block: suspend () -> Unit) {
+        val pending = goAsync()
+        scope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Widget broadcast work failed", e)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    private companion object {
+        const val TAG = "LiseurWidgetReceiver"
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     }
 }

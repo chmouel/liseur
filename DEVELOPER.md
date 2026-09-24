@@ -1122,6 +1122,12 @@ network or a connected server, and they ignore a remote cover URL.
   get `DATE_CHANGED` on Android 8 and later, so this job is what rolls the
   day and week over. `TIME_SET`, `TIMEZONE_CHANGED` and `LOCALE_CHANGED`
   redraw at once, since the labels and the week start are drawn in.
+- Any of these broadcasts may be what started the process, and Android
+  can kill it once the receiver returns. The receiver holds the broadcast
+  with `goAsync()` until its work is safe: the reconcile finishes, or the
+  redraw is enqueued as unique one-off work (`requestRedraw`, which
+  replaces a request still waiting). Do not start receiver work in a
+  process-local scope and return.
 - On a device without `FEATURE_APP_WIDGETS` the updater does nothing:
   there is no `AppWidgetManager`, and Glance's id lookup would throw.
 - Glance truncates a container after ten children. The chart splits its

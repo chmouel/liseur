@@ -9,9 +9,12 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.await
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -70,6 +73,23 @@ object WidgetUpdater {
         current.request()
     }
 
+    /**
+     * Hands a redraw to WorkManager, for a receiver whose process may not
+     * outlive it. A request still waiting is replaced, so a burst of them
+     * redraws once.
+     */
+    suspend fun requestRedraw(context: Context) {
+        val app = context.applicationContext
+        if (!supportsWidgets(app)) return
+        WorkManager.getInstance(app)
+            .enqueueUniqueWork(
+                ONE_OFF_REDRAW,
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<WidgetRefreshWorker>().build(),
+            )
+            .await()
+    }
+
     suspend fun updateNow(context: Context) {
         val app = context.applicationContext
         refreshes.update { it + 1 }
@@ -104,6 +124,7 @@ object WidgetUpdater {
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_APP_WIDGETS)
 
     suspend fun reconcilePeriodicNow(context: Context) {
+        if (!supportsWidgets(context)) return
         val manager = GlanceAppWidgetManager(context)
         val placed = widgets().sumOf { manager.getGlanceIds(it.javaClass).size }
         val work = WorkManager.getInstance(context)
@@ -121,12 +142,14 @@ object WidgetUpdater {
     private const val QUIET_MS = 3_000L
     private const val MAX_WAIT_MS = 15_000L
     private const val PERIODIC_REFRESH = "liseur-widget-refresh"
+    private const val ONE_OFF_REDRAW = "liseur-widget-redraw"
 }
 
 /**
  * Hourly redraw, so the day and week roll over on the homescreen
  * without the app being opened. Manifest receivers no longer hear
- * `DATE_CHANGED`, so this is what moves the widget past midnight.
+ * `DATE_CHANGED`, so this is what moves the widget past midnight. It
+ * also runs once for [WidgetUpdater.requestRedraw].
  */
 class WidgetRefreshWorker(
     context: Context,
