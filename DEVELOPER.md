@@ -1291,10 +1291,127 @@ CFI live.
   (`approximateOffer`). The first page turn records it as the agreed
   remote place in the same transaction as the move, so that move pushes
   an exact CFI; any jump declines it and leaves the server place alone.
+  A percentage-only place saved elsewhere while reading, or written
+  between this device's POST and its read-back, is offered through the
+  same catch-up pill as "Continue near page N" (`approximateCatchUp`).
+  Accepting goes there the same way, reading on agrees it, and
+  dismissing or jumping away agrees it as declined so the next move
+  pushes.
 - Reading status has its own agreements and exact-byte PATCH, keyed on
   `status_revision` so a status change keeps the verified CFI. Automatic
-  writes are on (`BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED`). See
-  [the position-sync notes](docs/bookorbit-position-sync.md).
+  writes are on (`BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED`).
+
+### What the BookOrbit server does
+
+Checked against v3.0.0 (`ghcr.io/bookorbit/bookorbit:3.0.0`).
+
+- `GET /books/files/{fileId}/progress` answers for one file. An unopened
+  file returns a default (percentage 0, null position fields, no
+  `updatedAt`); a saved zero has `updatedAt`. `BookOrbitProgressClient`
+  keeps the two apart and refuses malformed JSON, partial defaults and a
+  percentage outside 0..100. `lastReadAt`, `textUpdatedAt` and `updatedAt`
+  are shown to the reader and never used as merge clocks.
+- `POST /books/files/{fileId}/progress` replaces the whole text place. A
+  POST with only `percentage` nulls `cfi`, `pageNumber`, `positionSeconds`,
+  the media-overlay, Kobo and `koreaderProgress` fields. The write is
+  unconditional
+  ([`saveProgress`](https://github.com/bookorbit/bookorbit/blob/27cfdc20282eabdc89296c8c45482c578c157c7c/server/src/modules/book/book.service.ts#L2238-L2259)),
+  and its hooks can move read status, Kobo state and sibling EPUB progress.
+- The percentage column is PostgreSQL `real`. Liseur serializes it at
+  `Float` precision before saving the request bytes, so read-back can
+  require the exact CFI and the exact percentage.
+- `readStatus` lives on `GET /books/{id}` and changes through the
+  status-only `PATCH /books/{id}/status`, which leaves file progress and
+  its CFI alone. The public API cannot delete a status row.
+- Places saved without a CFI are common: imports and some clients write
+  them.
+
+### CFI bridge rules
+
+- `BookOrbitEpubPackage` reads `container.xml` and the OPF through the zip
+  central directory, each capped at 4 MiB. It keeps non-linear itemrefs
+  (they still occupy CFI indices), drops remote manifest items, refuses
+  duplicate ids, escaping paths, external identifiers and internal subsets.
+  `BookOrbitEpubInfoClient` compares the package path and spine with the
+  server's `/info` for the selected file.
+- `BookOrbitCfi` parses EPUB CFI 1.1 point and range CFIs, including
+  foliate's side-biased text assertions. Temporal and spatial offsets are
+  unsupported. An unparseable CFI is retained with its reason
+  (`BookOrbitCfiRepository`) and never turned into a percentage.
+- A parsed CFI is still DOM-unverified; `unresolvedReason` only reports
+  parser failures. The resolver enforces step parity (even steps land on
+  elements) and honors a step's `s=` parameter at element boundaries.
+  `/6/4!:3` has no text meaning and stays unresolved.
+- A range parent ending in `!` is an open path: join it with each endpoint
+  before walking, and never resolve `Range.parent` alone. Use `spineStep`
+  and each spine item's `step`; the package is not always `/6`. Flatten
+  only reader-owned wrappers, never an EPUB element.
+- Never use `BookOrbitForeignCfi.parsed` directly as a `Locator` or a POST
+  payload. An approximate place from a failed exact resolution must never
+  be written back as exact.
+- Android's WebView throws on `compareDocumentPosition`, so the incoming
+  check walks nodes in order instead. The outgoing capture skips tokens
+  without letters or digits, accepts an anchor that starts inside the
+  captured token, and retries briefly while the pager is still sliding to
+  a chapter's first page. A page without text sends nothing.
+
+### Agreement and exchange states
+
+- `reconcileExactPosition` decides from the local `position_revision`,
+  never a timestamp or a percentage tolerance. Equal CFIs settle even at
+  different percentages; different CFIs at the same percentage conflict.
+  A remote place without an agreement is not assumed to be this device's.
+- An exchange moves `PREPARED` → `MAY_HAVE_BEEN_SENT` → acknowledged, or
+  `UNCERTAIN` (read-back failed), `RETRY_REQUIRED` (server unchanged) or
+  `REJECTED` (401/403). Those four are read-back-only on every later run;
+  only an explicit reader choice prepares a new attempt. A read-back that
+  finds a third exact place means someone else wrote in between; it is
+  offered as a catch-up, and declining drops the attempt.
+- Every write re-reads the agreement row inside its own transaction.
+
+### Percentage-only openings
+
+| Local place | Condition | Opens at |
+| --- | --- | --- |
+| None | Any percentage-only server place | Server percentage |
+| Agreed and unchanged since | Server moved to another percentage-only place | Server percentage, with a way back |
+| Never matched, no verified CFI | Server percentage is further ahead | Server percentage, with a way back |
+
+Opening records nothing. The first page turn records the percentage as
+the agreed remote place in the same transaction as the move, which then
+pushes an exact CFI. Any jump (the way back, a bookmark, the contents, the
+scrubber or go-to-page, even onto the same page) declines it and leaves
+the server place alone. Any other percentage-only place, including one
+this device never matched, stays unresolved at opening and receives no
+POST; the open reader offers it as a catch-up instead.
+
+### Status mapping
+
+Liseur's explicit finished and unread marks map to BookOrbit `read` and
+`unread`, and manual BookOrbit `read` and `unread` map back. A manual
+`reading` maps only when the local passage is already in Liseur's reading
+range. Automatic statuses stay derived from position. `want_to_read`,
+`on_hold`, `rereading`, `skimmed`, `abandoned` and unknown values are
+preserved on BookOrbit.
+
+### BookOrbit fixtures
+
+- `progress-*.json` in `app/src/test/resources/bookorbit/` are synthetic.
+  `progress-live-*.json` are sanitized server responses with ids and
+  timestamps replaced and the null/presence shapes kept
+  (`BookOrbitLiveProgressTest`).
+- `OPS/` holds project-authored package and chapter documents.
+  `foliate-cfis.json` is output from BookOrbit's unmodified
+  `client/public/assets/foliate/epubcfi.js` at commit
+  `6be648b48a9cc376cfeff8953ebf22123583f7eb`. To regenerate it, serve
+  `tests/bookorbit/capture.html`, that `epubcfi.js`, `package.opf` and
+  `one.xhtml` from one directory on localhost and open the page in
+  Chromium; it prints the corpus. Do not vendor the upstream JavaScript.
+- `tests/bookorbit/ParserSmoke.java` runs the production parsers on an
+  emulator: compile with `javac --release 8`, convert with
+  `d8 --min-api 26`, copy the dex jar and the debug APK to
+  `/data/local/tmp`, and run `app_process /system/bin ParserSmoke` with
+  both on `CLASSPATH`.
 
 ## liseur-sync protocol
 
