@@ -97,6 +97,20 @@ class BookRemovalTest {
     }
 
     @Test
+    fun `removing a folder re-homes a surviving book with a new source`() = runTest {
+        val oldFolder = "content://$DOCS_AUTHORITY/tree/parent"
+        val newFolder = "content://$DOCS_AUTHORITY/tree/child"
+        val url = "content://$DOCS_AUTHORITY/tree/parent/document/book"
+        db.libraryFolderDao().upsert(LibraryFolder(oldFolder, 1))
+        db.bookDao().upsert(book(url).copy(source = oldFolder, remoteUuid = "remote"))
+
+        removal.deleteFolder(db.libraryFolderDao(), oldFolder, mapOf(url to newFolder))
+
+        assertEquals(url, db.bookDao().getByUrl(url)?.url)
+        assertEquals(newFolder, db.bookDao().getByUrl(url)?.source)
+    }
+
+    @Test
     fun `deleting a book deletes its sessions and leaves other history`() = runTest {
         db.bookDao().upsert(book("gone"))
         db.bookDao().upsert(book("kept"))
