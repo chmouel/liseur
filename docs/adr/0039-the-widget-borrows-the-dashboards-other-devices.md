@@ -32,7 +32,10 @@ sittings taken out.
 - `remote_stats_window` holds, for this week and this month, the
   residual sittings, the works read elsewhere and the combined streak.
 
-When a widget draws, it adds these to this device's live sittings.
+The screen saves both this week and this month, whichever span it
+shows, fetching the missing one without the comparison with the period
+before. When a widget draws, it adds these to this device's live
+sittings.
 Because the residual excludes this device's captured sittings, a sitting
 read here after the snapshot is still counted once, whether or not it
 has been uploaded since.
@@ -57,5 +60,7 @@ has been uploaded since.
 - Both tables are peer-keyed. `RemoteAccountRepository` moves them on
   a rekey (replacing anything under the new key, since this is derived
   data) and clears them when the account is forgotten.
-- Both tables are in `WIDGET_TABLES`, so saving a snapshot redraws the
-  widgets.
+- Both tables are in `WIDGET_TABLES`, with `work_alias`, so saving a
+  snapshot or learning a book's work redraws the widgets.
+- Each stats screen refresh asks the server up to three times instead
+  of once.

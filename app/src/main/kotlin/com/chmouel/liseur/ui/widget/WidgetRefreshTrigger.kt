@@ -13,6 +13,7 @@ internal val WIDGET_TABLES = arrayOf(
     "reading_sessions",
     "remote_stats_day",
     "remote_stats_window",
+    "work_alias",
 )
 
 /**

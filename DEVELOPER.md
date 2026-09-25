@@ -1116,8 +1116,10 @@ network or a connected server, and they ignore a remote cover URL.
   `RemoteStatsCache` saves what the server counted outside this
   device's captured sittings: per-day minutes in `remote_stats_day`, and
   week/month sittings, works and combined streak in
-  `remote_stats_window`. `periodStats` adds these to the live local
-  figures. Minutes and bars use every covered day. Sittings and books use
+  `remote_stats_window`. The screen saves this week and this month
+  whichever span it shows, fetching the missing one without a
+  comparison. `periodStats` adds these to the live local figures and
+  uses `work_alias` to count a book read here and elsewhere once. Minutes and bars use every covered day. Sittings and books use
   only a window for the same week or month, so the Today widget's
   sittings and books stay this device's. Rows apply only to the current
   liseur-sync account and to the device's own timezone. They refresh only
@@ -1126,7 +1128,7 @@ network or a connected server, and they ignore a remote cover URL.
 - One trigger redraws them: `AppContainer` collects
   `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
   `WIDGET_TABLES` (`books`, `reading_progress`, `reading_sessions`,
-  `remote_stats_day`, `remote_stats_window`). A new table that changes
+  `remote_stats_day`, `remote_stats_window`, `work_alias`). A new table that changes
   what a widget shows goes into that list. Do not add refresh callbacks
   to repositories or view models.
 - `WidgetUpdater.schedule` feeds `RefreshCoalescer`: a redraw runs after 3 s
