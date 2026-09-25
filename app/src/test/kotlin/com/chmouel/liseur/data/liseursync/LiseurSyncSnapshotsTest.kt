@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.RemoteStatsWindow
 import com.chmouel.liseur.data.db.SessionTransmission
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.remote.ServerKind
@@ -33,6 +34,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -730,6 +732,49 @@ class LiseurSyncSnapshotsTest {
             assertEquals(ComparisonScope.ALL_DEVICES, ready.headline.comparison!!.scope)
             assertEquals(ComparisonDirection.LESS, ready.headline.comparison!!.direction)
             assertEquals(50, ready.headline.comparison!!.percent)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a week on screen also saves the month for the widgets`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        try {
+            changeCapabilities = { it.put("comparison", true) }
+            sitting()
+            val cache = RemoteStatsCache(db.remoteStatsDao())
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_WEEK, zone = { zone },
+                now = { today.atTime(13, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                aliases = db.workIdentityDao().observeAliases(),
+                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+                remoteStats = cache,
+            )
+            models.put("widgets", model)
+            model.refreshServerInsights()
+            val windows = withContext(Dispatchers.IO) {
+                var found = emptyList<RemoteStatsWindow>()
+                repeat(250) {
+                    found = db.remoteStatsDao().windows(account.accountKey, zone.id)
+                    if (found.size == 2) return@withContext found
+                    Thread.sleep(20)
+                }
+                found
+            }
+            assertEquals(setOf("7d", "this_month"), windows.map { it.rangeId }.toSet())
+            assertEquals(
+                today.withDayOfMonth(1).toString(),
+                windows.single { it.rangeId == "this_month" }.fromDate,
+            )
+            assertEquals(2, requests.size)
+            assertTrue(requests[0].has("comparison"))
+            assertFalse(requests[1].has("comparison"))
         } finally {
             models.clear()
             Dispatchers.resetMain()

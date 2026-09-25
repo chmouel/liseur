@@ -349,8 +349,9 @@ class ReadingStatsViewModel(
         refresh = viewModelScope.launch {
             val context = source.discover() ?: return@launch
             val at = now(context.capabilities.timezone)
+            val sessions = sessionDao.allOnce()
             val result = source.read(
-                context, sessionDao.allOnce(), window.range, at.toLocalDate(), window.weekStart,
+                context, sessions, window.range, at.toLocalDate(), window.weekStart,
                 at.toLocalTime(),
             ) ?: return@launch
             resampleClock()
@@ -367,10 +368,28 @@ class ReadingStatsViewModel(
                 _snapshot.value = Answered(window, publish)
                 // The widgets never ask the network; this is how they learn
                 // about the reading done on other devices.
-                remoteStats?.save(
+                val cache = remoteStats ?: return@launch
+                cache.save(
                     publish.peer, publish.zone, publish.today, window.range,
                     window.range.startDate(publish.today, window.weekStart), publish.totals,
                 )
+                // The week and month widgets need both spans, whatever this
+                // screen shows, so the missing one is fetched without a
+                // comparison.
+                for (other in WIDGET_RANGES - window.range) {
+                    val extra = source.read(
+                        context, sessions, other, publish.today, window.weekStart, compare = false,
+                    ) ?: continue
+                    if (token != generation || extra.today != publish.today ||
+                        !source.isCurrent(extra)
+                    ) {
+                        return@launch
+                    }
+                    cache.save(
+                        extra.peer, extra.zone, extra.today, other,
+                        other.startDate(extra.today, window.weekStart), extra.totals,
+                    )
+                }
             }
         }
     }
@@ -616,6 +635,7 @@ class ReadingStatsViewModel(
         /** Long enough to survive a rotation without recomputing. */
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val CLOCK_SAMPLE_MS = 60_000L
+        private val WIDGET_RANGES = setOf(StatsRange.THIS_WEEK, StatsRange.THIS_MONTH)
         private const val COMPARISON_REFRESH_MS = 5 * 60_000L
 
         /**
