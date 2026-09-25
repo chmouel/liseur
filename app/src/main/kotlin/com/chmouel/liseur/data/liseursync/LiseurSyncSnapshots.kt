@@ -98,6 +98,7 @@ class LiseurSyncSnapshots(
         weekStart: DayOfWeek,
         through: LocalTime = LocalTime.MAX,
         compare: Boolean = true,
+        from: LocalDate? = range.startDate(today, weekStart),
     ): CompleteStatsSnapshot? = withContext(Dispatchers.Default) {
         optional {
             val account = context.account
@@ -114,7 +115,6 @@ class LiseurSyncSnapshots(
             // server cannot recognise and have it count them twice.
             val key = deviceKey().takeIf { it.isNotBlank() }
                 ?: return@optional refuse("this device has no identity to name its own reading by")
-            val from = range.startDate(today, weekStart)
             var comparison = if (compare && capabilities.comparison) {
                 range.comparison(today, weekStart, through.truncatedTo(ChronoUnit.MILLIS))
             } else {

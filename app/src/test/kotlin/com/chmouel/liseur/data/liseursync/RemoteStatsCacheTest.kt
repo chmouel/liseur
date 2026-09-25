@@ -3,11 +3,14 @@ package com.chmouel.liseur.data.liseursync
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteStatsDao
 import com.chmouel.liseur.data.db.RemoteStatsDay
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.StatsRange
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -38,8 +41,17 @@ class RemoteStatsCacheTest {
             LiseurDatabase::class.java,
         ).allowMainThreadQueries().build()
         dao = db.remoteStatsDao()
-        cache = RemoteStatsCache(dao)
+        cache = RemoteStatsCache(dao, db.remoteServerDao())
+        runBlocking { db.remoteServerDao().upsert(server) }
     }
+
+    private val server = RemoteServer(
+        kind = ServerKind.LISEUR_SYNC, baseUrl = "https://sync",
+        username = "reader", passwordCipher = null, apiKeyCipher = null, accountId = "device",
+        userId = null, koboTokenCipher = null, canDownload = true, addedAt = 1,
+        catalogSyncedAt = null, positionSyncedAt = null, syncToken = null,
+        liseurTokenCipher = null, liseurAccountId = "acc-1",
+    )
 
     @After
     fun close() = db.close()
@@ -88,6 +100,21 @@ class RemoteStatsCacheTest {
         cache.save(peer, paris, today, StatsRange.THIS_YEAR, today.withDayOfYear(1), week())
 
         assertEquals(4, dao.days(peer, paris.id).size)
+        assertTrue(dao.windows(peer, paris.id).isEmpty())
+    }
+
+    @Test
+    fun `days saved alone name no window`() = runTest {
+        cache.save(peer, paris, today, null, today.minusDays(6), week())
+        assertTrue(dao.days(peer, paris.id).isNotEmpty())
+        assertTrue(dao.windows(peer, paris.id).isEmpty())
+    }
+
+    @Test
+    fun `a snapshot for an account no longer connected is not kept`() = runTest {
+        db.remoteServerDao().upsert(server.copy(liseurAccountId = "acc-2"))
+        cache.save(peer, paris, today, StatsRange.THIS_WEEK, monday, week())
+        assertTrue(dao.days(peer, paris.id).isEmpty())
         assertTrue(dao.windows(peer, paris.id).isEmpty())
     }
 

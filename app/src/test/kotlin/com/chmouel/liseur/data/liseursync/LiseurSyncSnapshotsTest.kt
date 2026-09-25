@@ -8,7 +8,6 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RemoteServer
-import com.chmouel.liseur.data.db.RemoteStatsWindow
 import com.chmouel.liseur.data.db.SessionTransmission
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.remote.ServerKind
@@ -740,13 +739,13 @@ class LiseurSyncSnapshotsTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `a week on screen also saves the month for the widgets`() = runTest {
+    fun `a week on screen also saves the month and the day bars for the widgets`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val models = ViewModelStore()
         try {
             changeCapabilities = { it.put("comparison", true) }
             sitting()
-            val cache = RemoteStatsCache(db.remoteStatsDao())
+            val cache = RemoteStatsCache(db.remoteStatsDao(), db.remoteServerDao())
             val model = ReadingStatsViewModel(
                 db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
                 initialRange = StatsRange.THIS_WEEK, zone = { zone },
@@ -758,23 +757,28 @@ class LiseurSyncSnapshotsTest {
             )
             models.put("widgets", model)
             model.refreshServerInsights()
-            val windows = withContext(Dispatchers.IO) {
-                var found = emptyList<RemoteStatsWindow>()
+            // Saturday 5 September: the week began on 31 August and the
+            // month on the 1st, and the day widget's bars reach 30 August.
+            val bars = today.minusDays(6).toString()
+            withContext(Dispatchers.IO) {
                 repeat(250) {
-                    found = db.remoteStatsDao().windows(account.accountKey, zone.id)
-                    if (found.size == 2) return@withContext found
+                    if (db.remoteStatsDao().days(account.accountKey, zone.id).any { it.date == bars }) {
+                        return@withContext
+                    }
                     Thread.sleep(20)
                 }
-                found
             }
+            val windows = db.remoteStatsDao().windows(account.accountKey, zone.id)
             assertEquals(setOf("7d", "this_month"), windows.map { it.rangeId }.toSet())
             assertEquals(
                 today.withDayOfMonth(1).toString(),
                 windows.single { it.rangeId == "this_month" }.fromDate,
             )
-            assertEquals(2, requests.size)
+            assertEquals(3, requests.size)
             assertTrue(requests[0].has("comparison"))
             assertFalse(requests[1].has("comparison"))
+            assertEquals(bars, requests[2].getString("from"))
+            assertFalse(requests[2].has("comparison"))
         } finally {
             models.clear()
             Dispatchers.resetMain()
