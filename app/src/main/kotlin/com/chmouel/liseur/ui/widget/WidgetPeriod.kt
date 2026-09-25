@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.chmouel.liseur.domain.SessionSpan
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.domain.activeDayStreak
 import com.chmouel.liseur.domain.readingStats
 import java.time.DayOfWeek
 import java.time.Instant
@@ -52,6 +53,33 @@ data class PeriodStats(
 }
 
 /**
+ * What the last proven liseur-sync snapshot counted on other devices.
+ *
+ * Saved by the stats screen, never fetched by a widget. Only rows in the
+ * device's own timezone and for the current account belong here, and
+ * none of it includes this device's captured sittings, so it is added to
+ * the local figures rather than compared with them.
+ */
+data class WidgetRemote(
+    /** Other-device reading per day; a day that is absent was not covered. */
+    val days: Map<LocalDate, Long> = emptyMap(),
+    val windows: List<WidgetRemoteWindow> = emptyList(),
+    /** This device's book URLs by server work id, to count a book read on both once. */
+    val workIdByUrl: Map<String, String> = emptyMap(),
+)
+
+/** A week or month snapshot, as the stats screen last proved it. */
+data class WidgetRemoteWindow(
+    val range: StatsRange,
+    val from: LocalDate,
+    /** The last day the snapshot covered. */
+    val today: LocalDate,
+    val sessions: Int,
+    val workIds: Set<String>,
+    val combinedStreak: Int,
+)
+
+/**
  * Reduces the recorded sessions to what a widget shows for [period].
  *
  * Week and month reuse [readingStats], so the widget agrees with the
@@ -61,6 +89,11 @@ data class PeriodStats(
  *
  * Week and month bars run to the end of the period, with the days still
  * ahead left empty, so the chart keeps its shape as the period fills.
+ *
+ * [remote] adds the reading done on other devices. Minutes are added day
+ * by day wherever a snapshot covered the day. Sessions and books are
+ * added only from a snapshot of the same week or month, since the server
+ * does not count them per day; the day view keeps this device's.
  */
 fun periodStats(
     sessions: List<SessionSpan>,
@@ -69,9 +102,13 @@ fun periodStats(
     today: LocalDate,
     weekStart: DayOfWeek,
     period: WidgetPeriod,
+    remote: WidgetRemote? = null,
 ): PeriodStats {
     val range = if (period == WidgetPeriod.MONTH) StatsRange.THIS_MONTH else StatsRange.THIS_WEEK
     val stats = readingStats(sessions, books, zone, today, range, weekStart)
+    val remoteDays = remote?.days.orEmpty().filterKeys { !it.isAfter(today) }
+    val streak = remote?.let { streakWith(sessions, zone, today, stats.streakDays, it, remoteDays) }
+        ?: stats.streakDays
     return when (period) {
         WidgetPeriod.DAY -> {
             // Matches readingStats: a sitting counts on the day it was last read.
@@ -80,13 +117,13 @@ fun periodStats(
             val todays = byDay[today].orEmpty()
             PeriodStats(
                 period = period,
-                totalMs = todays.sumOf { it.durationMs },
+                totalMs = todays.sumOf { it.durationMs } + remoteDays[today].orZero(),
                 booksRead = todays.map { it.bookUrl }.distinct().size,
                 sessions = todays.size,
-                streakDays = stats.streakDays,
+                streakDays = streak,
                 bars = (DAY_BARS - 1 downTo 0).map { back ->
                     val date = today.minusDays(back.toLong())
-                    WidgetBar(date, byDay[date].orEmpty().sumOf { it.durationMs })
+                    WidgetBar(date, byDay[date].orEmpty().sumOf { it.durationMs } + remoteDays[date].orZero())
                 },
                 today = today,
             )
@@ -98,21 +135,51 @@ fun periodStats(
                 today.withDayOfMonth(1) to today.lengthOfMonth()
             }
             val recorded = stats.recent.associate { it.date to it.totalMs }
+            val window = remote?.windows?.firstOrNull {
+                it.range == range && it.from == start && !it.today.isAfter(today)
+            }
+            val booksRead = if (window == null) stats.booksRead else {
+                val here = stats.books.mapNotNull { it.bookUrl }
+                    .mapTo(mutableSetOf()) { url -> remote.workIdByUrl[url] ?: "url:$url" }
+                (here + window.workIds).size
+            }
+            val bars = (0 until length).map { forward ->
+                val date = start.plusDays(forward.toLong())
+                WidgetBar(date, (recorded[date] ?: 0L) + remoteDays[date].orZero())
+            }
             PeriodStats(
                 period = period,
-                totalMs = stats.totalMs,
-                booksRead = stats.booksRead,
-                sessions = stats.sessions,
-                streakDays = stats.streakDays,
-                bars = (0 until length).map { forward ->
-                    val date = start.plusDays(forward.toLong())
-                    WidgetBar(date, recorded[date] ?: 0L)
-                },
+                totalMs = stats.totalMs + bars.sumOf { remoteDays[it.date].orZero() },
+                booksRead = booksRead,
+                sessions = stats.sessions + (window?.sessions ?: 0),
+                streakDays = streak,
+                bars = bars,
                 today = today,
             )
         }
     }
 }
+
+/**
+ * The longest run the reader can be shown: this device's, the one across
+ * the days either side read on, or the server's own for today.
+ */
+private fun streakWith(
+    sessions: List<SessionSpan>,
+    zone: ZoneId,
+    today: LocalDate,
+    local: Int,
+    remote: WidgetRemote,
+    remoteDays: Map<LocalDate, Long>,
+): Int {
+    val active = sessions.filter { it.durationMs > 0 }
+        .mapTo(mutableSetOf()) { Instant.ofEpochMilli(it.lastReadAt).atZone(zone).toLocalDate() }
+    remoteDays.filterValues { it > 0 }.keys.forEach { active += it }
+    val server = remote.windows.filter { it.today == today }.maxOfOrNull { it.combinedStreak } ?: 0
+    return maxOf(local, activeDayStreak(active, today), server)
+}
+
+private fun Long?.orZero(): Long = this ?: 0L
 
 /** A short reading time for a chart label: 45m, 1h, 1h20. */
 sealed interface CompactDuration {

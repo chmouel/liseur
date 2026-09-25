@@ -12,6 +12,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.db.RemoteStatsDay
 import com.chmouel.liseur.data.db.UploadRefusal
 import com.chmouel.liseur.data.db.SessionRefusal
 import com.chmouel.liseur.data.db.WorkAlias
@@ -713,6 +714,10 @@ class RemoteAccountRepositoryTest {
         db.sessionTransmissionDao().insert(
             com.chmouel.liseur.data.db.SessionTransmission(oldKey, sessionId, "device-1", """{"session_id":"s-7"}"""),
         )
+        db.remoteStatsDao().upsertDays(listOf(RemoteStatsDay(oldKey, "2026-09-24", "UTC", 60_000)))
+        // Whatever is under the new key is only a snapshot; it is replaced, and
+        // it does not stop the rest of the account from moving.
+        db.remoteStatsDao().upsertDays(listOf(RemoteStatsDay("liseursync|$BASE|acc-1", "2026-09-23", "UTC", 1)))
 
         repository.connectLiseurSync(BASE, "ada", "pw")
 
@@ -731,12 +736,15 @@ class RemoteAccountRepositoryTest {
         assertEquals(0, db.sessionRefusalDao().countForPeer(oldKey))
         assertEquals("""{"session_id":"s-7"}""", db.sessionTransmissionDao().get(newKey, sessionId)!!.payload)
         assertEquals(0, db.sessionTransmissionDao().countForPeer(oldKey))
+        assertEquals(listOf("2026-09-24"), db.remoteStatsDao().days(newKey, "UTC").map { it.date })
+        assertTrue(db.remoteStatsDao().days(oldKey, "UTC").isEmpty())
 
         // From here on the key is stable across token rotations.
         repository.connectLiseurSync(BASE, "ada", "pw")
         assertEquals(newKey, db.remoteServerDao().get()!!.accountKey)
         repository.disconnect()
         assertEquals(0, db.sessionTransmissionDao().countForPeer(newKey))
+        assertTrue(db.remoteStatsDao().days(newKey, "UTC").isEmpty())
         assertTrue(db.readingSessionDao().get(sessionId)!!.legacyEvidenceUnknown)
     }
 
@@ -790,6 +798,7 @@ class RemoteAccountRepositoryTest {
         uploadRefusalDao = db.uploadRefusalDao(),
         sessionRefusalDao = db.sessionRefusalDao(),
         sessionTransmissionDao = db.sessionTransmissionDao(),
+        remoteStatsDao = db.remoteStatsDao(),
         setups = mapOf(ServerKind.LISEUR_SYNC to liseurSyncSetup),
     )
 

@@ -1516,10 +1516,25 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `an upgraded phone starts with no other-device reading for its widgets`() {
+        helper.createDatabase(TEST_DB, 60).close()
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                for (table in listOf("remote_stats_day", "remote_stats_window")) {
+                    db.query("SELECT COUNT(*) FROM $table").use {
+                        assertTrue(it.moveToFirst())
+                        assertEquals(0, it.getInt(0))
+                    }
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 60
+        const val LATEST = 61
     }
 }

@@ -42,6 +42,7 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import com.chmouel.liseur.data.liseursync.LiseurSyncSeriesClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncUploadClient
+import com.chmouel.liseur.data.liseursync.RemoteStatsCache
 import com.chmouel.liseur.data.liseursync.WorkResolver
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncPositionSync
@@ -245,6 +246,7 @@ class AppContainer(context: Context) {
         uploadRefusalDao = database.uploadRefusalDao(),
         sessionRefusalDao = database.sessionRefusalDao(),
         sessionTransmissionDao = database.sessionTransmissionDao(),
+        remoteStatsDao = database.remoteStatsDao(),
         starterProgressDao = database.starterCatalogProgressDao(),
         settingsSyncState = settingsSyncState,
         // Declared later in this file, so it is reached through the
@@ -648,6 +650,9 @@ class AppContainer(context: Context) {
         database.sessionTransmissionDao(), database.workIdentityDao(),
         deviceKey = { deviceIdentity.current().id },
     )
+
+    /** Other devices' reading from the last proven snapshot, for the widgets. */
+    val remoteStatsCache = RemoteStatsCache(database.remoteStatsDao())
 
     val remoteCatalog = RemoteCatalogRepository(
         router = remoteRouter,

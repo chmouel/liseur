@@ -16,6 +16,7 @@ import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
 import com.chmouel.liseur.data.liseursync.CompleteStatsSnapshot
+import com.chmouel.liseur.data.liseursync.RemoteStatsCache
 import com.chmouel.liseur.data.liseursync.statsSessions
 import com.chmouel.liseur.data.liseursync.statsAliases
 import com.chmouel.liseur.data.liseursync.WorkInsights
@@ -148,6 +149,7 @@ class ReadingStatsViewModel(
     private val liveAccounts: Flow<LiveIdentity?> = flowOf(null),
     private val snapshotSource: LiseurSyncSnapshots? = null,
     private val aliases: Flow<List<WorkAlias>> = flowOf(emptyList()),
+    private val remoteStats: RemoteStatsCache? = null,
 ) : ViewModel() {
 
     /** Collected only by the visible route, and refreshed again on entry. */
@@ -363,6 +365,12 @@ class ReadingStatsViewModel(
                     result
                 }
                 _snapshot.value = Answered(window, publish)
+                // The widgets never ask the network; this is how they learn
+                // about the reading done on other devices.
+                remoteStats?.save(
+                    publish.peer, publish.zone, publish.today, window.range,
+                    window.range.startDate(publish.today, window.weekStart), publish.totals,
+                )
             }
         }
     }
@@ -822,6 +830,7 @@ class ReadingStatsViewModel(
                     liveInvalidations = container.insightInvalidations,
                     liveAccounts = container.remoteAccount.server.map { it?.let(LiveIdentity::from) },
                     settings = container.appSettings,
+                    remoteStats = container.remoteStatsCache,
                 )
             }
         }

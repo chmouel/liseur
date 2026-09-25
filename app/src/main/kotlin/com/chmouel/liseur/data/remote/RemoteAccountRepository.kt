@@ -77,6 +77,7 @@ class RemoteAccountRepository(
      */
     private val sessionRefusalDao: SessionRefusalDao? = null,
     private val sessionTransmissionDao: com.chmouel.liseur.data.db.SessionTransmissionDao? = null,
+    private val remoteStatsDao: com.chmouel.liseur.data.db.RemoteStatsDao? = null,
     /**
      * How far a starter shelf has been explored. The walk belongs to the
      * catalog the account pointed at, so leaving it throws the progress
@@ -1088,6 +1089,9 @@ class RemoteAccountRepository(
         uploadRefusalDao?.rekeyAccount(from, to)
         sessionRefusalDao?.rekeyPeer(from, to)
         sessionTransmissionDao?.rekeyPeer(from, to)
+        // Not counted above: it is derived from a snapshot, so anything
+        // already under the new key is replaced rather than guarded.
+        remoteStatsDao?.rekeyPeer(from, to)
         settingsSyncState?.rekeyPeer(from, to)
         progressDao.rekeyAccount(from, to)
         return next
@@ -1247,6 +1251,7 @@ class RemoteAccountRepository(
         sessionDao?.forgetUploads()
         sessionDao?.forgetTransmissionEvidence()
         sessionTransmissionDao?.clearPeer(server.accountKey)
+        remoteStatsDao?.clearPeer(server.accountKey)
         sessionRefusalDao?.clearPeer(server.accountKey)
         // What this account agreed each setting was. Timestamps are the
         // issuing server's to interpret, so carrying them to the next
