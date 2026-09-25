@@ -2,6 +2,8 @@ package com.chmouel.liseur.data.liseursync
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.settings.FontSizeDefaultMigration
+import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.SettingsSyncRepository
 import com.chmouel.liseur.data.settings.SyncableSetting
 import kotlinx.coroutines.test.runTest
@@ -570,6 +572,60 @@ class LiseurSyncSettingsTest {
         assertFalse(requests().any { it.first == "PUT" })
     }
 
+    // -- The default font size moved ----------------------------------------
+
+    @Test
+    fun `an account still at the old default takes the new one`() = runTest {
+        values["reader.font_size"] = "1.0"
+        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
+        agree("reader.font_size", "1.0", NOW)
+        movedDefault()
+        clock = LATER
+        enqueueGet("reader.font_size" to Entry("1.0", NOW))
+        enqueuePut("reader.font_size" to Entry(NEW_DEFAULT, NOW + 1))
+
+        sync()
+
+        assertEquals(NEW_DEFAULT, pushed()["reader.font_size"])
+        assertEquals(NEW_DEFAULT, values["reader.font_size"])
+    }
+
+    @Test
+    fun `a size chosen on another device survives the moved default`() = runTest {
+        values["reader.font_size"] = "1.0"
+        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
+        agree("reader.font_size", "1.0", NOW)
+        movedDefault()
+        clock = LATER + 10
+        enqueueGet("reader.font_size" to Entry("1.8", LATER))
+
+        sync()
+
+        assertEquals("1.8", values["reader.font_size"])
+        assertEquals(0, puts())
+    }
+
+    @Test
+    fun `a moved default is not offered over a new account's size`() = runTest {
+        values["reader.font_size"] = "1.0"
+        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
+        movedDefault()
+        clock = LATER + 10
+        enqueueGet("reader.font_size" to Entry("1.8", LATER))
+
+        sync()
+
+        assertEquals("1.8", values["reader.font_size"])
+        assertEquals(0, puts())
+    }
+
+    /** The update: the reader now reads at the new default, noticed by the collector. */
+    private suspend fun movedDefault() {
+        FontSizeDefaultMigration(syncState, hasStoredFontSize = { false }).ensure()
+        values["reader.font_size"] = NEW_DEFAULT
+        syncState.observeLocal(mapOf("reader.font_size" to NEW_DEFAULT), LATER + 5)
+    }
+
     private fun settings(): List<SyncableSetting> =
         values.keys.toList().map { key ->
             SyncableSetting(
@@ -682,6 +738,7 @@ class LiseurSyncSettingsTest {
         const val OTHER = "liseursync|https://other.example.com|account-2"
         const val NOW = 100_000L
         const val LATER = 200_000L
+        val NEW_DEFAULT = ReaderPrefs.DEFAULT_FONT_SIZE.toString()
 
         fun iso(millis: Long): String =
             java.time.format.DateTimeFormatter.ISO_INSTANT.format(

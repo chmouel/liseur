@@ -230,8 +230,9 @@ Three categories, because "clamp" and "discard" are different answers:
   else is corruption or another build: out of range is **discarded, never
   clamped**. `lineHeight = 0.0` is below Readium's minimum of `1.0` and
   goes; `pageMargins = 0.0` is inside its range and stays.
-- `fontSize`, which has no null to fall back to, falls back to `1.0`
-  and clamps a finite out-of-range value.
+- `fontSize`, which has no null to fall back to, falls back to
+  `ReaderPrefs.DEFAULT_FONT_SIZE` (about 134%, originally `1.0`) and
+  clamps a finite out-of-range value.
 
 Clamping a negative into range would turn a corrupt byte into an
 explicit override, which would then switch advanced styles on and

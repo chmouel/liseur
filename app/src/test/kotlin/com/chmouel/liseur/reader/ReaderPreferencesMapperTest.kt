@@ -300,7 +300,7 @@ class ReaderPreferencesMapperTest {
         )
         for (css in ReadingCss.entries) {
             val prefs = wrecked.toEpubPreferences(theme, css = css)
-            assertEquals(1.0, prefs.fontSize!!, 1e-9)
+            assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, prefs.fontSize!!, 1e-9)
             assertNull(prefs.lineHeight)
             assertNull(prefs.pageMargins)
             assertNull(prefs.letterSpacing)

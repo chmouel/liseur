@@ -142,6 +142,11 @@ multiplier passed through `EpubPreferences`. Do not replace this with CSS
 `zoom` or WebView page/pinch zoom. Readium rounds the multiplier to an
 integer percentage for `WebSettings.textZoom`.
 
+A reader who never chose a size gets `ReaderPrefs.DEFAULT_FONT_SIZE`, one
+of the Size slider's own positions (about 134%). It used to be `1.0`, and
+`FontSizeDefaultMigration` keeps settings sync from treating that move as a
+reader edit; see [Settings and statistics](#settings-and-statistics).
+
 Build the diagnostic publication with:
 
 ```bash
@@ -1002,6 +1007,13 @@ reader behavior.
   values are marked applied and are not re-counted as local edits. Preserve
   the per-account baseline and avoid overwriting a change made after the
   request was sent.
+- Changing a setting's default moves the value of every reader who never
+  chose one, which the tracker would stamp as a fresh edit and push over
+  other devices. Run `SettingsSyncRepository.adoptMovedDefault` before the
+  tracker's first note and the first pass, as `FontSizeDefaultMigration`
+  does for the font size: it moves the observed value without a stamp, and
+  dates the new default one millisecond after any account's agreement on the
+  old one, so an untouched account follows and a real choice still wins.
 - Do not apply a setting that changes the open page while a book is open.
   Decide this per write with `SyncableSetting.affectsOpenBook`. Device-shaped
   settings never travel.

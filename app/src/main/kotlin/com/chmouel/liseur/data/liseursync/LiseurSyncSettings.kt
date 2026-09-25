@@ -34,6 +34,8 @@ class LiseurSyncSettings(
     private val settings: List<SyncableSetting>,
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
     private val now: () -> Long = System::currentTimeMillis,
+    /** Bookkeeping that must be settled before a pass reads it. */
+    private val ready: suspend () -> Unit = {},
 ) {
 
     /** Servers already found not to serve settings, so they are asked once. */
@@ -87,6 +89,7 @@ class LiseurSyncSettings(
 
         if (!stillConnected()) return 0
 
+        ready()
         val lastSynced = syncState.allLastSynced(accountKey)
         // Read before the clock, never after: the collector writes
         // these from its own scope while the pass runs, and a change

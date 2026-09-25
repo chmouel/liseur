@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.readerPrefsStore: DataStore<Preferences> by preferencesDataStore(
@@ -64,7 +65,7 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
     val prefs: Flow<ReaderPrefs> = store.data.map { p ->
         ReaderPrefs(
             font = ReadingFont.fromId(p[Keys.FONT]),
-            fontSize = p[Keys.FONT_SIZE] ?: 1.0,
+            fontSize = p[Keys.FONT_SIZE] ?: ReaderPrefs.DEFAULT_FONT_SIZE,
             themeChoice = ReaderThemeChoice.fromId(p[Keys.THEME]),
             lineHeight = p[Keys.LINE_HEIGHT],
             pageMargins = p[Keys.PAGE_MARGINS],
@@ -90,6 +91,12 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
     suspend fun setFont(font: ReadingFont) {
         store.edit { it[Keys.FONT] = font.id }
     }
+
+    /**
+     * Whether the reader has a size of their own, as opposed to reading
+     * at the default. A size pulled from a server counts as their own.
+     */
+    suspend fun hasStoredFontSize(): Boolean = store.data.first()[Keys.FONT_SIZE] != null
 
     suspend fun setFontSize(size: Double) {
         store.edit { it[Keys.FONT_SIZE] = TypographyRange.FONT_SIZE.require(size) }

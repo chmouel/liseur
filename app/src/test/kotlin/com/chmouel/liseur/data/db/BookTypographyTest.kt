@@ -135,7 +135,7 @@ class BookTypographyTest {
         val effective = shared.withTypographyOf(
             own.copy(fontSize = Double.NaN, lineHeight = -3.0, pageMargins = 99.0),
         )
-        assertEquals(1.0, effective.fontSize, 1e-9)
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, effective.fontSize, 1e-9)
         assertNull(effective.lineHeight)
         assertNull(effective.pageMargins)
     }
@@ -150,7 +150,7 @@ class BookTypographyTest {
             pageMargins = -1.0,
         )
         val row = BookTypography.from("book", wrecked)
-        assertEquals(1.0, row.fontSize, 1e-9)
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, row.fontSize, 1e-9)
         assertNull(row.lineHeight)
         assertNull(row.pageMargins)
     }

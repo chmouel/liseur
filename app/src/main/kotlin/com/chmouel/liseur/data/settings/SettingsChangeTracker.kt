@@ -38,6 +38,8 @@ class SettingsChangeTracker(
     private val settings: List<SyncableSetting>,
     private val sources: List<Flow<*>>,
     private val now: () -> Long = System::currentTimeMillis,
+    /** Bookkeeping that must be settled before anything is noted. */
+    private val ready: suspend () -> Unit = {},
 ) {
 
     fun start(scope: CoroutineScope) {
@@ -46,6 +48,7 @@ class SettingsChangeTracker(
             // they end up, and the stamp is the same either way.
             merge(*sources.toTypedArray()).conflate().collect {
                 try {
+                    ready()
                     note()
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) throw e

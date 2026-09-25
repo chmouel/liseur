@@ -85,7 +85,7 @@ class TypographyRangeTest {
     @Test
     fun `a font size has no null to fall back to, so it falls back to a size`() {
         for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0)) {
-            assertEquals(1.0, TypographyRange.FONT_SIZE.require(bad), 1e-9)
+            assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, TypographyRange.FONT_SIZE.require(bad), 1e-9)
         }
         assertEquals(ReaderPrefs.MAX_FONT_SIZE, TypographyRange.FONT_SIZE.require(99.0), 1e-9)
         assertEquals(ReaderPrefs.MIN_FONT_SIZE, TypographyRange.FONT_SIZE.require(0.01), 1e-9)
@@ -168,7 +168,7 @@ class TypographyRangeTest {
             autoScrollSpeed = Float.NaN,
         ).sanitized()
 
-        assertEquals(1.0, wrecked.fontSize, 1e-9)
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, wrecked.fontSize, 1e-9)
         assertNull(wrecked.lineHeight)
         assertNull(wrecked.pageMargins)
         assertNull(wrecked.letterSpacing)

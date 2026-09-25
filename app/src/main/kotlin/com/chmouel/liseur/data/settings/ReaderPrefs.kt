@@ -665,7 +665,7 @@ sealed class TypographyRange(
         val FONT_SIZE = Required(
             ReaderPrefs.MIN_FONT_SIZE,
             ReaderPrefs.MAX_FONT_SIZE,
-            fallback = 1.0,
+            fallback = ReaderPrefs.DEFAULT_FONT_SIZE,
         )
 
         /** Readium's `lineHeight` range. Zero is below it, and discarded. */
@@ -802,7 +802,8 @@ private fun isRtlLanguage(language: String?): Boolean {
 /**
  * User reading preferences.
  *
- * @param fontSize Percentage where 1.0 is the publisher's default size.
+ * @param fontSize Text zoom multiplier where 1.0 is the publisher's own
+ *   size. A reader who has not chosen one gets [DEFAULT_FONT_SIZE].
  * @param lineHeight Line height multiplier (1.0–2.0), null keeps publisher styles.
  * @param pageMargins Page margin multiplier (0.5–2.0), null keeps publisher styles.
  * @param brightness Screen brightness override 0.0–1.0, null follows the system.
@@ -827,7 +828,7 @@ private fun isRtlLanguage(language: String?): Boolean {
  */
 data class ReaderPrefs(
     val font: ReadingFont = ReadingFont.Default,
-    val fontSize: Double = 1.0,
+    val fontSize: Double = DEFAULT_FONT_SIZE,
     val themeChoice: ReaderThemeChoice = ReaderThemeChoice.Default,
     val lineHeight: Double? = null,
     val pageMargins: Double? = null,
@@ -861,6 +862,26 @@ data class ReaderPrefs(
          */
         const val FONT_SIZE_POSITIONS = 19
         const val FONT_SIZE_SLIDER_STEPS = FONT_SIZE_POSITIONS - 2
+
+        /**
+         * Which slider position a reader who never chose a size starts on.
+         *
+         * The publisher's own size (1.0) read too small for most people,
+         * so the default sits a few notches above it, at about 134%. It is
+         * one of the slider's own positions, computed the way
+         * `PinchResize.sizeAt` computes them, so the first pinch or drag
+         * moves one notch instead of first snapping onto the scale.
+         */
+        const val DEFAULT_FONT_SIZE_POSITION = 7
+        const val DEFAULT_FONT_SIZE = MIN_FONT_SIZE +
+            DEFAULT_FONT_SIZE_POSITION * ((MAX_FONT_SIZE - MIN_FONT_SIZE) / (FONT_SIZE_POSITIONS - 1))
+
+        /**
+         * The default before [DEFAULT_FONT_SIZE]. Only the settings-sync
+         * bookkeeping still needs it, to recognise a value it recorded
+         * back then as a default rather than as a choice.
+         */
+        const val LEGACY_DEFAULT_FONT_SIZE = 1.0
     }
 }
 
