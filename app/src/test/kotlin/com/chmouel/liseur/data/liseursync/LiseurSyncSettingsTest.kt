@@ -619,6 +619,24 @@ class LiseurSyncSettingsTest {
         assertEquals(0, puts())
     }
 
+    @Test
+    fun `another account's old agreement does not date the moved default here`() = runTest {
+        values["reader.font_size"] = "1.0"
+        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
+        agree("reader.font_size", "1.0", NOW)
+        agree("reader.font_size", "1.0", LATER, account = OTHER)
+        movedDefault()
+        clock = LATER + 10
+        // A real choice on this account, made after it agreed to the old
+        // default but before the other account did.
+        enqueueGet("reader.font_size" to Entry("1.8", NOW + 500))
+
+        sync()
+
+        assertEquals("1.8", values["reader.font_size"])
+        assertEquals(0, puts())
+    }
+
     /** The update: the reader now reads at the new default, noticed by the collector. */
     private suspend fun movedDefault() {
         FontSizeDefaultMigration(syncState, hasStoredFontSize = { false }).ensure()

@@ -61,6 +61,19 @@ class ReaderPreferencesRepositoryTest {
     }
 
     @Test
+    fun `a damaged stored size is not a size the reader chose`() = runTest {
+        val data = store()
+        val repo = ReaderPreferencesRepository(data)
+        for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0)) {
+            data.edit { it[doublePreferencesKey("font_size")] = bad }
+            assertFalse(repo.hasStoredFontSize())
+        }
+        // Too large is still a choice: it clamps to the largest size.
+        data.edit { it[doublePreferencesKey("font_size")] = 9.0 }
+        assertTrue(repo.hasStoredFontSize())
+    }
+
+    @Test
     fun `each setting survives being written down`() = runTest {
         val repo = ReaderPreferencesRepository(store())
         repo.setTextAlign(ReaderTextAlign.JUSTIFIED)

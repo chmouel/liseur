@@ -279,7 +279,7 @@ class SettingsSyncRepositoryTest {
     }
 
     @Test
-    fun `a moved default is dated just after the old one was agreed`() = runTest {
+    fun `a moved default is dated just after each account agreed to the old one`() = runTest {
         val repo = repo()
         repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
         repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
@@ -288,7 +288,38 @@ class SettingsSyncRepositoryTest {
         repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
         repo.observeLocal(mapOf(FONT_SIZE to "1.34"), 500)
 
-        assertEquals(301L, repo.localChanges()[FONT_SIZE])
+        // Each account is compared against its own history, never the
+        // other's, and a device-wide look sees no edit at all.
+        assertEquals(101L, repo.localChanges(A)[FONT_SIZE])
+        assertEquals(301L, repo.localChanges(B)[FONT_SIZE])
+        assertNull(repo.localChanges()[FONT_SIZE])
+        assertNull(repo.localChanges("never-connected")[FONT_SIZE])
+    }
+
+    @Test
+    fun `a moved default goes with its account`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+
+        repo.rekeyPeer(A, B)
+        assertEquals(101L, repo.localChanges(B)[FONT_SIZE])
+
+        repo.forgetPeer(B)
+        assertNull(repo.localChanges(B)[FONT_SIZE])
+    }
+
+    @Test
+    fun `a new agreement retires the moved default`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.34", 101)))
+
+        assertNull(repo.localChanges(A)[FONT_SIZE])
     }
 
     @Test
@@ -313,7 +344,7 @@ class SettingsSyncRepositoryTest {
         repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 900)
         repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
 
-        assertEquals(900L, repo.localChanges()[FONT_SIZE])
+        assertEquals(900L, repo.localChanges(A)[FONT_SIZE])
     }
 
     @Test

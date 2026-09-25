@@ -34,11 +34,16 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
 
     private fun stampPrefix(accountKey: String) = "ts:$accountKey:"
 
+    private fun movedDefaultPrefix(accountKey: String) = "md:$accountKey:"
+
     private fun valueKey(accountKey: String, settingKey: String) =
         stringPreferencesKey(valuePrefix(accountKey) + settingKey)
 
     private fun stampKey(accountKey: String, settingKey: String) =
         longPreferencesKey(stampPrefix(accountKey) + settingKey)
+
+    private fun movedDefaultKey(accountKey: String, settingKey: String) =
+        longPreferencesKey(movedDefaultPrefix(accountKey) + settingKey)
 
     private fun observedKey(settingKey: String) = stringPreferencesKey("ob:$settingKey")
 
@@ -77,6 +82,9 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
             for ((settingKey, entry) in entries) {
                 prefs[valueKey(accountKey, settingKey)] = entry.value
                 prefs[stampKey(accountKey, settingKey)] = entry.serverTimestamp
+                // A new agreement supersedes the old default it was
+                // dated against.
+                prefs.remove(movedDefaultKey(accountKey, settingKey))
             }
         }
     }
@@ -101,8 +109,14 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
         store.edit { prefs ->
             val fromValues = valuePrefix(from)
             val fromStamps = stampPrefix(from)
+            val fromMoved = movedDefaultPrefix(from)
             for ((key, value) in prefs.asMap().toMap()) {
                 when {
+                    key.name.startsWith(fromMoved) -> {
+                        val settingKey = key.name.removePrefix(fromMoved)
+                        prefs[movedDefaultKey(to, settingKey)] = value as Long
+                    }
+
                     key.name.startsWith(fromValues) -> {
                         val settingKey = key.name.removePrefix(fromValues)
                         prefs[valueKey(to, settingKey)] = value as String
@@ -125,23 +139,43 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
      * are offered to it rather than silently kept back.
      */
     suspend fun forgetPeer(accountKey: String) {
-        val values = valuePrefix(accountKey)
-        val stamps = stampPrefix(accountKey)
+        val prefixes = listOf(
+            valuePrefix(accountKey),
+            stampPrefix(accountKey),
+            movedDefaultPrefix(accountKey),
+        )
         store.edit { prefs ->
             for (key in prefs.asMap().keys.toList()) {
-                if (key.name.startsWith(values) || key.name.startsWith(stamps)) prefs.remove(key)
+                if (prefixes.any { key.name.startsWith(it) }) prefs.remove(key)
             }
         }
     }
 
-    /** When this device last changed each setting, for the keys it has seen change. */
-    suspend fun localChanges(): Map<String, Long> {
+    /**
+     * When this device last changed each setting, for the keys it has seen
+     * change.
+     *
+     * Given [accountKey], a default that moved since that account agreed
+     * to the old one counts as a change dated by [adoptMovedDefault]. That
+     * date is only meaningful against the account it was taken from, so
+     * it is never offered to another.
+     */
+    suspend fun localChanges(accountKey: String? = null): Map<String, Long> {
         val prefs = store.data.first()
         val out = mutableMapOf<String, Long>()
         for (key in prefs.asMap().keys) {
             if (!key.name.startsWith("ch:")) continue
             val settingKey = key.name.removePrefix("ch:")
             out[settingKey] = prefs[longPreferencesKey(key.name)] ?: continue
+        }
+        if (accountKey != null) {
+            val moved = movedDefaultPrefix(accountKey)
+            for (key in prefs.asMap().keys) {
+                if (!key.name.startsWith(moved)) continue
+                val settingKey = key.name.removePrefix(moved)
+                val at = prefs[longPreferencesKey(key.name)] ?: continue
+                out[settingKey] = maxOf(out[settingKey] ?: 0L, at)
+            }
         }
         return out
     }
@@ -216,13 +250,15 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
      * on an account agreed with and on one connected later. So the
      * observed value is moved with the default, and no stamp follows.
      *
-     * Where an account agreed to [legacy], the new default is dated just
-     * after that agreement. An account still holding the old default then
-     * takes the new one, and one that has since moved to a real choice
-     * keeps it, because that choice is later. Dating it now would win
-     * against the real choice, and dating it at the agreement itself
-     * would lose to the old default, which the server refuses to replace
-     * with a write of the same time.
+     * For each account that agreed to [legacy], the new default is dated
+     * just after that account's agreement, and kept with that account's
+     * baseline. An account still holding the old default then takes the
+     * new one, and one that has since moved to a real choice keeps it,
+     * because that choice is later. Dating it now would win against the
+     * real choice, and dating it at the agreement itself would lose to
+     * the old default, which the server refuses to replace with a write
+     * of the same time. One date shared by every account would compare
+     * one server's history against another's.
      *
      * Acts only while the observed value is still [legacy], so it runs
      * once. The caller checks that the reader has no value of their own.
@@ -232,15 +268,13 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
             if (prefs[observedKey(settingKey)] != legacy) return@edit
             prefs[observedKey(settingKey)] = current
             val suffix = ":$settingKey"
-            val agreedAt = prefs.asMap().keys
-                .filter { key ->
-                    key.name.startsWith("v:") && key.name.endsWith(suffix) &&
-                        prefs[stringPreferencesKey(key.name)] == legacy
-                }
-                .mapNotNull { key -> prefs[longPreferencesKey("ts:" + key.name.removePrefix("v:"))] }
-                .maxOrNull()
-                ?: return@edit
-            prefs[changedKey(settingKey)] = maxOf(prefs[changedKey(settingKey)] ?: 0L, agreedAt + 1)
+            for (key in prefs.asMap().keys.toList()) {
+                if (!key.name.startsWith("v:") || !key.name.endsWith(suffix)) continue
+                if (prefs[stringPreferencesKey(key.name)] != legacy) continue
+                val accountKey = key.name.removePrefix("v:").removeSuffix(suffix)
+                val agreedAt = prefs[stampKey(accountKey, settingKey)] ?: continue
+                prefs[movedDefaultKey(accountKey, settingKey)] = agreedAt + 1
+            }
         }
     }
 

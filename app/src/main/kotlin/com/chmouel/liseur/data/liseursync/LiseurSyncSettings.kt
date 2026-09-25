@@ -96,7 +96,7 @@ class LiseurSyncSettings(
         // that landed between the two reads would be capped back to
         // before it happened, which is the one way this cap could take
         // an edit away rather than protect one.
-        val recordedChanges = syncState.localChanges()
+        val recordedChanges = syncState.localChanges(accountKey)
         val pushTime = now()
         // No change is dated later than now. A device whose clock was
         // wrong records one that is, and correcting the clock does not
