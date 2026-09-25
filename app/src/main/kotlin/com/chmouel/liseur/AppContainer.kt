@@ -383,7 +383,8 @@ class AppContainer(context: Context) {
 
     private val fontSizeDefaultMigration = FontSizeDefaultMigration(
         syncState = settingsSyncState,
-        hasStoredFontSize = readerPreferences::hasStoredFontSize,
+        storedFontSize = readerPreferences::storedFontSize,
+        clearFontSize = readerPreferences::clearFontSize,
     )
 
     private val liseurSyncSettings = LiseurSyncSettings(
