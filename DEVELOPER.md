@@ -145,7 +145,10 @@ integer percentage for `WebSettings.textZoom`.
 A reader who never chose a size gets `ReaderPrefs.DEFAULT_FONT_SIZE`, one
 of the Size slider's own positions (about 134%). It used to be `1.0`, and
 `FontSizeDefaultMigration` keeps settings sync from treating that move as a
-reader edit; see [Settings and statistics](#settings-and-statistics).
+reader edit; see [Settings and statistics](#settings-and-statistics). A
+stored `1.0` that sync wrote from a server is handed back to the default
+too: no slider or pinch position is exactly `1.0`, so it can only be
+another device's old default.
 
 Build the diagnostic publication with:
 

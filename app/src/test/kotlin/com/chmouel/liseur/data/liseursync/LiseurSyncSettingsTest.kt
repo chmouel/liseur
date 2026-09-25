@@ -639,7 +639,7 @@ class LiseurSyncSettingsTest {
 
     /** The update: the reader now reads at the new default, noticed by the collector. */
     private suspend fun movedDefault() {
-        FontSizeDefaultMigration(syncState, hasStoredFontSize = { false }).ensure()
+        FontSizeDefaultMigration(syncState, storedFontSize = { null }, clearFontSize = {}).ensure()
         values["reader.font_size"] = NEW_DEFAULT
         syncState.observeLocal(mapOf("reader.font_size" to NEW_DEFAULT), LATER + 5)
     }

@@ -362,7 +362,7 @@ class SettingsSyncRepositoryTest {
         repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
         repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
 
-        FontSizeDefaultMigration(repo, hasStoredFontSize = { true }).ensure()
+        migration(repo, stored = 1.5).ensure()
         repo.observeLocal(mapOf(FONT_SIZE to ReaderPrefs.DEFAULT_FONT_SIZE.toString()), 500)
 
         // Untouched bookkeeping: the move reads as the reader's edit, as
@@ -375,11 +375,49 @@ class SettingsSyncRepositoryTest {
         val repo = repo()
         repo.observeLocal(mapOf(FONT_SIZE to ReaderPrefs.LEGACY_DEFAULT_FONT_SIZE.toString()), 10)
 
-        FontSizeDefaultMigration(repo, hasStoredFontSize = { false }).ensure()
+        migration(repo, stored = null).ensure()
         repo.observeLocal(mapOf(FONT_SIZE to ReaderPrefs.DEFAULT_FONT_SIZE.toString()), 500)
 
         assertNull(repo.localChanges()[FONT_SIZE])
     }
+
+    @Test
+    fun `an old default a server handed over moves like one nobody set`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
+        repo.markApplied(mapOf(FONT_SIZE to "1.0"))
+        var stored: Double? = 1.0
+
+        migration(repo, { stored }, { stored = null }).ensure()
+        repo.observeLocal(mapOf(FONT_SIZE to ReaderPrefs.DEFAULT_FONT_SIZE.toString()), 500)
+
+        assertNull(stored)
+        assertNull(repo.localChanges()[FONT_SIZE])
+        assertEquals(101L, repo.localChanges(A)[FONT_SIZE])
+    }
+
+    @Test
+    fun `an old default this device wrote itself is left alone`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
+        var stored: Double? = 1.0
+
+        migration(repo, { stored }, { stored = null }).ensure()
+
+        assertEquals(1.0, stored!!, 0.0)
+        assertNull(repo.localChanges(A)[FONT_SIZE])
+    }
+
+    private fun migration(repo: SettingsSyncRepository, stored: Double?) =
+        migration(repo, { stored }, {})
+
+    private fun migration(
+        repo: SettingsSyncRepository,
+        stored: suspend () -> Double?,
+        clear: suspend () -> Unit,
+    ) = FontSizeDefaultMigration(repo, storedFontSize = stored, clearFontSize = clear)
 
     private companion object {
         const val FONT_SIZE = "reader.font_size"

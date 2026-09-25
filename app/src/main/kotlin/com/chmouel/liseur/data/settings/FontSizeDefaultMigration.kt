@@ -12,10 +12,17 @@ import kotlinx.coroutines.sync.withLock
  * [SettingsSyncRepository.adoptMovedDefault] says otherwise, and it has
  * to before the collector's first look and before the first sync pass,
  * so both wait on [ensure].
+ *
+ * A stored old default that a server wrote is nobody's choice either:
+ * another device offered its own default, and this one took it. It is
+ * handed back to the default so the reader moves with everyone else.
+ * No slider or pinch position lands on exactly the old default, so a
+ * reader cannot have picked it on purpose.
  */
 class FontSizeDefaultMigration(
     private val syncState: SettingsSyncRepository,
-    private val hasStoredFontSize: suspend () -> Boolean,
+    private val storedFontSize: suspend () -> Double?,
+    private val clearFontSize: suspend () -> Unit,
 ) {
     private val mutex = Mutex()
 
@@ -27,15 +34,27 @@ class FontSizeDefaultMigration(
         if (done) return
         mutex.withLock {
             if (done) return
-            if (!hasStoredFontSize()) {
-                syncState.adoptMovedDefault(
-                    settingKey = SETTING_KEY,
-                    legacy = ReaderPrefs.LEGACY_DEFAULT_FONT_SIZE.toString(),
-                    current = ReaderPrefs.DEFAULT_FONT_SIZE.toString(),
-                )
-            }
+            migrate()
             done = true
         }
+    }
+
+    private suspend fun migrate() {
+        val legacy = ReaderPrefs.LEGACY_DEFAULT_FONT_SIZE.toString()
+        when (storedFontSize()) {
+            null -> Unit
+            // Cleared before the bookkeeping moves, so a process that dies
+            // between the two finds no stored size and finishes the job.
+            ReaderPrefs.LEGACY_DEFAULT_FONT_SIZE ->
+                if (syncState.cameFromServer(SETTING_KEY, legacy)) clearFontSize() else return
+
+            else -> return
+        }
+        syncState.adoptMovedDefault(
+            settingKey = SETTING_KEY,
+            legacy = legacy,
+            current = ReaderPrefs.DEFAULT_FONT_SIZE.toString(),
+        )
     }
 
     companion object {

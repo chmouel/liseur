@@ -267,6 +267,7 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
         store.edit { prefs ->
             if (prefs[observedKey(settingKey)] != legacy) return@edit
             prefs[observedKey(settingKey)] = current
+            prefs.remove(appliedKey(settingKey))
             val suffix = ":$settingKey"
             for (key in prefs.asMap().keys.toList()) {
                 if (!key.name.startsWith("v:") || !key.name.endsWith(suffix)) continue
@@ -277,6 +278,10 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
             }
         }
     }
+
+    /** Whether [value] is what a server last wrote to [settingKey] here. */
+    suspend fun cameFromServer(settingKey: String, value: String): Boolean =
+        store.data.first()[appliedKey(settingKey)] == value
 
     data class SyncedEntry(val value: String, val serverTimestamp: Long)
 }
