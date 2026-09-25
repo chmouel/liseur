@@ -36,8 +36,10 @@ import androidx.sqlite.execSQL
         BookOrbitPositionTraversal::class,
         BookOrbitPositionTraversalItem::class,
         BookOrbitStatusAgreement::class,
+        RemoteStatsDay::class,
+        RemoteStatsWindow::class,
     ],
-    version = 60,
+    version = 61,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -71,6 +73,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookOrbitPositionAgreementDao(): BookOrbitPositionAgreementDao
     abstract fun bookOrbitPositionTraversalDao(): BookOrbitPositionTraversalDao
     abstract fun bookOrbitStatusAgreementDao(): BookOrbitStatusAgreementDao
+    abstract fun remoteStatsDao(): RemoteStatsDao
 
     companion object {
         /** Adds the measured reading speed used for time-left estimates. */
@@ -1767,6 +1770,38 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        /** Keeps other devices' reading from the last proven snapshot for the widgets. */
+        val MIGRATION_60_61 = object : Migration(60, 61) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `remote_stats_day` (
+                        `account_key` TEXT NOT NULL,
+                        `date` TEXT NOT NULL,
+                        `zone` TEXT NOT NULL,
+                        `residual_ms` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`, `date`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `remote_stats_window` (
+                        `account_key` TEXT NOT NULL,
+                        `range_id` TEXT NOT NULL,
+                        `from_date` TEXT NOT NULL,
+                        `today` TEXT NOT NULL,
+                        `zone` TEXT NOT NULL,
+                        `residual_sessions` INTEGER NOT NULL,
+                        `work_ids` TEXT NOT NULL,
+                        `combined_streak` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`, `range_id`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1827,6 +1862,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_57_58,
             MIGRATION_58_59,
             MIGRATION_59_60,
+            MIGRATION_60_61,
         )
     }
 }

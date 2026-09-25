@@ -7,7 +7,13 @@ import kotlinx.coroutines.flow.Flow
  * The tables every widget reads. A new table that changes what a widget
  * shows belongs here, or the widget will not redraw when it changes.
  */
-internal val WIDGET_TABLES = arrayOf("books", "reading_progress", "reading_sessions")
+internal val WIDGET_TABLES = arrayOf(
+    "books",
+    "reading_progress",
+    "reading_sessions",
+    "remote_stats_day",
+    "remote_stats_window",
+)
 
 /**
  * One emission per change to what the widgets read, plus one straight

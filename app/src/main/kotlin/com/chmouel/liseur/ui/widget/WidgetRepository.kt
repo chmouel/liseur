@@ -11,9 +11,17 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.db.RemoteServerDao
+import com.chmouel.liseur.data.db.RemoteStatsDao
+import com.chmouel.liseur.data.db.RemoteStatsDay
+import com.chmouel.liseur.data.db.RemoteStatsWindow
+import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.openableUri
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.SessionSpan
 import com.chmouel.liseur.domain.StatsBook
+import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
@@ -24,6 +32,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +90,9 @@ class WidgetRepository(
     private val today: (ZoneId) -> LocalDate = { LocalDate.now(it) },
     private val weekStart: () -> DayOfWeek = { localeWeekStart(Locale.getDefault()) },
     private val decodeCover: (String) -> Bitmap? = ::decodeCoverBitmap,
+    private val serverDao: RemoteServerDao? = null,
+    private val remoteStatsDao: RemoteStatsDao? = null,
+    private val identityDao: WorkIdentityDao? = null,
 ) {
     /**
      * Every session is read, not just the period's: the streak is counted
@@ -132,7 +144,19 @@ class WidgetRepository(
             today = today(zone),
             weekStart = weekStart(),
             period = period,
+            remote = loadRemote(zone),
         )
+    }
+
+    /** Other devices' reading, as the stats screen last proved it; null without a sync account. */
+    private suspend fun loadRemote(zone: ZoneId): WidgetRemote? {
+        val stats = remoteStatsDao ?: return null
+        val account = serverDao?.get()?.takeIf { it.kind == ServerKind.LISEUR_SYNC } ?: return null
+        val key = account.accountKey
+        val days = stats.days(key, zone.id)
+        val windows = stats.windows(key, zone.id)
+        if (days.isEmpty() && windows.isEmpty()) return null
+        return widgetRemote(days, windows, identityDao?.aliasesFor(key).orEmpty())
     }
 
     private fun Book.toWidgetBook(context: Context, progression: Double?, withCover: Boolean): WidgetBook {
@@ -154,6 +178,33 @@ class WidgetRepository(
             openIntent = open,
         )
     }
+}
+
+/** Maps stored rows to what [periodStats] adds; a row that no longer parses is skipped. */
+internal fun widgetRemote(
+    days: List<RemoteStatsDay>,
+    windows: List<RemoteStatsWindow>,
+    aliases: List<WorkAlias>,
+): WidgetRemote = WidgetRemote(
+    days = days.mapNotNull { row -> row.date.toDateOrNull()?.let { it to row.residualMs } }.toMap(),
+    windows = windows.mapNotNull { row ->
+        val range = StatsRange.entries.firstOrNull { it.id == row.rangeId } ?: return@mapNotNull null
+        WidgetRemoteWindow(
+            range = range,
+            from = row.fromDate.toDateOrNull() ?: return@mapNotNull null,
+            today = row.today.toDateOrNull() ?: return@mapNotNull null,
+            sessions = row.residualSessions,
+            workIds = row.workIds.split('\n').filter { it.isNotEmpty() }.toSet(),
+            combinedStreak = row.combinedStreak,
+        )
+    },
+    workIdByUrl = aliases.filter { it.usable }.associate { it.bookUrl to it.workId },
+)
+
+private fun String.toDateOrNull(): LocalDate? = try {
+    LocalDate.parse(this)
+} catch (_: DateTimeParseException) {
+    null
 }
 
 fun PeriodStats.toWidgetStats(context: Context): WidgetStats = WidgetStats(

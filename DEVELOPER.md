@@ -1111,11 +1111,24 @@ The three Glance widgets in `ui/widget/` (current cover, reading stats,
 cover and stats) read only this device's Room data. They never touch the
 network or a connected server, and they ignore a remote cover URL.
 
+- Reading on other devices reaches the stats widgets through Room
+  (ADR-0039). When the stats screen accepts a liseur-sync snapshot,
+  `RemoteStatsCache` saves what the server counted outside this
+  device's captured sittings: per-day minutes in `remote_stats_day`, and
+  week/month sittings, works and combined streak in
+  `remote_stats_window`. `periodStats` adds these to the live local
+  figures. Minutes and bars use every covered day. Sittings and books use
+  only a window for the same week or month, so the Today widget's
+  sittings and books stay this device's. Rows apply only to the current
+  liseur-sync account and to the device's own timezone. They refresh only
+  when the stats screen is opened. Both tables are peer-keyed and are
+  handled by `carryPeerState` and `forgetSyncPeer`.
 - One trigger redraws them: `AppContainer` collects
   `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
-  `WIDGET_TABLES` (`books`, `reading_progress`, `reading_sessions`). A new
-  table that changes what a widget shows goes into that list. Do not add
-  refresh callbacks to repositories or view models.
+  `WIDGET_TABLES` (`books`, `reading_progress`, `reading_sessions`,
+  `remote_stats_day`, `remote_stats_window`). A new table that changes
+  what a widget shows goes into that list. Do not add refresh callbacks
+  to repositories or view models.
 - `WidgetUpdater.schedule` feeds `RefreshCoalescer`: a redraw runs after 3 s
   of quiet or 15 s after the first unserved request, whichever comes first.
   A page turn writes progress, so this is what bounds the cost while

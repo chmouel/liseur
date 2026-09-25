@@ -88,5 +88,8 @@ internal fun widgetRepository(context: Context): WidgetRepository {
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
         sessionDao = database.readingSessionDao(),
+        serverDao = database.remoteServerDao(),
+        remoteStatsDao = database.remoteStatsDao(),
+        identityDao = database.workIdentityDao(),
     )
 }
