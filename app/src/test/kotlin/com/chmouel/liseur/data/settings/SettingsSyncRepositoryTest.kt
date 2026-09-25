@@ -265,7 +265,93 @@ class SettingsSyncRepositoryTest {
         assertEquals(20L, repo.localChanges()["reader.font_size"])
     }
 
+    // -- A default that moved -----------------------------------------------
+
+    @Test
+    fun `a moved default is not an edit the reader made`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+        repo.observeLocal(mapOf(FONT_SIZE to "1.34"), 500)
+
+        assertNull(repo.localChanges()[FONT_SIZE])
+    }
+
+    @Test
+    fun `a moved default is dated just after the old one was agreed`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
+        repo.recordSynced(B, mapOf(FONT_SIZE to entry("1.0", 300)))
+
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+        repo.observeLocal(mapOf(FONT_SIZE to "1.34"), 500)
+
+        assertEquals(301L, repo.localChanges()[FONT_SIZE])
+    }
+
+    @Test
+    fun `an account that agreed to something else gives the moved default no date`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.5", 100)))
+
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+
+        assertNull(repo.localChanges()[FONT_SIZE])
+    }
+
+    @Test
+    fun `a default is moved once`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+
+        // The reader later picks the old size again, on purpose.
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 900)
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+
+        assertEquals(900L, repo.localChanges()[FONT_SIZE])
+    }
+
+    @Test
+    fun `a fresh install has nothing to move`() = runTest {
+        val repo = repo()
+        repo.adoptMovedDefault(FONT_SIZE, legacy = "1.0", current = "1.34")
+        repo.observeLocal(mapOf(FONT_SIZE to "1.34"), 500)
+
+        assertNull(repo.localChanges()[FONT_SIZE])
+    }
+
+    @Test
+    fun `the migration leaves a reader's own size alone`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to "1.0"), 10)
+        repo.recordSynced(A, mapOf(FONT_SIZE to entry("1.0", 100)))
+
+        FontSizeDefaultMigration(repo, hasStoredFontSize = { true }).ensure()
+        repo.observeLocal(mapOf(FONT_SIZE to ReaderPrefs.DEFAULT_FONT_SIZE.toString()), 500)
+
+        // Untouched bookkeeping: the move reads as the reader's edit, as
+        // it would be if they really had chosen it.
+        assertEquals(500L, repo.localChanges()[FONT_SIZE])
+    }
+
+    @Test
+    fun `the migration moves the recorded default when nothing was chosen`() = runTest {
+        val repo = repo()
+        repo.observeLocal(mapOf(FONT_SIZE to ReaderPrefs.LEGACY_DEFAULT_FONT_SIZE.toString()), 10)
+
+        FontSizeDefaultMigration(repo, hasStoredFontSize = { false }).ensure()
+        repo.observeLocal(mapOf(FONT_SIZE to ReaderPrefs.DEFAULT_FONT_SIZE.toString()), 500)
+
+        assertNull(repo.localChanges()[FONT_SIZE])
+    }
+
     private companion object {
+        const val FONT_SIZE = "reader.font_size"
         const val A = "liseursync|https://books.example.com|account-1"
         const val B = "liseursync|https://books.example.com|account-2"
     }

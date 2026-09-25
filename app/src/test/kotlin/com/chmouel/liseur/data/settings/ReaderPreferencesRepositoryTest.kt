@@ -50,6 +50,17 @@ class ReaderPreferencesRepositoryTest {
     }
 
     @Test
+    fun `a reader who never chose a size reads at the larger default`() = runTest {
+        val repo = ReaderPreferencesRepository(store())
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, repo.prefs.first().fontSize, 0.0)
+        assertFalse(repo.hasStoredFontSize())
+
+        repo.setFontSize(1.0)
+        assertTrue(repo.hasStoredFontSize())
+        assertEquals(1.0, repo.prefs.first().fontSize, 0.0)
+    }
+
+    @Test
     fun `each setting survives being written down`() = runTest {
         val repo = ReaderPreferencesRepository(store())
         repo.setTextAlign(ReaderTextAlign.JUSTIFIED)
@@ -192,7 +203,7 @@ class ReaderPreferencesRepositoryTest {
         assertFalse(raw.contains(doublePreferencesKey("letter_spacing")))
         assertFalse(raw.contains(doublePreferencesKey("line_height")))
         assertFalse(raw.contains(doublePreferencesKey("page_margins")))
-        assertEquals(1.0, raw[doublePreferencesKey("font_size")]!!, 1e-9)
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, raw[doublePreferencesKey("font_size")]!!, 1e-9)
     }
 
     @Test
@@ -213,7 +224,7 @@ class ReaderPreferencesRepositoryTest {
         }
 
         val prefs = ReaderPreferencesRepository(data).prefs.first()
-        assertEquals(1.0, prefs.fontSize, 1e-9)
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, prefs.fontSize, 1e-9)
         assertNull(prefs.lineHeight)
         assertNull(prefs.pageMargins)
         assertNull(prefs.letterSpacing)

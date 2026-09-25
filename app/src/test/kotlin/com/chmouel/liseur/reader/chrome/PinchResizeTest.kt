@@ -20,6 +20,14 @@ class PinchResizeTest {
     }
 
     @Test
+    fun `the default size is one of the positions`() {
+        val position = PinchResize.positionOf(ReaderPrefs.DEFAULT_FONT_SIZE)
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE_POSITION, position)
+        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, PinchResize.sizeAt(position), 0.0)
+        assertTrue(ReaderPrefs.DEFAULT_FONT_SIZE > ReaderPrefs.LEGACY_DEFAULT_FONT_SIZE)
+    }
+
+    @Test
     fun `every position round-trips through its size`() {
         for (i in 0 until PinchResize.POSITIONS) {
             assertEquals(i, PinchResize.positionOf(PinchResize.sizeAt(i)))

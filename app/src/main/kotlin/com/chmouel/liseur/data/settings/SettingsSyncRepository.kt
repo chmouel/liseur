@@ -206,5 +206,43 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
         }
     }
 
+    /**
+     * Brings the bookkeeping along when a new version moves a default the
+     * reader never chose, from [legacy] to [current].
+     *
+     * Left alone, the collector would see the value move and stamp it
+     * now, as though the reader had just picked it — and that invented
+     * edit would then beat a real choice made on another device, both
+     * on an account agreed with and on one connected later. So the
+     * observed value is moved with the default, and no stamp follows.
+     *
+     * Where an account agreed to [legacy], the new default is dated just
+     * after that agreement. An account still holding the old default then
+     * takes the new one, and one that has since moved to a real choice
+     * keeps it, because that choice is later. Dating it now would win
+     * against the real choice, and dating it at the agreement itself
+     * would lose to the old default, which the server refuses to replace
+     * with a write of the same time.
+     *
+     * Acts only while the observed value is still [legacy], so it runs
+     * once. The caller checks that the reader has no value of their own.
+     */
+    suspend fun adoptMovedDefault(settingKey: String, legacy: String, current: String) {
+        store.edit { prefs ->
+            if (prefs[observedKey(settingKey)] != legacy) return@edit
+            prefs[observedKey(settingKey)] = current
+            val suffix = ":$settingKey"
+            val agreedAt = prefs.asMap().keys
+                .filter { key ->
+                    key.name.startsWith("v:") && key.name.endsWith(suffix) &&
+                        prefs[stringPreferencesKey(key.name)] == legacy
+                }
+                .mapNotNull { key -> prefs[longPreferencesKey("ts:" + key.name.removePrefix("v:"))] }
+                .maxOrNull()
+                ?: return@edit
+            prefs[changedKey(settingKey)] = maxOf(prefs[changedKey(settingKey)] ?: 0L, agreedAt + 1)
+        }
+    }
+
     data class SyncedEntry(val value: String, val serverTimestamp: Long)
 }
