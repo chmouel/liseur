@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.liseursync
 
+import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.RemoteStatsDao
 import com.chmouel.liseur.data.db.RemoteStatsDay
 import com.chmouel.liseur.data.db.RemoteStatsWindow
@@ -16,13 +17,22 @@ import kotlin.math.roundToLong
  * already accepted. The widget adds this device's live sittings on top,
  * which is why only the residual is kept: a sitting read here after the
  * snapshot is then still counted once.
+ *
+ * A save is checked against the connected account inside the same
+ * transaction, so a snapshot that lands after a disconnect or a rekey
+ * cannot put rows back under a key that was just cleared.
  */
-class RemoteStatsCache(private val dao: RemoteStatsDao) {
+class RemoteStatsCache(
+    private val dao: RemoteStatsDao,
+    private val serverDao: RemoteServerDao,
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
+) {
+    /** A null [range] saves the days alone, with no window row. */
     internal suspend fun save(
         accountKey: String,
         zone: ZoneId,
         today: LocalDate,
-        range: StatsRange,
+        range: StatsRange?,
         from: LocalDate?,
         totals: SnapshotTotals,
     ) {
@@ -38,7 +48,7 @@ class RemoteStatsCache(private val dao: RemoteStatsDao) {
                     residualMs = (it.activeMinutes * 60_000.0).roundToLong(),
                 )
             }
-        val window = if (from != null && range in WINDOW_RANGES) {
+        val window = if (range != null && from != null && range in WINDOW_RANGES) {
             RemoteStatsWindow(
                 accountKey = accountKey,
                 rangeId = range.id,
@@ -52,7 +62,10 @@ class RemoteStatsCache(private val dao: RemoteStatsDao) {
         } else {
             null
         }
-        dao.save(accountKey, zone.id, oldest.toString(), days, window)
+        inTransaction {
+            if (serverDao.get()?.accountKey != accountKey) return@inTransaction
+            dao.save(accountKey, zone.id, oldest.toString(), days, window)
+        }
     }
 
     companion object {

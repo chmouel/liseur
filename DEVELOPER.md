@@ -1118,7 +1118,9 @@ network or a connected server, and they ignore a remote cover URL.
   week/month sittings, works and combined streak in
   `remote_stats_window`. The screen saves this week and this month
   whichever span it shows, fetching the missing one without a
-  comparison. `periodStats` adds these to the live local figures and
+  comparison, plus the last seven days when neither span reaches back
+  that far. A save checks the connected account in the same transaction
+  as the write. `periodStats` adds these to the live local figures and
   uses `work_alias` to count a book read here and elsewhere once. Minutes and bars use every covered day. Sittings and books use
   only a window for the same week or month, so the Today widget's
   sittings and books stay this device's. Rows apply only to the current

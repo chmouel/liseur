@@ -376,19 +376,29 @@ class ReadingStatsViewModel(
                 // The week and month widgets need both spans, whatever this
                 // screen shows, so the missing one is fetched without a
                 // comparison.
+                val today = publish.today
+                val saved = mutableListOf(window.range.startDate(today, window.weekStart))
                 for (other in WIDGET_RANGES - window.range) {
+                    val from = other.startDate(today, window.weekStart)
                     val extra = source.read(
-                        context, sessions, other, publish.today, window.weekStart, compare = false,
+                        context, sessions, other, today, window.weekStart, compare = false,
                     ) ?: continue
-                    if (token != generation || extra.today != publish.today ||
-                        !source.isCurrent(extra)
-                    ) {
+                    if (token != generation || extra.today != today || !source.isCurrent(extra)) {
                         return@launch
                     }
-                    cache.save(
-                        extra.peer, extra.zone, extra.today, other,
-                        other.startDate(extra.today, window.weekStart), extra.totals,
-                    )
+                    cache.save(extra.peer, extra.zone, today, other, from, extra.totals)
+                    saved += from
+                }
+                // The day widget draws the last seven days, which can start
+                // before both this week and this month.
+                val bars = today.minusDays(BAR_DAYS - 1)
+                if (saved.any { it == null || it <= bars }) return@launch
+                val extra = source.read(
+                    context, sessions, StatsRange.THIS_WEEK, today, window.weekStart,
+                    compare = false, from = bars,
+                ) ?: return@launch
+                if (token == generation && extra.today == today && source.isCurrent(extra)) {
+                    cache.save(extra.peer, extra.zone, today, null, bars, extra.totals)
                 }
             }
         }
@@ -636,6 +646,7 @@ class ReadingStatsViewModel(
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val CLOCK_SAMPLE_MS = 60_000L
         private val WIDGET_RANGES = setOf(StatsRange.THIS_WEEK, StatsRange.THIS_MONTH)
+        private const val BAR_DAYS = 7L
         private const val COMPARISON_REFRESH_MS = 5 * 60_000L
 
         /**

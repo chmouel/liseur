@@ -34,7 +34,8 @@ sittings taken out.
 
 The screen saves both this week and this month, whichever span it
 shows, fetching the missing one without the comparison with the period
-before. When a widget draws, it adds these to this device's live
+before. When neither reaches back to six days ago, it also fetches the
+last seven days, which the Today widget draws as bars. When a widget draws, it adds these to this device's live
 sittings.
 Because the residual excludes this device's captured sittings, a sitting
 read here after the snapshot is still counted once, whether or not it
@@ -62,5 +63,8 @@ has been uploaded since.
   data) and clears them when the account is forgotten.
 - Both tables are in `WIDGET_TABLES`, with `work_alias`, so saving a
   snapshot or learning a book's work redraws the widgets.
-- Each stats screen refresh asks the server up to three times instead
-  of once.
+- Each stats screen refresh can ask the server up to four times
+  instead of once.
+- A save checks, in the same transaction as the write, that the account
+  is still the connected one, so a snapshot that arrives after a
+  disconnect or a rekey leaves nothing behind.

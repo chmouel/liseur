@@ -652,7 +652,11 @@ class AppContainer(context: Context) {
     )
 
     /** Other devices' reading from the last proven snapshot, for the widgets. */
-    val remoteStatsCache = RemoteStatsCache(database.remoteStatsDao())
+    val remoteStatsCache = RemoteStatsCache(
+        database.remoteStatsDao(),
+        database.remoteServerDao(),
+        inTransaction = { work -> database.withTransaction { work() } },
+    )
 
     val remoteCatalog = RemoteCatalogRepository(
         router = remoteRouter,
