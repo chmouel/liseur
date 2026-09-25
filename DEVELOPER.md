@@ -1012,8 +1012,9 @@ reader behavior.
   other devices. Run `SettingsSyncRepository.adoptMovedDefault` before the
   tracker's first note and the first pass, as `FontSizeDefaultMigration`
   does for the font size: it moves the observed value without a stamp, and
-  dates the new default one millisecond after any account's agreement on the
-  old one, so an untouched account follows and a real choice still wins.
+  dates the new default one millisecond after each account's agreement on
+  the old one, stored with that account's baseline, so an untouched account
+  follows and a real choice still wins.
 - Do not apply a setting that changes the open page while a book is open.
   Decide this per write with `SyncableSetting.affectsOpenBook`. Device-shaped
   settings never travel.
