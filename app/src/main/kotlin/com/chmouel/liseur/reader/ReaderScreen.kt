@@ -3407,6 +3407,10 @@ fun ReaderScreen(
                     // over words the reader has finished with.
                     dismissSelection()
                 },
+                // A tapped mark has no platform selection, so only a touch
+                // elsewhere can close its bar. A live selection is closed
+                // by the web view, and its handles sit outside the bar.
+                dismissOnOutsideTouch = tappedSelection != null,
             )
         }
 

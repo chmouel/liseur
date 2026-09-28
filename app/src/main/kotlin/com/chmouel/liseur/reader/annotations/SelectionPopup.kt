@@ -56,6 +56,12 @@ class SelectionActions(
  * trying to look at is more bar than passage on a phone. When it offers
  * none, a plain Highlight takes their place: a bar with no way to mark
  * a passage would be a regression wearing a setting's clothes.
+ *
+ * [dismissOnOutsideTouch] must be off while the web view holds a live
+ * selection. Its handles are windows of their own, so grabbing one is a
+ * touch outside this bar, and dismissing then clears the selection out
+ * from under the finger dragging it (#257). The web view already lets
+ * the selection go on a tap elsewhere, and the bar follows it.
  */
 @Composable
 fun SelectionPopup(
@@ -64,12 +70,16 @@ fun SelectionPopup(
     activeTint: HighlightTint?,
     palette: HighlightPalette,
     onDismiss: () -> Unit,
+    dismissOnOutsideTouch: Boolean = true,
 ) {
     Popup(
         alignment = Alignment.TopCenter,
         offset = offset,
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = false),
+        properties = PopupProperties(
+            focusable = false,
+            dismissOnClickOutside = dismissOnOutsideTouch,
+        ),
     ) {
         // Electronic paper has no way to draw a soft shadow: it arrives as
         // a band of dithered grey that costs a repaint and reads as dirt.

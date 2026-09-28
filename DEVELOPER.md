@@ -1089,6 +1089,12 @@ reader behavior.
 - Runtime page repair must write only token-owned attributes. Keep
   `WideContentFit`, `FootnoteLayout`, and `SelectionHandleFix` idempotent and
   preserve authored classes and markup.
+- The selection bar must not dismiss on an outside touch while the web view
+  holds a live selection. The handles are separate windows, so grabbing one
+  counts as an outside touch, and dismissing clears the selection under the
+  drag (#257). The web view clears a live selection on a tap elsewhere by
+  itself; only a tapped mark, which has no platform selection, relies on the
+  outside touch.
 
 ### Covers, UI, and dependencies
 
