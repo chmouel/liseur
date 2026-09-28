@@ -1095,6 +1095,13 @@ reader behavior.
   drag (#257). The web view clears a live selection on a tap elsewhere by
   itself; only a tapped mark, which has no platform selection, relies on the
   outside touch.
+- A page's CSS `prefers-color-scheme` follows the reading page, not the
+  system. WebView reads it from `android:isLightTheme` on the reader
+  activity's theme, so `showPagesAs()` forces a `PageColorScheme` style
+  onto that theme and sends a configuration change to the WebViews on
+  screen, which repaints them without a reload. Standard Ebooks inverts
+  its line art under that query (#256). The attribute exists from API 29;
+  below it, pages still follow the system.
 
 ### Covers, UI, and dependencies
 

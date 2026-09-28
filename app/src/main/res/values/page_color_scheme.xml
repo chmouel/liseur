@@ -1,0 +1,7 @@
+<resources>
+    <!-- Empty below API 29, where android:isLightTheme does not exist and
+         a page's prefers-color-scheme follows the system. See
+         PageColorScheme.kt. -->
+    <style name="PageColorScheme.Light" parent="" />
+    <style name="PageColorScheme.Dark" parent="" />
+</resources>

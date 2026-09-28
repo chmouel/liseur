@@ -190,6 +190,9 @@ class ReaderActivity : FragmentActivity() {
             // colours reach the loading and error screens too, and dark
             // icons on a black loading screen is the same bug one scope up.
             SystemBarIcons(dark = readingPage?.isDarkPage ?: appIsDark)
+            // Keyed on the page's darkness, not the palette: a light and a
+            // sepia page report the same scheme.
+            LaunchedEffect(readingPage?.isDarkPage) { readingPage?.let(::showPagesAs) }
             ProvideEInk(settings.eInkMode) {
                 LiseurTheme(
                     darkTheme = appIsDark,

@@ -1,0 +1,10 @@
+<resources>
+    <!-- The system WebView answers prefers-color-scheme from this
+         attribute on the reader activity's theme. See PageColorScheme.kt. -->
+    <style name="PageColorScheme.Light" parent="">
+        <item name="android:isLightTheme">true</item>
+    </style>
+    <style name="PageColorScheme.Dark" parent="">
+        <item name="android:isLightTheme">false</item>
+    </style>
+</resources>
