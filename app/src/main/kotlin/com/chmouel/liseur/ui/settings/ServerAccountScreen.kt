@@ -1724,7 +1724,7 @@ private fun LocalNetworkNotice(
     }
 }
 
-private fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
+internal fun AccountError.messageRes(kind: ServerKind): Int = when (this) {
     AccountError.BAD_CREDENTIALS -> when (kind) {
         ServerKind.CALIBRE -> R.string.server_error_credentials
         ServerKind.KOMGA -> R.string.server_error_credentials_komga

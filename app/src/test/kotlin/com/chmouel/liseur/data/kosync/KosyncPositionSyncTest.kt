@@ -447,6 +447,30 @@ class KosyncPositionSyncTest {
     }
 
     @Test
+    fun `a book from a saved browse catalog keeps out of kosync`() = runTest {
+        pair()
+        val browsed = "browse:7:komga:abc"
+        db.bookDao().upsert(book(url = browsed, remoteUuid = "abc").copy(browseServerId = 7))
+        db.readingProgressDao().recordLocal(
+            bookUrl = browsed,
+            locatorJson = LOCATOR,
+            progression = 0.4,
+            readingSpeed = null,
+            status = "Reading",
+            updatedAt = NOW,
+        )
+
+        for (catalogUrl in listOf("https://books.example", null)) {
+            val kosync = sync(connectedKind = ServerKind.CUSTOM, catalogUrl = catalogUrl)
+            assertEquals(false, kosync.canSync(browsed))
+            assertEquals(PreviewOutcome.NotSynced, kosync.previewBook(browsed))
+            kosync.syncBook(browsed)
+            kosync.syncAll(null)
+        }
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun `a book whose file is gone has no name here and is skipped in silence`() = runTest {
         pair()
         db.bookDao().upsert(book(localUri = "file:///nowhere/gone.epub"))

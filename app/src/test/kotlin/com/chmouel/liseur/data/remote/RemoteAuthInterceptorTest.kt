@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.remote
 
+import com.chmouel.liseur.data.db.RemoteServer
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Headers
@@ -111,6 +112,95 @@ class RemoteAuthInterceptorTest {
 
     private fun redirectTo(location: String) =
         MockResponse(code = 302, headers = Headers.headersOf("Location", location))
+
+    @Test
+    fun `a browse cover on the main host uses only its own account`() {
+        ours.enqueue(MockResponse(body = "cover"))
+        val origin = requireNotNull(RemoteOrigin.of(ours.url("/").toString()))
+        val client = RemoteAuthInterceptor.imageLoaderClient(
+            credentialsFor = { url -> RemoteCredentials.ApiKey("main-key").takeIf { origin.covers(url) } },
+            browseCredentialsFor = { source, url ->
+                RemoteCredentials.ApiKey("browse-key").takeIf { source.serverId == 7L && origin.covers(url) }
+            },
+        )
+
+        val cover = ours.url("/cover").toString() + "#liseur-browse=${"a".repeat(24)}"
+        client.newCall(
+            Request.Builder().url(cover)
+                .header(BrowseCoverTaggingInterceptor.HEADER, browseCoverRequestHeader(7, cover))
+                .build(),
+        ).execute().close()
+
+        val sent = ours.takeRequest()
+        assertEquals("browse-key", sent.headers[RemoteCredentials.ApiKey.HEADER])
+        assertNull(sent.headers[BrowseCoverTaggingInterceptor.HEADER])
+    }
+
+    @Test
+    fun `a browse cover redirect does not carry either account secret`() {
+        ours.enqueue(redirectTo(theirs.url("/cover").toString()))
+        theirs.enqueue(MockResponse(body = "cover"))
+        val origin = requireNotNull(RemoteOrigin.of(ours.url("/").toString()))
+        val client = RemoteAuthInterceptor.imageLoaderClient(
+            credentialsFor = { url -> RemoteCredentials.ApiKey("main-key").takeIf { origin.covers(url) } },
+            browseCredentialsFor = { _, url ->
+                RemoteCredentials.ApiKey("browse-key").takeIf { origin.covers(url) }
+            },
+        )
+
+        val cover = ours.url("/cover").toString() + "#liseur-browse=${"a".repeat(24)}"
+        client.newCall(
+            Request.Builder().url(cover)
+                .header(BrowseCoverTaggingInterceptor.HEADER, browseCoverRequestHeader(7, cover))
+                .build(),
+        ).execute().close()
+
+        assertEquals("browse-key", ours.takeRequest().headers[RemoteCredentials.ApiKey.HEADER])
+        assertNull(theirs.takeRequest().headers[RemoteCredentials.ApiKey.HEADER])
+    }
+
+    @Test
+    fun `an old browse cover cannot use a replacement account on the same host`() {
+        ours.enqueue(redirectTo(ours.url("/cover/large").toString()))
+        ours.enqueue(MockResponse(body = "cover"))
+        val server = RemoteServer(
+            id = 7,
+            kind = ServerKind.KOMGA,
+            baseUrl = ours.url("/").toString(),
+            username = "new-reader",
+            passwordCipher = null,
+            apiKeyCipher = null,
+            accountId = null,
+            userId = null,
+            koboTokenCipher = null,
+            canDownload = true,
+            addedAt = 2,
+            catalogSyncedAt = null,
+            positionSyncedAt = null,
+            syncToken = null,
+        )
+        val oldCover = browseCoverUrl(ours.url("/cover").toString(), server.copy(addedAt = 1))
+        val origin = requireNotNull(RemoteOrigin.of(server.baseUrl))
+        val client = RemoteAuthInterceptor.imageLoaderClient(
+            credentialsFor = { url -> RemoteCredentials.ApiKey("main-key").takeIf { origin.covers(url) } },
+            browseCredentialsFor = { source, url ->
+                RemoteCredentials.ApiKey("new-browse-key")
+                    .takeIf { source.matches(server) && origin.covers(url) }
+            },
+        )
+
+        client.newCall(
+            Request.Builder().url(oldCover)
+                .header(BrowseCoverTaggingInterceptor.HEADER, browseCoverRequestHeader(7, oldCover))
+                .build(),
+        ).execute().close()
+
+        repeat(2) {
+            val sent = ours.takeRequest()
+            assertNull(sent.headers[RemoteCredentials.ApiKey.HEADER])
+            assertNull(sent.headers["Authorization"])
+        }
+    }
 
     private fun get(
         url: String,

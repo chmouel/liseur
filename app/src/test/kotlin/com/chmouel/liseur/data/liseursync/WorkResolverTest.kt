@@ -17,6 +17,7 @@ import mockwebserver3.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -309,6 +310,33 @@ class WorkResolverTest {
 
     private fun answer(code: Int, body: String) =
         server.enqueue(MockResponse(code = code, body = body))
+
+    @Test
+    fun `a book from a saved catalog resolves on its file, not the other server's id`() = runTest {
+        // Its remote id belongs to the browse catalog, which this server
+        // has never heard of; sending it as a catalog id or a source
+        // would ask about a book that is not here.
+        answer(200, """{"work_id":"w-3","confidence":"high"}""")
+        val browsed = downloaded().copy(
+            url = "browse:2:komga:k-1",
+            remoteUuid = "k-1",
+            browseServerId = 2,
+        )
+
+        assertNull(resolver.catalogIdOf(browsed))
+        assertNull(resolver.sourceOf(browsed))
+        val result = resolver.resolve(browsed, PEER, baseUrl(), TOKEN)
+
+        assertEquals("w-3", (result as WorkResolution.Named).alias.workId)
+        val request = server.takeRequest()
+        assertEquals("/v1/works/resolve", request.target)
+        val body = JSONObject(request.body!!.utf8())
+        val kinds = (0 until body.getJSONArray("identifiers").length()).map {
+            body.getJSONArray("identifiers").getJSONObject(it).getString("kind")
+        }
+        assertFalse("source" in kinds)
+        assertTrue("sha256" in kinds)
+    }
 
     @Test
     fun `a book from this server's own catalog is resolved by the server`() = runTest {

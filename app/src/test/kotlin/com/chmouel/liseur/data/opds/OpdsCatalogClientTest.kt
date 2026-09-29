@@ -9,6 +9,7 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -89,6 +90,120 @@ class OpdsCatalogClientTest {
             OpdsCatalogClient().allBooks(root(), credentials) { found += it }
         }
         return result.complete to found
+    }
+
+    @Test
+    fun `browsing a shelf exposes its children without importing their books`() = runBlocking {
+        pages["/opds"] = feed(navigation("Science fiction", "/opds/scifi") + book("root"))
+        pages["/opds/scifi"] = feed(book("child"))
+
+        val client = OpdsCatalogClient()
+        val top = client.browseSection(root(), RemoteCredentials.Anonymous)
+        assertTrue(top.complete)
+        assertEquals(listOf("Book root"), top.books.map { it.title })
+        assertEquals(listOf("Science fiction"), top.categories.map { it.title })
+        assertEquals(listOf("/opds"), asked)
+
+        val child = client.browseSection(root(), RemoteCredentials.Anonymous, top.categories.single().id)
+        assertEquals(listOf("Book child"), child.books.map { it.title })
+    }
+
+    @Test
+    fun `a paged browse stops after its page and says where the rest is`() = runBlocking {
+        val next = """<link rel="next" href="/opds?page=2"
+                         type="application/atom+xml;profile=opds-catalog"/>"""
+        pages["/opds"] = feed(book("1") + next)
+        pages["/opds?page=2"] = feed(book("2"))
+
+        val client = OpdsCatalogClient()
+        val first = client.browseSection(root(), RemoteCredentials.Anonymous, pageLimit = 1)
+        assertTrue(first.complete)
+        assertEquals(listOf("Book 1"), first.books.map { it.title })
+        assertEquals("${root()}?page=2", first.nextPage)
+        assertEquals(listOf("/opds"), asked)
+
+        val second = client.browseSection(root(), RemoteCredentials.Anonymous, first.nextPage!!, pageLimit = 1)
+        assertEquals(listOf("Book 2"), second.books.map { it.title })
+        assertNull(second.nextPage)
+
+        val whole = client.browseSection(root(), RemoteCredentials.Anonymous)
+        assertEquals(listOf("Book 1", "Book 2"), whole.books.map { it.title })
+        assertNull(whole.nextPage)
+    }
+
+    @Test
+    fun `a Gutenberg section shows the books behind its single-book feeds`() = runBlocking {
+        pages["/ebooks/search.opds/"] = feed(
+            navigation("Pride and Prejudice", "/ebooks/1342.opds") +
+                navigation("Moby Dick", "/ebooks/2701.opds") +
+                navigation("By author", "/ebooks/author/68.opds"),
+        )
+        pages["/ebooks/1342.opds"] = feed(book("urn:gutenberg:1342:2"))
+        codes["/ebooks/2701.opds"] = 503
+        val http = OkHttpClient.Builder()
+            .dns { listOf(InetAddress.getByName("127.0.0.1")) }
+            .build()
+        val base = "http://www.gutenberg.org:${server.port}"
+
+        val page = OpdsCatalogClient(OpdsHttp(http)).browseSection(
+            "$base/ebooks.opds/",
+            RemoteCredentials.Anonymous,
+            "$base/ebooks/search.opds/",
+            pageLimit = 1,
+        )
+
+        assertEquals(listOf("Book urn:gutenberg:1342:2"), page.books.map { it.title })
+        // A book feed that would not load stays a folder; other links are left alone.
+        assertEquals(listOf("Moby Dick", "By author"), page.categories.map { it.title })
+        assertFalse("/ebooks/author/68.opds" in asked)
+        assertEquals(3, page.requests)
+    }
+
+    @Test
+    fun `Gutenberg book feeds stay within the remaining request budget`() = runBlocking {
+        pages["/ebooks/search.opds/"] = feed(
+            (1..4).joinToString("") { navigation("Book $it", "/ebooks/$it.opds") },
+        )
+        (1..4).forEach { pages["/ebooks/$it.opds"] = feed(book("book-$it")) }
+        val http = OkHttpClient.Builder()
+            .dns { listOf(InetAddress.getByName("127.0.0.1")) }
+            .build()
+        val base = "http://www.gutenberg.org:${server.port}"
+
+        val page = OpdsCatalogClient(OpdsHttp(http)).browseSection(
+            "$base/ebooks.opds/",
+            RemoteCredentials.Anonymous,
+            "$base/ebooks/search.opds/",
+            pageLimit = 1,
+            requestBudget = 3,
+        )
+
+        assertEquals(3, page.requests)
+        assertEquals(3, asked.size)
+        assertEquals(listOf("Book book-1", "Book book-2"), page.books.map { it.title })
+        assertEquals(listOf("Book 3", "Book 4"), page.categories.map { it.title })
+    }
+
+    @Test
+    fun `only Gutenberg's numbered book feeds count as single-book feeds`() {
+        fun feed(url: String) = OpdsCatalogClient.isBookFeed(url.toHttpUrl())
+        assertTrue(feed("https://www.gutenberg.org/ebooks/1342.opds"))
+        assertTrue(feed("https://gutenberg.org/ebooks/84.opds"))
+        assertFalse(feed("https://www.gutenberg.org/ebooks/author/68.opds"))
+        assertFalse(feed("https://www.gutenberg.org/ebooks.opds/"))
+        assertFalse(feed("https://books.example/ebooks/1342.opds"))
+    }
+
+    @Test
+    fun `a page that continues into itself is not offered again`() = runBlocking {
+        pages["/opds"] = feed(
+            book("1") + """<link rel="next" href="/opds"
+                         type="application/atom+xml;profile=opds-catalog"/>""",
+        )
+
+        val page = OpdsCatalogClient().browseSection(root(), RemoteCredentials.Anonymous, pageLimit = 1)
+        assertNull(page.nextPage)
+        assertFalse(page.complete)
     }
 
     /**

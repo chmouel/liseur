@@ -138,6 +138,9 @@ class RemoteAccountRepository(
 ) {
     val server: Flow<RemoteServer?> = dao.observe()
 
+    /** The saved catalogs, each with its own login and download permission. */
+    val browseServers: Flow<List<RemoteServer>> = dao.observeBrowseServers()
+
     /**
      * What the account looks like to a caller that cannot suspend — the
      * image loader, mainly, which signs Coil's cover requests from an

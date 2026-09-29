@@ -12,6 +12,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.chmouel.liseur.data.remote.RemoteAuthInterceptor
+import com.chmouel.liseur.data.remote.matches
 import com.chmouel.liseur.domain.shouldSyncOnForeground
 import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.SyncScope
@@ -104,7 +105,31 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
                                 bookOrbitAuth = com.chmouel.liseur.data.bookorbit.BookOrbitNetworkAuth(
                                     container.bookOrbitSession,
                                     inferCurrentContext = true,
+                                    browseSessionFor = { source, _ ->
+                                        val server = kotlinx.coroutines.runBlocking {
+                                            container.database.remoteServerDao().get(source.serverId)
+                                        }
+                                        if (server?.kind == com.chmouel.liseur.data.remote.ServerKind.BOOKORBIT &&
+                                            source.matches(server)
+                                        ) {
+                                            com.chmouel.liseur.data.bookorbit.BookOrbitRequestContext.from(server)
+                                                ?.let { container.browseOrbitSession(source.serverId) to it }
+                                        } else null
+                                    },
                                 ),
+                                browseCredentialsFor = { source, url ->
+                                    val server = kotlinx.coroutines.runBlocking {
+                                        container.database.remoteServerDao().get(source.serverId)
+                                    }
+                                    val origin = server?.takeIf(source::matches)?.let {
+                                        if (it.kind.linksAreAbsolute) {
+                                            com.chmouel.liseur.data.remote.RemoteOrigin.ofOrigin(it.baseUrl)
+                                        } else {
+                                            com.chmouel.liseur.data.remote.RemoteOrigin.of(it.baseUrl)
+                                        }
+                                    }
+                                    server?.credentials?.takeIf { origin?.covers(url) == true }
+                                },
                                 credentialsFor = { url ->
                                     if (com.chmouel.liseur.data.bookorbit.BookOrbitUrl.isScopedCover(url)) {
                                         // Do not fall back to the generic

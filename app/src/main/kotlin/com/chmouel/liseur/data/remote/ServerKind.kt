@@ -205,7 +205,7 @@ enum class ServerKind(
          * opposed to a file the reader added on the device.
          */
         fun isRemoteUrl(bookUrl: String): Boolean =
-            bookUrl.startsWith("grimmory:") ||
+            bookUrl.startsWith("browse:") || bookUrl.startsWith("grimmory:") ||
                 entries.any { bookUrl.startsWith("${it.urlPrefix}:") }
         /**
          * The kind stored under [name], defaulting to [CALIBRE].

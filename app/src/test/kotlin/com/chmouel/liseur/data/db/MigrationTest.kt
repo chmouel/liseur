@@ -1531,10 +1531,29 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `an upgraded library has every book outside any saved catalog`() {
+        helper.createDatabase(TEST_DB, 61).use { db ->
+            db.execSQL(
+                "INSERT INTO books (url, title, added_at, download_state, series_checked, " +
+                    "series_override, series_claim_pending, series_claim_reset, series_index_override) " +
+                    "VALUES ('file:one', 'One', 1, 'DOWNLOADED', 0, 0, 0, 0, 0)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT browse_server_id FROM books WHERE url = 'file:one'").use {
+                    assertTrue(it.moveToFirst())
+                    assertTrue(it.isNull(0))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 61
+        const val LATEST = 62
     }
 }

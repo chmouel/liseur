@@ -3,6 +3,8 @@ package com.chmouel.liseur.data.bookorbit
 import android.net.Uri
 import androidx.core.net.toUri
 import androidx.room.withTransaction
+import com.chmouel.liseur.data.calibre.BookDownloadRepository.Companion.BROWSE_FILE_PREFIX
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookOrbitBinding
 import com.chmouel.liseur.data.db.BookOrbitBindingState
 import com.chmouel.liseur.data.db.BookOrbitCfiRecord
@@ -14,6 +16,7 @@ import org.readium.r2.shared.util.toAbsoluteUrl
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.net.URI
 
 data class BookOrbitCfiContext(
     val request: BookOrbitRequestContext,
@@ -247,13 +250,29 @@ class BookOrbitCfiRepository(
         if (book.downloadState != DownloadState.DOWNLOADED ||
             BookOrbitUrl.fileIdOf(book.downloadHref) != context.fileId
         ) stale()
-        val file = fileFor(book.remoteUuid ?: stale())
+        val file = downloadedFile(book, fileFor(book.remoteUuid ?: stale()))
         val localUrl = Uri.fromFile(file).toString()
         if (book.localUri != localUrl || openedUrl != localUrl || !file.isFile ||
             database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl)
                 ?.fileSize?.let { it != file.length() } == true
         ) stale()
         file
+    }
+
+    /**
+     * The download this row opens. A book downloaded from a saved
+     * catalog, and later adopted when the same account became the
+     * connected library, keeps the file it was fetched into, named after
+     * its URL rather than its server id. Only that shape of name, beside
+     * [named] in the books directory, is taken from the row.
+     */
+    private fun downloadedFile(book: Book, named: File): File {
+        val local = book.localUri?.takeIf { it.startsWith("file:") } ?: return named
+        val file = runCatching { File(URI(local)) }.getOrNull() ?: return named
+        return file.takeIf {
+            it.name.startsWith(BROWSE_FILE_PREFIX) &&
+                it.parentFile?.canonicalFile == named.parentFile?.canonicalFile
+        } ?: named
     }
 
     suspend fun retain(context: BookOrbitCfiContext, raw: String): BookOrbitForeignCfi =

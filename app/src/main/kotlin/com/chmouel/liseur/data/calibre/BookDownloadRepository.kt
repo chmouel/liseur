@@ -26,6 +26,7 @@ import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.remote.ServerDeleteResult
 import java.io.File
 import java.net.URI
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +40,9 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
@@ -104,6 +107,44 @@ class BulkTransferGate(maxConcurrent: Int = DEFAULT_MAX_CONCURRENT) {
     }
 }
 
+/** Keeps file writes and catalog removal from crossing for the same book. */
+internal class BookDownloadLocks {
+    private class Entry(val mutex: Mutex = Mutex(), var users: Int = 0)
+    private val entries = mutableMapOf<String, Entry>()
+
+    suspend fun <T> withBook(url: String, block: suspend () -> T): T {
+        val entry = synchronized(entries) {
+            entries.getOrPut(url) { Entry() }.also { it.users++ }
+        }
+        try {
+            return entry.mutex.withLock { block() }
+        } finally {
+            synchronized(entries) {
+                if (--entry.users == 0) entries.remove(url)
+            }
+        }
+    }
+
+    suspend fun <T> withBooks(urls: List<String>, block: suspend () -> T): T {
+        val ordered = urls.distinct().sorted()
+        val held = synchronized(entries) {
+            ordered.map { url -> entries.getOrPut(url) { Entry() }.also { it.users++ } }
+        }
+        var locked = 0
+        try {
+            held.forEach { it.mutex.lock(); locked++ }
+            return block()
+        } finally {
+            for (index in locked - 1 downTo 0) held[index].mutex.unlock()
+            synchronized(entries) {
+                ordered.forEachIndexed { index, url ->
+                    if (--held[index].users == 0) entries.remove(url)
+                }
+            }
+        }
+    }
+}
+
 /** Starts, watches and undoes book downloads. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class BookDownloadRepository(
@@ -122,10 +163,17 @@ class BookDownloadRepository(
      * forgot it would look exactly like one that had nothing to say.
      */
     private val accountKey: suspend () -> String? = { null },
+    private val browseServer: suspend (Long) -> RemoteServer? = { null },
     private val bulkTransferGate: BulkTransferGate = BulkTransferGate(),
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     private val workManager get() = WorkManager.getInstance(context)
+    private val bookLocks = BookDownloadLocks()
+
+    suspend fun <T> withBookLock(url: String, block: suspend () -> T): T = bookLocks.withBook(url, block)
+
+    suspend fun <T> withBookLocks(urls: List<String>, block: suspend () -> T): T =
+        bookLocks.withBooks(urls, block)
 
     /** Runs [block] once a bulk-download transfer slot is free. */
     suspend fun <T> withBulkTransferSlot(block: suspend () -> T): T =
@@ -161,7 +209,7 @@ class BookDownloadRepository(
             // book that outlived the account it came from, which is the
             // ordinary state of a book on a connection with no catalog.
             book.localUri?.let { sizeOf(it) }
-                ?: book.remoteUuid?.let { File(dir, "$it.epub").length() }
+                ?: fileKey(book)?.let { File(dir, "$it.epub").length() }
                 ?: 0L
         }
         StorageUse(count = books.size, bytes = bytes)
@@ -182,12 +230,22 @@ class BookDownloadRepository(
             }.getOrNull()
         }
 
-    suspend fun enqueue(book: Book) {
+    /**
+     * Queues [book] on its own. [guardSpace] asks it to leave room behind
+     * and wait for storage, as bulk work does, for when it is one of many
+     * the reader added at once.
+     */
+    suspend fun enqueue(book: Book, guardSpace: Boolean = false) {
+        val key = if (book.browseServerId != null) {
+            browseServer(book.browseServerId)?.accountKey ?: return
+        } else {
+            accountKey()
+        }
         bookDao.setDownloadState(book.url, DownloadState.QUEUED, null)
         workManager.enqueueUniqueWork(
             workName(book.url),
             ExistingWorkPolicy.KEEP,
-            request(book.url, accountKey = accountKey(), batchId = null),
+            request(book.url, accountKey = key, batchId = null, guardSpace = guardSpace),
         )
     }
 
@@ -376,7 +434,12 @@ class BookDownloadRepository(
         stat.availableBlocksLong * stat.blockSizeLong
     }.getOrDefault(0L)
 
-    private fun request(bookUrl: String, accountKey: String?, batchId: String?) =
+    private fun request(
+        bookUrl: String,
+        accountKey: String?,
+        batchId: String?,
+        guardSpace: Boolean = batchId != null,
+    ) =
         OneTimeWorkRequestBuilder<BookDownloadWorker>()
             .setInputData(
                 Data.Builder()
@@ -384,6 +447,7 @@ class BookDownloadRepository(
                     .apply {
                         accountKey?.let { putString(KEY_ACCOUNT_KEY, it) }
                         batchId?.let { putString(KEY_BATCH_ID, it) }
+                        if (guardSpace) putBoolean(KEY_GUARD_SPACE, true)
                     }
                     .build(),
             )
@@ -396,15 +460,25 @@ class BookDownloadRepository(
                     // Bulk work only. A single download the reader asked
                     // for by name should still start on a full-ish
                     // device; a hundred of them should not.
-                    .apply { if (batchId != null) setRequiresStorageNotLow(true) }
+                    .apply { if (guardSpace) setRequiresStorageNotLow(true) }
                     .build(),
             )
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
 
     suspend fun cancel(book: Book) {
-        workManager.cancelUniqueWork(workName(book.url))
-        bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
+        stopWork(book)
+        withBookLock(book.url) {
+            val current = bookDao.getByUrl(book.url)
+            if (current != null && current.localUri == null && current.downloadState != DownloadState.DOWNLOADED) {
+                bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
+            }
+        }
+    }
+
+    /** Requests cancellation without changing a row that may have finished meanwhile. */
+    suspend fun stopWork(book: Book) {
+        workManager.cancelUniqueWork(workName(book.url)).await()
     }
 
     /**
@@ -413,10 +487,10 @@ class BookDownloadRepository(
      * it again.
      */
     suspend fun removeDownload(book: Book) {
-        val uuid = book.remoteUuid ?: return
-        fileFor(uuid).delete()
-        File(booksDir(), "$uuid.epub.part").delete()
-        File(booksDir(), "$uuid.epub.etag").delete()
+        val key = fileKey(book) ?: return
+        fileFor(key).delete()
+        File(booksDir(), "$key.epub.part").delete()
+        File(booksDir(), "$key.epub.etag").delete()
         deleteOwnedCopy(book)
         bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
     }
@@ -524,7 +598,7 @@ class BookDownloadRepository(
      * after its server id, and a private copy in the app's own store.
      */
     private fun ownedFilesOf(book: Book): List<File> = buildList {
-        book.remoteUuid?.let { add(fileFor(it)) }
+        fileKey(book)?.let { add(fileFor(it)) }
         ownedCopyOf(book)?.let(::add)
     }.distinct()
 
@@ -610,14 +684,26 @@ class BookDownloadRepository(
 
     fun fileFor(uuid: String): File = File(booksDir(), "$uuid.epub")
 
+    /** Browse downloads use the full source-qualified URL for their private file name. */
+    fun fileKey(book: Book): String? = if (book.browseServerId != null) {
+        val digest = MessageDigest.getInstance("SHA-256").digest(book.url.toByteArray())
+        "$BROWSE_FILE_PREFIX${digest.joinToString("") { "%02x".format(it.toInt() and 0xff) }}"
+    } else {
+        book.remoteUuid
+    }
+
     fun localUriFor(uuid: String): String = Uri.fromFile(fileFor(uuid)).toString()
 
     companion object {
         const val TAG = "book-download"
+
+        /** Starts the private file name of a download made from a saved catalog. */
+        const val BROWSE_FILE_PREFIX = "browse_"
         const val KEY_BOOK_URL = "book_url"
         const val KEY_FRACTION = "fraction"
         const val KEY_ACCOUNT_KEY = "account_key"
         const val KEY_BATCH_ID = "batch_id"
+        const val KEY_GUARD_SPACE = "guard_space"
         const val KEY_STOOD_DOWN = "stood_down"
         const val BOOK_TAG_PREFIX = "book:"
         private const val BATCH_TAG_PREFIX = "batch:"

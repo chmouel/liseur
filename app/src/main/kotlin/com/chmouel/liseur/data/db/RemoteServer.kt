@@ -14,9 +14,8 @@ import com.chmouel.liseur.data.remote.ServerKind
 import kotlinx.coroutines.flow.Flow
 
 /**
- * The server the library is connected to. Only one row ever exists
- * ([SINGLE_ID]), but the table is keyed so support for several servers
- * can be added without another migration.
+ * A saved server connection. The library's automatic source always uses
+ * [SINGLE_ID]; larger ids are browse-only catalog connections.
  *
  * [kind] decides which half of this row is meaningful. calibre-web signs
  * in with [username] and [passwordCipher] and syncs over the Kobo
@@ -340,6 +339,22 @@ interface RemoteServerDao {
 
     @Query("SELECT * FROM remote_server WHERE id = :id")
     suspend fun get(id: Long = RemoteServer.SINGLE_ID): RemoteServer?
+
+    @Query("SELECT * FROM remote_server WHERE id != 1 ORDER BY id")
+    fun observeBrowseServers(): Flow<List<RemoteServer>>
+
+    @Query("SELECT * FROM remote_server WHERE id != 1 ORDER BY id")
+    suspend fun browseServers(): List<RemoteServer>
+
+    // Book URLs carry the id they were saved under (browse:<id>:…) even
+    // after the book moves to another connection, so those ids stay taken.
+    @Query(
+        "SELECT COALESCE(MAX(id), 1) + 1 FROM (SELECT id FROM remote_server " +
+            "UNION SELECT browse_server_id AS id FROM books WHERE browse_server_id IS NOT NULL " +
+            "UNION SELECT CAST(substr(url, 8, instr(substr(url, 8), ':') - 1) AS INTEGER) AS id " +
+            "FROM books WHERE url LIKE 'browse:%')",
+    )
+    suspend fun nextBrowseId(): Long
 
     @Upsert
     suspend fun upsert(server: RemoteServer)

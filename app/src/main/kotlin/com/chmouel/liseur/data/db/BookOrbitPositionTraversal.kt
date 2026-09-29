@@ -61,7 +61,7 @@ interface BookOrbitPositionTraversalDao {
             "WHERE account_key = :accountKey AND file_id IS NOT NULL " +
             "AND LOWER(file_format) = 'epub' AND state IN ('SELECTED', 'DOWNLOADED') " +
             "AND EXISTS (SELECT 1 FROM books WHERE books.url = book_orbit_binding.book_url " +
-            "AND books.remote_uuid IS NOT NULL)",
+            "AND books.remote_uuid IS NOT NULL AND books.browse_server_id IS NULL)",
     )
     suspend fun capture(accountKey: String)
 

@@ -33,6 +33,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 import java.net.InetAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -208,6 +209,49 @@ class BookOrbitCfiRepositoryTest {
         rejected()
         assertThrows(BookOrbitIdentityChanged::class.java) {
             runBlocking { repository.originalDocument(opened, "OPS/chapter.xhtml", ownedFile) }
+        }
+    }
+
+    @Test
+    fun `a download kept from a saved catalog is opened where it lies`(): Unit = runBlocking {
+        val books = folder.newFolder("books")
+        val file = File(books, "browse_0123abcd.epub")
+        ZipOutputStream(file.outputStream()).use { zip ->
+            for ((name, xml) in mapOf(
+                "META-INF/container.xml" to
+                    """<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""",
+                "OPS/book.opf" to
+                    """<package xmlns="http://www.idpf.org/2007/opf"><manifest><item id="one" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="one"/></spine></package>""",
+                "OPS/chapter.xhtml" to
+                    """<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Original passage</p></body></html>""",
+            )) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(xml.toByteArray())
+                zip.closeEntry()
+            }
+        }
+        val uri = Uri.fromFile(file).toString()
+        val stored = Book(
+            url = binding.bookUrl, title = "Test book", author = null, coverPath = null,
+            source = null, addedAt = 1, lastOpenedAt = null, localUri = uri,
+            remoteUuid = "promoted", downloadHref = BookOrbitUrl.downloadHref(34),
+            downloadState = DownloadState.DOWNLOADED,
+        )
+        db.bookDao().upsert(stored)
+        db.bookOrbitBindingDao().write(binding.copy(fileSize = file.length()))
+        val context = repository.capture(binding.bookUrl)
+        val fileFor: (String) -> File = { File(books, "$it.epub") }
+
+        assertEquals("OPS/book.opf", repository.openedPackage(context, uri, fileFor).publication.packagePath)
+
+        val elsewhere = File(folder.newFolder("other"), file.name).also { file.copyTo(it) }
+        val renamed = File(books, "copy.epub").also { file.copyTo(it) }
+        for (other in listOf(elsewhere, renamed)) {
+            val otherUri = Uri.fromFile(other).toString()
+            db.bookDao().upsert(db.bookDao().getByUrl(stored.url)!!.copy(localUri = otherUri))
+            assertThrows(BookOrbitIdentityChanged::class.java) {
+                runBlocking { repository.openedPackage(context, otherUri, fileFor) }
+            }
         }
     }
 

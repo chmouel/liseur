@@ -935,4 +935,59 @@
     <string name="reader_external_link_failed">Ninguna app de este dispositivo puede abrir ese enlace.</string>
     <string name="server_sync_bookorbit">Las posiciones de lectura se sincronizan en cada página para los EPUB verificados, y se te ofrece una posición guardada en otro lugar mientras lees. Prevalece la última escritura en el servidor. Las marcas de leído y no leído también se sincronizan; las anotaciones, no.</string>
     <string name="server_sync_off_bookorbit">Las posiciones de lectura no se sincronizan con BookOrbit.</string>
+    <string name="browse_libraries">Explorar bibliotecas remotas</string>
+    <string name="browse_add_connection">Añadir un catálogo</string>
+    <string name="browse_save_connection">Guardar y explorar</string>
+    <string name="browse_add_category">Añadir esta categoría</string>
+    <string name="browse_already_added">Ya está en tu biblioteca</string>
+    <string name="browse_unknown_author">Autor desconocido</string>
+    <string name="browse_confirm_title">¿Añadir libros a tu biblioteca?</string>
+    <string name="browse_download_size">Tamaño de descarga: %1$s</string>
+    <string name="browse_add_download">Añadir y descargar</string>
+    <string name="browse_remove_title">¿Quitar el catálogo guardado?</string>
+    <string name="browse_remove_detail">Este catálogo sale de tu lista. Los libros descargados y el progreso de lectura permanecen en tu biblioteca.</string>
+    <string name="browse_incomplete">No se pudo leer toda la categoría. Añade libros por separado o vuelve a intentarlo.</string>
+    <string name="browse_add_failed">No se pudieron añadir estos libros. Vuelve a intentarlo.</string>
+    <string name="browse_remove_failed">No se pudo quitar este catálogo.</string>
+    <string name="browse_load_failed">No se pudo cargar este catálogo. Comprueba la conexión y vuelve a intentarlo.</string>
+    <plurals name="browse_download_count">
+        <item quantity="one">¿Descargar %1$d libro?</item>
+        <item quantity="other">¿Descargar %1$d libros?</item>
+    </plurals>
+    <plurals name="browse_added_count">
+        <item quantity="one">%1$d libro añadido. Descarga iniciada.</item>
+        <item quantity="other">%1$d libros añadidos. Descargas iniciadas.</item>
+    </plurals>
+    <string name="browse_title">Bibliotecas remotas</string>
+    <string name="browse_empty">Aún no hay catálogos guardados</string>
+    <string name="browse_empty_detail">Guarda un catálogo de calibre-web, Komga, BookOrbit, liseur-sync u OPDS para explorarlo y elegir libros para descargar. Las posiciones de lectura no se sincronizan con estos catálogos.</string>
+    <string name="browse_gutenberg">Explorar Project Gutenberg</string>
+    <string name="browse_gutenberg_languages">Idiomas</string>
+    <string name="browse_gutenberg_categories">Categorías</string>
+    <string name="browse_gutenberg_detail">Clásicos gratuitos de dominio público, sin necesidad de cuenta.</string>
+    <string name="browse_gutenberg_failed">No se pudo acceder a Project Gutenberg. Comprueba tu conexión e inténtalo de nuevo.</string>
+    <string name="browse_form_intro">Los libros que añadas se descargan en este dispositivo. Las posiciones de lectura no se sincronizan con este catálogo.</string>
+    <string name="browse_catalog_options">Opciones de %1$s</string>
+    <string name="browse_refresh">Actualizar</string>
+    <string name="browse_section_collections">Colecciones</string>
+    <string name="browse_section_books">Libros</string>
+    <string name="browse_section_empty">No hay nada en esta sección.</string>
+    <string name="browse_partial">Solo se pudo leer una parte de esta sección.</string>
+    <string name="browse_select_all">Seleccionar todo</string>
+    <string name="browse_clear_selection">Borrar selección</string>
+    <string name="browse_select">Seleccionar</string>
+    <string name="browse_add_to_library">Añadir a la biblioteca</string>
+    <string name="browse_not_downloadable">Este catálogo no ofrece este libro para descargar.</string>
+    <string name="browse_download_failed">La descarga falló. Vuelve a intentarlo desde tu biblioteca.</string>
+    <string name="browse_open_library">Abrir biblioteca</string>
+    <string name="browse_nothing_to_add">Todo lo que hay aquí ya está en tu biblioteca.</string>
+    <plurals name="browse_selected_count">
+        <item quantity="one">%1$d seleccionado</item>
+        <item quantity="other">%1$d seleccionados</item>
+    </plurals>
+    <plurals name="browse_add_n">
+        <item quantity="one">Añadir %1$d libro</item>
+        <item quantity="other">Añadir %1$d libros</item>
+    </plurals>
+    <string name="browse_load_more">Cargar más</string>
 </resources>

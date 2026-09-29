@@ -46,6 +46,15 @@ object StarterCatalog {
         "https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads"
 
     /**
+     * Gutenberg's root navigation feed, for saving as a browse catalog.
+     *
+     * Unlike a starter shelf, browsing wants the root: its Popular,
+     * Latest and Random entries are sections to walk into. Liseur adds
+     * language and topic folders alongside those three entries.
+     */
+    const val BROWSE_URL = "https://www.gutenberg.org/ebooks.opds/"
+
+    /**
      * Languages with dedicated catalogs on Project Gutenberg.
      */
     val SUPPORTED_LANGUAGES = setOf(

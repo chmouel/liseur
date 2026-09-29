@@ -55,6 +55,7 @@ internal fun ServerKindRow(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    showSync: Boolean = true,
 ) {
     OutlinedCard(
         onClick = onClick,
@@ -65,7 +66,7 @@ internal fun ServerKindRow(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             overlineContent = { Text(stringResource(R.string.server_kind)) },
             headlineContent = { Text(stringResource(kind.labelRes())) },
-            supportingContent = { KindSupport(kind) },
+            supportingContent = { KindSupport(kind, showSync) },
             leadingContent = { ServerKindLogo(kind) },
             trailingContent = {
                 Icon(
@@ -95,6 +96,7 @@ internal fun ServerKindSheet(
     selected: ServerKind,
     onPick: (ServerKind) -> Unit,
     onDismiss: () -> Unit,
+    showSync: Boolean = true,
 ) {
     LiseurModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -120,7 +122,7 @@ internal fun ServerKindSheet(
                     ),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text(stringResource(kind.labelRes())) },
-                    supportingContent = { KindSupport(kind) },
+                    supportingContent = { KindSupport(kind, showSync) },
                     leadingContent = { ServerKindLogo(kind) },
                     trailingContent = {
                         // Null, not a second handler: the row already
@@ -136,12 +138,11 @@ internal fun ServerKindSheet(
 
 /** Redistributable logos or original provider glyphs, without copying restricted artwork. */
 @Composable
-private fun ServerKindLogo(kind: ServerKind) {
-    val size = Modifier.size(32.dp)
+internal fun ServerKindLogo(kind: ServerKind, modifier: Modifier = Modifier) {
     Image(
         painter = painterResource(kind.logoRes()),
         contentDescription = null,
-        modifier = size,
+        modifier = modifier.size(32.dp),
     )
 }
 
@@ -153,16 +154,21 @@ private fun ServerKind.logoRes(): Int = when (this) {
     ServerKind.CUSTOM -> R.drawable.ic_server_custom
 }
 
-/** What a kind is for, and whether it keeps your place. */
+/**
+ * What a kind is for, and whether it keeps your place. Browsing a saved
+ * catalog never syncs positions, so that screen leaves the second line out.
+ */
 @Composable
-private fun KindSupport(kind: ServerKind) {
+private fun KindSupport(kind: ServerKind, showSync: Boolean = true) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(stringResource(kind.taglineRes()))
-        Text(
-            stringResource(kind.syncLineRes()),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (showSync) {
+            Text(
+                stringResource(kind.syncLineRes()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

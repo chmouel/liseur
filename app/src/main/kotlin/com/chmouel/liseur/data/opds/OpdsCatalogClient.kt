@@ -10,11 +10,19 @@ import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.ResumableCatalogSource
+import com.chmouel.liseur.data.remote.BrowseCategory
+import com.chmouel.liseur.data.remote.BrowseListing
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.failureForCode
+import java.io.IOException
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -51,6 +59,98 @@ class OpdsCatalogClient(
      */
     private val shelfLimit: suspend (String) -> Int? = { null },
 ) : CatalogSource, ResumableCatalogSource {
+
+    /** Reads a single OPDS shelf and its pagination, leaving child shelves for navigation. */
+    suspend fun browseSection(
+        baseUrl: String,
+        credentials: RemoteCredentials,
+        sectionUrl: String = baseUrl,
+        /** How many feed pages to read; when more remain, the listing carries the next one. */
+        pageLimit: Int = MAX_REQUESTS,
+        /** Maximum requests including Gutenberg's single-book feeds. */
+        requestBudget: Int = MAX_REQUESTS,
+    ): BrowseListing = withContext(Dispatchers.IO) {
+        val budget = requestBudget.coerceAtMost(MAX_REQUESTS)
+        if (budget <= 0 || pageLimit <= 0) return@withContext BrowseListing(complete = false)
+        val scope = OpdsScope.of(baseUrl) ?: return@withContext BrowseListing(complete = false)
+        var next: HttpUrl? = sectionUrl.toHttpUrlOrNull()
+            ?.takeIf(scope::mayFetch) ?: return@withContext BrowseListing(complete = false)
+        val seen = mutableSetOf<String>()
+        val books = mutableListOf<RemoteBook>()
+        val categories = linkedMapOf<String, BrowseCategory>()
+        var requests = 0
+        var complete = true
+        while (next != null && requests < minOf(pageLimit, budget) && seen.add(next.toString())) {
+            requests++
+            coroutineContext.ensureActive()
+            val fetched = http.get(next, scope, credentials)
+            val page = fetched.response.use { response ->
+                if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
+                try {
+                    OpdsParser.parse(response.body.string())
+                } catch (e: SAXException) {
+                    throw RemoteHttpFailure(SyncFailure.Malformed)
+                }
+            }
+            val base = fetched.url.resolveOrSelf(page.xmlBase)
+            books += page.books.map { it.toRemote(scope, base) }
+            page.navigation.forEach { link ->
+                val url = base.resolve(link.href)?.takeIf(scope::mayFetch)
+                if (url == null) complete = false
+                url?.let {
+                    categories[it.toString()] = BrowseCategory(
+                        id = it.toString(),
+                        title = link.title?.takeIf(String::isNotBlank) ?: it.encodedPath,
+                    )
+                }
+            }
+            next = page.nextHref?.let { href ->
+                base.resolve(href)?.takeIf(scope::mayFetch).also { if (it == null) complete = false }
+            }
+        }
+        // Gutenberg lists each book as a link to a feed of its own.
+        // Shown as they are, every book would be a folder holding one
+        // book, so those feeds are read here and their book put in the
+        // folder's place. One that cannot be read stays a folder.
+        val bookFeeds = categories.keys.mapNotNull { id -> id.toHttpUrlOrNull()?.takeIf(::isBookFeed) }
+            .take(budget - requests)
+        if (bookFeeds.isNotEmpty()) {
+            requests += bookFeeds.size
+            val gate = Semaphore(BOOK_FEED_PARALLELISM)
+            val expanded = coroutineScope {
+                bookFeeds.map { url ->
+                    async {
+                        gate.withPermit {
+                            try {
+                                val feed = fetch(url, scope, credentials)
+                                url to feed.books.map { it.toRemote(scope, feed.base) }
+                            } catch (e: RemoteHttpFailure) {
+                                Log.i(TAG, "A book feed could not be read; leaving it as a folder", e)
+                                null
+                            } catch (e: IOException) {
+                                Log.i(TAG, "A book feed could not be read; leaving it as a folder", e)
+                                null
+                            }
+                        }
+                    }
+                }.awaitAll()
+            }
+            expanded.filterNotNull().forEach { (url, found) ->
+                if (found.isNotEmpty()) {
+                    categories.remove(url.toString())
+                    books += found
+                }
+            }
+        }
+        val more = next?.takeIf { (pageLimit < MAX_REQUESTS || budget < MAX_REQUESTS) && it.toString() !in seen }
+        BrowseListing(
+            categories.values.toList(),
+            books.distinctBy(RemoteBook::remoteId),
+            complete && (next == null || more != null),
+            nextPage = more?.toString(),
+            requests = requests,
+        )
+    }
 
     override suspend fun allBooks(
         baseUrl: String,
@@ -449,5 +549,17 @@ class OpdsCatalogClient(
          * thousands of books, and a refresh that ends.
          */
         const val MAX_REQUESTS = 400
+
+        /** How many single-book feeds a browsed section reads at once. */
+        const val BOOK_FEED_PARALLELISM = 4
+
+        private val BOOK_FEED_PATH = Regex("/ebooks/\\d+\\.opds")
+
+        /**
+         * Whether [url] is a feed holding one Project Gutenberg book,
+         * which its listings link to instead of listing the book itself.
+         */
+        fun isBookFeed(url: HttpUrl): Boolean =
+            url.host.removePrefix("www.") == "gutenberg.org" && BOOK_FEED_PATH.matches(url.encodedPath)
     }
 }

@@ -629,7 +629,9 @@ class KosyncPositionSync(
         } else {
             listOfNotNull(bookDao.getByUrl(book)).filter { it.openableUrl != null }
         }
-        return if (catalogued) found.filter { it.isCandidate } else found
+        // isCandidate already keeps browse-catalog books out; the
+        // device-wide set skips it, so it says so again.
+        return if (catalogued) found.filter { it.isCandidate } else found.filter { it.browseServerId == null }
     }
 
 
@@ -640,10 +642,13 @@ class KosyncPositionSync(
      * The URL check is what holds the confirmed scope: a locally added
      * book *adopted* after an upload to liseur-sync also carries a
      * `remoteUuid`, but keeps its own local `url` by design — its
-     * positions already travel natively, and kosync leaves it alone.
+     * positions already travel natively, and kosync leaves it alone. A
+     * book from a saved browse catalog came from another server, not
+     * the connected one, and its reading place is promised to stay put.
      */
     private val Book.isCandidate: Boolean
-        get() = remoteUuid != null && openableUrl != null && ServerKind.isRemoteUrl(url)
+        get() = remoteUuid != null && openableUrl != null && browseServerId == null &&
+            ServerKind.isRemoteUrl(url)
 
     private fun ReadingProgress.statusOrDerived(): ReadingStatus =
         status?.let { ReadingStatus.fromWire(it) }

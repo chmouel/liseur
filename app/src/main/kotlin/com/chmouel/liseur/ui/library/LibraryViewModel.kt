@@ -189,6 +189,8 @@ data class LibraryUiState(
     val catalogStatus: CatalogStatus = CatalogStatus.Idle,
     val downloads: Map<String, DownloadProgress> = emptyMap(),
     val canDownload: Boolean = true,
+    /** The saved catalogs whose books may be downloaded, by id. */
+    val downloadableBrowse: Set<Long> = emptySet(),
     /**
      * Whether the connected server lets this account delete books from
      * it. calibre-web always has; liseur-sync does where the connection
@@ -332,6 +334,10 @@ data class LibraryUiState(
      */
     val shownSeries: Set<String> = emptySet(),
 )
+
+/** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
+fun LibraryUiState.canDownload(book: Book): Boolean =
+    book.browseServerId?.let { it in downloadableBrowse } ?: canDownload
 
 /**
  * A deletion the user asked for that did not happen, and where it was
@@ -604,6 +610,7 @@ class LibraryViewModel(
                 appSettings.catalogPartialDismissedFor,
                 catalog.starterMore,
                 catalog.starterMoreLoading,
+                account.browseServers,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -621,6 +628,8 @@ class LibraryViewModel(
             @Suppress("UNCHECKED_CAST")
             val running = baseValues[3] as Map<String, DownloadProgress>
             val server = baseValues[4] as RemoteServer?
+            @Suppress("UNCHECKED_CAST")
+            val browseServers = baseValues[15] as List<RemoteServer>
             val refreshing = baseValues[5] as Boolean
             val settings = baseValues[6] as AppSettings
             @Suppress("UNCHECKED_CAST")
@@ -753,6 +762,7 @@ class LibraryViewModel(
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
+                downloadableBrowse = browseServers.filter { it.canDownload }.mapTo(mutableSetOf()) { it.id },
                 canDeleteFromServer = canDeleteFrom(server, router),
                 serverDeleteNeedsReconnect = deleteNeedsReconnect(server, router),
                 canForgetServerReading = canDeleteFrom(server, router) &&
@@ -1079,7 +1089,8 @@ class LibraryViewModel(
         viewModelScope.launch {
             val server = account.current()
             val deleter = server?.let { router.deleterFor(it.kind) }
-            val result = if (server == null || deleter == null) {
+            // A saved-catalog book's id belongs to another server.
+            val result = if (server == null || deleter == null || book.browseServerId != null) {
                 ServerDeleteResult.Failed(null)
             } else {
                 downloads.deleteFromServer(book, deleter, server, forgetReading)
@@ -1178,7 +1189,8 @@ class LibraryViewModel(
         viewModelScope.launch {
             val clean = name?.trim()?.takeIf { it.isNotEmpty() }
             bookDao.setSeriesOverride(book.url, clean, index)
-            catalog.retryPendingSeriesClaims()
+            if (book.browseServerId != null) bookDao.settleBrowseSeriesEdit(book.url)
+            else catalog.retryPendingSeriesClaims()
         }
     }
 
@@ -1186,9 +1198,10 @@ class LibraryViewModel(
     fun resetBookSeries(book: Book) {
         viewModelScope.launch {
             bookDao.clearSeriesOverride(book.url)
+            if (book.browseServerId != null) bookDao.settleBrowseSeriesEdit(book.url)
+            else catalog.retryPendingSeriesClaims()
             // Restoring catalog metadata always removes this reader's personal layer. A shared
             // delete needs an explicit admin route; silently using one here is unsafe.
-            catalog.retryPendingSeriesClaims()
         }
     }
 
@@ -1205,6 +1218,7 @@ class LibraryViewModel(
      */
     fun resetBookSharedSeries(book: Book) {
         viewModelScope.launch {
+            if (book.browseServerId != null) return@launch
             val server = account.current()?.takeIf {
                 it.kind == ServerKind.LISEUR_SYNC && it.canAdmin
             } ?: return@launch

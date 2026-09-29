@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.remote.CatalogSource
 import com.chmouel.liseur.data.remote.CatalogWalk
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.BrowseCategory
 import com.chmouel.liseur.data.remote.RemoteSeriesMembership
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.ensureActive
@@ -22,6 +23,25 @@ import org.json.JSONObject
 class LiseurSyncCatalogClient(
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
 ) : CatalogSource {
+
+    /** Folder names for a browser; the ordinary catalog walk only needs ids. */
+    suspend fun browseFolders(baseUrl: String, credentials: RemoteCredentials): List<BrowseCategory> {
+        val found = mutableListOf<BrowseCategory>()
+        var after: String? = null
+        var guard = MAX_PAGES
+        while (guard-- > 0) {
+            coroutineContext.ensureActive()
+            val answer = http.get(LiseurSyncApi.folders(baseUrl, after, FOLDER_PAGE), credentials)
+            val array = answer.optJSONArray("folders") ?: break
+            for (index in 0 until array.length()) {
+                val folder = array.optJSONObject(index) ?: continue
+                val id = folder.optString("folder_id").takeIf { it.isNotEmpty() } ?: continue
+                found += BrowseCategory("folder:$id", folder.optString("name").ifEmpty { id })
+            }
+            after = answer.optString("next_after").takeIf { it.isNotEmpty() } ?: break
+        }
+        return found
+    }
 
     override suspend fun allBooks(
         baseUrl: String,

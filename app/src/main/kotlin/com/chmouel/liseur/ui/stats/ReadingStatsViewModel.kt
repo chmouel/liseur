@@ -508,6 +508,7 @@ class ReadingStatsViewModel(
                 finished = book.finished,
                 coverPath = book.coverPath,
                 coverUrl = book.coverUrl,
+                browseServerId = book.browseServerId,
             )
         }
         val spans = sessions.map {
@@ -737,6 +738,7 @@ class ReadingStatsViewModel(
                             finished = row.finished,
                             coverPath = row.coverPath,
                             coverUrl = row.coverUrl,
+                            browseServerId = row.browseServerId,
                         )
                     }
                     ?: return@forEach
@@ -771,6 +773,7 @@ class ReadingStatsViewModel(
                     pendingSessions = rows.sumOf { it.pendingSessions },
                     coverPath = metadata.coverPath,
                     coverUrl = metadata.coverUrl,
+                    browseServerId = metadata.browseServerId,
                 )
             }
             val elsewhere = (

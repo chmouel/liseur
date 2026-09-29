@@ -53,6 +53,7 @@ import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
+import com.chmouel.liseur.ui.library.BrowseLibrariesRoute
 import com.chmouel.liseur.ui.library.ConfirmLocalDeleteDialog
 import com.chmouel.liseur.ui.library.ConfirmRemoveDownloadDialog
 import com.chmouel.liseur.ui.library.ConfirmRemoveFromLibraryDialog
@@ -174,6 +175,7 @@ private enum class Screen {
     READING_NAVIGATION,
     HIDDEN_BOOKS,
     SERVER_ACCOUNT,
+    BROWSE_LIBRARIES,
     LICENCES,
     ABOUT,
     STATS,
@@ -223,7 +225,10 @@ private fun LiseurApp(settings: AppSettings) {
                 accountReturnsTo = Screen.LIBRARY
                 screen = Screen.SERVER_ACCOUNT
             },
+            onBrowseLibraries = { screen = Screen.BROWSE_LIBRARIES },
         )
+
+        Screen.BROWSE_LIBRARIES -> BrowseLibrariesRoute(onExit = { screen = Screen.LIBRARY })
 
         Screen.STATS -> {
             BackHandler { screen = Screen.LIBRARY }
@@ -599,6 +604,7 @@ private fun LibraryRoute(
     onOpenStats: () -> Unit,
     onOpenBookStats: (com.chmouel.liseur.data.db.Book) -> Unit,
     onConnectServer: () -> Unit,
+    onBrowseLibraries: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
     val context = LocalContext.current
@@ -895,6 +901,7 @@ private fun LibraryRoute(
         onOpenStats = onOpenStats,
         onOpenBookStats = onOpenBookStats,
         onConnectServer = onConnectServer,
+        onBrowseLibraries = onBrowseLibraries,
         onStartWithFreeBooks = viewModel::connectStarterCatalog,
         freeBooksFailures = viewModel.starterCatalogFailures,
         freeBooksFallback = viewModel.starterCatalogFallback,

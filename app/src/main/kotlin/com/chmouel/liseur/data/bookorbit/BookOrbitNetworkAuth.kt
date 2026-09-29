@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.bookorbit
 
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.data.remote.BrowseCoverSource
 import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
@@ -23,19 +24,29 @@ class BookOrbitNetworkAuth(
     private val session: BookOrbitSession,
     /** Covers have no request tag until the network interceptor sees them. */
     private val inferCurrentContext: Boolean = false,
+    private val browseSessionFor: (BrowseCoverSource, String) -> Pair<BookOrbitSession, BookOrbitRequestContext>? =
+        { _, _ -> null },
 ) : Interceptor, Authenticator {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
+        val browse = request.tag(BrowseCoverSource::class.java)
+        val browseAuth = if (browse != null) {
+            browseSessionFor(browse, request.url.toString()) ?: return chain.proceed(request)
+        } else {
+            null
+        }
+        val activeSession = browseAuth?.first ?: session
         val context = request.tag(BookOrbitRequestContext::class.java)
+            ?: browseAuth?.second
             ?: if (inferCurrentContext) {
-                runBlocking { session.contextForUrl(request.url.toString()) }
+                runBlocking { activeSession.contextForUrl(request.url.toString()) }
             } else {
                 null
             }
             ?: return chain.proceed(request)
         if (!context.covers(request.url.toString())) throw IOException("BookOrbit request left its server scope")
-        val token = runBlocking { session.token(context) }
+        val token = runBlocking { activeSession.token(context) }
         val signed =
             signed(request, token).newBuilder()
                 .tag(BookOrbitRequestContext::class.java, context)
@@ -44,7 +55,7 @@ class BookOrbitNetworkAuth(
         if (response.code != 401 || request.tag(Retried::class.java) != null) return response
 
         val fresh = runBlocking {
-            runCatching { session.afterRejection(context, token) }.getOrNull()
+            runCatching { activeSession.afterRejection(context, token) }.getOrNull()
         } ?: return response
         response.close()
         return chain.proceed(

@@ -22,6 +22,7 @@ import okhttp3.Response
  */
 class RemoteAuthInterceptor(
     private val credentialsFor: (String) -> RemoteCredentials?,
+    private val browseCredentialsFor: (BrowseCoverSource, String) -> RemoteCredentials? = { _, _ -> null },
     private val requestPolicy: (okhttp3.Request) -> RequestCredentialPolicy = {
         RequestCredentialPolicy.DEFAULT
     },
@@ -42,7 +43,12 @@ class RemoteAuthInterceptor(
         val unsigned = request.newBuilder()
             .removeHeader(BASIC_HEADER)
             .removeHeader(RemoteCredentials.ApiKey.HEADER)
-        val credentials = credentialsFor(request.url.toString())
+        val browse = request.tag(BrowseCoverSource::class.java)
+        val credentials = if (browse != null) {
+            browseCredentialsFor(browse, request.url.toString())
+        } else {
+            credentialsFor(request.url.toString())
+        }
         return chain.proceed(credentials?.signInto(unsigned)?.build() ?: unsigned.build())
     }
 
@@ -64,12 +70,44 @@ class RemoteAuthInterceptor(
             requestPolicy: (okhttp3.Request) -> RequestCredentialPolicy = {
                 RequestCredentialPolicy.DEFAULT
             },
+            browseCredentialsFor: (BrowseCoverSource, String) -> RemoteCredentials? = { _, _ -> null },
         ): OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(BrowseCoverTaggingInterceptor())
             .apply {
                 if (bookOrbitAuth != null) addInterceptor(bookOrbitAuth)
             }
-            .addNetworkInterceptor(RemoteAuthInterceptor(credentialsFor, requestPolicy))
+            .addNetworkInterceptor(RemoteAuthInterceptor(credentialsFor, browseCredentialsFor, requestPolicy))
             .build()
+    }
+}
+
+/** The saved connection and its cover cache scope, kept on redirects as an OkHttp request tag. */
+data class BrowseCoverSource(val serverId: Long, val scope: String?)
+
+internal fun browseCoverRequestHeader(serverId: Long, url: String): String =
+    "$serverId:${browseCoverScopeFromUrl(url).orEmpty()}"
+
+private fun browseCoverScopeFromUrl(url: String): String? =
+    url.substringAfter('#', "").split('&')
+        .lastOrNull { it.startsWith("liseur-browse=") }
+        ?.substringAfter('=')
+        ?.takeIf { it.matches(Regex("[0-9a-f]{24}")) }
+
+/** Coil sends this header; it is removed before the request reaches the network. */
+class BrowseCoverTaggingInterceptor : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val header = request.header(HEADER)
+        val id = header?.substringBefore(':')?.toLongOrNull()
+        val builder = request.newBuilder().removeHeader(HEADER)
+        if (id != null) {
+            builder.tag(BrowseCoverSource::class.java, BrowseCoverSource(id, header.substringAfter(':', "").ifEmpty { null }))
+        }
+        return chain.proceed(builder.build())
+    }
+
+    companion object {
+        const val HEADER = "X-Liseur-Browse-Source"
     }
 }
 

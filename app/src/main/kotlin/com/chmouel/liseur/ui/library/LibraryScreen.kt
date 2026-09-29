@@ -137,6 +137,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.StarterCatalogMoreResult
@@ -171,6 +172,7 @@ fun LibraryScreen(
     onOpenStats: () -> Unit,
     onOpenBookStats: (Book) -> Unit,
     onConnectServer: () -> Unit,
+    onBrowseLibraries: () -> Unit,
     onDownload: (Book) -> Unit,
     onCancelDownload: (Book) -> Unit,
     onRemoveDownload: (Book) -> Unit,
@@ -612,6 +614,16 @@ fun LibraryScreen(
                                         onConnectServer()
                                     },
                                 )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.browse_libraries)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.CloudDownload, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        addMenuOpen = false
+                                        onBrowseLibraries()
+                                    },
+                                )
                             }
                         }
                         // A menu rather than more icons. The bar is
@@ -807,7 +819,7 @@ fun LibraryScreen(
                                 book.openableUrl != null -> onBookSelected(book)
                                 book.url in state.downloads ->
                                     scope.launch { snackbarHost.showSnackbar(downloading) }
-                                !state.canDownload ->
+                                !state.canDownload(book) ->
                                     scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
                                 else -> onDownloadAndOpen(book)
                             }
@@ -894,7 +906,7 @@ fun LibraryScreen(
             book = book,
             downloading = book.url in state.downloads,
             onDismiss = { sheetBook = null },
-            canDownload = state.canDownload,
+            canDownload = state.canDownload(book),
             canDeleteFromServer = state.canDeleteFromServer,
             serverDeleteNeedsReconnect = state.serverDeleteNeedsReconnect,
             canUploadToServer = state.canUploadToServer,
@@ -1316,7 +1328,7 @@ internal fun BookActionsSheet(
                     )
                 }
             }
-            if (book.remoteUuid != null && canDeleteFromServer) {
+            if (book.remoteUuid != null && book.browseServerId == null && canDeleteFromServer) {
                 // Kept apart from the others on purpose: everything above
                 // touches this device only, this one reaches the server.
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -1326,7 +1338,7 @@ internal fun BookActionsSheet(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-            } else if (book.remoteUuid != null && serverDeleteNeedsReconnect) {
+            } else if (book.remoteUuid != null && book.browseServerId == null && serverDeleteNeedsReconnect) {
                 // Say why rather than leave a gap. The action is missing
                 // for a reason the reader can act on, and one they would
                 // never guess from an absence.
@@ -1912,9 +1924,10 @@ fun BookCover(book: Book, modifier: Modifier = Modifier) {
         // has asked what they chose.
         val context = LocalContext.current
         val eInk = LocalEInk.current
-        val request = remember(artwork, eInk, context) {
+        val request = remember(artwork, eInk, context, book.browseServerId) {
             ImageRequest.Builder(context)
                 .data(artwork)
+                .browseCover(artwork, book.coverUrl, book.browseServerId)
                 .crossfade(!eInk)
                 .build()
         }
@@ -1952,7 +1965,7 @@ internal val CoverBadgeContent = Color.White
  * waiting for its moment.
  */
 @Composable
-private fun DownloadOverlay(
+internal fun DownloadOverlay(
     fraction: Float?,
     queued: Boolean,
     modifier: Modifier = Modifier,

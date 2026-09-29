@@ -123,10 +123,17 @@ class WorkResolver(
      * the device has been syncing all along *is* the book it was just
      * sent, and the library would show the two side by side — one with
      * the file, one with the reading.
+     *
+     * A book from a saved browse catalog has neither: its `remote_uuid`
+     * is that other server's id, so it resolves on its file alone.
      */
     fun sourceOf(book: Book): String? =
-        book.url.takeIf { url -> ServerKind.entries.any { it.remoteId(url) != null } }
-            ?: book.remoteUuid?.let { ServerKind.LISEUR_SYNC.remoteUrl(it) }
+        if (book.browseServerId != null) {
+            null
+        } else {
+            book.url.takeIf { url -> ServerKind.entries.any { it.remoteId(url) != null } }
+                ?: book.remoteUuid?.let { ServerKind.LISEUR_SYNC.remoteUrl(it) }
+        }
 
     /**
      * This server's own id for [book], however the book came by it.
@@ -136,7 +143,11 @@ class WorkResolver(
      * carries it as a link.
      */
     fun catalogIdOf(book: Book): String? =
-        ServerKind.LISEUR_SYNC.remoteId(book.url) ?: book.remoteUuid
+        if (book.browseServerId != null) {
+            null
+        } else {
+            ServerKind.LISEUR_SYNC.remoteId(book.url) ?: book.remoteUuid
+        }
 
     /**
      * Asks the server what to call [book], caching whatever it says.

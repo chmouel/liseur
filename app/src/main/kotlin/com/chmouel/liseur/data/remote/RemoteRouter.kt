@@ -49,6 +49,9 @@ class RemoteRouter(
 
     suspend fun positionSync(): PositionSync? = kind()?.let(positions::get)
 
+    /** liseur-sync can identify a downloaded book by its bytes, regardless of origin. */
+    suspend fun maySyncBrowseBook(): Boolean = kind() == ServerKind.LISEUR_SYNC
+
     fun liveFor(kind: ServerKind): LiveChanges? = live[kind]
 
     /** The deleter for a server already in hand, when the kind has one. */
@@ -76,7 +79,10 @@ class RemoteRouter(
  * whose reading positions the connected server shows in its own
  * interface.
  */
-class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
+class RoutedPositionSync(
+    private val router: RemoteRouter,
+    private val isBrowseBook: suspend (String) -> Boolean = { false },
+) : PeerPositionSync {
 
     override val peerId: String get() = PeerPositionSync.CATALOG
 
@@ -89,16 +95,20 @@ class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
         router.positionSync()?.syncAll(snapshot, carryingOn) ?: SyncOutcome.NotApplicable
 
     override suspend fun syncBook(bookUrl: String): SyncOutcome =
-        router.positionSync()?.syncBook(bookUrl) ?: SyncOutcome.NotApplicable
+        if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) SyncOutcome.NotApplicable
+        else router.positionSync()?.syncBook(bookUrl) ?: SyncOutcome.NotApplicable
 
     override suspend fun canSync(bookUrl: String): Boolean =
-        router.positionSync()?.canSync(bookUrl) ?: false
+        (!isBrowseBook(bookUrl) || router.maySyncBrowseBook()) &&
+            (router.positionSync()?.canSync(bookUrl) ?: false)
 
     override suspend fun previewBook(bookUrl: String): PreviewOutcome =
-        router.positionSync()?.previewBook(bookUrl) ?: PreviewOutcome.NotSynced
+        if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) PreviewOutcome.NotSynced
+        else router.positionSync()?.previewBook(bookUrl) ?: PreviewOutcome.NotSynced
 
     override suspend fun preservedConflict(bookUrl: String, peerId: String?): SyncPreview? =
-        router.positionSync()?.preservedConflict(bookUrl)
+        if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) null
+        else router.positionSync()?.preservedConflict(bookUrl)
 
     override suspend fun takeRemotePosition(
         bookUrl: String,
@@ -106,7 +116,8 @@ class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
         peerId: String?,
         expectedAccountKey: String?,
     ): ResolveOutcome =
-        router.positionSync()?.takeRemotePosition(
+        if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) ResolveOutcome.Done
+        else router.positionSync()?.takeRemotePosition(
             bookUrl,
             atRevision,
             peerId,
@@ -114,7 +125,8 @@ class RoutedPositionSync(private val router: RemoteRouter) : PeerPositionSync {
         ) ?: if (expectedAccountKey != null) ResolveOutcome.Superseded else ResolveOutcome.Done
 
     override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
-        router.positionSync()?.keepLocalPosition(bookUrl) ?: ResolveOutcome.Done
+        if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) ResolveOutcome.Done
+        else router.positionSync()?.keepLocalPosition(bookUrl) ?: ResolveOutcome.Done
 
     override suspend fun refreshUnresolved() {
         router.positionSync()?.refreshUnresolved()

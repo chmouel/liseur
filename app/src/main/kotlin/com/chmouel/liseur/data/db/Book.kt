@@ -58,6 +58,8 @@ data class Book(
      */
     @ColumnInfo(name = "local_uri") val localUri: String? = null,
     @ColumnInfo(name = "remote_uuid") val remoteUuid: String? = null,
+    /** Saved browse connection that supplied this book; null for the main server and local files. */
+    @ColumnInfo(name = "browse_server_id") val browseServerId: Long? = null,
     @ColumnInfo(name = "remote_book_id") val remoteBookId: Int? = null,
     @ColumnInfo(name = "cover_url") val coverUrl: String? = null,
     @ColumnInfo(name = "download_href") val downloadHref: String? = null,
@@ -275,8 +277,24 @@ interface BookDao {
      * another, and an unordered pair could quote one slice and fetch a
      * different one.
      */
-    @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL ORDER BY url")
+    @Query("SELECT * FROM books WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL ORDER BY url")
     suspend fun allRemote(): List<Book>
+
+    @Query("SELECT * FROM books WHERE browse_server_id = :serverId ORDER BY title COLLATE NOCASE")
+    suspend fun fromBrowseServer(serverId: Long): List<Book>
+
+    @Query("SELECT * FROM books WHERE browse_server_id = :serverId")
+    fun observeFromBrowseServer(serverId: Long): Flow<List<Book>>
+
+    @Query("SELECT * FROM books WHERE browse_server_id = :serverId AND local_uri IS NULL")
+    suspend fun undownloadedFromBrowseServer(serverId: Long): List<Book>
+
+    @Query("UPDATE books SET remote_uuid = NULL, download_href = NULL, cover_url = NULL WHERE browse_server_id = :serverId AND local_uri IS NOT NULL")
+    suspend fun unlinkDownloadedFromBrowseServer(serverId: Long)
+
+    /** Hands one saved-catalog book to another connection to the same account, keeping its URL. */
+    @Query("UPDATE books SET browse_server_id = :serverId, cover_url = :coverUrl WHERE url = :url")
+    suspend fun moveToBrowseServer(url: String, serverId: Long, coverUrl: String?)
 
     /**
      * Every book whose file this device can open, wherever it came
@@ -297,7 +315,7 @@ interface BookDao {
     suspend fun allOpenable(): List<Book>
 
     /** Remote-only books that will disappear when their account does. */
-    @Query("SELECT url FROM books WHERE remote_uuid IS NOT NULL AND local_uri IS NULL")
+    @Query("SELECT url FROM books WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL AND local_uri IS NULL")
     suspend fun remoteNotDownloadedUrls(): List<String>
 
     /**
@@ -321,7 +339,7 @@ interface BookDao {
             "WHEN series_index_override = 1 THEN user_series_index " +
             "ELSE file_series_index END, " +
             "series_id = NULL " +
-            "WHERE remote_uuid IS NOT NULL",
+            "WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL",
     )
     suspend fun unlinkDownloadedFromRemote()
 
@@ -564,8 +582,11 @@ interface BookDao {
         personalSeriesUpdatedAt: Long?,
     ): Int
 
-    @Query("SELECT * FROM books WHERE series_claim_pending = 1")
+    @Query("SELECT * FROM books WHERE series_claim_pending = 1 AND browse_server_id IS NULL")
     suspend fun pendingSeriesClaims(): List<Book>
+
+    @Query("UPDATE books SET series_claim_pending = 0, series_claim_reset = 0 WHERE url = :url AND browse_server_id IS NOT NULL")
+    suspend fun settleBrowseSeriesEdit(url: String)
 
     /**
      * Drops every locally pending claim outright, for when there is no
@@ -702,6 +723,7 @@ interface BookDao {
         """
         UPDATE books
         SET title = :title, author = :author, remote_uuid = :remoteUuid,
+            browse_server_id = CASE WHEN :promoteBrowse THEN NULL ELSE browse_server_id END,
             remote_book_id = :remoteBookId, cover_url = :coverUrl,
             download_href = :downloadHref, remote_updated_at = :remoteUpdatedAt,
             remote_page_count = :remotePageCount,
@@ -803,7 +825,7 @@ interface BookDao {
                     AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesId
                 ELSE series_id
             END
-        WHERE url = :url
+        WHERE url = :url AND browse_server_id IS :expectedBrowseServerId
         """,
     )
     suspend fun updateCatalogFields(
@@ -829,13 +851,19 @@ interface BookDao {
         seriesId: String?,
         personalSeriesUpdatedAt: Long? = null,
         sizeBytes: Long? = null,
+        expectedBrowseServerId: Long? = null,
+        promoteBrowse: Boolean = false,
     )
 
     @Query("DELETE FROM books WHERE url IN (:urls)")
     suspend fun deleteByUrls(urls: List<String>)
 
-    @Query("SELECT * FROM books WHERE remote_uuid IN (:remoteUuids)")
+    @Query("SELECT * FROM books WHERE remote_uuid IN (:remoteUuids) AND browse_server_id IS NULL")
     suspend fun byRemoteUuids(remoteUuids: List<String>): List<Book>
+
+    /** [byRemoteUuids], plus rows of the saved catalogs in [browseServerIds]. */
+    @Query("SELECT * FROM books WHERE remote_uuid IN (:remoteUuids) AND (browse_server_id IS NULL OR browse_server_id IN (:browseServerIds))")
+    suspend fun byRemoteUuidsWithin(remoteUuids: List<String>, browseServerIds: List<Long>): List<Book>
 
     /**
      * Gives a local book a server identity, after an upload landed.

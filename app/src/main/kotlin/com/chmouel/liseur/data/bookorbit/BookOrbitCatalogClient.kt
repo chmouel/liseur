@@ -51,6 +51,9 @@ class BookOrbitCatalogClient(
      * the one this client would derive. Asked once per page.
      */
     private val localUrls: suspend (List<String>) -> Map<String, String> = { emptyMap() },
+    private val serverId: Long = com.chmouel.liseur.data.db.RemoteServer.SINGLE_ID,
+    private val bookUrlFor: (String) -> String = ServerKind.BOOKORBIT::remoteUrl,
+    private val persistCatalogBindings: Boolean = true,
 ) : CatalogSource {
 
     override suspend fun allBooks(
@@ -58,7 +61,7 @@ class BookOrbitCatalogClient(
         credentials: RemoteCredentials,
         onPage: suspend (List<RemoteBook>) -> Unit,
     ): CatalogWalk {
-        val server = serverDao.get()?.takeIf { it.kind == ServerKind.BOOKORBIT }
+        val server = serverDao.get(serverId)?.takeIf { it.kind == ServerKind.BOOKORBIT }
             ?: throw RemoteHttpFailure(SyncFailure.Unauthorised)
         val context = BookOrbitRequestContext.from(server)
             ?.takeIf { com.chmouel.liseur.data.remote.RemoteUrl.sameAddress(it.baseUrl, baseUrl) }
@@ -95,7 +98,7 @@ class BookOrbitCatalogClient(
             }
             val held = heldUrls(context, server, answer.cards)
             val mapped = answer.cards.mapNotNull { card ->
-                cardFor(context, server, card, persistBinding = true, held)?.also { cards += it.ref }
+                cardFor(context, server, card, persistBinding = persistCatalogBindings, held)?.also { cards += it.ref }
                     ?.let { it.book }
             }
             books += mapped
@@ -120,7 +123,7 @@ class BookOrbitCatalogClient(
         credentials: RemoteCredentials,
         query: String,
     ): List<RemoteBook> {
-        val server = serverDao.get()?.takeIf { it.kind == ServerKind.BOOKORBIT }
+        val server = serverDao.get(serverId)?.takeIf { it.kind == ServerKind.BOOKORBIT }
             ?: throw RemoteHttpFailure(SyncFailure.Unauthorised)
         val context = BookOrbitRequestContext.from(server)
             ?.takeIf { com.chmouel.liseur.data.remote.RemoteUrl.sameAddress(it.baseUrl, baseUrl) }
@@ -174,7 +177,7 @@ class BookOrbitCatalogClient(
             // than given one that could be adopted by somebody else.
             return null
         }
-        val bookUrl = held[remoteId] ?: ServerKind.BOOKORBIT.remoteUrl(remoteId)
+        val bookUrl = held[remoteId] ?: bookUrlFor(remoteId)
         var binding = bindings.get(server.accountKey, bookUrl)
         if (binding == null && persistBinding) {
             val proposed = BookOrbitBinding(
@@ -190,7 +193,7 @@ class BookOrbitCatalogClient(
                 updatedAt = System.currentTimeMillis(),
             )
             inTransaction {
-                if (!context.matches(serverDao.get())) throw AccountChanged()
+                if (!context.matches(serverDao.get(serverId))) throw AccountChanged()
                 binding = bindings.bindIfUnbound(proposed)
             }
         }
@@ -209,7 +212,7 @@ class BookOrbitCatalogClient(
                     updatedAt = System.currentTimeMillis(),
                 )
                 inTransaction {
-                    if (!context.matches(serverDao.get())) throw AccountChanged()
+                    if (!context.matches(serverDao.get(serverId))) throw AccountChanged()
                     bindings.write(updated)
                 }
                 binding = updated
@@ -338,3 +341,20 @@ class BookOrbitCatalogSnapshot(
     val books: List<RemoteBook>,
     val cards: List<BookOrbitCardRef>,
 ) : CatalogSnapshot
+
+/**
+ * The library URL each remote id already lives under, for [BookOrbitCatalogClient]'s
+ * `localUrls`.
+ *
+ * [rows] are main-catalog rows and rows of saved catalogs the main
+ * catalog may promote. A main row wins, as it does in the merge. A saved
+ * catalog's row is used only when it is the one candidate, so the binding
+ * is written under the URL that promotion keeps. Two rows of the same
+ * kind are a duplicate left alone on purpose; neither is chosen.
+ */
+internal fun heldBookUrls(rows: List<com.chmouel.liseur.data.db.Book>): Map<String, String> =
+    rows.groupBy { it.remoteUuid }.mapNotNull { (id, candidates) ->
+        val (main, browsed) = candidates.partition { it.browseServerId == null }
+        val row = if (main.isNotEmpty()) main.singleOrNull() else browsed.singleOrNull()
+        id?.let { row?.let { id to it.url } }
+    }.toMap()

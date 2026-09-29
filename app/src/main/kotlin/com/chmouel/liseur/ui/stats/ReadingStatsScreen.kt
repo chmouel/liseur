@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonDirection
@@ -784,6 +785,7 @@ private fun BookStatCard(book: BookReadingStats, onClick: (() -> Unit)?) {
                 title = book.title,
                 coverPath = book.coverPath,
                 coverUrl = book.coverUrl,
+                browseServerId = book.browseServerId,
                 modifier = Modifier
                     .width(44.dp)
                     .height(64.dp),
@@ -894,6 +896,7 @@ internal fun StatsCoverThumbnail(
     title: String,
     coverPath: String?,
     coverUrl: String?,
+    browseServerId: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     val artwork = coverPath ?: coverUrl
@@ -908,9 +911,10 @@ internal fun StatsCoverThumbnail(
     if (artwork != null) {
         val context = LocalContext.current
         val eInk = LocalEInk.current
-        val request = remember(artwork, eInk, context) {
+        val request = remember(artwork, eInk, context, browseServerId) {
             ImageRequest.Builder(context)
                 .data(artwork)
+                .browseCover(artwork, coverUrl, browseServerId)
                 .crossfade(!eInk)
                 .build()
         }

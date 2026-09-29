@@ -68,6 +68,19 @@ class ReadingStatsTest {
     }
 
     @Test
+    fun `a cover from a saved catalog keeps the catalog it is fetched with`() {
+        val stats = readingStats(
+            sessions = listOf(SessionSpan("a", noonOn(today), 600_000)),
+            books = mapOf("a" to book("a").copy(coverUrl = "https://opds.example/cover/a", browseServerId = 3)),
+            zone = zone,
+            today = today,
+        )
+        val line = stats.books.single()
+        assertEquals("https://opds.example/cover/a", line.coverUrl)
+        assertEquals(3L, line.browseServerId)
+    }
+
+    @Test
     fun `last read comes from the final checkpoint rather than the session start`() {
         val started = noonOn(today.minusDays(1))
         val finished = noonOn(today)

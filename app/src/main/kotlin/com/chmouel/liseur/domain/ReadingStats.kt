@@ -59,6 +59,8 @@ data class BookReadingStats(
     val pendingSessions: Int = 0,
     val coverPath: String? = null,
     val coverUrl: String? = null,
+    /** The saved catalog [coverUrl] comes from, whose login fetches it. */
+    val browseServerId: Long? = null,
     /**
      * The server's name for the work, when this row came from one.
      *
@@ -163,6 +165,8 @@ data class StatsBook(
     val finished: Boolean,
     val coverPath: String? = null,
     val coverUrl: String? = null,
+    /** The saved catalog [coverUrl] comes from, whose login fetches it. */
+    val browseServerId: Long? = null,
 )
 
 /** How many days of history the dashboard shows day by day by default. */
@@ -238,6 +242,7 @@ fun readingStats(
             pendingSessions = spans.count { !it.uploaded },
             coverPath = book?.coverPath,
             coverUrl = book?.coverUrl,
+            browseServerId = book?.browseServerId,
         )
     }.sortedWith(compareByDescending<BookReadingStats> { it.totalMs }.thenBy { it.title })
 

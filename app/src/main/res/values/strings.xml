@@ -978,4 +978,60 @@
     <string name="reader_external_link_failed">No app on this device can open that link.</string>
     <string name="server_sync_bookorbit">Reading places sync on every page for verified EPUBs, and places saved elsewhere are offered while you read. The last server write wins. Finished and unread marks sync too; annotations do not.</string>
     <string name="server_sync_off_bookorbit">Reading places are not synced with BookOrbit.</string>
+    <string name="browse_libraries">Browse remote libraries</string>
+    <string name="browse_add_connection">Add a catalog</string>
+    <string name="browse_save_connection">Save and browse</string>
+    <string name="browse_add_category">Add this category</string>
+    <string name="browse_already_added">Already in your library</string>
+    <string name="browse_unknown_author">Unknown author</string>
+    <string name="browse_confirm_title">Add books to your library?</string>
+    <string name="browse_download_size">Download size: %1$s</string>
+    <string name="browse_add_download">Add and download</string>
+    <string name="browse_remove_title">Remove saved catalog?</string>
+    <string name="browse_remove_detail">This catalog leaves your saved list. Downloaded books and reading progress stay in your library.</string>
+    <string name="browse_incomplete">The whole category could not be read. Add individual books or try again.</string>
+    <string name="browse_add_failed">Could not add these books. Try again.</string>
+    <string name="browse_remove_failed">Could not remove this catalog.</string>
+    <string name="browse_load_failed">Could not load this catalog. Check your connection and try again.</string>
+    <plurals name="browse_download_count">
+        <item quantity="one">Download %1$d book?</item>
+        <item quantity="other">Download %1$d books?</item>
+    </plurals>
+    <plurals name="browse_added_count">
+        <item quantity="one">Added %1$d book. Download started.</item>
+        <item quantity="other">Added %1$d books. Downloads started.</item>
+    </plurals>
+    <string name="browse_title">Remote libraries</string>
+    <string name="browse_empty">No saved catalogs yet</string>
+    <string name="browse_empty_detail">Save a calibre-web, Komga, BookOrbit, liseur-sync or OPDS catalog to look through it and choose books to download. Reading places are not synced with these catalogs.</string>
+    <string name="browse_gutenberg">Browse Project Gutenberg</string>
+    <string name="browse_gutenberg_name" translatable="false">Gutenberg</string>
+    <string name="browse_gutenberg_languages">Languages</string>
+    <string name="browse_gutenberg_categories">Categories</string>
+    <string name="browse_gutenberg_detail">Free classics in the public domain, no account needed.</string>
+    <string name="browse_gutenberg_failed">Could not reach Project Gutenberg. Check your connection and try again.</string>
+    <string name="browse_form_intro">Books you add are downloaded to this device. Reading places are not synced with this catalog.</string>
+    <string name="browse_catalog_options">Options for %1$s</string>
+    <string name="browse_refresh">Refresh</string>
+    <string name="browse_section_collections">Collections</string>
+    <string name="browse_section_books">Books</string>
+    <string name="browse_section_empty">Nothing in this section.</string>
+    <string name="browse_partial">Only part of this section could be read.</string>
+    <string name="browse_select_all">Select all</string>
+    <string name="browse_clear_selection">Clear selection</string>
+    <string name="browse_select">Select</string>
+    <string name="browse_add_to_library">Add to library</string>
+    <string name="browse_not_downloadable">This catalog does not offer this book for download.</string>
+    <string name="browse_download_failed">The download failed. Try again from your library.</string>
+    <string name="browse_open_library">Open library</string>
+    <string name="browse_nothing_to_add">Everything here is already in your library.</string>
+    <plurals name="browse_selected_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="browse_add_n">
+        <item quantity="one">Add %1$d book</item>
+        <item quantity="other">Add %1$d books</item>
+    </plurals>
+    <string name="browse_load_more">Load more</string>
 </resources>

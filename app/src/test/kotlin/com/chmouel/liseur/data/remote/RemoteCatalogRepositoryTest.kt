@@ -19,6 +19,7 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -176,7 +177,7 @@ class RemoteCatalogRepositoryTest {
 
     /** A catalog whose "Load 50 more" answer is whatever the test needs. */
     private class FakeResumableCatalog(
-        private val more: suspend () -> CatalogMore,
+        private val more: suspend (knownRemoteIds: Set<String>) -> CatalogMore,
     ) : CatalogSource, ResumableCatalogSource {
         override suspend fun allBooks(
             baseUrl: String,
@@ -197,7 +198,7 @@ class RemoteCatalogRepositoryTest {
             knownRemoteIds: Set<String>,
             limit: Int,
             onPage: suspend (List<RemoteBook>) -> Unit,
-        ): CatalogMore = more()
+        ): CatalogMore = more(knownRemoteIds)
     }
 
     private fun repository(
@@ -286,6 +287,69 @@ class RemoteCatalogRepositoryTest {
         updatedAt = null,
         pageCount = null,
     )
+
+    @Test
+    fun `main refresh leaves a selected browse book with the same remote id alone`() = runTest {
+        connect()
+        val remote = book("shared-id")
+        val browseUrl = BrowseCatalogRepository.bookUrl(2, ServerKind.KOMGA, remote.remoteId)
+        db.bookDao().upsert(
+            mergeCatalogEntry(remote, null, browseUrl, "https://elsewhere.example", 1L, ServerKind.KOMGA)
+                .copy(browseServerId = 2),
+        )
+        val catalog = FakeCatalog { onPage -> onPage(listOf(remote)) }
+
+        repository(catalog).refresh()
+
+        assertNotNull(db.bookDao().getByUrl(browseUrl))
+        assertEquals(2L, db.bookDao().getByUrl(browseUrl)?.browseServerId)
+        assertNotNull(db.bookDao().getByUrl(ServerKind.KOMGA.remoteUrl("shared-id")))
+    }
+
+    @Test
+    fun `a book saved from the same account mid-walk is adopted, not duplicated`() = runTest {
+        connect()
+        db.remoteServerDao().upsert(db.remoteServerDao().get()!!.copy(id = 2))
+        val remote = book("raced")
+        val browseUrl = BrowseCatalogRepository.bookUrl(2, ServerKind.KOMGA, remote.remoteId)
+        val catalog = FakeCatalog { onPage ->
+            db.bookDao().upsert(
+                mergeCatalogEntry(remote, null, browseUrl, "https://books.example", 1L, ServerKind.KOMGA)
+                    .copy(browseServerId = 2),
+            )
+            onPage(listOf(remote))
+        }
+
+        repository(catalog).refresh()
+
+        val stored = db.bookDao().allOnce().single()
+        assertEquals(browseUrl, stored.url)
+        assertNull(stored.browseServerId)
+    }
+
+    @Test
+    fun `load more does not count a browse book with the same remote id as known`() = runTest {
+        connect(ServerKind.CUSTOM, shelfLimit = 25)
+        val remote = book("shared-id")
+        val browseUrl = BrowseCatalogRepository.bookUrl(2, ServerKind.CUSTOM, remote.remoteId)
+        db.bookDao().upsert(
+            mergeCatalogEntry(remote, null, browseUrl, "https://elsewhere.example", 1L, ServerKind.CUSTOM)
+                .copy(browseServerId = 2),
+        )
+        var known: Set<String>? = null
+        val catalog = FakeResumableCatalog { ids ->
+            known = ids
+            CatalogMore(
+                added = 0,
+                exhausted = true,
+                state = CatalogContinuation(queue = emptyList(), seen = emptySet()),
+            )
+        }
+
+        repository(catalog, starterProgressDao = db.starterCatalogProgressDao()).loadMoreStarterCatalog()
+
+        assertEquals(false, known?.contains(remote.remoteId))
+    }
 
     @Test
     fun `custom refresh adopts a downloaded legacy Grimmory row`() = runTest {
@@ -1312,6 +1376,7 @@ class RemoteCatalogRepositoryTest {
      * account's shelf empty until somebody pulled it down by hand.
      */
     @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `a detached refresh waits for the walk in flight instead of standing down`() = runTest {
         connect()
         val gate = CompletableDeferred<Unit>()

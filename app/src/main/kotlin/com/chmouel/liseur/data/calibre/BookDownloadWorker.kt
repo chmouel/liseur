@@ -21,10 +21,16 @@ class BookDownloadWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val container = applicationContext.container
         val bookUrl = inputData.getString(BookDownloadRepository.KEY_BOOK_URL)
             ?: return give_up("no book url")
+        return applicationContext.container.bookDownloads.withBookLock(bookUrl) { download(bookUrl) }
+    }
+
+    private suspend fun download(bookUrl: String): Result {
+        val container = applicationContext.container
         val batchId = inputData.getString(BookDownloadRepository.KEY_BATCH_ID)
+        val guardSpace = batchId != null ||
+            inputData.getBoolean(BookDownloadRepository.KEY_GUARD_SPACE, false)
 
         // A batch that has already hit a wall is being cancelled, and
         // cancellation takes a moment to arrive. Anything starting in
@@ -39,12 +45,16 @@ class BookDownloadWorker(
 
         val bookDao = container.database.bookDao()
         val book = bookDao.getByUrl(bookUrl) ?: return give_up("unknown book $bookUrl")
-        val uuid = book.remoteUuid ?: return give_up("book has no uuid")
+        if (book.remoteUuid == null) return give_up("book has no uuid")
         // The URL, the secret and the way to ask for a file all come
         // from the one row that was read. Looking each of them up in
         // turn is how a key typed in just now ends up being handed to
         // the server that was connected a moment ago.
-        val server = container.remoteAccount.current() ?: return give_up("no server")
+        val server = if (book.browseServerId != null) {
+            container.database.remoteServerDao().get(book.browseServerId)
+        } else {
+            container.remoteAccount.current()
+        } ?: return give_up("no server")
         // Book URLs are not account-qualified, so work queued against one
         // server and run after the reader switched to another would hand
         // the new server a URL belonging to the old one. The catalog
@@ -56,7 +66,12 @@ class BookDownloadWorker(
             return stopped(bookUrl, "queued for an account that is no longer connected")
         }
         val credentials = server.credentials ?: return give_up("no credentials")
-        val files = container.remoteRouter.filesFor(server.kind) ?: return give_up("no file source")
+        val files = if (book.browseServerId != null && server.kind == ServerKind.BOOKORBIT) {
+            container.browseOrbitFile(server.id)
+        } else {
+            container.remoteRouter.filesFor(server.kind)
+        } ?: return give_up("no file source")
+        val fileKey = container.bookDownloads.fileKey(book) ?: return give_up("no file key")
 
         val request = files.downloadRequest(server, credentials, book)
             ?: run {
@@ -70,25 +85,24 @@ class BookDownloadWorker(
         val downloads = container.bookDownloads
         val downloader = BookDownloader(
             http = files.downloadHttp(),
-            // Bulk work is the only thing that can fill a device on its
-            // own, so it is the only thing asked to leave room behind. A
-            // single download the reader asked for by name keeps the
-            // behaviour it has always had.
-            freeSpace = if (batchId != null) downloads::freeBytes else null,
+            // Bulk work, and many books added from a saved catalog at
+            // once, can fill a device on their own, so only they are
+            // asked to leave room behind. A single download the reader
+            // asked for by name keeps the behaviour it has always had.
+            freeSpace = if (guardSpace) downloads::freeBytes else null,
         )
         val runDownload = suspend {
             downloader.download(
                 request = request,
-                target = downloads.fileFor(uuid),
+                target = downloads.fileFor(fileKey),
             ) { downloaded, total ->
                 val fraction = total?.takeIf { it > 0 }?.let { downloaded.toFloat() / it }
                 setProgress(progressData(bookUrl, fraction))
             }
         }
-        // Only a batch shares a server with siblings worth pacing
-        // against; a download the reader asked for by name runs at
-        // once, same as it always has.
-        val outcome = if (batchId != null) {
+        // A batch or a multi-book catalog add shares the transfer slots;
+        // a single book the reader asked for runs at once as before.
+        val outcome = if (guardSpace) {
             downloads.withBulkTransferSlot(runDownload)
         } else {
             runDownload()
@@ -108,17 +122,23 @@ class BookDownloadWorker(
         // only whether *a* row is there would file one account's bytes
         // under the other's book. The row is asked about as well, for
         // work queued by a version that stamped no account.
-        val stillOurs = queuedFor == null ||
-            container.remoteAccount.current()?.answersTo(queuedFor) == true
+        val currentServer = if (book.browseServerId != null) {
+            container.database.remoteServerDao().get(book.browseServerId)
+        } else {
+            container.remoteAccount.current()
+        }
+        val stillOurs = currentServer?.id == server.id &&
+            currentServer.addedAt == server.addedAt &&
+            (queuedFor == null || currentServer.answersTo(queuedFor))
         if (!stillOurs || bookDao.getByUrl(bookUrl) == null) {
-            if (outcome is DownloadOutcome.Done) downloads.fileFor(uuid).delete()
+            if (outcome is DownloadOutcome.Done) downloads.fileFor(fileKey).delete()
             batchId?.let { stopBatch(it, BulkStopReason.ACCOUNT_CHANGED) }
             return stopped(bookUrl, "the account changed while this book was downloading")
         }
 
         return when (outcome) {
             is DownloadOutcome.Done -> {
-                val localUri = downloads.localUriFor(uuid)
+                val localUri = downloads.localUriFor(fileKey)
                 bookDao.setDownloadState(
                     bookUrl,
                     DownloadState.DOWNLOADED,
@@ -152,7 +172,7 @@ class BookDownloadWorker(
                     // single book denial must not turn a valid account
                     // capability off for the whole shelf. Its setup
                     // capability is refreshed explicitly instead.
-                    if (server.kind != ServerKind.BOOKORBIT) {
+                    if (book.browseServerId == null && server.kind != ServerKind.BOOKORBIT) {
                         container.database.remoteServerDao().setCanDownload(false)
                     }
                     fail(bookUrl)

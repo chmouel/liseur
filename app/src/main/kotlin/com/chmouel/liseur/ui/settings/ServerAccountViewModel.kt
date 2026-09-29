@@ -49,6 +49,17 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+internal fun SetupFailure.toUiError(): AccountError = when (this) {
+    SetupFailure.BadCredentials -> AccountError.BAD_CREDENTIALS
+    SetupFailure.SignInRequired -> AccountError.SIGN_IN_REQUIRED
+    SetupFailure.InsufficientScopes -> AccountError.INSUFFICIENT_SCOPES
+    SetupFailure.WrongServer -> AccountError.WRONG_SERVER
+    SetupFailure.InsecureTransport -> AccountError.INSECURE_TRANSPORT
+    SetupFailure.RateLimited -> AccountError.RATE_LIMITED
+    is SetupFailure.Unreachable ->
+        if (httpMayWork) AccountError.UNREACHABLE_TRY_HTTP else AccountError.UNREACHABLE
+}
+
 /** What went wrong while connecting, phrased as something to act on. */
 enum class AccountError {
     BAD_CREDENTIALS,
@@ -957,17 +968,6 @@ class ServerAccountViewModel(
                 kosyncStatus = kept.kosyncStatus,
             )
         }
-    }
-
-    private fun SetupFailure.toUiError(): AccountError = when (this) {
-        SetupFailure.BadCredentials -> AccountError.BAD_CREDENTIALS
-        SetupFailure.SignInRequired -> AccountError.SIGN_IN_REQUIRED
-        SetupFailure.InsufficientScopes -> AccountError.INSUFFICIENT_SCOPES
-        SetupFailure.WrongServer -> AccountError.WRONG_SERVER
-        SetupFailure.InsecureTransport -> AccountError.INSECURE_TRANSPORT
-        SetupFailure.RateLimited -> AccountError.RATE_LIMITED
-        is SetupFailure.Unreachable ->
-            if (httpMayWork) AccountError.UNREACHABLE_TRY_HTTP else AccountError.UNREACHABLE
     }
 
     companion object {

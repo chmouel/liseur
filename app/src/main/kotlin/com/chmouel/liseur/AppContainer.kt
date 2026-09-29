@@ -51,6 +51,7 @@ import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.LiveRefresh
 import com.chmouel.liseur.data.remote.LiveTopic
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
+import com.chmouel.liseur.data.remote.BrowseCatalogRepository
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
 import com.chmouel.liseur.data.remote.RoutedPositionSync
@@ -233,6 +234,19 @@ class AppContainer(context: Context) {
         bookOrbitHttp, bookOrbitCfis,
     )
 
+    private val serverSetups = mapOf(
+        ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
+        ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
+        ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
+            deviceName = { deviceIdentity.current().name },
+        ),
+        ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitSetupClient(
+            deviceLabel = { deviceIdentity.current().name },
+            session = bookOrbitSession,
+        ),
+        ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsSetupClient(),
+    )
+
     val remoteAccount = RemoteAccountRepository(
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
@@ -266,23 +280,7 @@ class AppContainer(context: Context) {
         bookOrbitPositionAgreementDao = database.bookOrbitPositionAgreementDao(),
         bookOrbitPositionTraversalDao = database.bookOrbitPositionTraversalDao(),
         bookOrbitStatusAgreementDao = database.bookOrbitStatusAgreementDao(),
-        setups = mapOf(
-            ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
-            ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
-            // The device token is minted in the device's own name, since
-            // the server shows it in its device list.
-            ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
-                deviceName = { deviceIdentity.current().name },
-            ),
-            // BookOrbit records a device label on the session it issues,
-            // and shows it in its own session list, so it is the same
-            // name the phone goes by elsewhere.
-            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitSetupClient(
-                deviceLabel = { deviceIdentity.current().name },
-                session = bookOrbitSession,
-            ),
-            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsSetupClient(),
-        ),
+        setups = serverSetups,
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -293,6 +291,7 @@ class AppContainer(context: Context) {
         scope = applicationScope,
         bulkStore = bulkDownloads,
         accountKey = { database.remoteServerDao().get()?.accountKey },
+        browseServer = { id -> database.remoteServerDao().get(id) },
         inTransaction = { work -> database.withTransaction { work() } },
     )
 
@@ -469,12 +468,16 @@ class AppContainer(context: Context) {
                 http = bookOrbitHttp,
                 inTransaction = { work -> database.withTransaction { work() } },
                 localUrls = { ids ->
-                    // Two rows under one id is a duplicate adoption left
-                    // alone on purpose; neither is chosen over the other.
-                    database.bookDao().byRemoteUuids(ids)
-                        .groupBy { it.remoteUuid }
-                        .mapNotNull { (id, rows) -> id?.let { rows.singleOrNull()?.let { row -> id to row.url } } }
-                        .toMap()
+                    // The saved catalogs the merge may promote, so a
+                    // promoted book is bound under the URL it keeps.
+                    val servers = database.remoteServerDao()
+                    val main = servers.get()
+                    val promotable = servers.browseServers()
+                        .filter { main != null && it.kind == main.kind && it.accountKey == main.accountKey }
+                        .map { it.id }
+                    com.chmouel.liseur.data.bookorbit.heldBookUrls(
+                        database.bookDao().byRemoteUuidsWithin(ids, promotable),
+                    )
                 },
             ),
         ),
@@ -578,7 +581,9 @@ class AppContainer(context: Context) {
         CompositePositionSync(
             listOf(
                 LocalNetworkGuardedSync(
-                    delegate = RoutedPositionSync(remoteRouter),
+                    delegate = RoutedPositionSync(remoteRouter) { url ->
+                        database.bookDao().getByUrl(url)?.browseServerId != null
+                    },
                     access = localNetwork,
                     reporting = syncReporting,
                 ),
@@ -667,6 +672,49 @@ class AppContainer(context: Context) {
         inTransaction = { work -> database.withTransaction { work() } },
         networkAvailability = networkAvailability,
         localNetwork = localNetwork,
+    )
+
+    private val browseOrbitSessions = mutableMapOf<Long, com.chmouel.liseur.data.bookorbit.BookOrbitSession>()
+
+    fun browseOrbitSession(serverId: Long): com.chmouel.liseur.data.bookorbit.BookOrbitSession =
+        synchronized(browseOrbitSessions) {
+            browseOrbitSessions.getOrPut(serverId) {
+                com.chmouel.liseur.data.bookorbit.BookOrbitSession(
+                    database.remoteServerDao(), serverId = serverId,
+                )
+            }
+        }
+
+    fun browseOrbitFile(serverId: Long): com.chmouel.liseur.data.bookorbit.BookOrbitFileSource =
+        com.chmouel.liseur.data.bookorbit.BookOrbitFileSource(browseOrbitSession(serverId))
+
+    val browseCatalog = BrowseCatalogRepository(
+        servers = database.remoteServerDao(),
+        books = database.bookDao(),
+        orbitBindings = database.bookOrbitBindingDao(),
+        removal = bookRemoval,
+        downloads = bookDownloads,
+        router = remoteRouter,
+        setups = serverSetups,
+        orbitCatalog = { id ->
+            com.chmouel.liseur.data.bookorbit.BookOrbitCatalogClient(
+                bindings = database.bookOrbitBindingDao(),
+                serverDao = database.remoteServerDao(),
+                http = com.chmouel.liseur.data.bookorbit.BookOrbitHttp(browseOrbitSession(id)),
+                inTransaction = { work -> database.withTransaction { work() } },
+                serverId = id,
+                bookUrlFor = { remoteId -> BrowseCatalogRepository.bookUrl(id, ServerKind.BOOKORBIT, remoteId) },
+                persistCatalogBindings = false,
+            )
+        },
+        closeOrbit = { server ->
+            try {
+                browseOrbitSession(server.id).close(server)
+            } finally {
+                synchronized(browseOrbitSessions) { browseOrbitSessions.remove(server.id) }
+            }
+        },
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 
     val seriesExtras = SeriesExtrasRepository(

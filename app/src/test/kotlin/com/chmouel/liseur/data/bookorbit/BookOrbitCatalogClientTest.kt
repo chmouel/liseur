@@ -166,6 +166,27 @@ class BookOrbitCatalogClientTest {
         assertEquals("bookorbit:${BookOrbitScope.remoteId(address(), "1", 113)}", stored.bookUrl)
     }
 
+    @Test
+    fun `browsing a separate connection does not bind unadded books`() = runBlocking {
+        val dao = FakeServerDao(account().copy(id = 2))
+        val bindings = FakeBindingDao()
+        val session = BookOrbitSession(dao, RemoteHttp(), now = { 1_000L }, serverId = 2)
+        val catalog = BookOrbitCatalogClient(
+            bindings = bindings,
+            serverDao = dao,
+            http = BookOrbitHttp(session),
+            serverId = 2,
+            bookUrlFor = { "browse:2:bookorbit:$it" },
+            persistCatalogBindings = false,
+        )
+        server.enqueue(page(epubCard(352)))
+
+        val walk = catalog.allBooks(address(), RemoteCredentials.Deferred)
+
+        assertEquals(1, (walk.snapshot as BookOrbitCatalogSnapshot).books.size)
+        assertTrue(bindings.rows.isEmpty())
+    }
+
     /**
      * The one that matters: the server makes a different EPUB primary at
      * its next scan. The book keeps the file its reading is in.
@@ -314,6 +335,9 @@ class BookOrbitCatalogClientTest {
     private class FakeServerDao(var row: RemoteServer?) : RemoteServerDao {
         override fun observe(id: Long): Flow<RemoteServer?> = flowOf(row)
         override suspend fun get(id: Long): RemoteServer? = row
+        override fun observeBrowseServers(): Flow<List<RemoteServer>> = flowOf(emptyList())
+        override suspend fun browseServers(): List<RemoteServer> = emptyList()
+        override suspend fun nextBrowseId(): Long = 2
         override suspend fun upsert(server: RemoteServer) { row = server }
         override suspend fun setKoboTokenCipher(cipher: String?, id: Long) = Unit
         override suspend fun setCatalogSyncedAt(at: Long, id: Long) = Unit

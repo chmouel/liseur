@@ -38,6 +38,7 @@ class BookOrbitSession(
     private val serverDao: RemoteServerDao,
     private val http: RemoteHttp = RemoteHttp(RemoteHttp.forAuthentication()),
     private val now: () -> Long = System::currentTimeMillis,
+    private val serverId: Long = RemoteServer.SINGLE_ID,
 ) {
 
     /** The tokens in hand, and which connection they belong to. */
@@ -291,6 +292,12 @@ class BookOrbitSession(
      */
     suspend fun close() {
         val server = account() ?: return
+        close(server)
+    }
+
+    /** Logs out a connection already removed from the database. */
+    suspend fun close(server: RemoteServer) {
+        if (server.id != serverId || server.kind != com.chmouel.liseur.data.remote.ServerKind.BOOKORBIT) return
         val refresh = readRefresh(server)
         clear()
         if (refresh != null) {
@@ -301,7 +308,7 @@ class BookOrbitSession(
     }
 
     private suspend fun account(): RemoteServer? =
-        serverDao.get()?.takeIf { it.kind == com.chmouel.liseur.data.remote.ServerKind.BOOKORBIT }
+        serverDao.get(serverId)?.takeIf { it.kind == com.chmouel.liseur.data.remote.ServerKind.BOOKORBIT }
 
     private suspend fun account(context: BookOrbitRequestContext): RemoteServer? =
         account()?.takeIf(context::matches)
@@ -339,6 +346,7 @@ class BookOrbitSession(
             session = result.sessionId,
             epoch = server.orbitEpoch,
             expected = server.orbitRefreshCipher,
+            id = serverId,
         )
         if (written == 0) {
             synchronized(this) { cached = null }

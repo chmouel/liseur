@@ -327,6 +327,7 @@ private fun BookHeroHeader(stats: BookReadingStats) {
             title = stats.title,
             coverPath = stats.coverPath,
             coverUrl = stats.coverUrl,
+            browseServerId = stats.browseServerId,
             modifier = Modifier
                 .width(100.dp)
                 .height(150.dp),

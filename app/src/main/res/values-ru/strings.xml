@@ -991,4 +991,67 @@
     <string name="reader_external_link_failed">Ни одно приложение на этом устройстве не может открыть эту ссылку.</string>
     <string name="server_sync_bookorbit">Позиции чтения синхронизируются на каждой странице для проверенных EPUB, а позиция, сохранённая в другом месте, предлагается прямо во время чтения. Сохраняется последняя запись на сервере. Отметки «прочитано» и «не прочитано» тоже синхронизируются, аннотации — нет.</string>
     <string name="server_sync_off_bookorbit">Позиции чтения не синхронизируются с BookOrbit.</string>
+    <string name="browse_libraries">Просмотр удалённых библиотек</string>
+    <string name="browse_add_connection">Добавить каталог</string>
+    <string name="browse_save_connection">Сохранить и открыть</string>
+    <string name="browse_add_category">Добавить эту категорию</string>
+    <string name="browse_already_added">Уже в вашей библиотеке</string>
+    <string name="browse_unknown_author">Автор неизвестен</string>
+    <string name="browse_confirm_title">Добавить книги в библиотеку?</string>
+    <string name="browse_download_size">Размер загрузки: %1$s</string>
+    <string name="browse_add_download">Добавить и скачать</string>
+    <string name="browse_remove_title">Удалить сохранённый каталог?</string>
+    <string name="browse_remove_detail">Каталог исчезнет из списка. Скачанные книги и история чтения останутся в библиотеке.</string>
+    <string name="browse_incomplete">Не удалось прочитать всю категорию. Добавьте книги по отдельности или повторите попытку.</string>
+    <string name="browse_add_failed">Не удалось добавить книги. Повторите попытку.</string>
+    <string name="browse_remove_failed">Не удалось удалить каталог.</string>
+    <string name="browse_load_failed">Не удалось загрузить каталог. Проверьте соединение и повторите попытку.</string>
+    <plurals name="browse_download_count">
+        <item quantity="one">Скачать %1$d книгу?</item>
+        <item quantity="few">Скачать %1$d книги?</item>
+        <item quantity="many">Скачать %1$d книг?</item>
+        <item quantity="other">Скачать %1$d книги?</item>
+    </plurals>
+    <plurals name="browse_added_count">
+        <item quantity="one">Добавлена %1$d книга. Загрузка началась.</item>
+        <item quantity="few">Добавлено %1$d книги. Загрузки начались.</item>
+        <item quantity="many">Добавлено %1$d книг. Загрузки начались.</item>
+        <item quantity="other">Добавлено %1$d книги. Загрузки начались.</item>
+    </plurals>
+    <string name="browse_title">Удалённые библиотеки</string>
+    <string name="browse_empty">Сохранённых каталогов пока нет</string>
+    <string name="browse_empty_detail">Сохраните каталог calibre-web, Komga, BookOrbit, liseur-sync или OPDS, чтобы просматривать его и выбирать книги для скачивания. Позиции чтения с этими каталогами не синхронизируются.</string>
+    <string name="browse_gutenberg">Открыть «Проект Гутенберг»</string>
+    <string name="browse_gutenberg_languages">Языки</string>
+    <string name="browse_gutenberg_categories">Категории</string>
+    <string name="browse_gutenberg_detail">Бесплатная классика в общественном достоянии, без учётной записи.</string>
+    <string name="browse_gutenberg_failed">Не удалось подключиться к «Проекту Гутенберг». Проверьте соединение и попробуйте ещё раз.</string>
+    <string name="browse_form_intro">Добавленные книги скачиваются на это устройство. Позиции чтения с этим каталогом не синхронизируются.</string>
+    <string name="browse_catalog_options">Параметры: %1$s</string>
+    <string name="browse_refresh">Обновить</string>
+    <string name="browse_section_collections">Коллекции</string>
+    <string name="browse_section_books">Книги</string>
+    <string name="browse_section_empty">В этом разделе ничего нет.</string>
+    <string name="browse_partial">Удалось прочитать только часть этого раздела.</string>
+    <string name="browse_select_all">Выбрать все</string>
+    <string name="browse_clear_selection">Снять выделение</string>
+    <string name="browse_select">Выбрать</string>
+    <string name="browse_add_to_library">Добавить в библиотеку</string>
+    <string name="browse_not_downloadable">Этот каталог не позволяет скачать эту книгу.</string>
+    <string name="browse_download_failed">Не удалось скачать. Повторите попытку из библиотеки.</string>
+    <string name="browse_open_library">Открыть библиотеку</string>
+    <string name="browse_nothing_to_add">Всё здесь уже есть в вашей библиотеке.</string>
+    <plurals name="browse_selected_count">
+        <item quantity="one">Выбрано: %1$d</item>
+        <item quantity="few">Выбрано: %1$d</item>
+        <item quantity="many">Выбрано: %1$d</item>
+        <item quantity="other">Выбрано: %1$d</item>
+    </plurals>
+    <plurals name="browse_add_n">
+        <item quantity="one">Добавить %1$d книгу</item>
+        <item quantity="few">Добавить %1$d книги</item>
+        <item quantity="many">Добавить %1$d книг</item>
+        <item quantity="other">Добавить %1$d книги</item>
+    </plurals>
+    <string name="browse_load_more">Загрузить ещё</string>
 </resources>

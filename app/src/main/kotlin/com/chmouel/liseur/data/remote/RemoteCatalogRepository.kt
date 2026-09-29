@@ -297,7 +297,7 @@ class RemoteCatalogRepository(
             if (progress?.exhausted == true) {
                 return tag(StarterCatalogMoreResult.Added(0, exhausted = true))
             }
-            val known = KnownBooks(bookDao.allOnce())
+            val known = KnownBooks(bookDao.allOnce().filter { it.browseServerId == null })
             val knownRemoteIds = known.remoteIds()
             val more = try {
                 client.loadMore(
@@ -455,7 +455,20 @@ class RemoteCatalogRepository(
                 // What is already known, read once. Doing it per book was
                 // a query each against an unindexed column, so the cost of
                 // folding a catalog in grew with the square of the shelf.
-                val known = KnownBooks(bookDao.allOnce())
+                val allKnown = bookDao.allOnce()
+                val browseServers = serverDao.browseServers().filter {
+                    it.kind == server.kind && it.accountKey == server.accountKey
+                }
+                val promotableBrowseIds = browseServers.mapTo(mutableSetOf()) { it.id }
+                // A saved catalog has its own URL for reading history. When
+                // the same account becomes the connected catalog, its exact
+                // remote id is enough to adopt that row and keep the URL.
+                // Main-catalog rows go last so an existing main row remains
+                // authoritative if a duplicate is already present.
+                val known = KnownBooks(
+                    allKnown.filter { it.browseServerId?.let(promotableBrowseIds::contains) == true } +
+                        allKnown.filter { it.browseServerId == null },
+                )
                 val deferredLegacy = mutableListOf<RemoteBook>()
                 val walk = client.allBooks(catalogUrl, credentials) { page ->
                     page.forEach { seen += it.remoteId }
@@ -465,6 +478,7 @@ class RemoteCatalogRepository(
                             kind = server.kind,
                             baseUrl = catalogUrl,
                             books = page,
+                            promotableBrowseIds = promotableBrowseIds,
                             deferLegacy = server.kind == ServerKind.CUSTOM,
                             deferredLegacy = deferredLegacy,
                         )
@@ -483,6 +497,7 @@ class RemoteCatalogRepository(
                             kind = server.kind,
                             baseUrl = catalogUrl,
                             books = distinctDeferredLegacy,
+                            promotableBrowseIds = promotableBrowseIds,
                             legacyKeys = uniqueLegacyKeys,
                         )
                     }
@@ -648,6 +663,7 @@ class RemoteCatalogRepository(
         kind: ServerKind,
         baseUrl: String,
         books: List<RemoteBook>,
+        promotableBrowseIds: Set<Long> = emptySet(),
         deferLegacy: Boolean = false,
         deferredLegacy: MutableList<RemoteBook>? = null,
         legacyKeys: Set<Pair<String, String?>> = emptySet(),
@@ -663,7 +679,16 @@ class RemoteCatalogRepository(
         // what the series write below checks itself against.
         val unknown = books.map { it.remoteId }
             .filter { known.findExact(it, kind.remoteUrl(it)) == null }
-        if (unknown.isNotEmpty()) bookDao.byRemoteUuids(unknown).forEach(known::remember)
+        // A saved catalog of this account can add a book mid-walk too,
+        // and that row is this catalog's to adopt, as in the snapshot.
+        if (unknown.isNotEmpty()) {
+            val raced = if (promotableBrowseIds.isEmpty()) {
+                bookDao.byRemoteUuids(unknown)
+            } else {
+                bookDao.byRemoteUuidsWithin(unknown, promotableBrowseIds.toList())
+            }
+            raced.forEach(known::remember)
+        }
         // Keyed by URL so a feed that names the same book twice on one
         // page folds into one insert, rather than two rows racing for
         // the same unique URL and being refused.
@@ -698,7 +723,13 @@ class RemoteCatalogRepository(
             // reading positions hang off; the catalog's spelling of the
             // identity belongs to rows the catalog itself introduced.
             val rowUrl = existing?.takeIf { it.id != 0L }?.url ?: url
-            val merged = mergeCatalogEntry(remote, existing, rowUrl, baseUrl, now, kind)
+            val browseServerId = existing?.browseServerId?.takeIf { it in promotableBrowseIds }
+            val catalogEntry = mergeCatalogEntry(remote, existing, rowUrl, baseUrl, now, kind)
+            val merged = if (browseServerId != null) {
+                catalogEntry.copy(browseServerId = null)
+            } else {
+                catalogEntry
+            }
             known.remember(merged)
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
@@ -710,6 +741,7 @@ class RemoteCatalogRepository(
                     book = merged,
                     remote = remote,
                     snapshotUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
+                    expectedBrowseServerId = browseServerId,
                 )
             }
         }
@@ -744,6 +776,8 @@ class RemoteCatalogRepository(
                 seriesId = book.seriesId,
                 personalSeriesUpdatedAt = book.personalSeriesUpdatedAt,
                 sizeBytes = book.sizeBytes,
+                expectedBrowseServerId = update.expectedBrowseServerId,
+                promoteBrowse = update.expectedBrowseServerId != null,
             )
         }
         if (inserts.isNotEmpty()) bookDao.upsertAll(inserts.values.toList())
@@ -967,6 +1001,7 @@ private data class CatalogUpdate(
     val book: Book,
     val remote: RemoteBook,
     val snapshotUserSeriesUpdatedAt: Long?,
+    val expectedBrowseServerId: Long?,
 )
 
 

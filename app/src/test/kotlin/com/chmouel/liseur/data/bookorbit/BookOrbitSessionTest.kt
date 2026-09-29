@@ -309,6 +309,9 @@ class BookOrbitSessionTest {
 
         override fun observe(id: Long): Flow<RemoteServer?> = flowOf(row)
         override suspend fun get(id: Long): RemoteServer? = row
+        override fun observeBrowseServers(): Flow<List<RemoteServer>> = flowOf(emptyList())
+        override suspend fun browseServers(): List<RemoteServer> = emptyList()
+        override suspend fun nextBrowseId(): Long = 2
         override suspend fun upsert(server: RemoteServer) { row = server }
         override suspend fun setKoboTokenCipher(cipher: String?, id: Long) = Unit
         override suspend fun setCatalogSyncedAt(at: Long, id: Long) = Unit
