@@ -86,23 +86,6 @@ class StarterCatalogTest {
     }
 
     @Test
-    fun `the default is one of the sizes offered`() {
-        assertTrue(StarterCatalog.DEFAULT_SHELF in StarterCatalog.SIZES)
-    }
-
-    @Test
-    fun `the largest shelf offered fits inside the walk's budget`() {
-        // Gutenberg lists each book as a link to its own feed, so a
-        // book is a request, plus one more per page of twenty-five. A
-        // size the budget could not reach would quietly shelve fewer
-        // books than the reader asked for.
-        val biggest = StarterCatalog.SIZES.max()
-        val pages = (biggest + PAGE - 1) / PAGE
-
-        assertTrue(biggest + pages < OpdsCatalogClient.MAX_REQUESTS)
-    }
-
-    @Test
     fun `the book feeds the walk descends into are inside the scope`() {
         val scope = OpdsScope.of(StarterCatalog.Category.POPULAR.url)!!
         // Every entry in this feed is a navigation link to a one-book
@@ -172,23 +155,6 @@ class StarterCatalogTest {
     }
 
     @Test
-    fun `the picker opens on the reader's language when there is a shelf for it`() {
-        for (lang in StarterCatalog.OFFERED_LANGUAGES) {
-            assertEquals(lang, StarterCatalog.resolveLanguage(lang))
-            assertEquals(lang, StarterCatalog.resolveLanguage(lang.uppercase()))
-        }
-    }
-
-    @Test
-    fun `a language with no shelf opens on English rather than on nothing`() {
-        // A phone in Welsh or Arabic has no Gutenberg feed to offer, and
-        // an empty shelf is a worse first minute than an English one.
-        for (unknown in listOf(null, "", "cy", "ar", "unsupported_language")) {
-            assertEquals(StarterCatalog.DEFAULT_LANGUAGE, StarterCatalog.resolveLanguage(unknown))
-        }
-    }
-
-    @Test
     fun `every offered language names an address the catalog may walk`() {
         for (lang in StarterCatalog.OFFERED_LANGUAGES) {
             for (category in StarterCatalog.Category.entries) {
@@ -238,11 +204,11 @@ class StarterCatalogTest {
         // Gutenberg catalogues by language and knows nothing of where
         // it is spoken. Reading `pt-BR` as "no Portuguese here" would
         // answer a Brazilian reader in English.
-        assertEquals("pt", StarterCatalog.resolveLanguage("pt-BR"))
-        assertEquals("pt", StarterCatalog.resolveLanguage("pt_BR"))
-        assertEquals("zh", StarterCatalog.resolveLanguage("zh-Hans"))
-        assertEquals("fr", StarterCatalog.resolveLanguage("fr-CA"))
-        assertEquals("en", StarterCatalog.resolveLanguage("en-GB"))
+        assertEquals("pt", StarterCatalog.baseLanguage("pt-BR"))
+        assertEquals("pt", StarterCatalog.baseLanguage("pt_BR"))
+        assertEquals("zh", StarterCatalog.baseLanguage("zh-Hans"))
+        assertEquals("fr", StarterCatalog.baseLanguage("fr-CA"))
+        assertEquals("en", StarterCatalog.baseLanguage("en-GB"))
 
         assertEquals(
             StarterCatalog.Category.POPULAR.url("pt"),

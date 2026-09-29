@@ -12,8 +12,6 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RemoteServerDao
-import com.chmouel.liseur.data.db.StarterCatalogProgress
-import com.chmouel.liseur.data.db.StarterCatalogProgressDao
 import com.chmouel.liseur.data.library.BookRemoval
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -123,7 +121,6 @@ class RemoteCatalogRepositoryTest {
     private suspend fun connect(
         kind: ServerKind = ServerKind.KOMGA,
         catalogUrl: String? = "https://books.example",
-        shelfLimit: Int? = null,
         addedAt: Long = 0L,
     ) {
         db.remoteServerDao().upsert(
@@ -143,7 +140,6 @@ class RemoteCatalogRepositoryTest {
                 catalogSyncedAt = null,
                 positionSyncedAt = null,
                 syncToken = null,
-                shelfLimit = shelfLimit,
                 liseurTokenCipher = if (kind == ServerKind.LISEUR_SYNC) {
                     RemoteServer.seal("token")
                 } else {
@@ -156,7 +152,6 @@ class RemoteCatalogRepositoryTest {
     /** A catalog that does whatever the test needs it to do. */
     private class FakeCatalog(
         private val complete: Boolean = true,
-        private val continuation: CatalogContinuation? = null,
         private val walk: suspend (suspend (List<RemoteBook>) -> Unit) -> Unit,
     ) : CatalogSource {
         override suspend fun allBooks(
@@ -165,7 +160,7 @@ class RemoteCatalogRepositoryTest {
             onPage: suspend (List<RemoteBook>) -> Unit,
         ): CatalogWalk {
             walk(onPage)
-            return CatalogWalk(complete = complete, continuation = continuation)
+            return CatalogWalk(complete = complete)
         }
 
         override suspend fun search(
@@ -175,36 +170,9 @@ class RemoteCatalogRepositoryTest {
         ): List<RemoteBook> = emptyList()
     }
 
-    /** A catalog whose "Load 50 more" answer is whatever the test needs. */
-    private class FakeResumableCatalog(
-        private val more: suspend (knownRemoteIds: Set<String>) -> CatalogMore,
-    ) : CatalogSource, ResumableCatalogSource {
-        override suspend fun allBooks(
-            baseUrl: String,
-            credentials: RemoteCredentials,
-            onPage: suspend (List<RemoteBook>) -> Unit,
-        ): CatalogWalk = CatalogWalk(complete = true)
-
-        override suspend fun search(
-            baseUrl: String,
-            credentials: RemoteCredentials,
-            query: String,
-        ): List<RemoteBook> = emptyList()
-
-        override suspend fun loadMore(
-            baseUrl: String,
-            credentials: RemoteCredentials,
-            state: CatalogContinuation?,
-            knownRemoteIds: Set<String>,
-            limit: Int,
-            onPage: suspend (List<RemoteBook>) -> Unit,
-        ): CatalogMore = more(knownRemoteIds)
-    }
-
     private fun repository(
         catalog: CatalogSource,
         localNetwork: LocalNetworkAccess = LocalNetworkAccess.Unrestricted,
-        starterProgressDao: StarterCatalogProgressDao? = null,
     ) = RemoteCatalogRepository(
         router = RemoteRouter(
             serverDao = db.remoteServerDao(),
@@ -228,7 +196,6 @@ class RemoteCatalogRepositoryTest {
             db.annotationSyncDao(),
             bookOrbitBindings = db.bookOrbitBindingDao(),
         ),
-        starterProgressDao = starterProgressDao,
         localNetwork = localNetwork,
     )
 
@@ -325,30 +292,6 @@ class RemoteCatalogRepositoryTest {
         val stored = db.bookDao().allOnce().single()
         assertEquals(browseUrl, stored.url)
         assertNull(stored.browseServerId)
-    }
-
-    @Test
-    fun `load more does not count a browse book with the same remote id as known`() = runTest {
-        connect(ServerKind.CUSTOM, shelfLimit = 25)
-        val remote = book("shared-id")
-        val browseUrl = BrowseCatalogRepository.bookUrl(2, ServerKind.CUSTOM, remote.remoteId)
-        db.bookDao().upsert(
-            mergeCatalogEntry(remote, null, browseUrl, "https://elsewhere.example", 1L, ServerKind.CUSTOM)
-                .copy(browseServerId = 2),
-        )
-        var known: Set<String>? = null
-        val catalog = FakeResumableCatalog { ids ->
-            known = ids
-            CatalogMore(
-                added = 0,
-                exhausted = true,
-                state = CatalogContinuation(queue = emptyList(), seen = emptySet()),
-            )
-        }
-
-        repository(catalog, starterProgressDao = db.starterCatalogProgressDao()).loadMoreStarterCatalog()
-
-        assertEquals(false, known?.contains(remote.remoteId))
     }
 
     @Test
@@ -626,153 +569,6 @@ class RemoteCatalogRepositoryTest {
         )
         // Nor may anything be told this is what the server now holds.
         assertEquals(null, db.remoteServerDao().get()?.catalogSyncedAt)
-    }
-
-    /**
-     * A starter shelf's very first refresh already stopped somewhere
-     * specific in the catalog; recording that means the first "Load 50
-     * more" tap can resume from there, instead of re-walking the root
-     * and everything already discovered just to reach new ground again.
-     */
-    @Test
-    fun `the initial capped walk seeds the load-more checkpoint`() = runTest {
-        connect(ServerKind.CUSTOM, shelfLimit = 25)
-        val continuation = CatalogContinuation(
-            queue = listOf(CatalogStep("https://books.example/opds/mystery", depth = 1)),
-            seen = setOf("https://books.example/opds", "https://books.example/opds/fiction"),
-        )
-        val catalog = FakeCatalog(complete = false, continuation = continuation) { onPage ->
-            onPage(listOf(book("b1")))
-        }
-        val progressDao = db.starterCatalogProgressDao()
-
-        repository(catalog, starterProgressDao = progressDao).refresh()
-
-        val server = db.remoteServerDao().get()!!
-        val saved = progressDao.get(server.accountKey, "https://books.example")
-        assertNotNull(saved)
-        assertEquals(listOf("https://books.example/opds/mystery"), saved!!.continuation.queue.map { it.url })
-        assertFalse(saved.exhausted)
-    }
-
-    /**
-     * An empty queue is not proof that a walk read the whole catalog: a
-     * feed skipped for its depth, its scope, or a failure this walk does
-     * not keep retrying, can leave the queue empty while `complete` is
-     * still false. Seeding that as exhausted would take the button away
-     * from a shelf nobody has actually finished walking.
-     */
-    @Test
-    fun `an incomplete walk with nothing left queued leaves no checkpoint to seed`() = runTest {
-        connect(ServerKind.CUSTOM, shelfLimit = 25)
-        val catalog = FakeCatalog(
-            complete = false,
-            continuation = CatalogContinuation(queue = emptyList(), seen = setOf("https://books.example/opds")),
-        ) { onPage -> onPage(listOf(book("b1"))) }
-        val progressDao = db.starterCatalogProgressDao()
-
-        repository(catalog, starterProgressDao = progressDao).refresh()
-
-        val server = db.remoteServerDao().get()!!
-        // Seeding this continuation would carry over its `seen` set, and
-        // `loadMore()`'s own empty-queue fallback re-fetches only the
-        // root under that same `seen` set, so a feed already marked seen
-        // here would never be queued again even though it was never
-        // actually read. Leaving nothing seeded instead lets the first
-        // "Load 50 more" tap walk from a clean root, same as any shelf
-        // with no continuation at all.
-        assertNull(progressDao.get(server.accountKey, "https://books.example"))
-    }
-
-    /**
-     * A load-more that has already run has a checkpoint ahead of what
-     * an ordinary refresh would rebuild. Seeding must not stamp over it.
-     */
-    @Test
-    fun `a checkpoint already advanced by a load-more is not reseeded`() = runTest {
-        connect(ServerKind.CUSTOM, shelfLimit = 25)
-        val progressDao = db.starterCatalogProgressDao()
-        val server = db.remoteServerDao().get()!!
-        val advanced = StarterCatalogProgress.of(
-            accountKey = server.accountKey,
-            catalogUrl = "https://books.example",
-            continuation = CatalogContinuation(queue = emptyList(), seen = setOf("already-there")),
-            exhausted = true,
-        )
-        progressDao.upsert(advanced)
-
-        val catalog = FakeCatalog(
-            complete = false,
-            continuation = CatalogContinuation(
-                queue = listOf(CatalogStep("https://books.example/opds/somewhere-else", depth = 1)),
-                seen = setOf("https://books.example/opds"),
-            ),
-        ) { onPage -> onPage(listOf(book("b1"))) }
-
-        repository(catalog, starterProgressDao = progressDao).refresh()
-
-        val saved = progressDao.get(server.accountKey, "https://books.example")
-        assertEquals(true, saved?.exhausted)
-        assertEquals(emptyList<String>(), saved?.continuation?.queue?.map { it.url })
-    }
-
-    /**
-     * A real walk runs in the repository's own scope, so it can still
-     * be finishing after the reader has disconnected and connected
-     * somewhere else; its answer must not be shown as if it were about
-     * the shelf now on screen. Calling the suspend function directly
-     * rather than through that detached scope tests the same tagging
-     * and filtering without racing a background coroutine.
-     */
-    @Test
-    fun `a load-more result belongs to the account it was read for`() = runTest {
-        connect(ServerKind.CUSTOM, shelfLimit = 25)
-        val progressDao = db.starterCatalogProgressDao()
-        val catalog = FakeResumableCatalog {
-            CatalogMore(
-                added = 3,
-                exhausted = false,
-                state = CatalogContinuation(queue = emptyList(), seen = emptySet()),
-            )
-        }
-        val repository = repository(catalog, starterProgressDao = progressDao)
-
-        repository.loadMoreStarterCatalog()
-        assertEquals(StarterCatalogMoreResult.Added(3, false), repository.starterMoreResult.first())
-
-        // A different shelf connects before the reader ever returns to
-        // see that result.
-        connect(ServerKind.CUSTOM, catalogUrl = "https://elsewhere.example", shelfLimit = 25)
-
-        assertEquals(null, repository.starterMoreResult.first())
-    }
-
-    /**
-     * `accountKey` alone is not enough here either, for the same reason
-     * it is not enough in [forAccount]: a disconnect and a reconnect to
-     * the very same address hash the same.
-     */
-    @Test
-    fun `a load-more result is not shown after a reconnect to the same address either`() = runTest {
-        connect(ServerKind.CUSTOM, shelfLimit = 25, addedAt = 1_000L)
-        val progressDao = db.starterCatalogProgressDao()
-        val catalog = FakeResumableCatalog {
-            CatalogMore(
-                added = 3,
-                exhausted = false,
-                state = CatalogContinuation(queue = emptyList(), seen = emptySet()),
-            )
-        }
-        val repository = repository(catalog, starterProgressDao = progressDao)
-
-        repository.loadMoreStarterCatalog()
-        assertEquals(StarterCatalogMoreResult.Added(3, false), repository.starterMoreResult.first())
-
-        // The reader disconnects and reconnects to the same address
-        // before returning to see that result.
-        connect(ServerKind.CUSTOM, shelfLimit = 25, addedAt = 2_000L)
-
-        assertEquals(null, repository.starterMoreResult.first())
     }
 
     /**

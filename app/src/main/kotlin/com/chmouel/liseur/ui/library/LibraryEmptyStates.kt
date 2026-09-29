@@ -294,7 +294,6 @@ internal fun EmptyLibrary(
     onConnectServer: () -> Unit,
     modifier: Modifier = Modifier,
     offerFreeBooks: Boolean = false,
-    connectingFreeBooks: Boolean = false,
     onStartWithFreeBooks: () -> Unit = {},
 ) {
     // Which cut of the mark to draw is asked of the theme in force
@@ -347,12 +346,8 @@ internal fun EmptyLibrary(
             LibraryActionCard(
                 icon = Icons.Outlined.AutoStories,
                 title = stringResource(R.string.starter_catalog),
-                hint = stringResource(
-                    if (connectingFreeBooks) R.string.starter_catalog_connecting
-                    else R.string.starter_catalog_hint,
-                ),
+                hint = stringResource(R.string.starter_catalog_hint),
                 onClick = onStartWithFreeBooks,
-                busy = connectingFreeBooks,
                 modifier = Modifier.entrance(delayMillis = 5 * ENTRANCE_STEP_MS),
             )
         }

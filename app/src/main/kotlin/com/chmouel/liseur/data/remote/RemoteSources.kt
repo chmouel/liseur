@@ -25,41 +25,16 @@ interface CatalogSource {
     ): List<RemoteBook>
 }
 
-/**
- * A catalog that can resume discovery from a stored traversal point.
- *
- * This is separate from [CatalogSource.allBooks]: a refresh updates the
- * connected library, while this explicitly asks a starter shelf for more
- * books after setup. Providers that cannot resume simply do not implement it.
- */
-interface ResumableCatalogSource {
-    suspend fun loadMore(
-        baseUrl: String,
-        credentials: RemoteCredentials,
-        state: CatalogContinuation?,
-        knownRemoteIds: Set<String>,
-        limit: Int,
-        onPage: suspend (List<RemoteBook>) -> Unit = {},
-    ): CatalogMore
-}
-
-/** One feed still owed by a resumable catalog walk. */
+/** One feed recorded by persisted starter catalog progress. */
 data class CatalogStep(
     val url: String,
     val depth: Int,
 )
 
-/** The durable part of a resumable catalog walk. */
+/** The durable traversal state kept for old starter catalog progress rows. */
 data class CatalogContinuation(
     val queue: List<CatalogStep>,
     val seen: Set<String>,
-)
-
-/** What came back from asking a catalog for another bounded slice. */
-data class CatalogMore(
-    val added: Int,
-    val exhausted: Boolean,
-    val state: CatalogContinuation,
 )
 
 /**
@@ -75,12 +50,6 @@ data class CatalogWalk(
     val complete: Boolean,
     /** What the provider kept of the walk, for reusing within this run. */
     val snapshot: CatalogSnapshot? = null,
-    /**
-     * Where a bounded starter shelf stopped, for [ResumableCatalogSource.loadMore]
-     * to resume from rather than walking the root again. Null for a provider or
-     * an address this does not apply to.
-     */
-    val continuation: CatalogContinuation? = null,
 )
 
 /**
@@ -272,27 +241,6 @@ sealed interface SetupResult {
     data class Failure(val reason: SetupFailure) : SetupResult
 }
 
-/**
- * What came of offering to connect an open catalog.
- *
- * [ALREADY_CONNECTED] is not a failure and has nothing to report: a
- * server is connected, which is what the offer was for.
- */
-enum class OpenCatalogOutcome { CONNECTED, UNREACHABLE, ALREADY_CONNECTED }
-
-/**
- * What came of offering to connect Project Gutenberg's starter shelf.
- */
-enum class StarterCatalogOutcome {
-    /** Connected to the requested language. */
-    CONNECTED,
-    /** Connected to English because the requested language had no matching books. */
-    CONNECTED_FALLBACK,
-    /** The catalog server could not be reached or failed. */
-    UNREACHABLE,
-    /** A server was already connected in the meantime. */
-    ALREADY_CONNECTED,
-}
 
 /**
  * What came of connecting a Custom server, address by address.

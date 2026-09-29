@@ -160,9 +160,18 @@ import com.chmouel.liseur.ui.windowWidth
 @Composable
 fun BrowseLibrariesRoute(
     onExit: () -> Unit,
+    openGutenberg: Boolean = false,
+    onGutenbergOpened: () -> Unit = {},
     model: BrowseLibrariesViewModel = viewModel(factory = BrowseLibrariesViewModel.Factory),
 ) {
     val state by model.state.collectAsStateWithLifecycle()
+    // Wait for the saved list so an existing Gutenberg is reopened, not saved twice.
+    LaunchedEffect(openGutenberg, state.savedLoaded) {
+        if (openGutenberg && state.savedLoaded) {
+            model.connectGutenberg()
+            onGutenbergOpened()
+        }
+    }
     val back = { if (!model.back()) onExit() }
     BackHandler(onBack = back)
     val snackbar = remember { SnackbarHostState() }

@@ -22,6 +22,8 @@ import com.chmouel.liseur.data.komga.KomgaSetupClient
 import com.chmouel.liseur.data.kosync.KosyncPairing
 import com.chmouel.liseur.data.kosync.KosyncProbe
 import com.chmouel.liseur.data.kosync.ProvedKosyncPairing
+import com.chmouel.liseur.data.opds.GutenbergBrowse
+import com.chmouel.liseur.data.opds.OpdsScope
 import com.chmouel.liseur.data.opds.OpdsSetupClient
 import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
@@ -393,129 +395,6 @@ class RemoteAccountRepository(
     )
 
     /**
-     * Connects an open catalog, and only while nothing is connected.
-     *
-     * For the shelf of free books the empty library offers. That card
-     * is shown only when there is no server, but a tap can outlive the
-     * state that allowed it: probing the catalog takes a moment, and a
-     * reader who connects their own server in that moment must not have
-     * it replaced by one they tapped before it existed. So the account
-     * is read again inside the transaction that would write over it,
-     * and the connection made first is the one that stands.
-     *
-     * Anonymous, and no plain-text fallback. An open catalog has no
-     * login, and the address is one Liseur ships rather than one
-     * anybody typed, so there is nobody to ask about either.
-     *
-     * A KOReader pairing is left exactly where it is. It outlives a
-     * catalog disconnection on purpose, so an empty library may well
-     * have one standing, and it is the reader's own configuration:
-     * taking it away because they tapped a card offering free books
-     * would lose credentials and peer agreements they never mentioned.
-     * Those books syncing to their sync server is what a sync server
-     * is for.
-     */
-    suspend fun connectOpenCatalogIfDisconnected(
-        catalogUrl: String,
-        shelfLimit: Int? = null,
-    ): OpenCatalogOutcome {
-        if (dao.get() != null) return OpenCatalogOutcome.ALREADY_CONNECTED
-        val setup = setups[ServerKind.CUSTOM] ?: return OpenCatalogOutcome.UNREACHABLE
-        val probed = setup.connect(catalogUrl, RemoteCredentials.Anonymous, allowHttp = false)
-        val capabilities = when (probed) {
-            is SetupResult.Failure -> return OpenCatalogOutcome.UNREACHABLE
-            is SetupResult.Success -> probed.capabilities
-        }
-        var published = false
-        changingAccount {
-            inTransaction {
-                if (dao.get() != null) return@inTransaction
-                storeLocked(
-                    ServerKind.CUSTOM,
-                    RemoteCredentials.Anonymous,
-                    capabilities,
-                    keepsPairing = true,
-                    shelfLimit = shelfLimit,
-                )
-                published = true
-            }
-        }
-        return if (published) {
-            OpenCatalogOutcome.CONNECTED
-        } else {
-            OpenCatalogOutcome.ALREADY_CONNECTED
-        }
-    }
-
-    /**
-     * Connects Project Gutenberg's starter catalog, preferring [languageCode]
-     * and falling back to English if the requested language feed has no matching books.
-     */
-    suspend fun connectStarterCatalogIfDisconnected(
-        category: StarterCatalog.Category,
-        shelfLimit: Int? = null,
-        languageCode: String? = null,
-    ): StarterCatalogOutcome {
-        if (dao.get() != null) return StarterCatalogOutcome.ALREADY_CONNECTED
-        val setup = setups[ServerKind.CUSTOM] ?: return StarterCatalogOutcome.UNREACHABLE
-
-        val normalizedLang = StarterCatalog.baseLanguage(languageCode)
-            ?.takeIf { it in StarterCatalog.SUPPORTED_LANGUAGES }
-        val targetUrl = category.url(normalizedLang)
-
-        if (normalizedLang != null && targetUrl != category.englishUrl) {
-            val probed = setup.connect(targetUrl, RemoteCredentials.Anonymous, allowHttp = false)
-            when (probed) {
-                is SetupResult.Success -> {
-                    if (probed.capabilities.hasBooks) {
-                        return publishStarter(probed.capabilities, shelfLimit, isFallback = false)
-                    }
-                    // The feed answered successfully but contained no books ("No records found")
-                    // -> fall through to English
-                }
-                is SetupResult.Failure -> {
-                    // Network or server failure: report unreachable rather than quiet English fallback
-                    return StarterCatalogOutcome.UNREACHABLE
-                }
-            }
-        }
-
-        val englishProbed = setup.connect(category.englishUrl, RemoteCredentials.Anonymous, allowHttp = false)
-        val capabilities = when (englishProbed) {
-            is SetupResult.Failure -> return StarterCatalogOutcome.UNREACHABLE
-            is SetupResult.Success -> englishProbed.capabilities
-        }
-        val isFallback = normalizedLang != null && targetUrl != category.englishUrl
-        return publishStarter(capabilities, shelfLimit, isFallback = isFallback)
-    }
-
-    private suspend fun publishStarter(
-        capabilities: ServerCapabilities,
-        shelfLimit: Int?,
-        isFallback: Boolean,
-    ): StarterCatalogOutcome {
-        var published = false
-        changingAccount {
-            inTransaction {
-                if (dao.get() != null) return@inTransaction
-                storeLocked(
-                    ServerKind.CUSTOM,
-                    RemoteCredentials.Anonymous,
-                    capabilities,
-                    keepsPairing = true,
-                    shelfLimit = shelfLimit,
-                )
-                published = true
-            }
-        }
-        return if (published) {
-            if (isFallback) StarterCatalogOutcome.CONNECTED_FALLBACK else StarterCatalogOutcome.CONNECTED
-        } else {
-            StarterCatalogOutcome.ALREADY_CONNECTED
-        }
-    }
-
-    /**
      * Connects a Custom server: an OPDS catalog, a KOReader sync
      * server, or one of the two.
      *
@@ -758,12 +637,6 @@ class RemoteAccountRepository(
          * server. That name is the account here.
          */
         signedInAs: String? = null,
-        /**
-         * How many books to offer this connection's shelf at, or null
-         * to leave whatever it already had. Only the starter card sets
-         * it; every other connection walks as much as it can.
-         */
-        shelfLimit: Int? = null,
     ) {
         val username = signedInAs ?: when (credentials) {
             is RemoteCredentials.Basic -> credentials.username
@@ -925,29 +798,6 @@ class RemoteAccountRepository(
                 } else {
                     existing?.orbitEpoch ?: System.currentTimeMillis()
                 },
-                // The reader's choice stands until they make another
-                // one. A reconnect that says nothing about the size —
-                // an address correction, a refreshed credential — keeps
-                // the shelf the size it was offered at.
-                //
-                // Only while it is the same catalog, though. The size
-                // is about the shelf that was picked, and it is also
-                // what marks a connection as one this app made and
-                // grows rather than prunes; carrying it to a feed the
-                // reader has pointed the connection at instead would
-                // leave their own catalog unable to let go of a book
-                // that was deleted on the server.
-                shelfLimit = shelfLimit ?: existing
-                    ?.takeIf { row ->
-                        val before = row.catalogUrl
-                        val after = capabilities.catalogUrl
-                        if (before == null || after == null) {
-                            before == after
-                        } else {
-                            RemoteUrl.sameAddress(before, after)
-                        }
-                    }
-                    ?.shelfLimit,
         )
         val written = if (existing != null) carryPeerState(existing, next) else next
         dao.upsert(written)
@@ -1193,6 +1043,55 @@ class RemoteAccountRepository(
                 dao.delete()
             }
         }
+    }
+
+    /**
+     * Turns a Project Gutenberg starter shelf, connected as the main
+     * server by older versions, into the saved Gutenberg browse catalog.
+     *
+     * Downloaded books keep their URLs, so reading places, notes and
+     * statistics stay with them; they only change owner. Books that were
+     * never downloaded go, as on a disconnect: the browse catalog lists
+     * them again whenever the reader wants one.
+     */
+    suspend fun retireStarterShelf(): Boolean {
+        var retired = false
+        changingAccount {
+            inTransaction {
+                val server = dao.get()?.takeIf(GutenbergBrowse::isStarterShelf) ?: return@inTransaction
+                val browse = dao.browseServers().firstOrNull(GutenbergBrowse::isRoot)
+                    ?: RemoteServer(
+                        id = dao.nextBrowseId(),
+                        kind = ServerKind.CUSTOM,
+                        baseUrl = server.baseUrl,
+                        catalogUrl = StarterCatalog.BROWSE_URL,
+                        username = "",
+                        passwordCipher = null,
+                        apiKeyCipher = null,
+                        accountId = null,
+                        userId = null,
+                        koboTokenCipher = null,
+                        canDownload = true,
+                        addedAt = System.currentTimeMillis(),
+                        catalogSyncedAt = null,
+                        positionSyncedAt = null,
+                        syncToken = null,
+                    ).also { dao.upsert(it) }
+                forgetSyncPeer(server)
+                bookRemoval.deleteRemoteNotDownloaded()
+                // An OPDS remote id is the catalog root's fingerprint, then the entry id's
+                // digest. Re-prefixing lets the saved catalog recognise the books it keeps.
+                val from = server.catalogUrl?.let(OpdsScope::of)?.fingerprint
+                val to = browse.catalogUrl?.let(OpdsScope::of)?.fingerprint
+                if (from != null && to != null) bookDao.rescopeRemote("$from:", "$to:")
+                bookDao.moveRemoteToBrowseServer(browse.id)
+                bookOrbitBindingDao?.clearOrphans()
+                seriesExtraDao.clear()
+                dao.delete()
+                retired = true
+            }
+        }
+        return retired
     }
 
     /**

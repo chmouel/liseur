@@ -17,6 +17,12 @@ internal object GutenbergBrowse {
         server.kind == ServerKind.CUSTOM &&
             server.catalogUrl?.let { RemoteUrl.sameAddress(it, StarterCatalog.BROWSE_URL) } == true
 
+    /** A main connection made by the old "Start with free books" shelf, before it opened this catalog instead. */
+    fun isStarterShelf(server: RemoteServer): Boolean =
+        server.id == RemoteServer.SINGLE_ID && server.kind == ServerKind.CUSTOM && server.shelfLimit != null &&
+            server.catalogUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+                ?.removePrefix("www.") == "gutenberg.org"
+
     fun isVirtual(id: String): Boolean = id.startsWith("gutenberg:")
 
     fun rootCategories(): List<BrowseCategory> = listOf(

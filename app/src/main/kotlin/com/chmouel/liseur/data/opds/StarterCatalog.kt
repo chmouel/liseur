@@ -10,10 +10,9 @@ package com.chmouel.liseur.data.opds
  * are out of copyright, given away, and served over plain OPDS with no
  * account to make.
  *
- * It is connected as an ordinary Custom server, anonymously. Nothing
- * here is a special case in the catalog layer; this file holds
- * addresses, and everything downstream of them treats those addresses
- * like any other the reader might have typed.
+ * It is saved as an anonymous Custom browse catalog, and the empty
+ * library's "Start with free books" card opens it. This file holds the
+ * addresses `GutenbergBrowse` lists as languages and shelves.
  *
  * Nothing here names a string to show. The data layer does not reach
  * for resources, so the labels live beside the card that draws them.
@@ -83,20 +82,6 @@ object StarterCatalog {
     val OFFERED_LANGUAGES: List<String> = listOf(DEFAULT_LANGUAGE) + SUPPORTED_LANGUAGES
 
     /**
-     * Which of [OFFERED_LANGUAGES] to open on, given the reader's own.
-     *
-     * A phone set to a language Gutenberg has a catalog for should not
-     * have to say so, and one set to a language it does not should be
-     * shown the shelf that has books rather than an empty one. Answered
-     * here, once, rather than at whichever screen happens to ask.
-     *
-     * This does not decide an address — [Category.url] still does that,
-     * and still applies its own rule to whatever it is handed.
-     */
-    fun resolveLanguage(preferred: String?): String =
-        baseLanguage(preferred)?.takeIf { it in OFFERED_LANGUAGES } ?: DEFAULT_LANGUAGE
-
-    /**
      * The primary subtag of a language tag, lowercased.
      *
      * Gutenberg catalogues by language and knows nothing of where it is
@@ -122,20 +107,15 @@ object StarterCatalog {
      * In English, bookshelves curated by hand at Gutenberg are used
      * where available. For non-English languages, searches combining
      * subject and language (`s.<subject>+l.<lang>`) or the language's
-     * most downloaded books are queried. If no books match, resolution
-     * falls back to the English shelf.
+     * most downloaded books are queried. A hand-curated English shelf
+     * is not listed for other languages, and a listed shelf that turns
+     * out empty is shown empty rather than swapped for the English one.
      *
      * The ids are written down because there is no way to discover
      * them: Gutenberg publishes no OPDS index of its bookshelves. That
      * is the cost of the curation — an id Gutenberg retires becomes an
      * empty shelf, which is at least a legible failure rather than a
      * shelf of the wrong books.
-     *
-     * Each entry's address is its own account, because an `OpdsScope`
-     * fingerprint takes in the path and the query. Changing category is
-     * therefore an account switch, which is why the offer is only ever
-     * made to a library with no server: it can make the first choice
-     * and no other.
      */
     enum class Category(private val shelf: Int?, internal val subject: String? = null) {
         POPULAR(null),
@@ -197,34 +177,4 @@ object StarterCatalog {
         /** The default English OPDS address for backwards compatibility. */
         val url: String get() = englishUrl
     }
-
-    /**
-     * How many books the offered shelf may hold.
-     *
-     * Bounded by what the walk can afford rather than by taste. A book
-     * costs one request — Gutenberg lists each as a link to its own
-     * feed — plus one more per page of twenty-five, against
-     * `OpdsCatalogClient.MAX_REQUESTS`. Two hundred is a little over
-     * half the budget and about a minute of asking somebody else's free
-     * server for things, which is as far as a starting shelf should go.
-     * Nothing here pretends to mirror a catalog of seventy thousand
-     * books; `CatalogStatus.Partial` says so on the shelf itself.
-     */
-    val SIZES = listOf(25, 50, 100, 200)
-
-    /**
-     * How many books a shelf holds when nobody said.
-     *
-     * Enough to browse rather than to finish, and it arrives in well
-     * under a minute.
-     *
-     * Nothing derives a size from an address. An address is not
-     * ownership: a reader is free to type Gutenberg's most-downloaded
-     * feed into the Book server form themselves, and reading that as a
-     * shelf Liseur offered would cap their catalog at fifty books and
-     * then, on the second refresh, reconcile everything past the
-     * fiftieth as gone. A size is written down when the card makes the
-     * connection, and a connection that has none is walked in full.
-     */
-    const val DEFAULT_SHELF = 50
 }

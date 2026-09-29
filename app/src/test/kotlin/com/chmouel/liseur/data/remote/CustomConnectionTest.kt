@@ -3,14 +3,17 @@ package com.chmouel.liseur.data.remote
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncCredentials
 import com.chmouel.liseur.data.kosync.KosyncPairing
 import com.chmouel.liseur.data.kosync.KosyncProbe
 import com.chmouel.liseur.data.kosync.ProvedKosyncPairing
 import com.chmouel.liseur.data.library.BookRemoval
+import com.chmouel.liseur.data.opds.OpdsScope
 import com.chmouel.liseur.data.opds.StarterCatalog
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.test.runTest
@@ -43,7 +46,6 @@ class CustomConnectionTest {
     private lateinit var db: LiseurDatabase
     private lateinit var account: RemoteAccountRepository
     private var catalogRefusal: SetupFailure? = null
-    private var catalogHasBooks: (String) -> Boolean = { true }
     private var kosyncAnswer: SetupFailure? = null
 
     @Before
@@ -230,78 +232,112 @@ class CustomConnectionTest {
     }
 
     @Test
-    fun `a shelf of free books leaves a sync partner where it is`() = runTest {
-        // A kosync pairing outlives its catalog on purpose, so an empty
-        // library may well have one standing when the free-books card
-        // is offered. It is the reader's own configuration, and tapping
-        // a card about Project Gutenberg is not a request to throw away
-        // credentials and peer agreements they never mentioned.
-        connect(catalog = CATALOG, kosyncUrl = SYNC)
-        account.disconnect()
-        assertEquals(SYNC, db.kosyncPeerDao().get()?.baseUrl)
+    fun `a starter shelf becomes the saved Gutenberg catalog`() = runTest {
+        starterShelf()
+        db.bookDao().upsert(book("custom:read", remoteUuid = "read", localUri = "file:///books/read.epub"))
+        db.bookDao().upsert(book("custom:unread", remoteUuid = "unread"))
+        db.bookDao().upsert(book("file:///books/mine.epub", localUri = "file:///books/mine.epub"))
 
-        val outcome = account.connectOpenCatalogIfDisconnected(CATALOG, shelfLimit = 25)
+        assertTrue(account.retireStarterShelf())
 
-        assertEquals(OpenCatalogOutcome.CONNECTED, outcome)
-        assertEquals(SYNC, db.kosyncPeerDao().get()?.baseUrl)
-        assertEquals(25, db.remoteServerDao().get()?.shelfLimit)
-    }
-
-    @Test
-    fun `starter catalog connects to preferred language when books exist`() = runTest {
-        val outcome = account.connectStarterCatalogIfDisconnected(
-            category = StarterCatalog.Category.POPULAR,
-            shelfLimit = 50,
-            languageCode = "fr",
-        )
-
-        assertEquals(StarterCatalogOutcome.CONNECTED, outcome)
-        val server = db.remoteServerDao().get()!!
-        assertEquals(StarterCatalog.Category.POPULAR.url("fr"), server.catalogUrl)
-        assertEquals(50, server.shelfLimit)
-    }
-
-    @Test
-    fun `starter catalog falls back to english when preferred language is empty`() = runTest {
-        catalogHasBooks = { url -> !url.contains("l.fr") }
-
-        val outcome = account.connectStarterCatalogIfDisconnected(
-            category = StarterCatalog.Category.POPULAR,
-            shelfLimit = 50,
-            languageCode = "fr",
-        )
-
-        assertEquals(StarterCatalogOutcome.CONNECTED_FALLBACK, outcome)
-        val server = db.remoteServerDao().get()!!
-        assertEquals(StarterCatalog.Category.POPULAR.englishUrl, server.catalogUrl)
-    }
-
-    @Test
-    fun `starter catalog does not fall back to english on network failure`() = runTest {
-        catalogRefusal = SetupFailure.Unreachable("No internet", httpMayWork = false)
-
-        val outcome = account.connectStarterCatalogIfDisconnected(
-            category = StarterCatalog.Category.POPULAR,
-            shelfLimit = 50,
-            languageCode = "fr",
-        )
-
-        assertEquals(StarterCatalogOutcome.UNREACHABLE, outcome)
         assertNull(db.remoteServerDao().get())
+        val browse = db.remoteServerDao().browseServers().single()
+        assertTrue(com.chmouel.liseur.data.opds.GutenbergBrowse.isRoot(browse))
+        assertEquals(browse.id, db.bookDao().getByUrl("custom:read")?.browseServerId)
+        assertNull(db.bookDao().getByUrl("custom:unread"))
+        assertNull(db.bookDao().getByUrl("file:///books/mine.epub")?.browseServerId)
     }
 
     @Test
-    fun `starter catalog connects directly to english when english is requested`() = runTest {
-        val outcome = account.connectStarterCatalogIfDisconnected(
-            category = StarterCatalog.Category.SCIENCE_FICTION,
-            shelfLimit = 25,
-            languageCode = "en",
+    fun `a kept book answers to the saved catalog's remote id`() = runTest {
+        // Remote ids start with the catalog root's fingerprint, and the
+        // starter feed and the browse root are different roots. Without
+        // the new prefix, browsing would offer the kept book as new.
+        val shelf = OpdsScope.of(StarterCatalog.Category.POPULAR.englishUrl)!!
+        val root = OpdsScope.of(StarterCatalog.BROWSE_URL)!!
+        starterShelf()
+        db.bookDao().upsert(
+            book("custom:read", remoteUuid = shelf.remoteId("urn:gutenberg:98:2"), localUri = "file:///books/read.epub"),
         )
 
-        assertEquals(StarterCatalogOutcome.CONNECTED, outcome)
-        val server = db.remoteServerDao().get()!!
-        assertEquals(StarterCatalog.Category.SCIENCE_FICTION.englishUrl, server.catalogUrl)
+        assertTrue(account.retireStarterShelf())
+
+        val kept = db.bookDao().getByUrl("custom:read")!!
+        assertEquals(root.remoteId("urn:gutenberg:98:2"), kept.remoteUuid)
+        assertEquals("custom:read", kept.url)
     }
+
+    @Test
+    fun `a starter shelf joins a Gutenberg catalog already saved`() = runTest {
+        db.remoteServerDao().upsert(
+            server(id = 5L, catalogUrl = StarterCatalog.BROWSE_URL, shelfLimit = null),
+        )
+        starterShelf()
+        db.bookDao().upsert(book("custom:read", remoteUuid = "read", localUri = "file:///books/read.epub"))
+
+        assertTrue(account.retireStarterShelf())
+
+        assertEquals(listOf(5L), db.remoteServerDao().browseServers().map { it.id })
+        assertEquals(5L, db.bookDao().getByUrl("custom:read")?.browseServerId)
+    }
+
+    @Test
+    fun `a catalog the reader connected is not a starter shelf`() = runTest {
+        connect(catalog = StarterCatalog.BROWSE_URL, kosyncUrl = "")
+
+        assertFalse(account.retireStarterShelf())
+        assertNotNull(db.remoteServerDao().get())
+    }
+
+    @Test
+    fun `retiring a starter shelf happens once`() = runTest {
+        starterShelf()
+
+        assertTrue(account.retireStarterShelf())
+        assertFalse(account.retireStarterShelf())
+        assertEquals(1, db.remoteServerDao().browseServers().size)
+    }
+
+    private suspend fun starterShelf() {
+        db.remoteServerDao().upsert(
+            server(
+                id = RemoteServer.SINGLE_ID,
+                catalogUrl = StarterCatalog.Category.POPULAR.englishUrl,
+                shelfLimit = 50,
+            ),
+        )
+    }
+
+    private fun server(id: Long, catalogUrl: String, shelfLimit: Int?) = RemoteServer(
+        id = id,
+        kind = ServerKind.CUSTOM,
+        baseUrl = catalogUrl,
+        catalogUrl = catalogUrl,
+        username = "",
+        passwordCipher = null,
+        apiKeyCipher = null,
+        accountId = null,
+        userId = null,
+        koboTokenCipher = null,
+        canDownload = true,
+        addedAt = 0L,
+        catalogSyncedAt = null,
+        positionSyncedAt = null,
+        syncToken = null,
+        shelfLimit = shelfLimit,
+    )
+
+    private fun book(url: String, remoteUuid: String? = null, localUri: String? = null) = Book(
+        url = url,
+        title = url,
+        author = null,
+        coverPath = null,
+        source = null,
+        addedAt = 0L,
+        lastOpenedAt = null,
+        remoteUuid = remoteUuid,
+        localUri = localUri,
+    )
 
     @Test
     fun `a key written down before the spelling settled still names this account`() = runTest {
@@ -486,7 +522,7 @@ class CustomConnectionTest {
                     allowHttp: Boolean,
                 ): SetupResult = catalogRefusal
                     ?.let { SetupResult.Failure(it) }
-                    ?: success(rawUrl, catalogHasBooks(rawUrl))
+                    ?: success(rawUrl)
             },
         ),
     )
@@ -497,13 +533,13 @@ class CustomConnectionTest {
         const val OLD_CATALOG = "https://old.example/opds"
         const val OLD_SYNC = "https://old.example/kosync"
 
-        fun success(url: String = CATALOG, hasBooks: Boolean = true) = SetupResult.Success(
+        fun success(url: String = CATALOG) = SetupResult.Success(
             ServerCapabilities(
                 baseUrl = url,
                 canDownload = true,
                 accountId = null,
                 displayName = "The Shelf",
-                hasBooks = hasBooks,
+                hasBooks = true,
             ),
         )
     }

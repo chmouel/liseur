@@ -99,25 +99,7 @@
     <string name="empty_library_title">Votre bibliothèque est vide</string>
     <string name="empty_library_subtitle">Voici comment la remplir.</string>
     <string name="starter_catalog">Commencer avec des livres gratuits</string>
-    <string name="starter_catalog_hint">Des classiques de Project Gutenberg, libres de droits et gratuits à lire. Choisissez une langue, une étagère et combien de livres récupérer.</string>
-    <string name="starter_catalog_connecting">Connexion à Project Gutenberg…</string>
-    <string name="starter_catalog_failed">Impossible d\'atteindre Project Gutenberg. Vérifiez votre connexion et réessayez.</string>
-    <string name="starter_catalog_fallback_english">Aucun livre n\'a été trouvé dans cette langue ; affichage du catalogue en anglais.</string>
-    <string name="starter_catalog_sheet_hint">Project Gutenberg offre des livres dont le copyright a expiré. Aucune inscription.</string>
-    <string name="starter_catalog_which">Quels livres</string>
-    <string name="starter_catalog_language">Langue</string>
-    <string name="starter_catalog_language_more">Plus de langues</string>
-    <string name="starter_catalog_how_many">Combien</string>
-    <string name="starter_catalog_how_many_hint">Chaque livre est une requête séparée vers un serveur gratuit financé par des dons, donc une plus grande étagère prend plus de temps. Vous pouvez toujours ajouter vos propres livres aussi.</string>
-    <string name="starter_catalog_start">Obtenir les livres</string>
-    <string name="starter_catalog_more_hint">Cette étagère Gutenberg peut continuer à grandir après la première configuration.</string>
-    <string name="starter_catalog_more_button">Charger 50 livres de plus</string>
-    <string name="starter_catalog_more_failed">Impossible de charger plus de livres depuis Project Gutenberg. Réessayez plus tard.</string>
-    <string name="starter_catalog_more_exhausted">Aucun autre livre n\'a été trouvé sur cette étagère.</string>
-    <plurals name="starter_catalog_more_added">
-        <item quantity="one">%d nouveau livre ajouté.</item>
-        <item quantity="other">%d nouveaux livres ajoutés.</item>
-    </plurals>
+    <string name="starter_catalog_hint">Des classiques de Project Gutenberg, libres de droits et gratuits à lire. Parcourez-les par langue ou par étagère et téléchargez ceux qui vous plaisent.</string>
     <string name="starter_category_popular">Les plus populaires</string>
     <string name="starter_category_best_ever">Les meilleurs livres</string>
     <string name="starter_category_science_fiction">Science-fiction</string>

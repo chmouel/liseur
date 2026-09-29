@@ -155,20 +155,11 @@ data class RemoteServer(
     val annotationCursorSeq: Long = 0,
 
     /**
-     * How many books this connection's shelf is offered at, or null for
-     * as much of the catalog as the walk's budget reaches.
-     *
-     * Only a shelf Liseur offered sets it: a reader who typed an
-     * address gets the ordinary walk. It has to be stored rather than
-     * worked out from the address, because the walk runs again on every
-     * refresh — including from a background worker with no idea what
-     * was picked — and a number that came back different would have the
-     * shelf grow or shrink under the reader.
-     *
-     * Deliberately absent from [accountKey]. Changing fifty to a
-     * hundred is not changing account, and a key that moved with it
-     * would strand every peer-keyed row and stop any download already
-     * queued.
+     * The size of a Gutenberg starter shelf connected by an older
+     * version. Startup reads it to turn such a connection into a saved
+     * browse catalog, and a refresh that runs before then still skips
+     * removing books the capped walk did not reach. Nothing writes it
+     * any more; the column stays so the schema does not change.
      */
     @ColumnInfo(name = "shelf_limit") val shelfLimit: Int? = null,
 ) {

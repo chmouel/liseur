@@ -12,10 +12,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Where a starter OPDS catalog should resume discovery.
+ * Where a starter OPDS catalog used to resume discovery.
  *
- * Keyed by account and catalog address so a reconnect or a different Custom
- * catalog cannot inherit a queue that belonged to another shelf.
+ * The starter shelf and its "load more" are gone, so nothing writes this
+ * table any more. It stays so the schema does not change, and account
+ * cleanup still deletes its rows.
  */
 @Entity(tableName = "starter_catalog_progress", primaryKeys = ["account_key", "catalog_url"])
 data class StarterCatalogProgress(

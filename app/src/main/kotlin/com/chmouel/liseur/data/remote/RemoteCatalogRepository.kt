@@ -7,8 +7,6 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
-import com.chmouel.liseur.data.db.StarterCatalogProgress
-import com.chmouel.liseur.data.db.StarterCatalogProgressDao
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.domain.SeriesMetadata
 import com.chmouel.liseur.domain.SeriesOverride
@@ -22,9 +20,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -75,19 +70,6 @@ sealed interface CatalogStatus {
     data object CredentialsLost : CatalogStatus
 }
 
-/** Whether the connected starter catalog can discover more books. */
-data class StarterCatalogMoreState(
-    val available: Boolean = false,
-    val exhausted: Boolean = false,
-)
-
-/** What the explicit starter-catalog expansion did. */
-sealed interface StarterCatalogMoreResult {
-    data class Added(val count: Int, val exhausted: Boolean) : StarterCatalogMoreResult
-    data class Failed(val reason: SyncFailure) : StarterCatalogMoreResult
-    data object NotAvailable : StarterCatalogMoreResult
-}
-
 /**
  * Keeps a copy of the connected server's catalog in the library.
  *
@@ -106,13 +88,6 @@ class RemoteCatalogRepository(
     private val bookDao: BookDao,
     private val bookRemoval: BookRemoval,
     /**
-     * How far a starter shelf has been walked. Null where there is no
-     * such shelf to walk — in tests, and in any build that does not
-     * offer one — and the offer of more books is withheld rather than
-     * made and then unable to do anything.
-     */
-    private val starterProgressDao: StarterCatalogProgressDao? = null,
-    /**
      * Whose account a book belongs to is only true until someone signs
      * out, so every write here checks and writes in one go. Anything
      * less and a disconnect landing mid-refresh leaves the new account
@@ -125,62 +100,6 @@ class RemoteCatalogRepository(
 ) {
     private val _status = MutableStateFlow<CatalogStatus>(CatalogStatus.Idle)
     val status: StateFlow<CatalogStatus> = _status.asStateFlow()
-    private val _starterMoreLoading = MutableStateFlow(false)
-    val starterMoreLoading: StateFlow<Boolean> = _starterMoreLoading.asStateFlow()
-
-    private val _starterMoreResult = MutableStateFlow<StarterMoreOutcome?>(null)
-
-    /**
-     * What the last finished load-more came to, held until the reader
-     * has seen it.
-     *
-     * A plain [SharedFlow] loses a value nobody was collecting at the
-     * moment it was emitted, and the walk runs in this repository's own
-     * scope precisely so it can outlive a rotation or a moment spent
-     * off the library screen. Held state survives that the way the
-     * event would not; [starterMoreResultShown] is how the reader marks
-     * it read.
-     *
-     * Tagged with the account it was produced for and filtered against
-     * whichever account is connected now. That walk can finish after the
-     * reader has disconnected or switched servers, and a value left
-     * over from it would otherwise report somebody else's added books,
-     * or somebody else's failure, over the next account's shelf. Left
-     * as a cold flow rather than turned into a [StateFlow] here: it is
-     * the same shape as [starterMore] below, and the caller already
-     * turns that one into durable state on the account's own subscriber.
-     */
-    val starterMoreResult: kotlinx.coroutines.flow.Flow<StarterCatalogMoreResult?> =
-        combine(_starterMoreResult, serverDao.observe()) { outcome, server ->
-            outcome
-                ?.takeIf { it.accountKey == server?.accountKey && it.addedAt == server?.addedAt }
-                ?.result
-        }
-
-    fun starterMoreResultShown() {
-        _starterMoreResult.value = null
-    }
-
-    val starterMore: kotlinx.coroutines.flow.Flow<StarterCatalogMoreState> =
-        serverDao.observe().flatMapLatest { server ->
-            val progressDao = starterProgressDao
-            if (progressDao != null &&
-                server?.kind == ServerKind.CUSTOM &&
-                server.shelfLimit != null &&
-                server.catalogUrl != null
-            ) {
-                val catalogUrl = RemoteUrl.withoutTrailingSlash(server.catalogUrl)
-                progressDao.observe(server.accountKey, catalogUrl).map { progress ->
-                    StarterCatalogMoreState(
-                        available = true,
-                        exhausted = progress?.exhausted == true,
-                    )
-                }
-            } else {
-                flowOf(StarterCatalogMoreState())
-            }
-        }
-
     private val refreshing = Mutex()
 
     /**
@@ -228,177 +147,6 @@ class RemoteCatalogRepository(
             refreshLocked()
         } finally {
             refreshing.unlock()
-        }
-    }
-
-    /**
-     * Asks for more books in the app's own scope.
-     *
-     * Books are committed page by page, so a walk cut short halfway
-     * through can leave the shelf ahead of the saved checkpoint and the
-     * same books are read again next time. Leaving the library is not a
-     * reason for that to happen, so the walk does not belong to the
-     * screen that started it.
-     */
-    fun loadMoreDetached() {
-        scope.launch {
-            try {
-                loadMoreStarterCatalog()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Loading more starter books failed unexpectedly", e)
-            }
-        }
-    }
-
-    /**
-     * Adds another bounded slice from a starter OPDS shelf.
-     *
-     * Uses the refresh lock because both paths fold catalog entries into
-     * the same rows. This action discovers; refreshes only keep known books
-     * current.
-     *
-     * Tags its own answer with the account it read [server] as, right
-     * where that account was resolved, rather than leaving a caller to
-     * read it a second time. A second read can land after this one, on
-     * whichever account the reader has since switched to, and would then
-     * tag this account's answer as the new one's instead.
-     */
-    suspend fun loadMoreStarterCatalog(limit: Int = STARTER_MORE_BATCH): StarterCatalogMoreResult {
-        if (!refreshing.tryLock()) return StarterCatalogMoreResult.NotAvailable
-        _starterMoreLoading.value = true
-        return try {
-            val server = serverDao.get() ?: return StarterCatalogMoreResult.NotAvailable
-            // Tags every answer below with the account this walk read as,
-            // so a reader who has since switched accounts is filtered out
-            // by [starterMoreResult] rather than shown somebody else's.
-            fun tag(result: StarterCatalogMoreResult): StarterCatalogMoreResult {
-                _starterMoreResult.value = StarterMoreOutcome(server.accountKey, server.addedAt, result)
-                return result
-            }
-            if (server.kind != ServerKind.CUSTOM || server.shelfLimit == null) {
-                return tag(StarterCatalogMoreResult.NotAvailable)
-            }
-            val catalogUrl = server.catalogUrl ?: return tag(StarterCatalogMoreResult.NotAvailable)
-            val progressDao = starterProgressDao ?: return tag(StarterCatalogMoreResult.NotAvailable)
-            val credentials = server.credentials
-                ?: return tag(StarterCatalogMoreResult.Failed(SyncFailure.Unauthorised))
-            if (!networkAvailability.isAvailable()) {
-                return tag(StarterCatalogMoreResult.Failed(SyncFailure.Offline))
-            }
-            if (localNetwork.blocks(server.baseUrl)) {
-                return tag(StarterCatalogMoreResult.Failed(SyncFailure.LocalNetworkBlocked))
-            }
-            val client = router.resumableCatalogFor(server.kind)
-                ?: return tag(StarterCatalogMoreResult.NotAvailable)
-            val progressKey = RemoteUrl.withoutTrailingSlash(catalogUrl)
-            val progress = progressDao.get(server.accountKey, progressKey)
-            if (progress?.exhausted == true) {
-                return tag(StarterCatalogMoreResult.Added(0, exhausted = true))
-            }
-            val known = KnownBooks(bookDao.allOnce().filter { it.browseServerId == null })
-            val knownRemoteIds = known.remoteIds()
-            val more = try {
-                client.loadMore(
-                    baseUrl = catalogUrl,
-                    credentials = credentials,
-                    state = progress?.continuation,
-                    knownRemoteIds = knownRemoteIds,
-                    limit = limit,
-                ) { page ->
-                    forAccount(server) {
-                        store(
-                            known = known,
-                            kind = server.kind,
-                            baseUrl = catalogUrl,
-                            books = page,
-                        )
-                    }
-                }
-            } catch (e: RemoteHttpFailure) {
-                Log.i(TAG, "The starter catalog would not load more books")
-                return tag(StarterCatalogMoreResult.Failed(e.reason))
-            } catch (e: SocketTimeoutException) {
-                Log.i(TAG, "The starter catalog took too long to load more books")
-                return tag(StarterCatalogMoreResult.Failed(SyncFailure.Timeout))
-            } catch (e: AccountChanged) {
-                // Before the general `IOException`, which it is one of.
-                // An account that went away mid-walk is not an offline
-                // phone, and telling the reader it was would be a lie
-                // about the account they have only just connected.
-                Log.i(TAG, "The account changed while loading more books")
-                return tag(StarterCatalogMoreResult.NotAvailable)
-            } catch (e: IOException) {
-                Log.i(TAG, "Could not load more starter catalog books", e)
-                return tag(StarterCatalogMoreResult.Failed(SyncFailure.Offline))
-            }
-            try {
-                forAccount(server) {
-                    progressDao.upsert(
-                        StarterCatalogProgress.of(
-                            accountKey = server.accountKey,
-                            catalogUrl = progressKey,
-                            continuation = more.state,
-                            exhausted = more.exhausted,
-                        ),
-                    )
-                }
-            } catch (e: AccountChanged) {
-                // The books that were stored were stored against the
-                // account that was connected at the time; the checkpoint
-                // belongs to an account nobody is talking to any more.
-                Log.i(TAG, "The account changed before the walk could be saved")
-                return tag(StarterCatalogMoreResult.NotAvailable)
-            }
-            tag(StarterCatalogMoreResult.Added(more.added, more.exhausted))
-        } finally {
-            _starterMoreLoading.value = false
-            refreshing.unlock()
-        }
-    }
-
-    /**
-     * Records where the initial capped walk of a starter shelf stopped,
-     * so the first "Load 50 more" tap resumes from there instead of
-     * reading the root and every feed since all over again.
-     *
-     * Only the first refresh has anything to seed: once a load-more has
-     * run, its own checkpoint is ahead of whatever an ordinary refresh
-     * would rebuild, and must not be replaced by it.
-     */
-    private suspend fun seedStarterCatalogProgress(server: RemoteServer, catalogUrl: String, walk: CatalogWalk) {
-        val progressDao = starterProgressDao ?: return
-        if (server.shelfLimit == null) return
-        val continuation = walk.continuation ?: return
-        if (!walk.complete && continuation.queue.isEmpty()) {
-            // Nothing left queued does not mean nothing is left to read:
-            // a feed dropped for its depth, its scope, or a failure this
-            // walk does not retry can empty the queue too. Seeding this
-            // continuation would leave its `seen` set behind, and
-            // `loadMore()`'s own empty-queue fallback re-fetches only the
-            // root under that same `seen` set, so a feed already marked
-            // seen here is never queued again even though it was never
-            // actually read. Leaving nothing seeded lets the first
-            // "Load 50 more" tap walk from the root with a clean slate
-            // instead, the same as a shelf with no continuation at all.
-            return
-        }
-        val progressKey = RemoteUrl.withoutTrailingSlash(catalogUrl)
-        if (progressDao.get(server.accountKey, progressKey) != null) return
-        try {
-            forAccount(server) {
-                progressDao.upsert(
-                    StarterCatalogProgress.of(
-                        accountKey = server.accountKey,
-                        catalogUrl = progressKey,
-                        continuation = continuation,
-                        exhausted = walk.complete,
-                    ),
-                )
-            }
-        } catch (e: AccountChanged) {
-            Log.i(TAG, "The account changed before the initial walk's progress could be saved")
         }
     }
 
@@ -507,22 +255,11 @@ class RemoteCatalogRepository(
                     // library, so nothing may be removed for being absent
                     // from it and nothing may be told this is current.
                     //
-                    // There used to be an exception for a walk that
-                    // stopped only because this app's own shelf size
-                    // was reached: the shelf had been seen whole, so a
-                    // book that had dropped off it could go. A starter
-                    // shelf can now be asked for more books, which
-                    // makes it something the reader grows rather than a
-                    // rolling top N, and letting go of a book because
-                    // the popularity order moved would quietly undo
-                    // that. Nothing is reconciled from a short walk.
-                    //
                     // Through the account guard like every other write
                     // here, because the status is about a server: one
                     // signed out of while this was in flight must not
                     // leave its notice over the next account's shelf.
                     Log.i(TAG, "The catalog walk did not finish; keeping what is known")
-                    seedStarterCatalogProgress(server, catalogUrl, walk)
                     forAccount(server) {
                         _status.value = CatalogStatus.Partial
                     }
@@ -532,7 +269,6 @@ class RemoteCatalogRepository(
                 // while this was in flight. Writing now would delete the
                 // new account's books, or bring the old account back from
                 // the dead, so the whole answer is dropped instead.
-                seedStarterCatalogProgress(server, catalogUrl, walk)
                 forAccount(server) {
                     if (server.shelfLimit == null) reconcileVanished(seen, server.accountKey)
                     serverDao.setCatalogSyncedAt(System.currentTimeMillis())
@@ -873,7 +609,6 @@ class RemoteCatalogRepository(
 
     private companion object {
         const val TAG = "RemoteCatalog"
-        const val STARTER_MORE_BATCH = 50
     }
 }
 
@@ -975,21 +710,6 @@ private class KnownBooks(books: List<Book>) {
         legacyGrimmory.remove(book.title to book.author)
     }
 }
-
-/**
- * A finished load-more result, tagged with the account it was read
- * for. See [RemoteCatalogRepository.starterMoreResult].
- *
- * Tagged with [addedAt] as well as [accountKey], for the same reason
- * [forAccount] checks both: a disconnect-then-reconnect to the same
- * catalog carries the same key, and a result read for the connection
- * before it must not be shown as if it were about the one after.
- */
-private data class StarterMoreOutcome(
-    val accountKey: String,
-    val addedAt: Long,
-    val result: StarterCatalogMoreResult,
-)
 
 /**
  * A catalog row ready to write, tied to the local series revision from

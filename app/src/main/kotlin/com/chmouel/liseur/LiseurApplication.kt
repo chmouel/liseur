@@ -39,6 +39,9 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
             if (container.remoteAccount.forgetUnreadableAccount()) {
                 container.appSettings.setAccountLostToRestore(true)
             }
+            // Older versions connected the free Gutenberg shelf as the
+            // main library; it now lives with the other saved catalogs.
+            container.remoteAccount.retireStarterShelf()
             // Covers are fetched from the server and need signing, from
             // an image loader that cannot wait on the database. Read the
             // account now so the first screenful does not have to.

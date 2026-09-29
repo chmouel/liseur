@@ -296,6 +296,17 @@ interface BookDao {
     @Query("UPDATE books SET browse_server_id = :serverId, cover_url = :coverUrl WHERE url = :url")
     suspend fun moveToBrowseServer(url: String, serverId: Long, coverUrl: String?)
 
+    /** Swaps the catalog prefix [from] for [to] on the main catalog's remote ids, keeping their URLs. */
+    @Query(
+        "UPDATE books SET remote_uuid = :to || substr(remote_uuid, length(:from) + 1) " +
+            "WHERE browse_server_id IS NULL AND substr(remote_uuid, 1, length(:from)) = :from",
+    )
+    suspend fun rescopeRemote(from: String, to: String)
+
+    /** Hands the main catalog's remaining books to a saved browse catalog, keeping their URLs. */
+    @Query("UPDATE books SET browse_server_id = :serverId WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL")
+    suspend fun moveRemoteToBrowseServer(serverId: Long)
+
     /**
      * Every book whose file this device can open, wherever it came
      * from.

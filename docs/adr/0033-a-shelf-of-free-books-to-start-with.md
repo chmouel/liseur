@@ -1,6 +1,20 @@
 # 33. A shelf of free books to start with
 
-Status: accepted
+Status: superseded
+
+The "Start with free books" card now opens Project Gutenberg as a saved
+browse catalog under Remote libraries, where the reader picks a language
+and a shelf and downloads single books. The sized shelf, its picker and
+"Load 50 more" were removed. On first start, the app turns a shelf that
+an older version connected as the main library into the saved Gutenberg
+catalog. It keeps downloaded books and drops the ones never downloaded.
+The `starter_catalog_progress` table and the `remote_server.shelf_limit`
+column stay in the schema for that conversion. Startup reads
+`shelf_limit` to recognise an old shelf, and a catalog refresh that runs
+before the conversion leaves the shelf's books alone while it is set.
+Forgetting an account still deletes its `starter_catalog_progress` rows.
+Nothing sets `shelf_limit` or adds progress rows any more. This ADR is
+kept as the record of the former design.
 
 ## Context
 

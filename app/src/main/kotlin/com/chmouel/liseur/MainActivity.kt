@@ -204,6 +204,7 @@ private fun LiseurApp(settings: AppSettings) {
         mutableStateOf<StatsTarget?>(null)
     }
     var bookStatsReturnsTo by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
+    var openGutenberg by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember(context) { context.container.appSettings }
@@ -226,9 +227,17 @@ private fun LiseurApp(settings: AppSettings) {
                 screen = Screen.SERVER_ACCOUNT
             },
             onBrowseLibraries = { screen = Screen.BROWSE_LIBRARIES },
+            onStartWithFreeBooks = {
+                openGutenberg = true
+                screen = Screen.BROWSE_LIBRARIES
+            },
         )
 
-        Screen.BROWSE_LIBRARIES -> BrowseLibrariesRoute(onExit = { screen = Screen.LIBRARY })
+        Screen.BROWSE_LIBRARIES -> BrowseLibrariesRoute(
+            onExit = { screen = Screen.LIBRARY },
+            openGutenberg = openGutenberg,
+            onGutenbergOpened = { openGutenberg = false },
+        )
 
         Screen.STATS -> {
             BackHandler { screen = Screen.LIBRARY }
@@ -605,6 +614,7 @@ private fun LibraryRoute(
     onOpenBookStats: (com.chmouel.liseur.data.db.Book) -> Unit,
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
+    onStartWithFreeBooks: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
     val context = LocalContext.current
@@ -902,12 +912,7 @@ private fun LibraryRoute(
         onOpenBookStats = onOpenBookStats,
         onConnectServer = onConnectServer,
         onBrowseLibraries = onBrowseLibraries,
-        onStartWithFreeBooks = viewModel::connectStarterCatalog,
-        freeBooksFailures = viewModel.starterCatalogFailures,
-        freeBooksFallback = viewModel.starterCatalogFallback,
-        onLoadMoreFreeBooks = viewModel::loadMoreStarterCatalog,
-        freeBooksMoreResult = viewModel.starterCatalogMoreResult,
-        onFreeBooksMoreResultShown = viewModel::starterCatalogMoreResultShown,
+        onStartWithFreeBooks = onStartWithFreeBooks,
         onDownload = viewModel::download,
         onCancelDownload = viewModel::cancelDownload,
         onRemoveDownload = viewModel::removeDownload,

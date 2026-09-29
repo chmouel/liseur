@@ -140,10 +140,8 @@ import coil3.request.crossfade
 import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.CatalogStatus
-import com.chmouel.liseur.data.remote.StarterCatalogMoreResult
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
-import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.db.RefusedBytes
 import com.chmouel.liseur.data.db.UploadRefusal
 import com.chmouel.liseur.data.calibre.DownloadProgress
@@ -207,12 +205,7 @@ fun LibraryScreen(
     onClearFilters: () -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
-    onStartWithFreeBooks: (StarterCatalog.Category, Int, String) -> Unit = { _, _, _ -> },
-    freeBooksFailures: Flow<Unit> = emptyFlow(),
-    freeBooksFallback: Flow<Unit> = emptyFlow(),
-    onLoadMoreFreeBooks: () -> Unit = {},
-    freeBooksMoreResult: StateFlow<StarterCatalogMoreResult?> = MutableStateFlow(null),
-    onFreeBooksMoreResultShown: () -> Unit = {},
+    onStartWithFreeBooks: () -> Unit = {},
     notice: Notice? = null,
     onNoticeShown: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -240,7 +233,6 @@ fun LibraryScreen(
     var confirmRemoveFromLibrary by remember { mutableStateOf<Book?>(null) }
     var confirmRemoveDownload by remember { mutableStateOf<Book?>(null) }
     var editSeriesOf by remember { mutableStateOf<Book?>(null) }
-    var starterSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val eInk = LocalEInk.current
     val notYetHere = stringResource(R.string.book_not_downloaded)
@@ -254,37 +246,6 @@ fun LibraryScreen(
             val message = if (failure.onServer) serverDeleteFailed else localDeleteFailed
             snackbarHost.showSnackbar(message.format(failure.book.title))
         }
-    }
-    val freeBooksFailed = stringResource(R.string.starter_catalog_failed)
-    LaunchedEffect(freeBooksFailures) {
-        freeBooksFailures.collect { snackbarHost.showSnackbar(freeBooksFailed) }
-    }
-    val freeBooksFallbackMsg = stringResource(R.string.starter_catalog_fallback_english)
-    LaunchedEffect(freeBooksFallback) {
-        freeBooksFallback.collect { snackbarHost.showSnackbar(freeBooksFallbackMsg) }
-    }
-    val noMoreFreeBooks = stringResource(R.string.starter_catalog_more_exhausted)
-    val freeBooksMoreFailed = stringResource(R.string.starter_catalog_more_failed)
-    val freeBooksMoreResultValue by freeBooksMoreResult.collectAsStateWithLifecycle()
-    LaunchedEffect(freeBooksMoreResultValue) {
-        val result = freeBooksMoreResultValue ?: return@LaunchedEffect
-        when (result) {
-            is StarterCatalogMoreResult.Added -> {
-                val message = if (result.count == 0 && result.exhausted) {
-                    noMoreFreeBooks
-                } else {
-                    context.resources.getQuantityString(
-                        R.plurals.starter_catalog_more_added,
-                        result.count,
-                        result.count,
-                    )
-                }
-                snackbarHost.showSnackbar(message)
-            }
-            is StarterCatalogMoreResult.Failed -> snackbarHost.showSnackbar(freeBooksMoreFailed)
-            StarterCatalogMoreResult.NotAvailable -> Unit
-        }
-        onFreeBooksMoreResultShown()
     }
     // Removing a book from the library is quiet and easy to do by
     // accident, and the entry it took away may be the one being read,
@@ -724,22 +685,6 @@ fun LibraryScreen(
                         onDismiss = onDismissCatalogPartial,
                     )
                 }
-                if (
-                    state.starterCatalogMoreAvailable &&
-                    !state.starterCatalogMoreExhausted &&
-                    !state.libraryIsEmpty &&
-                    LibraryFilterOption.ARCHIVED !in state.filters.options
-                ) {
-                    StarterCatalogMoreNotice(
-                        // A refresh holds the same lock this walk needs,
-                        // so a tap during one would be dropped without
-                        // anything happening. Greying the button out
-                        // says so rather than ignoring the reader.
-                        loading = state.starterCatalogMoreLoading || state.refreshing,
-                        showProgress = state.starterCatalogMoreLoading,
-                        onLoadMore = onLoadMoreFreeBooks,
-                    )
-                }
                 when {
                     state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
 
@@ -768,8 +713,7 @@ fun LibraryScreen(
                         // made where taking it up costs nothing: an
                         // empty library with nothing connected.
                         offerFreeBooks = !state.hasServer,
-                        connectingFreeBooks = state.connectingStarterCatalog,
-                        onStartWithFreeBooks = { starterSheet = true },
+                        onStartWithFreeBooks = onStartWithFreeBooks,
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -944,23 +888,6 @@ fun LibraryScreen(
                 editSeriesOf = null
             },
             onDismiss = { editSeriesOf = null },
-        )
-    }
-
-    if (starterSheet) {
-        // The sheet stays up while the probe runs, so its button can
-        // spin and its chips stay still: closing it on the tap left the
-        // reader on an empty library with nothing happening, and put a
-        // failure in a snackbar over a card that looked untouched.
-        // `hasServer` is what settles it — the shelf's own refresh
-        // indicator takes over from there.
-        if (state.hasServer) {
-            LaunchedEffect(Unit) { starterSheet = false }
-        }
-        StarterCatalogSheet(
-            connecting = state.connectingStarterCatalog,
-            onConfirm = onStartWithFreeBooks,
-            onDismiss = { starterSheet = false },
         )
     }
 }
@@ -1825,42 +1752,6 @@ private fun CatalogPartialNotice(
                     Icons.Outlined.Close,
                     contentDescription = stringResource(R.string.catalog_partial_dismiss),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StarterCatalogMoreNotice(
-    loading: Boolean,
-    showProgress: Boolean,
-    onLoadMore: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.starter_catalog_more_hint),
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f).padding(end = 8.dp),
-            )
-            TextButton(onClick = onLoadMore, enabled = !loading) {
-                if (showProgress) {
-                    CircularProgressIndicator(
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(16.dp),
-                    )
-                } else {
-                    Text(stringResource(R.string.starter_catalog_more_button))
-                }
             }
         }
     }
