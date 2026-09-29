@@ -97,7 +97,11 @@ jobs:
           test -f "$apk"
           apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$apksigner"
-          "$apksigner" verify --verbose "$apk"
+          "$apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/apk-verification.txt"
+          cat "$RUNNER_TEMP/apk-verification.txt"
+          certificate_sha256=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-verification.txt")
+          [[ "$certificate_sha256" =~ ^[[:xdigit:]]{64}$ ]]
+          printf 'RELEASE_CERTIFICATE_SHA256=%s\n' "$certificate_sha256" >> "$GITHUB_ENV"
           release_apk="app/build/outputs/apk/release/liseur-${RELEASE_TAG}.apk"
           mv "$apk" "$release_apk"
           printf 'RELEASE_APK=%s\n' "$release_apk" >> "$GITHUB_ENV"
@@ -147,6 +151,15 @@ jobs:
           else
             hack/generate-release-notes --output "$notes" "$RELEASE_TAG"
           fi
+          fingerprint=$(printf '%s' "$RELEASE_CERTIFICATE_SHA256" | tr '[:lower:]' '[:upper:]' | sed 's/../&:/g; s/:$//')
+          {
+            printf '\n### Verify the APK\n\n'
+            printf 'Package name and signing certificate SHA-256 fingerprint (for AppVerifier):\n\n'
+            printf '```text\ncom.chmouel.liseur\n%s\n```\n\n' "$fingerprint"
+            printf 'To verify the downloaded APK with Android SDK build tools:\n\n'
+            printf '```sh\napksigner verify --print-certs liseur-%s.apk\n```\n\n' "$RELEASE_TAG"
+            printf 'Verification must succeed and the certificate SHA-256 digest must match the fingerprint above (ignoring colons and letter case). This is the certificate fingerprint, not the APK file checksum.\n'
+          } >> "$notes"
           printf 'RELEASE_NOTES=%s\n' "$notes" >> "$GITHUB_ENV"
           cat "$notes"
 
