@@ -208,6 +208,8 @@ fun LibraryScreen(
     onStartWithFreeBooks: () -> Unit = {},
     notice: Notice? = null,
     onNoticeShown: (Long) -> Unit = {},
+    widgetBook: Book? = null,
+    onWidgetBookHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -237,6 +239,24 @@ fun LibraryScreen(
     val eInk = LocalEInk.current
     val notYetHere = stringResource(R.string.book_not_downloaded)
     val credentialsLost = stringResource(R.string.server_credentials_lost)
+    val openShelfBook: (Book) -> Unit = { book ->
+        when {
+            book.openableUrl != null -> onBookSelected(book)
+            book.url in state.downloads ->
+                scope.launch { snackbarHost.showSnackbar(downloading) }
+            !state.canDownload(book) ->
+                scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
+            else -> onDownloadAndOpen(book)
+        }
+    }
+    // A widget cover gets the same answer as a shelf tap, once the
+    // library knows which servers allow downloads.
+    LaunchedEffect(widgetBook, state.loading) {
+        val book = widgetBook ?: return@LaunchedEffect
+        if (state.loading) return@LaunchedEffect
+        onWidgetBookHandled()
+        openShelfBook(book)
+    }
 
     val downloadFailed = stringResource(R.string.download_failed_open)
     val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)
@@ -758,16 +778,7 @@ fun LibraryScreen(
                         onToggleFilter = onToggleFilter,
                         onSetGroupBySeries = onSetGroupBySeries,
                         onClearFilters = onClearFilters,
-                        onBookSelected = { book ->
-                            when {
-                                book.openableUrl != null -> onBookSelected(book)
-                                book.url in state.downloads ->
-                                    scope.launch { snackbarHost.showSnackbar(downloading) }
-                                !state.canDownload(book) ->
-                                    scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
-                                else -> onDownloadAndOpen(book)
-                            }
-                        },
+                        onBookSelected = openShelfBook,
                         onBookLongPress = { sheetBook = it },
                         onSeriesSelected = onSeriesSelected,
                         modifier = Modifier.fillMaxSize(),

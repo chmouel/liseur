@@ -1170,8 +1170,10 @@ cached cover files; it never waits on a network request.
   page anchor. Paging and resizing clamp that anchor after books disappear.
   Only the visible page's covers are decoded, capped at 160 px per edge
   to keep an eight-cover RemoteViews payload within the binder budget.
-  Each cover opens its book, using the normal download-and-open flow for
-  remote books. The header opens the library. Widget requests are consumed
+  Each cover opens its book. Once the library has loaded, a remote book
+  follows the same checks as a shelf tap: a download in progress or a
+  server that forbids downloads shows the shelf's snackbar instead of
+  starting a download. The header opens the library. Widget requests are consumed
   so activity recreation cannot repeat a download or redirect navigation.
 - Dashboard, library and remote-book taps go through the unexported
   `WidgetLaunchActivity`, which hands the request to `MainActivity` in

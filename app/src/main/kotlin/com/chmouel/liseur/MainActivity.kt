@@ -641,17 +641,14 @@ private fun LibraryRoute(
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var widgetShelfBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     LaunchedEffect(widgetBook) {
         val url = widgetBook ?: return@LaunchedEffect
         val book = context.container.database.bookDao().getByUrl(url)
-        onWidgetHandled()
         if (book != null && !book.hidden && !book.archived) {
-            val local = book.openableUri()
-            if (local != null) {
-                context.startActivity(ReaderActivity.intent(context, local, book.url))
-            } else {
-                viewModel.downloadAndOpen(book)
-            }
+            widgetShelfBook = book
+        } else {
+            onWidgetHandled()
         }
     }
 
@@ -987,6 +984,11 @@ private fun LibraryRoute(
         },
         notice = notice,
         onNoticeShown = viewModel::noticeShown,
+        widgetBook = widgetShelfBook,
+        onWidgetBookHandled = {
+            widgetShelfBook = null
+            onWidgetHandled()
+        },
     )
 }
 

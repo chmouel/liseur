@@ -536,7 +536,13 @@ class AppContainer(context: Context) {
                         database.remoteServerDao().get()?.let(LiveIdentity::from) == identity
                     ) {
                         _insightInvalidations.value += 1
-                        WidgetUpdater.requestStatsRefresh(context.applicationContext)
+                        try {
+                            WidgetUpdater.requestStatsRefresh(context.applicationContext)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Best-effort, as after a position sync: the event itself was handled.
+                        }
                         result.copy(completed = result.completed + LiveTopic.INSIGHTS)
                     } else result
                 },
