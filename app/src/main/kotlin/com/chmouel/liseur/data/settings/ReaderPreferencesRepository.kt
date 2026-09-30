@@ -200,6 +200,18 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.AUTO_SCROLL_SPEED] = AutoScrollPreference.snap(step) }
     }
 
+    /**
+     * One notch slower or faster from the stored speed. Read and written
+     * in one edit, so two quick taps on the page land two notches apart
+     * instead of both nudging the value the screen last saw.
+     */
+    suspend fun nudgeAutoScrollSpeed(by: Int) {
+        store.edit {
+            val current = it[Keys.AUTO_SCROLL_SPEED] ?: AutoScrollPreference.DEFAULT_STEP
+            it[Keys.AUTO_SCROLL_SPEED] = AutoScrollPreference.nudge(current, by)
+        }
+    }
+
     suspend fun setTextAlign(align: ReaderTextAlign) {
         store.edit { it[Keys.TEXT_ALIGN] = align.id }
     }

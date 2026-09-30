@@ -2559,6 +2559,9 @@ class ReaderViewModel(
     fun setAutoScrollSpeed(step: Float) =
         viewModelScope.launch { prefsRepo.setAutoScrollSpeed(step) }
 
+    fun nudgeAutoScrollSpeed(by: Int) =
+        viewModelScope.launch { prefsRepo.nudgeAutoScrollSpeed(by) }
+
     /**
      * Steps the middle of the footer on, telling [onChosen] what it
      * landed on so the note can name it. The choice is made inside the

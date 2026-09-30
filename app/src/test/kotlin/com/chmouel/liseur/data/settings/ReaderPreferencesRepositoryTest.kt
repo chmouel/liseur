@@ -321,4 +321,18 @@ class ReaderPreferencesRepositoryTest {
         assertEquals(FooterField.PERCENT_READ, repo.prefs.first().footerLeft)
         assertEquals(FooterField.PAGE_OF_BOOK, repo.prefs.first().footerRight)
     }
+
+    @Test
+    fun `quick taps on the auto-scroll speed buttons each count`() = runTest {
+        val repo = ReaderPreferencesRepository(store())
+        val start = AutoScrollPreference.DEFAULT_STEP
+        listOf(
+            async { repo.nudgeAutoScrollSpeed(1) },
+            async { repo.nudgeAutoScrollSpeed(1) },
+        ).awaitAll()
+        assertEquals(start + 2, repo.prefs.first().autoScrollSpeed, 0f)
+
+        repeat(AutoScrollPreference.MAX_STEP + 2) { repo.nudgeAutoScrollSpeed(1) }
+        assertEquals(AutoScrollPreference.MAX_STEP.toFloat(), repo.prefs.first().autoScrollSpeed, 0f)
+    }
 }

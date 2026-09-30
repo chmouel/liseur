@@ -491,6 +491,7 @@ class ReaderActivity : FragmentActivity() {
                                             setPageTurnStyle = viewModel::setPageTurnStyle,
                                             setColumnMode = viewModel::setColumnMode,
                                             setAutoScrollSpeed = viewModel::setAutoScrollSpeed,
+                                            nudgeAutoScrollSpeed = { viewModel.nudgeAutoScrollSpeed(it) },
                                             setTypographyIsOwn = viewModel::setTypographyIsOwn,
                                             fineTypography = FineTypographyActions(
                                                 onTextAlignChanged = viewModel::setTextAlign,

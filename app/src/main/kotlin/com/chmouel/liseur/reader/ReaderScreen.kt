@@ -150,7 +150,6 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.reader.chrome.CatchUpPill
-import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.reader.chrome.AdvancedSheet
 import com.chmouel.liseur.reader.chrome.AUTO_SCROLL_CONTROLS_LINGER_MS
 import com.chmouel.liseur.reader.chrome.AutoScrollControls
@@ -2340,6 +2339,31 @@ fun ReaderScreen(
         }
     }
 
+    /*
+     * The place a page stopped from the auto-scroll controls has reached.
+     *
+     * The loop saves every two seconds and the manual poll takes the
+     * stopped page as unmoved, so without this a reader who pauses and
+     * leaves could be saved up to two seconds behind the page.
+     */
+    fun holdScrolledPlaceNow() {
+        effectScope.launch {
+            if (!effectiveScrollingNow) return@launch
+            val nav = navigatorNow ?: return@launch
+            val since = heldPlace.mark()
+            val captured = try {
+                scrolledPlace(nav)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            if (captured != null && heldPlace.hold(captured, since)) {
+                publishCaptured(nav, captured, NavigatorPositionEvent.READER_MOVEMENT)
+            }
+        }
+    }
+
     /**
      * Marks the page, or unmarks it, from wherever the reader asked.
      *
@@ -3015,20 +3039,20 @@ fun ReaderScreen(
                         onPause = {
                             autoScrollPaused = true
                             autoScrollControlsPoke += 1
+                            holdScrolledPlaceNow()
                         },
                         onSlower = {
-                            onPrefsAction.setAutoScrollSpeed(
-                                AutoScrollPreference.nudge(prefs.autoScrollSpeed, -1),
-                            )
+                            onPrefsAction.nudgeAutoScrollSpeed(-1)
                             autoScrollControlsPoke += 1
                         },
                         onFaster = {
-                            onPrefsAction.setAutoScrollSpeed(
-                                AutoScrollPreference.nudge(prefs.autoScrollSpeed, 1),
-                            )
+                            onPrefsAction.nudgeAutoScrollSpeed(1)
                             autoScrollControlsPoke += 1
                         },
-                        onStop = { autoScrollArmed = false },
+                        onStop = {
+                            autoScrollArmed = false
+                            holdScrolledPlaceNow()
+                        },
                     )
                 }
                 if (scrubberShown) {
@@ -3912,6 +3936,7 @@ class ReaderPrefsActions(
     val setPageTurnStyle: (PageTurnStyle) -> Unit,
     val setColumnMode: (ColumnMode) -> Unit,
     val setAutoScrollSpeed: (Float) -> Unit,
+    val nudgeAutoScrollSpeed: (Int) -> Unit,
     val setTypographyIsOwn: (Boolean) -> Unit,
     val fineTypography: FineTypographyActions,
 )
