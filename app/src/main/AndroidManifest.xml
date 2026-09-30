@@ -80,6 +80,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.widget.WidgetLaunchActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name=".ui.widget.LibraryWidgetReceiver"
             android:exported="true"

@@ -19,7 +19,6 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import com.chmouel.liseur.MainActivity
 import com.chmouel.liseur.R
 import kotlinx.coroutines.coroutineScope
 
@@ -32,7 +31,7 @@ class WeekStatsWidget : GlanceAppWidget() {
             GlanceTheme(colors = LiseurGlanceColorScheme.colors) {
                 val snapshot = live.observe()
                 val stats = snapshot.stats ?: return@GlanceTheme
-                val onClick = MainActivity.widgetIntent(context, stats = true)
+                val onClick = WidgetLaunchActivity.intent(context, stats = true)
                 WidgetScaffold(onClick = onClick) {
                     StatsContent(context = context, stats = stats)
                 }

@@ -14,6 +14,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.await
@@ -28,8 +29,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** What the hourly refresh should be doing, given how many widgets are placed. */
 enum class PeriodicRefresh { Enqueue, Cancel }
@@ -63,16 +67,34 @@ object WidgetUpdater {
     private fun widgets(): List<GlanceAppWidget> =
         listOf(CoverOnlyWidget(), WeekStatsWidget(), CoverStatsWidget(), LibraryWidget())
 
+    private val statsRequests = Mutex()
+
     suspend fun requestStatsRefresh(context: Context) {
         if (!supportsWidgets(context)) return
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            "liseur-widget-stats",
-            ExistingWorkPolicy.KEEP,
-            OneTimeWorkRequestBuilder<WidgetStatsRefreshWorker>()
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .setInitialDelay(3, TimeUnit.SECONDS)
-                .build(),
-        ).await()
+        val work = WorkManager.getInstance(context)
+        statsRequests.withLock {
+            val states = work.getWorkInfosForUniqueWorkFlow(STATS_REFRESH).first().map { it.state }
+            val policy = statsRefreshPolicy(states) ?: return
+            work.enqueueUniqueWork(
+                STATS_REFRESH,
+                policy,
+                OneTimeWorkRequestBuilder<WidgetStatsRefreshWorker>()
+                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .setInitialDelay(3, TimeUnit.SECONDS)
+                    .build(),
+            ).await()
+        }
+    }
+
+    /**
+     * A waiting refresh has not fetched yet, so it already covers this
+     * request. A running one may have fetched before the event that asked
+     * for this one, so a single trailing run is queued behind it.
+     */
+    internal fun statsRefreshPolicy(states: List<WorkInfo.State>): ExistingWorkPolicy? = when {
+        states.any { it == WorkInfo.State.ENQUEUED || it == WorkInfo.State.BLOCKED } -> null
+        states.any { it == WorkInfo.State.RUNNING } -> ExistingWorkPolicy.APPEND_OR_REPLACE
+        else -> ExistingWorkPolicy.KEEP
     }
 
     internal suspend fun hasStatsWidgets(context: Context): Boolean {
@@ -168,6 +190,7 @@ object WidgetUpdater {
     private const val MAX_WAIT_MS = 15_000L
     private const val PERIODIC_REFRESH = "liseur-widget-refresh"
     private const val ONE_OFF_REDRAW = "liseur-widget-redraw"
+    private const val STATS_REFRESH = "liseur-widget-stats"
 }
 
 /** Network work is separate from rendering, so offline widgets still redraw and roll over. */

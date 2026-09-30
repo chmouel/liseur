@@ -84,21 +84,9 @@ import androidx.core.net.toUri
 import androidx.compose.runtime.collectAsState
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.ui.widget.WidgetRequests
 
 class MainActivity : ComponentActivity() {
-    private val widgetRequest = kotlinx.coroutines.flow.MutableStateFlow<Intent?>(null)
-
-    companion object {
-        private const val WIDGET_TARGET = "widget_target"
-        private const val WIDGET_BOOK = "widget_book"
-
-        fun widgetIntent(context: Context, stats: Boolean = false, bookUrl: String? = null): Intent =
-            Intent(context, MainActivity::class.java)
-                .putExtra(WIDGET_TARGET, if (stats) "stats" else "library")
-                .putExtra(WIDGET_BOOK, bookUrl)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    }
-
     /**
      * Whether we still have to decide between the library and the book you
      * were reading. The splash screen stays up while we do, which takes one
@@ -115,10 +103,7 @@ class MainActivity : ComponentActivity() {
         // Only a genuinely cold start resumes a book: coming back from the
         // reader must land on the library, not bounce straight back in.
         if (savedInstanceState != null) deciding = false
-        if (intent.hasExtra(WIDGET_TARGET)) {
-            deciding = false
-            widgetRequest.value = intent
-        }
+        if (WidgetRequests.pending.value != null) deciding = false
 
         setContent {
             val settings by container.appSettings.settings
@@ -139,16 +124,12 @@ class MainActivity : ComponentActivity() {
                     eInk = LocalEInk.current,
                     colorEInk = settings.colorEInk,
                 ) {
-                    val request by widgetRequest.collectAsState()
+                    val request = WidgetRequests.pending.collectAsState().value
                     LiseurApp(
                         settings,
-                        widgetTarget = request?.getStringExtra(WIDGET_TARGET),
-                        widgetBook = request?.getStringExtra(WIDGET_BOOK),
-                        onWidgetHandled = {
-                            widgetRequest.value = null
-                            intent.removeExtra(WIDGET_TARGET)
-                            intent.removeExtra(WIDGET_BOOK)
-                        },
+                        widgetTarget = request?.let { if (it.stats) "stats" else "library" },
+                        widgetBook = request?.bookUrl,
+                        onWidgetHandled = { request?.let(WidgetRequests::consume) },
                     )
                 }
             }
@@ -166,12 +147,6 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Being here means the library is what you left the app on.
         lifecycleScope.launch { container.sessionState.setLeftFromReader(false) }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        if (intent.hasExtra(WIDGET_TARGET)) widgetRequest.value = intent
     }
 
     private suspend fun resumeLastBook() {

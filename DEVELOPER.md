@@ -1140,8 +1140,10 @@ cached cover files; it never waits on a network request.
   `RemoteStatsCache`, keeping only the other-device residual after exact
   local overlap is subtracted (ADR-0039). The dashboard and background
   worker share this refresher. A successful position sync, live insights
-  update, or widget placement queues one coalesced, network-constrained
-  refresh. The hourly redraw also requests a refresh. The worker checks
+  update, or widget placement queues one network-constrained refresh.
+  A request while a refresh waits is covered by it; a request while one
+  runs queues a single trailing run. The hourly redraw also requests a
+  refresh. The worker checks
   that a stats widget is still placed and respects local-network access.
   Failed requests retain the last proven data.
 - The widget computes local sessions in the cached account timezone, so
@@ -1169,6 +1171,11 @@ cached cover files; it never waits on a network request.
   Each cover opens its book, using the normal download-and-open flow for
   remote books. The header opens the library. Widget requests are consumed
   so activity recreation cannot repeat a download or redirect navigation.
+- Dashboard, library and remote-book taps go through the unexported
+  `WidgetLaunchActivity`, which hands the request to `MainActivity` in
+  process via `WidgetRequests`. `MainActivity` is exported, so it never
+  reads widget targets from intent extras. In cover and stats, the book
+  side opens the book and the figures open the dashboard.
 - One trigger redraws them: `AppContainer` collects
   `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
   `WIDGET_TABLES` (`books`, `reading_progress`, `reading_sessions`,

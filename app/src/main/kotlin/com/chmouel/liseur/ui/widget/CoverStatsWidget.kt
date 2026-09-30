@@ -7,8 +7,10 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
@@ -25,7 +27,6 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.chmouel.liseur.R
-import com.chmouel.liseur.MainActivity
 import kotlinx.coroutines.coroutineScope
 
 class CoverStatsWidget : GlanceAppWidget() {
@@ -39,7 +40,7 @@ class CoverStatsWidget : GlanceAppWidget() {
                 val book = snapshot.book
                 val stats = snapshot.stats ?: return@GlanceTheme
                 if (book == null) {
-                    WidgetScaffold(onClick = MainActivity.widgetIntent(context, stats = true)) {
+                    WidgetScaffold(onClick = WidgetLaunchActivity.intent(context, stats = true)) {
                         StatsContent(context, stats)
                     }
                 } else {
@@ -119,17 +120,24 @@ private fun CoverStatsContent(
             Spacer(GlanceModifier.height(if (roomy) 8.dp else 6.dp))
             if (roomy || !largeText) ProgressTrack(progression = book.progression)
             Spacer(GlanceModifier.height(if (roomy) 8.dp else 4.dp))
-            Text(
-                text = periodTotal(context, stats),
-                style = TextStyle(
-                    color = GlanceTheme.colors.onSurface,
-                    fontSize = if (roomy) 13.sp else 12.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-                maxLines = 1,
-            )
-            Spacer(GlanceModifier.height(4.dp))
-            StatsScope(context, stats)
+            // The book side opens the book; the figures open the dashboard.
+            Column(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .clickable(actionStartActivity(WidgetLaunchActivity.intent(context, stats = true))),
+            ) {
+                Text(
+                    text = periodTotal(context, stats),
+                    style = TextStyle(
+                        color = GlanceTheme.colors.onSurface,
+                        fontSize = if (roomy) 13.sp else 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    maxLines = 1,
+                )
+                Spacer(GlanceModifier.height(4.dp))
+                StatsScope(context, stats)
+            }
         }
     }
 }

@@ -42,7 +42,6 @@ import androidx.glance.layout.width
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import com.chmouel.liseur.MainActivity
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import kotlinx.coroutines.Dispatchers
@@ -103,7 +102,7 @@ class LibraryWidget : GlanceAppWidget() {
                             if (size.width.value >= 240) Spacer(GlanceModifier.width(8.dp))
                             Text(
                                 text = context.getString(R.string.widget_library_label),
-                                modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(MainActivity.widgetIntent(context))),
+                                modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(WidgetLaunchActivity.intent(context))),
                                 style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 15.sp),
                                 maxLines = 1,
                             )

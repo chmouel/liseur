@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.core.graphics.scale
-import com.chmouel.liseur.MainActivity
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
@@ -174,7 +173,7 @@ class WidgetRepository(
             ReaderActivity.intent(context, fileUrl, url)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         } else {
-            MainActivity.widgetIntent(context, bookUrl = url)
+            WidgetLaunchActivity.intent(context, bookUrl = url)
         }
         return WidgetBook(
             url = url,
