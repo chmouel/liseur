@@ -1152,7 +1152,9 @@ cached cover files; it never waits on a network request.
   account and are rekeyed/cleared by `RemoteAccountRepository`.
 - Each cached day and window records its refresh time. Stats widgets show
   “All devices” only when every day of the selected period is covered and
-  the oldest contributing day was refreshed within the last hour. Older
+  the oldest contributing day was refreshed within the last hour. A
+  streak taken from a week or month window counts that window's refresh
+  time too. Older
   or partial data is labelled as including last synced reading; without
   remote coverage the widget says “This device”. Missing days are distinct
   from explicitly covered zero-activity days.

@@ -29,6 +29,26 @@ class WidgetPeriodTest {
         assertFalse(nextDay.remoteCovered)
         assertEquals(0L, nextDay.totalMs)
     }
+
+    @Test
+    fun `a streak from an older window is only as fresh as that window`() {
+        val window = WidgetRemoteWindow(
+            range = StatsRange.THIS_WEEK, from = today.minusDays(3), today = today,
+            sessions = 0, workIds = emptySet(), combinedStreak = 9, refreshedAt = 50L,
+        )
+        val remote = WidgetRemote(
+            days = mapOf(today to 60_000L), refreshedAtByDay = mapOf(today to 123L), windows = listOf(window),
+        )
+        val day = periodStats(emptyList(), emptyMap(), zone, today, DayOfWeek.MONDAY, WidgetPeriod.DAY, remote)
+        assertEquals(9, day.streakDays)
+        assertEquals(50L, day.remoteUpdatedAt)
+
+        // A window whose streak is not shown does not age the figures.
+        val shorter = remote.copy(windows = listOf(window.copy(combinedStreak = 1)))
+        val unused = periodStats(emptyList(), emptyMap(), zone, today, DayOfWeek.MONDAY, WidgetPeriod.DAY, shorter)
+        assertEquals(1, unused.streakDays)
+        assertEquals(123L, unused.remoteUpdatedAt)
+    }
     private val zone = ZoneId.of("UTC")
     private val today = LocalDate.of(2026, 9, 24) // Thursday
     private val hour = TimeUnit.HOURS.toMillis(1)

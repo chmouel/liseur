@@ -81,6 +81,7 @@ data class WidgetRemoteWindow(
     val sessions: Int,
     val workIds: Set<String>,
     val combinedStreak: Int,
+    val refreshedAt: Long = 0,
 )
 
 /**
@@ -118,9 +119,11 @@ fun periodStats(
     }
     val dates = generateSequence(from) { it.plusDays(1).takeUnless { date -> date > today } }.toList()
     val covered = dates.all { it in remoteDays }
-    val updatedAt = dates.mapNotNull { remote?.refreshedAtByDay?.get(it) }.minOrNull()
-    val streak = remote?.let { streakWith(sessions, zone, today, stats.streakDays, it, remoteDays) }
-        ?: stats.streakDays
+    val pick = remote?.let { streakWith(sessions, zone, today, stats.streakDays, it, remoteDays) }
+    val streak = pick?.days ?: stats.streakDays
+    // A streak taken from a window is only as fresh as that window.
+    val updatedAt = (dates.mapNotNull { remote?.refreshedAtByDay?.get(it) } + listOfNotNull(pick?.windowRefreshedAt))
+        .minOrNull()
     return when (period) {
         WidgetPeriod.DAY -> {
             // Matches readingStats: a sitting counts on the day it was last read.
@@ -176,9 +179,12 @@ fun periodStats(
     }
 }
 
+private data class StreakPick(val days: Int, val windowRefreshedAt: Long?)
+
 /**
  * The longest run the reader can be shown: this device's, the one across
- * the days either side read on, or the server's own for today.
+ * the days either side read on, or the server's own for today. When the
+ * server's wins, its window's refresh time comes along.
  */
 private fun streakWith(
     sessions: List<SessionSpan>,
@@ -187,12 +193,17 @@ private fun streakWith(
     local: Int,
     remote: WidgetRemote,
     remoteDays: Map<LocalDate, Long>,
-): Int {
+): StreakPick {
     val active = sessions.filter { it.durationMs > 0 }
         .mapTo(mutableSetOf()) { Instant.ofEpochMilli(it.lastReadAt).atZone(zone).toLocalDate() }
     remoteDays.filterValues { it > 0 }.keys.forEach { active += it }
-    val server = remote.windows.filter { it.today == today }.maxOfOrNull { it.combinedStreak } ?: 0
-    return maxOf(local, activeDayStreak(active, today), server)
+    val seen = maxOf(local, activeDayStreak(active, today))
+    val server = remote.windows.filter { it.today == today }.maxByOrNull { it.combinedStreak }
+    return if (server != null && server.combinedStreak > seen) {
+        StreakPick(server.combinedStreak, server.refreshedAt)
+    } else {
+        StreakPick(seen, null)
+    }
 }
 
 private fun Long?.orZero(): Long = this ?: 0L

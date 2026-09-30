@@ -203,6 +203,7 @@ internal fun widgetRemote(
             sessions = row.residualSessions,
             workIds = row.workIds.split('\n').filter { it.isNotEmpty() }.toSet(),
             combinedStreak = row.combinedStreak,
+            refreshedAt = row.refreshedAt,
         )
     },
     workIdByUrl = aliases.filter { it.usable }.associate { it.bookUrl to it.workId },
