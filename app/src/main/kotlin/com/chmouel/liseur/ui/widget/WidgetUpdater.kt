@@ -8,6 +8,8 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
+import androidx.work.Constraints
+import androidx.work.NetworkType
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -15,7 +17,10 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.await
+import com.chmouel.liseur.container
+import com.chmouel.liseur.domain.localeWeekStart
 import java.util.concurrent.TimeUnit
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +61,25 @@ object WidgetUpdater {
     val generation: StateFlow<Long> = refreshes.asStateFlow()
 
     private fun widgets(): List<GlanceAppWidget> =
-        listOf(CoverOnlyWidget(), WeekStatsWidget(), CoverStatsWidget())
+        listOf(CoverOnlyWidget(), WeekStatsWidget(), CoverStatsWidget(), LibraryWidget())
+
+    suspend fun requestStatsRefresh(context: Context) {
+        if (!supportsWidgets(context)) return
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "liseur-widget-stats",
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<WidgetStatsRefreshWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setInitialDelay(3, TimeUnit.SECONDS)
+                .build(),
+        ).await()
+    }
+
+    internal suspend fun hasStatsWidgets(context: Context): Boolean {
+        if (!supportsWidgets(context)) return false
+        val manager = GlanceAppWidgetManager(context)
+        return listOf(WeekStatsWidget(), CoverStatsWidget()).any { manager.getGlanceIds(it.javaClass).isNotEmpty() }
+    }
 
     fun schedule(context: Context) {
         val app = context.applicationContext
@@ -137,6 +160,7 @@ object WidgetUpdater {
             PeriodicRefresh.Cancel -> work.cancelUniqueWork(PERIODIC_REFRESH)
         }
         operation.await()
+        if (hasStatsWidgets(context)) requestStatsRefresh(context)
     }
 
     private const val TAG = "WidgetUpdater"
@@ -144,6 +168,16 @@ object WidgetUpdater {
     private const val MAX_WAIT_MS = 15_000L
     private const val PERIODIC_REFRESH = "liseur-widget-refresh"
     private const val ONE_OFF_REDRAW = "liseur-widget-redraw"
+}
+
+/** Network work is separate from rendering, so offline widgets still redraw and roll over. */
+class WidgetStatsRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        if (WidgetUpdater.hasStatsWidgets(applicationContext)) {
+            applicationContext.container.remoteStatsRefresh.refresh(localeWeekStart(Locale.getDefault()))
+        }
+        return Result.success()
+    }
 }
 
 /**

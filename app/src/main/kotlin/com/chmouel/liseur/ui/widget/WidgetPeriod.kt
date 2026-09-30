@@ -45,6 +45,8 @@ data class PeriodStats(
     val streakDays: Int,
     val bars: List<WidgetBar>,
     val today: LocalDate,
+    val remoteCovered: Boolean = false,
+    val remoteUpdatedAt: Long? = null,
 ) {
     val peakMs: Long get() = bars.maxOfOrNull { it.totalMs } ?: 0L
 
@@ -55,17 +57,19 @@ data class PeriodStats(
 /**
  * What the last proven liseur-sync snapshot counted on other devices.
  *
- * Saved by the stats screen, never fetched by a widget. Only rows in the
- * device's own timezone and for the current account belong here, and
+ * Saved by the shared refresher, never fetched during rendering. Only rows
+ * in the account timezone and for the current account belong here, and
  * none of it includes this device's captured sittings, so it is added to
  * the local figures rather than compared with them.
  */
 data class WidgetRemote(
+    val zone: ZoneId? = null,
     /** Other-device reading per day; a day that is absent was not covered. */
     val days: Map<LocalDate, Long> = emptyMap(),
     val windows: List<WidgetRemoteWindow> = emptyList(),
     /** This device's book URLs by server work id, to count a book read on both once. */
     val workIdByUrl: Map<String, String> = emptyMap(),
+    val refreshedAtByDay: Map<LocalDate, Long> = emptyMap(),
 )
 
 /** A week or month snapshot, as the stats screen last proved it. */
@@ -107,6 +111,14 @@ fun periodStats(
     val range = if (period == WidgetPeriod.MONTH) StatsRange.THIS_MONTH else StatsRange.THIS_WEEK
     val stats = readingStats(sessions, books, zone, today, range, weekStart)
     val remoteDays = remote?.days.orEmpty().filterKeys { !it.isAfter(today) }
+    val from = when (period) {
+        WidgetPeriod.DAY -> today
+        WidgetPeriod.WEEK -> today.with(TemporalAdjusters.previousOrSame(weekStart))
+        WidgetPeriod.MONTH -> today.withDayOfMonth(1)
+    }
+    val dates = generateSequence(from) { it.plusDays(1).takeUnless { date -> date > today } }.toList()
+    val covered = dates.all { it in remoteDays }
+    val updatedAt = dates.mapNotNull { remote?.refreshedAtByDay?.get(it) }.minOrNull()
     val streak = remote?.let { streakWith(sessions, zone, today, stats.streakDays, it, remoteDays) }
         ?: stats.streakDays
     return when (period) {
@@ -126,6 +138,8 @@ fun periodStats(
                     WidgetBar(date, byDay[date].orEmpty().sumOf { it.durationMs } + remoteDays[date].orZero())
                 },
                 today = today,
+                remoteCovered = covered,
+                remoteUpdatedAt = updatedAt,
             )
         }
         WidgetPeriod.WEEK, WidgetPeriod.MONTH -> {
@@ -155,6 +169,8 @@ fun periodStats(
                 streakDays = streak,
                 bars = bars,
                 today = today,
+                remoteCovered = covered,
+                remoteUpdatedAt = updatedAt,
             )
         }
     }

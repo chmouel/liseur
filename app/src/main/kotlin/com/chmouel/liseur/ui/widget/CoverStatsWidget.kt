@@ -10,7 +10,6 @@ import androidx.glance.GlanceTheme
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
-import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
@@ -26,6 +25,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.chmouel.liseur.R
+import com.chmouel.liseur.MainActivity
 import kotlinx.coroutines.coroutineScope
 
 class CoverStatsWidget : GlanceAppWidget() {
@@ -39,7 +39,9 @@ class CoverStatsWidget : GlanceAppWidget() {
                 val book = snapshot.book
                 val stats = snapshot.stats ?: return@GlanceTheme
                 if (book == null) {
-                    EmptyShelf(context)
+                    WidgetScaffold(onClick = MainActivity.widgetIntent(context, stats = true)) {
+                        StatsContent(context, stats)
+                    }
                 } else {
                     WidgetScaffold(onClick = book.openIntent) {
                         CoverStatsContent(
@@ -61,12 +63,12 @@ private fun CoverStatsContent(
     stats: WidgetStats,
 ) {
     val roomy = sizeAtLeast(CoverStatsRoomy)
+    val largeText = context.resources.configuration.fontScale > 1.2f
     val coverWidth = if (roomy) 96.dp else 64.dp
     Row(
         modifier = GlanceModifier
             .fillMaxSize()
-            .padding(if (roomy) 12.dp else 8.dp)
-            .background(widgetCard),
+            .padding(if (roomy) 12.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BookCoverImage(
@@ -82,8 +84,8 @@ private fun CoverStatsContent(
                 .padding(start = if (roomy) 12.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = context.getString(R.string.continue_reading).uppercase(),
+            if (!largeText) Text(
+                text = context.getString(R.string.continue_reading),
                 style = TextStyle(
                     color = GlanceTheme.colors.primary,
                     fontSize = 10.sp,
@@ -102,7 +104,7 @@ private fun CoverStatsContent(
                 ),
                 maxLines = if (roomy) 2 else 1,
             )
-            if (roomy) {
+            if (roomy && !largeText) {
                 book.author?.let { author ->
                     Text(
                         text = author,
@@ -115,7 +117,7 @@ private fun CoverStatsContent(
                 }
             }
             Spacer(GlanceModifier.height(if (roomy) 8.dp else 6.dp))
-            ProgressTrack(progression = book.progression)
+            if (roomy || !largeText) ProgressTrack(progression = book.progression)
             Spacer(GlanceModifier.height(if (roomy) 8.dp else 4.dp))
             Text(
                 text = periodTotal(context, stats),
@@ -126,10 +128,8 @@ private fun CoverStatsContent(
                 ),
                 maxLines = 1,
             )
-            if (roomy && stats.figures.bars.isNotEmpty()) {
-                Spacer(GlanceModifier.height(6.dp))
-                StatsBars(stats = stats, barsHeight = 24.dp)
-            }
+            Spacer(GlanceModifier.height(4.dp))
+            StatsScope(context, stats)
         }
     }
 }

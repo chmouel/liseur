@@ -22,6 +22,7 @@ data class RemoteStatsDay(
     @ColumnInfo(name = "date") val date: String,
     @ColumnInfo(name = "zone") val zone: String,
     @ColumnInfo(name = "residual_ms") val residualMs: Long,
+    @ColumnInfo(name = "refreshed_at", defaultValue = "0") val refreshedAt: Long = 0,
 )
 
 /** A week or month snapshot's other-device sittings and works. */
@@ -37,10 +38,14 @@ data class RemoteStatsWindow(
     /** Server work ids, one per line. */
     @ColumnInfo(name = "work_ids") val workIds: String,
     @ColumnInfo(name = "combined_streak") val combinedStreak: Int,
+    @ColumnInfo(name = "refreshed_at", defaultValue = "0") val refreshedAt: Long = 0,
 )
 
 @Dao
 interface RemoteStatsDao {
+    @Query("SELECT zone FROM remote_stats_day WHERE account_key = :accountKey ORDER BY refreshed_at DESC, date DESC LIMIT 1")
+    suspend fun zone(accountKey: String): String?
+
     @Upsert
     suspend fun upsertDays(rows: List<RemoteStatsDay>)
 

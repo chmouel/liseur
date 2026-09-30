@@ -116,6 +116,18 @@ guessed about reading you did before Liseur arrived.
   </tr>
 </table>
 
+## Home-screen widgets
+
+The library widget pages through book covers. Reading widgets show the selected
+period, reading time, and whether the totals include synced devices.
+
+| Light | Dark |
+| --- | --- |
+| ![Widgets in light mode](screenshots/22-widgets-light.png) | ![Widgets in dark mode](screenshots/23-widgets-dark.png) |
+
+These widget screenshots were captured in a disposable emulator using a native
+AppWidgetHost with the demo library.
+
 ## On a tablet
 
 <table>

@@ -233,6 +233,46 @@ class WidgetRepositoryTest {
         }
     }
 
+    @Test
+    fun `account timezone cache counts all devices plus new local reading without a dashboard`() = runBlocking {
+        val account = com.chmouel.liseur.data.db.RemoteServer(
+            kind = com.chmouel.liseur.data.remote.ServerKind.LISEUR_SYNC, baseUrl = "https://sync",
+            username = "reader", passwordCipher = null, apiKeyCipher = null, accountId = "device",
+            userId = null, koboTokenCipher = null, canDownload = true, addedAt = 1,
+            catalogSyncedAt = null, positionSyncedAt = null, syncToken = null,
+            liseurTokenCipher = null, liseurAccountId = "account",
+        )
+        db.remoteServerDao().upsert(account)
+        val accountZone = "America/Los_Angeles"
+        val monday = today.minusDays(3)
+        val stamp = 123_000L
+        db.remoteStatsDao().upsertDays((0..3).map { day ->
+            com.chmouel.liseur.data.db.RemoteStatsDay(
+                account.accountKey, monday.plusDays(day.toLong()).toString(), accountZone,
+                if (day == 3) 8 * 3_600_000L else 0L, stamp,
+            )
+        })
+        // Midnight on this phone is yesterday in the account timezone.
+        insertSession("file:///a.epub", today, 30 * 60_000L)
+        val repo = WidgetRepository(
+            db.bookDao(), db.readingProgressDao(), db.readingSessionDao(),
+            zone = { zone }, today = { today }, weekStart = { weekStart },
+            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(),
+            identityDao = db.workIdentityDao(),
+        )
+        val week = repo.load(context, WidgetPeriod.WEEK).stats!!.figures
+        assertEquals(8 * 3_600_000L + 30 * 60_000L, week.totalMs)
+        assertTrue(week.remoteCovered)
+        assertEquals(stamp, week.remoteUpdatedAt)
+        assertEquals(8 * 3_600_000L, repo.load(context, WidgetPeriod.DAY).stats!!.figures.totalMs)
+        insertSession("file:///new.epub", today, 15 * 60_000L)
+        assertEquals(week.totalMs + 15 * 60_000L, repo.load(context, WidgetPeriod.WEEK).stats!!.figures.totalMs)
+        db.remoteServerDao().upsert(account.copy(liseurAccountId = "another-account"))
+        val switched = repo.load(context, WidgetPeriod.WEEK).stats!!.figures
+        assertEquals(45 * 60_000L, switched.totalMs)
+        assertNull(switched.remoteUpdatedAt)
+    }
+
     private fun repository(decodeCover: (String) -> Bitmap? = { null }) = WidgetRepository(
         bookDao = db.bookDao(),
         progressDao = db.readingProgressDao(),

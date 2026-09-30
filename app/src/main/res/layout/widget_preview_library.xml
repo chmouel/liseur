@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher previews use framework ImageViews, which require android:tint. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" tools:ignore="UseAppTint" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp" android:background="@drawable/widget_preview_card">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="40dp" android:orientation="horizontal" android:gravity="center_vertical">
+        <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_widget_library" android:tint="@color/widget_preview_ink" android:contentDescription="@null"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:text="@string/widget_library_label" android:textSize="15sp" android:textColor="@color/widget_preview_ink"/>
+        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:padding="8dp" android:src="@drawable/ic_widget_previous" android:tint="@color/widget_preview_ink" android:contentDescription="@string/widget_previous_books"/>
+        <ImageView android:layout_width="40dp" android:layout_height="40dp" android:padding="8dp" android:src="@drawable/ic_widget_next" android:tint="@color/widget_preview_ink" android:contentDescription="@string/widget_next_books"/>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="8dp" android:orientation="horizontal" android:baselineAligned="false">
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_cover"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_fill"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_past"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_ink"/>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="8dp" android:orientation="horizontal" android:baselineAligned="false">
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_cover"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_fill"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_past"/>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginHorizontal="4dp" android:background="@drawable/widget_preview_cover" android:backgroundTint="@color/widget_preview_ink"/>
+    </LinearLayout>
+</LinearLayout>

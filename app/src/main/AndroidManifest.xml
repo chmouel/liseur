@@ -81,6 +81,19 @@
         </activity>
 
         <receiver
+            android:name=".ui.widget.LibraryWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_library_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_library_info" />
+        </receiver>
+
+        <receiver
             android:name=".ui.widget.CoverOnlyWidgetReceiver"
             android:exported="true"
             android:label="@string/widget_cover_label">

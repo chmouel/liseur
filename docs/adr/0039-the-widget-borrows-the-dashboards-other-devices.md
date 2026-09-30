@@ -68,3 +68,26 @@ has been uploaded since.
 - A save checks, in the same transaction as the write, that the account
   is still the connected one, so a snapshot that arrives after a
   disconnect or a rekey leaves nothing behind.
+
+## Amendment: independent refresh and account timezone
+
+Opening the dashboard as the only way to refresh left the home-screen
+figures stale after reading on another device. The widgets now share
+`RemoteStatsRefresh` with the dashboard. Successful position syncs, live
+insights events, and widget placement enqueue a coalesced background job;
+the hourly redraw requests it too. That job runs only while a stats
+widget is placed, requires connectivity, and respects local-network
+access. Rendering continues to read Room immediately, including offline.
+
+The exact residual accounting is unchanged. The widget attributes local
+sessions in the cached account timezone instead of refusing the cache
+when the phone timezone differs. Cache rows record refresh times, and
+the widget distinguishes fresh complete coverage, older or partial
+synced reading, and this-device figures. Account changes remain guarded
+at save time, and all rows follow account rekeying and cleanup.
+
+The dashboard saves its accepted range and the shared refresher fetches
+any missing week/month range without comparison data. The simplified
+widgets show time and streak; removing their charts also removes the
+extra last-seven-days request. Session and book counts remain available
+on the dashboard instead of exposing mixed scope in the Today widget.

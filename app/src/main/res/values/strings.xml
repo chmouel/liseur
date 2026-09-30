@@ -1016,4 +1016,17 @@
         <item quantity="other">Add %1$d books</item>
     </plurals>
     <string name="browse_load_more">Load more</string>
+
+    <!-- Home-screen library and reading widgets. -->
+    <string name="widget_library_label">Your books</string>
+    <string name="widget_library_description">Browse the covers of books in your library</string>
+    <string name="widget_previous_books">Previous books</string>
+    <string name="widget_next_books">Next books</string>
+    <string name="widget_scope_all_devices">All devices</string>
+    <string name="widget_scope_last_sync">Includes last synced reading</string>
+    <string name="widget_scope_this_device">This device</string>
+    <plurals name="widget_streak_days">
+        <item quantity="one">%1$d-day streak</item>
+        <item quantity="other">%1$d-day streak</item>
+    </plurals>
 </resources>

@@ -18,6 +18,7 @@ import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonScope
 import com.chmouel.liseur.domain.readingStats
+import com.chmouel.liseur.domain.unionMinutes
 import com.chmouel.liseur.ui.stats.ReadingStatsUiState
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.stats.StatsProvenance
@@ -739,7 +740,7 @@ class LiseurSyncSnapshotsTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `a week on screen also saves the month and the day bars for the widgets`() = runTest {
+    fun `a week on screen also saves the month for the widgets`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val models = ViewModelStore()
         try {
@@ -753,16 +754,14 @@ class LiseurSyncSnapshotsTest {
                 snapshotSource = client(),
                 aliases = db.workIdentityDao().observeAliases(),
                 liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
-                remoteStats = cache,
+                remoteStats = RemoteStatsRefresh(client(), db.readingSessionDao(), cache, now = { today.atTime(13, 0).atZone(it) }),
             )
             models.put("widgets", model)
             model.refreshServerInsights()
-            // Saturday 5 September: the week began on 31 August and the
-            // month on the 1st, and the day widget's bars reach 30 August.
-            val bars = today.minusDays(6).toString()
+            // The shared refresher fetches the missing month without a comparison.
             withContext(Dispatchers.IO) {
                 repeat(250) {
-                    if (db.remoteStatsDao().days(account.accountKey, zone.id).any { it.date == bars }) {
+                    if (db.remoteStatsDao().windows(account.accountKey, zone.id).size == 2) {
                         return@withContext
                     }
                     Thread.sleep(20)
@@ -774,11 +773,9 @@ class LiseurSyncSnapshotsTest {
                 today.withDayOfMonth(1).toString(),
                 windows.single { it.rangeId == "this_month" }.fromDate,
             )
-            assertEquals(3, requests.size)
+            assertEquals(2, requests.size)
             assertTrue(requests[0].has("comparison"))
             assertFalse(requests[1].has("comparison"))
-            assertEquals(bars, requests[2].getString("from"))
-            assertFalse(requests[2].has("comparison"))
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -818,6 +815,43 @@ class LiseurSyncSnapshotsTest {
             models.clear()
             Dispatchers.resetMain()
         }
+    }
+
+    @Test
+    fun `background refresh fills both widget windows without a dashboard and retains them offline`() = runTest {
+        val id = sitting(unknown = true)
+        transmit(id)
+        val refresh = RemoteStatsRefresh(
+            client(), db.readingSessionDao(), RemoteStatsCache(db.remoteStatsDao(), db.remoteServerDao()),
+            now = { today.atTime(13, 0).atZone(it) },
+        )
+        refresh.refresh(DayOfWeek.MONDAY)
+        assertEquals(setOf("7d", "this_month"), db.remoteStatsDao().windows(account.accountKey, zone.id).map { it.rangeId }.toSet())
+        assertEquals(80 * 60_000L, db.remoteStatsDao().days(account.accountKey, zone.id).last().residualMs)
+        assertEquals(2, requests.size)
+        assertTrue(requests.none { it.has("comparison") })
+        val widget = com.chmouel.liseur.ui.widget.WidgetRepository(
+            db.bookDao(), db.readingProgressDao(), db.readingSessionDao(),
+            zone = { ZoneId.of("UTC") }, today = { today }, weekStart = { DayOfWeek.MONDAY },
+            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(), identityDao = db.workIdentityDao(),
+        ).load(ApplicationProvider.getApplicationContext(), com.chmouel.liseur.ui.widget.WidgetPeriod.WEEK)
+        val localMs = db.readingSessionDao().allOnce().sumOf { it.durationMs }
+        assertEquals(unionMinutes(90.0, localMs, 10.0), widget.stats!!.figures.totalMs)
+        val before = db.remoteStatsDao().days(account.accountKey, zone.id)
+        capabilitiesCode = 503
+        refresh.refresh(DayOfWeek.MONDAY)
+        assertEquals(before, db.remoteStatsDao().days(account.accountKey, zone.id))
+    }
+
+    @Test
+    fun `background refresh respects local network access before making a request`() = runTest {
+        val refresh = RemoteStatsRefresh(
+            client(), db.readingSessionDao(), RemoteStatsCache(db.remoteStatsDao(), db.remoteServerDao()),
+            canAccess = { false }, now = { today.atStartOfDay(it) },
+        )
+        refresh.refresh(DayOfWeek.MONDAY)
+        assertEquals(0, server.requestCount)
+        assertTrue(db.remoteStatsDao().windows(account.accountKey, zone.id).isEmpty())
     }
 
     private fun client() = LiseurSyncSnapshots(

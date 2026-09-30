@@ -13,8 +13,7 @@ import kotlin.math.roundToLong
  * Keeps what the last proven snapshot counted on other devices, so the
  * home-screen widgets can show it without asking the network.
  *
- * Only the dashboard writes here, and only with a snapshot it has
- * already accepted. The widget adds this device's live sittings on top,
+ * The shared refresher writes only proven snapshots here. The widget adds this device's live sittings on top,
  * which is why only the residual is kept: a sitting read here after the
  * snapshot is then still counted once.
  *
@@ -26,6 +25,7 @@ class RemoteStatsCache(
     private val dao: RemoteStatsDao,
     private val serverDao: RemoteServerDao,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
     /** A null [range] saves the days alone, with no window row. */
     internal suspend fun save(
@@ -37,6 +37,7 @@ class RemoteStatsCache(
         totals: SnapshotTotals,
     ) {
         val residual = snapshotResidual(totals) ?: return
+        val refreshedAt = now()
         val oldest = today.minusDays(KEPT_DAYS - 1)
         val days = residual.days
             .filter { it.date in oldest..today }
@@ -46,6 +47,7 @@ class RemoteStatsCache(
                     date = it.date.toString(),
                     zone = zone.id,
                     residualMs = (it.activeMinutes * 60_000.0).roundToLong(),
+                    refreshedAt = refreshedAt,
                 )
             }
         val window = if (range != null && from != null && range in WINDOW_RANGES) {
@@ -58,6 +60,7 @@ class RemoteStatsCache(
                 residualSessions = residual.sessions,
                 workIds = residual.workIds.joinToString("\n"),
                 combinedStreak = residual.combinedStreak,
+                refreshedAt = refreshedAt,
             )
         } else {
             null
@@ -69,7 +72,7 @@ class RemoteStatsCache(
     }
 
     companion object {
-        /** A month plus the seven-day chart of the day widget, with a margin. */
+        /** A month of daily totals, with a margin for rollover and streaks. */
         const val KEPT_DAYS = 62L
 
         private val WINDOW_RANGES = setOf(StatsRange.THIS_WEEK, StatsRange.THIS_MONTH)

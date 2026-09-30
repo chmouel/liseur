@@ -1132,30 +1132,47 @@ reader behavior.
 
 ### Home-screen widgets
 
-The three Glance widgets in `ui/widget/` (current cover, reading stats,
-cover and stats) read only this device's Room data. They never touch the
-network or a connected server, and they ignore a remote cover URL.
+The four Glance widgets in `ui/widget/` show the current cover, reading
+stats, cover and stats, or a paged library grid. Rendering reads Room and
+cached cover files; it never waits on a network request.
 
-- Reading on other devices reaches the stats widgets through Room
-  (ADR-0039). When the stats screen accepts a liseur-sync snapshot,
-  `RemoteStatsCache` saves what the server counted outside this
-  device's captured sittings: per-day minutes in `remote_stats_day`, and
-  week/month sittings, works and combined streak in
-  `remote_stats_window`. The screen saves this week and this month
-  whichever span it shows, fetching the missing one without a
-  comparison, plus the last seven days when neither span reaches back
-  that far. A save checks the connected account in the same transaction
-  as the write. `periodStats` adds these to the live local figures and
-  uses `work_alias` to count a book read here and elsewhere once. Minutes and bars use every covered day. Sittings and books use
-  only a window for the same week or month, so the Today widget's
-  sittings and books stay this device's. Rows apply only to the current
-  liseur-sync account and to the device's own timezone. They refresh only
-  when the stats screen is opened. Both tables are peer-keyed and are
-  handled by `carryPeerState` and `forgetSyncPeer`.
+- `RemoteStatsRefresh` saves proven liseur-sync snapshots through
+  `RemoteStatsCache`, keeping only the other-device residual after exact
+  local overlap is subtracted (ADR-0039). The dashboard and background
+  worker share this refresher. A successful position sync, live insights
+  update, or widget placement queues one coalesced, network-constrained
+  refresh. The hourly redraw also requests a refresh. The worker checks
+  that a stats widget is still placed and respects local-network access.
+  Failed requests retain the last proven data.
+- The widget computes local sessions in the cached account timezone, so
+  a different phone timezone does not drop other devices or mix calendar
+  days. Without a cache it uses the phone timezone. Rows remain keyed by
+  account and are rekeyed/cleared by `RemoteAccountRepository`.
+- Each cached day and window records its refresh time. Stats widgets show
+  “All devices” only when every day of the selected period is covered and
+  the oldest contributing day was refreshed within the last hour. Older
+  or partial data is labelled as including last synced reading; without
+  remote coverage the widget says “This device”. Missing days are distinct
+  from explicitly covered zero-activity days.
+- Stats widgets show reading time, a streak, and scope. Session/book counts
+  and charts are omitted. Compact layouts with larger system fonts omit
+  secondary details so reading time and scope remain visible. A stats tap
+  opens the dashboard, including on a
+  cold start with automatic reader resume enabled. Cover taps open the
+  book. Cover and stats falls back to stats when no local book exists.
+- The library widget excludes hidden/archived books, orders recently opened
+  books first, then titles and URLs for a stable order, and shows two to
+  four columns with one or two rows. Its Glance state stores a per-instance
+  page anchor. Paging and resizing clamp that anchor after books disappear.
+  Only the visible page's covers are decoded, capped at 160 px per edge
+  to keep an eight-cover RemoteViews payload within the binder budget.
+  Each cover opens its book, using the normal download-and-open flow for
+  remote books. The header opens the library. Widget requests are consumed
+  so activity recreation cannot repeat a download or redirect navigation.
 - One trigger redraws them: `AppContainer` collects
   `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
   `WIDGET_TABLES` (`books`, `reading_progress`, `reading_sessions`,
-  `remote_stats_day`, `remote_stats_window`, `work_alias`). A new table that changes
+  `remote_stats_day`, `remote_stats_window`, `work_alias`, `remote_server`). A new table that changes
   what a widget shows goes into that list. Do not add refresh callbacks
   to repositories or view models.
 - `WidgetUpdater.schedule` feeds `RefreshCoalescer`: a redraw runs after 3 s
@@ -1186,14 +1203,11 @@ network or a connected server, and they ignore a remote cover URL.
   redraw is enqueued as unique one-off work (`requestRedraw`, which
   replaces a request still waiting). Do not start receiver work in a
   process-local scope and return.
-- The chart carries one TalkBack description listing the days read, in
-  the same words the in-app chart speaks for each bar.
+- Library covers expose book titles to TalkBack, and paging arrows have
+  translated descriptions.
 - On a device without `FEATURE_APP_WIDGETS` the updater does nothing:
   there is no `AppWidgetManager`, and Glance's id lookup would throw.
-- Glance truncates a container after ten children. The chart splits its
-  bars into rows sized by `barChunkSize`, and bars under 6 dp are not drawn
-  by the launcher, so an empty day uses that minimum.
-- Covers are decoded at most 256 px on the long edge in `RGB_565`, which
+- Single covers are decoded at most 256 px on the long edge in `RGB_565`, which
   keeps the RemoteViews bitmap well under the binder transaction limit.
 - The picker previews are static layouts (`layout/widget_preview_*`, Android
   12 and later) with PNG fallbacks in `drawable-nodpi`. Their colours in

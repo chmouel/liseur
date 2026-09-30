@@ -11,7 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * What the three Liseur receivers share: the hourly refresh follows
+ * What the Liseur receivers share: the hourly refresh follows
  * whether any widget is placed, and a clock or time zone change redraws,
  * since "today" and "this week" may now be different days. A language
  * change redraws too: the labels and the week start were baked in when

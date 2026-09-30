@@ -15,6 +15,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -31,6 +32,30 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PositionSyncCoordinatorTest {
+    @Test
+    fun `stats refresh failure does not strand sync callers or prevent subsequent sync`() = runTest {
+        val sync = FakeSync()
+        val coordinator = PositionSyncCoordinator(sync, onSynced = {
+            throw IllegalStateException("Widget scheduling failed")
+        })
+        withTimeout(1_000) {
+            assertEquals(SyncOutcome.Success, coordinator.request(SyncScope.Full))
+            sync.outcome = SyncOutcome.Incomplete
+            assertEquals(SyncOutcome.Incomplete, coordinator.request(SyncScope.Book("book")))
+        }
+    }
+
+    @Test
+    fun `successful sync notifies the stats refresh but failed sync does not`() = runTest {
+        val sync = FakeSync()
+        var refreshes = 0
+        val coordinator = PositionSyncCoordinator(sync, onSynced = { refreshes++ })
+        assertEquals(SyncOutcome.Success, coordinator.request(SyncScope.Full))
+        assertEquals(1, refreshes)
+        sync.outcome = SyncOutcome.Failure(SyncFailure.Forbidden)
+        coordinator.request(SyncScope.Book("book"))
+        assertEquals(1, refreshes)
+    }
     private val liveIdentity = com.chmouel.liseur.data.remote.LiveIdentity(
         "account", "http://localhost", com.chmouel.liseur.data.remote.ServerKind.LISEUR_SYNC,
         "cipher", "device",

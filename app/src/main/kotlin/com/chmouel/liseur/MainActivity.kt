@@ -86,6 +86,18 @@ import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.SeriesShelf
 
 class MainActivity : ComponentActivity() {
+    private val widgetRequest = kotlinx.coroutines.flow.MutableStateFlow<Intent?>(null)
+
+    companion object {
+        private const val WIDGET_TARGET = "widget_target"
+        private const val WIDGET_BOOK = "widget_book"
+
+        fun widgetIntent(context: Context, stats: Boolean = false, bookUrl: String? = null): Intent =
+            Intent(context, MainActivity::class.java)
+                .putExtra(WIDGET_TARGET, if (stats) "stats" else "library")
+                .putExtra(WIDGET_BOOK, bookUrl)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
 
     /**
      * Whether we still have to decide between the library and the book you
@@ -103,6 +115,10 @@ class MainActivity : ComponentActivity() {
         // Only a genuinely cold start resumes a book: coming back from the
         // reader must land on the library, not bounce straight back in.
         if (savedInstanceState != null) deciding = false
+        if (intent.hasExtra(WIDGET_TARGET)) {
+            deciding = false
+            widgetRequest.value = intent
+        }
 
         setContent {
             val settings by container.appSettings.settings
@@ -123,7 +139,17 @@ class MainActivity : ComponentActivity() {
                     eInk = LocalEInk.current,
                     colorEInk = settings.colorEInk,
                 ) {
-                    LiseurApp(settings)
+                    val request by widgetRequest.collectAsState()
+                    LiseurApp(
+                        settings,
+                        widgetTarget = request?.getStringExtra(WIDGET_TARGET),
+                        widgetBook = request?.getStringExtra(WIDGET_BOOK),
+                        onWidgetHandled = {
+                            widgetRequest.value = null
+                            intent.removeExtra(WIDGET_TARGET)
+                            intent.removeExtra(WIDGET_BOOK)
+                        },
+                    )
                 }
             }
         }
@@ -140,6 +166,12 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Being here means the library is what you left the app on.
         lifecycleScope.launch { container.sessionState.setLeftFromReader(false) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.hasExtra(WIDGET_TARGET)) widgetRequest.value = intent
     }
 
     private suspend fun resumeLastBook() {
@@ -195,8 +227,19 @@ private const val SOURCE_URL = "https://github.com/chmouel/liseur"
 private const val SPONSOR_URL = "https://github.com/sponsors/chmouel"
 
 @Composable
-private fun LiseurApp(settings: AppSettings) {
+private fun LiseurApp(
+    settings: AppSettings,
+    widgetTarget: String? = null,
+    widgetBook: String? = null,
+    onWidgetHandled: () -> Unit = {},
+) {
     var screen by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
+    LaunchedEffect(widgetTarget, widgetBook) {
+        if (widgetTarget != null) {
+            screen = if (widgetTarget == "stats") Screen.STATS else Screen.LIBRARY
+            if (widgetBook == null) onWidgetHandled()
+        }
+    }
     // The server screen is reached from two places now, and Back has to
     // go back to whichever one it was, not to the one it usually is.
     var accountReturnsTo by rememberSaveable { mutableStateOf(Screen.SETTINGS) }
@@ -215,6 +258,8 @@ private fun LiseurApp(settings: AppSettings) {
 
     when (screen) {
         Screen.LIBRARY -> LibraryRoute(
+            widgetBook = widgetBook,
+            onWidgetHandled = onWidgetHandled,
             onOpenSettings = { screen = Screen.SETTINGS },
             onOpenStats = { screen = Screen.STATS },
             onOpenBookStats = { book ->
@@ -615,10 +660,25 @@ private fun LibraryRoute(
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
     onStartWithFreeBooks: () -> Unit,
+    widgetBook: String? = null,
+    onWidgetHandled: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(widgetBook) {
+        val url = widgetBook ?: return@LaunchedEffect
+        val book = context.container.database.bookDao().getByUrl(url)
+        onWidgetHandled()
+        if (book != null && !book.hidden && !book.archived) {
+            val local = book.openableUri()
+            if (local != null) {
+                context.startActivity(ReaderActivity.intent(context, local, book.url))
+            } else {
+                viewModel.downloadAndOpen(book)
+            }
+        }
+    }
 
     // Coming back from the reader, or from a file manager where a book was
     // just dropped into a watched folder, the library should already know.

@@ -62,6 +62,7 @@ class PositionSyncCoordinator(
      * eventually would not.
      */
     private val carryOn: () -> Unit = {},
+    private val onSynced: suspend () -> Unit = {},
 ) {
 
     /** Re-counts unsettled disagreements without starting a run. */
@@ -232,6 +233,15 @@ class PositionSyncCoordinator(
                     return@withLock
                 }
                 clearInFlight(slot)
+                if (outcome == SyncOutcome.Success || outcome == SyncOutcome.Incomplete) {
+                    try {
+                        onSynced()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Widget refresh is best-effort; sync has already succeeded.
+                    }
+                }
                 slot.complete(outcome)
                 if (!outcome.continuation) {
                     carriedOn = 0

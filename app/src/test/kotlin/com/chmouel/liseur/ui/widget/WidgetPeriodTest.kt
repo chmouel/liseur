@@ -15,6 +15,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetPeriodTest {
+    @Test
+    fun `missing coverage and a day rollover never claim a complete all device period`() {
+        val remote = WidgetRemote(
+            days = mapOf(today to 60_000L), refreshedAtByDay = mapOf(today to 123L),
+        )
+        val day = periodStats(emptyList(), emptyMap(), zone, today, DayOfWeek.MONDAY, WidgetPeriod.DAY, remote)
+        assertTrue(day.remoteCovered)
+        assertEquals(123L, day.remoteUpdatedAt)
+        val week = periodStats(emptyList(), emptyMap(), zone, today, DayOfWeek.MONDAY, WidgetPeriod.WEEK, remote)
+        assertFalse(week.remoteCovered)
+        val nextDay = periodStats(emptyList(), emptyMap(), zone, today.plusDays(1), DayOfWeek.MONDAY, WidgetPeriod.DAY, remote)
+        assertFalse(nextDay.remoteCovered)
+        assertEquals(0L, nextDay.totalMs)
+    }
     private val zone = ZoneId.of("UTC")
     private val today = LocalDate.of(2026, 9, 24) // Thursday
     private val hour = TimeUnit.HOURS.toMillis(1)

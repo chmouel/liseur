@@ -29,6 +29,7 @@ import com.chmouel.liseur.reader.ReaderActivity
 import com.chmouel.liseur.ui.stats.DurationParts
 import com.chmouel.liseur.ui.stats.durationParts
 import java.time.DayOfWeek
+import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -41,7 +42,7 @@ import kotlinx.coroutines.withContext
 /**
  * What a homescreen widget draws, read once per update.
  *
- * Device-local only: the widget never waits on the network. [stats] is
+ * Read from the offline cache: the widget never waits on the network. [stats] is
  * null when the widget did not ask for it.
  */
 data class WidgetSnapshot(
@@ -112,7 +113,8 @@ class WidgetRepository(
     }
 
     private suspend fun loadStats(period: WidgetPeriod): PeriodStats {
-        val zone = zone()
+        val remote = loadRemote()
+        val zone = remote?.zone ?: zone()
         val progressions = progressDao.getAll()
             .associateBy({ it.bookUrl }, { it.totalProgression })
         val statsBooks = bookDao.allOnce().associate { row ->
@@ -144,29 +146,35 @@ class WidgetRepository(
             today = today(zone),
             weekStart = weekStart(),
             period = period,
-            remote = loadRemote(zone),
+            remote = remote,
         )
     }
 
     /** Other devices' reading, as the stats screen last proved it; null without a sync account. */
-    private suspend fun loadRemote(zone: ZoneId): WidgetRemote? {
+    private suspend fun loadRemote(): WidgetRemote? {
         val stats = remoteStatsDao ?: return null
         val account = serverDao?.get()?.takeIf { it.kind == ServerKind.LISEUR_SYNC } ?: return null
         val key = account.accountKey
+        val zone = try {
+            stats.zone(key)?.let(ZoneId::of) ?: return null
+        } catch (_: DateTimeException) {
+            return null
+        }
         val days = stats.days(key, zone.id)
         val windows = stats.windows(key, zone.id)
         if (days.isEmpty() && windows.isEmpty()) return null
-        return widgetRemote(days, windows, identityDao?.aliasesFor(key).orEmpty())
+        val aliases = identityDao?.aliasesFor(key).orEmpty()
+        if (serverDao.get()?.accountKey != key) return null
+        return widgetRemote(days, windows, aliases).copy(zone = zone)
     }
 
-    private fun Book.toWidgetBook(context: Context, progression: Double?, withCover: Boolean): WidgetBook {
+    internal fun Book.toWidgetBook(context: Context, progression: Double?, withCover: Boolean): WidgetBook {
         val fileUrl = openableUri()
         val open = if (fileUrl != null) {
             ReaderActivity.intent(context, fileUrl, url)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         } else {
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            MainActivity.widgetIntent(context, bookUrl = url)
         }
         return WidgetBook(
             url = url,
@@ -199,6 +207,7 @@ internal fun widgetRemote(
         )
     },
     workIdByUrl = aliases.filter { it.usable }.associate { it.bookUrl to it.workId },
+    refreshedAtByDay = days.mapNotNull { row -> row.date.toDateOrNull()?.let { it to row.refreshedAt } }.toMap(),
 )
 
 private fun String.toDateOrNull(): LocalDate? = try {

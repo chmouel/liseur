@@ -972,4 +972,17 @@
         <item quantity="other">Ajouter %1$d livres</item>
     </plurals>
     <string name="browse_load_more">Charger plus</string>
+
+    <!-- Home-screen library and reading widgets. -->
+    <string name="widget_library_label">Vos livres</string>
+    <string name="widget_library_description">Parcourir les couvertures des livres de votre bibliothèque</string>
+    <string name="widget_previous_books">Livres précédents</string>
+    <string name="widget_next_books">Livres suivants</string>
+    <string name="widget_scope_all_devices">Tous les appareils</string>
+    <string name="widget_scope_last_sync">Inclut la dernière lecture synchronisée</string>
+    <string name="widget_scope_this_device">Cet appareil</string>
+    <plurals name="widget_streak_days">
+        <item quantity="one">Série de %1$d jour</item>
+        <item quantity="other">Série de %1$d jours</item>
+    </plurals>
 </resources>

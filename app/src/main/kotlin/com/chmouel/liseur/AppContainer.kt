@@ -37,6 +37,7 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
 import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
+import com.chmouel.liseur.data.liseursync.RemoteStatsRefresh
 import com.chmouel.liseur.data.liseursync.LiseurSyncLive
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
@@ -535,6 +536,7 @@ class AppContainer(context: Context) {
                         database.remoteServerDao().get()?.let(LiveIdentity::from) == identity
                     ) {
                         _insightInvalidations.value += 1
+                        WidgetUpdater.requestStatsRefresh(context.applicationContext)
                         result.copy(completed = result.completed + LiveTopic.INSIGHTS)
                     } else result
                 },
@@ -574,6 +576,7 @@ class AppContainer(context: Context) {
             ),
         ),
         carryOn = { PositionSyncWorker.continueBootstrap(context.applicationContext) },
+        onSynced = { WidgetUpdater.requestStatsRefresh(context.applicationContext) },
     )
 
     private val latestPositionSync = LatestPositionSync(
@@ -640,6 +643,15 @@ class AppContainer(context: Context) {
         database.remoteStatsDao(),
         database.remoteServerDao(),
         inTransaction = { work -> database.withTransaction { work() } },
+    )
+
+    val remoteStatsRefresh = RemoteStatsRefresh(
+        source = syncSnapshots,
+        sessions = database.readingSessionDao(),
+        cache = remoteStatsCache,
+        canAccess = {
+            database.remoteServerDao().get()?.let { !localNetwork.blocks(it.baseUrl) } == true
+        },
     )
 
     val remoteCatalog = RemoteCatalogRepository(

@@ -39,7 +39,7 @@ import androidx.sqlite.execSQL
         RemoteStatsDay::class,
         RemoteStatsWindow::class,
     ],
-    version = 62,
+    version = 63,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1808,6 +1808,13 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_62_63 = object : Migration(62, 63) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE remote_stats_day ADD COLUMN refreshed_at INTEGER NOT NULL DEFAULT 0")
+                connection.execSQL("ALTER TABLE remote_stats_window ADD COLUMN refreshed_at INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1870,6 +1877,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_59_60,
             MIGRATION_60_61,
             MIGRATION_61_62,
+            MIGRATION_62_63,
         )
     }
 }
