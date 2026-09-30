@@ -2,6 +2,7 @@ package com.chmouel.liseur.reader.chrome
 
 import com.chmouel.liseur.data.settings.AutoScrollPreference
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -181,5 +182,46 @@ class AutoScrollSpeedTest {
             AutoScrollSpeed.dpPerSecond(AutoScrollPreference.MAX_STEP + 1f),
             0.001,
         )
+    }
+}
+
+class AutoScrollControlsShownTest {
+
+    private fun shown(
+        armed: Boolean = true,
+        paused: Boolean = false,
+        chromeVisible: Boolean = false,
+        linger: Boolean = false,
+        blocked: Boolean = false,
+    ) = autoScrollControlsShown(armed, paused, chromeVisible, linger, blocked)
+
+    @Test
+    fun `a page carrying itself is left alone once the controls have faded`() {
+        assertFalse(shown())
+    }
+
+    @Test
+    fun `the controls linger after being used`() {
+        assertTrue(shown(linger = true))
+    }
+
+    @Test
+    fun `a paused page keeps its way back on screen`() {
+        assertTrue(shown(paused = true))
+    }
+
+    @Test
+    fun `the chrome stopping the page brings the controls with it`() {
+        assertTrue(shown(chromeVisible = true))
+    }
+
+    @Test
+    fun `nothing is shown when auto-scroll is off`() {
+        assertFalse(shown(armed = false, paused = true, chromeVisible = true, linger = true))
+    }
+
+    @Test
+    fun `an offer at the bottom of the screen takes precedence`() {
+        assertFalse(shown(paused = true, chromeVisible = true, linger = true, blocked = true))
     }
 }

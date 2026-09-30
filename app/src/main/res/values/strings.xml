@@ -707,10 +707,14 @@
     <string name="reader_typography_own_off">Font, size, line spacing and margins are shared with every book.</string>
     <string name="reader_advanced">Advanced</string>
     <string name="reader_auto_scroll">Scroll the page for me</string>
-    <string name="reader_auto_scroll_detail">The page carries itself along, and the screen stays awake. Touch it to stop, touch it again to carry on.</string>
+    <string name="reader_auto_scroll_detail">The page carries itself along, and the screen stays awake. Touch it to stop, or use the controls at the bottom to pause, change the speed or stop.</string>
     <string name="reader_auto_scroll_speed">Scrolling speed</string>
     <string name="reader_auto_scroll_slower">Slower</string>
     <string name="reader_auto_scroll_faster">Faster</string>
+    <string name="reader_auto_scroll_pause">Pause scrolling</string>
+    <string name="reader_auto_scroll_resume">Resume scrolling</string>
+    <string name="reader_auto_scroll_stop">Stop scrolling</string>
+    <string name="reader_auto_scroll_speed_value">Speed %1$d</string>
     <string name="footer_mode_smart">Time left, or the chapter</string>
     <string name="footer_mode_pages_chapter">Pages left in chapter</string>
     <string name="footer_mode_time_book">Time left in book</string>

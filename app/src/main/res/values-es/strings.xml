@@ -674,10 +674,14 @@
     <string name="reader_typography_own_off">La fuente, el tamaño, el interlineado y los márgenes se comparten con todos los libros.</string>
     <string name="reader_advanced">Avanzado</string>
     <string name="reader_auto_scroll">Desplazar la página por mí</string>
-    <string name="reader_auto_scroll_detail">La página avanza sola y la pantalla se mantiene encendida. Tócala para parar, tócala otra vez para seguir.</string>
+    <string name="reader_auto_scroll_detail">La página avanza sola y la pantalla se mantiene encendida. Tócala para parar, o usa los controles de abajo para pausar, cambiar la velocidad o detener.</string>
     <string name="reader_auto_scroll_speed">Velocidad de desplazamiento</string>
     <string name="reader_auto_scroll_slower">Más despacio</string>
     <string name="reader_auto_scroll_faster">Más rápido</string>
+    <string name="reader_auto_scroll_pause">Pausar el desplazamiento</string>
+    <string name="reader_auto_scroll_resume">Reanudar el desplazamiento</string>
+    <string name="reader_auto_scroll_stop">Detener el desplazamiento</string>
+    <string name="reader_auto_scroll_speed_value">Velocidad %1$d</string>
     <string name="footer_mode_smart">Tiempo restante, o el capítulo</string>
     <string name="footer_mode_pages_chapter">Páginas restantes en el capítulo</string>
     <string name="footer_mode_time_book">Tiempo restante en el libro</string>

@@ -76,6 +76,9 @@ fun TypographySheet(
     onKeepScreenOnChanged: (Boolean) -> Unit,
     scrollMode: Boolean,
     onScrollModeChanged: (Boolean) -> Unit,
+    scrolling: Boolean,
+    autoScrolling: Boolean,
+    onAutoScrollChanged: (Boolean) -> Unit,
     onOpenAdvanced: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -116,6 +119,15 @@ fun TypographySheet(
                 enabled = reshapeable,
                 onChanged = onScrollModeChanged,
             )
+            // The page's answer rather than the switch above: vertical
+            // text scrolls whatever that says, and a fixed-layout book
+            // turns whatever it says.
+            if (scrolling) {
+                AutoScrollToggle(
+                    enabled = autoScrolling,
+                    onChanged = onAutoScrollChanged,
+                )
+            }
             KeepScreenOnToggle(
                 enabled = keepScreenOn,
                 onChanged = onKeepScreenOnChanged,
@@ -192,6 +204,45 @@ private fun ScrollModeToggle(
             )
         }
         Switch(checked = checked, enabled = enabled, onCheckedChange = null)
+    }
+}
+
+/**
+ * Starts the page moving on its own.
+ *
+ * Right under the scrolling switch, because that is where a reader who
+ * has just chosen to scroll looks next. Starting closes this sheet so
+ * the reader sees the page they asked to move; the controls on the page
+ * pause it, change its speed, and stop it. The speed is also kept in
+ * the Advanced sheet, set once and left alone.
+ *
+ * See `docs/adr/0006-auto-scroll.md` and
+ * `docs/adr/0040-auto-scroll-controls.md`.
+ */
+@Composable
+private fun AutoScrollToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = enabled,
+                role = Role.Switch,
+                onValueChange = onChanged,
+            ),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.reader_auto_scroll),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = stringResource(R.string.reader_auto_scroll_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = null)
     }
 }
 

@@ -127,3 +127,27 @@ object AutoScrollSpeed {
         return SLOWEST_DP_PER_SECOND * ratio.pow(across) * fontSize
     }
 }
+
+/**
+ * How long the auto-scroll controls stay up after they were last used,
+ * before the accessibility timeout the reader may have asked for.
+ */
+const val AUTO_SCROLL_CONTROLS_LINGER_MS = 3_000L
+
+/**
+ * Whether the auto-scroll controls are on the page.
+ *
+ * Only while the page is armed to carry itself, and only when nothing
+ * [blocked] owns the bottom of the screen (an offer to jump, the end of
+ * the book). Then they stay while the page is [paused], since ▶ is the
+ * way back, and while the [chromeVisible] chrome has stopped the page,
+ * for the same reason. Otherwise they only [linger] briefly after being
+ * used, like a video player's, and get out of the text's way.
+ */
+fun autoScrollControlsShown(
+    armed: Boolean,
+    paused: Boolean,
+    chromeVisible: Boolean,
+    linger: Boolean,
+    blocked: Boolean,
+): Boolean = armed && !blocked && (paused || chromeVisible || linger)

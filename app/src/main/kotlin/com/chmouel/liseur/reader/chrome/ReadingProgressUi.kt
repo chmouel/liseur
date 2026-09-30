@@ -848,7 +848,7 @@ private fun Modifier.combinedClickableWithoutRipple(
  * plainly than either.
  */
 @Composable
-private fun ChromePill(
+internal fun ChromePill(
     theme: ReaderTheme,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,

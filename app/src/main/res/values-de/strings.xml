@@ -684,10 +684,14 @@
     <string name="reader_typography_own_off">Schrift, Größe, Zeilenabstand und Ränder gelten für alle Bücher.</string>
     <string name="reader_advanced">Erweitert</string>
     <string name="reader_auto_scroll">Seite für mich scrollen</string>
-    <string name="reader_auto_scroll_detail">Die Seite bewegt sich von allein, und der Bildschirm bleibt wach. Tippen zum Anhalten, nochmal tippen zum Weitermachen.</string>
+    <string name="reader_auto_scroll_detail">Die Seite bewegt sich von allein, und der Bildschirm bleibt wach. Tippen zum Anhalten, oder mit den Steuerelementen unten pausieren, die Geschwindigkeit ändern oder beenden.</string>
     <string name="reader_auto_scroll_speed">Scrollgeschwindigkeit</string>
     <string name="reader_auto_scroll_slower">Langsamer</string>
     <string name="reader_auto_scroll_faster">Schneller</string>
+    <string name="reader_auto_scroll_pause">Scrollen pausieren</string>
+    <string name="reader_auto_scroll_resume">Scrollen fortsetzen</string>
+    <string name="reader_auto_scroll_stop">Scrollen beenden</string>
+    <string name="reader_auto_scroll_speed_value">Geschwindigkeit %1$d</string>
     <string name="footer_mode_smart">Verbleibende Zeit oder das Kapitel</string>
     <string name="footer_mode_pages_chapter">Seiten übrig im Kapitel</string>
     <string name="footer_mode_time_book">Zeit übrig im Buch</string>

@@ -74,6 +74,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -149,9 +150,13 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.reader.chrome.CatchUpPill
+import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.reader.chrome.AdvancedSheet
+import com.chmouel.liseur.reader.chrome.AUTO_SCROLL_CONTROLS_LINGER_MS
+import com.chmouel.liseur.reader.chrome.AutoScrollControls
 import com.chmouel.liseur.reader.chrome.AutoScrollSpeed
 import com.chmouel.liseur.reader.chrome.AutoScrollTicker
+import com.chmouel.liseur.reader.chrome.autoScrollControlsShown
 import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageCurl
 import com.chmouel.liseur.reader.chrome.PageCurlOverlay
@@ -500,6 +505,13 @@ fun ReaderScreen(
     LaunchedEffect(effectiveScrolling) { onScrollingChanged(effectiveScrolling) }
     val pageContainerScrolls = containerScrolls(reflowableText, scrollMode)
     var autoScrollArmed by remember { mutableStateOf(false) }
+    // Paused from the on-page controls. Unlike the chrome, which pauses
+    // only while it is up, this holds until the reader presses play.
+    var autoScrollPaused by remember { mutableStateOf(false) }
+    // Bumped whenever the on-page controls are used, which is what keeps
+    // them up for a moment before they fade.
+    var autoScrollControlsPoke by remember { mutableIntStateOf(0) }
+    var autoScrollControlsLinger by remember { mutableStateOf(false) }
     val columnMode = prefs.columnMode.effectiveFor(widthClass())
 
     // The activity decides what a keyboard's arrows mean, and the
@@ -1878,12 +1890,14 @@ fun ReaderScreen(
      * chrome goes, the page carries on. A drag is a finger down, so the
      * text goes where the reader puts it and picks up from there.
      *
-     * Nothing else in the reader gains a control for this. An offer the
-     * reader has not answered — a pill, a dialog — holds the page still
-     * too: a decision taken about a page that has moved on is a decision
-     * about nothing.
+     * The pause button on the on-page controls (ADR 40) is one more
+     * entry in the same list rather than a mechanism of its own. An
+     * offer the reader has not answered — a pill, a dialog — holds the
+     * page still too: a decision taken about a page that has moved on is
+     * a decision about nothing.
      */
     val canAutoScroll = autoScrollArmed &&
+        !autoScrollPaused &&
         effectiveScrolling &&
         !chromeVisible &&
         !fingerDown &&
@@ -1912,10 +1926,30 @@ fun ReaderScreen(
     // is behind the sheet. Get out of the way so the reader can see what
     // they asked for.
     LaunchedEffect(autoScrollArmed) {
+        autoScrollPaused = false
         if (autoScrollArmed) {
             sheet = ReaderSheet.NONE
             chromeVisible = false
+            autoScrollControlsPoke += 1
         }
+    }
+
+    // The on-page controls stay a moment after they were last touched,
+    // then get out of the text's way. The wait is the one a reader who
+    // needs longer to find a control has asked the system for.
+    val accessibility = LocalAccessibilityManager.current
+    LaunchedEffect(autoScrollControlsPoke) {
+        if (autoScrollControlsPoke == 0) return@LaunchedEffect
+        autoScrollControlsLinger = true
+        delay(
+            accessibility?.calculateRecommendedTimeoutMillis(
+                AUTO_SCROLL_CONTROLS_LINGER_MS,
+                containsIcons = true,
+                containsText = true,
+                containsControls = true,
+            ) ?: AUTO_SCROLL_CONTROLS_LINGER_MS,
+        )
+        autoScrollControlsLinger = false
     }
 
     // A book that stops being scrolled has nothing to scroll. Switching
@@ -2952,6 +2986,51 @@ fun ReaderScreen(
                         )
                     }
                 }
+                // Above the scrubber, so a reader who stopped the page by
+                // raising the chrome finds play right there. The offers
+                // above hold the page still on their own, and two pills
+                // is a quiz, so the controls wait for them to be answered.
+                val autoScrollControlsUp = autoScrollControlsShown(
+                    armed = autoScrollArmed && effectiveScrolling,
+                    paused = autoScrollPaused,
+                    chromeVisible = chromeVisible,
+                    linger = autoScrollControlsLinger,
+                    blocked = jumpBack != null || catchUp != null,
+                )
+                AnimatedVisibility(
+                    visible = autoScrollControlsUp,
+                    enter = if (eInk) EnterTransition.None else fadeIn(tween(CHROME_ANIM_MS)),
+                    exit = if (eInk) ExitTransition.None else fadeOut(tween(CHROME_ANIM_MS)),
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    AutoScrollControls(
+                        playing = !autoScrollPaused && !chromeVisible,
+                        speed = prefs.autoScrollSpeed,
+                        theme = readingTheme,
+                        onPlay = {
+                            autoScrollPaused = false
+                            chromeVisible = false
+                            autoScrollControlsPoke += 1
+                        },
+                        onPause = {
+                            autoScrollPaused = true
+                            autoScrollControlsPoke += 1
+                        },
+                        onSlower = {
+                            onPrefsAction.setAutoScrollSpeed(
+                                AutoScrollPreference.nudge(prefs.autoScrollSpeed, -1),
+                            )
+                            autoScrollControlsPoke += 1
+                        },
+                        onFaster = {
+                            onPrefsAction.setAutoScrollSpeed(
+                                AutoScrollPreference.nudge(prefs.autoScrollSpeed, 1),
+                            )
+                            autoScrollControlsPoke += 1
+                        },
+                        onStop = { autoScrollArmed = false },
+                    )
+                }
                 if (scrubberShown) {
                     ChromeEdgeFade(theme = readingTheme, solidAtTop = false)
                     ReadingScrubber(
@@ -3474,6 +3553,9 @@ fun ReaderScreen(
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             scrollMode = scrollMode,
             onScrollModeChanged = onScrollModeChanged,
+            scrolling = effectiveScrolling,
+            autoScrolling = autoScrollArmed,
+            onAutoScrollChanged = { autoScrollArmed = it },
             onOpenAdvanced = { sheet = ReaderSheet.ADVANCED },
             onDismiss = { sheet = ReaderSheet.NONE },
         )
@@ -3486,7 +3568,6 @@ fun ReaderScreen(
             // runs rather than turns whatever the setting says, and a
             // fixed-layout book turns rather than runs whatever it says.
             scrolling = effectiveScrolling,
-            autoScrolling = autoScrollArmed,
             autoScrollSpeed = prefs.autoScrollSpeed,
             typographyIsOwn = typographyIsOwn,
             readingCss = readingCss,
@@ -3500,7 +3581,6 @@ fun ReaderScreen(
             highlightPalette = highlightPalette,
             onHighlightTintToggled = onHighlightTintToggled,
             onHighlightDefaultTintChanged = onHighlightDefaultTintChanged,
-            onAutoScrollChanged = { autoScrollArmed = it },
             onAutoScrollSpeedChanged = onPrefsAction.setAutoScrollSpeed,
             onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
             // Back to typography, not back to the book: this sheet was

@@ -58,8 +58,8 @@ import com.chmouel.liseur.ui.windowWidth
  *
  * What it holds is what a reader sets once, if ever: the shape of the
  * text block, what the footer says, which colours a passage may be
- * marked in, how a page gets out of the way when it is turned, whether
- * the page moves on its own, and whether any of it is this book's
+ * marked in, how a page gets out of the way when it is turned, how fast
+ * a scrolled page carries itself, and whether any of it is this book's
  * alone. The rest of what belongs here — finer
  * typography, read-aloud, imported fonts — arrives with its own issue,
  * and the shape of the sheet is the point: five rows, or ten, it is the
@@ -70,8 +70,8 @@ import com.chmouel.liseur.ui.windowWidth
  * whatever the setting says, and a fixed-layout book is paginated
  * whatever it says. Three rows turn on it, and they are the same
  * question asked once — a page that scrolls has no columns to count and
- * no turn to animate, and is the only kind that can be scrolled along on
- * its own.
+ * no turn to animate, and is the only kind whose pace of scrolling along
+ * on its own means anything.
  *
  * [readingCss] is what this book can honour. A fixed-layout book greys
  * the line spacing, the margins and the columns along with the fine
@@ -87,7 +87,6 @@ import com.chmouel.liseur.ui.windowWidth
 fun AdvancedSheet(
     prefs: ReaderPrefs,
     scrolling: Boolean,
-    autoScrolling: Boolean,
     autoScrollSpeed: Float,
     typographyIsOwn: Boolean,
     readingCss: ReadingCss,
@@ -101,7 +100,6 @@ fun AdvancedSheet(
     highlightPalette: HighlightPalette,
     onHighlightTintToggled: (HighlightTint) -> Unit,
     onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
-    onAutoScrollChanged: (Boolean) -> Unit,
     onAutoScrollSpeedChanged: (Float) -> Unit,
     onTypographyIsOwnChanged: (Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -159,13 +157,11 @@ fun AdvancedSheet(
                     onSelected = onPageTurnStyleChanged,
                 )
             }
+            // The switch itself sits beside the scrolling one in the
+            // reading sheet; the pace is set once and left, so it lives
+            // here.
             if (scrolling) {
-                AutoScrollRow(
-                    enabled = autoScrolling,
-                    speed = autoScrollSpeed,
-                    onChanged = onAutoScrollChanged,
-                    onSpeedChanged = onAutoScrollSpeedChanged,
-                )
+                AutoScrollSpeedSlider(value = autoScrollSpeed, onChanged = onAutoScrollSpeedChanged)
             }
             JustThisBookToggle(
                 enabled = typographyIsOwn,
@@ -215,55 +211,6 @@ private fun JustThisBookToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
 }
 
 /**
- * Starts the page moving on its own, and sets how fast.
- *
- * Only offered to a book read by scrolling, which is what keeps this out
- * of a paginated one: there, the tap zones and the volume keys already
- * turn pages without the reader reaching for anything.
- *
- * The speed sits under the switch whether or not the page is moving.
- * Starting closes this sheet, so a slider shown only while running would
- * be a slider nobody could ever reach: the reader sets a pace, watches
- * the page, and comes back to move it a notch.
- *
- * See `docs/adr/0006-auto-scroll.md`.
- */
-@Composable
-private fun AutoScrollRow(
-    enabled: Boolean,
-    speed: Float,
-    onChanged: (Boolean) -> Unit,
-    onSpeedChanged: (Float) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .toggleable(
-                    value = enabled,
-                    role = Role.Switch,
-                    onValueChange = onChanged,
-                ),
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.reader_auto_scroll),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = stringResource(R.string.reader_auto_scroll_detail),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = enabled, onCheckedChange = null)
-        }
-        AutoScrollSpeedSlider(value = speed, onChanged = onSpeedChanged)
-    }
-}
-
-/**
  * The pace, in notches rather than in numbers.
  *
  * A figure in dp a second would be honest and useless: nobody knows what
@@ -274,6 +221,12 @@ private fun AutoScrollRow(
  * Committed when the slider is let go rather than as it moves, the way
  * every other reading slider here works: what is written down is the
  * answer, not the sweep of the thumb getting to it.
+ *
+ * Only offered to a book read by scrolling. The switch that starts the
+ * page moving is in the reading sheet, and the controls on the page
+ * nudge this same setting a notch at a time.
+ *
+ * See `docs/adr/0006-auto-scroll.md`.
  */
 @Composable
 private fun AutoScrollSpeedSlider(value: Float, onChanged: (Float) -> Unit) {

@@ -674,10 +674,14 @@
     <string name="reader_typography_own_off">Carattere, dimensione, interlinea e margini sono condivisi con ogni libro.</string>
     <string name="reader_advanced">Avanzate</string>
     <string name="reader_auto_scroll">Scorri la pagina per me</string>
-    <string name="reader_auto_scroll_detail">La pagina avanza da sola e lo schermo resta acceso. Toccalo per fermare, toccalo di nuovo per riprendere.</string>
+    <string name="reader_auto_scroll_detail">La pagina avanza da sola e lo schermo resta acceso. Toccala per fermare, oppure usa i comandi in basso per mettere in pausa, cambiare la velocità o interrompere.</string>
     <string name="reader_auto_scroll_speed">Velocità di scorrimento</string>
     <string name="reader_auto_scroll_slower">Più lento</string>
     <string name="reader_auto_scroll_faster">Più veloce</string>
+    <string name="reader_auto_scroll_pause">Metti in pausa lo scorrimento</string>
+    <string name="reader_auto_scroll_resume">Riprendi lo scorrimento</string>
+    <string name="reader_auto_scroll_stop">Interrompi lo scorrimento</string>
+    <string name="reader_auto_scroll_speed_value">Velocità %1$d</string>
     <string name="footer_mode_smart">Tempo rimasto, o il capitolo</string>
     <string name="footer_mode_pages_chapter">Pagine rimaste nel capitolo</string>
     <string name="footer_mode_time_book">Tempo rimasto nel libro</string>

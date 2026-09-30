@@ -724,10 +724,14 @@
     <string name="reader_typography_own_off">Шрифт, размер, межстрочный интервал и поля общие для всех книг.</string>
     <string name="reader_advanced">Дополнительно</string>
     <string name="reader_auto_scroll">Прокручивать страницу за меня</string>
-    <string name="reader_auto_scroll_detail">Страница движется сама, экран не гаснет. Коснитесь, чтобы остановить, коснитесь снова, чтобы продолжить.</string>
+    <string name="reader_auto_scroll_detail">Страница движется сама, экран не гаснет. Коснитесь, чтобы остановить, или используйте кнопки внизу, чтобы приостановить, изменить скорость или выключить.</string>
     <string name="reader_auto_scroll_speed">Скорость прокрутки</string>
     <string name="reader_auto_scroll_slower">Медленнее</string>
     <string name="reader_auto_scroll_faster">Быстрее</string>
+    <string name="reader_auto_scroll_pause">Приостановить прокрутку</string>
+    <string name="reader_auto_scroll_resume">Продолжить прокрутку</string>
+    <string name="reader_auto_scroll_stop">Выключить прокрутку</string>
+    <string name="reader_auto_scroll_speed_value">Скорость %1$d</string>
     <string name="footer_mode_smart">Оставшееся время или глава</string>
     <string name="footer_mode_pages_chapter">Страниц до конца главы</string>
     <string name="footer_mode_time_book">Время до конца книги</string>

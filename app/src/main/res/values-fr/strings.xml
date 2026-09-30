@@ -674,10 +674,14 @@
     <string name="reader_typography_own_off">Police, taille, interligne et marges sont partagés avec tous les livres.</string>
     <string name="reader_advanced">Avancé</string>
     <string name="reader_auto_scroll">Faire défiler la page pour moi</string>
-    <string name="reader_auto_scroll_detail">La page avance toute seule, et l\'écran reste allumé. Touchez-la pour arrêter, touchez-la à nouveau pour continuer.</string>
+    <string name="reader_auto_scroll_detail">La page avance toute seule, et l\'écran reste allumé. Touchez-la pour arrêter, ou utilisez les commandes en bas pour mettre en pause, changer la vitesse ou arrêter.</string>
     <string name="reader_auto_scroll_speed">Vitesse de défilement</string>
     <string name="reader_auto_scroll_slower">Plus lent</string>
     <string name="reader_auto_scroll_faster">Plus rapide</string>
+    <string name="reader_auto_scroll_pause">Mettre le défilement en pause</string>
+    <string name="reader_auto_scroll_resume">Reprendre le défilement</string>
+    <string name="reader_auto_scroll_stop">Arrêter le défilement</string>
+    <string name="reader_auto_scroll_speed_value">Vitesse %1$d</string>
     <string name="footer_mode_smart">Temps restant, ou le chapitre</string>
     <string name="footer_mode_pages_chapter">Pages restantes dans le chapitre</string>
     <string name="footer_mode_time_book">Temps restant dans le livre</string>

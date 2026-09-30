@@ -60,6 +60,22 @@ class AutoScrollPreferenceTest {
     }
 
     @Test
+    fun `nudging moves one whole notch and stays on the slider`() {
+        assertEquals(5f, AutoScrollPreference.nudge(4f, 1))
+        assertEquals(3f, AutoScrollPreference.nudge(4f, -1))
+        assertEquals(5f, AutoScrollPreference.nudge(4.4f, 1))
+        assertEquals(
+            AutoScrollPreference.MAX_STEP.toFloat(),
+            AutoScrollPreference.nudge(AutoScrollPreference.MAX_STEP.toFloat(), 1),
+        )
+        assertEquals(
+            AutoScrollPreference.MIN_STEP.toFloat(),
+            AutoScrollPreference.nudge(AutoScrollPreference.MIN_STEP.toFloat(), -1),
+        )
+        assertEquals(AutoScrollPreference.DEFAULT_STEP + 1, AutoScrollPreference.nudge(Float.NaN, 1))
+    }
+
+    @Test
     fun `a sanitised step is always somewhere the slider can sit`() {
         val awkward = listOf(
             Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY,

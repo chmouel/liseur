@@ -3,6 +3,11 @@
 Status: accepted
 GitHub issue: [#45](https://github.com/chmouel/liseur/issues/45)
 
+> Amended by [ADR-0040](0040-auto-scroll-controls.md): the switch now
+> sits under "Read by scrolling" in the typography sheet, the speed
+> stays in Advanced, and the page gains a small pause, speed and stop
+> control while auto-scroll is on.
+
 ## Context
 
 Scroll mode exists, but the thumb still has to move the page. Reading

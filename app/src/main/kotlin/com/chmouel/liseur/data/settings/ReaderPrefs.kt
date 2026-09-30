@@ -519,6 +519,13 @@ object AutoScrollPreference {
 
     /** The nearest whole notch, for a slider that lands on one. */
     fun snap(step: Float): Float = sanitize(step).roundToInt().toFloat()
+
+    /**
+     * The notch [by] notches away from [step], for the slower and faster
+     * buttons on the page. Lands on a whole notch and stays on the
+     * slider, so the buttons and the slider always agree.
+     */
+    fun nudge(step: Float, by: Int): Float = sanitize(snap(step) + by)
 }
 
 /**
