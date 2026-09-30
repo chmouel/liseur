@@ -643,6 +643,8 @@ private fun LibraryRoute(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var widgetShelfBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     LaunchedEffect(widgetBook) {
+        // Drop the previous tap's book so only this request can reach the shelf.
+        widgetShelfBook = null
         val url = widgetBook ?: return@LaunchedEffect
         val book = context.container.database.bookDao().getByUrl(url)
         if (book != null && !book.hidden && !book.archived) {
