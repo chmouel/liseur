@@ -209,6 +209,45 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `restore rejects a backup for another application`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("wrong-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("wrong-app-reader.preferences_pb"))
+        val payload = JSONObject()
+            .put("app", JSONObject().put("theme_mode", "dark"))
+            .put("reader", JSONObject())
+        val backup = archive("wrong-app.zip", payload, application = "another-app")
+
+        assertEquals(
+            SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+            restore(repository(app, reader, fonts), Uri.fromFile(backup)),
+        )
+        assertEquals(ThemeMode.SYSTEM, app.settings.first().themeMode)
+    }
+
+    @Test
+    fun `restore rejects an invalid dictionary URL`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("invalid-dictionary.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("invalid-dictionary-reader.preferences_pb"))
+        val payload = JSONObject()
+            .put("app", JSONObject().put("dictionary_base_url", "http://example.com"))
+            .put("reader", JSONObject())
+        val backup = archive("invalid-dictionary.zip", payload)
+
+        assertEquals(
+            SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+            restore(repository(app, reader, fonts), Uri.fromFile(backup)),
+        )
+        assertEquals(
+            com.chmouel.liseur.domain.DictionaryUrl.DEFAULT_BASE_URL,
+            app.settings.first().dictionaryBaseUrl,
+        )
+    }
+
+    @Test
     fun `restore reports when only app settings were written`() = runTest {
         val fonts = UserFontRepository(context, this, loadCheck = { true })
         fonts.awaitReady()
@@ -256,12 +295,13 @@ class SettingsBackupRepositoryTest {
         name: String,
         settings: JSONObject,
         additionalEntries: Map<String, ByteArray> = emptyMap(),
+        application: String = "liseur",
     ): File {
         val entries = linkedMapOf("settings.json" to settings.toString().toByteArray())
         entries.putAll(additionalEntries)
         val manifest = JSONObject()
             .put("format", 1)
-            .put("application", "liseur")
+            .put("application", application)
             .put(
                 "entries",
                 org.json.JSONArray().also { manifestEntries ->

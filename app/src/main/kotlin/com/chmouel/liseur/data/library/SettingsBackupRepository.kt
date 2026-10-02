@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.applyBackupJson
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
+import com.chmouel.liseur.domain.DictionaryUrl
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -178,7 +179,11 @@ class SettingsBackupRepository(
                             }
                         },
                     )
-                    File(result.stagingDirectory, INDEX_PATH).writeText(index.toString())
+                    try {
+                        File(result.stagingDirectory, INDEX_PATH).writeText(index.toString())
+                    } catch (e: IOException) {
+                        throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
+                    }
                     retained = true
                     SettingsBackupInspection.Ready(
                         SettingsBackupPreview(
@@ -192,6 +197,9 @@ class SettingsBackupRepository(
                     throw e
                 } catch (e: BackupFailureException) {
                     SettingsBackupInspection.Failed(e.failure)
+                } catch (e: IOException) {
+                    Log.w(TAG, "Could not save settings backup inspection", e)
+                    SettingsBackupInspection.Failed(SettingsBackupFailure.STORAGE)
                 } catch (e: Exception) {
                     SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
                 } finally {
@@ -373,6 +381,9 @@ class SettingsBackupRepository(
             } catch (e: Exception) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
+            if (manifest.opt("application") != "liseur") {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
             if (manifest.optInt("format", -1) != FORMAT) {
                 return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
             }
@@ -488,6 +499,12 @@ class SettingsBackupRepository(
             ?: throw IllegalArgumentException("Missing reader settings")
         app.validateBackupJson(APP_BACKUP_TYPES)
         reader.validateBackupJson(READER_BACKUP_TYPES)
+        if (app.has("dictionary_base_url")) {
+            val baseUrl = app.getString("dictionary_base_url")
+            if (DictionaryUrl.normalise(baseUrl) != baseUrl) {
+                throw IllegalArgumentException("Invalid dictionary base URL")
+            }
+        }
         validateIds(app, mapOf(
             "theme_mode" to setOf("system", "light", "dark"),
             "tap_zones" to setOf("standard", "swapped"),
