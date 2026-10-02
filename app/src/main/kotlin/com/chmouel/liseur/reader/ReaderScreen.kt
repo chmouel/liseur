@@ -351,6 +351,7 @@ private enum class ReaderSheet { NONE, TYPOGRAPHY, ADVANCED }
 @Composable
 fun ReaderScreen(
     publication: Publication,
+    displayAuthors: List<String>,
     /**
      * Where this navigator is being reopened to, snapshotted when it was
      * built. Null for a book with no saved position.
@@ -2886,8 +2887,8 @@ fun ReaderScreen(
             Box(Modifier.fillMaxSize().then(behindViewer)) {
                 Endpaper(
                     title = publication.metadata.title.orEmpty(),
-                    author = publication.metadata.authors
-                        .joinToString(", ") { it.name }
+                    author = displayAuthors
+                        .joinToString(", ")
                         .ifBlank { null },
                     theme = readingTheme,
                     finished = continuation?.finished,

@@ -1550,10 +1550,32 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `author identity upgrade keeps legacy authors and work ids`() {
+        helper.createDatabase(TEST_DB, 63).use { db ->
+            db.execSQL(
+                "INSERT INTO books (url, title, author, work_id, added_at, download_state, series_checked, " +
+                    "series_override, series_claim_pending, series_claim_reset, series_index_override) " +
+                    "VALUES ('file:one', 'A Test Book', 'الكاتب', 'a test book — الكاتب', " +
+                    "1, 'DOWNLOADED', 0, 0, 0, 0, 0)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS)
+            .use { db ->
+                db.query("SELECT author, work_id, identity_author FROM books WHERE url = 'file:one'").use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals("الكاتب", it.getString(0))
+                    assertEquals("a test book — الكاتب", it.getString(1))
+                    assertTrue(it.isNull(2))
+                }
+            }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 63
+        const val LATEST = 64
     }
 }

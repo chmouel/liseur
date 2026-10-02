@@ -14,6 +14,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.LibraryFolderDao
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.SeriesMetadata
 import com.chmouel.liseur.domain.isSameWork
 import com.chmouel.liseur.domain.workIdOf
@@ -469,6 +470,15 @@ class LocalLibraryRepository(
             .onFailure { Log.w(TAG, "Could not drop the copied book at $url", it) }
     }
 
+    /** Repairs a local shelf label without reindexing or changing reading state. */
+    suspend fun refreshAuthor(url: String, primaryAuthors: List<String>) {
+        if (ServerKind.isRemoteUrl(url)) return
+        bookDao.updateAuthor(url, primaryAuthors.joinToString(", ").ifBlank { null })
+    }
+
+    private fun Publication.identityAuthor(): String? =
+        metadata.authors.joinToString(", ") { it.name }.ifBlank { null }
+
     suspend fun markOpened(url: String) {
         bookDao.touchLastOpened(url, System.currentTimeMillis())
     }
@@ -914,10 +924,10 @@ class LocalLibraryRepository(
             val title = publication.metadata.title
                 ?: openableUrl.filename?.removeSuffix(".epub")
                 ?: "Untitled"
-            val author = publication.metadata.authors
-                .joinToString(", ") { it.name }
-                .ifBlank { null }
-            val workId = workIdOf(publication.metadata.identifier, title, author)
+            val author = (primaryEpubAuthors(publication) ?: publication.metadata.authors.map { it.name })
+                .joinToString(", ").ifBlank { null }
+            // Display corrections must not change the identity of an existing file.
+            val workId = workIdOf(publication.metadata.identifier, title, publication.identityAuthor())
             val series = seriesOf(publication)
             // Cleanup first, then the new description. Torn the other
             // way round, a death between the two leaves the new workId
@@ -935,6 +945,7 @@ class LocalLibraryRepository(
                 coverPath = saveCover(publication, bookUrl),
                 fileModifiedAt = modifiedAt,
                 workId = workId,
+                identityAuthor = publication.identityAuthor().orEmpty(),
                 seriesName = series.name,
                 seriesIndex = series.index,
             )
@@ -959,9 +970,8 @@ class LocalLibraryRepository(
             val title = publication.metadata.title
                 ?: url.filename?.removeSuffix(".epub")
                 ?: "Untitled"
-            val author = publication.metadata.authors
-                .joinToString(", ") { it.name }
-                .ifBlank { null }
+            val author = (primaryEpubAuthors(publication) ?: publication.metadata.authors.map { it.name })
+                .joinToString(", ").ifBlank { null }
             val series = seriesOf(publication)
             val book = Book(
                 url = url.toString(),
@@ -972,7 +982,8 @@ class LocalLibraryRepository(
                 addedAt = System.currentTimeMillis(),
                 lastOpenedAt = null,
                 fileModifiedAt = modifiedAt,
-                workId = workIdOf(publication.metadata.identifier, title, author),
+                workId = workIdOf(publication.metadata.identifier, title, publication.identityAuthor()),
+                identityAuthor = publication.identityAuthor().orEmpty(),
                 seriesName = series.name,
                 seriesIndex = series.index,
                 fileSeriesName = series.name,

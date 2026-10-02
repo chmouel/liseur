@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.domain.workIdOf
 import java.io.File
 import java.net.InetAddress
 import kotlinx.coroutines.flow.first
@@ -89,6 +90,41 @@ class WorkResolverTest {
         }
         assertEquals(listOf("sha256", "partial-md5", "source", "dc", "ta"), kinds)
         assertEquals("A Memory Called Empire", body.getString("title"))
+    }
+
+    @Test
+    fun `repeated author repairs preserve a fallback with no original author`() = runTest {
+        val book = sideloaded().copy(author = null, workId = workIdOf(null, "A Memory Called Empire", null))
+        db.bookDao().upsert(book)
+        db.bookDao().updateAuthor(book.url, "First correction")
+        db.bookDao().updateAuthor(book.url, "Arkady Martine")
+        val repaired = db.bookDao().getByUrl(book.url)!!
+        assertEquals("", repaired.identityAuthor)
+        assertEquals(book.workId, repaired.workId)
+        answer(200, """{"work_id":"w-1","confidence":"low","created":false}""")
+
+        assertTrue(resolver.resolve(repaired, PEER, baseUrl(), TOKEN) is WorkResolution.NeedsConfirming)
+
+        val identifiers = JSONObject(server.takeRequest().body!!.utf8()).getJSONArray("identifiers")
+        assertEquals(listOf("sha256", "partial-md5", "ta"), (0 until identifiers.length()).map {
+            identifiers.getJSONObject(it).getString("kind")
+        })
+    }
+
+    @Test
+    fun `author repairs still send a genuine file identifier`() = runTest {
+        val book = sideloaded()
+        db.bookDao().upsert(book)
+        db.bookDao().updateAuthor(book.url, "Corrected author")
+        answer(200, """{"work_id":"w-1","confidence":"high"}""")
+
+        resolver.resolve(db.bookDao().getByUrl(book.url)!!, PEER, baseUrl(), TOKEN)
+
+        val identifiers = JSONObject(server.takeRequest().body!!.utf8()).getJSONArray("identifiers")
+        assertEquals(listOf("sha256", "partial-md5", "dc", "ta"), (0 until identifiers.length()).map {
+            identifiers.getJSONObject(it).getString("kind")
+        })
+        assertEquals(book.workId, identifiers.getJSONObject(2).getString("value"))
     }
 
     @Test

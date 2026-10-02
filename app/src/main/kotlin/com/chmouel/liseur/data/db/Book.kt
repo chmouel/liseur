@@ -73,6 +73,8 @@ data class Book(
      * told apart from the same book fetched again.
      */
     @ColumnInfo(name = "work_id") val workId: String? = null,
+    /** Author used for [workId], before display corrections; empty means no author, null means legacy. */
+    @ColumnInfo(name = "identity_author") val identityAuthor: String? = null,
     /** When the book was marked read, by hand or by reaching the end. */
     @ColumnInfo(name = "finished_at") val finishedAt: Long? = null,
     /**
@@ -410,12 +412,20 @@ interface BookDao {
         downloadedAt: Long? = null,
     )
 
+    @Query(
+        """
+        UPDATE books SET identity_author = COALESCE(identity_author, author, ''), author = :author
+        WHERE url = :url AND author IS NOT :author
+        """,
+    )
+    suspend fun updateAuthor(url: String, author: String?)
+
     /** Refreshes what we read out of a file that changed on disk. */
     @Query(
         """
         UPDATE books
         SET title = :title, author = :author, cover_path = :coverPath,
-            file_modified_at = :fileModifiedAt, work_id = :workId,
+            file_modified_at = :fileModifiedAt, work_id = :workId, identity_author = :identityAuthor,
             file_series_name = :seriesName, file_series_index = :seriesIndex,
             series_name = CASE
                 WHEN series_override = 1 THEN user_series_name
@@ -451,6 +461,7 @@ interface BookDao {
         workId: String?,
         seriesName: String?,
         seriesIndex: Double?,
+        identityAuthor: String = author.orEmpty(),
     )
 
     /**

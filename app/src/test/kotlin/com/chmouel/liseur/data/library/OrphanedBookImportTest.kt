@@ -6,16 +6,26 @@ import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingProgress
+import com.chmouel.liseur.data.liseursync.WorkResolution
+import com.chmouel.liseur.data.liseursync.WorkResolver
+import com.chmouel.liseur.data.remote.RemoteCredentials
 import java.io.File
+import java.net.InetAddress
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.test.runTest
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -24,6 +34,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.readium.r2.shared.util.toAbsoluteUrl
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.util.Url
+import org.readium.r2.shared.util.resource.SingleResourceContainer
+import org.readium.r2.shared.util.resource.StringResource
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -46,6 +61,8 @@ class OrphanedBookImportTest {
 
     private lateinit var db: LiseurDatabase
     private lateinit var library: LocalLibraryRepository
+    private lateinit var retriever: AssetRetriever
+    private lateinit var opener: PublicationOpener
 
     @Before
     fun open() {
@@ -66,17 +83,14 @@ class OrphanedBookImportTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
         val assetRetriever = AssetRetriever(context.contentResolver, httpClient)
+        retriever = assetRetriever
+        opener = PublicationOpener(DefaultPublicationParser(
+            context, httpClient = httpClient, assetRetriever = assetRetriever, pdfFactory = null,
+        ))
         library = LocalLibraryRepository(
             context = context,
             assetRetriever = assetRetriever,
-            publicationOpener = PublicationOpener(
-                publicationParser = DefaultPublicationParser(
-                    context,
-                    httpClient = httpClient,
-                    assetRetriever = assetRetriever,
-                    pdfFactory = null,
-                ),
-            ),
+            publicationOpener = opener,
             bookDao = db.bookDao(),
             folderDao = db.libraryFolderDao(),
             bookRemoval = removal,
@@ -143,6 +157,142 @@ class OrphanedBookImportTest {
         assertNull(db.readingProgressDao().get(fileUrl))
     }
 
+    @Test
+    fun `import displays original authors but retains Readium work identity`() = runTest {
+        val epub = folder.newFile("authors.epub").also {
+            writeEpub(it, authors = AUTHOR_METADATA, identifier = "none")
+        }
+        val result = library.importBook(Uri.fromFile(epub)) as ImportResult.Added
+        assertEquals("Original author", result.book.author)
+        assertEquals("a test book — الكاتب", result.book.workId)
+        assertFallbackIsNotSent(result.book.url)
+        val asset = retriever.retrieve(Uri.fromFile(epub).toAbsoluteUrl()!!).getOrNull()!!
+        val publication = opener.open(asset, allowUserInteraction = false).getOrNull()!!
+        try {
+            assertEquals("الكاتب", publication.metadata.authors.single().name)
+            assertEquals(listOf("Original author"), primaryEpubAuthors(publication))
+            // Optional metadata failures must leave callers free to use Readium's names.
+            val missing = Publication(publication.manifest)
+            try {
+                assertNull(primaryEpubAuthors(missing))
+            } finally {
+                missing.close()
+            }
+            val malformed = Publication(publication.manifest, SingleResourceContainer(
+                Url("META-INF/container.xml")!!, StringResource("<container><broken></container>"),
+            ))
+            try {
+                assertNull(primaryEpubAuthors(malformed))
+            } finally {
+                malformed.close()
+            }
+        } finally {
+            publication.close()
+        }
+    }
+
+    @Test
+    fun `import uses original contributor names while retaining Readium author roles`() = runTest {
+        val epub = folder.newFile("contributors.epub").also {
+            writeEpub(it, authors = """
+                <dc:creator>First author</dc:creator>
+                <dc:contributor xmlns:opf="http://www.idpf.org/2007/opf" opf:role="aut">Legacy author</dc:contributor>
+                <dc:contributor id="author">Modern author</dc:contributor>
+                <meta property="role" refines="#author" scheme="marc:relators">aut</meta>
+                <meta property="alternate-script" refines="#author">الكاتب</meta>
+                <dc:contributor id="translator">Translator</dc:contributor>
+                <meta property="role" refines="#translator">trl</meta>
+            """.trimIndent())
+        }
+        val result = library.importBook(Uri.fromFile(epub)) as ImportResult.Added
+        assertEquals("First author, Legacy author, Modern author", result.book.author)
+    }
+
+    @Test
+    fun `repair and later reindex preserve a local book's identity and reading`() = runTest {
+        val epub = folder.newFile("old-authors.epub").also {
+            writeEpub(it, authors = AUTHOR_METADATA, identifier = "none")
+        }
+        val url = Uri.fromFile(epub).toString()
+        val saved = orphan(url).copy(
+            title = "A Test Book", author = "الكاتب", workId = "a test book — الكاتب",
+            archivedAt = 4, hiddenAt = 5,
+        )
+        val id = db.bookDao().upsert(saved)
+        val before = saved.copy(id = id)
+        val place = progress(url)
+        val annotation = BookAnnotation(
+            id = "note", bookId = url, kind = "BOOK_NOTE", locatorJson = "", note = "Keep me",
+            createdAt = 2, updatedAt = 3,
+        )
+        db.readingProgressDao().upsert(place)
+        db.annotationDao().upsert(annotation)
+        val sessionId = db.readingSessionDao().insert(ReadingSession(
+            bookUrl = url, startedAt = 1, endedAt = 2, lastCheckpointAt = 2, durationMs = 1,
+        ))
+        val session = db.readingSessionDao().get(sessionId)
+        val asset = retriever.retrieve(Uri.fromFile(epub).toAbsoluteUrl()!!).getOrNull()!!
+        val publication = opener.open(asset, allowUserInteraction = false).getOrNull()!!
+        try {
+            library.refreshAuthor(url, primaryEpubAuthors(publication)!!)
+        } finally {
+            publication.close()
+        }
+        assertEquals(before.copy(author = "Original author", identityAuthor = before.author), db.bookDao().getByUrl(url))
+        assertFallbackIsNotSent(url)
+        assertEquals(place, db.readingProgressDao().get(url))
+        assertEquals(annotation, db.annotationDao().byId("note"))
+        assertEquals(session, db.readingSessionDao().get(sessionId))
+
+        // Restoring an orphan forces the same reindex path as a changed folder file.
+        library.importBook(Uri.fromFile(epub))
+        assertEquals("a test book — الكاتب", db.bookDao().getByUrl(url)?.workId)
+        assertEquals("remote", db.bookDao().getByUrl(url)?.remoteUuid)
+        assertFallbackIsNotSent(url)
+        assertEquals(place, db.readingProgressDao().get(url))
+        assertEquals(annotation, db.annotationDao().byId("note"))
+        assertEquals(session, db.readingSessionDao().get(sessionId))
+    }
+
+    @Test
+    fun `opening a catalog book does not replace its server author`() = runTest {
+        val book = orphan("calibre:remote").copy(author = "Catalog author")
+        val id = db.bookDao().upsert(book)
+        library.refreshAuthor(book.url, listOf("EPUB author"))
+        assertEquals(book.copy(id = id), db.bookDao().getByUrl(book.url))
+    }
+
+    private suspend fun assertFallbackIsNotSent(url: String) {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val resolver = WorkResolver(
+            dao = db.workIdentityDao(),
+            fingerprints = BookFingerprintStore(context, db.workIdentityDao()),
+        )
+        MockWebServer().use { server ->
+            server.start(InetAddress.getByName("127.0.0.1"), 0)
+            server.enqueue(MockResponse.Builder().code(200).body(
+                """{"work_id":"matched-work","confidence":"low","created":false}""",
+            ).build())
+            val baseUrl = "http://127.0.0.1:${server.port}"
+            // Exercise file identifiers even when the restored row also has an upload link.
+            val book = db.bookDao().getByUrl(url)!!.copy(remoteUuid = null)
+            val result = resolver.resolve(
+                book, "liseursync|$baseUrl|test", baseUrl,
+                RemoteCredentials.Bearer("test-token"),
+            )
+            assertTrue(result is WorkResolution.NeedsConfirming)
+            val body = JSONObject(server.takeRequest().body!!.utf8())
+            val identifiers = body.getJSONArray("identifiers")
+            val kinds = (0 until identifiers.length()).map {
+                identifiers.getJSONObject(it).getString("kind")
+            }
+            assertFalse("dc" in kinds)
+            val titleAuthor = (0 until identifiers.length()).map { identifiers.getJSONObject(it) }
+                .single { it.getString("kind") == "ta" }
+            assertEquals("a test book|original author", titleAuthor.getString("value"))
+        }
+    }
+
     private fun orphan(url: String) = Book(
         url = url,
         title = "Orphan",
@@ -162,8 +312,17 @@ class OrphanedBookImportTest {
         updatedAt = 1,
     )
 
+    private val AUTHOR_METADATA = """
+        <dc:creator id="author">Original author</dc:creator>
+        <meta property="alternate-script" refines="#author">الكاتب</meta>
+    """.trimIndent()
+
     /** The smallest EPUB the streamer will open. */
-    private fun writeEpub(target: File) {
+    private fun writeEpub(
+        target: File,
+        authors: String = "",
+        identifier: String = "urn:uuid:0f6a7e2c-1111-4222-8333-444455556666",
+    ) {
         ZipOutputStream(target.outputStream()).use { zip ->
             val mimetype = "application/epub+zip".toByteArray()
             zip.setMethod(ZipOutputStream.STORED)
@@ -194,9 +353,10 @@ class OrphanedBookImportTest {
             put(
                 "OEBPS/content.opf",
                 """<?xml version="1.0" encoding="UTF-8"?>
-                <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id" xml:lang="en-US">
                   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-                    <dc:identifier id="id">urn:uuid:0f6a7e2c-1111-4222-8333-444455556666</dc:identifier>
+                    <dc:identifier id="id">$identifier</dc:identifier>
+                    $authors
                     <dc:title>A Test Book</dc:title>
                     <dc:language>en</dc:language>
                     <meta property="dcterms:modified">2020-01-01T00:00:00Z</meta>

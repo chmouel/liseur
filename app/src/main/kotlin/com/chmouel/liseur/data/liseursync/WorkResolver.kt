@@ -445,7 +445,7 @@ class WorkResolver(
         val identifiers = WorkIdentifiers.of(
             fingerprint = fingerprint,
             sourceId = sourceId,
-            dcIdentifier = WorkIdentifiers.dcFrom(book.workId, book.title, book.author),
+            dcIdentifier = WorkIdentifiers.dcFrom(book.workId, book.title, book.identityAuthor ?: book.author),
             title = book.title,
             author = book.author,
         )

@@ -50,6 +50,7 @@ import com.chmouel.liseur.data.db.BookTypographyDao
 import com.chmouel.liseur.data.db.withTypographyOf
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.library.primaryEpubAuthors
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -309,6 +310,7 @@ class ReaderViewModel(
 
         data class Ready(
             val publication: Publication,
+            val displayAuthors: List<String>,
             val navigatorFactory: EpubNavigatorFactory,
             val initialLocator: Locator?,
             val openedBookOrbit: BookOrbitOpenedEpub? = null,
@@ -1405,9 +1407,12 @@ class ReaderViewModel(
                 offerBookOrbitWayBack(localTarget, approximateTarget, replaced.remote.displayTime)
             }
             lastLocator = initialLocator
+            val primaryAuthors = primaryEpubAuthors(publication)
+            if (primaryAuthors != null) library.refreshAuthor(bookId, primaryAuthors)
             library.markOpened(bookId)
             _state.value = UiState.Ready(
                 publication = publication,
+                displayAuthors = primaryAuthors ?: publication.metadata.authors.map { it.name },
                 navigatorFactory = EpubNavigatorFactory(publication),
                 initialLocator = initialLocator,
                 openedBookOrbit = openedBookOrbit,
@@ -2391,7 +2396,7 @@ class ReaderViewModel(
     fun notebookMarkdown(): String =
         exportNotebookMarkdown(
             title = publication?.metadata?.title.orEmpty(),
-            author = publication?.metadata?.authors?.firstOrNull()?.name,
+            author = (_state.value as? UiState.Ready)?.displayAuthors?.firstOrNull(),
             annotations = annotations.value,
         )
 
