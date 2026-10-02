@@ -131,6 +131,8 @@ class SettingsBackupRepositoryTest {
         val reader = ReaderPreferencesRepository(store("preview-reader.preferences_pb"))
         val backup = File(folder.root, "preview.zip")
         val repository = repository(app, reader, fonts)
+        val abandoned = File(context.cacheDir, "settings-backup-abandoned-${System.nanoTime()}")
+        assertTrue(abandoned.mkdirs())
         val original = JSONObject()
             .put("app", JSONObject().put("theme_mode", "dark"))
             .put("reader", JSONObject())
@@ -140,6 +142,7 @@ class SettingsBackupRepositoryTest {
         archive("preview-original.zip", original).copyTo(backup)
 
         val inspected = repository.inspect(Uri.fromFile(backup)) as SettingsBackupInspection.Ready
+        assertFalse(abandoned.exists())
         archive("preview-replacement.zip", replacement).copyTo(backup, overwrite = true)
         assertEquals(
             SettingsBackupRestoreResult.Restored(0, 0, 0),

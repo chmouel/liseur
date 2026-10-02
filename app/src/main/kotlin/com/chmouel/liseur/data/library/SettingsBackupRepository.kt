@@ -162,6 +162,7 @@ class SettingsBackupRepository(
 
     suspend fun inspect(source: Uri): SettingsBackupInspection = withContext(Dispatchers.IO) {
         operationMutex.withLock {
+        sweepStaleStaging()
         when (val result = readArchive(source)) {
             is ArchiveResult.Error -> SettingsBackupInspection.Failed(result.failure)
             is ArchiveResult.Valid -> {
@@ -185,7 +186,7 @@ class SettingsBackupRepository(
                                 settings.getJSONObject("reader").length(),
                             fontCount = result.entries.keys.count { it.startsWith("fonts/") },
                         ),
-                        result.stagingDirectory.name.removePrefix(STAGING_PREFIX),
+                        result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
                     )
                 } catch (e: CancellationException) {
                     throw e
@@ -260,12 +261,12 @@ class SettingsBackupRepository(
 
     suspend fun discardInspection(archiveId: String?) = withContext(Dispatchers.IO) {
         if (archiveId == null || !ARCHIVE_ID.matches(archiveId)) return@withContext
-        operationMutex.withLock { removeStaging(File(context.cacheDir, "$STAGING_PREFIX$archiveId")) }
+        operationMutex.withLock { removeStaging(stagingDirectory(archiveId)) }
     }
 
     private fun readStagedArchive(archiveId: String): ArchiveResult.Valid? {
         if (!ARCHIVE_ID.matches(archiveId)) return null
-        val directory = File(context.cacheDir, "$STAGING_PREFIX$archiveId")
+        val directory = stagingDirectory(archiveId)
         val index = try {
             JSONObject(File(directory, INDEX_PATH).readText())
         } catch (e: Exception) {
@@ -291,7 +292,7 @@ class SettingsBackupRepository(
 
     private suspend fun readArchive(source: Uri): ArchiveResult {
         val staging = try {
-            File(context.cacheDir, "$STAGING_PREFIX${UUID.randomUUID()}").also {
+            File(context.cacheDir, "$PROCESS_STAGING_PREFIX${UUID.randomUUID()}").also {
                 if (!it.mkdirs()) throw IOException("Could not create staging directory")
             }
         } catch (e: Exception) {
@@ -588,6 +589,19 @@ class SettingsBackupRepository(
         }
     }
 
+    private fun stagingDirectory(archiveId: String): File =
+        File(context.cacheDir, "$PROCESS_STAGING_PREFIX$archiveId")
+
+    private fun sweepStaleStaging() {
+        val currentPrefix = PROCESS_STAGING_PREFIX
+        context.cacheDir.listFiles()
+            ?.filter {
+                it.isDirectory && it.name.startsWith(STAGING_PREFIX) &&
+                    !it.name.startsWith(currentPrefix)
+            }
+            ?.forEach(::removeStaging)
+    }
+
     private fun MessageDigest.hexDigest(): String =
         digest().joinToString("") { "%02x".format(it) }
 
@@ -620,6 +634,8 @@ class SettingsBackupRepository(
     companion object {
         private const val TAG = "SettingsBackup"
         private const val STAGING_PREFIX = "settings-backup-"
+        private val PROCESS_STAGING_ID = UUID.randomUUID().toString()
+        private val PROCESS_STAGING_PREFIX = "$STAGING_PREFIX$PROCESS_STAGING_ID-"
         private const val INDEX_PATH = "inspection.json"
         private val ARCHIVE_ID = Regex("[0-9a-f-]{36}")
         private val ENTRY_FILE = Regex("entry-[0-9]+")
