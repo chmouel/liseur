@@ -828,6 +828,10 @@ class LibraryViewModel(
         // never be looked at again on their own. This fills them in
         // behind the shelf, which is already drawn and does not wait.
         viewModelScope.launch { library.backfillSeries() }
+        // Libraries upgraded from before EPUB display authors were
+        // separated need the files read once; failures remain eligible
+        // for the next launch.
+        viewModelScope.launch { library.backfillAuthors() }
         // Under Always, a book that arrives on the device goes up
         // without being asked about. The work is unique per book URL, so
         // this seeing the same book again while it is still queued keeps

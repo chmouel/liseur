@@ -237,7 +237,15 @@ class LocalLibraryRepository(
                 // it: same work keeps everything, a different one starts
                 // fresh, exactly as a folder scan treats a file rewritten
                 // in place, and one that will not open restores nothing.
-                if (!reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)) {
+                if (!reindexBook(
+                        durable,
+                        book.url,
+                        modifiedAt = null,
+                        previousWorkId = book.workId,
+                        previousAuthor = book.author,
+                        previousIdentityAuthor = book.identityAuthor,
+                    )
+                ) {
                     // A copy made just for this restore is not referenced
                     // by anything once the restore is refused, so it goes.
                     // Content addressing makes that safe: a file another
@@ -371,7 +379,15 @@ class LocalLibraryRepository(
                 // taken over the path starts fresh, and one that will
                 // not open restores nothing.
                 if (durable != null) {
-                    if (reindexBook(durable, book.url, modifiedAt = null, previousWorkId = book.workId)) {
+                    if (reindexBook(
+                            durable,
+                            book.url,
+                            modifiedAt = null,
+                            previousWorkId = book.workId,
+                            previousAuthor = book.author,
+                            previousIdentityAuthor = book.identityAuthor,
+                        )
+                    ) {
                         bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
                     } else if (!keepsWorking) {
                         // A copy made just for this restore is not
@@ -722,6 +738,8 @@ class LocalLibraryRepository(
                             bookUrl = url.toString(),
                             modifiedAt = file.modifiedAt,
                             previousWorkId = existing.workId,
+                            previousAuthor = existing.author,
+                            previousIdentityAuthor = existing.identityAuthor,
                         )
                     }
                 }
@@ -761,6 +779,8 @@ class LocalLibraryRepository(
                             bookUrl = alias.url,
                             modifiedAt = file.modifiedAt,
                             previousWorkId = alias.workId,
+                            previousAuthor = alias.author,
+                            previousIdentityAuthor = alias.identityAuthor,
                         )
                     }
                 }
@@ -913,6 +933,8 @@ class LocalLibraryRepository(
         bookUrl: String,
         modifiedAt: Long?,
         previousWorkId: String?,
+        previousAuthor: String?,
+        previousIdentityAuthor: String?,
     ): Boolean {
         val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
@@ -926,8 +948,27 @@ class LocalLibraryRepository(
                 ?: "Untitled"
             val author = (primaryEpubAuthors(publication) ?: publication.metadata.authors.map { it.name })
                 .joinToString(", ").ifBlank { null }
-            // Display corrections must not change the identity of an existing file.
-            val workId = workIdOf(publication.metadata.identifier, title, publication.identityAuthor())
+            // Readium's language choice must not change fallback identity
+            // when the primary display author still matches the shelf.
+            val indexedWorkId = workIdOf(
+                publication.metadata.identifier,
+                title,
+                publication.identityAuthor(),
+            )
+            val previousWorkIdForMetadata = workIdOf(
+                publication.metadata.identifier,
+                title,
+                previousIdentityAuthor,
+            )
+            val workId = if (
+                previousIdentityAuthor != null &&
+                previousAuthor == author &&
+                previousWorkIdForMetadata == previousWorkId
+            ) {
+                previousWorkId
+            } else {
+                indexedWorkId
+            }
             val series = seriesOf(publication)
             // Cleanup first, then the new description. Torn the other
             // way round, a death between the two leaves the new workId
@@ -1083,6 +1124,55 @@ class LocalLibraryRepository(
                 bookDao.fillSeriesFromFile(book.url, series.name, series.index)
             }
             delay(BACKFILL_PAUSE_MS)
+        }
+    }
+
+    /**
+     * Repairs author labels on books already on the shelf.
+     *
+     * Rows from before original EPUB authors were stored have no
+     * identity_author. Reading the file updates the shelf label while
+     * retaining the old author as the work identity. Unreadable files
+     * stay eligible for the next run.
+     */
+    suspend fun backfillAuthors(batchSize: Int = BACKFILL_BATCH) = withContext(Dispatchers.IO) {
+        val skipped = mutableSetOf<String>()
+        while (true) {
+            val batch = bookDao.needingAuthorCheck(batchSize + skipped.size)
+                .asSequence()
+                .filter { it.url !in skipped }
+                .take(batchSize)
+                .toList()
+            if (batch.isEmpty()) return@withContext
+            for (book in batch) {
+                currentCoroutineContext().ensureActive()
+                if (ServerKind.isRemoteUrl(book.url)) {
+                    skipped += book.url
+                    continue
+                }
+                val fileUrl = book.openableUri()?.let { AbsoluteUrl(it) }
+                val authors = fileUrl?.let { readPrimaryAuthors(it) }
+                if (authors == null) {
+                    skipped += book.url
+                    continue
+                }
+                refreshAuthor(book.url, authors)
+            }
+            delay(BACKFILL_PAUSE_MS)
+        }
+    }
+
+    private suspend fun readPrimaryAuthors(url: AbsoluteUrl): List<String>? {
+        val asset = assetRetriever.retrieve(url).getOrElse { return null }
+        val publication = publicationOpener.open(asset, allowUserInteraction = false)
+            .getOrElse {
+                asset.close()
+                return null
+            }
+        return try {
+            primaryEpubAuthors(publication)
+        } finally {
+            publication.close()
         }
     }
 

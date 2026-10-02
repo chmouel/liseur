@@ -255,6 +255,63 @@ class OrphanedBookImportTest {
     }
 
     @Test
+    fun `reindex keeps work identity when alternate script language changes`() = runTest {
+        val epub = folder.newFile("alternate-script.epub").also {
+            writeEpub(it, authors = AUTHOR_METADATA, identifier = "none")
+        }
+        val url = Uri.fromFile(epub).toString()
+        val added = library.importBook(Uri.fromFile(epub)) as ImportResult.Added
+        val workId = added.book.workId
+        assertEquals("a test book — الكاتب", workId)
+        val place = progress(url)
+        db.readingProgressDao().upsert(place)
+
+        writeEpub(
+            epub,
+            authors = """
+                <dc:creator id="author">Original author</dc:creator>
+                <meta property="alternate-script" refines="#author" xml:lang="ar">الكاتب</meta>
+            """.trimIndent(),
+            identifier = "none",
+        )
+        db.bookDao().setDownloadState(url, DownloadState.REMOTE, null)
+
+        library.importBook(Uri.fromFile(epub))
+
+        assertEquals(workId, db.bookDao().getByUrl(url)?.workId)
+        assertEquals(place, db.readingProgressDao().get(url))
+    }
+
+    @Test
+    fun `author backfill repairs old shelves and retries unavailable files`() = runTest {
+        val epub = folder.newFile("legacy-authors.epub")
+        val url = Uri.fromFile(epub).toString()
+        val id = db.bookDao().upsert(
+            orphan(url).copy(
+                title = "A Test Book",
+                author = "الكاتب",
+                identityAuthor = null,
+                workId = "a test book — الكاتب",
+                downloadState = DownloadState.DOWNLOADED,
+                localUri = url,
+            ),
+        )
+
+        library.backfillAuthors(batchSize = 1)
+        assertEquals("الكاتب", db.bookDao().getByUrl(url)?.author)
+        assertNull(db.bookDao().getByUrl(url)?.identityAuthor)
+
+        writeEpub(epub, authors = AUTHOR_METADATA, identifier = "none")
+        library.backfillAuthors(batchSize = 1)
+
+        val repaired = db.bookDao().getByUrl(url)
+        assertEquals(id, repaired?.id)
+        assertEquals("Original author", repaired?.author)
+        assertEquals("الكاتب", repaired?.identityAuthor)
+        assertEquals("a test book — الكاتب", repaired?.workId)
+    }
+
+    @Test
     fun `opening a catalog book does not replace its server author`() = runTest {
         val book = orphan("calibre:remote").copy(author = "Catalog author")
         val id = db.bookDao().upsert(book)

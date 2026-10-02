@@ -415,10 +415,21 @@ interface BookDao {
     @Query(
         """
         UPDATE books SET identity_author = COALESCE(identity_author, author, ''), author = :author
-        WHERE url = :url AND author IS NOT :author
+        WHERE url = :url AND (author IS NOT :author OR identity_author IS NULL)
         """,
     )
     suspend fun updateAuthor(url: String, author: String?)
+
+    /** Books whose file has not yet been checked for its primary author. */
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE identity_author IS NULL
+          AND (local_uri IS NOT NULL OR download_state = 'DOWNLOADED')
+        LIMIT :limit
+        """,
+    )
+    suspend fun needingAuthorCheck(limit: Int): List<Book>
 
     /** Refreshes what we read out of a file that changed on disk. */
     @Query(
