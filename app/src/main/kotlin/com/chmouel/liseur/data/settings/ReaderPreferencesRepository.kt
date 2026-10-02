@@ -19,6 +19,19 @@ private val Context.readerPrefsStore: DataStore<Preferences> by preferencesDataS
     name = "reader_preferences",
 )
 
+internal val READER_BACKUP_TYPES = mapOf(
+    "font" to BackupValueType.STRING, "font_size" to BackupValueType.DOUBLE,
+    "theme" to BackupValueType.STRING, "line_height" to BackupValueType.DOUBLE,
+    "page_margins" to BackupValueType.DOUBLE, "brightness" to BackupValueType.FLOAT,
+    "page_turn_style" to BackupValueType.STRING, "page_turn_animation" to BackupValueType.BOOLEAN,
+    "footer_mode" to BackupValueType.STRING, "footer_left" to BackupValueType.STRING,
+    "footer_right" to BackupValueType.STRING, "column_mode" to BackupValueType.STRING,
+    "auto_scroll_speed" to BackupValueType.FLOAT, "text_align" to BackupValueType.STRING,
+    "font_weight" to BackupValueType.STRING, "hyphens" to BackupValueType.BOOLEAN,
+    "letter_spacing" to BackupValueType.DOUBLE, "word_spacing" to BackupValueType.DOUBLE,
+    "paragraph_spacing" to BackupValueType.DOUBLE,
+)
+
 /**
  * Persists the reading preferences (font, size, theme, brightness…).
  *
@@ -30,26 +43,22 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
 
     constructor(context: Context) : this(context.readerPrefsStore)
 
-    private val backupTypes = mapOf(
-        "font" to BackupValueType.STRING, "font_size" to BackupValueType.DOUBLE,
-        "theme" to BackupValueType.STRING, "line_height" to BackupValueType.DOUBLE,
-        "page_margins" to BackupValueType.DOUBLE, "brightness" to BackupValueType.FLOAT,
-        "page_turn_style" to BackupValueType.STRING, "page_turn_animation" to BackupValueType.BOOLEAN,
-        "footer_mode" to BackupValueType.STRING, "footer_left" to BackupValueType.STRING,
-        "footer_right" to BackupValueType.STRING, "column_mode" to BackupValueType.STRING,
-        "auto_scroll_speed" to BackupValueType.FLOAT, "text_align" to BackupValueType.STRING,
-        "font_weight" to BackupValueType.STRING, "hyphens" to BackupValueType.BOOLEAN,
-        "letter_spacing" to BackupValueType.DOUBLE, "word_spacing" to BackupValueType.DOUBLE,
-        "paragraph_spacing" to BackupValueType.DOUBLE,
-    )
-
-    suspend fun backupValues(): JSONObject = store.data.first().backupJson(backupTypes.keys)
+    suspend fun backupValues(): JSONObject {
+        val stored = store.data.first()
+        val values = stored.backupJson(READER_BACKUP_TYPES.keys - "page_turn_animation")
+        val style = stored[Keys.PAGE_TURN_STYLE]
+        val legacyAnimation = stored[Keys.LEGACY_PAGE_TURN_ANIMATION]
+        if (style != null || legacyAnimation != null) {
+            values.put("page_turn_style", pageTurnStyleFrom(style, legacyAnimation).id)
+        }
+        return values
+    }
 
     suspend fun restoreBackupValues(values: JSONObject) {
         // The complete payload is checked before the edit so malformed input cannot
         // leave half of a preference store restored.
-        values.validateBackupJson(backupTypes)
-        store.edit { values.applyBackupJson(it, backupTypes) }
+        values.validateBackupJson(READER_BACKUP_TYPES)
+        store.edit { values.applyBackupJson(it, READER_BACKUP_TYPES) }
     }
 
     private object Keys {

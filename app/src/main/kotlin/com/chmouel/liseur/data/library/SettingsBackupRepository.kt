@@ -4,9 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.APP_BACKUP_TYPES
 import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.data.settings.BackupValueType
 import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
+import com.chmouel.liseur.data.settings.READER_BACKUP_TYPES
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.data.settings.UserFontRepository
@@ -80,11 +82,11 @@ class SettingsBackupRepository(
     suspend fun exportTo(target: Uri): SettingsBackupExportResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
         try {
-            val settingsBytes = JSONObject()
+            val settings = JSONObject()
                 .put("app", appSettings.backupValues())
                 .put("reader", readerPreferences.backupValues())
-                .toString()
-                .toByteArray(Charsets.UTF_8)
+            canonicalizeBackupSettings(settings)
+            val settingsBytes = settings.toString().toByteArray(Charsets.UTF_8)
             if (settingsBytes.size > MAX_SETTINGS_BYTES) {
                 return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
             }
@@ -586,6 +588,24 @@ class SettingsBackupRepository(
         validateReaderNumbers(reader)
     }
 
+    private fun canonicalizeBackupSettings(settings: JSONObject) {
+        val sections = listOf("app", "reader")
+        sections.forEach { section ->
+            val values = settings.getJSONObject(section)
+            values.keys().asSequence().toList().forEach { key ->
+                val app = if (section == "app") JSONObject().put(key, values.get(key)) else JSONObject()
+                val reader = if (section == "reader") JSONObject().put(key, values.get(key)) else JSONObject()
+                try {
+                    validateSettings(JSONObject().put("app", app).put("reader", reader))
+                } catch (e: IllegalArgumentException) {
+                    values.remove(key)
+                    Log.w(TAG, "Skipping invalid stored backup setting: $section.$key")
+                }
+            }
+        }
+        validateSettings(settings)
+    }
+
     private fun countKnownSettings(settings: JSONObject): Int {
         fun JSONObject.countKeys(known: Map<String, BackupValueType>): Int {
             val keys = keys()
@@ -760,52 +780,6 @@ class SettingsBackupRepository(
         private const val BUFFER_SIZE = 32 * 1024
         private const val NUMBER_EPSILON = 0.000001
         private val SHA256 = Regex("[0-9a-f]{64}")
-
-        private val APP_BACKUP_TYPES = mapOf(
-            "theme_mode" to BackupValueType.STRING,
-            "dynamic_color" to BackupValueType.BOOLEAN,
-            "volume_keys_turn_pages" to BackupValueType.BOOLEAN,
-            "tap_zones" to BackupValueType.STRING,
-            "pinch_to_resize" to BackupValueType.BOOLEAN,
-            "resume_last_book" to BackupValueType.BOOLEAN,
-            "keep_screen_on" to BackupValueType.BOOLEAN,
-            "scroll_mode" to BackupValueType.BOOLEAN,
-            "library_sort" to BackupValueType.STRING,
-            "library_sort_reversed" to BackupValueType.BOOLEAN,
-            "library_filters" to BackupValueType.STRING,
-            "library_group_by_series" to BackupValueType.BOOLEAN,
-            "eink_mode" to BackupValueType.STRING,
-            "color_eink" to BackupValueType.BOOLEAN,
-            "vendor_refresh" to BackupValueType.BOOLEAN,
-            "definition_target" to BackupValueType.STRING,
-            "dictionary_lookup_enabled" to BackupValueType.BOOLEAN,
-            "dictionary_base_url" to BackupValueType.STRING,
-            "upload_policy" to BackupValueType.STRING,
-            "stats_range" to BackupValueType.STRING,
-            "highlight_tints_offered" to BackupValueType.STRING_SET,
-            "highlight_tint_default" to BackupValueType.STRING,
-        )
-        private val READER_BACKUP_TYPES = mapOf(
-            "font" to BackupValueType.STRING,
-            "font_size" to BackupValueType.DOUBLE,
-            "theme" to BackupValueType.STRING,
-            "line_height" to BackupValueType.DOUBLE,
-            "page_margins" to BackupValueType.DOUBLE,
-            "brightness" to BackupValueType.FLOAT,
-            "page_turn_style" to BackupValueType.STRING,
-            "page_turn_animation" to BackupValueType.BOOLEAN,
-            "footer_mode" to BackupValueType.STRING,
-            "footer_left" to BackupValueType.STRING,
-            "footer_right" to BackupValueType.STRING,
-            "column_mode" to BackupValueType.STRING,
-            "auto_scroll_speed" to BackupValueType.FLOAT,
-            "text_align" to BackupValueType.STRING,
-            "font_weight" to BackupValueType.STRING,
-            "hyphens" to BackupValueType.BOOLEAN,
-            "letter_spacing" to BackupValueType.DOUBLE,
-            "word_spacing" to BackupValueType.DOUBLE,
-            "paragraph_spacing" to BackupValueType.DOUBLE,
-        )
 
         private fun safePath(path: String) = path.isNotBlank() && !path.startsWith('/') &&
             '\\' !in path && path.split('/').none { it.isEmpty() || it == "." || it == ".." }

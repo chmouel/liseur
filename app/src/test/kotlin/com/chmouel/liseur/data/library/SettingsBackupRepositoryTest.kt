@@ -5,12 +5,15 @@ import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReaderPrefs
+import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
@@ -79,6 +82,66 @@ class SettingsBackupRepositoryTest {
         assertEquals(ThemeMode.DARK, restoredApp.settings.first().themeMode)
         assertEquals(1.75, restoredReader.prefs.first().fontSize, 0.0)
         assertEquals(true, restoredReader.prefs.first().hyphens)
+    }
+
+    @Test
+    fun `export skips stored settings that would make its archive invalid`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val appStore = store("invalid-source-app.preferences_pb")
+        appStore.edit {
+            it[stringPreferencesKey("theme_mode")] = "future-theme"
+            it[booleanPreferencesKey("dynamic_color")] = false
+        }
+        val readerStore = store("invalid-source-reader.preferences_pb")
+        readerStore.edit { it[doublePreferencesKey("font_size")] = 999.0 }
+        val repository = repository(
+            AppSettingsRepository(appStore),
+            ReaderPreferencesRepository(readerStore),
+            fonts,
+        )
+        val backup = File(folder.root, "sanitized-settings.zip")
+
+        assertEquals(
+            SettingsBackupExportResult.Exported(0),
+            repository.exportTo(Uri.fromFile(backup)),
+        )
+        val inspection = repository.inspect(Uri.fromFile(backup)) as SettingsBackupInspection.Ready
+        assertEquals(SettingsBackupPreview(settingCount = 1, fontCount = 0), inspection.preview)
+        val settings = ZipFile(backup).use { zip ->
+            JSONObject(
+                zip.getInputStream(zip.getEntry("settings.json")).bufferedReader().use {
+                    it.readText()
+                },
+            )
+        }
+        assertFalse(settings.getJSONObject("app").has("theme_mode"))
+        assertEquals(false, settings.getJSONObject("app").getBoolean("dynamic_color"))
+        assertFalse(settings.getJSONObject("reader").has("font_size"))
+    }
+
+    @Test
+    fun `export restores a legacy page turn choice over a modern choice`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val sourceApp = AppSettingsRepository(store("legacy-turn-app.preferences_pb"))
+        val sourceReaderStore = store("legacy-turn-reader.preferences_pb")
+        sourceReaderStore.edit { it[booleanPreferencesKey("page_turn_animation")] = false }
+        val backup = File(folder.root, "legacy-page-turn.zip")
+        assertEquals(
+            SettingsBackupExportResult.Exported(0),
+            repository(sourceApp, ReaderPreferencesRepository(sourceReaderStore), fonts)
+                .exportTo(Uri.fromFile(backup)),
+        )
+
+        val targetApp = AppSettingsRepository(store("modern-turn-app.preferences_pb"))
+        val targetReader = ReaderPreferencesRepository(store("modern-turn-reader.preferences_pb"))
+        targetReader.setPageTurnStyle(PageTurnStyle.SLIDE)
+        assertEquals(
+            SettingsBackupRestoreResult.Restored(0, 0, 0),
+            restore(repository(targetApp, targetReader, fonts), Uri.fromFile(backup)),
+        )
+        assertEquals(PageTurnStyle.NONE, targetReader.prefs.first().pageTurnStyle)
     }
 
     @Test

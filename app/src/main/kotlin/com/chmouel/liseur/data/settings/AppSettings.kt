@@ -335,7 +335,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun current(): AppSettings = settings.first()
 
     /** Stored, user-facing preferences only; account and transient state stay private. */
-    suspend fun backupValues(): JSONObject = store.data.first().backupJson(APP_BACKUP_KEYS)
+    suspend fun backupValues(): JSONObject = store.data.first().backupJson(APP_BACKUP_TYPES.keys)
 
     /** Applies validated allowlisted values in one DataStore edit. */
     suspend fun restoreBackupValues(values: JSONObject) {
@@ -502,16 +502,6 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         }
     }
 }
-
-internal val APP_BACKUP_KEYS = setOf(
-    "theme_mode", "dynamic_color", "volume_keys_turn_pages", "tap_zones",
-    "pinch_to_resize", "resume_last_book", "keep_screen_on", "scroll_mode",
-    "library_sort", "library_sort_reversed", "library_filters",
-    "library_group_by_series", "eink_mode", "color_eink", "vendor_refresh",
-    "definition_target", "dictionary_lookup_enabled", "dictionary_base_url",
-    "upload_policy", "stats_range", "highlight_tints_offered",
-    "highlight_tint_default",
-)
 
 internal val APP_BACKUP_TYPES = mapOf(
     "theme_mode" to BackupValueType.STRING, "dynamic_color" to BackupValueType.BOOLEAN,
