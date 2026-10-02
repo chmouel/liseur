@@ -108,6 +108,35 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `a nameless custom font keeps its picked display name in a backup`() = runTest {
+        val sourceFonts = UserFontRepository(context, this, loadCheck = { true })
+        sourceFonts.awaitReady()
+        val fontBytes = SfntFixtures.sfnt(names = emptyList())
+        assertTrue(
+            sourceFonts.import(Uri.fromFile(writeFont(fontBytes)), "OpenDyslexic-Regular.ttf") is
+                FontImportResult.Imported,
+        )
+
+        val app = AppSettingsRepository(store("nameless-font-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("nameless-font-reader.preferences_pb"))
+        val backup = File(folder.root, "nameless-font-settings.zip")
+        assertEquals(
+            SettingsBackupExportResult.Exported(1),
+            repository(app, reader, sourceFonts).exportTo(Uri.fromFile(backup)),
+        )
+
+        val digest = sha256(fontBytes)
+        assertTrue(File(context.filesDir, "fonts/$digest.ttf").delete())
+        val targetFonts = UserFontRepository(context, this, loadCheck = { true })
+        targetFonts.awaitReady()
+        assertEquals(
+            SettingsBackupRestoreResult.Restored(1, 0, 0),
+            restore(repository(app, reader, targetFonts), Uri.fromFile(backup)),
+        )
+        assertEquals("OpenDyslexic-Regular", targetFonts.backupFonts().single().displayName)
+    }
+
+    @Test
     fun `a damaged archive is rejected without changing settings`() = runTest {
         val fonts = UserFontRepository(context, this, loadCheck = { true })
         fonts.awaitReady()
@@ -315,6 +344,33 @@ class SettingsBackupRepositoryTest {
             com.chmouel.liseur.domain.DictionaryUrl.DEFAULT_BASE_URL,
             app.settings.first().dictionaryBaseUrl,
         )
+    }
+
+    @Test
+    fun `restore rejects encoded settings with unknown values`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("invalid-encoded-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("invalid-encoded-reader.preferences_pb"))
+        val invalidAppSettings = listOf(
+            JSONObject().put("library_filters", "future_filter"),
+            JSONObject().put(
+                "highlight_tints_offered",
+                org.json.JSONArray().put("MAGENTA"),
+            ),
+            JSONObject().put("highlight_tint_default", "MAGENTA"),
+        )
+
+        invalidAppSettings.forEachIndexed { index, invalidSettings ->
+            val payload = JSONObject()
+                .put("app", invalidSettings)
+                .put("reader", JSONObject())
+            val backup = archive("invalid-encoded-$index.zip", payload)
+            assertEquals(
+                SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+                restore(repository(app, reader, fonts), Uri.fromFile(backup)),
+            )
+        }
     }
 
     @Test

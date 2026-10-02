@@ -14,6 +14,8 @@ import com.chmouel.liseur.data.settings.applyBackupJson
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
 import com.chmouel.liseur.domain.DictionaryUrl
+import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -96,6 +98,7 @@ class SettingsBackupRepository(
             listed += EntryMetadata(SETTINGS_PATH, settingsBytes.size.toLong(), sha256(settingsBytes))
             var totalBytes = settingsBytes.size.toLong()
             val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
+            val fontNames = fonts.associate { "fonts/${it.fileName}" to it.displayName }
             for (font in fonts) {
                 currentCoroutineContext().ensureActive()
                 val path = "fonts/${font.fileName}"
@@ -120,12 +123,12 @@ class SettingsBackupRepository(
                     "entries",
                     JSONArray().also { entries ->
                         listed.forEach { entry ->
-                            entries.put(
-                                JSONObject()
-                                    .put("path", entry.path)
-                                    .put("size", entry.size)
-                                    .put("sha256", entry.sha256),
-                            )
+                            val value = JSONObject()
+                                .put("path", entry.path)
+                                .put("size", entry.size)
+                                .put("sha256", entry.sha256)
+                            fontNames[entry.path]?.let { value.put("displayName", it) }
+                            entries.put(value)
                         }
                     },
                 )
@@ -175,7 +178,9 @@ class SettingsBackupRepository(
                         "entries",
                         JSONArray().also { values ->
                             result.entries.forEach { (path, entry) ->
-                                values.put(JSONObject().put("path", path).put("file", entry.file.name))
+                                val value = JSONObject().put("path", path).put("file", entry.file.name)
+                                entry.displayName?.let { value.put("displayName", it) }
+                                values.put(value)
                             }
                         },
                     )
@@ -247,7 +252,10 @@ class SettingsBackupRepository(
                 archive.entries.filterKeys { it.startsWith("fonts/") }.forEach { (path, entry) ->
                     currentCoroutineContext().ensureActive()
                     val name = path.removePrefix("fonts/")
-                    when (userFonts.import(Uri.fromFile(entry.file), name)) {
+                    val pickedName = entry.displayName?.let {
+                        "$it.${name.substringAfterLast('.', "")}"
+                    } ?: name
+                    when (userFonts.import(Uri.fromFile(entry.file), pickedName)) {
                         is FontImportResult.Imported -> imported++
                         is FontImportResult.AlreadyPresent -> present++
                         else -> failures++
@@ -298,9 +306,18 @@ class SettingsBackupRepository(
             val path = item.optString("path")
             val fileName = item.optString("file")
             if (!safePath(path) || path == MANIFEST_PATH || !fileName.matches(ENTRY_FILE)) return null
+            val displayName = item.opt("displayName") as? String
+            if (
+                (item.has("displayName") && displayName == null) ||
+                (displayName != null &&
+                    (!path.startsWith("fonts/") ||
+                        com.chmouel.liseur.data.settings.fonts.FontNames.sanitize(displayName) != displayName))
+            ) {
+                return null
+            }
             val file = File(directory, fileName)
             if (!file.isFile) return null
-            entries[path] = StagedEntry(file, file.length(), "")
+            entries[path] = StagedEntry(file, file.length(), "", displayName)
         }
         if (SETTINGS_PATH !in entries || entries.keys.any { it != SETTINGS_PATH && !it.startsWith("fonts/") }) {
             return null
@@ -388,7 +405,7 @@ class SettingsBackupRepository(
             }
             val listed = manifest.optJSONArray("entries")
                 ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
-            val expected = mutableMapOf<String, Pair<Long, String>>()
+            val expected = mutableMapOf<String, ExpectedEntry>()
             for (index in 0 until listed.length()) {
                 val item = listed.optJSONObject(index)
                     ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
@@ -407,12 +424,21 @@ class SettingsBackupRepository(
                 } ?: -1L
                 val digest = item.opt("sha256") as? String
                     ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                val displayName = item.opt("displayName") as? String
+                if (
+                    (item.has("displayName") && displayName == null) ||
+                    (displayName != null &&
+                        (!path.startsWith("fonts/") ||
+                            com.chmouel.liseur.data.settings.fonts.FontNames.sanitize(displayName) != displayName))
+                ) {
+                    return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                }
                 if (
                     !safePath(path) ||
                     path == MANIFEST_PATH ||
                     size !in 0..MAX_ENTRY_BYTES ||
                     !SHA256.matches(digest) ||
-                    expected.put(path, size to digest) != null
+                    expected.put(path, ExpectedEntry(size, digest, displayName)) != null
                 ) {
                     return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                 }
@@ -422,7 +448,7 @@ class SettingsBackupRepository(
             }
             expected.forEach { (path, check) ->
                 val entry = entries.getValue(path)
-                if (entry.size != check.first || entry.sha256 != check.second) {
+                if (entry.size != check.size || entry.sha256 != check.sha256) {
                     return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                 }
                 if (path.startsWith("fonts/")) {
@@ -435,7 +461,12 @@ class SettingsBackupRepository(
                 }
             }
             keepStaging = true
-            ArchiveResult.Valid(staging, entries - MANIFEST_PATH)
+            ArchiveResult.Valid(
+                staging,
+                (entries - MANIFEST_PATH).mapValues { (path, entry) ->
+                    entry.copy(displayName = expected.getValue(path).displayName)
+                },
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: BackupFailureException) {
@@ -510,6 +541,12 @@ class SettingsBackupRepository(
             ?: throw IllegalArgumentException("Missing reader settings")
         app.validateBackupJson(APP_BACKUP_TYPES)
         reader.validateBackupJson(READER_BACKUP_TYPES)
+        if (app.has("library_filters")) {
+            val filters = app.getString("library_filters")
+            if (LibraryFilters(options = LibraryFilters.parse(filters)).serialise() != filters) {
+                throw IllegalArgumentException("Invalid library filters")
+            }
+        }
         if (app.has("dictionary_base_url")) {
             val baseUrl = app.getString("dictionary_base_url")
             if (DictionaryUrl.normalise(baseUrl) != baseUrl) {
@@ -524,7 +561,17 @@ class SettingsBackupRepository(
             "definition_target" to setOf("built_in", "external_app"),
             "upload_policy" to setOf("ask", "always", "never"),
             "stats_range" to com.chmouel.liseur.domain.StatsRange.entries.map { it.id }.toSet(),
+            "highlight_tint_default" to HighlightTint.entries.map { it.name }.toSet(),
         ))
+        if (app.has("highlight_tints_offered")) {
+            val allowedTints = HighlightTint.entries.map { it.name }.toSet()
+            val offered = app.getJSONArray("highlight_tints_offered")
+            for (index in 0 until offered.length()) {
+                if (offered.getString(index) !in allowedTints) {
+                    throw IllegalArgumentException("Invalid offered highlight tint")
+                }
+            }
+        }
         validateIds(reader, mapOf(
             "font" to com.chmouel.liseur.data.settings.ReaderFont.entries.map { it.id }.toSet(),
             "theme" to com.chmouel.liseur.data.settings.ReaderThemeChoice.entries.map { it.id }.toSet(),
@@ -668,7 +715,13 @@ class SettingsBackupRepository(
     }
 
     private data class EntryMetadata(val path: String, val size: Long, val sha256: String)
-    private data class StagedEntry(val file: File, val size: Long, val sha256: String)
+    private data class ExpectedEntry(val size: Long, val sha256: String, val displayName: String?)
+    private data class StagedEntry(
+        val file: File,
+        val size: Long,
+        val sha256: String,
+        val displayName: String? = null,
+    )
 
     private sealed interface ArchiveResult {
         data class Valid(
