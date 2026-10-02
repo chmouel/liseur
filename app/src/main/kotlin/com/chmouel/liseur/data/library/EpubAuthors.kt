@@ -21,9 +21,7 @@ suspend fun primaryEpubAuthors(publication: Publication): List<String>? = withCo
         val container = publication.get(Url("META-INF/container.xml")!!)?.use {
             it.read().getOrNull()?.let(::parse)
         } ?: return@withContext null
-        val path = container.getFirst("rootfiles", OCF_NAMESPACE)
-            ?.getFirst("rootfile", OCF_NAMESPACE)?.getAttr("full-path")
-            ?.let { Url.fromEpubHref(it) } ?: return@withContext null
+        val path = opfPath(container)?.let { Url.fromEpubHref(it) } ?: return@withContext null
         val document = publication.get(path)?.use {
             it.read().getOrNull()?.let(::parse)
         } ?: return@withContext null
@@ -34,6 +32,12 @@ suspend fun primaryEpubAuthors(publication: Publication): List<String>? = withCo
         null
     }
 }
+
+internal fun opfPath(container: ElementNode): String? =
+    container.getFirst("rootfiles", OCF_NAMESPACE)
+        ?.get("rootfile", OCF_NAMESPACE)
+        ?.firstOrNull { it.getAttr("media-type").orEmpty().trim() == OPF_MEDIA_TYPE }
+        ?.getAttr("full-path")
 
 internal fun primaryEpubAuthors(document: ElementNode, expectedCount: Int): List<String>? {
     if (document.name != "package" || document.namespace != OPF_NAMESPACE) return null
@@ -65,3 +69,4 @@ private const val OCF_NAMESPACE = "urn:oasis:names:tc:opendocument:xmlns:contain
 private const val OPF_NAMESPACE = "http://www.idpf.org/2007/opf"
 private const val DC_NAMESPACE = "http://purl.org/dc/elements/1.1/"
 private const val META_VOCABULARY = "http://idpf.org/epub/vocab/package/meta/#"
+private const val OPF_MEDIA_TYPE = "application/oebps-package+xml"

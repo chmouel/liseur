@@ -71,6 +71,21 @@ class EpubAuthorsTest {
         assertNull(primaryEpubAuthors(document, 0))
     }
 
+    @Test
+    fun `chooses OPF rootfile when a different rendition is listed first`() {
+        val container = XmlParser().parse("""
+            <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+              <rootfiles>
+                <rootfile full-path="alt/book.pdf" media-type="application/pdf"/>
+                <rootfile full-path="OPS/main.opf" media-type="application/oebps-package+xml"/>
+                <rootfile full-path="OPS/other.opf" media-type="application/oebps-package+xml"/>
+              </rootfiles>
+            </container>
+        """.trimIndent().byteInputStream())
+
+        assertEquals("OPS/main.opf", opfPath(container))
+    }
+
     private fun authors(metadata: String, count: Int = 1, extraAttributes: String = ""): List<String>? {
         val document = XmlParser().parse("""
             <package xmlns="http://www.idpf.org/2007/opf" xml:lang="en-US"
