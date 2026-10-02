@@ -22,6 +22,8 @@ import com.chmouel.liseur.data.library.SettingsBackupRestoreResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
 import java.text.SimpleDateFormat
@@ -36,6 +38,7 @@ data class SettingsZipBackupUi(
     val restore: () -> Unit,
     val confirmRestore: () -> Unit,
     val dismissPreview: () -> Unit,
+    val close: () -> Unit,
 )
 
 sealed interface SettingsBackupUiStatus {
@@ -61,6 +64,7 @@ private class SettingsBackupViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsBackupState())
     val state = _state.asStateFlow()
+    private var activeOperation: Job? = null
 
     override fun onCleared() {
         viewModelScope.launch(NonCancellable) { repository.discardProcessInspections() }
@@ -114,14 +118,25 @@ private class SettingsBackupViewModel(
         viewModelScope.launch { repository.discardInspection(archiveId) }
     }
 
+    fun close() {
+        val operation = activeOperation
+        viewModelScope.launch {
+            operation?.cancelAndJoin()
+            repository.discardProcessInspections()
+            _state.value = SettingsBackupState()
+            activeOperation = null
+        }
+    }
+
     private fun runBusy(action: suspend () -> Unit) {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true) }
-        viewModelScope.launch {
+        activeOperation = viewModelScope.launch {
             try {
                 action()
             } finally {
                 _state.update { it.copy(busy = false) }
+                activeOperation = null
             }
         }
     }
@@ -157,5 +172,6 @@ fun rememberSettingsZipBackup(): SettingsZipBackupUi {
         restore = { open.launch(arrayOf("*/*")) },
         confirmRestore = model::confirmRestore,
         dismissPreview = model::dismissPreview,
+        close = model::close,
     )
 }

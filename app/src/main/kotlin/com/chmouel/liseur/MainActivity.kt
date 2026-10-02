@@ -355,7 +355,10 @@ private fun LiseurApp(
         }
 
         Screen.SETTINGS_BACKUP -> {
-            val back = { screen = Screen.SETTINGS }
+            val back = {
+                settingsZipBackup.close()
+                screen = Screen.SETTINGS
+            }
             BackHandler { back() }
             SettingsBackupScreen(
                 backup = settingsZipBackup,
