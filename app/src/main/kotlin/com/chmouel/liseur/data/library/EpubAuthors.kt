@@ -28,9 +28,9 @@ internal suspend fun epubAuthorIdentityMatches(
         return@withContext false
     }
     val document = publication.packageDocument() ?: return@withContext false
-    val names = epubAuthors(document, publication.metadata.authors.size)?.names
+    val aliases = epubAuthors(document, publication.metadata.authors.size)?.aliases
         ?: return@withContext false
-    expectedIdentity in names || expectedIdentity.split(", ").all { it in names }
+    matchesJoinedAuthorIdentity(expectedIdentity, aliases)
 }
 
 private suspend fun Publication.packageDocument(): ElementNode? {
@@ -62,7 +62,7 @@ internal fun primaryEpubAuthors(document: ElementNode, expectedCount: Int): List
 
 private data class ParsedEpubAuthors(
     val primary: List<String>,
-    val names: Set<String>,
+    val aliases: List<Set<String>>,
 )
 
 private fun epubAuthors(document: ElementNode, expectedCount: Int): ParsedEpubAuthors? {
@@ -86,8 +86,8 @@ private fun epubAuthors(document: ElementNode, expectedCount: Int): ParsedEpubAu
     val alternateScripts = metas.filter {
         it.packageProperty(document) == META_VOCABULARY + "alternate-script"
     }
-    val names = authorElements.flatMap { (element, primary) ->
-        buildList {
+    val aliases = authorElements.map { (element, primary) ->
+        buildSet {
             add(primary)
             element.id?.let { id ->
                 alternateScripts.asSequence()
@@ -96,8 +96,32 @@ private fun epubAuthors(document: ElementNode, expectedCount: Int): ParsedEpubAu
                     .forEach(::add)
             }
         }
-    }.toSet()
-    return ParsedEpubAuthors(authors, names)
+    }
+    return ParsedEpubAuthors(authors, aliases)
+}
+
+internal fun matchesJoinedAuthorIdentity(identity: String, aliases: List<Set<String>>): Boolean {
+    if (aliases.isEmpty()) return false
+    val failed = mutableSetOf<Pair<Int, Int>>()
+
+    fun matches(authorIndex: Int, offset: Int): Boolean {
+        if (authorIndex == aliases.size) return offset == identity.length
+        val state = authorIndex to offset
+        if (state in failed) return false
+        for (alias in aliases[authorIndex]) {
+            if (!identity.startsWith(alias, offset)) continue
+            val end = offset + alias.length
+            if (authorIndex == aliases.lastIndex) {
+                if (end == identity.length) return true
+            } else if (identity.startsWith(", ", end) && matches(authorIndex + 1, end + 2)) {
+                return true
+            }
+        }
+        failed += state
+        return false
+    }
+
+    return matches(0, 0)
 }
 
 private fun ElementNode.packageProperty(document: ElementNode): String {

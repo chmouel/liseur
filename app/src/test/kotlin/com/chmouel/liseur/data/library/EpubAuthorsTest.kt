@@ -3,7 +3,9 @@
 package com.chmouel.liseur.data.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.readium.r2.shared.util.xml.XmlParser
@@ -84,6 +86,16 @@ class EpubAuthorsTest {
         """.trimIndent().byteInputStream())
 
         assertEquals("OPS/main.opf", opfPath(container))
+    }
+
+    @Test
+    fun `matches complete multi-author identities when a name contains a comma`() {
+        val aliases = listOf(setOf("Old Script"), setOf("Doe, Jane", "Jane Doe"))
+
+        assertTrue(matchesJoinedAuthorIdentity("Old Script, Doe, Jane", aliases))
+        assertTrue(matchesJoinedAuthorIdentity("Old Script, Jane Doe", aliases))
+        assertFalse(matchesJoinedAuthorIdentity("Old Script, Doe, John", aliases))
+        assertTrue(matchesJoinedAuthorIdentity("Doe, Jane", listOf(setOf("Doe, Jane"))))
     }
 
     private fun authors(metadata: String, count: Int = 1, extraAttributes: String = ""): List<String>? {
