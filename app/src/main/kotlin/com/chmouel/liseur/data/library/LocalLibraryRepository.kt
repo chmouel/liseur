@@ -1151,19 +1151,21 @@ class LocalLibraryRepository(
             if (batch.isEmpty()) return@withContext
             for (book in batch) {
                 currentCoroutineContext().ensureActive()
-                val fileUrl = book.openableUri()?.let { AbsoluteUrl(it) }
-                if (
+                val retry = importLock.withLock {
+                    val current = bookDao.getByUrl(book.url)
+                        ?.takeIf { it.identityAuthor == null }
+                        ?: return@withLock false
+                    val fileUrl = current.openableUri()?.let { AbsoluteUrl(it) }
                     fileUrl == null || !reindexBook(
                         openableUrl = fileUrl,
-                        bookUrl = book.url,
-                        modifiedAt = book.fileModifiedAt,
-                        previousWorkId = book.workId,
-                        previousAuthor = book.author,
-                        previousIdentityAuthor = book.identityAuthor,
+                        bookUrl = current.url,
+                        modifiedAt = current.fileModifiedAt,
+                        previousWorkId = current.workId,
+                        previousAuthor = current.author,
+                        previousIdentityAuthor = current.identityAuthor,
                     )
-                ) {
-                    skipped += book.url
                 }
+                if (retry) skipped += book.url
             }
             delay(BACKFILL_PAUSE_MS)
         }
