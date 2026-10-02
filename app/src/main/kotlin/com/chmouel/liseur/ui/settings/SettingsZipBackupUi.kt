@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,6 +61,10 @@ private class SettingsBackupViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsBackupState())
     val state = _state.asStateFlow()
+
+    override fun onCleared() {
+        viewModelScope.launch(NonCancellable) { repository.discardProcessInspections() }
+    }
 
     fun export(uri: Uri) = runBusy {
         _state.update {

@@ -264,6 +264,17 @@ class SettingsBackupRepository(
         operationMutex.withLock { removeStaging(stagingDirectory(archiveId)) }
     }
 
+    suspend fun discardProcessInspections() = withContext(Dispatchers.IO) {
+        operationMutex.withLock {
+            context.cacheDir.listFiles()
+                ?.filter {
+                    it.isDirectory && it.name.startsWith(PROCESS_STAGING_PREFIX) &&
+                        STAGING_DIRECTORY.matches(it.name)
+                }
+                ?.forEach(::removeStaging)
+        }
+    }
+
     private fun readStagedArchive(archiveId: String): ArchiveResult.Valid? {
         if (!ARCHIVE_ID.matches(archiveId)) return null
         val directory = stagingDirectory(archiveId)
@@ -636,6 +647,8 @@ class SettingsBackupRepository(
         private const val STAGING_PREFIX = "settings-backup-"
         private val PROCESS_STAGING_ID = UUID.randomUUID().toString()
         private val PROCESS_STAGING_PREFIX = "$STAGING_PREFIX$PROCESS_STAGING_ID-"
+        private val STAGING_DIRECTORY =
+            Regex("${Regex.escape(PROCESS_STAGING_PREFIX)}[0-9a-f-]{36}")
         private const val INDEX_PATH = "inspection.json"
         private val ARCHIVE_ID = Regex("[0-9a-f-]{36}")
         private val ENTRY_FILE = Regex("entry-[0-9]+")

@@ -143,10 +143,17 @@ class SettingsBackupRepositoryTest {
 
         val inspected = repository.inspect(Uri.fromFile(backup)) as SettingsBackupInspection.Ready
         assertFalse(abandoned.exists())
+        repository.discardProcessInspections()
+        assertFalse(File(context.cacheDir, "settings-backup-${inspected.archiveId}").exists())
+        val stagedRoots = context.cacheDir.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("settings-backup-") }
+            .orEmpty()
+        assertTrue(stagedRoots.isEmpty())
+        val retainedInspection = repository.inspect(Uri.fromFile(backup)) as SettingsBackupInspection.Ready
         archive("preview-replacement.zip", replacement).copyTo(backup, overwrite = true)
         assertEquals(
             SettingsBackupRestoreResult.Restored(0, 0, 0),
-            repository.restore(inspected.archiveId),
+            repository.restore(retainedInspection.archiveId),
         )
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
     }
