@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
 
 private val Context.readerPrefsStore: DataStore<Preferences> by preferencesDataStore(
     name = "reader_preferences",
@@ -28,6 +29,28 @@ private val Context.readerPrefsStore: DataStore<Preferences> by preferencesDataS
 class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
 
     constructor(context: Context) : this(context.readerPrefsStore)
+
+    private val backupTypes = mapOf(
+        "font" to BackupValueType.STRING, "font_size" to BackupValueType.DOUBLE,
+        "theme" to BackupValueType.STRING, "line_height" to BackupValueType.DOUBLE,
+        "page_margins" to BackupValueType.DOUBLE, "brightness" to BackupValueType.FLOAT,
+        "page_turn_style" to BackupValueType.STRING, "page_turn_animation" to BackupValueType.BOOLEAN,
+        "footer_mode" to BackupValueType.STRING, "footer_left" to BackupValueType.STRING,
+        "footer_right" to BackupValueType.STRING, "column_mode" to BackupValueType.STRING,
+        "auto_scroll_speed" to BackupValueType.FLOAT, "text_align" to BackupValueType.STRING,
+        "font_weight" to BackupValueType.STRING, "hyphens" to BackupValueType.BOOLEAN,
+        "letter_spacing" to BackupValueType.DOUBLE, "word_spacing" to BackupValueType.DOUBLE,
+        "paragraph_spacing" to BackupValueType.DOUBLE,
+    )
+
+    suspend fun backupValues(): JSONObject = store.data.first().backupJson(backupTypes.keys)
+
+    suspend fun restoreBackupValues(values: JSONObject) {
+        // The complete payload is checked before the edit so malformed input cannot
+        // leave half of a preference store restored.
+        values.validateBackupJson(backupTypes)
+        store.edit { values.applyBackupJson(it, backupTypes) }
+    }
 
     private object Keys {
         val FONT = stringPreferencesKey("font")

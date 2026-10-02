@@ -122,6 +122,25 @@ keytool -genkeypair -v -keystore /path/to/your.p12 -storetype PKCS12 \
 Either way `./gradlew assembleRelease` picks the file up automatically;
 without it the release build is simply unsigned.
 
+## Settings backup archive
+
+Settings backups are ZIP files with a versioned `manifest.json`, a
+`settings.json` payload, and optional `fonts/<sha256>.(ttf|otf)` entries.
+The manifest records each payload entry's size and SHA-256 checksum. The
+settings payload uses explicit allowlists for the app and reader preference
+stores; account credentials, server connections, sync metadata, and transient
+notices are not included. Unset keys remain absent so restoring a backup
+leaves destination values alone when the archive did not store that setting.
+Custom font entry names retain their content-based identifiers.
+
+The Settings screen inspects a ZIP and previews its setting and font counts
+before restore. Unknown optional JSON fields are ignored; malformed known
+fields, unsafe or duplicate paths, checksum mismatches, and unsupported
+versions are rejected. Font files are passed through the normal font importer,
+so its validation and installation limits still apply. Settings are written
+to two independent DataStores, so a storage failure can leave a partial
+restore. Annotation JSON transfer remains a separate feature.
+
 ## Testing
 
 ```bash

@@ -763,6 +763,18 @@
     <string name="settings_library">Biblioteca</string>
     <string name="settings_remote_library">Bibliotecas remotas</string>
     <string name="settings_export_import">Exportar e importar</string>
+    <string name="settings_backup_title">Ajustes y fuentes</string>
+    <string name="settings_backup_detail">Guarda tus preferencias y fuentes personalizadas instaladas en un archivo ZIP.</string>
+    <string name="settings_backup_export">Exportar copia</string>
+    <string name="settings_backup_export_detail">Crea un ZIP fechado con tus ajustes y fuentes.</string>
+    <string name="settings_backup_restore">Restaurar copia</string>
+    <string name="settings_backup_restore_detail">Previsualiza la copia antes de aplicarla.</string>
+    <string name="settings_backup_preview_title">¿Restaurar ajustes y fuentes?</string>
+    <string name="settings_backup_preview_body">Esta copia contiene %1$d ajustes y %2$d fuentes personalizadas. Cambiarán los ajustes globales; se conservarán los datos de lectura existentes.</string>
+    <string name="settings_backup_restore_action">Restaurar</string>
+    <string name="settings_backup_exported">Copia guardada con %1$d fuentes personalizadas.</string>
+    <string name="settings_backup_restored">Se restauraron %1$d fuentes; %2$d ya estaban instaladas; no se pudieron instalar %3$d.</string>
+    <string name="settings_backup_failed">Error en la copia: %1$s</string>
     <string name="settings_library_help_title">Servidores de libros</string>
     <string name="settings_library_help_body" formatted="true">Un servidor de libros — calibre-web, Komga, liseur-sync o un catálogo OPDS — guarda tu biblioteca: Liseur la explora y descarga de ella, y mantiene tu lugar al día donde el servidor lo permite. Una conexión OPDS personalizada puede emparejarse con un servidor de sincronización KOReader para las posiciones de lectura. Solo se conecta un servidor a la vez.\n\nliseur-sync es el que también mantiene al día los libros que no vinieron de ningún sitio más que de este teléfono: un archivo de una tarjeta SD sincroniza también su posición. Monta el tuyo desde %1$s.</string>
     <string name="settings_account_detail">Explora y descarga desde un servidor calibre-web, Komga, liseur-sync u OPDS, y mantén tu lugar al día — OPDS a través de un servidor de sincronización KOReader emparejado.</string>

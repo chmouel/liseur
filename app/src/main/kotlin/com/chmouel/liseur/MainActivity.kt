@@ -71,6 +71,7 @@ import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
 import com.chmouel.liseur.ui.settings.HiddenBooksScreen
 import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
 import com.chmouel.liseur.ui.settings.AnnotationBackupUi
+import com.chmouel.liseur.ui.settings.rememberSettingsZipBackup
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.ProvideEInk
 import com.chmouel.liseur.data.settings.AppSettings
@@ -230,6 +231,7 @@ private fun LiseurApp(
     val readerPrefs by readerPreferences.prefs.collectAsStateWithLifecycle(ReaderPrefs())
     val appIsDark = settings.themeMode.isDark()
     val annotationBackup = rememberAnnotationBackup()
+    val settingsZipBackup = rememberSettingsZipBackup()
 
     when (screen) {
         Screen.LIBRARY -> LibraryRoute(
@@ -343,6 +345,7 @@ private fun LiseurApp(
                 libraryFolders = library.libraryFolders,
                 onRemoveFolder = { library.removeFolder(it) },
                 backup = annotationBackup,
+                zipBackup = settingsZipBackup,
                 server = context.container.remoteAccount.server,
                 onOpenAbout = { screen = Screen.ABOUT },
                 onBack = { screen = Screen.LIBRARY },

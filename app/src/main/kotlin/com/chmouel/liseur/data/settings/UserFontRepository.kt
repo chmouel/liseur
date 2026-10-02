@@ -109,6 +109,12 @@ class UserFontRepository(
     /** The ids currently backed by a file, for resolving a stored preference. */
     fun registry(): Set<String> = _fonts.value.mapTo(HashSet()) { it.id }
 
+    /** Files are content addressed, so their existing ids survive a restore. */
+    suspend fun backupFonts(): List<UserFont> {
+        awaitReady()
+        return withContext(Dispatchers.IO) { _fonts.value.filter { it.file.isFile && it.file.canRead() } }
+    }
+
     // -- import -------------------------------------------------------------
 
     suspend fun import(uri: Uri, pickedName: String?): ImportResult = withContext(Dispatchers.IO) {

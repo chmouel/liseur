@@ -774,6 +774,18 @@
     <string name="settings_library">Bibliothek</string>
     <string name="settings_remote_library">Externe Bibliotheken</string>
     <string name="settings_export_import">Export und Import</string>
+    <string name="settings_backup_title">Einstellungen und Schriftarten</string>
+    <string name="settings_backup_detail">Speichere App-Einstellungen und installierte Schriftarten in einer ZIP-Sicherung.</string>
+    <string name="settings_backup_export">Sicherung exportieren</string>
+    <string name="settings_backup_export_detail">Erstelle eine datierte ZIP-Datei mit Einstellungen und Schriftarten.</string>
+    <string name="settings_backup_restore">Sicherung wiederherstellen</string>
+    <string name="settings_backup_restore_detail">Zeige den Inhalt der Sicherung vor dem Anwenden an.</string>
+    <string name="settings_backup_preview_title">Einstellungen und Schriftarten wiederherstellen?</string>
+    <string name="settings_backup_preview_body">Diese Sicherung enthält %1$d Einstellungen und %2$d eigene Schriftarten. Globale Einstellungen werden geändert; vorhandene Lesedaten bleiben erhalten.</string>
+    <string name="settings_backup_restore_action">Wiederherstellen</string>
+    <string name="settings_backup_exported">Sicherung mit %1$d eigenen Schriftarten gespeichert.</string>
+    <string name="settings_backup_restored">%1$d Schriftarten wiederhergestellt; %2$d waren bereits installiert; %3$d konnten nicht installiert werden.</string>
+    <string name="settings_backup_failed">Sicherung fehlgeschlagen: %1$s</string>
     <string name="settings_library_help_title">Buchserver</string>
     <string name="settings_library_help_body" formatted="true">Ein Buchserver — calibre-web, Komga, liseur-sync oder ein OPDS-Katalog — hält deine Bibliothek: Liseur durchsucht ihn und lädt davon herunter und hält deine Stelle im Einklang, wo der Server das unterstützt. Eine benutzerdefinierte OPDS-Verbindung kann für Lesepositionen mit einem KOReader-Sync-Server gekoppelt werden. Es ist jeweils ein Server verbunden.\n\nliseur-sync ist der, der auch Bücher mitführt, die nur von diesem Handy kamen: eine Datei von einer SD-Karte synchronisiert ihre Position ebenfalls. Betreibe deinen eigenen von %1$s.</string>
     <string name="settings_account_detail">Durchsuchen und Herunterladen von einem calibre-web-, Komga-, liseur-sync- oder OPDS-Server und deine Stelle im Einklang halten — OPDS über einen gekoppelten KOReader-Sync-Server.</string>

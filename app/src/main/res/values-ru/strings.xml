@@ -813,6 +813,18 @@
     <string name="settings_library">Библиотека</string>
     <string name="settings_remote_library">Удалённые библиотеки</string>
     <string name="settings_export_import">Экспорт и импорт</string>
+    <string name="settings_backup_title">Настройки и шрифты</string>
+    <string name="settings_backup_detail">Сохраните параметры приложения и установленные шрифты в ZIP-архив.</string>
+    <string name="settings_backup_export">Экспортировать резервную копию</string>
+    <string name="settings_backup_export_detail">Создайте датированный ZIP-файл с настройками и шрифтами.</string>
+    <string name="settings_backup_restore">Восстановить резервную копию</string>
+    <string name="settings_backup_restore_detail">Просмотрите состав копии перед восстановлением.</string>
+    <string name="settings_backup_preview_title">Восстановить настройки и шрифты?</string>
+    <string name="settings_backup_preview_body">В копии: параметров — %1$d, пользовательских шрифтов — %2$d. Глобальные настройки изменятся, текущие данные чтения сохранятся.</string>
+    <string name="settings_backup_restore_action">Восстановить</string>
+    <string name="settings_backup_exported">Копия сохранена; пользовательских шрифтов: %1$d.</string>
+    <string name="settings_backup_restored">Восстановлено шрифтов: %1$d; уже установлено: %2$d; не удалось установить: %3$d.</string>
+    <string name="settings_backup_failed">Не удалось выполнить резервное копирование: %1$s</string>
     <string name="settings_library_help_title">Серверы книг</string>
     <string name="settings_library_help_body" formatted="true">Сервер книг — calibre-web, Komga, liseur-sync или каталог OPDS — хранит вашу библиотеку: Liseur просматривает её и скачивает из неё, и синхронизирует место чтения, где сервер это поддерживает. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения. Одновременно подключён один сервер.\n\nliseur-sync — тот, что также синхронизирует книги, появившиеся только на этом телефоне: файл с SD-карты тоже синхронизирует позицию. Запустите свой с %1$s.</string>
     <string name="settings_account_detail">Просматривайте и скачивайте с сервера calibre-web, Komga, liseur-sync или OPDS и синхронизируйте место чтения — для OPDS через связанный сервер синхронизации KOReader.</string>

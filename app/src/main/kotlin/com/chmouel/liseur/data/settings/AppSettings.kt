@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import org.json.JSONObject
 import androidx.datastore.preferences.preferencesDataStore
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
@@ -333,6 +334,14 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun current(): AppSettings = settings.first()
 
+    /** Stored, user-facing preferences only; account and transient state stay private. */
+    suspend fun backupValues(): JSONObject = store.data.first().backupJson(APP_BACKUP_KEYS)
+
+    /** Applies validated allowlisted values in one DataStore edit. */
+    suspend fun restoreBackupValues(values: JSONObject) {
+        store.edit { values.applyBackupJson(it, APP_BACKUP_TYPES) }
+    }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         store.edit { it[Keys.THEME_MODE] = mode.id }
     }
@@ -493,3 +502,28 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         }
     }
 }
+
+internal val APP_BACKUP_KEYS = setOf(
+    "theme_mode", "dynamic_color", "volume_keys_turn_pages", "tap_zones",
+    "pinch_to_resize", "resume_last_book", "keep_screen_on", "scroll_mode",
+    "library_sort", "library_sort_reversed", "library_filters",
+    "library_group_by_series", "eink_mode", "color_eink", "vendor_refresh",
+    "definition_target", "dictionary_lookup_enabled", "dictionary_base_url",
+    "upload_policy", "stats_range", "highlight_tints_offered",
+    "highlight_tint_default",
+)
+
+internal val APP_BACKUP_TYPES = mapOf(
+    "theme_mode" to BackupValueType.STRING, "dynamic_color" to BackupValueType.BOOLEAN,
+    "volume_keys_turn_pages" to BackupValueType.BOOLEAN, "tap_zones" to BackupValueType.STRING,
+    "pinch_to_resize" to BackupValueType.BOOLEAN, "resume_last_book" to BackupValueType.BOOLEAN,
+    "keep_screen_on" to BackupValueType.BOOLEAN, "scroll_mode" to BackupValueType.BOOLEAN,
+    "library_sort" to BackupValueType.STRING, "library_sort_reversed" to BackupValueType.BOOLEAN,
+    "library_filters" to BackupValueType.STRING, "library_group_by_series" to BackupValueType.BOOLEAN,
+    "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
+    "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,
+    "dictionary_lookup_enabled" to BackupValueType.BOOLEAN, "dictionary_base_url" to BackupValueType.STRING,
+    "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
+    "highlight_tints_offered" to BackupValueType.STRING_SET,
+    "highlight_tint_default" to BackupValueType.STRING,
+)
