@@ -25,6 +25,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -43,7 +45,7 @@ enum class SettingsBackupFailure {
 data class SettingsBackupPreview(val settingCount: Int, val fontCount: Int)
 
 sealed interface SettingsBackupInspection {
-    data class Ready(val preview: SettingsBackupPreview) : SettingsBackupInspection
+    data class Ready(val preview: SettingsBackupPreview, val archiveId: String) : SettingsBackupInspection
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupInspection
 }
 
@@ -70,7 +72,10 @@ class SettingsBackupRepository(
     private val readerPreferences: ReaderPreferencesRepository,
     private val userFonts: UserFontRepository,
 ) {
+    private val operationMutex = Mutex()
+
     suspend fun exportTo(target: Uri): SettingsBackupExportResult = withContext(Dispatchers.IO) {
+        operationMutex.withLock {
         try {
             val settingsBytes = JSONObject()
                 .put("app", appSettings.backupValues())
@@ -152,38 +157,54 @@ class SettingsBackupRepository(
             Log.w(TAG, "Settings export failed", e)
             SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
         }
+        }
     }
 
     suspend fun inspect(source: Uri): SettingsBackupInspection = withContext(Dispatchers.IO) {
+        operationMutex.withLock {
         when (val result = readArchive(source)) {
             is ArchiveResult.Error -> SettingsBackupInspection.Failed(result.failure)
-            is ArchiveResult.Valid -> try {
-                val settings = decodeSettings(result.entries.getValue(SETTINGS_PATH).file)
-                validateSettings(settings)
-                SettingsBackupInspection.Ready(
-                    SettingsBackupPreview(
-                        settingCount = settings.getJSONObject("app").length() +
-                            settings.getJSONObject("reader").length(),
-                        fontCount = result.entries.keys.count { it.startsWith("fonts/") },
-                    ),
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: BackupFailureException) {
-                SettingsBackupInspection.Failed(e.failure)
-            } catch (e: Exception) {
-                SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
-            } finally {
-                removeStaging(result.stagingDirectory)
+            is ArchiveResult.Valid -> {
+                var retained = false
+                try {
+                    val settings = decodeSettings(result.entries.getValue(SETTINGS_PATH).file)
+                    validateSettings(settings)
+                    val index = JSONObject().put(
+                        "entries",
+                        JSONArray().also { values ->
+                            result.entries.forEach { (path, entry) ->
+                                values.put(JSONObject().put("path", path).put("file", entry.file.name))
+                            }
+                        },
+                    )
+                    File(result.stagingDirectory, INDEX_PATH).writeText(index.toString())
+                    retained = true
+                    SettingsBackupInspection.Ready(
+                        SettingsBackupPreview(
+                            settingCount = settings.getJSONObject("app").length() +
+                                settings.getJSONObject("reader").length(),
+                            fontCount = result.entries.keys.count { it.startsWith("fonts/") },
+                        ),
+                        result.stagingDirectory.name.removePrefix(STAGING_PREFIX),
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: BackupFailureException) {
+                    SettingsBackupInspection.Failed(e.failure)
+                } catch (e: Exception) {
+                    SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+                } finally {
+                    if (!retained) removeStaging(result.stagingDirectory)
+                }
             }
+        }
         }
     }
 
-    suspend fun restore(source: Uri): SettingsBackupRestoreResult = withContext(Dispatchers.IO) {
-        val archive = when (val result = readArchive(source)) {
-            is ArchiveResult.Error -> return@withContext SettingsBackupRestoreResult.Failed(result.failure)
-            is ArchiveResult.Valid -> result
-        }
+    suspend fun restore(archiveId: String): SettingsBackupRestoreResult = withContext(Dispatchers.IO) {
+        operationMutex.withLock {
+        val archive = readStagedArchive(archiveId)
+            ?: return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
         try {
             val settings = try {
                 decodeSettings(archive.entries.getValue(SETTINGS_PATH).file).also(::validateSettings)
@@ -234,11 +255,43 @@ class SettingsBackupRepository(
         } finally {
             removeStaging(archive.stagingDirectory)
         }
+        }
+    }
+
+    suspend fun discardInspection(archiveId: String?) = withContext(Dispatchers.IO) {
+        if (archiveId == null || !ARCHIVE_ID.matches(archiveId)) return@withContext
+        operationMutex.withLock { removeStaging(File(context.cacheDir, "$STAGING_PREFIX$archiveId")) }
+    }
+
+    private fun readStagedArchive(archiveId: String): ArchiveResult.Valid? {
+        if (!ARCHIVE_ID.matches(archiveId)) return null
+        val directory = File(context.cacheDir, "$STAGING_PREFIX$archiveId")
+        val index = try {
+            JSONObject(File(directory, INDEX_PATH).readText())
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read inspected backup", e)
+            return null
+        }
+        val listed = index.optJSONArray("entries") ?: return null
+        val entries = linkedMapOf<String, StagedEntry>()
+        for (position in 0 until listed.length()) {
+            val item = listed.optJSONObject(position) ?: return null
+            val path = item.optString("path")
+            val fileName = item.optString("file")
+            if (!safePath(path) || path == MANIFEST_PATH || !fileName.matches(ENTRY_FILE)) return null
+            val file = File(directory, fileName)
+            if (!file.isFile) return null
+            entries[path] = StagedEntry(file, file.length(), "")
+        }
+        if (SETTINGS_PATH !in entries || entries.keys.any { it != SETTINGS_PATH && !it.startsWith("fonts/") }) {
+            return null
+        }
+        return ArchiveResult.Valid(directory, entries)
     }
 
     private suspend fun readArchive(source: Uri): ArchiveResult {
         val staging = try {
-            File(context.cacheDir, "settings-backup-${UUID.randomUUID()}").also {
+            File(context.cacheDir, "$STAGING_PREFIX${UUID.randomUUID()}").also {
                 if (!it.mkdirs()) throw IOException("Could not create staging directory")
             }
         } catch (e: Exception) {
@@ -566,6 +619,10 @@ class SettingsBackupRepository(
 
     companion object {
         private const val TAG = "SettingsBackup"
+        private const val STAGING_PREFIX = "settings-backup-"
+        private const val INDEX_PATH = "inspection.json"
+        private val ARCHIVE_ID = Regex("[0-9a-f-]{36}")
+        private val ENTRY_FILE = Regex("entry-[0-9]+")
         private const val FORMAT = 1
         private const val MANIFEST_PATH = "manifest.json"
         private const val SETTINGS_PATH = "settings.json"

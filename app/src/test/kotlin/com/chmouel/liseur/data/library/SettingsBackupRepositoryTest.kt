@@ -13,6 +13,8 @@ import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.data.settings.UserFontRepository
+import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
+import com.chmouel.liseur.data.settings.fonts.SfntFixtures
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -58,10 +60,9 @@ class SettingsBackupRepositoryTest {
         val source = repository(sourceApp, sourceReader, fonts)
 
         assertEquals(SettingsBackupExportResult.Exported(0), source.exportTo(uri))
-        assertEquals(
-            SettingsBackupInspection.Ready(SettingsBackupPreview(settingCount = 3, fontCount = 0)),
-            source.inspect(uri),
-        )
+        val inspected = source.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(SettingsBackupPreview(settingCount = 3, fontCount = 0), inspected.preview)
+        source.discardInspection(inspected.archiveId)
 
         val settings = ZipFile(backup).use { zip ->
             zip.getInputStream(zip.getEntry("settings.json")).bufferedReader().use {
@@ -74,10 +75,36 @@ class SettingsBackupRepositoryTest {
         val restoredReader = ReaderPreferencesRepository(store("restored-reader.preferences_pb"))
         val restored = repository(restoredApp, restoredReader, fonts)
 
-        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restored.restore(uri))
+        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(restored, uri))
         assertEquals(ThemeMode.DARK, restoredApp.settings.first().themeMode)
         assertEquals(1.75, restoredReader.prefs.first().fontSize, 0.0)
         assertEquals(true, restoredReader.prefs.first().hyphens)
+    }
+
+    @Test
+    fun `an exported custom font is restored with its content identity`() = runTest {
+        val sourceFonts = UserFontRepository(context, this, loadCheck = { true })
+        sourceFonts.awaitReady()
+        val fontBytes = SfntFixtures.sfnt(names = listOf(SfntFixtures.name(1, "Backup Font")))
+        assertTrue(sourceFonts.import(Uri.fromFile(writeFont(fontBytes)), "backup.ttf") is FontImportResult.Imported)
+
+        val app = AppSettingsRepository(store("font-backup-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("font-backup-reader.preferences_pb"))
+        val backup = File(folder.root, "font-settings.zip")
+        assertEquals(
+            SettingsBackupExportResult.Exported(1),
+            repository(app, reader, sourceFonts).exportTo(Uri.fromFile(backup)),
+        )
+
+        val digest = sha256(fontBytes)
+        assertTrue(File(context.filesDir, "fonts/$digest.ttf").delete())
+        val targetFonts = UserFontRepository(context, this, loadCheck = { true })
+        targetFonts.awaitReady()
+        val result = restore(repository(app, reader, targetFonts), Uri.fromFile(backup))
+
+        assertEquals(SettingsBackupRestoreResult.Restored(1, 0, 0), result)
+        assertTrue(targetFonts.registry().contains("user:$digest"))
+        assertEquals(fontBytes.toList(), File(context.filesDir, "fonts/$digest.ttf").readBytes().toList())
     }
 
     @Test
@@ -91,8 +118,34 @@ class SettingsBackupRepositoryTest {
         val repository = repository(app, reader, fonts)
 
         assertTrue(repository.inspect(Uri.fromFile(backup)) is SettingsBackupInspection.Failed)
-        assertTrue(repository.restore(Uri.fromFile(backup)) is SettingsBackupRestoreResult.Failed)
+        assertTrue(restore(repository, Uri.fromFile(backup)) is SettingsBackupRestoreResult.Failed)
         assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
+    }
+
+    @Test
+    fun `restore uses the archive that was previewed`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("preview-app.preferences_pb"))
+        app.setThemeMode(ThemeMode.LIGHT)
+        val reader = ReaderPreferencesRepository(store("preview-reader.preferences_pb"))
+        val backup = File(folder.root, "preview.zip")
+        val repository = repository(app, reader, fonts)
+        val original = JSONObject()
+            .put("app", JSONObject().put("theme_mode", "dark"))
+            .put("reader", JSONObject())
+        val replacement = JSONObject()
+            .put("app", JSONObject().put("theme_mode", "light"))
+            .put("reader", JSONObject())
+        archive("preview-original.zip", original).copyTo(backup)
+
+        val inspected = repository.inspect(Uri.fromFile(backup)) as SettingsBackupInspection.Ready
+        archive("preview-replacement.zip", replacement).copyTo(backup, overwrite = true)
+        assertEquals(
+            SettingsBackupRestoreResult.Restored(0, 0, 0),
+            repository.restore(inspected.archiveId),
+        )
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
     }
 
     @Test
@@ -112,7 +165,7 @@ class SettingsBackupRepositoryTest {
 
         assertEquals(
             SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
-            repository.restore(Uri.fromFile(backup)),
+            restore(repository, Uri.fromFile(backup)),
         )
         assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
     }
@@ -139,7 +192,7 @@ class SettingsBackupRepositoryTest {
 
             assertEquals(
                 SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
-                repository.restore(Uri.fromFile(backup)),
+                restore(repository, Uri.fromFile(backup)),
             )
             assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
         }
@@ -160,7 +213,7 @@ class SettingsBackupRepositoryTest {
 
         assertEquals(
             SettingsBackupRestoreResult.PartiallyRestored,
-            repository(app, reader, fonts).restore(Uri.fromFile(backup)),
+            restore(repository(app, reader, fonts), Uri.fromFile(backup)),
         )
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         assertEquals(
@@ -175,6 +228,19 @@ class SettingsBackupRepositoryTest {
         reader: ReaderPreferencesRepository,
         fonts: UserFontRepository,
     ) = SettingsBackupRepository(context, app, reader, fonts)
+
+    private suspend fun restore(
+        repository: SettingsBackupRepository,
+        uri: Uri,
+    ): SettingsBackupRestoreResult =
+        when (val inspection = repository.inspect(uri)) {
+            is SettingsBackupInspection.Ready -> repository.restore(inspection.archiveId)
+            is SettingsBackupInspection.Failed ->
+                SettingsBackupRestoreResult.Failed(inspection.failure)
+        }
+
+    private fun writeFont(bytes: ByteArray): File =
+        File(folder.root, "custom-font.ttf").apply { writeBytes(bytes) }
 
     private fun archive(
         name: String,

@@ -67,12 +67,12 @@ fun SettingsBackupScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = backup.confirmRestore) {
+                TextButton(onClick = backup.confirmRestore, enabled = !backup.busy) {
                     Text(stringResource(R.string.settings_backup_restore_action))
                 }
             },
             dismissButton = {
-                TextButton(onClick = backup.dismissPreview) {
+                TextButton(onClick = backup.dismissPreview, enabled = !backup.busy) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -118,14 +118,14 @@ fun SettingsBackupScreen(
                     icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
                     title = stringResource(R.string.settings_backup_export),
                     subtitle = stringResource(R.string.settings_backup_export_detail),
-                    enabled = true,
+                    enabled = !backup.busy,
                     onClick = backup.export,
                 )
                 BackupActionRow(
                     icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
                     title = stringResource(R.string.settings_backup_restore),
                     subtitle = stringResource(R.string.settings_backup_restore_detail),
-                    enabled = true,
+                    enabled = !backup.busy,
                     onClick = backup.restore,
                 )
                 backup.status?.let { status ->
