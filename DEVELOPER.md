@@ -133,9 +133,9 @@ notices are not included. Unset keys remain absent so restoring a backup
 leaves destination values alone when the archive did not store that setting.
 Custom font entry names retain their content-based identifiers.
 
-The Settings screen inspects a ZIP and previews its setting and font counts
-before restore. Unknown optional JSON fields are ignored; malformed known
-fields, unsafe or duplicate paths, checksum mismatches, and unsupported
+The Settings backup screen inspects a ZIP and previews its setting and font
+counts before restore. Unknown optional JSON fields are ignored; malformed
+known fields, unsafe or duplicate paths, checksum mismatches, and unsupported
 versions are rejected. Font files are passed through the normal font importer,
 so its validation and installation limits still apply. Settings are written
 to two independent DataStores, so a storage failure can leave a partial

@@ -83,7 +83,7 @@ fun SettingsScreen(
     libraryFolders: Flow<List<LibraryFolder>>,
     onRemoveFolder: (LibraryFolder) -> Unit,
     backup: AnnotationBackupUi,
-    zipBackup: SettingsZipBackupUi,
+    onOpenSettingsBackup: () -> Unit,
     server: Flow<RemoteServer?>,
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
@@ -346,7 +346,12 @@ fun SettingsScreen(
                 }
 
                 SettingsGroup(stringResource(R.string.settings_export_import)) {
-                    SettingsArchiveBackupCard(zipBackup)
+                    ConnectionRow(
+                        icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
+                        title = stringResource(R.string.settings_backup_title),
+                        subtitle = stringResource(R.string.settings_backup_detail),
+                        onClick = onOpenSettingsBackup,
+                    )
                     HighlightsBackupCard(backup = backup, grouped = true)
                 }
 
@@ -354,60 +359,6 @@ fun SettingsScreen(
                     PlainRow(stringResource(R.string.about_open), onOpenAbout)
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun SettingsArchiveBackupCard(backup: SettingsZipBackupUi) {
-    backup.preview?.let { ready ->
-        AlertDialog(
-            onDismissRequest = backup.dismissPreview,
-            title = { Text(stringResource(R.string.settings_backup_preview_title)) },
-            text = {
-                Text(stringResource(
-                    R.string.settings_backup_preview_body,
-                    ready.preview.settingCount,
-                    ready.preview.fontCount,
-                ))
-            },
-            confirmButton = {
-                TextButton(onClick = backup.confirmRestore) {
-                    Text(stringResource(R.string.settings_backup_restore_action))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = backup.dismissPreview) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-    Column(Modifier.padding(vertical = 8.dp)) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Text(stringResource(R.string.settings_backup_title), style = MaterialTheme.typography.titleSmall)
-            Text(
-                stringResource(R.string.settings_backup_detail),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        BackupActionRow(
-            icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
-            title = stringResource(R.string.settings_backup_export),
-            subtitle = stringResource(R.string.settings_backup_export_detail),
-            enabled = true,
-            onClick = backup.export,
-        )
-        BackupActionRow(
-            icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
-            title = stringResource(R.string.settings_backup_restore),
-            subtitle = stringResource(R.string.settings_backup_restore_detail),
-            enabled = true,
-            onClick = backup.restore,
-        )
-        backup.status?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
     }
 }
@@ -531,7 +482,7 @@ private fun HighlightsBackupCard(backup: AnnotationBackupUi, grouped: Boolean = 
 }
 
 @Composable
-private fun BackupActionRow(
+internal fun BackupActionRow(
     icon: @Composable () -> Unit,
     title: String,
     subtitle: String,

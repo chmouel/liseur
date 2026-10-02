@@ -67,6 +67,7 @@ import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.AboutScreen
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
+import com.chmouel.liseur.ui.settings.SettingsBackupScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
 import com.chmouel.liseur.ui.settings.HiddenBooksScreen
 import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
@@ -179,6 +180,7 @@ class MainActivity : ComponentActivity() {
 private enum class Screen {
     LIBRARY,
     SETTINGS,
+    SETTINGS_BACKUP,
     READING_APPEARANCE,
     READING_NAVIGATION,
     HIDDEN_BOOKS,
@@ -341,14 +343,23 @@ private fun LiseurApp(
                 },
                 onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
                 onOpenReadingNavigation = { screen = Screen.READING_NAVIGATION },
+                onOpenSettingsBackup = { screen = Screen.SETTINGS_BACKUP },
                 onOpenHiddenBooks = { screen = Screen.HIDDEN_BOOKS },
                 libraryFolders = library.libraryFolders,
                 onRemoveFolder = { library.removeFolder(it) },
                 backup = annotationBackup,
-                zipBackup = settingsZipBackup,
                 server = context.container.remoteAccount.server,
                 onOpenAbout = { screen = Screen.ABOUT },
                 onBack = { screen = Screen.LIBRARY },
+            )
+        }
+
+        Screen.SETTINGS_BACKUP -> {
+            val back = { screen = Screen.SETTINGS }
+            BackHandler { back() }
+            SettingsBackupScreen(
+                backup = settingsZipBackup,
+                onBack = back,
             )
         }
 
