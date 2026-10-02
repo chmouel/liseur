@@ -392,9 +392,21 @@ class SettingsBackupRepository(
             for (index in 0 until listed.length()) {
                 val item = listed.optJSONObject(index)
                     ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
-                val path = item.optString("path")
-                val size = item.optLong("size", -1)
-                val digest = item.optString("sha256")
+                val path = item.opt("path") as? String
+                    ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                val size = (item.opt("size") as? Number)?.toDouble()?.let { rawSize ->
+                    if (
+                        rawSize.isFinite() &&
+                        rawSize % 1.0 == 0.0 &&
+                        rawSize in 0.0..MAX_ENTRY_BYTES.toDouble()
+                    ) {
+                        rawSize.toLong()
+                    } else {
+                        -1L
+                    }
+                } ?: -1L
+                val digest = item.opt("sha256") as? String
+                    ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                 if (
                     !safePath(path) ||
                     path == MANIFEST_PATH ||

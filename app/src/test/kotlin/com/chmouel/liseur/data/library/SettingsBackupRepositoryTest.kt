@@ -266,6 +266,37 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `inspection rejects coerced manifest entry fields`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("invalid-entry-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("invalid-entry-reader.preferences_pb"))
+        val repository = repository(app, reader, fonts)
+        val payload = JSONObject()
+            .put("app", JSONObject())
+            .put("reader", JSONObject())
+        val settingsSize = payload.toString().toByteArray().size
+        val invalidFields: List<Map<String, Any>> = listOf(
+            mapOf("size" to settingsSize.toString()),
+            mapOf("size" to settingsSize + 0.5),
+            mapOf("path" to 123),
+            mapOf("sha256" to 123),
+        )
+
+        invalidFields.forEachIndexed { index, overrides ->
+            val backup = archive(
+                "invalid-entry-$index.zip",
+                payload,
+                manifestEntryOverrides = overrides,
+            )
+            assertEquals(
+                SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+                repository.inspect(Uri.fromFile(backup)),
+            )
+        }
+    }
+
+    @Test
     fun `restore rejects an invalid dictionary URL`() = runTest {
         val fonts = UserFontRepository(context, this, loadCheck = { true })
         fonts.awaitReady()
@@ -336,6 +367,7 @@ class SettingsBackupRepositoryTest {
         additionalEntries: Map<String, ByteArray> = emptyMap(),
         application: String = "liseur",
         format: Any = 1,
+        manifestEntryOverrides: Map<String, Any> = emptyMap(),
     ): File {
         val entries = linkedMapOf("settings.json" to settings.toString().toByteArray())
         entries.putAll(additionalEntries)
@@ -350,7 +382,10 @@ class SettingsBackupRepositoryTest {
                             JSONObject()
                                 .put("path", path)
                                 .put("size", bytes.size)
-                                .put("sha256", sha256(bytes)),
+                                .put("sha256", sha256(bytes))
+                                .apply {
+                                    manifestEntryOverrides.forEach { (key, value) -> put(key, value) }
+                                },
                         )
                     }
                 },
