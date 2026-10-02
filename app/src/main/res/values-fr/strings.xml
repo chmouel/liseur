@@ -796,7 +796,7 @@
         <item quantity="one">%1$d police n’a pas pu être installée.</item>
         <item quantity="other">%1$d polices n’ont pas pu être installées.</item>
     </plurals>
-    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_restored_settings">Paramètres restaurés.</string>
     <string name="settings_backup_error_file">Impossible d’ouvrir ou d’enregistrer ce fichier de sauvegarde.</string>
     <string name="settings_backup_error_invalid">Ce fichier n’est pas une sauvegarde de paramètres valide ou il est endommagé.</string>
     <string name="settings_backup_error_version">Cette sauvegarde a été créée avec une version de l’application qui ne peut pas être lue.</string>

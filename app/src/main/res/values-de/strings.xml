@@ -807,7 +807,7 @@
         <item quantity="one">%1$d Schriftart konnte nicht installiert werden.</item>
         <item quantity="other">%1$d Schriftarten konnten nicht installiert werden.</item>
     </plurals>
-    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_restored_settings">Einstellungen wiederhergestellt.</string>
     <string name="settings_backup_error_file">Diese Sicherungsdatei konnte nicht geöffnet oder gespeichert werden.</string>
     <string name="settings_backup_error_invalid">Dies ist keine gültige Einstellungssicherung oder die Datei ist beschädigt.</string>
     <string name="settings_backup_error_version">Diese Sicherung wurde mit einer nicht unterstützten App-Version erstellt.</string>

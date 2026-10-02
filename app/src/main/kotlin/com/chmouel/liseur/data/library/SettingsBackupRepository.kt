@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
 import com.chmouel.liseur.data.settings.READER_BACKUP_TYPES
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.TypographyRange
+import com.chmouel.liseur.data.settings.UserFontImport
 import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.applyBackupJson
 import com.chmouel.liseur.data.settings.fonts.UserFont
@@ -251,13 +252,18 @@ class SettingsBackupRepository(
             var present = 0
             var failures = 0
             try {
-                archive.entries.filterKeys { it.startsWith("fonts/") }.forEach { (path, entry) ->
-                    currentCoroutineContext().ensureActive()
-                    val name = path.removePrefix("fonts/")
-                    val pickedName = entry.displayName?.let {
-                        "$it.${name.substringAfterLast('.', "")}"
-                    } ?: name
-                    when (userFonts.import(Uri.fromFile(entry.file), pickedName)) {
+                val fontImports = archive.entries
+                    .filterKeys { it.startsWith("fonts/") }
+                    .map { (path, entry) ->
+                        currentCoroutineContext().ensureActive()
+                        val name = path.removePrefix("fonts/")
+                        val pickedName = entry.displayName?.let {
+                            "$it.${name.substringAfterLast('.', "")}"
+                        } ?: name
+                        UserFontImport(Uri.fromFile(entry.file), pickedName)
+                    }
+                userFonts.importAll(fontImports).forEach { result ->
+                    when (result) {
                         is FontImportResult.Imported -> imported++
                         is FontImportResult.AlreadyPresent -> present++
                         else -> failures++

@@ -858,7 +858,7 @@
         <item quantity="many">Не удалось установить %1$d шрифтов.</item>
         <item quantity="other">Не удалось установить %1$d шрифта.</item>
     </plurals>
-    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_restored_settings">Настройки восстановлены.</string>
     <string name="settings_backup_error_file">Не удалось открыть или сохранить файл резервной копии.</string>
     <string name="settings_backup_error_invalid">Файл не является корректной копией настроек или повреждён.</string>
     <string name="settings_backup_error_version">Копия создана версией приложения, которую невозможно прочитать.</string>

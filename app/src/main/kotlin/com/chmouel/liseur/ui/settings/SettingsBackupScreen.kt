@@ -135,24 +135,41 @@ fun SettingsBackupScreen(
                             status.fonts,
                             status.fonts,
                         )
-                        is SettingsBackupUiStatus.Restored -> stringResource(
-                            R.string.settings_backup_restored,
-                            pluralStringResource(
-                                R.plurals.settings_backup_restored_fonts,
-                                status.fontsImported,
-                                status.fontsImported,
-                            ),
-                            pluralStringResource(
-                                R.plurals.settings_backup_already_installed,
-                                status.fontsAlreadyPresent,
-                                status.fontsAlreadyPresent,
-                            ),
-                            pluralStringResource(
-                                R.plurals.settings_backup_font_failures,
-                                status.fontFailures,
-                                status.fontFailures,
-                            ),
-                        )
+                        is SettingsBackupUiStatus.Restored -> {
+                            val restoredFonts = if (status.fontsImported > 0) {
+                                pluralStringResource(
+                                    R.plurals.settings_backup_restored_fonts,
+                                    status.fontsImported,
+                                    status.fontsImported,
+                                )
+                            } else {
+                                null
+                            }
+                            val alreadyInstalled = if (status.fontsAlreadyPresent > 0) {
+                                pluralStringResource(
+                                    R.plurals.settings_backup_already_installed,
+                                    status.fontsAlreadyPresent,
+                                    status.fontsAlreadyPresent,
+                                )
+                            } else {
+                                null
+                            }
+                            val fontFailures = if (status.fontFailures > 0) {
+                                pluralStringResource(
+                                    R.plurals.settings_backup_font_failures,
+                                    status.fontFailures,
+                                    status.fontFailures,
+                                )
+                            } else {
+                                null
+                            }
+                            listOfNotNull(
+                                stringResource(R.string.settings_backup_restored_settings),
+                                restoredFonts,
+                                alreadyInstalled,
+                                fontFailures,
+                            ).joinToString(" ")
+                        }
                         is SettingsBackupUiStatus.Failed ->
                             stringResource(status.failure.message)
                         SettingsBackupUiStatus.PartiallyRestored ->

@@ -796,7 +796,7 @@
         <item quantity="one">Impossibile installare %1$d carattere.</item>
         <item quantity="other">Impossibile installare %1$d caratteri.</item>
     </plurals>
-    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_restored_settings">Impostazioni ripristinate.</string>
     <string name="settings_backup_error_file">Impossibile aprire o salvare questo file di backup.</string>
     <string name="settings_backup_error_invalid">Il file non è un backup valido delle impostazioni oppure è danneggiato.</string>
     <string name="settings_backup_error_version">Il backup è stato creato con una versione dell’app non leggibile.</string>

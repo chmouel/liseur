@@ -831,7 +831,7 @@
         <item quantity="one">%1$d font could not be installed.</item>
         <item quantity="other">%1$d fonts could not be installed.</item>
     </plurals>
-    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_restored_settings">Settings restored.</string>
     <string name="settings_backup_error_file">Could not open or save this backup file.</string>
     <string name="settings_backup_error_invalid">This is not a valid settings backup, or the file is damaged.</string>
     <string name="settings_backup_error_version">This backup was created by an app version that cannot be read.</string>

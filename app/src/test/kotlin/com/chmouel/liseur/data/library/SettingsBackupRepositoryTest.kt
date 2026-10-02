@@ -171,12 +171,17 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
-    fun `a nameless custom font keeps its picked display name in a backup`() = runTest {
+    fun `nameless custom fonts keep their picked display names in a backup`() = runTest {
         val sourceFonts = UserFontRepository(context, this, loadCheck = { true })
         sourceFonts.awaitReady()
-        val fontBytes = SfntFixtures.sfnt(names = emptyList())
+        val firstFont = SfntFixtures.sfnt(names = emptyList())
+        val secondFont = SfntFixtures.sfnt(names = emptyList(), weightClass = 700)
         assertTrue(
-            sourceFonts.import(Uri.fromFile(writeFont(fontBytes)), "OpenDyslexic-Regular.ttf") is
+            sourceFonts.import(Uri.fromFile(writeFont(firstFont)), "OpenDyslexic-Regular.ttf") is
+                FontImportResult.Imported,
+        )
+        assertTrue(
+            sourceFonts.import(Uri.fromFile(writeFont(secondFont)), "Noto-Alt-Regular.ttf") is
                 FontImportResult.Imported,
         )
 
@@ -184,19 +189,24 @@ class SettingsBackupRepositoryTest {
         val reader = ReaderPreferencesRepository(store("nameless-font-reader.preferences_pb"))
         val backup = File(folder.root, "nameless-font-settings.zip")
         assertEquals(
-            SettingsBackupExportResult.Exported(1),
+            SettingsBackupExportResult.Exported(2),
             repository(app, reader, sourceFonts).exportTo(Uri.fromFile(backup)),
         )
 
-        val digest = sha256(fontBytes)
-        assertTrue(File(context.filesDir, "fonts/$digest.ttf").delete())
+        listOf(firstFont, secondFont).forEach { bytes ->
+            val digest = sha256(bytes)
+            assertTrue(File(context.filesDir, "fonts/$digest.ttf").delete())
+        }
         val targetFonts = UserFontRepository(context, this, loadCheck = { true })
         targetFonts.awaitReady()
         assertEquals(
-            SettingsBackupRestoreResult.Restored(1, 0, 0),
+            SettingsBackupRestoreResult.Restored(2, 0, 0),
             restore(repository(app, reader, targetFonts), Uri.fromFile(backup)),
         )
-        assertEquals("OpenDyslexic-Regular", targetFonts.backupFonts().single().displayName)
+        assertEquals(
+            setOf("OpenDyslexic-Regular", "Noto-Alt-Regular"),
+            targetFonts.backupFonts().map { it.displayName }.toSet(),
+        )
     }
 
     @Test

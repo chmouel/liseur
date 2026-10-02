@@ -10,6 +10,8 @@ import com.chmouel.liseur.data.settings.fonts.SfntFont
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +38,8 @@ sealed interface ImportResult {
     data object Unreadable : ImportResult
     data object StorageFailed : ImportResult
 }
+
+internal data class UserFontImport(val uri: Uri, val pickedName: String?)
 
 /** What became of an attempt to take one away. */
 sealed interface RemovalResult {
@@ -121,7 +125,30 @@ class UserFontRepository(
         lock.withLock { importLocked(uri, pickedName) }
     }
 
-    private fun importLocked(uri: Uri, pickedName: String?): ImportResult {
+    /** Imports a restore batch under one lock and publishes it with one directory scan. */
+    internal suspend fun importAll(inputs: List<UserFontImport>): List<ImportResult> =
+        withContext(Dispatchers.IO) {
+            if (inputs.isEmpty()) return@withContext emptyList()
+            lock.withLock {
+                var fontCount = _fonts.value.size
+                try {
+                    inputs.map { input ->
+                        currentCoroutineContext().ensureActive()
+                        importLocked(input.uri, input.pickedName, fontCount, rescanAfterImport = false)
+                            .also { if (it is ImportResult.Imported) fontCount++ }
+                    }
+                } finally {
+                    rescanLocked()
+                }
+            }
+        }
+
+    private fun importLocked(
+        uri: Uri,
+        pickedName: String?,
+        fontCount: Int = _fonts.value.size,
+        rescanAfterImport: Boolean = true,
+    ): ImportResult {
         if (!dir.exists() && !dir.mkdirs()) return ImportResult.StorageFailed
 
         val temp = File(dir, "${UUID.randomUUID()}$TEMP")
@@ -177,7 +204,7 @@ class UserFontRepository(
             temp.delete()
             return ImportResult.AlreadyPresent(id)
         }
-        if (_fonts.value.size >= MAX_FONTS) {
+        if (fontCount >= MAX_FONTS) {
             temp.delete()
             return ImportResult.TooMany
         }
@@ -193,14 +220,14 @@ class UserFontRepository(
 
         return try {
             writeIndex(readIndex() + (id to name))
-            rescanLocked()
+            if (rescanAfterImport) rescanLocked()
             ImportResult.Imported(id)
         } catch (e: IOException) {
             Log.w(TAG, "font stored but the name index could not be written", e)
             // The file is there and must be published as there. It comes
             // back with a name derived from its own tables or its digest;
             // the list never disagrees with the directory.
-            rescanLocked()
+            if (rescanAfterImport) rescanLocked()
             ImportResult.Imported(id)
         }
     }

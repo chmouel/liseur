@@ -796,7 +796,7 @@
         <item quantity="one">No se pudo instalar %1$d fuente.</item>
         <item quantity="other">No se pudieron instalar %1$d fuentes.</item>
     </plurals>
-    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_restored_settings">Ajustes restaurados.</string>
     <string name="settings_backup_error_file">No se pudo abrir ni guardar este archivo de copia.</string>
     <string name="settings_backup_error_invalid">El archivo no es una copia de ajustes válida o está dañado.</string>
     <string name="settings_backup_error_version">La copia se creó con una versión de la aplicación que no se puede leer.</string>
