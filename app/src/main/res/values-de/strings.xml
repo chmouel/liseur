@@ -781,11 +781,40 @@
     <string name="settings_backup_restore">Sicherung wiederherstellen</string>
     <string name="settings_backup_restore_detail">Zeige den Inhalt der Sicherung vor dem Anwenden an.</string>
     <string name="settings_backup_preview_title">Einstellungen und Schriftarten wiederherstellen?</string>
-    <string name="settings_backup_preview_body">Diese Sicherung enthält %1$d Einstellungen und %2$d eigene Schriftarten. Globale Einstellungen werden geändert; vorhandene Lesedaten bleiben erhalten.</string>
+    <string name="settings_backup_preview_body">Diese Sicherung enthält %1$s und %2$s. Globale Einstellungen werden geändert; vorhandene Lesedaten bleiben erhalten.</string>
     <string name="settings_backup_restore_action">Wiederherstellen</string>
-    <string name="settings_backup_exported">Sicherung mit %1$d eigenen Schriftarten gespeichert.</string>
-    <string name="settings_backup_restored">%1$d Schriftarten wiederhergestellt; %2$d waren bereits installiert; %3$d konnten nicht installiert werden.</string>
-    <string name="settings_backup_failed">Sicherung fehlgeschlagen: %1$s</string>
+    <plurals name="settings_backup_setting_count">
+        <item quantity="one">%1$d Einstellung</item>
+        <item quantity="other">%1$d Einstellungen</item>
+    </plurals>
+    <plurals name="settings_backup_font_count">
+        <item quantity="one">%1$d eigene Schriftart</item>
+        <item quantity="other">%1$d eigene Schriftarten</item>
+    </plurals>
+    <plurals name="settings_backup_exported">
+        <item quantity="one">Sicherung gespeichert: %1$d eigene Schriftart.</item>
+        <item quantity="other">Sicherung gespeichert: %1$d eigene Schriftarten.</item>
+    </plurals>
+    <plurals name="settings_backup_restored_fonts">
+        <item quantity="one">%1$d Schriftart wiederhergestellt.</item>
+        <item quantity="other">%1$d Schriftarten wiederhergestellt.</item>
+    </plurals>
+    <plurals name="settings_backup_already_installed">
+        <item quantity="one">%1$d Schriftart war bereits installiert.</item>
+        <item quantity="other">%1$d Schriftarten waren bereits installiert.</item>
+    </plurals>
+    <plurals name="settings_backup_font_failures">
+        <item quantity="one">%1$d Schriftart konnte nicht installiert werden.</item>
+        <item quantity="other">%1$d Schriftarten konnten nicht installiert werden.</item>
+    </plurals>
+    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_error_file">Diese Sicherungsdatei konnte nicht geöffnet oder gespeichert werden.</string>
+    <string name="settings_backup_error_invalid">Dies ist keine gültige Einstellungssicherung oder die Datei ist beschädigt.</string>
+    <string name="settings_backup_error_version">Diese Sicherung wurde mit einer nicht unterstützten App-Version erstellt.</string>
+    <string name="settings_backup_error_size">Diese Sicherung ist zu groß, um sie wiederherzustellen.</string>
+    <string name="settings_backup_error_storage">Die Sicherung konnte nicht im Gerätespeicher vorbereitet werden.</string>
+    <string name="settings_backup_error_restore">Die Einstellungen konnten nicht wiederhergestellt werden.</string>
+    <string name="settings_backup_error_partial">Ein Teil der Einstellungen wurde wiederhergestellt, der Rest konnte nicht übernommen werden. Prüfe deine Einstellungen.</string>
     <string name="settings_library_help_title">Buchserver</string>
     <string name="settings_library_help_body" formatted="true">Ein Buchserver — calibre-web, Komga, liseur-sync oder ein OPDS-Katalog — hält deine Bibliothek: Liseur durchsucht ihn und lädt davon herunter und hält deine Stelle im Einklang, wo der Server das unterstützt. Eine benutzerdefinierte OPDS-Verbindung kann für Lesepositionen mit einem KOReader-Sync-Server gekoppelt werden. Es ist jeweils ein Server verbunden.\n\nliseur-sync ist der, der auch Bücher mitführt, die nur von diesem Handy kamen: eine Datei von einer SD-Karte synchronisiert ihre Position ebenfalls. Betreibe deinen eigenen von %1$s.</string>
     <string name="settings_account_detail">Durchsuchen und Herunterladen von einem calibre-web-, Komga-, liseur-sync- oder OPDS-Server und deine Stelle im Einklang halten — OPDS über einen gekoppelten KOReader-Sync-Server.</string>

@@ -805,11 +805,40 @@
     <string name="settings_backup_restore">Restore backup</string>
     <string name="settings_backup_restore_detail">Preview a settings and fonts backup before applying it.</string>
     <string name="settings_backup_preview_title">Restore settings and fonts?</string>
-    <string name="settings_backup_preview_body">This backup contains %1$d settings and %2$d custom fonts. Global settings will change; existing reading data will be preserved.</string>
+    <string name="settings_backup_preview_body">This backup contains %1$s and %2$s. Global settings will change; existing reading data will be preserved.</string>
     <string name="settings_backup_restore_action">Restore</string>
-    <string name="settings_backup_exported">Backup saved with %1$d custom fonts.</string>
-    <string name="settings_backup_restored">Restored %1$d fonts; %2$d were already installed; %3$d could not be installed.</string>
-    <string name="settings_backup_failed">Backup failed: %1$s</string>
+    <plurals name="settings_backup_setting_count">
+        <item quantity="one">%1$d setting</item>
+        <item quantity="other">%1$d settings</item>
+    </plurals>
+    <plurals name="settings_backup_font_count">
+        <item quantity="one">%1$d custom font</item>
+        <item quantity="other">%1$d custom fonts</item>
+    </plurals>
+    <plurals name="settings_backup_exported">
+        <item quantity="one">Backup saved with %1$d custom font.</item>
+        <item quantity="other">Backup saved with %1$d custom fonts.</item>
+    </plurals>
+    <plurals name="settings_backup_restored_fonts">
+        <item quantity="one">Restored %1$d font.</item>
+        <item quantity="other">Restored %1$d fonts.</item>
+    </plurals>
+    <plurals name="settings_backup_already_installed">
+        <item quantity="one">%1$d font was already installed.</item>
+        <item quantity="other">%1$d fonts were already installed.</item>
+    </plurals>
+    <plurals name="settings_backup_font_failures">
+        <item quantity="one">%1$d font could not be installed.</item>
+        <item quantity="other">%1$d fonts could not be installed.</item>
+    </plurals>
+    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_error_file">Could not open or save this backup file.</string>
+    <string name="settings_backup_error_invalid">This is not a valid settings backup, or the file is damaged.</string>
+    <string name="settings_backup_error_version">This backup was created by an app version that cannot be read.</string>
+    <string name="settings_backup_error_size">This backup is too large to restore.</string>
+    <string name="settings_backup_error_storage">The backup could not be prepared in device storage.</string>
+    <string name="settings_backup_error_restore">The settings could not be restored.</string>
+    <string name="settings_backup_error_partial">Some settings were restored, but the rest of the backup could not be applied. Check your settings.</string>
     <string name="settings_library_help_title">Book servers</string>
     <string name="settings_library_help_body" formatted="true">A book server — calibre-web, Komga, liseur-sync or an OPDS catalog — holds your library: Liseur browses it and downloads from it, and keeps your place in step where the server supports it. A Custom OPDS connection can pair with a KOReader sync server for reading positions. One server is connected at a time.\n\nliseur-sync is the one that also keeps books that came from nowhere but this phone in step: a file off an SD card syncs its position too. Run your own from %1$s.</string>
     <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync or OPDS server, and keep your place in step — OPDS through a paired KOReader sync server.</string>

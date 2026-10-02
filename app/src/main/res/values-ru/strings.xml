@@ -820,11 +820,52 @@
     <string name="settings_backup_restore">Восстановить резервную копию</string>
     <string name="settings_backup_restore_detail">Просмотрите состав копии перед восстановлением.</string>
     <string name="settings_backup_preview_title">Восстановить настройки и шрифты?</string>
-    <string name="settings_backup_preview_body">В копии: параметров — %1$d, пользовательских шрифтов — %2$d. Глобальные настройки изменятся, текущие данные чтения сохранятся.</string>
+    <string name="settings_backup_preview_body">В копии: %1$s, %2$s. Глобальные настройки изменятся, текущие данные чтения сохранятся.</string>
     <string name="settings_backup_restore_action">Восстановить</string>
-    <string name="settings_backup_exported">Копия сохранена; пользовательских шрифтов: %1$d.</string>
-    <string name="settings_backup_restored">Восстановлено шрифтов: %1$d; уже установлено: %2$d; не удалось установить: %3$d.</string>
-    <string name="settings_backup_failed">Не удалось выполнить резервное копирование: %1$s</string>
+    <plurals name="settings_backup_setting_count">
+        <item quantity="one">%1$d параметр</item>
+        <item quantity="few">%1$d параметра</item>
+        <item quantity="many">%1$d параметров</item>
+        <item quantity="other">%1$d параметра</item>
+    </plurals>
+    <plurals name="settings_backup_font_count">
+        <item quantity="one">%1$d пользовательский шрифт</item>
+        <item quantity="few">%1$d пользовательских шрифта</item>
+        <item quantity="many">%1$d пользовательских шрифтов</item>
+        <item quantity="other">%1$d пользовательского шрифта</item>
+    </plurals>
+    <plurals name="settings_backup_exported">
+        <item quantity="one">Копия сохранена с %1$d пользовательским шрифтом.</item>
+        <item quantity="few">Копия сохранена с %1$d пользовательскими шрифтами.</item>
+        <item quantity="many">Копия сохранена с %1$d пользовательскими шрифтами.</item>
+        <item quantity="other">Копия сохранена с %1$d пользовательскими шрифтами.</item>
+    </plurals>
+    <plurals name="settings_backup_restored_fonts">
+        <item quantity="one">Восстановлен %1$d шрифт.</item>
+        <item quantity="few">Восстановлено %1$d шрифта.</item>
+        <item quantity="many">Восстановлено %1$d шрифтов.</item>
+        <item quantity="other">Восстановлено %1$d шрифта.</item>
+    </plurals>
+    <plurals name="settings_backup_already_installed">
+        <item quantity="one">%1$d шрифт уже установлен.</item>
+        <item quantity="few">%1$d шрифта уже установлены.</item>
+        <item quantity="many">%1$d шрифтов уже установлены.</item>
+        <item quantity="other">%1$d шрифта уже установлены.</item>
+    </plurals>
+    <plurals name="settings_backup_font_failures">
+        <item quantity="one">Не удалось установить %1$d шрифт.</item>
+        <item quantity="few">Не удалось установить %1$d шрифта.</item>
+        <item quantity="many">Не удалось установить %1$d шрифтов.</item>
+        <item quantity="other">Не удалось установить %1$d шрифта.</item>
+    </plurals>
+    <string name="settings_backup_restored">%1$s %2$s %3$s</string>
+    <string name="settings_backup_error_file">Не удалось открыть или сохранить файл резервной копии.</string>
+    <string name="settings_backup_error_invalid">Файл не является корректной копией настроек или повреждён.</string>
+    <string name="settings_backup_error_version">Копия создана версией приложения, которую невозможно прочитать.</string>
+    <string name="settings_backup_error_size">Копия слишком велика для восстановления.</string>
+    <string name="settings_backup_error_storage">Не удалось подготовить копию в хранилище устройства.</string>
+    <string name="settings_backup_error_restore">Не удалось восстановить настройки.</string>
+    <string name="settings_backup_error_partial">Часть настроек восстановлена, но остальные данные копии применить не удалось. Проверьте настройки.</string>
     <string name="settings_library_help_title">Серверы книг</string>
     <string name="settings_library_help_body" formatted="true">Сервер книг — calibre-web, Komga, liseur-sync или каталог OPDS — хранит вашу библиотеку: Liseur просматривает её и скачивает из неё, и синхронизирует место чтения, где сервер это поддерживает. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения. Одновременно подключён один сервер.\n\nliseur-sync — тот, что также синхронизирует книги, появившиеся только на этом телефоне: файл с SD-карты тоже синхронизирует позицию. Запустите свой с %1$s.</string>
     <string name="settings_account_detail">Просматривайте и скачивайте с сервера calibre-web, Komga, liseur-sync или OPDS и синхронизируйте место чтения — для OPDS через связанный сервер синхронизации KOReader.</string>

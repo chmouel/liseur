@@ -26,9 +26,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.library.SettingsBackupFailure
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 
@@ -42,6 +44,16 @@ fun SettingsBackupScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     backup.preview?.let { ready ->
+        val settingCount = pluralStringResource(
+            R.plurals.settings_backup_setting_count,
+            ready.preview.settingCount,
+            ready.preview.settingCount,
+        )
+        val fontCount = pluralStringResource(
+            R.plurals.settings_backup_font_count,
+            ready.preview.fontCount,
+            ready.preview.fontCount,
+        )
         AlertDialog(
             onDismissRequest = backup.dismissPreview,
             title = { Text(stringResource(R.string.settings_backup_preview_title)) },
@@ -49,8 +61,8 @@ fun SettingsBackupScreen(
                 Text(
                     stringResource(
                         R.string.settings_backup_preview_body,
-                        ready.preview.settingCount,
-                        ready.preview.fontCount,
+                        settingCount,
+                        fontCount,
                     ),
                 )
             },
@@ -116,9 +128,38 @@ fun SettingsBackupScreen(
                     enabled = true,
                     onClick = backup.restore,
                 )
-                backup.status?.let {
+                backup.status?.let { status ->
+                    val message = when (status) {
+                        is SettingsBackupUiStatus.Exported -> pluralStringResource(
+                            R.plurals.settings_backup_exported,
+                            status.fonts,
+                            status.fonts,
+                        )
+                        is SettingsBackupUiStatus.Restored -> stringResource(
+                            R.string.settings_backup_restored,
+                            pluralStringResource(
+                                R.plurals.settings_backup_restored_fonts,
+                                status.fontsImported,
+                                status.fontsImported,
+                            ),
+                            pluralStringResource(
+                                R.plurals.settings_backup_already_installed,
+                                status.fontsAlreadyPresent,
+                                status.fontsAlreadyPresent,
+                            ),
+                            pluralStringResource(
+                                R.plurals.settings_backup_font_failures,
+                                status.fontFailures,
+                                status.fontFailures,
+                            ),
+                        )
+                        is SettingsBackupUiStatus.Failed ->
+                            stringResource(status.failure.message)
+                        SettingsBackupUiStatus.PartiallyRestored ->
+                            stringResource(R.string.settings_backup_error_partial)
+                    }
                     Text(
-                        text = it,
+                        text = message,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -128,3 +169,13 @@ fun SettingsBackupScreen(
         }
     }
 }
+
+private val SettingsBackupFailure.message: Int
+    get() = when (this) {
+        SettingsBackupFailure.FILE_ACCESS -> R.string.settings_backup_error_file
+        SettingsBackupFailure.INVALID_ARCHIVE -> R.string.settings_backup_error_invalid
+        SettingsBackupFailure.UNSUPPORTED_VERSION -> R.string.settings_backup_error_version
+        SettingsBackupFailure.TOO_LARGE -> R.string.settings_backup_error_size
+        SettingsBackupFailure.STORAGE -> R.string.settings_backup_error_storage
+        SettingsBackupFailure.RESTORE -> R.string.settings_backup_error_restore
+    }

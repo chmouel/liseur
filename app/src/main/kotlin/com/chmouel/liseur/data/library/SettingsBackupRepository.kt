@@ -2,38 +2,65 @@ package com.chmouel.liseur.data.library
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.AutoScrollPreference
+import com.chmouel.liseur.data.settings.BackupValueType
 import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.data.settings.UserFontRepository
-import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.applyBackupJson
+import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+enum class SettingsBackupFailure {
+    FILE_ACCESS,
+    INVALID_ARCHIVE,
+    UNSUPPORTED_VERSION,
+    TOO_LARGE,
+    STORAGE,
+    RESTORE,
+}
 
 data class SettingsBackupPreview(val settingCount: Int, val fontCount: Int)
 
 sealed interface SettingsBackupInspection {
     data class Ready(val preview: SettingsBackupPreview) : SettingsBackupInspection
-    data class Failed(val reason: String) : SettingsBackupInspection
+    data class Failed(val failure: SettingsBackupFailure) : SettingsBackupInspection
 }
 
-sealed interface SettingsBackupResult {
-    data class Exported(val fonts: Int) : SettingsBackupResult
-    data class Restored(val fontsImported: Int, val fontsAlreadyPresent: Int, val fontFailures: Int) : SettingsBackupResult
-    data class Failed(val reason: String) : SettingsBackupResult
+sealed interface SettingsBackupExportResult {
+    data class Exported(val fonts: Int) : SettingsBackupExportResult
+    data class Failed(val failure: SettingsBackupFailure) : SettingsBackupExportResult
+}
+
+sealed interface SettingsBackupRestoreResult {
+    data class Restored(
+        val fontsImported: Int,
+        val fontsAlreadyPresent: Int,
+        val fontFailures: Int,
+    ) : SettingsBackupRestoreResult
+
+    data class Failed(val failure: SettingsBackupFailure) : SettingsBackupRestoreResult
+    data object PartiallyRestored : SettingsBackupRestoreResult
 }
 
 /** Versioned archive for deliberate, user initiated settings and font transfer. */
@@ -43,187 +70,357 @@ class SettingsBackupRepository(
     private val readerPreferences: ReaderPreferencesRepository,
     private val userFonts: UserFontRepository,
 ) {
-    suspend fun exportTo(target: Uri): SettingsBackupResult = withContext(Dispatchers.IO) {
-        val app = appSettings.backupValues()
-        val reader = readerPreferences.backupValues()
-        val fonts = userFonts.backupFonts()
-        val entries = linkedMapOf<String, ByteArray>()
-        entries[SETTINGS_PATH] = JSONObject()
-            .put("app", app)
-            .put("reader", reader)
-            .toString()
-            .toByteArray(Charsets.UTF_8)
-        fonts.forEach { font ->
-            currentCoroutineContext().ensureActive()
-            entries["fonts/${font.fileName}"] = font.file.readBytes()
-        }
-        val manifest = JSONObject().put("format", FORMAT).put("application", "liseur")
-        val listed = JSONArray()
-        entries.forEach { (path, bytes) ->
-            listed.put(JSONObject().put("path", path).put("size", bytes.size).put("sha256", sha256(bytes)))
-        }
-        manifest.put("entries", listed)
+    suspend fun exportTo(target: Uri): SettingsBackupExportResult = withContext(Dispatchers.IO) {
         try {
-            context.contentResolver.openOutputStream(target, "wt")?.use { output ->
-                ZipOutputStream(output).use { zip ->
-                    writeEntry(zip, MANIFEST_PATH, manifest.toString().toByteArray())
-                    entries.forEach { (path, bytes) ->
-                        currentCoroutineContext().ensureActive()
-                        writeEntry(zip, path, bytes)
+            val settingsBytes = JSONObject()
+                .put("app", appSettings.backupValues())
+                .put("reader", readerPreferences.backupValues())
+                .toString()
+                .toByteArray(Charsets.UTF_8)
+            if (settingsBytes.size > MAX_SETTINGS_BYTES) {
+                return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+            }
+
+            val fonts = userFonts.backupFonts()
+            if (fonts.size > MAX_FONT_FILES) {
+                return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+            }
+
+            val listed = ArrayList<EntryMetadata>(fonts.size + 1)
+            listed += EntryMetadata(SETTINGS_PATH, settingsBytes.size.toLong(), sha256(settingsBytes))
+            var totalBytes = settingsBytes.size.toLong()
+            val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
+            for (font in fonts) {
+                currentCoroutineContext().ensureActive()
+                val path = "fonts/${font.fileName}"
+                if (!safePath(path)) {
+                    return@withContext SettingsBackupExportResult.Failed(
+                        SettingsBackupFailure.INVALID_ARCHIVE,
+                    )
+                }
+                val metadata = hashFile(path, font.file)
+                totalBytes += metadata.size
+                if (totalBytes > MAX_TOTAL_BYTES) {
+                    return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+                }
+                fontMetadata += metadata
+                listed += metadata
+            }
+
+            val manifest = JSONObject()
+                .put("format", FORMAT)
+                .put("application", "liseur")
+                .put(
+                    "entries",
+                    JSONArray().also { entries ->
+                        listed.forEach { entry ->
+                            entries.put(
+                                JSONObject()
+                                    .put("path", entry.path)
+                                    .put("size", entry.size)
+                                    .put("sha256", entry.sha256),
+                            )
+                        }
+                    },
+                )
+            val manifestBytes = manifest.toString().toByteArray(Charsets.UTF_8)
+            totalBytes += manifestBytes.size
+            if (manifestBytes.size > MAX_MANIFEST_BYTES || totalBytes > MAX_TOTAL_BYTES) {
+                return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+            }
+
+            val output = context.contentResolver.openOutputStream(target, "wt")
+                ?: return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
+            ZipOutputStream(output).use { zip ->
+                writeEntry(zip, MANIFEST_PATH, manifestBytes)
+                writeEntry(zip, SETTINGS_PATH, settingsBytes)
+                fonts.zip(fontMetadata).forEach { (font, expected) ->
+                    currentCoroutineContext().ensureActive()
+                    val actual = writeFileEntry(zip, expected.path, font.file)
+                    if (actual != expected) {
+                        throw BackupFailureException(SettingsBackupFailure.FILE_ACCESS)
                     }
                 }
-            } ?: return@withContext SettingsBackupResult.Failed("Could not open the destination")
+            }
+            SettingsBackupExportResult.Exported(fonts.size)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: BackupFailureException) {
+            e.cause?.let { Log.w(TAG, "Settings export failed", it) }
+            SettingsBackupExportResult.Failed(e.failure)
         } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            return@withContext SettingsBackupResult.Failed(e.message ?: "Could not write the backup")
+            Log.w(TAG, "Settings export failed", e)
+            SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
         }
-        SettingsBackupResult.Exported(fonts.size)
     }
 
     suspend fun inspect(source: Uri): SettingsBackupInspection = withContext(Dispatchers.IO) {
-        when (val archive = readArchive(source)) {
-            is ArchiveResult.Error -> SettingsBackupInspection.Failed(archive.reason)
-            is ArchiveResult.Valid -> {
-                val settings = runCatching { JSONObject(archive.entries.getValue(SETTINGS_PATH).toString(Charsets.UTF_8)) }
-                    .getOrElse { return@withContext SettingsBackupInspection.Failed("Settings data is malformed") }
-                try {
-                    validateSettings(settings)
-                    archive.entries.keys.filter { it.startsWith("fonts/") }.forEach { path ->
-                        val name = path.removePrefix("fonts/")
-                        val digest = name.substringBefore('.')
-                        val extension = name.substringAfter('.', "")
-                        if (UserFont.fileNameFor(digest, extension) != name) {
-                            return@withContext SettingsBackupInspection.Failed("A font entry has an invalid name")
-                        }
-                        if (sha256(archive.entries.getValue(path)) != digest) {
-                            return@withContext SettingsBackupInspection.Failed("A font identifier does not match its contents")
-                        }
-                    }
-                } catch (e: IllegalArgumentException) {
-                    return@withContext SettingsBackupInspection.Failed(e.message ?: "Settings data is malformed")
-                }
+        when (val result = readArchive(source)) {
+            is ArchiveResult.Error -> SettingsBackupInspection.Failed(result.failure)
+            is ArchiveResult.Valid -> try {
+                val settings = decodeSettings(result.entries.getValue(SETTINGS_PATH).file)
+                validateSettings(settings)
                 SettingsBackupInspection.Ready(
                     SettingsBackupPreview(
-                        settingCount = settings.optJSONObject("app")?.length().orZero() +
-                            settings.optJSONObject("reader")?.length().orZero(),
-                        fontCount = archive.entries.keys.count { it.startsWith("fonts/") },
+                        settingCount = settings.getJSONObject("app").length() +
+                            settings.getJSONObject("reader").length(),
+                        fontCount = result.entries.keys.count { it.startsWith("fonts/") },
                     ),
                 )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BackupFailureException) {
+                SettingsBackupInspection.Failed(e.failure)
+            } catch (e: Exception) {
+                SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+            } finally {
+                removeStaging(result.stagingDirectory)
             }
         }
     }
 
-    suspend fun restore(source: Uri): SettingsBackupResult = withContext(Dispatchers.IO) {
+    suspend fun restore(source: Uri): SettingsBackupRestoreResult = withContext(Dispatchers.IO) {
         val archive = when (val result = readArchive(source)) {
-            is ArchiveResult.Error -> return@withContext SettingsBackupResult.Failed(result.reason)
+            is ArchiveResult.Error -> return@withContext SettingsBackupRestoreResult.Failed(result.failure)
             is ArchiveResult.Valid -> result
         }
-        val settings = try {
-            JSONObject(archive.entries.getValue(SETTINGS_PATH).toString(Charsets.UTF_8)).also(::validateSettings)
-        } catch (e: Exception) {
-            return@withContext SettingsBackupResult.Failed(e.message ?: "Settings data is malformed")
-        }
-        // Validation is complete before any store is edited. The two stores are
-        // independent, so storage errors after this point are reported as partial.
         try {
-            appSettings.restoreBackupValues(settings.getJSONObject("app"))
-            readerPreferences.restoreBackupValues(settings.getJSONObject("reader"))
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            return@withContext SettingsBackupResult.Failed(e.message ?: "Could not restore settings")
-        }
-        var imported = 0
-        var present = 0
-        var failures = 0
-        val staging = File(context.cacheDir, "backup-fonts-${System.nanoTime()}")
-        try {
-            staging.mkdirs()
-            archive.entries.filterKeys { it.startsWith("fonts/") }.forEach { (path, bytes) ->
-                currentCoroutineContext().ensureActive()
-                val name = path.removePrefix("fonts/")
-                val digest = name.substringBefore('.')
-                val extension = name.substringAfter('.', "")
-                if (UserFont.fileNameFor(digest, extension) != name) {
-                    failures++
+            val settings = try {
+                decodeSettings(archive.entries.getValue(SETTINGS_PATH).file).also(::validateSettings)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BackupFailureException) {
+                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+            } catch (e: Exception) {
+                return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
+
+            var appSettingsRestored = false
+            try {
+                appSettings.restoreBackupValues(settings.getJSONObject("app"))
+                appSettingsRestored = true
+                readerPreferences.restoreBackupValues(settings.getJSONObject("reader"))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Settings restore failed", e)
+                return@withContext if (appSettingsRestored) {
+                    SettingsBackupRestoreResult.PartiallyRestored
                 } else {
-                    val file = File(staging, name)
-                    file.writeBytes(bytes)
-                    when (userFonts.import(Uri.fromFile(file), name)) {
+                    SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE)
+                }
+            }
+
+            var imported = 0
+            var present = 0
+            var failures = 0
+            try {
+                archive.entries.filterKeys { it.startsWith("fonts/") }.forEach { (path, entry) ->
+                    currentCoroutineContext().ensureActive()
+                    val name = path.removePrefix("fonts/")
+                    when (userFonts.import(Uri.fromFile(entry.file), name)) {
                         is FontImportResult.Imported -> imported++
                         is FontImportResult.AlreadyPresent -> present++
                         else -> failures++
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Font restore stopped after settings were restored", e)
+                return@withContext SettingsBackupRestoreResult.PartiallyRestored
             }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            return@withContext SettingsBackupResult.Failed(
-                "Settings were restored, but font restore stopped: ${e.message ?: "storage error"}",
-            )
+            SettingsBackupRestoreResult.Restored(imported, present, failures)
         } finally {
-            staging.deleteRecursively()
+            removeStaging(archive.stagingDirectory)
         }
-        SettingsBackupResult.Restored(imported, present, failures)
     }
 
     private suspend fun readArchive(source: Uri): ArchiveResult {
-        val entries = linkedMapOf<String, ByteArray>()
-        try {
-            val input = context.contentResolver.openInputStream(source)
-                ?: return ArchiveResult.Error("Could not open the backup")
-            ZipInputStream(input).use { zip ->
-                var total = 0L
-                while (true) {
-                    currentCoroutineContext().ensureActive()
-                    val entry = zip.nextEntry ?: break
-                    if (entry.isDirectory || !safePath(entry.name) || entry.name in entries) {
-                        return ArchiveResult.Error("Backup contains an unsafe or duplicate entry")
-                    }
-                    val bytes = zip.readBytesBounded(MAX_ENTRY_BYTES)
-                    total += bytes.size
-                    if (total > MAX_TOTAL_BYTES) return ArchiveResult.Error("Backup is too large")
-                    entries[entry.name] = bytes
-                    zip.closeEntry()
-                }
+        val staging = try {
+            File(context.cacheDir, "settings-backup-${UUID.randomUUID()}").also {
+                if (!it.mkdirs()) throw IOException("Could not create staging directory")
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            return ArchiveResult.Error(e.message ?: "Backup is damaged")
+            Log.w(TAG, "Could not prepare backup staging", e)
+            return ArchiveResult.Error(SettingsBackupFailure.STORAGE)
         }
-        val manifest = try {
-            JSONObject(entries[MANIFEST_PATH]?.toString(Charsets.UTF_8) ?: return ArchiveResult.Error("Backup manifest is missing"))
-        } catch (_: Exception) {
-            return ArchiveResult.Error("Backup manifest is malformed")
-        }
-        if (manifest.optInt("format", -1) != FORMAT) return ArchiveResult.Error("Unsupported backup version")
-        val listed = manifest.optJSONArray("entries") ?: return ArchiveResult.Error("Backup manifest is incomplete")
-        val expected = mutableMapOf<String, Pair<Int, String>>()
-        for (i in 0 until listed.length()) {
-            val item = listed.optJSONObject(i) ?: return ArchiveResult.Error("Backup manifest is malformed")
-            val path = item.optString("path")
-            val size = item.optLong("size", -1).takeIf { it in 0..MAX_ENTRY_BYTES }?.toInt()
-                ?: return ArchiveResult.Error("Backup entry size is invalid")
-            val digest = item.optString("sha256").takeIf { it.matches(Regex("[0-9a-f]{64}")) }
-                ?: return ArchiveResult.Error("Backup checksum is invalid")
-            if (!safePath(path) || path == MANIFEST_PATH || expected.put(path, size to digest) != null) {
-                return ArchiveResult.Error("Backup manifest contains an unsafe or duplicate entry")
+        var keepStaging = false
+        return try {
+            val input = try {
+                context.contentResolver.openInputStream(source)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Could not open settings backup", e)
+                return ArchiveResult.Error(SettingsBackupFailure.FILE_ACCESS)
+            } ?: return ArchiveResult.Error(SettingsBackupFailure.FILE_ACCESS)
+
+            val entries = linkedMapOf<String, StagedEntry>()
+            var totalBytes = 0L
+            ZipInputStream(input).use { zip ->
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val entry = zip.nextEntry ?: break
+                    val path = entry.name
+                    if (
+                        entry.isDirectory ||
+                        !safePath(path) ||
+                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH) && !path.startsWith("fonts/") ||
+                        path in entries ||
+                        entries.size >= MAX_ARCHIVE_ENTRIES
+                    ) {
+                        return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                    }
+                    val sizeLimit = when (path) {
+                        MANIFEST_PATH -> MAX_MANIFEST_BYTES
+                        SETTINGS_PATH -> MAX_SETTINGS_BYTES
+                        else -> MAX_ENTRY_BYTES
+                    }
+                    val staged = stageEntry(
+                        zip = zip,
+                        file = File(staging, "entry-${entries.size}"),
+                        sizeLimit = minOf(sizeLimit, MAX_TOTAL_BYTES - totalBytes),
+                    )
+                    totalBytes += staged.size
+                    entries[path] = staged
+                    zip.closeEntry()
+                }
             }
+
+            val manifestEntry = entries[MANIFEST_PATH]
+                ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            val settingsEntry = entries[SETTINGS_PATH]
+                ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            if (manifestEntry.size > MAX_MANIFEST_BYTES || settingsEntry.size > MAX_SETTINGS_BYTES) {
+                return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
+            }
+            if (entries.keys.count { it.startsWith("fonts/") } > MAX_FONT_FILES) {
+                return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
+            }
+
+            val manifest = try {
+                JSONObject(readStagedBytes(manifestEntry.file, MAX_MANIFEST_BYTES).toString(Charsets.UTF_8))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BackupFailureException) {
+                return ArchiveResult.Error(e.failure)
+            } catch (e: Exception) {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
+            if (manifest.optInt("format", -1) != FORMAT) {
+                return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
+            }
+            val listed = manifest.optJSONArray("entries")
+                ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            val expected = mutableMapOf<String, Pair<Long, String>>()
+            for (index in 0 until listed.length()) {
+                val item = listed.optJSONObject(index)
+                    ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                val path = item.optString("path")
+                val size = item.optLong("size", -1)
+                val digest = item.optString("sha256")
+                if (
+                    !safePath(path) ||
+                    path == MANIFEST_PATH ||
+                    size !in 0..MAX_ENTRY_BYTES ||
+                    !SHA256.matches(digest) ||
+                    expected.put(path, size to digest) != null
+                ) {
+                    return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                }
+            }
+            if (expected.keys != entries.keys - MANIFEST_PATH) {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
+            expected.forEach { (path, check) ->
+                val entry = entries.getValue(path)
+                if (entry.size != check.first || entry.sha256 != check.second) {
+                    return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                }
+                if (path.startsWith("fonts/")) {
+                    val name = path.removePrefix("fonts/")
+                    val digest = name.substringBefore('.')
+                    val extension = name.substringAfter('.', "")
+                    if (UserFont.fileNameFor(digest, extension) != name || digest != entry.sha256) {
+                        return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                    }
+                }
+            }
+            keepStaging = true
+            ArchiveResult.Valid(staging, entries - MANIFEST_PATH)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: BackupFailureException) {
+            e.cause?.let { Log.w(TAG, "Could not stage settings backup", it) }
+            ArchiveResult.Error(e.failure)
+        } catch (e: Exception) {
+            Log.w(TAG, "Settings backup is damaged or unreadable", e)
+            ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+        } finally {
+            if (!keepStaging) removeStaging(staging)
         }
-        if (expected.keys != entries.keys - MANIFEST_PATH) return ArchiveResult.Error("Backup entries do not match the manifest")
-        expected.forEach { (path, check) ->
-            val bytes = entries.getValue(path)
-            if (bytes.size != check.first || sha256(bytes) != check.second) return ArchiveResult.Error("Backup checksum failed")
+    }
+
+    private suspend fun stageEntry(
+        zip: ZipInputStream,
+        file: File,
+        sizeLimit: Long,
+    ): StagedEntry {
+        val digest = MessageDigest.getInstance("SHA-256")
+        var size = 0L
+        try {
+            file.outputStream().buffered().use { output ->
+                val buffer = ByteArray(BUFFER_SIZE)
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val count = try {
+                        zip.read(buffer)
+                    } catch (e: IOException) {
+                        throw BackupFailureException(SettingsBackupFailure.INVALID_ARCHIVE, e)
+                    }
+                    if (count < 0) break
+                    size += count
+                    if (size > sizeLimit) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+                    try {
+                        output.write(buffer, 0, count)
+                    } catch (e: IOException) {
+                        throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
+                    }
+                    digest.update(buffer, 0, count)
+                }
+            }
+        } catch (e: BackupFailureException) {
+            throw e
+        } catch (e: IOException) {
+            throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
         }
-        val settings = entries[SETTINGS_PATH] ?: return ArchiveResult.Error("Settings data is missing")
-        if (settings.size > MAX_SETTINGS_BYTES) return ArchiveResult.Error("Settings data is too large")
-        return ArchiveResult.Valid(entries - MANIFEST_PATH)
+        return StagedEntry(file, size, digest.hexDigest())
+    }
+
+    private fun decodeSettings(file: File): JSONObject =
+        try {
+            JSONObject(readStagedBytes(file, MAX_SETTINGS_BYTES).toString(Charsets.UTF_8))
+        } catch (e: JSONException) {
+            throw BackupFailureException(SettingsBackupFailure.INVALID_ARCHIVE, e)
+        }
+
+    private fun readStagedBytes(file: File, limit: Long): ByteArray {
+        if (!file.isFile || file.length() > limit) {
+            throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+        }
+        return try {
+            file.readBytes()
+        } catch (e: IOException) {
+            throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
+        }
     }
 
     private fun validateSettings(settings: JSONObject) {
-        val app = settings.optJSONObject("app") ?: throw IllegalArgumentException("App settings are missing")
-        val reader = settings.optJSONObject("reader") ?: throw IllegalArgumentException("Reader settings are missing")
-        // Running the existing strict type decoder on throwaway preferences validates
-        // known fields before either DataStore receives a write.
+        val app = settings.optJSONObject("app")
+            ?: throw IllegalArgumentException("Missing app settings")
+        val reader = settings.optJSONObject("reader")
+            ?: throw IllegalArgumentException("Missing reader settings")
         app.validateBackupJson(APP_BACKUP_TYPES)
         reader.validateBackupJson(READER_BACKUP_TYPES)
         validateIds(app, mapOf(
@@ -246,6 +443,39 @@ class SettingsBackupRepository(
             "text_align" to com.chmouel.liseur.data.settings.ReaderTextAlign.entries.map { it.id }.toSet(),
             "font_weight" to com.chmouel.liseur.data.settings.ReaderFontWeight.entries.map { it.id }.toSet(),
         ))
+        validateReaderNumbers(reader)
+    }
+
+    private fun validateReaderNumbers(reader: JSONObject) {
+        validateRange(reader, "font_size", TypographyRange.FONT_SIZE)
+        validateRange(reader, "line_height", TypographyRange.LINE_HEIGHT)
+        validateRange(reader, "page_margins", TypographyRange.PAGE_MARGINS)
+        validateRange(reader, "letter_spacing", TypographyRange.LETTER_SPACING)
+        validateRange(reader, "word_spacing", TypographyRange.WORD_SPACING)
+        validateRange(reader, "paragraph_spacing", TypographyRange.PARAGRAPH_SPACING)
+
+        if (reader.has("brightness")) {
+            val brightness = reader.getDouble("brightness")
+            if (brightness !in 0.0..1.0) throw IllegalArgumentException("Invalid brightness")
+        }
+        if (reader.has("auto_scroll_speed")) {
+            val speed = reader.getDouble("auto_scroll_speed")
+            if (
+                speed !in AutoScrollPreference.MIN_STEP.toDouble()..AutoScrollPreference.MAX_STEP.toDouble() ||
+                abs(speed - speed.roundToInt()) > NUMBER_EPSILON
+            ) {
+                throw IllegalArgumentException("Invalid auto-scroll speed")
+            }
+        }
+    }
+
+    private fun validateRange(json: JSONObject, key: String, range: TypographyRange) {
+        if (!json.has(key)) return
+        val value = json.getDouble(key)
+        val sanitized = range.sanitize(value)
+        if (sanitized == null || abs(sanitized - value) > NUMBER_EPSILON) {
+            throw IllegalArgumentException("Invalid numeric setting: $key")
+        }
     }
 
     private fun validateIds(json: JSONObject, allowed: Map<String, Set<String>>) {
@@ -253,97 +483,150 @@ class SettingsBackupRepository(
             val value = json.optString(key)
             val validImportedFont = key == "font" && UserFont.digestOf(value) != null
             if (json.has(key) && value !in values && !validImportedFont) {
-                throw IllegalArgumentException("Unsupported value for setting: $key")
+                throw IllegalArgumentException("Unsupported setting value: $key")
             }
         }
     }
 
-
-    private sealed interface ArchiveResult {
-        data class Valid(val entries: Map<String, ByteArray>) : ArchiveResult
-        data class Error(val reason: String) : ArchiveResult
+    private suspend fun hashFile(path: String, file: File): EntryMetadata {
+        val digest = MessageDigest.getInstance("SHA-256")
+        var size = 0L
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(BUFFER_SIZE)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val count = input.read(buffer)
+                if (count < 0) break
+                size += count
+                if (size > MAX_ENTRY_BYTES) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+                digest.update(buffer, 0, count)
+            }
+        }
+        return EntryMetadata(path, size, digest.hexDigest())
     }
 
+    private suspend fun writeFileEntry(
+        zip: ZipOutputStream,
+        path: String,
+        file: File,
+    ): EntryMetadata {
+        val digest = MessageDigest.getInstance("SHA-256")
+        var size = 0L
+        zip.putNextEntry(ZipEntry(path))
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(BUFFER_SIZE)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val count = input.read(buffer)
+                if (count < 0) break
+                size += count
+                if (size > MAX_ENTRY_BYTES) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+                zip.write(buffer, 0, count)
+                digest.update(buffer, 0, count)
+            }
+        }
+        zip.closeEntry()
+        return EntryMetadata(path, size, digest.hexDigest())
+    }
+
+    private fun removeStaging(directory: File) {
+        if (directory.exists() && !directory.deleteRecursively()) {
+            Log.w(TAG, "Could not remove temporary backup data")
+        }
+    }
+
+    private fun MessageDigest.hexDigest(): String =
+        digest().joinToString("") { "%02x".format(it) }
+
+    private fun sha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun writeEntry(zip: ZipOutputStream, path: String, bytes: ByteArray) {
+        zip.putNextEntry(ZipEntry(path))
+        zip.write(bytes)
+        zip.closeEntry()
+    }
+
+    private data class EntryMetadata(val path: String, val size: Long, val sha256: String)
+    private data class StagedEntry(val file: File, val size: Long, val sha256: String)
+
+    private sealed interface ArchiveResult {
+        data class Valid(
+            val stagingDirectory: File,
+            val entries: Map<String, StagedEntry>,
+        ) : ArchiveResult
+
+        data class Error(val failure: SettingsBackupFailure) : ArchiveResult
+    }
+
+    private class BackupFailureException(
+        val failure: SettingsBackupFailure,
+        cause: Throwable? = null,
+    ) : Exception(cause)
+
     companion object {
+        private const val TAG = "SettingsBackup"
         private const val FORMAT = 1
         private const val MANIFEST_PATH = "manifest.json"
         private const val SETTINGS_PATH = "settings.json"
-        private const val MAX_ENTRY_BYTES = 16L * 1024 * 1024
-        private const val MAX_SETTINGS_BYTES = 1024 * 1024
-        private const val MAX_TOTAL_BYTES = 600L * 1024 * 1024
+        private const val MAX_SETTINGS_BYTES = 1024L * 1024
+        private const val MAX_MANIFEST_BYTES = 1024L * 1024
+        private const val MAX_FONT_FILES = UserFontRepository.MAX_FONTS
+        private const val MAX_ENTRY_BYTES = UserFontRepository.MAX_BYTES
+        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 2
+        private const val MAX_TOTAL_BYTES =
+            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES
+        private const val BUFFER_SIZE = 32 * 1024
+        private const val NUMBER_EPSILON = 0.000001
+        private val SHA256 = Regex("[0-9a-f]{64}")
 
         private val APP_BACKUP_TYPES = mapOf(
-            "theme_mode" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "dynamic_color" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "volume_keys_turn_pages" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "tap_zones" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "pinch_to_resize" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "resume_last_book" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "keep_screen_on" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "scroll_mode" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "library_sort" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "library_sort_reversed" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "library_filters" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "library_group_by_series" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "eink_mode" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "color_eink" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "vendor_refresh" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "definition_target" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "dictionary_lookup_enabled" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "dictionary_base_url" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "upload_policy" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "stats_range" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "highlight_tints_offered" to com.chmouel.liseur.data.settings.BackupValueType.STRING_SET,
-            "highlight_tint_default" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
+            "theme_mode" to BackupValueType.STRING,
+            "dynamic_color" to BackupValueType.BOOLEAN,
+            "volume_keys_turn_pages" to BackupValueType.BOOLEAN,
+            "tap_zones" to BackupValueType.STRING,
+            "pinch_to_resize" to BackupValueType.BOOLEAN,
+            "resume_last_book" to BackupValueType.BOOLEAN,
+            "keep_screen_on" to BackupValueType.BOOLEAN,
+            "scroll_mode" to BackupValueType.BOOLEAN,
+            "library_sort" to BackupValueType.STRING,
+            "library_sort_reversed" to BackupValueType.BOOLEAN,
+            "library_filters" to BackupValueType.STRING,
+            "library_group_by_series" to BackupValueType.BOOLEAN,
+            "eink_mode" to BackupValueType.STRING,
+            "color_eink" to BackupValueType.BOOLEAN,
+            "vendor_refresh" to BackupValueType.BOOLEAN,
+            "definition_target" to BackupValueType.STRING,
+            "dictionary_lookup_enabled" to BackupValueType.BOOLEAN,
+            "dictionary_base_url" to BackupValueType.STRING,
+            "upload_policy" to BackupValueType.STRING,
+            "stats_range" to BackupValueType.STRING,
+            "highlight_tints_offered" to BackupValueType.STRING_SET,
+            "highlight_tint_default" to BackupValueType.STRING,
         )
         private val READER_BACKUP_TYPES = mapOf(
-            "font" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "font_size" to com.chmouel.liseur.data.settings.BackupValueType.DOUBLE,
-            "theme" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "line_height" to com.chmouel.liseur.data.settings.BackupValueType.DOUBLE,
-            "page_margins" to com.chmouel.liseur.data.settings.BackupValueType.DOUBLE,
-            "brightness" to com.chmouel.liseur.data.settings.BackupValueType.FLOAT,
-            "page_turn_style" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "page_turn_animation" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "footer_mode" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "footer_left" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "footer_right" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "column_mode" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "auto_scroll_speed" to com.chmouel.liseur.data.settings.BackupValueType.FLOAT,
-            "text_align" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "font_weight" to com.chmouel.liseur.data.settings.BackupValueType.STRING,
-            "hyphens" to com.chmouel.liseur.data.settings.BackupValueType.BOOLEAN,
-            "letter_spacing" to com.chmouel.liseur.data.settings.BackupValueType.DOUBLE,
-            "word_spacing" to com.chmouel.liseur.data.settings.BackupValueType.DOUBLE,
-            "paragraph_spacing" to com.chmouel.liseur.data.settings.BackupValueType.DOUBLE,
+            "font" to BackupValueType.STRING,
+            "font_size" to BackupValueType.DOUBLE,
+            "theme" to BackupValueType.STRING,
+            "line_height" to BackupValueType.DOUBLE,
+            "page_margins" to BackupValueType.DOUBLE,
+            "brightness" to BackupValueType.FLOAT,
+            "page_turn_style" to BackupValueType.STRING,
+            "page_turn_animation" to BackupValueType.BOOLEAN,
+            "footer_mode" to BackupValueType.STRING,
+            "footer_left" to BackupValueType.STRING,
+            "footer_right" to BackupValueType.STRING,
+            "column_mode" to BackupValueType.STRING,
+            "auto_scroll_speed" to BackupValueType.FLOAT,
+            "text_align" to BackupValueType.STRING,
+            "font_weight" to BackupValueType.STRING,
+            "hyphens" to BackupValueType.BOOLEAN,
+            "letter_spacing" to BackupValueType.DOUBLE,
+            "word_spacing" to BackupValueType.DOUBLE,
+            "paragraph_spacing" to BackupValueType.DOUBLE,
         )
 
         private fun safePath(path: String) = path.isNotBlank() && !path.startsWith('/') &&
             '\\' !in path && path.split('/').none { it.isEmpty() || it == "." || it == ".." }
-
-        private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
-            .digest(bytes).joinToString("") { "%02x".format(it) }
-
-        private fun writeEntry(zip: ZipOutputStream, path: String, bytes: ByteArray) {
-            zip.putNextEntry(ZipEntry(path))
-            zip.write(bytes)
-            zip.closeEntry()
-        }
-
-        private fun java.util.zip.ZipInputStream.readBytesBounded(limit: Long): ByteArray {
-            val output = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(32 * 1024)
-            var total = 0L
-            while (true) {
-                val count = read(buffer)
-                if (count < 0) break
-                total += count
-                if (total > limit) throw IOException("Backup entry is too large")
-                output.write(buffer, 0, count)
-            }
-            return output.toByteArray()
-        }
-
-        private fun Int?.orZero() = this ?: 0
     }
 }
