@@ -26,6 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -93,21 +94,23 @@ private class SettingsBackupViewModel(
         val archiveId = _state.value.preview?.archiveId ?: return
         runBusy {
             _state.update { it.copy(preview = null) }
-            val result = repository.restore(archiveId)
-            _state.update {
-                it.copy(
-                    status = when (result) {
-                        is SettingsBackupRestoreResult.Restored -> SettingsBackupUiStatus.Restored(
-                            result.fontsImported,
-                            result.fontsAlreadyPresent,
-                            result.fontFailures,
-                        )
-                        is SettingsBackupRestoreResult.Failed ->
-                            SettingsBackupUiStatus.Failed(result.failure)
-                        SettingsBackupRestoreResult.PartiallyRestored ->
-                            SettingsBackupUiStatus.PartiallyRestored
-                    },
-                )
+            withContext(NonCancellable) {
+                val result = repository.restore(archiveId)
+                _state.update {
+                    it.copy(
+                        status = when (result) {
+                            is SettingsBackupRestoreResult.Restored -> SettingsBackupUiStatus.Restored(
+                                result.fontsImported,
+                                result.fontsAlreadyPresent,
+                                result.fontFailures,
+                            )
+                            is SettingsBackupRestoreResult.Failed ->
+                                SettingsBackupUiStatus.Failed(result.failure)
+                            SettingsBackupRestoreResult.PartiallyRestored ->
+                                SettingsBackupUiStatus.PartiallyRestored
+                        },
+                    )
+                }
             }
         }
     }
@@ -123,7 +126,7 @@ private class SettingsBackupViewModel(
         viewModelScope.launch {
             operation?.cancelAndJoin()
             repository.discardProcessInspections()
-            _state.value = SettingsBackupState()
+            _state.update { it.copy(preview = null, busy = false) }
             activeOperation = null
         }
     }
