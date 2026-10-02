@@ -187,8 +187,7 @@ class SettingsBackupRepository(
                     retained = true
                     SettingsBackupInspection.Ready(
                         SettingsBackupPreview(
-                            settingCount = settings.getJSONObject("app").length() +
-                                settings.getJSONObject("reader").length(),
+                            settingCount = countKnownSettings(settings),
                             fontCount = result.entries.keys.count { it.startsWith("fonts/") },
                         ),
                         result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
@@ -384,7 +383,7 @@ class SettingsBackupRepository(
             if (manifest.opt("application") != "liseur") {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.optInt("format", -1) != FORMAT) {
+            if (manifest.opt("format") != FORMAT) {
                 return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
             }
             val listed = manifest.optJSONArray("entries")
@@ -526,6 +525,20 @@ class SettingsBackupRepository(
             "font_weight" to com.chmouel.liseur.data.settings.ReaderFontWeight.entries.map { it.id }.toSet(),
         ))
         validateReaderNumbers(reader)
+    }
+
+    private fun countKnownSettings(settings: JSONObject): Int {
+        fun JSONObject.countKeys(known: Map<String, BackupValueType>): Int {
+            val keys = keys()
+            var count = 0
+            while (keys.hasNext()) {
+                if (keys.next() in known) count++
+            }
+            return count
+        }
+
+        return settings.getJSONObject("app").countKeys(APP_BACKUP_TYPES) +
+            settings.getJSONObject("reader").countKeys(READER_BACKUP_TYPES)
     }
 
     private fun validateReaderNumbers(reader: JSONObject) {
