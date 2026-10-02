@@ -1408,7 +1408,7 @@ class ReaderViewModel(
             }
             lastLocator = initialLocator
             val primaryAuthors = primaryEpubAuthors(publication)
-            if (primaryAuthors != null) library.refreshAuthor(bookId, primaryAuthors)
+            if (primaryAuthors != null) library.refreshAuthor(bookId, primaryAuthors, publication)
             library.markOpened(bookId)
             _state.value = UiState.Ready(
                 publication = publication,

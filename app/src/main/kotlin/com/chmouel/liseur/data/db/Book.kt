@@ -426,6 +426,7 @@ interface BookDao {
         SELECT * FROM books
         WHERE identity_author IS NULL
           AND (local_uri IS NOT NULL OR download_state = 'DOWNLOADED')
+          AND (url LIKE 'file:%' OR url LIKE 'content:%')
         LIMIT :limit
         """,
     )

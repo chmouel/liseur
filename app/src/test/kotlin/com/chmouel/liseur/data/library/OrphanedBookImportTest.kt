@@ -234,7 +234,7 @@ class OrphanedBookImportTest {
         val asset = retriever.retrieve(Uri.fromFile(epub).toAbsoluteUrl()!!).getOrNull()!!
         val publication = opener.open(asset, allowUserInteraction = false).getOrNull()!!
         try {
-            library.refreshAuthor(url, primaryEpubAuthors(publication)!!)
+            library.refreshAuthor(url, primaryEpubAuthors(publication)!!, publication)
         } finally {
             publication.close()
         }
@@ -293,6 +293,34 @@ class OrphanedBookImportTest {
     }
 
     @Test
+    fun `opening a replaced book cannot update the old shelf author before reindex`() = runTest {
+        val epub = folder.newFile("replaced-author.epub").also {
+            writeEpub(it, authors = "<dc:creator id=\"author\">Old author</dc:creator>", identifier = "none")
+        }
+        val url = Uri.fromFile(epub).toString()
+        val added = library.importBook(Uri.fromFile(epub)) as ImportResult.Added
+        assertEquals("Old author", added.book.author)
+        val place = progress(url)
+        db.readingProgressDao().upsert(place)
+
+        writeEpub(epub, authors = "<dc:creator id=\"author\">New author</dc:creator>", identifier = "none")
+        val asset = retriever.retrieve(Uri.fromFile(epub).toAbsoluteUrl()!!).getOrNull()!!
+        val publication = opener.open(asset, allowUserInteraction = false).getOrNull()!!
+        try {
+            library.refreshAuthor(url, primaryEpubAuthors(publication)!!, publication)
+        } finally {
+            publication.close()
+        }
+        assertEquals("Old author", db.bookDao().getByUrl(url)?.author)
+
+        db.bookDao().setDownloadState(url, DownloadState.REMOTE, null)
+        library.importBook(Uri.fromFile(epub))
+
+        assertEquals("New author", db.bookDao().getByUrl(url)?.author)
+        assertNull(db.readingProgressDao().get(url))
+    }
+
+    @Test
     fun `author backfill repairs old shelves and retries unavailable files`() = runTest {
         val epub = folder.newFile("legacy-authors.epub")
         val url = Uri.fromFile(epub).toString()
@@ -306,10 +334,19 @@ class OrphanedBookImportTest {
                 localUri = url,
             ),
         )
+        val remoteUrl = "calibre:remote"
+        val remote = orphan(remoteUrl).copy(
+            author = "Catalog author",
+            downloadState = DownloadState.DOWNLOADED,
+            localUri = url,
+        )
+        val remoteId = db.bookDao().upsert(remote)
+        assertTrue(db.bookDao().needingAuthorCheck(10).none { it.url == remoteUrl })
 
         library.backfillAuthors(batchSize = 1)
         assertEquals("الكاتب", db.bookDao().getByUrl(url)?.author)
         assertNull(db.bookDao().getByUrl(url)?.identityAuthor)
+        assertEquals(remote.copy(id = remoteId), db.bookDao().getByUrl(remoteUrl))
 
         writeEpub(epub, authors = AUTHOR_METADATA, identifier = "none")
         library.backfillAuthors(batchSize = 1)
@@ -325,7 +362,16 @@ class OrphanedBookImportTest {
     fun `opening a catalog book does not replace its server author`() = runTest {
         val book = orphan("calibre:remote").copy(author = "Catalog author")
         val id = db.bookDao().upsert(book)
-        library.refreshAuthor(book.url, listOf("EPUB author"))
+        val epub = folder.newFile("catalog.epub").also {
+            writeEpub(it, authors = "<dc:creator>EPUB author</dc:creator>")
+        }
+        val asset = retriever.retrieve(Uri.fromFile(epub).toAbsoluteUrl()!!).getOrNull()!!
+        val publication = opener.open(asset, allowUserInteraction = false).getOrNull()!!
+        try {
+            library.refreshAuthor(book.url, listOf("EPUB author"), publication)
+        } finally {
+            publication.close()
+        }
         assertEquals(book.copy(id = id), db.bookDao().getByUrl(book.url))
     }
 

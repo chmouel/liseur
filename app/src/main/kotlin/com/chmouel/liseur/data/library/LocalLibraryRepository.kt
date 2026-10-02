@@ -486,9 +486,16 @@ class LocalLibraryRepository(
             .onFailure { Log.w(TAG, "Could not drop the copied book at $url", it) }
     }
 
-    /** Repairs a local shelf label without reindexing or changing reading state. */
-    suspend fun refreshAuthor(url: String, primaryAuthors: List<String>) {
+    /** Repairs a local shelf label only when its stored identity is still in the EPUB. */
+    suspend fun refreshAuthor(
+        url: String,
+        primaryAuthors: List<String>,
+        publication: Publication,
+    ) {
         if (ServerKind.isRemoteUrl(url)) return
+        val book = bookDao.getByUrl(url) ?: return
+        val expectedIdentity = book.identityAuthor ?: book.author
+        if (!epubAuthorIdentityMatches(publication, expectedIdentity)) return
         bookDao.updateAuthor(url, primaryAuthors.joinToString(", ").ifBlank { null })
     }
 
@@ -948,21 +955,20 @@ class LocalLibraryRepository(
                 ?: "Untitled"
             val author = (primaryEpubAuthors(publication) ?: publication.metadata.authors.map { it.name })
                 .joinToString(", ").ifBlank { null }
-            // Readium's language choice must not change fallback identity
-            // when the primary display author still matches the shelf.
+            // Keep fallback identity only while its author remains in the OPF.
             val indexedWorkId = workIdOf(
                 publication.metadata.identifier,
                 title,
                 publication.identityAuthor(),
             )
+            val previousIdentityForMetadata = previousIdentityAuthor ?: previousAuthor
             val previousWorkIdForMetadata = workIdOf(
                 publication.metadata.identifier,
                 title,
-                previousIdentityAuthor ?: previousAuthor,
+                previousIdentityForMetadata,
             )
-            val preservePreviousIdentity =
-                previousAuthor == author &&
-                    previousWorkIdForMetadata == previousWorkId
+            val preservePreviousIdentity = previousWorkIdForMetadata == previousWorkId &&
+                epubAuthorIdentityMatches(publication, previousIdentityForMetadata)
             val workId = if (preservePreviousIdentity) previousWorkId else indexedWorkId
             val series = seriesOf(publication)
             // Cleanup first, then the new description. Torn the other
@@ -982,7 +988,7 @@ class LocalLibraryRepository(
                 fileModifiedAt = modifiedAt,
                 workId = workId,
                 identityAuthor = if (preservePreviousIdentity) {
-                    (previousIdentityAuthor ?: previousAuthor).orEmpty()
+                    previousIdentityForMetadata.orEmpty()
                 } else {
                     publication.identityAuthor().orEmpty()
                 },
@@ -1145,33 +1151,21 @@ class LocalLibraryRepository(
             if (batch.isEmpty()) return@withContext
             for (book in batch) {
                 currentCoroutineContext().ensureActive()
-                if (ServerKind.isRemoteUrl(book.url)) {
-                    skipped += book.url
-                    continue
-                }
                 val fileUrl = book.openableUri()?.let { AbsoluteUrl(it) }
-                val authors = fileUrl?.let { readPrimaryAuthors(it) }
-                if (authors == null) {
+                if (
+                    fileUrl == null || !reindexBook(
+                        openableUrl = fileUrl,
+                        bookUrl = book.url,
+                        modifiedAt = book.fileModifiedAt,
+                        previousWorkId = book.workId,
+                        previousAuthor = book.author,
+                        previousIdentityAuthor = book.identityAuthor,
+                    )
+                ) {
                     skipped += book.url
-                    continue
                 }
-                refreshAuthor(book.url, authors)
             }
             delay(BACKFILL_PAUSE_MS)
-        }
-    }
-
-    private suspend fun readPrimaryAuthors(url: AbsoluteUrl): List<String>? {
-        val asset = assetRetriever.retrieve(url).getOrElse { return null }
-        val publication = publicationOpener.open(asset, allowUserInteraction = false)
-            .getOrElse {
-                asset.close()
-                return null
-            }
-        return try {
-            primaryEpubAuthors(publication)
-        } finally {
-            publication.close()
         }
     }
 
