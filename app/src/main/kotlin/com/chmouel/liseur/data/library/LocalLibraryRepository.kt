@@ -958,17 +958,12 @@ class LocalLibraryRepository(
             val previousWorkIdForMetadata = workIdOf(
                 publication.metadata.identifier,
                 title,
-                previousIdentityAuthor,
+                previousIdentityAuthor ?: previousAuthor,
             )
-            val workId = if (
-                previousIdentityAuthor != null &&
+            val preservePreviousIdentity =
                 previousAuthor == author &&
-                previousWorkIdForMetadata == previousWorkId
-            ) {
-                previousWorkId
-            } else {
-                indexedWorkId
-            }
+                    previousWorkIdForMetadata == previousWorkId
+            val workId = if (preservePreviousIdentity) previousWorkId else indexedWorkId
             val series = seriesOf(publication)
             // Cleanup first, then the new description. Torn the other
             // way round, a death between the two leaves the new workId
@@ -986,7 +981,11 @@ class LocalLibraryRepository(
                 coverPath = saveCover(publication, bookUrl),
                 fileModifiedAt = modifiedAt,
                 workId = workId,
-                identityAuthor = publication.identityAuthor().orEmpty(),
+                identityAuthor = if (preservePreviousIdentity) {
+                    (previousIdentityAuthor ?: previousAuthor).orEmpty()
+                } else {
+                    publication.identityAuthor().orEmpty()
+                },
                 seriesName = series.name,
                 seriesIndex = series.index,
             )

@@ -279,6 +279,16 @@ class OrphanedBookImportTest {
         library.importBook(Uri.fromFile(epub))
 
         assertEquals(workId, db.bookDao().getByUrl(url)?.workId)
+        assertEquals("الكاتب", db.bookDao().getByUrl(url)?.identityAuthor)
+        assertEquals(place, db.readingProgressDao().get(url))
+
+        // A further rewrite must still compare against the author that
+        // produced the retained fallback work ID.
+        db.bookDao().setDownloadState(url, DownloadState.REMOTE, null)
+        library.importBook(Uri.fromFile(epub))
+
+        assertEquals(workId, db.bookDao().getByUrl(url)?.workId)
+        assertEquals("الكاتب", db.bookDao().getByUrl(url)?.identityAuthor)
         assertEquals(place, db.readingProgressDao().get(url))
     }
 
