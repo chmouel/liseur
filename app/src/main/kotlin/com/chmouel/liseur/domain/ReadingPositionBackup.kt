@@ -23,13 +23,15 @@ fun decodeReadingPositionBackup(text: String): List<BackedUpReadingPosition> {
         val entry = entries.getJSONObject(index)
         val bookId = entry.opt("book_id") as? String
         require(!bookId.isNullOrBlank() && ids.add(bookId))
-        val locator = entry.opt("locator") as? String ?: error("Missing locator")
-        require(Locator.fromJSON(JSONObject(locator)) != null)
+        val locator = if (entry.isNull("locator")) "{}" else {
+            entry.opt("locator") as? String ?: error("Invalid locator")
+        }
         val progression = if (entry.isNull("progression")) null else {
             (entry.opt("progression") as? Number)?.toDouble()?.also {
                 require(it.isFinite() && it in 0.0..1.0)
             } ?: error("Invalid progression")
         }
+        require(if (locator == "{}") progression != null else Locator.fromJSON(JSONObject(locator)) != null)
         val readAt = entry.opt("read_at")
         require((readAt is Long || readAt is Int) && (readAt as Number).toLong() >= 0)
         fun metadata(key: String): String? {

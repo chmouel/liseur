@@ -59,6 +59,16 @@ class AnnotationBackupTest {
     }
 
     @Test
+    fun `annotation fractions outside the book are rejected`() {
+        for (progression in listOf(-1.0, 2.0)) {
+            val encoded = encodeAnnotationBackup(listOf(
+                BackedUpBook(full.bookId, null, null, listOf(full.copy(totalProgression = progression))),
+            ))
+            assertTrue(decodeAnnotationBackup(encoded) is BackupContents.Unreadable)
+        }
+    }
+
+    @Test
     fun `broken highlight and bookmark locators are rejected`() {
         for (mark in listOf(full, bare)) {
             val encoded = encodeAnnotationBackup(listOf(

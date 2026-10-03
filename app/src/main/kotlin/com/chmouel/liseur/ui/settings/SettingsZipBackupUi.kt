@@ -117,7 +117,9 @@ private class SettingsBackupViewModel(
     }
 
     fun inspect(uri: Uri) = runBusy {
-        repository.discardInspection(_state.value.preview?.archiveId)
+        val previousArchive = _state.value.preview?.archiveId
+        _state.update { it.copy(preview = null, status = null) }
+        repository.discardInspection(previousArchive)
         when (val result = repository.inspect(uri)) {
             is SettingsBackupInspection.Ready ->
                 _state.update { it.copy(preview = result, status = null) }

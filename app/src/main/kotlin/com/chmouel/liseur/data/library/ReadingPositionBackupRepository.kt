@@ -44,15 +44,15 @@ class ReadingPositionBackupRepository(
                     for (position in page) {
                         currentCoroutineContext().ensureActive()
                         lastUrl = position.bookUrl
-                        // Status-only rows have no saved place to restore.
-                        if (runCatching { Locator.fromJSON(JSONObject(position.locatorJson)) }.getOrNull() == null) continue
+                        val exact = runCatching { Locator.fromJSON(JSONObject(position.locatorJson)) }.getOrNull() != null
+                        val progression = position.totalProgression?.takeIf { it.isFinite() && it in 0.0..1.0 }
+                        if (!exact && progression == null) continue
                         val book = bookDao.getByUrl(position.bookUrl)
                         writer.beginObject().name("book_id").value(position.bookUrl)
                         book?.title?.let { writer.name("title").value(it) }
                         book?.author?.let { writer.name("author").value(it) }
-                        writer.name("locator").value(position.locatorJson)
-                        position.totalProgression?.takeIf { it.isFinite() && it in 0.0..1.0 }
-                            ?.let { writer.name("progression").value(it) }
+                        if (exact) writer.name("locator").value(position.locatorJson)
+                        progression?.let { writer.name("progression").value(it) }
                         writer.name("read_at").value((position.readAt ?: position.updatedAt).coerceAtLeast(0))
                             .endObject()
                         writer.flush()
@@ -66,11 +66,13 @@ class ReadingPositionBackupRepository(
 
     suspend fun restore(positions: List<BackedUpReadingPosition>): Int {
         val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
+        val targets = positions.map { matchBackedUpReadingPosition(it, known) }
+        val counts = targets.groupingBy { it }.eachCount()
         val changed = linkedSetOf<String>()
         try {
-            for (position in positions) {
+            for ((position, target) in positions.zip(targets)) {
                 currentCoroutineContext().ensureActive()
-                val url = matchBackedUpReadingPosition(position, known)
+                val url = if (counts.getValue(target) > 1) position.bookId else target
                 progressDao.openBooks.unlessOpen(url) {
                     progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
                         position.readAt, System.currentTimeMillis())

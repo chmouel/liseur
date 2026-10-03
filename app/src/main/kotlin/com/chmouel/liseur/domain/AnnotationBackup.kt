@@ -130,7 +130,7 @@ fun decodeAnnotationBackup(json: String): BackupContents {
                     !m.isNull(it) && m.opt(it) !is String
                 } ||
                 (!m.isNull("progression") &&
-                    ((m.opt("progression") as? Number)?.toDouble()?.let { it.isFinite() } != true))
+                    ((m.opt("progression") as? Number)?.toDouble()?.let { it.isFinite() && it in 0.0..1.0 } != true))
             ) {
                 return BackupContents.Unreadable("invalid annotation fields")
             }

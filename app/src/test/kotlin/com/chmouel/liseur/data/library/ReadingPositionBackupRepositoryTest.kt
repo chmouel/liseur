@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.domain.BackedUpReadingPosition
 import com.chmouel.liseur.domain.decodeReadingPositionBackup
@@ -71,6 +72,34 @@ class ReadingPositionBackupRepositoryTest {
         assertEquals(locator, db.readingProgressDao().get("first")?.locatorJson)
         assertEquals(null, db.readingProgressDao().get("second"))
         db.readingProgressDao().openBooks.leave("second")
+    }
+
+    @Test
+    fun `percentage-only positions survive export and restore`() = runTest {
+        db.readingProgressDao().upsert(ReadingProgress("book", "{}", 0.6, updatedAt = 20))
+        val file = folder.newFile()
+        repository().writeContents(file, 4096)
+        val positions = decodeReadingPositionBackup(file.readText())
+        assertEquals(listOf(BackedUpReadingPosition("book", null, null, "{}", 0.6, 20)), positions)
+        db.readingProgressDao().forget("book")
+        assertEquals(1, repository().restore(positions))
+        assertEquals(0.6, db.readingProgressDao().get("book")?.totalProgression)
+        assertEquals("{}", db.readingProgressDao().get("book")?.locatorJson)
+    }
+
+    @Test
+    fun `two backup identities cannot replace the same local book`() = runTest {
+        db.bookDao().upsert(Book(url = "local", title = "Poems", author = "Blake", coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null))
+        val local = ReadingProgress("local", locator, 0.8, updatedAt = 20)
+        db.readingProgressDao().upsert(local)
+        assertEquals(2, repository().restore(listOf(
+            BackedUpReadingPosition("old-one", "Poems", "Blake", locator, 0.3, 10),
+            BackedUpReadingPosition("old-two", "Poems", "Blake", locator, 0.5, 10),
+        )))
+        assertEquals(local, db.readingProgressDao().get("local"))
+        assertEquals(0.3, db.readingProgressDao().get("old-one")?.totalProgression)
+        assertEquals(0.5, db.readingProgressDao().get("old-two")?.totalProgression)
     }
 
     @Test
