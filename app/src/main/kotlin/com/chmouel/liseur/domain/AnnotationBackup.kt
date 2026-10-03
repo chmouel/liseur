@@ -122,10 +122,11 @@ fun decodeAnnotationBackup(json: String): BackupContents {
             if (
                 AnnotationKind.entries.none { it.name == m.opt("kind") } ||
                 m.opt("locator") !is String ||
-                !m.isInteger("created_at") ||
-                listOf("updated_at", "note_created_at", "note_updated_at", "position").any {
-                    !m.isNull(it) && !m.isInteger(it)
+                !m.isTimestamp("created_at") ||
+                listOf("updated_at", "note_created_at", "note_updated_at").any {
+                    !m.isNull(it) && !m.isTimestamp(it)
                 } ||
+                (!m.isNull("position") && !m.isInteger("position")) ||
                 listOf("text", "note", "tint", "chapter").any {
                     !m.isNull(it) && m.opt(it) !is String
                 } ||
@@ -133,6 +134,9 @@ fun decodeAnnotationBackup(json: String): BackupContents {
                     ((m.opt("progression") as? Number)?.toDouble()?.let { it.isFinite() && it in 0.0..1.0 } != true))
             ) {
                 return BackupContents.Unreadable("invalid annotation fields")
+            }
+            if (m.optLong("updated_at") == 0L && m.getLong("created_at") > Long.MAX_VALUE / 1000) {
+                return BackupContents.Unreadable("annotation timestamp overflow")
             }
             if (m.optString("kind") != AnnotationKind.BOOK_NOTE.name &&
                 runCatching { Locator.fromJSON(JSONObject(m.getString("locator"))) }.getOrNull() == null
@@ -198,6 +202,9 @@ fun matchBackedUpBook(
 
 private fun JSONObject.isInteger(key: String): Boolean =
     opt(key) is Int || opt(key) is Long
+
+private fun JSONObject.isTimestamp(key: String): Boolean =
+    isInteger(key) && (opt(key) as Number).toLong() >= 0
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() }

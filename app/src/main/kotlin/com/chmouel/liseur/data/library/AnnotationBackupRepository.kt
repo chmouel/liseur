@@ -231,7 +231,7 @@ class AnnotationBackupRepository(
                     // time in microseconds rather than sending a zero client_ts.
                     mark.copy(
                         bookId = bookId,
-                        updatedAt = mark.updatedAt.takeIf { it > 0 } ?: (mark.createdAt * 1000),
+                        updatedAt = mark.updatedAt.takeIf { it > 0 } ?: Math.multiplyExact(mark.createdAt, 1000L),
                     )
                 }
             }

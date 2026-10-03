@@ -126,7 +126,7 @@ class SettingsBackupRepository(
             val stagedPositions = File.createTempFile("positions-export-", ".json", context.cacheDir)
             positionFile = stagedPositions
             try {
-                positions.writeContents(stagedPositions, MAX_POSITIONS_BYTES)
+                positions.writeContents(stagedPositions, MAX_READING_DATA_BYTES - annotationMetadata.size)
             } catch (e: ReadingPositionBackupTooLarge) {
                 throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
             }
@@ -476,6 +476,7 @@ class SettingsBackupRepository(
 
             val entries = linkedMapOf<String, StagedEntry>()
             var totalBytes = 0L
+            var readingDataBytes = 0L
             ZipInputStream(buffered).use { zip ->
                 while (true) {
                     currentCoroutineContext().ensureActive()
@@ -502,6 +503,12 @@ class SettingsBackupRepository(
                         file = File(staging, "entry-${entries.size}"),
                         sizeLimit = minOf(sizeLimit, MAX_TOTAL_BYTES - totalBytes),
                     )
+                    if (path == ANNOTATIONS_PATH || path == POSITIONS_PATH) {
+                        readingDataBytes += staged.size
+                        if (readingDataBytes > MAX_READING_DATA_BYTES) {
+                            return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
+                        }
+                    }
                     totalBytes += staged.size
                     entries[path] = staged
                     zip.closeEntry()
@@ -925,8 +932,10 @@ class SettingsBackupRepository(
         private const val SETTINGS_PATH = "settings.json"
         private const val ANNOTATIONS_PATH = "annotations.json"
         private const val POSITIONS_PATH = "positions.json"
-        private const val MAX_POSITIONS_BYTES = 16L * 1024 * 1024
-        private const val MAX_ANNOTATIONS_BYTES = 16L * 1024 * 1024
+        // JSON trees expand well beyond their file size during inspection and restore.
+        private const val MAX_READING_DATA_BYTES = 4L * 1024 * 1024
+        private const val MAX_POSITIONS_BYTES = MAX_READING_DATA_BYTES
+        private const val MAX_ANNOTATIONS_BYTES = MAX_READING_DATA_BYTES
         private const val MAX_SETTINGS_BYTES = 1024L * 1024
         private const val MAX_MANIFEST_BYTES = 1024L * 1024
         private const val MAX_FONT_FILES = UserFontRepository.MAX_FONTS

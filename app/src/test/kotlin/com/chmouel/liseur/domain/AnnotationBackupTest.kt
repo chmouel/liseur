@@ -59,6 +59,21 @@ class AnnotationBackupTest {
     }
 
     @Test
+    fun `negative timestamps and overflowing legacy timestamps are rejected`() {
+        val marks = listOf(
+            bookNote.copy(createdAt = -1), bookNote.copy(updatedAt = -1),
+            bookNote.copy(noteCreatedAt = -1), bookNote.copy(noteUpdatedAt = -1),
+            bookNote.copy(createdAt = Long.MAX_VALUE, updatedAt = 0),
+        )
+        for (mark in marks) {
+            val encoded = encodeAnnotationBackup(listOf(BackedUpBook(mark.bookId, null, null, listOf(mark))))
+            assertTrue(decodeAnnotationBackup(encoded) is BackupContents.Unreadable)
+        }
+        val largestSafe = bookNote.copy(createdAt = Long.MAX_VALUE / 1000, updatedAt = 0)
+        assertEquals(largestSafe, roundTrip(listOf(BackedUpBook(largestSafe.bookId, null, null, listOf(largestSafe)))).single().annotations.single())
+    }
+
+    @Test
     fun `annotation fractions outside the book are rejected`() {
         for (progression in listOf(-1.0, 2.0)) {
             val encoded = encodeAnnotationBackup(listOf(

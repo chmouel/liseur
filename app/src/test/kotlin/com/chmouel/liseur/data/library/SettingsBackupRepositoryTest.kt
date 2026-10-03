@@ -147,6 +147,19 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `combined reading payload size is rejected before JSON decoding`() = runTest {
+        val app = AppSettingsRepository(store("combined-limit-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("combined-limit-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val payload = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val entry = ByteArray(3 * 1024 * 1024) { ' '.code.toByte() }
+        val file = archive("combined-limit.zip", payload, mapOf(
+            "annotations.json" to entry, "positions.json" to entry,
+        ), format = 3)
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.TOO_LARGE), repository.inspect(Uri.fromFile(file)))
+    }
+
+    @Test
     fun `malformed position rejects the backup before changing settings`() = runTest {
         val app = AppSettingsRepository(store("bad-position-app.preferences_pb"))
         val reader = ReaderPreferencesRepository(store("bad-position-reader.preferences_pb"))
