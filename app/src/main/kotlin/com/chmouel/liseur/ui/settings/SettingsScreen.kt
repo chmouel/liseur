@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +23,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -56,7 +54,6 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.RemoteServer
-import com.chmouel.liseur.data.library.Inspection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ThemeMode
@@ -82,7 +79,6 @@ fun SettingsScreen(
     onOpenHiddenBooks: () -> Unit,
     libraryFolders: Flow<List<LibraryFolder>>,
     onRemoveFolder: (LibraryFolder) -> Unit,
-    backup: AnnotationBackupUi,
     onOpenSettingsBackup: () -> Unit,
     server: Flow<RemoteServer?>,
     onOpenAbout: () -> Unit,
@@ -352,7 +348,6 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_backup_detail),
                         onClick = onOpenSettingsBackup,
                     )
-                    HighlightsBackupCard(backup = backup, grouped = true)
                 }
 
                 SettingsGroup(stringResource(R.string.settings_about)) {
@@ -382,103 +377,6 @@ private fun PlainRow(title: String, onClick: () -> Unit) {
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier.clickable(onClick = onClick),
     )
-}
-
-/**
- * Keeping and carrying marks, as one card rather than two blind rows.
- *
- * The summary says what an export would hold before the picker asks
- * where to put it, and a restore is previewed before it is applied:
- * a file is a leap otherwise, and "Restored 0 marks" is a poor way to
- * find out the books in it are not on this phone.
- */
-@Composable
-private fun HighlightsBackupCard(backup: AnnotationBackupUi, grouped: Boolean = false) {
-    // The confirm dialog is owed to whichever file is being asked about.
-    (backup.pendingImport as? Inspection.Ready)?.let { ready ->
-        AlertDialog(
-            onDismissRequest = backup.dismissImport,
-            title = { Text(stringResource(R.string.import_preview_title)) },
-            text = {
-                Text(
-                    if (ready.preview.matchedBooks > 0) {
-                        stringResource(
-                            R.string.import_preview_body,
-                            ready.preview.marks,
-                            ready.preview.books,
-                            ready.preview.matchedBooks,
-                        )
-                    } else {
-                        stringResource(R.string.import_preview_none)
-                    },
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = backup.confirmImport,
-                    enabled = ready.preview.matchedBooks > 0,
-                ) {
-                    Text(stringResource(R.string.import_apply))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = backup.dismissImport) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
-    }
-
-    // Inside a section the card already exists; drawing another one
-    // would nest a box in a box.
-    val content: @Composable ColumnScope.() -> Unit = {
-        Column(Modifier.padding(vertical = 8.dp)) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    text = stringResource(R.string.annotations_backup_title),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Text(
-                    text = backup.summary?.let {
-                        if (it.marks > 0) {
-                            stringResource(R.string.annotations_backup_summary, it.marks, it.books)
-                        } else {
-                            stringResource(R.string.annotations_backup_none)
-                        }
-                    } ?: stringResource(R.string.annotations_backup_none),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            BackupActionRow(
-                icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
-                title = stringResource(R.string.export_annotations),
-                subtitle = stringResource(R.string.export_annotations_detail),
-                enabled = (backup.summary?.marks ?: 0) > 0,
-                onClick = backup.export,
-            )
-            BackupActionRow(
-                icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
-                title = stringResource(R.string.import_annotations),
-                subtitle = stringResource(R.string.import_annotations_detail),
-                enabled = true,
-                onClick = backup.restore,
-            )
-            backup.status?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-        }
-    }
-    if (grouped) {
-        Column(content = content)
-    } else {
-        Card(Modifier.padding(top = 8.dp).fillMaxWidth(), content = content)
-    }
 }
 
 @Composable

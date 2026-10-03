@@ -112,18 +112,9 @@ class AnnotationBackupRepository(
     }
 
     suspend fun exportTo(target: Uri): BackupResult = withContext(Dispatchers.IO) {
-        val annotations = annotationDao.all()
-        if (annotations.isEmpty()) return@withContext BackupResult.NothingToExport
+        val books = exportContents().books
+        if (books.isEmpty()) return@withContext BackupResult.NothingToExport
 
-        val titles = bookDao.allOnce().associateBy { it.url }
-        val books = annotations.groupBy { it.bookId }.map { (bookId, marks) ->
-            BackedUpBook(
-                bookId = bookId,
-                title = titles[bookId]?.title,
-                author = titles[bookId]?.author,
-                annotations = marks,
-            )
-        }
         try {
             context.contentResolver.openOutputStream(target, "wt")?.use { out ->
                 out.write(encodeAnnotationBackup(books).toByteArray())
@@ -131,7 +122,7 @@ class AnnotationBackupRepository(
         } catch (e: java.io.IOException) {
             return@withContext BackupResult.Failed(e.message)
         }
-        BackupResult.Exported(books = books.size, annotations = annotations.size)
+        BackupResult.Exported(books = books.size, annotations = books.sumOf { it.annotations.size })
     }
 
     suspend fun importFrom(source: Uri): BackupResult = withContext(Dispatchers.IO) {
@@ -145,31 +136,47 @@ class AnnotationBackupRepository(
         val contents = decodeAnnotationBackup(text)
         if (contents is BackupContents.Unreadable) return@withContext BackupResult.Failed(contents.reason)
 
-        val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
-        val incoming = (contents as BackupContents.Readable).books.flatMap { book ->
-            val bookId = matchBackedUpBook(book, known)
-            book.annotations.map { mark ->
-                // The backup format records when a mark was made and
-                // nothing else, so that is what it changed at. It has to
-                // be something: liseur-sync sends this as `client_ts`,
-                // and a restored mark left at zero would claim to have
-                // been written in 1970 and disagree with every device
-                // that already has it.
-                mark.copy(
-                    bookId = bookId,
-                    updatedAt = mark.updatedAt.takeIf { it > 0 } ?: (mark.createdAt * 1000),
-                )
-            }
-        }
-        if (incoming.isEmpty()) return@withContext BackupResult.Imported(added = 0, alreadyHere = 0)
-
-        val inserted = annotationDao.insertMissing(incoming)
-        val added = inserted.count { it != -1L }
-        incoming.zip(inserted)
-            .filter { (_, rowId) -> rowId != -1L }
-            .map { (mark, _) -> mark.bookId }
-            .distinct()
-            .forEach(requestBookSync)
-        BackupResult.Imported(added = added, alreadyHere = incoming.size - added)
+        importContents(contents as BackupContents.Readable)
     }
+
+    internal suspend fun exportContents(): BackupContents.Readable = withContext(Dispatchers.IO) {
+        val titles = bookDao.allOnce().associateBy { it.url }
+        BackupContents.Readable(
+            annotationDao.all().groupBy { it.bookId }.map { (bookId, marks) ->
+                BackedUpBook(bookId, titles[bookId]?.title, titles[bookId]?.author, marks)
+            },
+        )
+    }
+
+    internal suspend fun previewContents(contents: BackupContents.Readable): BackupPreview =
+        withContext(Dispatchers.IO) {
+            val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
+            BackupPreview.of(previewBackupMatch(contents, known))
+        }
+
+    internal suspend fun importContents(contents: BackupContents.Readable): BackupResult.Imported =
+        withContext(Dispatchers.IO) {
+            val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
+            val incoming = contents.books.flatMap { book ->
+                val bookId = matchBackedUpBook(book, known)
+                book.annotations.map { mark ->
+                    // Older backups omit the edit timestamp. Use the creation
+                    // time in microseconds rather than sending a zero client_ts.
+                    mark.copy(
+                        bookId = bookId,
+                        updatedAt = mark.updatedAt.takeIf { it > 0 } ?: (mark.createdAt * 1000),
+                    )
+                }
+            }
+            if (incoming.isEmpty()) return@withContext BackupResult.Imported(added = 0, alreadyHere = 0)
+
+            val inserted = annotationDao.insertMissing(incoming)
+            val added = inserted.count { it != -1L }
+            incoming.zip(inserted)
+                .filter { (_, rowId) -> rowId != -1L }
+                .map { (mark, _) -> mark.bookId }
+                .distinct()
+                .forEach(requestBookSync)
+            BackupResult.Imported(added = added, alreadyHere = incoming.size - added)
+        }
 }

@@ -19,6 +19,7 @@ import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.SettingsBackupRepository
+import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -194,7 +195,10 @@ class AppContainer(context: Context) {
         appSettings = appSettings,
         readerPreferences = readerPreferences,
         userFonts = userFonts,
+        annotations = annotationBackup,
     )
+
+    val bookExport = BookExportRepository(context.applicationContext, database.bookDao())
 
     val sessionState = SessionStateRepository(context.applicationContext)
 

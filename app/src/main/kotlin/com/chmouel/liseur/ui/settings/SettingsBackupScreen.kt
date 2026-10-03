@@ -12,6 +12,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material3.LinearProgressIndicator
+import com.chmouel.liseur.data.library.BookExportResult
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,7 +66,21 @@ fun SettingsBackupScreen(
                         R.string.settings_backup_preview_body,
                         settingCount,
                         fontCount,
-                    ),
+                        stringResource(
+                            R.string.annotations_backup_summary,
+                            ready.preview.annotationCount,
+                            ready.preview.annotationBookCount,
+                        ),
+                    ) + if (ready.preview.annotationCount > 0) {
+                        "\n\n" + stringResource(
+                            R.string.import_preview_body,
+                            ready.preview.annotationCount,
+                            ready.preview.annotationBookCount,
+                            ready.preview.matchedAnnotationBooks,
+                        )
+                    } else {
+                        ""
+                    },
                 )
             },
             confirmButton = {
@@ -128,13 +145,39 @@ fun SettingsBackupScreen(
                     enabled = !backup.busy,
                     onClick = backup.restore,
                 )
+                BackupActionRow(
+                    icon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                    title = stringResource(R.string.books_export_title),
+                    subtitle = stringResource(R.string.books_export_detail),
+                    enabled = !backup.busy,
+                    onClick = backup.exportBooks,
+                )
+                backup.bookProgress?.let { progress ->
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text(
+                            stringResource(R.string.books_export_progress, progress.processed, progress.total),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        if (progress.total > 0) {
+                            LinearProgressIndicator(
+                                progress = { progress.processed.toFloat() / progress.total },
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            )
+                        } else {
+                            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                        }
+                        TextButton(onClick = backup.cancelBookExport) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                }
                 backup.status?.let { status ->
                     val message = when (status) {
                         is SettingsBackupUiStatus.Exported -> pluralStringResource(
                             R.plurals.settings_backup_exported,
                             status.fonts,
                             status.fonts,
-                        )
+                        ) + " " + stringResource(R.string.settings_backup_annotation_count, status.annotations)
                         is SettingsBackupUiStatus.Restored -> {
                             val restoredFonts = if (status.fontsImported > 0) {
                                 pluralStringResource(
@@ -168,12 +211,36 @@ fun SettingsBackupScreen(
                                 restoredFonts,
                                 alreadyInstalled,
                                 fontFailures,
+                                if (status.annotationsAdded > 0) {
+                                    stringResource(R.string.import_annotations_done, status.annotationsAdded)
+                                } else if (status.annotationsAlreadyPresent > 0) {
+                                    stringResource(R.string.import_annotations_none)
+                                } else {
+                                    null
+                                },
                             ).joinToString(" ")
                         }
                         is SettingsBackupUiStatus.Failed ->
                             stringResource(status.failure.message)
                         SettingsBackupUiStatus.PartiallyRestored ->
                             stringResource(R.string.settings_backup_error_partial)
+                        is SettingsBackupUiStatus.BooksExported -> when (val result = status.result) {
+                            is BookExportResult.Completed -> stringResource(
+                                R.string.books_export_result,
+                                result.counts.exported, result.counts.skipped, result.counts.failed,
+                            )
+                            BookExportResult.Empty -> stringResource(R.string.books_export_empty)
+                            is BookExportResult.Failed -> stringResource(
+                                when (result.reason) {
+                                    BookExportResult.Failure.LIBRARY -> R.string.books_export_error_library
+                                    BookExportResult.Failure.FOLDER -> R.string.books_export_error_folder
+                                },
+                            )
+                        }
+                        is SettingsBackupUiStatus.BooksExportCancelled -> stringResource(
+                            R.string.books_export_cancelled,
+                            status.counts.exported, status.counts.skipped, status.counts.failed,
+                        )
                     }
                     Text(
                         text = message,

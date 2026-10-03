@@ -1,6 +1,7 @@
 package com.chmouel.liseur.domain
 
 import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.data.db.AnnotationKind
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -70,6 +71,7 @@ fun encodeAnnotationBackup(books: List<BackedUpBook>): String {
                     a.position?.let { put("position", it) }
                     a.totalProgression?.let { put("progression", it) }
                     put("created_at", a.createdAt)
+                    put("updated_at", a.updatedAt)
                     a.noteCreatedAt?.let { put("note_created_at", it) }
                     a.noteUpdatedAt?.let { put("note_updated_at", it) }
                 },
@@ -95,21 +97,42 @@ fun decodeAnnotationBackup(json: String): BackupContents {
     } catch (e: org.json.JSONException) {
         return BackupContents.Unreadable(e.message ?: "not a backup file")
     }
-    if (root.optInt("format", 0) > FORMAT) {
-        return BackupContents.Unreadable("made by a newer version of Liseur")
+    if (root.opt("format") != FORMAT || root.opt("application") != "liseur") {
+        return BackupContents.Unreadable("not a supported Liseur annotation backup")
     }
     val books = root.optJSONArray("books")
         ?: return BackupContents.Unreadable("no books in this file")
 
     val out = mutableListOf<BackedUpBook>()
     for (i in 0 until books.length()) {
-        val entry = books.optJSONObject(i) ?: continue
-        val bookId = entry.optString("book_id").takeIf { it.isNotEmpty() } ?: continue
-        val marks = entry.optJSONArray("annotations") ?: JSONArray()
+        val entry = books.optJSONObject(i) ?: return BackupContents.Unreadable("invalid book")
+        val bookId = (entry.opt("book_id") as? String)?.takeIf { it.isNotEmpty() }
+            ?: return BackupContents.Unreadable("missing book identity")
+        if (listOf("title", "author").any { !entry.isNull(it) && entry.opt(it) !is String }) {
+            return BackupContents.Unreadable("invalid book metadata")
+        }
+        val marks = entry.optJSONArray("annotations")
+            ?: return BackupContents.Unreadable("missing annotations")
         val annotations = mutableListOf<BookAnnotation>()
         for (j in 0 until marks.length()) {
-            val m = marks.optJSONObject(j) ?: continue
-            val id = m.optString("id").takeIf { it.isNotEmpty() } ?: continue
+            val m = marks.optJSONObject(j) ?: return BackupContents.Unreadable("invalid annotation")
+            val id = (m.opt("id") as? String)?.takeIf { it.isNotEmpty() }
+                ?: return BackupContents.Unreadable("missing annotation identity")
+            if (
+                AnnotationKind.entries.none { it.name == m.opt("kind") } ||
+                m.opt("locator") !is String ||
+                !m.isInteger("created_at") ||
+                listOf("updated_at", "note_created_at", "note_updated_at", "position").any {
+                    !m.isNull(it) && !m.isInteger(it)
+                } ||
+                listOf("text", "note", "tint", "chapter").any {
+                    !m.isNull(it) && m.opt(it) !is String
+                } ||
+                (!m.isNull("progression") &&
+                    ((m.opt("progression") as? Number)?.toDouble()?.let { it.isFinite() } != true))
+            ) {
+                return BackupContents.Unreadable("invalid annotation fields")
+            }
             annotations += BookAnnotation(
                 id = id,
                 bookId = bookId,
@@ -119,9 +142,10 @@ fun decodeAnnotationBackup(json: String): BackupContents {
                 note = m.optStringOrNull("note"),
                 tint = m.optStringOrNull("tint"),
                 chapter = m.optStringOrNull("chapter"),
-                position = if (m.has("position")) m.optInt("position") else null,
-                totalProgression = if (m.has("progression")) m.optDouble("progression") else null,
+                position = if (!m.isNull("position")) m.optInt("position") else null,
+                totalProgression = if (!m.isNull("progression")) m.optDouble("progression") else null,
                 createdAt = m.optLong("created_at"),
+                updatedAt = m.optLong("updated_at"),
                 noteCreatedAt = m.optLongOrNull("note_created_at"),
                 noteUpdatedAt = m.optLongOrNull("note_updated_at"),
             )
@@ -165,6 +189,9 @@ fun matchBackedUpBook(
             ?: backedUp.bookId
     }
 }
+
+private fun JSONObject.isInteger(key: String): Boolean =
+    opt(key) is Int || opt(key) is Long
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotEmpty() }

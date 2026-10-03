@@ -10,6 +10,14 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
+import androidx.room.Room
+import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookAnnotation
+import com.chmouel.liseur.data.db.BookAnnotationDao
+import com.chmouel.liseur.data.db.AnnotationKind
+import com.chmouel.liseur.domain.BackedUpBook
+import com.chmouel.liseur.domain.encodeAnnotationBackup
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -33,6 +41,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 import org.junit.runner.RunWith
 import org.junit.rules.TemporaryFolder
 import org.robolectric.RobolectricTestRunner
@@ -45,6 +55,18 @@ class SettingsBackupRepositoryTest {
     val folder = TemporaryFolder()
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
+    private lateinit var db: LiseurDatabase
+    private val requested = mutableListOf<String>()
+
+    @Before
+    fun open() {
+        db = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java).build()
+    }
+
+    @After
+    fun close() {
+        db.close()
+    }
 
     @Test
     fun `an exported archive restores app and reader settings`() = runTest {
@@ -471,11 +493,168 @@ class SettingsBackupRepositoryTest {
         )
     }
 
+    @Test
+    fun `one ZIP restores annotations alongside settings without overwriting existing marks`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("combined-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("combined-reader.preferences_pb"))
+        app.setThemeMode(ThemeMode.DARK)
+        db.bookDao().upsert(book("source-book"))
+        val marks = AnnotationKind.entries.map { kind ->
+            BookAnnotation(
+                id = kind.name,
+                bookId = "source-book",
+                kind = kind.name,
+                locatorJson = if (kind == AnnotationKind.BOOK_NOTE) "" else "{\"href\":\"chapter.xhtml\"}",
+                text = "A passage",
+                note = "A note",
+                tint = "YELLOW",
+                createdAt = 123,
+                noteCreatedAt = 124,
+                noteUpdatedAt = 125000,
+                updatedAt = 126000,
+            )
+        }
+        marks.forEach { db.annotationDao().upsert(it) }
+        val uri = Uri.fromFile(File(folder.root, "combined.zip"))
+        val repository = repository(app, reader, fonts)
+        assertEquals(SettingsBackupExportResult.Exported(0, 4), repository.exportTo(uri))
+        ZipFile(File(uri.path!!)).use { zip ->
+            assertTrue(zip.getEntry("annotations.json") != null)
+            val manifest = JSONObject(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText())
+            assertEquals(2, manifest.getInt("format"))
+        }
+
+        db.annotationDao().deleteForBook("source-book")
+        db.bookDao().upsert(book("target-book"))
+        // Remove the source identity so matching uses the title and author on this device.
+        db.bookDao().deleteByUrls(listOf("source-book"))
+        val edited = marks.first().copy(bookId = "target-book", note = "A newer local note")
+        db.annotationDao().upsert(edited)
+        app.setThemeMode(ThemeMode.LIGHT)
+
+        val ready = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(SettingsBackupPreview(1, 0, 4, 1, 1), ready.preview)
+        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0, 3, 1), repository.restore(ready.archiveId))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+        assertEquals(edited, db.annotationDao().byId(edited.id))
+        marks.drop(1).forEach { mark ->
+            assertEquals(mark.copy(bookId = "target-book"), db.annotationDao().byId(mark.id))
+        }
+        assertEquals(listOf("target-book"), requested)
+        requested.clear()
+        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0, 0, 4), restore(repository, uri))
+        assertTrue(requested.isEmpty())
+    }
+
+    @Test
+    fun `the same restore action accepts legacy annotation JSON and preserves settings`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("legacy-annotation-app.preferences_pb"))
+        app.setThemeMode(ThemeMode.DARK)
+        val reader = ReaderPreferencesRepository(store("legacy-annotation-reader.preferences_pb"))
+        reader.setFontSize(1.75)
+        val mark = BookAnnotation("orphan", "missing-book", AnnotationKind.BOOK_NOTE.name, "", note = "Keep me", createdAt = 123)
+        val file = File(folder.root, "legacy-annotations.json").apply {
+            val json = JSONObject(encodeAnnotationBackup(listOf(BackedUpBook("missing-book", null, null, listOf(mark)))))
+            json.getJSONArray("books").getJSONObject(0).getJSONArray("annotations").getJSONObject(0).remove("updated_at")
+            writeText(json.toString())
+        }
+        val repository = repository(app, reader, fonts)
+        val ready = repository.inspect(Uri.fromFile(file)) as SettingsBackupInspection.Ready
+        assertEquals(SettingsBackupPreview(0, 0, 1, 1, 0), ready.preview)
+        file.writeText("The picked file changed after preview")
+        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0, 1, 0), repository.restore(ready.archiveId))
+        assertEquals(mark.copy(updatedAt = 123000), db.annotationDao().byId("orphan"))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+        assertEquals(1.75, reader.prefs.first().fontSize, 0.0)
+    }
+
+    @Test
+    fun `invalid annotations reject the whole backup before settings change`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("invalid-annotations-app.preferences_pb"))
+        app.setThemeMode(ThemeMode.LIGHT)
+        val reader = ReaderPreferencesRepository(store("invalid-annotations-reader.preferences_pb"))
+        val payload = JSONObject().put("app", JSONObject().put("theme_mode", "dark")).put("reader", JSONObject())
+        val file = archive("invalid-annotations.zip", payload, mapOf("annotations.json" to "broken".toByteArray()), format = 2)
+        assertEquals(
+            SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+            restore(repository(app, reader, fonts), Uri.fromFile(file)),
+        )
+        assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
+        assertTrue(db.annotationDao().all().isEmpty())
+    }
+
+    @Test
+    fun `version two requires its annotation payload`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("missing-annotations-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("missing-annotations-reader.preferences_pb"))
+        val payload = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val file = archive("missing-annotations.zip", payload, format = 2)
+        assertEquals(
+            SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+            repository(app, reader, fonts).inspect(Uri.fromFile(file)),
+        )
+    }
+
+    @Test
+    fun `version one settings backups preserve destination annotations`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("version-one-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("version-one-reader.preferences_pb"))
+        val mark = BookAnnotation("existing", "local-book", AnnotationKind.BOOK_NOTE.name, "", note = "Keep me", createdAt = 123)
+        db.annotationDao().upsert(mark)
+        val payload = JSONObject().put("app", JSONObject().put("theme_mode", "dark")).put("reader", JSONObject())
+        val file = archive("version-one.zip", payload)
+        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(repository(app, reader, fonts), Uri.fromFile(file)))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+        assertEquals(mark, db.annotationDao().byId(mark.id))
+        assertTrue(requested.isEmpty())
+    }
+
+    @Test
+    fun `annotation storage failure is reported as a partial restore`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("annotation-failure-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("annotation-failure-reader.preferences_pb"))
+        val mark = BookAnnotation("incoming", "local-book", AnnotationKind.BOOK_NOTE.name, "", note = "Keep me", createdAt = 123)
+        val payload = JSONObject().put("app", JSONObject().put("theme_mode", "dark")).put("reader", JSONObject())
+        val json = encodeAnnotationBackup(listOf(BackedUpBook(mark.bookId, null, null, listOf(mark))))
+        val file = archive("annotation-failure.zip", payload, mapOf("annotations.json" to json.toByteArray()), format = 2)
+        val failingDao = object : BookAnnotationDao by db.annotationDao() {
+            override suspend fun insertMissing(annotations: List<BookAnnotation>): List<Long> = throw IOException("storage failed")
+        }
+        val repository = SettingsBackupRepository(
+            context, app, reader, fonts,
+            AnnotationBackupRepository(context, failingDao, db.bookDao(), requested::add),
+        )
+        assertEquals(SettingsBackupRestoreResult.PartiallyRestored, restore(repository, Uri.fromFile(file)))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+        assertTrue(db.annotationDao().all().isEmpty())
+        assertTrue(requested.isEmpty())
+    }
+
+    private fun book(url: String) = Book(
+        url = url, title = "A book", author = "An author", coverPath = null, source = null,
+        addedAt = 0, lastOpenedAt = null,
+    )
+
     private fun repository(
         app: AppSettingsRepository,
         reader: ReaderPreferencesRepository,
         fonts: UserFontRepository,
-    ) = SettingsBackupRepository(context, app, reader, fonts)
+    ) = SettingsBackupRepository(
+        context, app, reader, fonts,
+        AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+    )
 
     private suspend fun restore(
         repository: SettingsBackupRepository,

@@ -763,14 +763,22 @@
     <string name="settings_library">Bibliothèque</string>
     <string name="settings_remote_library">Bibliothèques distantes</string>
     <string name="settings_export_import">Exporter et importer</string>
-    <string name="settings_backup_title">Paramètres et polices</string>
-    <string name="settings_backup_detail">Enregistrez les préférences et les polices personnalisées dans une archive ZIP.</string>
+    <string name="books_export_title">Exporter les livres téléchargés</string>
+    <string name="books_export_detail">Copiez tous les EPUB disponibles hors ligne dans un dossier. Les noms de fichiers existants sont ignorés.</string>
+    <string name="books_export_progress">Export des livres : %1$d sur %2$d</string>
+    <string name="books_export_result">Exportés : %1$d. Ignorés : %2$d. Échecs : %3$d.</string>
+    <string name="books_export_cancelled">Export annulé. Exportés : %1$d. Ignorés : %2$d. Échecs : %3$d.</string>
+    <string name="books_export_empty">Aucun livre hors ligne à exporter.</string>
+    <string name="books_export_error_library">Impossible de lire la bibliothèque pour l’export.</string>
+    <string name="books_export_error_folder">Impossible d’exporter dans ce dossier. Choisissez un dossier accessible en écriture.</string>
+    <string name="settings_backup_title">Sauvegarde et restauration</string>
+    <string name="settings_backup_detail">Enregistrez les paramètres, polices personnalisées, surlignages, notes et signets dans une archive ZIP.</string>
     <string name="settings_backup_export">Exporter la sauvegarde</string>
-    <string name="settings_backup_export_detail">Créez une archive ZIP datée avec vos paramètres et vos polices.</string>
+    <string name="settings_backup_export_detail">Créez une archive ZIP datée avec vos paramètres, polices et annotations.</string>
     <string name="settings_backup_restore">Restaurer une sauvegarde</string>
     <string name="settings_backup_restore_detail">Prévisualisez une sauvegarde avant de l’appliquer.</string>
-    <string name="settings_backup_preview_title">Restaurer les paramètres et les polices ?</string>
-    <string name="settings_backup_preview_body">Cette sauvegarde contient %1$s et %2$s. Les paramètres globaux seront modifiés ; les données de lecture existantes seront conservées.</string>
+    <string name="settings_backup_preview_title">Restaurer cette sauvegarde ?</string>
+    <string name="settings_backup_preview_body">Cette sauvegarde contient %1$s, %2$s et %3$s. Les paramètres enregistrés seront appliqués ; les annotations seront ajoutées sans remplacer les marques existantes.</string>
     <string name="settings_backup_restore_action">Restaurer</string>
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d paramètre</item>
@@ -796,14 +804,15 @@
         <item quantity="one">%1$d police n’a pas pu être installée.</item>
         <item quantity="other">%1$d polices n’ont pas pu être installées.</item>
     </plurals>
-    <string name="settings_backup_restored_settings">Paramètres restaurés.</string>
+    <string name="settings_backup_annotation_count">Annotations : %1$d.</string>
+    <string name="settings_backup_restored_settings">Sauvegarde restaurée.</string>
     <string name="settings_backup_error_file">Impossible d’ouvrir ou d’enregistrer ce fichier de sauvegarde.</string>
-    <string name="settings_backup_error_invalid">Ce fichier n’est pas une sauvegarde de paramètres valide ou il est endommagé.</string>
+    <string name="settings_backup_error_invalid">Ce fichier n’est pas une sauvegarde valide ou il est endommagé.</string>
     <string name="settings_backup_error_version">Cette sauvegarde a été créée avec une version de l’application qui ne peut pas être lue.</string>
     <string name="settings_backup_error_size">Cette sauvegarde est trop volumineuse pour être restaurée.</string>
     <string name="settings_backup_error_storage">Impossible de préparer la sauvegarde dans le stockage de l’appareil.</string>
-    <string name="settings_backup_error_restore">Impossible de restaurer les paramètres.</string>
-    <string name="settings_backup_error_partial">Une partie des paramètres a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos paramètres.</string>
+    <string name="settings_backup_error_restore">Impossible de restaurer la sauvegarde.</string>
+    <string name="settings_backup_error_partial">Une partie de la sauvegarde a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos paramètres et annotations.</string>
     <string name="settings_library_help_title">Serveurs de livres</string>
     <string name="settings_library_help_body" formatted="true">Un serveur de livres — calibre-web, Komga, liseur-sync ou un catalogue OPDS — détient votre bibliothèque : Liseur la parcourt et télécharge depuis elle, et garde votre place à jour là où le serveur le permet. Une connexion OPDS Personnalisée peut s\'associer à un serveur de sync KOReader pour les positions de lecture. Un seul serveur est connecté à la fois.\n\nliseur-sync est celui qui garde aussi à jour les livres qui n\'étaient que sur ce téléphone : un fichier d\'une carte SD synchronise aussi sa position. Hébergez le vôtre depuis %1$s.</string>
     <string name="settings_account_detail">Parcourir et télécharger depuis un serveur calibre-web, Komga, liseur-sync ou OPDS, et garder votre place à jour — OPDS via un serveur de sync KOReader associé.</string>

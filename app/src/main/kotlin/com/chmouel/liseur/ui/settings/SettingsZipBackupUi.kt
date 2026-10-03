@@ -14,6 +14,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chmouel.liseur.container
+import com.chmouel.liseur.data.library.BookExportRepository
+import com.chmouel.liseur.data.library.BookExportProgress
+import com.chmouel.liseur.data.library.BookExportResult
+import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.data.library.SettingsBackupExportResult
 import com.chmouel.liseur.data.library.SettingsBackupFailure
 import com.chmouel.liseur.data.library.SettingsBackupInspection
@@ -35,6 +39,9 @@ data class SettingsZipBackupUi(
     val preview: SettingsBackupInspection.Ready?,
     val status: SettingsBackupUiStatus?,
     val busy: Boolean,
+    val bookProgress: BookExportProgress?,
+    val exportBooks: () -> Unit,
+    val cancelBookExport: () -> Unit,
     val export: () -> Unit,
     val restore: () -> Unit,
     val confirmRestore: () -> Unit,
@@ -43,25 +50,31 @@ data class SettingsZipBackupUi(
 )
 
 sealed interface SettingsBackupUiStatus {
-    data class Exported(val fonts: Int) : SettingsBackupUiStatus
+    data class Exported(val fonts: Int, val annotations: Int) : SettingsBackupUiStatus
     data class Restored(
         val fontsImported: Int,
         val fontsAlreadyPresent: Int,
         val fontFailures: Int,
+        val annotationsAdded: Int,
+        val annotationsAlreadyPresent: Int,
     ) : SettingsBackupUiStatus
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupUiStatus
     data object PartiallyRestored : SettingsBackupUiStatus
+    data class BooksExported(val result: BookExportResult) : SettingsBackupUiStatus
+    data class BooksExportCancelled(val counts: BookExportProgress) : SettingsBackupUiStatus
 }
 
 private data class SettingsBackupState(
     val preview: SettingsBackupInspection.Ready? = null,
     val status: SettingsBackupUiStatus? = null,
     val busy: Boolean = false,
+    val bookProgress: BookExportProgress? = null,
 )
 
 private class SettingsBackupViewModel(
     private val repository: SettingsBackupRepository,
+    private val bookExport: BookExportRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsBackupState())
     val state = _state.asStateFlow()
@@ -74,10 +87,31 @@ private class SettingsBackupViewModel(
     fun export(uri: Uri) = runBusy {
         _state.update {
             it.copy(status = when (val result = repository.exportTo(uri)) {
-                is SettingsBackupExportResult.Exported -> SettingsBackupUiStatus.Exported(result.fonts)
+                is SettingsBackupExportResult.Exported -> SettingsBackupUiStatus.Exported(result.fonts, result.annotations)
                 is SettingsBackupExportResult.Failed -> SettingsBackupUiStatus.Failed(result.failure)
             })
         }
+    }
+
+    fun exportBooks(uri: Uri) = runBusy {
+        _state.update { it.copy(status = null, bookProgress = BookExportProgress(0)) }
+        try {
+            val result = bookExport.exportTo(uri) { progress ->
+                _state.update { it.copy(bookProgress = progress) }
+            }
+            _state.update { it.copy(status = SettingsBackupUiStatus.BooksExported(result)) }
+        } catch (e: CancellationException) {
+            _state.update {
+                it.copy(status = SettingsBackupUiStatus.BooksExportCancelled(it.bookProgress ?: BookExportProgress(0)))
+            }
+            throw e
+        } finally {
+            _state.update { it.copy(bookProgress = null) }
+        }
+    }
+
+    fun cancelBookExport() {
+        if (_state.value.bookProgress != null) activeOperation?.cancel()
     }
 
     fun inspect(uri: Uri) = runBusy {
@@ -103,6 +137,8 @@ private class SettingsBackupViewModel(
                                 result.fontsImported,
                                 result.fontsAlreadyPresent,
                                 result.fontFailures,
+                                result.annotationsAdded,
+                                result.annotationsAlreadyPresent,
                             )
                             is SettingsBackupRestoreResult.Failed ->
                                 SettingsBackupUiStatus.Failed(result.failure)
@@ -148,7 +184,7 @@ private class SettingsBackupViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = checkNotNull(this[APPLICATION_KEY])
-                SettingsBackupViewModel(app.container.settingsBackup)
+                SettingsBackupViewModel(app.container.settingsBackup, app.container.bookExport)
             }
         }
     }
@@ -164,10 +200,16 @@ fun rememberSettingsZipBackup(): SettingsZipBackupUi {
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
         if (it != null) model.inspect(it)
     }
+    val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        if (it != null) model.exportBooks(it)
+    }
     return SettingsZipBackupUi(
         preview = state.preview,
         status = state.status,
         busy = state.busy,
+        bookProgress = state.bookProgress,
+        exportBooks = { folder.launch(null) },
+        cancelBookExport = model::cancelBookExport,
         export = {
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
             save.launch("liseur-backup-$date.zip")

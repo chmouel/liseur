@@ -82,6 +82,21 @@ class AnnotationBackupTest {
     }
 
     @Test
+    fun `annotation edit timestamps survive a backup`() {
+        val edited = full.copy(updatedAt = 1_700_000_020_000_000)
+        val back = roundTrip(listOf(BackedUpBook(edited.bookId, null, null, listOf(edited))))
+        assertEquals(edited, back.single().annotations.single())
+    }
+
+    @Test
+    fun `malformed annotation entries are rejected instead of silently dropped`() {
+        val json = org.json.JSONObject(encodeAnnotationBackup(listOf(BackedUpBook(full.bookId, null, null, listOf(full)))))
+        val mark = json.getJSONArray("books").getJSONObject(0).getJSONArray("annotations").getJSONObject(0)
+        mark.remove("id")
+        assertTrue(decodeAnnotationBackup(json.toString()) is BackupContents.Unreadable)
+    }
+
+    @Test
     fun `a bookmark with nothing written on it comes back empty, not blank`() {
         val back = roundTrip(listOf(BackedUpBook("calibre:uuid-1", null, null, listOf(bare))))
         assertEquals(bare, back.single().annotations.single())

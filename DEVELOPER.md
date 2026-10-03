@@ -124,8 +124,9 @@ without it the release build is simply unsigned.
 
 ## Settings backup archive
 
-Settings backups are ZIP files with a versioned `manifest.json`, a
-`settings.json` payload, and optional `fonts/<sha256>.(ttf|otf)` entries.
+Backups are ZIP files with a versioned `manifest.json`, `settings.json` and
+`annotations.json` payloads, and optional `fonts/<sha256>.(ttf|otf)` entries.
+Version 2 includes annotations; version 1 settings-only archives remain readable.
 The manifest records each payload entry's size and SHA-256 checksum. The
 settings payload uses explicit allowlists for the app and reader preference
 stores; account credentials, server connections, sync metadata, and transient
@@ -133,13 +134,26 @@ notices are not included. Unset keys remain absent so restoring a backup
 leaves destination values alone when the archive did not store that setting.
 Custom font entry names retain their content-based identifiers.
 
-The Settings backup screen inspects a ZIP and previews its setting and font
-counts before restore. Unknown optional JSON fields are ignored; malformed
+The Backup and restore screen previews settings, fonts, annotations, and
+matching library books before restore. The same Restore action also accepts
+older annotation-only JSON files. Restoring annotations adds missing marks,
+preserves existing ones, and requests sync for books with newly added marks.
+Unknown optional JSON fields are ignored; malformed
 known fields, unsafe or duplicate paths, checksum mismatches, and unsupported
 versions are rejected. Font files are passed through the normal font importer,
 so its validation and installation limits still apply. Settings are written
 to two independent DataStores, so a storage failure can leave a partial
-restore. Annotation JSON transfer remains a separate feature.
+restore. An annotation storage failure after settings were applied is also
+reported as a partial restore.
+
+The same screen offers a separate folder export for all offline EPUBs, including
+imports, watched-folder books, hidden books, and archived books. Copies use
+sanitized title-and-author filenames. Existing names and duplicate export names
+are skipped case-insensitively. Export streams files individually, reports
+exported/skipped/failed counts, and continues after per-book failures. Cancelling
+or leaving the screen stops the export; completed copies remain and incomplete
+copies are removed where the folder provider permits it. Rotation preserves the
+running export. This action does not modify the library or download remote books.
 
 ## Testing
 
