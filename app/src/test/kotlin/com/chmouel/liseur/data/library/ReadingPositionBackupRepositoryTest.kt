@@ -43,6 +43,19 @@ class ReadingPositionBackupRepositoryTest {
     }
 
     @Test
+    fun `export carries every position across several pages`() = runTest {
+        val expected = List(75) { index ->
+            BackedUpReadingPosition("book-${index.toString().padStart(3, '0')}", null, null, locator, 0.2, 10)
+        }
+        expected.forEach {
+            db.readingProgressDao().upsert(ReadingProgress(it.bookId, it.locatorJson, it.progression, updatedAt = it.readAt))
+        }
+        val file = folder.newFile()
+        repository().writeContents(file, 65536)
+        assertEquals(expected, decodeReadingPositionBackup(file.readText()))
+    }
+
+    @Test
     fun `restore refuses to replace a position being used by an open reader`() = runTest {
         val saved = ReadingProgress("book", locator, 0.2, updatedAt = 20)
         db.readingProgressDao().upsert(saved)

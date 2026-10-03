@@ -40,22 +40,25 @@ class ReadingPositionBackupRepository(
             JsonWriter(bounded.writer(Charsets.UTF_8)).use { writer ->
                 writer.beginObject().name("format").value(1).name("application").value("liseur")
                     .name("positions").beginArray()
-                while (true) {
-                    currentCoroutineContext().ensureActive()
-                    val position = progressDao.nextForBackup(lastUrl) ?: break
-                    lastUrl = position.bookUrl
-                    // Status-only rows have no saved place to restore.
-                    if (runCatching { Locator.fromJSON(JSONObject(position.locatorJson)) }.getOrNull() == null) continue
-                    val book = bookDao.getByUrl(position.bookUrl)
-                    writer.beginObject().name("book_id").value(position.bookUrl)
-                    book?.title?.let { writer.name("title").value(it) }
-                    book?.author?.let { writer.name("author").value(it) }
-                    writer.name("locator").value(position.locatorJson)
-                    position.totalProgression?.takeIf { it.isFinite() && it in 0.0..1.0 }
-                        ?.let { writer.name("progression").value(it) }
-                    writer.name("read_at").value((position.readAt ?: position.updatedAt).coerceAtLeast(0))
-                        .endObject()
-                    writer.flush()
+                var page = progressDao.firstBackupPage()
+                while (page.isNotEmpty()) {
+                    for (position in page) {
+                        currentCoroutineContext().ensureActive()
+                        lastUrl = position.bookUrl
+                        // Status-only rows have no saved place to restore.
+                        if (runCatching { Locator.fromJSON(JSONObject(position.locatorJson)) }.getOrNull() == null) continue
+                        val book = bookDao.getByUrl(position.bookUrl)
+                        writer.beginObject().name("book_id").value(position.bookUrl)
+                        book?.title?.let { writer.name("title").value(it) }
+                        book?.author?.let { writer.name("author").value(it) }
+                        writer.name("locator").value(position.locatorJson)
+                        position.totalProgression?.takeIf { it.isFinite() && it in 0.0..1.0 }
+                            ?.let { writer.name("progression").value(it) }
+                        writer.name("read_at").value((position.readAt ?: position.updatedAt).coerceAtLeast(0))
+                            .endObject()
+                        writer.flush()
+                    }
+                    page = progressDao.nextBackupPage(checkNotNull(lastUrl))
                 }
                 writer.endArray().endObject()
             }

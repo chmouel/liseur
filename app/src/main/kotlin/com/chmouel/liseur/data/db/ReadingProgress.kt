@@ -192,8 +192,11 @@ abstract class ReadingProgressDao {
     @Query("SELECT * FROM reading_progress")
     abstract suspend fun getAll(): List<ReadingProgress>
 
-    @Query("SELECT * FROM reading_progress WHERE :lastUrl IS NULL OR book_url > :lastUrl ORDER BY book_url LIMIT 1")
-    abstract suspend fun nextForBackup(lastUrl: String?): ReadingProgress?
+    @Query("SELECT * FROM reading_progress ORDER BY book_url LIMIT 32")
+    abstract suspend fun firstBackupPage(): List<ReadingProgress>
+
+    @Query("SELECT * FROM reading_progress WHERE book_url > :lastUrl ORDER BY book_url LIMIT 32")
+    abstract suspend fun nextBackupPage(lastUrl: String): List<ReadingProgress>
 
     @Query("UPDATE reading_progress SET read_at = :readAt WHERE book_url = :bookUrl")
     abstract suspend fun restoreBackupReadAt(bookUrl: String, readAt: Long)

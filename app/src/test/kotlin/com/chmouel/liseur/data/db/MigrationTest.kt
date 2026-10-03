@@ -1572,10 +1572,29 @@ class MigrationTest {
             }
     }
 
+    @Test
+    fun `annotation backup index upgrade preserves marks and supports keyset pages`() {
+        helper.createDatabase(TEST_DB, 64).use { db ->
+            db.execSQL("INSERT INTO annotations (id, book_id, kind, locator_json, created_at) VALUES ('note', 'book', 'BOOK_NOTE', '', 1)")
+        }
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT id FROM annotations").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("note", it.getString(0))
+            }
+            db.query("EXPLAIN QUERY PLAN SELECT * FROM annotations WHERE (book_id, id) > ('book', 'a') ORDER BY book_id, id LIMIT 32").use {
+                val plans = mutableListOf<String>()
+                while (it.moveToNext()) plans += it.getString(3)
+                assertTrue(plans.any { plan -> "index_annotations_book_id_id" in plan })
+                assertTrue(plans.none { plan -> "TEMP B-TREE" in plan })
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 64
+        const val LATEST = 65
     }
 }

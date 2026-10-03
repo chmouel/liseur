@@ -76,11 +76,11 @@ class AnnotationBackupRepositoryTest {
 
     @Test
     fun `staged export groups paged rows and stops at its byte limit`() = runTest {
-        val marks = listOf(mark("one"), mark("two"), mark("three", "book-two"))
+        val marks = List(75) { mark("note-${it.toString().padStart(3, '0')}", if (it < 50) "book-one" else "book-two") }
         marks.forEach { db.annotationDao().upsert(it) }
         val file = File.createTempFile("annotation-test-", ".json", context.cacheDir)
         try {
-            assertEquals(3, repository().writeContents(file, 4096))
+            assertEquals(75, repository().writeContents(file, 65536))
             val contents = decodeAnnotationBackup(file.readText()) as BackupContents.Readable
             assertEquals(marks, contents.books.flatMap { it.annotations })
             assertTrue(runCatching { repository().writeContents(file, 100) }.exceptionOrNull() is AnnotationBackupTooLarge)

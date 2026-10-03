@@ -83,7 +83,7 @@ class AnnotationBackupRepository(
     private val bookDao: BookDao,
     private val requestBookSync: (String) -> Unit = {},
 ) {
-    /** Writes one row at a time so the archive limit also bounds export memory. */
+    /** Writes bounded pages so the archive limit also bounds export memory. */
     suspend fun writeContents(file: File, maxBytes: Long): Int = withContext(Dispatchers.IO) {
         var written = 0L
         var count = 0
@@ -104,33 +104,36 @@ class AnnotationBackupRepository(
             JsonWriter(bounded.writer(Charsets.UTF_8)).use { writer ->
                 writer.beginObject().name("format").value(1).name("application").value("liseur")
                     .name("books").beginArray()
-                while (true) {
-                    currentCoroutineContext().ensureActive()
-                    val mark = annotationDao.nextForBackup(lastBook, lastId) ?: break
-                    if (mark.bookId != lastBook) {
-                        if (lastBook != null) writer.endArray().endObject()
-                        val book = bookDao.getByUrl(mark.bookId)
-                        writer.beginObject().name("book_id").value(mark.bookId)
-                        book?.title?.let { writer.name("title").value(it) }
-                        book?.author?.let { writer.name("author").value(it) }
-                        writer.name("annotations").beginArray()
+                var page = annotationDao.firstBackupPage()
+                while (page.isNotEmpty()) {
+                    for (mark in page) {
+                        currentCoroutineContext().ensureActive()
+                        if (mark.bookId != lastBook) {
+                            if (lastBook != null) writer.endArray().endObject()
+                            val book = bookDao.getByUrl(mark.bookId)
+                            writer.beginObject().name("book_id").value(mark.bookId)
+                            book?.title?.let { writer.name("title").value(it) }
+                            book?.author?.let { writer.name("author").value(it) }
+                            writer.name("annotations").beginArray()
+                        }
+                        writer.beginObject().name("id").value(mark.id).name("kind").value(mark.kind)
+                            .name("locator").value(mark.locatorJson)
+                        mark.text?.let { writer.name("text").value(it) }
+                        mark.note?.let { writer.name("note").value(it) }
+                        mark.tint?.let { writer.name("tint").value(it) }
+                        mark.chapter?.let { writer.name("chapter").value(it) }
+                        mark.position?.let { writer.name("position").value(it) }
+                        mark.totalProgression?.let { writer.name("progression").value(it) }
+                        writer.name("created_at").value(mark.createdAt).name("updated_at").value(mark.updatedAt)
+                        mark.noteCreatedAt?.let { writer.name("note_created_at").value(it) }
+                        mark.noteUpdatedAt?.let { writer.name("note_updated_at").value(it) }
+                        writer.endObject()
+                        writer.flush()
+                        count++
+                        lastBook = mark.bookId
+                        lastId = mark.id
                     }
-                    writer.beginObject().name("id").value(mark.id).name("kind").value(mark.kind)
-                        .name("locator").value(mark.locatorJson)
-                    mark.text?.let { writer.name("text").value(it) }
-                    mark.note?.let { writer.name("note").value(it) }
-                    mark.tint?.let { writer.name("tint").value(it) }
-                    mark.chapter?.let { writer.name("chapter").value(it) }
-                    mark.position?.let { writer.name("position").value(it) }
-                    mark.totalProgression?.let { writer.name("progression").value(it) }
-                    writer.name("created_at").value(mark.createdAt).name("updated_at").value(mark.updatedAt)
-                    mark.noteCreatedAt?.let { writer.name("note_created_at").value(it) }
-                    mark.noteUpdatedAt?.let { writer.name("note_updated_at").value(it) }
-                    writer.endObject()
-                    writer.flush()
-                    count++
-                    lastBook = mark.bookId
-                    lastId = mark.id
+                    page = annotationDao.nextBackupPage(checkNotNull(lastBook), checkNotNull(lastId))
                 }
                 if (lastBook != null) writer.endArray().endObject()
                 writer.endArray().endObject()

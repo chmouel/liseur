@@ -25,7 +25,7 @@ enum class AnnotationKind { HIGHLIGHT, NOTE, BOOK_NOTE, BOOKMARK }
  */
 @Entity(
     tableName = "annotations",
-    indices = [Index("book_id")],
+    indices = [Index("book_id"), Index(value = ["book_id", "id"])],
 )
 data class BookAnnotation(
     @PrimaryKey val id: String,
@@ -74,8 +74,11 @@ interface BookAnnotationDao {
     @Query("SELECT * FROM annotations ORDER BY book_id, created_at")
     suspend fun all(): List<BookAnnotation>
 
-    @Query("SELECT * FROM annotations WHERE :lastBook IS NULL OR book_id > :lastBook OR (book_id = :lastBook AND id > :lastId) ORDER BY book_id, id LIMIT 1")
-    suspend fun nextForBackup(lastBook: String?, lastId: String?): BookAnnotation?
+    @Query("SELECT * FROM annotations ORDER BY book_id, id LIMIT 32")
+    suspend fun firstBackupPage(): List<BookAnnotation>
+
+    @Query("SELECT * FROM annotations WHERE (book_id, id) > (:lastBook, :lastId) ORDER BY book_id, id LIMIT 32")
+    suspend fun nextBackupPage(lastBook: String, lastId: String): List<BookAnnotation>
 
     /** One mark, or nothing; the sync pass asks about ids it was told. */
     @Query("SELECT * FROM annotations WHERE id = :id")

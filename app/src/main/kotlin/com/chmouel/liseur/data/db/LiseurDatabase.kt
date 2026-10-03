@@ -39,7 +39,7 @@ import androidx.sqlite.execSQL
         RemoteStatsDay::class,
         RemoteStatsWindow::class,
     ],
-    version = 64,
+    version = 65,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -1821,6 +1821,12 @@ abstract class LiseurDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_64_65 = object : Migration(64, 65) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("CREATE INDEX IF NOT EXISTS index_annotations_book_id_id ON annotations (book_id, id)")
+            }
+        }
+
         val MIGRATIONS: Array<Migration> get() = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -1885,6 +1891,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_61_62,
             MIGRATION_62_63,
             MIGRATION_63_64,
+            MIGRATION_64_65,
         )
     }
 }

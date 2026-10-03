@@ -127,6 +127,8 @@ without it the release build is simply unsigned.
 Backups are ZIP files with a versioned `manifest.json`, `settings.json` and
 `annotations.json` and `positions.json` payloads, and optional `fonts/<sha256>.(ttf|otf)` entries.
 Version 3 includes reading positions; version 2 annotation archives and version 1 settings-only archives remain readable.
+Annotation export uses indexed keyset pages and a size-bounded staging file;
+reading-position export pages through its URL primary key.
 The manifest records each payload entry's size and SHA-256 checksum. The
 settings payload uses explicit allowlists for the app and reader preference
 stores; account credentials, server connections, sync metadata, and transient
