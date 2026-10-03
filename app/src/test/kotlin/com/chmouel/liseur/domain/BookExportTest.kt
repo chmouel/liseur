@@ -25,6 +25,7 @@ class BookExportTest {
     fun `names replace format controls and normalize Unicode whitespace`() {
         assertEquals("Book_name with spaces - Author.epub",
             bookExportFileName("Book\u202ename\u2028with\u2029spaces", "Author"))
+        assertEquals("Book_name.epub", bookExportFileName("Book" + String(Character.toChars(0xE0001)) + "name", null))
         assertEquals("A B.epub", bookExportFileName("A\u00a0B", null))
     }
 

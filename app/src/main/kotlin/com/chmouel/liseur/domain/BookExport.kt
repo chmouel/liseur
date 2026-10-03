@@ -2,14 +2,19 @@ package com.chmouel.liseur.domain
 
 /** A portable filename for a copy of an offline EPUB. */
 fun bookExportFileName(title: String, author: String?): String {
-    fun clean(value: String): String = value.map { character ->
-        when {
-            character.isISOControl() || Character.getType(character) == Character.FORMAT.toInt() ||
-                character in "\\/:*?\"<>|" -> '_'
-            character.isWhitespace() || Character.isSpaceChar(character) -> ' '
-            else -> character
+    fun clean(value: String): String = buildString {
+        var index = 0
+        while (index < value.length) {
+            val codePoint = value.codePointAt(index)
+            when {
+                Character.isISOControl(codePoint) || Character.getType(codePoint) == Character.FORMAT.toInt() ||
+                    codePoint.toChar() in "\\/:*?\"<>|" && codePoint <= Char.MAX_VALUE.code -> append('_')
+                Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint) -> append(' ')
+                else -> appendCodePoint(codePoint)
+            }
+            index += Character.charCount(codePoint)
         }
-    }.joinToString("").trim().trim('.').trim()
+    }.trim().trim('.').trim()
 
     val name = clean(title).ifEmpty { "book" }
     val by = author?.let(::clean)?.takeIf { it.isNotEmpty() }

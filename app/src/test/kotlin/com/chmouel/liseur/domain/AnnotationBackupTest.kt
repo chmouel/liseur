@@ -67,6 +67,19 @@ class AnnotationBackupTest {
     }
 
     @Test
+    fun `duplicate books invalid page numbers and unknown tints are rejected`() {
+        val book = BackedUpBook(full.bookId, "A Book", null, listOf(full))
+        assertTrue(decodeAnnotationBackup(encodeAnnotationBackup(listOf(book, book.copy(title = "Other", annotations = listOf(bare))))) is BackupContents.Unreadable)
+        for (position in listOf(0L, -1L, Int.MAX_VALUE.toLong() + 1, Long.MAX_VALUE)) {
+            val json = org.json.JSONObject(encodeAnnotationBackup(listOf(book)))
+            json.getJSONArray("books").getJSONObject(0).getJSONArray("annotations").getJSONObject(0).put("position", position)
+            assertTrue(decodeAnnotationBackup(json.toString()) is BackupContents.Unreadable)
+        }
+        assertTrue(decodeAnnotationBackup(encodeAnnotationBackup(listOf(book.copy(annotations = listOf(full.copy(tint = "UNKNOWN")))))) is BackupContents.Unreadable)
+        assertEquals(Int.MAX_VALUE, roundTrip(listOf(book.copy(annotations = listOf(full.copy(position = Int.MAX_VALUE))))).single().annotations.single().position)
+    }
+
+    @Test
     fun `negative timestamps and overflowing legacy timestamps are rejected`() {
         val marks = listOf(
             bookNote.copy(createdAt = -1), bookNote.copy(updatedAt = -1),

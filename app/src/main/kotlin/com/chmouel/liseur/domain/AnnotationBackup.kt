@@ -2,6 +2,7 @@ package com.chmouel.liseur.domain
 
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.AnnotationKind
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import org.readium.r2.shared.publication.Locator
 import org.json.JSONArray
 import org.json.JSONObject
@@ -105,11 +106,13 @@ fun decodeAnnotationBackup(json: String): BackupContents {
         ?: return BackupContents.Unreadable("no books in this file")
 
     val out = mutableListOf<BackedUpBook>()
+    val bookIds = mutableSetOf<String>()
     val annotationIds = mutableSetOf<String>()
     for (i in 0 until books.length()) {
         val entry = books.optJSONObject(i) ?: return BackupContents.Unreadable("invalid book")
         val bookId = (entry.opt("book_id") as? String)?.takeIf { it.isNotEmpty() }
             ?: return BackupContents.Unreadable("missing book identity")
+        if (!bookIds.add(bookId)) return BackupContents.Unreadable("duplicate book identity")
         if (listOf("title", "author").any { !entry.isNull(it) && entry.opt(it) !is String }) {
             return BackupContents.Unreadable("invalid book metadata")
         }
@@ -128,7 +131,8 @@ fun decodeAnnotationBackup(json: String): BackupContents {
                 listOf("updated_at", "note_created_at", "note_updated_at").any {
                     !m.isNull(it) && !m.isTimestamp(it)
                 } ||
-                (!m.isNull("position") && !m.isInteger("position")) ||
+                (!m.isNull("position") && (!m.isInteger("position") || m.optLong("position") !in 1..Int.MAX_VALUE.toLong())) ||
+                (!m.isNull("tint") && HighlightTint.entries.none { it.name == m.opt("tint") }) ||
                 listOf("text", "note", "tint", "chapter").any {
                     !m.isNull(it) && m.opt(it) !is String
                 } ||
