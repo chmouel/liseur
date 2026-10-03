@@ -3,7 +3,7 @@ package com.chmouel.liseur.domain
 /** A portable filename for a copy of an offline EPUB. */
 fun bookExportFileName(title: String, author: String?): String {
     fun clean(value: String): String = value.map { character ->
-        if (character.code < 32 || character.code == 127 || character in "\\/:*?\"<>|") '_'
+        if (character.isISOControl() || character in "\\/:*?\"<>|") '_'
         else character
     }.joinToString("").trim().trim('.').trim()
 

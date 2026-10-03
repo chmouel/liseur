@@ -16,8 +16,8 @@ class BookExportTest {
     @Test
     fun `names preserve Unicode and cannot introduce paths or control characters`() {
         assertEquals("Été _ hiver - Zoë.epub", bookExportFileName("Été / hiver", "Zoë"))
-        val name = bookExportFileName("../book\\name:\n?*\"<>|", null)
-        assertFalse(name.any { it.code < 32 || it in "/\\:*?\"<>|" })
+        val name = bookExportFileName("../book\\name:\n?*\"<>|\u0085\u009f", null)
+        assertFalse(name.any { it.isISOControl() || it in "/\\:*?\"<>|" })
         assertFalse(name.startsWith('.'))
     }
 

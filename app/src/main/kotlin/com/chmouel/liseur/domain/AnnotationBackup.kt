@@ -105,6 +105,7 @@ fun decodeAnnotationBackup(json: String): BackupContents {
         ?: return BackupContents.Unreadable("no books in this file")
 
     val out = mutableListOf<BackedUpBook>()
+    val annotationIds = mutableSetOf<String>()
     for (i in 0 until books.length()) {
         val entry = books.optJSONObject(i) ?: return BackupContents.Unreadable("invalid book")
         val bookId = (entry.opt("book_id") as? String)?.takeIf { it.isNotEmpty() }
@@ -119,6 +120,7 @@ fun decodeAnnotationBackup(json: String): BackupContents {
             val m = marks.optJSONObject(j) ?: return BackupContents.Unreadable("invalid annotation")
             val id = (m.opt("id") as? String)?.takeIf { it.isNotEmpty() }
                 ?: return BackupContents.Unreadable("missing annotation identity")
+            if (!annotationIds.add(id)) return BackupContents.Unreadable("duplicate annotation identity")
             if (
                 AnnotationKind.entries.none { it.name == m.opt("kind") } ||
                 m.opt("locator") !is String ||

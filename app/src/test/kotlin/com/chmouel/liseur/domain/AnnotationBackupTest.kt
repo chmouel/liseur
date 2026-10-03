@@ -59,6 +59,14 @@ class AnnotationBackupTest {
     }
 
     @Test
+    fun `duplicate annotation identities are rejected within and across books`() {
+        val first = BackedUpBook(full.bookId, null, null, listOf(full))
+        val second = BackedUpBook("another-book", null, null, listOf(full.copy(bookId = "another-book")))
+        assertTrue(decodeAnnotationBackup(encodeAnnotationBackup(listOf(first.copy(annotations = listOf(full, full))))) is BackupContents.Unreadable)
+        assertTrue(decodeAnnotationBackup(encodeAnnotationBackup(listOf(first, second))) is BackupContents.Unreadable)
+    }
+
+    @Test
     fun `negative timestamps and overflowing legacy timestamps are rejected`() {
         val marks = listOf(
             bookNote.copy(createdAt = -1), bookNote.copy(updatedAt = -1),
