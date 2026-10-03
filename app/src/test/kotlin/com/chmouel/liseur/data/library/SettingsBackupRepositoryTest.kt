@@ -128,6 +128,25 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `older ZIP versions reject payloads introduced in newer versions`() = runTest {
+        val app = AppSettingsRepository(store("version-payload-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("version-payload-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val payload = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val annotations = encodeAnnotationBackup(emptyList()).toByteArray()
+        val positions = """{"format":1,"application":"liseur","positions":[]}""".toByteArray()
+        val cases = listOf(
+            1 to mapOf("annotations.json" to annotations),
+            1 to mapOf("positions.json" to positions),
+            2 to mapOf("annotations.json" to annotations, "positions.json" to positions),
+        )
+        cases.forEachIndexed { index, (version, entries) ->
+            val file = archive("old-payload-$index.zip", payload, entries, format = version)
+            assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repository.inspect(Uri.fromFile(file)))
+        }
+    }
+
+    @Test
     fun `malformed position rejects the backup before changing settings`() = runTest {
         val app = AppSettingsRepository(store("bad-position-app.preferences_pb"))
         val reader = ReaderPreferencesRepository(store("bad-position-reader.preferences_pb"))

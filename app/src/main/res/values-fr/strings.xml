@@ -812,7 +812,7 @@
     <string name="settings_backup_error_size">Cette sauvegarde est trop volumineuse pour être restaurée.</string>
     <string name="settings_backup_error_storage">Impossible de préparer la sauvegarde dans le stockage de l’appareil.</string>
     <string name="settings_backup_error_restore">Impossible de restaurer la sauvegarde.</string>
-    <string name="settings_backup_error_partial">Une partie de la sauvegarde a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos paramètres et annotations.</string>
+    <string name="settings_backup_error_partial">Une partie de la sauvegarde a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos réglages, polices, annotations et positions de lecture.</string>
     <string name="settings_library_help_title">Serveurs de livres</string>
     <string name="settings_library_help_body" formatted="true">Un serveur de livres — calibre-web, Komga, liseur-sync ou un catalogue OPDS — détient votre bibliothèque : Liseur la parcourt et télécharge depuis elle, et garde votre place à jour là où le serveur le permet. Une connexion OPDS Personnalisée peut s\'associer à un serveur de sync KOReader pour les positions de lecture. Un seul serveur est connecté à la fois.\n\nliseur-sync est celui qui garde aussi à jour les livres qui n\'étaient que sur ce téléphone : un fichier d\'une carte SD synchronise aussi sa position. Hébergez le vôtre depuis %1$s.</string>
     <string name="settings_account_detail">Parcourir et télécharger depuis un serveur calibre-web, Komga, liseur-sync ou OPDS, et garder votre place à jour — OPDS via un serveur de sync KOReader associé.</string>
@@ -1039,6 +1039,12 @@
         <item quantity="one">Série de %1$d jour</item>
         <item quantity="other">Série de %1$d jours</item>
     </plurals>
-    <string name="settings_backup_positions_preview">Positions de lecture : %1$d. La restauration remplace les positions actuelles par les positions sauvegardées.</string>
-    <string name="settings_backup_positions_restored">Positions de lecture restaurées : %1$d.</string>
+    <plurals name="settings_backup_positions_preview">
+        <item quantity="one">%1$d position de lecture. La restauration remplace les positions actuelles par les positions sauvegardées.</item>
+        <item quantity="other">%1$d positions de lecture. La restauration remplace les positions actuelles par les positions sauvegardées.</item>
+    </plurals>
+    <plurals name="settings_backup_positions_restored">
+        <item quantity="one">%1$d position de lecture restaurée.</item>
+        <item quantity="other">%1$d positions de lecture restaurées.</item>
+    </plurals>
 </resources>

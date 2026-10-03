@@ -812,7 +812,7 @@
     <string name="settings_backup_error_size">Il backup è troppo grande per essere ripristinato.</string>
     <string name="settings_backup_error_storage">Impossibile preparare il backup nella memoria del dispositivo.</string>
     <string name="settings_backup_error_restore">Impossibile ripristinare il backup.</string>
-    <string name="settings_backup_error_partial">Una parte del backup è stata ripristinata, ma non è stato possibile applicare il resto. Controlla impostazioni e annotazioni.</string>
+    <string name="settings_backup_error_partial">Una parte del backup è stata ripristinata, ma il resto non è stato applicato. Controlla impostazioni, caratteri, annotazioni e posizioni di lettura.</string>
     <string name="settings_library_help_title">Server dei libri</string>
     <string name="settings_library_help_body" formatted="true">Un server dei libri — calibre-web, Komga, liseur-sync o un catalogo OPDS — tiene la tua libreria: Liseur la sfoglia e scarica da essa, e tiene il tuo posto allineato dove il server lo supporta. Una connessione OPDS Personalizzata può abbinarsi a un server di sync KOReader per le posizioni di lettura. Si collega un solo server alla volta.\n\nliseur-sync è quello che tiene allineati anche i libri arrivati solo da questo telefono: anche un file da una scheda SD sincronizza la posizione. Installane uno tuo da %1$s.</string>
     <string name="settings_account_detail">Sfoglia e scarica da un server calibre-web, Komga, liseur-sync o OPDS, e tieni il tuo posto allineato — OPDS tramite un server di sync KOReader abbinato.</string>
@@ -1039,6 +1039,12 @@
         <item quantity="one">%1$d giorno consecutivo</item>
         <item quantity="other">%1$d giorni consecutivi</item>
     </plurals>
-    <string name="settings_backup_positions_preview">Posizioni di lettura: %1$d. Il ripristino sostituisce le posizioni attuali con quelle salvate.</string>
-    <string name="settings_backup_positions_restored">Posizioni di lettura ripristinate: %1$d.</string>
+    <plurals name="settings_backup_positions_preview">
+        <item quantity="one">%1$d posizione di lettura. Il ripristino sostituisce le posizioni attuali con quelle salvate.</item>
+        <item quantity="other">%1$d posizioni di lettura. Il ripristino sostituisce le posizioni attuali con quelle salvate.</item>
+    </plurals>
+    <plurals name="settings_backup_positions_restored">
+        <item quantity="one">Ripristinata %1$d posizione di lettura.</item>
+        <item quantity="other">Ripristinate %1$d posizioni di lettura.</item>
+    </plurals>
 </resources>

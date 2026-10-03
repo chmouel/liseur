@@ -534,10 +534,10 @@ class SettingsBackupRepository(
             if (manifest.opt("format") !in setOf(1, 2, FORMAT)) {
                 return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
             }
-            if (manifest.optInt("format") >= 2 && ANNOTATIONS_PATH !in entries) {
+            if ((manifest.optInt("format") >= 2) != (ANNOTATIONS_PATH in entries)) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.opt("format") == FORMAT && POSITIONS_PATH !in entries) {
+            if ((manifest.opt("format") == FORMAT) != (POSITIONS_PATH in entries)) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
             val listed = manifest.optJSONArray("entries")

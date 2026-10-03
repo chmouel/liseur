@@ -56,6 +56,24 @@ class ReadingPositionBackupRepositoryTest {
     }
 
     @Test
+    fun `partial restore requests sync for positions written before a later failure`() = runTest {
+        val requests = mutableListOf<String>()
+        val repository = ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requests::add)
+        db.readingProgressDao().openBooks.enter("second")
+        val result = runCatching {
+            repository.restore(listOf(
+                BackedUpReadingPosition("first", null, null, locator, 0.3, 10),
+                BackedUpReadingPosition("second", null, null, locator, 0.4, 10),
+            ))
+        }
+        assertTrue(result.isFailure)
+        assertEquals(listOf("first"), requests)
+        assertEquals(locator, db.readingProgressDao().get("first")?.locatorJson)
+        assertEquals(null, db.readingProgressDao().get("second"))
+        db.readingProgressDao().openBooks.leave("second")
+    }
+
+    @Test
     fun `restore refuses to replace a position being used by an open reader`() = runTest {
         val saved = ReadingProgress("book", locator, 0.2, updatedAt = 20)
         db.readingProgressDao().upsert(saved)

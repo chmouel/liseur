@@ -874,7 +874,7 @@
     <string name="settings_backup_error_size">Копия слишком велика для восстановления.</string>
     <string name="settings_backup_error_storage">Не удалось подготовить копию в хранилище устройства.</string>
     <string name="settings_backup_error_restore">Не удалось восстановить резервную копию.</string>
-    <string name="settings_backup_error_partial">Часть резервной копии восстановлена, но остальное применить не удалось. Проверьте настройки и аннотации.</string>
+    <string name="settings_backup_error_partial">Часть копии восстановлена, но остальное применить не удалось. Проверьте настройки, шрифты, аннотации и позиции чтения.</string>
     <string name="settings_library_help_title">Серверы книг</string>
     <string name="settings_library_help_body" formatted="true">Сервер книг — calibre-web, Komga, liseur-sync или каталог OPDS — хранит вашу библиотеку: Liseur просматривает её и скачивает из неё, и синхронизирует место чтения, где сервер это поддерживает. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения. Одновременно подключён один сервер.\n\nliseur-sync — тот, что также синхронизирует книги, появившиеся только на этом телефоне: файл с SD-карты тоже синхронизирует позицию. Запустите свой с %1$s.</string>
     <string name="settings_account_detail">Просматривайте и скачивайте с сервера calibre-web, Komga, liseur-sync или OPDS и синхронизируйте место чтения — для OPDS через связанный сервер синхронизации KOReader.</string>
@@ -1115,6 +1115,16 @@
         <item quantity="many">%1$d дней подряд</item>
         <item quantity="other">%1$d дней подряд</item>
     </plurals>
-    <string name="settings_backup_positions_preview">Позиции чтения: %1$d. Восстановление заменит текущие позиции сохранёнными.</string>
-    <string name="settings_backup_positions_restored">Восстановлено позиций чтения: %1$d.</string>
+    <plurals name="settings_backup_positions_preview">
+        <item quantity="one">%1$d позиция чтения. Восстановление заменит текущие позиции сохранёнными.</item>
+        <item quantity="few">%1$d позиции чтения. Восстановление заменит текущие позиции сохранёнными.</item>
+        <item quantity="many">%1$d позиций чтения. Восстановление заменит текущие позиции сохранёнными.</item>
+        <item quantity="other">%1$d позиции чтения. Восстановление заменит текущие позиции сохранёнными.</item>
+    </plurals>
+    <plurals name="settings_backup_positions_restored">
+        <item quantity="one">Восстановлена %1$d позиция чтения.</item>
+        <item quantity="few">Восстановлены %1$d позиции чтения.</item>
+        <item quantity="many">Восстановлено %1$d позиций чтения.</item>
+        <item quantity="other">Восстановлены %1$d позиции чтения.</item>
+    </plurals>
 </resources>

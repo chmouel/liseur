@@ -847,7 +847,7 @@
     <string name="settings_backup_error_size">This backup is too large to restore.</string>
     <string name="settings_backup_error_storage">The backup could not be prepared in device storage.</string>
     <string name="settings_backup_error_restore">The backup could not be restored.</string>
-    <string name="settings_backup_error_partial">Part of the backup was restored, but the rest could not be applied. Check your settings and annotations.</string>
+    <string name="settings_backup_error_partial">Part of the backup was restored, but the rest could not be applied. Check your settings, fonts, annotations, and reading positions.</string>
     <string name="settings_library_help_title">Book servers</string>
     <string name="settings_library_help_body" formatted="true">A book server — calibre-web, Komga, liseur-sync or an OPDS catalog — holds your library: Liseur browses it and downloads from it, and keeps your place in step where the server supports it. A Custom OPDS connection can pair with a KOReader sync server for reading positions. One server is connected at a time.\n\nliseur-sync is the one that also keeps books that came from nowhere but this phone in step: a file off an SD card syncs its position too. Run your own from %1$s.</string>
     <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync or OPDS server, and keep your place in step — OPDS through a paired KOReader sync server.</string>
@@ -1083,6 +1083,12 @@
         <item quantity="one">%1$d-day streak</item>
         <item quantity="other">%1$d-day streak</item>
     </plurals>
-    <string name="settings_backup_positions_preview">Reading positions: %1$d. Restoring replaces current positions with the saved positions.</string>
-    <string name="settings_backup_positions_restored">Reading positions restored: %1$d.</string>
+    <plurals name="settings_backup_positions_preview">
+        <item quantity="one">%1$d reading position. Restoring replaces current positions with the saved positions.</item>
+        <item quantity="other">%1$d reading positions. Restoring replaces current positions with the saved positions.</item>
+    </plurals>
+    <plurals name="settings_backup_positions_restored">
+        <item quantity="one">Restored %1$d reading position.</item>
+        <item quantity="other">Restored %1$d reading positions.</item>
+    </plurals>
 </resources>

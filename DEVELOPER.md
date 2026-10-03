@@ -141,10 +141,12 @@ matching library books before restore. The same Restore action also accepts
 older annotation-only JSON files. Restoring annotations adds missing marks,
 preserves existing ones, and requests sync for books with newly added marks.
 Restoring reading positions replaces the saved Readium locator and progression,
-matching books by URL or title and author. The original reading time is kept;
+matching books by URL or an unambiguous title and author match. The original reading time is kept;
 this device records a new local revision without importing account baselines or
 acknowledgements, then requests sync. Positions for missing books retain their
-original URL. Older backups leave reading positions unchanged.
+original URL. Older backups leave reading positions unchanged; archives with payloads newer
+than their declared version are rejected. Completed position writes request
+sync even if a later write fails.
 Unknown optional JSON fields are ignored; malformed
 known fields, unsafe or duplicate paths, checksum mismatches, and unsupported
 versions are rejected. Font files are passed through the normal font importer,

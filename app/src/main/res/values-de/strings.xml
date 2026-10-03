@@ -823,7 +823,7 @@
     <string name="settings_backup_error_size">Diese Sicherung ist zu groß, um sie wiederherzustellen.</string>
     <string name="settings_backup_error_storage">Die Sicherung konnte nicht im Gerätespeicher vorbereitet werden.</string>
     <string name="settings_backup_error_restore">Die Sicherung konnte nicht wiederhergestellt werden.</string>
-    <string name="settings_backup_error_partial">Ein Teil der Sicherung wurde wiederhergestellt, der Rest konnte nicht übernommen werden. Prüfe deine Einstellungen und Anmerkungen.</string>
+    <string name="settings_backup_error_partial">Ein Teil der Sicherung wurde wiederhergestellt, der Rest konnte nicht angewendet werden. Prüfe Einstellungen, Schriftarten, Anmerkungen und Lesepositionen.</string>
     <string name="settings_library_help_title">Buchserver</string>
     <string name="settings_library_help_body" formatted="true">Ein Buchserver — calibre-web, Komga, liseur-sync oder ein OPDS-Katalog — hält deine Bibliothek: Liseur durchsucht ihn und lädt davon herunter und hält deine Stelle im Einklang, wo der Server das unterstützt. Eine benutzerdefinierte OPDS-Verbindung kann für Lesepositionen mit einem KOReader-Sync-Server gekoppelt werden. Es ist jeweils ein Server verbunden.\n\nliseur-sync ist der, der auch Bücher mitführt, die nur von diesem Handy kamen: eine Datei von einer SD-Karte synchronisiert ihre Position ebenfalls. Betreibe deinen eigenen von %1$s.</string>
     <string name="settings_account_detail">Durchsuchen und Herunterladen von einem calibre-web-, Komga-, liseur-sync- oder OPDS-Server und deine Stelle im Einklang halten — OPDS über einen gekoppelten KOReader-Sync-Server.</string>
@@ -1051,6 +1051,12 @@
         <item quantity="one">%1$d Tag in Folge</item>
         <item quantity="other">%1$d Tage in Folge</item>
     </plurals>
-    <string name="settings_backup_positions_preview">Lesepositionen: %1$d. Die Wiederherstellung ersetzt aktuelle Positionen durch die gespeicherten Positionen.</string>
-    <string name="settings_backup_positions_restored">Wiederhergestellte Lesepositionen: %1$d.</string>
+    <plurals name="settings_backup_positions_preview">
+        <item quantity="one">%1$d Leseposition. Die Wiederherstellung ersetzt aktuelle Positionen durch die gespeicherten Positionen.</item>
+        <item quantity="other">%1$d Lesepositionen. Die Wiederherstellung ersetzt aktuelle Positionen durch die gespeicherten Positionen.</item>
+    </plurals>
+    <plurals name="settings_backup_positions_restored">
+        <item quantity="one">%1$d Leseposition wiederhergestellt.</item>
+        <item quantity="other">%1$d Lesepositionen wiederhergestellt.</item>
+    </plurals>
 </resources>

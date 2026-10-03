@@ -3,10 +3,9 @@ package com.chmouel.liseur.data.library
 import android.util.JsonWriter
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
-import com.chmouel.liseur.domain.BackedUpBook
 import com.chmouel.liseur.domain.BackedUpReadingPosition
 import com.chmouel.liseur.domain.KnownBook
-import com.chmouel.liseur.domain.matchBackedUpBook
+import com.chmouel.liseur.domain.matchBackedUpReadingPosition
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -68,16 +67,19 @@ class ReadingPositionBackupRepository(
     suspend fun restore(positions: List<BackedUpReadingPosition>): Int {
         val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
         val changed = linkedSetOf<String>()
-        for (position in positions) {
-            currentCoroutineContext().ensureActive()
-            val url = matchBackedUpBook(BackedUpBook(position.bookId, position.title, position.author, emptyList()), known)
-            progressDao.openBooks.unlessOpen(url) {
-                progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
-                    position.readAt, System.currentTimeMillis())
-            } ?: throw IOException("Cannot replace the position of an open book")
-            changed += url
+        try {
+            for (position in positions) {
+                currentCoroutineContext().ensureActive()
+                val url = matchBackedUpReadingPosition(position, known)
+                progressDao.openBooks.unlessOpen(url) {
+                    progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
+                        position.readAt, System.currentTimeMillis())
+                } ?: throw IOException("Cannot replace the position of an open book")
+                changed += url
+            }
+        } finally {
+            changed.forEach(requestBookSync)
         }
-        changed.forEach(requestBookSync)
         return changed.size
     }
 }

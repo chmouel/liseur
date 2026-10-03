@@ -1,5 +1,6 @@
 package com.chmouel.liseur.domain
 
+import java.util.Locale
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
 
@@ -38,4 +39,15 @@ fun decodeReadingPositionBackup(text: String): List<BackedUpReadingPosition> {
         BackedUpReadingPosition(bookId, metadata("title"), metadata("author"), locator,
             progression, (readAt as Number).toLong())
     }
+}
+
+/** Position replacement requires an unambiguous metadata match when the URL changed. */
+fun matchBackedUpReadingPosition(position: BackedUpReadingPosition, known: List<KnownBook>): String {
+    if (known.any { it.bookId == position.bookId }) return position.bookId
+    val title = position.title?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return position.bookId
+    val author = position.author?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }
+    return known.singleOrNull {
+        it.title.trim().lowercase(Locale.ROOT) == title &&
+            it.author?.trim()?.lowercase(Locale.ROOT)?.takeIf { value -> value.isNotEmpty() } == author
+    }?.bookId ?: position.bookId
 }
