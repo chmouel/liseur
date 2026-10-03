@@ -125,8 +125,8 @@ without it the release build is simply unsigned.
 ## Settings backup archive
 
 Backups are ZIP files with a versioned `manifest.json`, `settings.json` and
-`annotations.json` payloads, and optional `fonts/<sha256>.(ttf|otf)` entries.
-Version 2 includes annotations; version 1 settings-only archives remain readable.
+`annotations.json` and `positions.json` payloads, and optional `fonts/<sha256>.(ttf|otf)` entries.
+Version 3 includes reading positions; version 2 annotation archives and version 1 settings-only archives remain readable.
 The manifest records each payload entry's size and SHA-256 checksum. The
 settings payload uses explicit allowlists for the app and reader preference
 stores; account credentials, server connections, sync metadata, and transient
@@ -134,10 +134,15 @@ notices are not included. Unset keys remain absent so restoring a backup
 leaves destination values alone when the archive did not store that setting.
 Custom font entry names retain their content-based identifiers.
 
-The Backup and restore screen previews settings, fonts, annotations, and
+The Backup and restore screen previews settings, fonts, reading positions, annotations, and
 matching library books before restore. The same Restore action also accepts
 older annotation-only JSON files. Restoring annotations adds missing marks,
 preserves existing ones, and requests sync for books with newly added marks.
+Restoring reading positions replaces the saved Readium locator and progression,
+matching books by URL or title and author. The original reading time is kept;
+this device records a new local revision without importing account baselines or
+acknowledgements, then requests sync. Positions for missing books retain their
+original URL. Older backups leave reading positions unchanged.
 Unknown optional JSON fields are ignored; malformed
 known fields, unsafe or duplicate paths, checksum mismatches, and unsupported
 versions are rejected. Font files are passed through the normal font importer,

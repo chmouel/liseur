@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.library.AnnotationBackupRepository
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.LocalLibraryRepository
+import com.chmouel.liseur.data.library.ReadingPositionBackupRepository
 import com.chmouel.liseur.data.library.SettingsBackupRepository
 import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.openableUri
@@ -196,6 +197,7 @@ class AppContainer(context: Context) {
         readerPreferences = readerPreferences,
         userFonts = userFonts,
         annotations = annotationBackup,
+        positions = ReadingPositionBackupRepository(database.readingProgressDao(), database.bookDao(), ::requestBookSync),
     )
 
     val bookExport = BookExportRepository(context.applicationContext, database.bookDao())

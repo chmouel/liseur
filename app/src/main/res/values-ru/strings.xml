@@ -822,9 +822,9 @@
     <string name="books_export_error_library">Не удалось прочитать библиотеку для экспорта.</string>
     <string name="books_export_error_folder">Не удалось экспортировать в эту папку. Выберите папку с разрешением на запись.</string>
     <string name="settings_backup_title">Резервное копирование и восстановление</string>
-    <string name="settings_backup_detail">Сохраните настройки, свои шрифты, выделения, заметки и закладки в ZIP-архив.</string>
+    <string name="settings_backup_detail">Сохраните настройки, пользовательские шрифты, позиции чтения, выделения, заметки и закладки в ZIP-копии.</string>
     <string name="settings_backup_export">Экспортировать резервную копию</string>
-    <string name="settings_backup_export_detail">Создайте ZIP-архив с датой, содержащий настройки, шрифты и аннотации.</string>
+    <string name="settings_backup_export_detail">Создайте ZIP-файл с датой, настройками, шрифтами, позициями чтения и аннотациями.</string>
     <string name="settings_backup_restore">Восстановить резервную копию</string>
     <string name="settings_backup_restore_detail">Просмотрите содержимое резервной копии перед восстановлением.</string>
     <string name="settings_backup_preview_title">Восстановить эту резервную копию?</string>
@@ -1115,4 +1115,6 @@
         <item quantity="many">%1$d дней подряд</item>
         <item quantity="other">%1$d дней подряд</item>
     </plurals>
+    <string name="settings_backup_positions_preview">Позиции чтения: %1$d. Восстановление заменит текущие позиции сохранёнными.</string>
+    <string name="settings_backup_positions_restored">Восстановлено позиций чтения: %1$d.</string>
 </resources>

@@ -772,9 +772,9 @@
     <string name="books_export_error_library">Impossibile leggere la libreria per l’esportazione.</string>
     <string name="books_export_error_folder">Impossibile esportare in questa cartella. Scegli una cartella con permesso di scrittura.</string>
     <string name="settings_backup_title">Backup e ripristino</string>
-    <string name="settings_backup_detail">Salva impostazioni, caratteri personalizzati, evidenziazioni, note e segnalibri in un backup ZIP.</string>
+    <string name="settings_backup_detail">Salva impostazioni, caratteri personalizzati, posizioni di lettura, evidenziazioni, note e segnalibri in un backup ZIP.</string>
     <string name="settings_backup_export">Esporta backup</string>
-    <string name="settings_backup_export_detail">Crea un file ZIP datato con impostazioni, caratteri e annotazioni.</string>
+    <string name="settings_backup_export_detail">Crea un file ZIP datato con impostazioni, caratteri, posizioni di lettura e annotazioni.</string>
     <string name="settings_backup_restore">Ripristina backup</string>
     <string name="settings_backup_restore_detail">Visualizza il contenuto di un backup prima di applicarlo.</string>
     <string name="settings_backup_preview_title">Ripristinare questo backup?</string>
@@ -1039,4 +1039,6 @@
         <item quantity="one">%1$d giorno consecutivo</item>
         <item quantity="other">%1$d giorni consecutivi</item>
     </plurals>
+    <string name="settings_backup_positions_preview">Posizioni di lettura: %1$d. Il ripristino sostituisce le posizioni attuali con quelle salvate.</string>
+    <string name="settings_backup_positions_restored">Posizioni di lettura ripristinate: %1$d.</string>
 </resources>

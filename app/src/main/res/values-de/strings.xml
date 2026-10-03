@@ -783,9 +783,9 @@
     <string name="books_export_error_library">Die Bibliothek konnte für den Export nicht gelesen werden.</string>
     <string name="books_export_error_folder">In diesen Ordner konnte nicht exportiert werden. Wähle einen beschreibbaren Ordner.</string>
     <string name="settings_backup_title">Sichern und Wiederherstellen</string>
-    <string name="settings_backup_detail">Speichere Einstellungen, eigene Schriftarten, Markierungen, Notizen und Lesezeichen in einer ZIP-Sicherung.</string>
+    <string name="settings_backup_detail">Einstellungen, eigene Schriftarten, Lesepositionen, Markierungen, Notizen und Lesezeichen in einer ZIP-Sicherung speichern.</string>
     <string name="settings_backup_export">Sicherung exportieren</string>
-    <string name="settings_backup_export_detail">Erstelle eine datierte ZIP-Datei mit Einstellungen, Schriftarten und Anmerkungen.</string>
+    <string name="settings_backup_export_detail">Eine datierte ZIP-Datei mit Einstellungen, Schriftarten, Lesepositionen und Anmerkungen erstellen.</string>
     <string name="settings_backup_restore">Sicherung wiederherstellen</string>
     <string name="settings_backup_restore_detail">Zeige den Inhalt einer Sicherung vor dem Anwenden an.</string>
     <string name="settings_backup_preview_title">Diese Sicherung wiederherstellen?</string>
@@ -1051,4 +1051,6 @@
         <item quantity="one">%1$d Tag in Folge</item>
         <item quantity="other">%1$d Tage in Folge</item>
     </plurals>
+    <string name="settings_backup_positions_preview">Lesepositionen: %1$d. Die Wiederherstellung ersetzt aktuelle Positionen durch die gespeicherten Positionen.</string>
+    <string name="settings_backup_positions_restored">Wiederhergestellte Lesepositionen: %1$d.</string>
 </resources>

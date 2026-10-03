@@ -772,9 +772,9 @@
     <string name="books_export_error_library">No se pudo leer la biblioteca para exportarla.</string>
     <string name="books_export_error_folder">No se pudo exportar a esta carpeta. Elige una carpeta con permiso de escritura.</string>
     <string name="settings_backup_title">Copia de seguridad y restauración</string>
-    <string name="settings_backup_detail">Guarda ajustes, fuentes personalizadas, subrayados, notas y marcadores en una copia ZIP.</string>
+    <string name="settings_backup_detail">Guarda ajustes, fuentes personalizadas, posiciones de lectura, resaltados, notas y marcadores en una copia ZIP.</string>
     <string name="settings_backup_export">Exportar copia</string>
-    <string name="settings_backup_export_detail">Crea un archivo ZIP con fecha que incluya ajustes, fuentes y anotaciones.</string>
+    <string name="settings_backup_export_detail">Crea un archivo ZIP fechado con tus ajustes, fuentes, posiciones de lectura y anotaciones.</string>
     <string name="settings_backup_restore">Restaurar copia</string>
     <string name="settings_backup_restore_detail">Previsualiza una copia antes de aplicarla.</string>
     <string name="settings_backup_preview_title">¿Restaurar esta copia?</string>
@@ -1039,4 +1039,6 @@
         <item quantity="one">Racha de %1$d día</item>
         <item quantity="other">Racha de %1$d días</item>
     </plurals>
+    <string name="settings_backup_positions_preview">Posiciones de lectura: %1$d. La restauración reemplaza las posiciones actuales por las guardadas.</string>
+    <string name="settings_backup_positions_restored">Posiciones de lectura restauradas: %1$d.</string>
 </resources>

@@ -772,9 +772,9 @@
     <string name="books_export_error_library">Impossible de lire la bibliothèque pour l’export.</string>
     <string name="books_export_error_folder">Impossible d’exporter dans ce dossier. Choisissez un dossier accessible en écriture.</string>
     <string name="settings_backup_title">Sauvegarde et restauration</string>
-    <string name="settings_backup_detail">Enregistrez les paramètres, polices personnalisées, surlignages, notes et signets dans une archive ZIP.</string>
+    <string name="settings_backup_detail">Enregistrez les réglages, polices personnalisées, positions de lecture, surlignages, notes et signets dans une sauvegarde ZIP.</string>
     <string name="settings_backup_export">Exporter la sauvegarde</string>
-    <string name="settings_backup_export_detail">Créez une archive ZIP datée avec vos paramètres, polices et annotations.</string>
+    <string name="settings_backup_export_detail">Créez un fichier ZIP daté avec vos réglages, polices, positions de lecture et annotations.</string>
     <string name="settings_backup_restore">Restaurer une sauvegarde</string>
     <string name="settings_backup_restore_detail">Prévisualisez une sauvegarde avant de l’appliquer.</string>
     <string name="settings_backup_preview_title">Restaurer cette sauvegarde ?</string>
@@ -1039,4 +1039,6 @@
         <item quantity="one">Série de %1$d jour</item>
         <item quantity="other">Série de %1$d jours</item>
     </plurals>
+    <string name="settings_backup_positions_preview">Positions de lecture : %1$d. La restauration remplace les positions actuelles par les positions sauvegardées.</string>
+    <string name="settings_backup_positions_restored">Positions de lecture restaurées : %1$d.</string>
 </resources>

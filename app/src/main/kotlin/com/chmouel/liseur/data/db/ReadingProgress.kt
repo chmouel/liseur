@@ -192,6 +192,24 @@ abstract class ReadingProgressDao {
     @Query("SELECT * FROM reading_progress")
     abstract suspend fun getAll(): List<ReadingProgress>
 
+    @Query("SELECT * FROM reading_progress WHERE :lastUrl IS NULL OR book_url > :lastUrl ORDER BY book_url LIMIT 1")
+    abstract suspend fun nextForBackup(lastUrl: String?): ReadingProgress?
+
+    @Query("UPDATE reading_progress SET read_at = :readAt WHERE book_url = :bookUrl")
+    abstract suspend fun restoreBackupReadAt(bookUrl: String, readAt: Long)
+
+    @Transaction
+    open suspend fun restoreBackupPosition(
+        bookUrl: String, locatorJson: String, progression: Double?, readAt: Long, now: Long,
+    ) {
+        val previous = get(bookUrl)
+        val status = com.chmouel.liseur.domain.readingStatusFor(
+            progression, previous?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE,
+        ).wireName
+        recordLocal(bookUrl, locatorJson, progression, null, null, null, null, status, now)
+        restoreBackupReadAt(bookUrl, readAt.coerceAtMost(now))
+    }
+
     /**
      * When each book was last read. The position is written both by
      * turning a page here and by taking one from the server, so this is

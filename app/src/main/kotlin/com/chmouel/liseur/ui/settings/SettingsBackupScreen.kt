@@ -74,7 +74,9 @@ fun SettingsBackupScreen(
                             ready.preview.annotationCount,
                             ready.preview.annotationBookCount,
                         ),
-                    ) + if (ready.preview.annotationCount > 0) {
+                    ) + (if (ready.preview.positionCount > 0) {
+                        "\n\n" + stringResource(R.string.settings_backup_positions_preview, ready.preview.positionCount)
+                    } else { "" }) + (if (ready.preview.annotationCount > 0) {
                         "\n\n" + stringResource(
                             R.string.import_preview_body,
                             ready.preview.annotationCount,
@@ -83,7 +85,7 @@ fun SettingsBackupScreen(
                         )
                     } else {
                         ""
-                    },
+                    }),
                 )
             },
             confirmButton = {
@@ -211,6 +213,9 @@ fun SettingsBackupScreen(
                             }
                             listOfNotNull(
                                 stringResource(R.string.settings_backup_restored_settings),
+                                if (status.positionsRestored > 0) {
+                                    stringResource(R.string.settings_backup_positions_restored, status.positionsRestored)
+                                } else { null },
                                 restoredFonts,
                                 alreadyInstalled,
                                 fontFailures,

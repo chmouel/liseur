@@ -14,6 +14,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.room.Room
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.AnnotationKind
@@ -67,6 +68,79 @@ class SettingsBackupRepositoryTest {
     @After
     fun close() {
         db.close()
+    }
+
+    @Test
+    fun `ZIP restore replaces a newer reading position without copying sync bookkeeping`() = runTest {
+        val app = AppSettingsRepository(store("position-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("position-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val url = "file:///source/book.epub"
+        val locator = """{"href":"chapter.xhtml","type":"application/xhtml+xml","locations":{"progression":0.4,"totalProgression":0.4}}"""
+        val saved = ReadingProgress(url, locator, 0.4, updatedAt = 100, readAt = 80,
+            localRevision = 20, ackedRevision = 19, agreedAccount = "source-account")
+        db.readingProgressDao().upsert(saved)
+        val archive = Uri.fromFile(File(folder.root, "position.zip"))
+        assertEquals(SettingsBackupExportResult.Exported(0), repository.exportTo(archive))
+        val current = saved.copy(locatorJson = locator.replace("0.4", "0.8"), totalProgression = 0.8,
+            updatedAt = 1000, readAt = 1000, localRevision = 4, ackedRevision = 3,
+            positionRevision = 2, agreedAccount = "destination-account", agreedProgression = 0.8)
+        db.readingProgressDao().upsert(current)
+        val preview = repository.inspect(archive) as SettingsBackupInspection.Ready
+        assertEquals(1, preview.preview.positionCount)
+        val restored = repository.restore(preview.archiveId) as SettingsBackupRestoreResult.Restored
+        assertEquals(1, restored.positionsRestored)
+        val actual = db.readingProgressDao().get(url)!!
+        assertEquals(locator, actual.locatorJson)
+        assertEquals(0.4, actual.totalProgression!!, 0.0)
+        assertEquals(80L, actual.readAt)
+        assertTrue(actual.updatedAt > current.updatedAt)
+        assertEquals(5L, actual.localRevision)
+        assertEquals(3L, actual.positionRevision)
+        assertEquals(3L, actual.ackedRevision)
+        assertEquals("destination-account", actual.agreedAccount)
+        assertEquals(0.8, actual.agreedProgression!!, 0.0)
+        assertTrue(url in requested)
+    }
+
+    @Test
+    fun `position backup matches a book imported at another URL`() = runTest {
+        val app = AppSettingsRepository(store("mapped-position-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("mapped-position-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val original = "file:///old/book.epub"
+        val destination = "file:///new/book.epub"
+        fun book(url: String) = Book(url = url, title = "Same book", author = "Author", coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null)
+        db.bookDao().upsert(book(original))
+        val locator = """{"href":"chapter.xhtml","type":"application/xhtml+xml"}"""
+        db.readingProgressDao().upsert(ReadingProgress(original, locator, 0.3, updatedAt = 100))
+        val archive = Uri.fromFile(File(folder.root, "mapped-position.zip"))
+        repository.exportTo(archive)
+        db.bookDao().deleteByUrls(listOf(original))
+        db.readingProgressDao().forget(original)
+        db.bookDao().upsert(book(destination))
+        val restored = restore(repository, archive) as SettingsBackupRestoreResult.Restored
+        assertEquals(1, restored.positionsRestored)
+        assertEquals(locator, db.readingProgressDao().get(destination)?.locatorJson)
+        assertEquals(100L, db.readingProgressDao().get(destination)?.readAt)
+        assertTrue(destination in requested)
+    }
+
+    @Test
+    fun `malformed position rejects the backup before changing settings`() = runTest {
+        val app = AppSettingsRepository(store("bad-position-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("bad-position-reader.preferences_pb"))
+        app.setThemeMode(ThemeMode.DARK)
+        val payload = JSONObject().put("app", JSONObject().put("theme_mode", "light")).put("reader", JSONObject())
+        val positions = """{"format":1,"application":"liseur","positions":[{"book_id":"book","locator":"broken","read_at":10}]}"""
+        val annotations = encodeAnnotationBackup(emptyList())
+        val archive = archive("bad-position.zip", payload, mapOf(
+            "positions.json" to positions.toByteArray(), "annotations.json" to annotations.toByteArray(),
+        ), format = 3)
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repository.inspect(Uri.fromFile(archive)))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
     }
 
     @Test
@@ -545,7 +619,7 @@ class SettingsBackupRepositoryTest {
         ZipFile(File(uri.path!!)).use { zip ->
             assertTrue(zip.getEntry("annotations.json") != null)
             val manifest = JSONObject(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText())
-            assertEquals(2, manifest.getInt("format"))
+            assertEquals(3, manifest.getInt("format"))
         }
 
         db.annotationDao().deleteForBook("source-book")
@@ -626,7 +700,7 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
-    fun `version one settings backups preserve destination annotations`() = runTest {
+    fun `version one settings backups preserve destination annotations and positions`() = runTest {
         val fonts = UserFontRepository(context, this, loadCheck = { true })
         fonts.awaitReady()
         val app = AppSettingsRepository(store("version-one-app.preferences_pb"))
@@ -634,10 +708,13 @@ class SettingsBackupRepositoryTest {
         val mark = BookAnnotation("existing", "local-book", AnnotationKind.BOOK_NOTE.name, "", note = "Keep me", createdAt = 123)
         db.annotationDao().upsert(mark)
         val payload = JSONObject().put("app", JSONObject().put("theme_mode", "dark")).put("reader", JSONObject())
+        val position = ReadingProgress("local-book", "{}", 0.4, updatedAt = 12)
+        db.readingProgressDao().upsert(position)
         val file = archive("version-one.zip", payload)
         assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(repository(app, reader, fonts), Uri.fromFile(file)))
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         assertEquals(mark, db.annotationDao().byId(mark.id))
+        assertEquals(position, db.readingProgressDao().get("local-book"))
         assertTrue(requested.isEmpty())
     }
 
@@ -657,6 +734,7 @@ class SettingsBackupRepositoryTest {
         val repository = SettingsBackupRepository(
             context, app, reader, fonts,
             AnnotationBackupRepository(context, failingDao, db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
         )
         assertEquals(SettingsBackupRestoreResult.PartiallyRestored, restore(repository, Uri.fromFile(file)))
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
@@ -676,6 +754,7 @@ class SettingsBackupRepositoryTest {
     ) = SettingsBackupRepository(
         context, app, reader, fonts,
         AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+        ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
     )
 
     private suspend fun restore(

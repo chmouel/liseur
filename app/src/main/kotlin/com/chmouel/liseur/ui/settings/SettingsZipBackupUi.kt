@@ -57,6 +57,7 @@ sealed interface SettingsBackupUiStatus {
         val fontFailures: Int,
         val annotationsAdded: Int,
         val annotationsAlreadyPresent: Int,
+        val positionsRestored: Int,
     ) : SettingsBackupUiStatus
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupUiStatus
@@ -140,6 +141,7 @@ private class SettingsBackupViewModel(
                                 result.fontFailures,
                                 result.annotationsAdded,
                                 result.annotationsAlreadyPresent,
+                                result.positionsRestored,
                             )
                             is SettingsBackupRestoreResult.Failed ->
                                 SettingsBackupUiStatus.Failed(result.failure)

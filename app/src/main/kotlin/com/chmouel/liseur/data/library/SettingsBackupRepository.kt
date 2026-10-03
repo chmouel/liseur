@@ -17,6 +17,8 @@ import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.applyBackupJson
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
+import com.chmouel.liseur.domain.BackedUpReadingPosition
+import com.chmouel.liseur.domain.decodeReadingPositionBackup
 import com.chmouel.liseur.domain.BackupContents
 import com.chmouel.liseur.domain.decodeAnnotationBackup
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -59,6 +61,7 @@ data class SettingsBackupPreview(
     val annotationCount: Int = 0,
     val annotationBookCount: Int = 0,
     val matchedAnnotationBooks: Int = 0,
+    val positionCount: Int = 0,
 )
 
 sealed interface SettingsBackupInspection {
@@ -78,6 +81,7 @@ sealed interface SettingsBackupRestoreResult {
         val fontFailures: Int,
         val annotationsAdded: Int = 0,
         val annotationsAlreadyPresent: Int = 0,
+        val positionsRestored: Int = 0,
     ) : SettingsBackupRestoreResult
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupRestoreResult
@@ -91,6 +95,7 @@ class SettingsBackupRepository(
     private val readerPreferences: ReaderPreferencesRepository,
     private val userFonts: UserFontRepository,
     private val annotations: AnnotationBackupRepository,
+    private val positions: ReadingPositionBackupRepository,
 ) {
     private val operationMutex = Mutex()
 
@@ -98,6 +103,7 @@ class SettingsBackupRepository(
         operationMutex.withLock {
         var completed = false
         var annotationFile: File? = null
+        var positionFile: File? = null
         try {
             val settings = JSONObject()
                 .put("app", appSettings.backupValues())
@@ -117,15 +123,25 @@ class SettingsBackupRepository(
             }
             val annotationMetadata = hashFile(ANNOTATIONS_PATH, stagedAnnotations)
 
+            val stagedPositions = File.createTempFile("positions-export-", ".json", context.cacheDir)
+            positionFile = stagedPositions
+            try {
+                positions.writeContents(stagedPositions, MAX_POSITIONS_BYTES)
+            } catch (e: ReadingPositionBackupTooLarge) {
+                throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+            }
+            val positionMetadata = hashFile(POSITIONS_PATH, stagedPositions)
+
             val fonts = userFonts.backupFonts()
             if (fonts.size > MAX_FONT_FILES) {
                 return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
             }
 
-            val listed = ArrayList<EntryMetadata>(fonts.size + 2)
+            val listed = ArrayList<EntryMetadata>(fonts.size + 3)
             listed += EntryMetadata(SETTINGS_PATH, settingsBytes.size.toLong(), sha256(settingsBytes))
             listed += annotationMetadata
-            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size
+            listed += positionMetadata
+            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size + positionMetadata.size
             val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
             val fontNames = fonts.associate { "fonts/${it.fileName}" to it.displayName }
             for (font in fonts) {
@@ -173,6 +189,7 @@ class SettingsBackupRepository(
                 writeEntry(zip, MANIFEST_PATH, manifestBytes)
                 writeEntry(zip, SETTINGS_PATH, settingsBytes)
                 writeFileEntry(zip, ANNOTATIONS_PATH, stagedAnnotations)
+                writeFileEntry(zip, POSITIONS_PATH, stagedPositions)
                 fonts.zip(fontMetadata).forEach { (font, expected) ->
                     currentCoroutineContext().ensureActive()
                     val actual = writeFileEntry(zip, expected.path, font.file)
@@ -193,6 +210,7 @@ class SettingsBackupRepository(
             SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
         } finally {
             annotationFile?.delete()
+            positionFile?.delete()
             if (!completed) withContext(NonCancellable) {
                 runCatching {
                     if (target.scheme == "content") {
@@ -215,6 +233,7 @@ class SettingsBackupRepository(
                     val settings = decodeSettings(result.entries.getValue(SETTINGS_PATH).file)
                     validateSettings(settings)
                     val annotationPreview = annotations.previewContents(decodeAnnotations(result.entries))
+                    val positionContents = decodePositions(result.entries)
                     val index = JSONObject().put(
                         "entries",
                         JSONArray().also { values ->
@@ -238,6 +257,7 @@ class SettingsBackupRepository(
                             annotationCount = annotationPreview.marks,
                             annotationBookCount = annotationPreview.books,
                             matchedAnnotationBooks = annotationPreview.matchedBooks,
+                            positionCount = positionContents.size,
                         ),
                         result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
                     )
@@ -275,6 +295,12 @@ class SettingsBackupRepository(
 
             val annotationContents = try {
                 decodeAnnotations(archive.entries)
+            } catch (e: BackupFailureException) {
+                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+            }
+
+            val positionContents = try {
+                decodePositions(archive.entries)
             } catch (e: BackupFailureException) {
                 return@withContext SettingsBackupRestoreResult.Failed(e.failure)
             }
@@ -330,8 +356,16 @@ class SettingsBackupRepository(
                 Log.w(TAG, "Annotation restore stopped after settings were restored", e)
                 return@withContext SettingsBackupRestoreResult.PartiallyRestored
             }
+            val restoredPositions = try {
+                positions.restore(positionContents)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Reading position restore stopped after settings were restored", e)
+                return@withContext SettingsBackupRestoreResult.PartiallyRestored
+            }
             SettingsBackupRestoreResult.Restored(
-                imported, present, failures, annotationResult.added, annotationResult.alreadyHere,
+                imported, present, failures, annotationResult.added, annotationResult.alreadyHere, restoredPositions,
             )
         } finally {
             removeStaging(archive.stagingDirectory)
@@ -384,7 +418,7 @@ class SettingsBackupRepository(
             if (!file.isFile) return null
             entries[path] = StagedEntry(file, file.length(), "", displayName)
         }
-        if (SETTINGS_PATH !in entries || entries.keys.any { it !in setOf(SETTINGS_PATH, ANNOTATIONS_PATH) && !it.startsWith("fonts/") }) {
+        if (SETTINGS_PATH !in entries || entries.keys.any { it !in setOf(SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH) && !it.startsWith("fonts/") }) {
             return null
         }
         return ArchiveResult.Valid(directory, entries)
@@ -450,7 +484,7 @@ class SettingsBackupRepository(
                     if (
                         entry.isDirectory ||
                         !safePath(path) ||
-                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH, ANNOTATIONS_PATH) && !path.startsWith("fonts/") ||
+                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH) && !path.startsWith("fonts/") ||
                         path in entries ||
                         entries.size >= MAX_ARCHIVE_ENTRIES
                     ) {
@@ -460,6 +494,7 @@ class SettingsBackupRepository(
                         MANIFEST_PATH -> MAX_MANIFEST_BYTES
                         SETTINGS_PATH -> MAX_SETTINGS_BYTES
                         ANNOTATIONS_PATH -> MAX_ANNOTATIONS_BYTES
+                        POSITIONS_PATH -> MAX_POSITIONS_BYTES
                         else -> MAX_ENTRY_BYTES
                     }
                     val staged = stageEntry(
@@ -496,10 +531,13 @@ class SettingsBackupRepository(
             if (manifest.opt("application") != "liseur") {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.opt("format") !in setOf(1, FORMAT)) {
+            if (manifest.opt("format") !in setOf(1, 2, FORMAT)) {
                 return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
             }
-            if (manifest.opt("format") == FORMAT && ANNOTATIONS_PATH !in entries) {
+            if (manifest.optInt("format") >= 2 && ANNOTATIONS_PATH !in entries) {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
+            if (manifest.opt("format") == FORMAT && POSITIONS_PATH !in entries) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
             val listed = manifest.optJSONArray("entries")
@@ -613,6 +651,15 @@ class SettingsBackupRepository(
             throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
         }
         return StagedEntry(file, size, digest.hexDigest())
+    }
+
+    private fun decodePositions(entries: Map<String, StagedEntry>): List<BackedUpReadingPosition> {
+        val entry = entries[POSITIONS_PATH] ?: return emptyList()
+        return try {
+            decodeReadingPositionBackup(readStagedBytes(entry.file, MAX_POSITIONS_BYTES).toString(Charsets.UTF_8))
+        } catch (e: Exception) {
+            throw BackupFailureException(SettingsBackupFailure.INVALID_ARCHIVE, e)
+        }
     }
 
     private fun decodeAnnotations(entries: Map<String, StagedEntry>): BackupContents.Readable {
@@ -873,18 +920,20 @@ class SettingsBackupRepository(
         private const val INDEX_PATH = "inspection.json"
         private val ARCHIVE_ID = Regex("[0-9a-f-]{36}")
         private val ENTRY_FILE = Regex("entry-[0-9]+")
-        private const val FORMAT = 2
+        private const val FORMAT = 3
         private const val MANIFEST_PATH = "manifest.json"
         private const val SETTINGS_PATH = "settings.json"
         private const val ANNOTATIONS_PATH = "annotations.json"
+        private const val POSITIONS_PATH = "positions.json"
+        private const val MAX_POSITIONS_BYTES = 16L * 1024 * 1024
         private const val MAX_ANNOTATIONS_BYTES = 16L * 1024 * 1024
         private const val MAX_SETTINGS_BYTES = 1024L * 1024
         private const val MAX_MANIFEST_BYTES = 1024L * 1024
         private const val MAX_FONT_FILES = UserFontRepository.MAX_FONTS
         private const val MAX_ENTRY_BYTES = UserFontRepository.MAX_BYTES
-        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 3
+        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 4
         private const val MAX_TOTAL_BYTES =
-            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES
+            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES + MAX_POSITIONS_BYTES
         private const val BUFFER_SIZE = 32 * 1024
         private const val NUMBER_EPSILON = 0.000001
         private val SHA256 = Regex("[0-9a-f]{64}")

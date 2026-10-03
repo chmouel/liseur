@@ -807,9 +807,9 @@
     <string name="books_export_error_library">Could not read the library for export.</string>
     <string name="books_export_error_folder">Could not open this folder for export. Choose a writable folder.</string>
     <string name="settings_backup_title">Backup and restore</string>
-    <string name="settings_backup_detail">Save settings, custom fonts, highlights, notes, and bookmarks in a ZIP backup.</string>
+    <string name="settings_backup_detail">Save settings, custom fonts, reading positions, highlights, notes, and bookmarks in a ZIP backup.</string>
     <string name="settings_backup_export">Export backup</string>
-    <string name="settings_backup_export_detail">Create a dated ZIP file with your settings, fonts, and annotations.</string>
+    <string name="settings_backup_export_detail">Create a dated ZIP file with your settings, fonts, reading positions, and annotations.</string>
     <string name="settings_backup_restore">Restore backup</string>
     <string name="settings_backup_restore_detail">Preview a backup before applying it.</string>
     <string name="settings_backup_preview_title">Restore this backup?</string>
@@ -1083,4 +1083,6 @@
         <item quantity="one">%1$d-day streak</item>
         <item quantity="other">%1$d-day streak</item>
     </plurals>
+    <string name="settings_backup_positions_preview">Reading positions: %1$d. Restoring replaces current positions with the saved positions.</string>
+    <string name="settings_backup_positions_restored">Reading positions restored: %1$d.</string>
 </resources>
