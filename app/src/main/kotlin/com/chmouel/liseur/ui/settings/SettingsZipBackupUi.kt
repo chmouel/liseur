@@ -79,6 +79,7 @@ private class SettingsBackupViewModel(
     private val _state = MutableStateFlow(SettingsBackupState())
     val state = _state.asStateFlow()
     private var activeOperation: Job? = null
+    private var closing = false
 
     override fun onCleared() {
         viewModelScope.launch(NonCancellable) { repository.discardProcessInspections() }
@@ -158,23 +159,30 @@ private class SettingsBackupViewModel(
     }
 
     fun close() {
+        if (closing) return
+        closing = true
+        _state.update { it.copy(busy = true) }
         val operation = activeOperation
         viewModelScope.launch {
-            operation?.cancelAndJoin()
-            repository.discardProcessInspections()
-            _state.update { it.copy(preview = null, busy = false) }
-            activeOperation = null
+            try {
+                operation?.cancelAndJoin()
+                repository.discardProcessInspections()
+            } finally {
+                closing = false
+                _state.update { it.copy(preview = null, busy = false) }
+                activeOperation = null
+            }
         }
     }
 
     private fun runBusy(action: suspend () -> Unit) {
-        if (_state.value.busy) return
+        if (closing || _state.value.busy) return
         _state.update { it.copy(busy = true) }
         activeOperation = viewModelScope.launch {
             try {
                 action()
             } finally {
-                _state.update { it.copy(busy = false) }
+                _state.update { it.copy(busy = closing) }
                 activeOperation = null
             }
         }

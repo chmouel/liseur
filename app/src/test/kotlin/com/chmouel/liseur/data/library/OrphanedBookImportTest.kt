@@ -359,6 +359,33 @@ class OrphanedBookImportTest {
     }
 
     @Test
+    fun `author backfill preserves legacy title-only identity and reading`() = runTest {
+        val epub = folder.newFile("title-only.epub").also {
+            writeEpub(it, authors = AUTHOR_METADATA, identifier = "none")
+        }
+        val url = Uri.fromFile(epub).toString()
+        db.bookDao().upsert(orphan(url).copy(
+            title = "A Test Book", author = null, identityAuthor = null,
+            workId = "a test book", downloadState = DownloadState.DOWNLOADED, localUri = url,
+        ))
+        val place = progress(url)
+        db.readingProgressDao().upsert(place)
+        val annotation = BookAnnotation(
+            id = "title-only-note", bookId = url, kind = "BOOK_NOTE", locatorJson = "",
+            note = "Keep me", createdAt = 2, updatedAt = 3,
+        )
+        db.annotationDao().upsert(annotation)
+
+        library.backfillAuthors()
+
+        assertEquals("Original author", db.bookDao().getByUrl(url)?.author)
+        assertEquals("", db.bookDao().getByUrl(url)?.identityAuthor)
+        assertEquals("a test book", db.bookDao().getByUrl(url)?.workId)
+        assertEquals(place, db.readingProgressDao().get(url))
+        assertEquals(annotation, db.annotationDao().byId(annotation.id))
+    }
+
+    @Test
     fun `opening a catalog book does not replace its server author`() = runTest {
         val book = orphan("calibre:remote").copy(author = "Catalog author")
         val id = db.bookDao().upsert(book)

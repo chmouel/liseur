@@ -968,7 +968,8 @@ class LocalLibraryRepository(
                 previousIdentityForMetadata,
             )
             val preservePreviousIdentity = previousWorkIdForMetadata == previousWorkId &&
-                epubAuthorIdentityMatches(publication, previousIdentityForMetadata)
+                (previousIdentityForMetadata.isNullOrBlank() ||
+                    epubAuthorIdentityMatches(publication, previousIdentityForMetadata))
             val workId = if (preservePreviousIdentity) previousWorkId else indexedWorkId
             val series = seriesOf(publication)
             // Cleanup first, then the new description. Torn the other
