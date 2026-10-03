@@ -861,7 +861,15 @@
     <string name="unarchive_book">Ripristina dall\'archivio</string>
     <string name="export_annotations">Esporta</string>
     <string name="annotations_backup_title">Evidenziazioni e note</string>
-    <string name="annotations_backup_summary" formatted="true">%1$d segni su %2$d libri</string>
+    <string name="annotations_backup_summary" formatted="true">%1$s su %2$s</string>
+    <plurals name="annotations_backup_mark_count">
+        <item quantity="one">%d segno</item>
+        <item quantity="other">%d segni</item>
+    </plurals>
+    <plurals name="annotations_backup_book_count">
+        <item quantity="one">%d libro</item>
+        <item quantity="other">%d libri</item>
+    </plurals>
     <string name="annotations_backup_none">Niente ancora segnato</string>
     <string name="export_annotations_detail">Scrivi ogni segno in un file da tenere o portare su un altro dispositivo.</string>
     <string name="import_annotations">Ripristina</string>

@@ -71,8 +71,8 @@ fun SettingsBackupScreen(
                         fontCount,
                         stringResource(
                             R.string.annotations_backup_summary,
-                            ready.preview.annotationCount,
-                            ready.preview.annotationBookCount,
+                            pluralStringResource(R.plurals.annotations_backup_mark_count, ready.preview.annotationCount, ready.preview.annotationCount),
+                            pluralStringResource(R.plurals.annotations_backup_book_count, ready.preview.annotationBookCount, ready.preview.annotationBookCount),
                         ),
                     ) + (if (ready.preview.positionCount > 0) {
                         "\n\n" + pluralStringResource(R.plurals.settings_backup_positions_preview, ready.preview.positionCount, ready.preview.positionCount)

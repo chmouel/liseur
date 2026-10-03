@@ -22,6 +22,13 @@ class BookExportTest {
     }
 
     @Test
+    fun `names replace format controls and normalize Unicode whitespace`() {
+        assertEquals("Book_name with spaces - Author.epub",
+            bookExportFileName("Book\u202ename\u2028with\u2029spaces", "Author"))
+        assertEquals("A B.epub", bookExportFileName("A\u00a0B", null))
+    }
+
+    @Test
     fun `long names are limited in UTF8 without splitting characters`() {
         val name = bookExportFileName("📚é".repeat(100), "Author")
         val stem = name.removeSuffix(".epub")

@@ -861,7 +861,15 @@
     <string name="unarchive_book">Desarchivar</string>
     <string name="export_annotations">Exportar</string>
     <string name="annotations_backup_title">Resaltados y notas</string>
-    <string name="annotations_backup_summary" formatted="true">%1$d marcas en %2$d libros</string>
+    <string name="annotations_backup_summary" formatted="true">%1$s en %2$s</string>
+    <plurals name="annotations_backup_mark_count">
+        <item quantity="one">%d marca</item>
+        <item quantity="other">%d marcas</item>
+    </plurals>
+    <plurals name="annotations_backup_book_count">
+        <item quantity="one">%d libro</item>
+        <item quantity="other">%d libros</item>
+    </plurals>
     <string name="annotations_backup_none">Aún no hay nada marcado</string>
     <string name="export_annotations_detail">Escribe cada marca en un archivo que puedas guardar o llevar a otro dispositivo.</string>
     <string name="import_annotations">Restaurar</string>

@@ -902,7 +902,15 @@
     <string name="unarchive_book">Unarchive</string>
     <string name="export_annotations">Export</string>
     <string name="annotations_backup_title">Highlights and notes</string>
-    <string name="annotations_backup_summary" formatted="true">%1$d marks across %2$d books</string>
+    <string name="annotations_backup_summary" formatted="true">%1$s across %2$s</string>
+    <plurals name="annotations_backup_mark_count">
+        <item quantity="one">%d mark</item>
+        <item quantity="other">%d marks</item>
+    </plurals>
+    <plurals name="annotations_backup_book_count">
+        <item quantity="one">%d book</item>
+        <item quantity="other">%d books</item>
+    </plurals>
     <string name="annotations_backup_none">Nothing marked yet</string>
     <string name="export_annotations_detail">Write every mark to a file you can keep or carry to another device.</string>
     <string name="import_annotations">Restore</string>

@@ -3,8 +3,12 @@ package com.chmouel.liseur.domain
 /** A portable filename for a copy of an offline EPUB. */
 fun bookExportFileName(title: String, author: String?): String {
     fun clean(value: String): String = value.map { character ->
-        if (character.isISOControl() || character in "\\/:*?\"<>|") '_'
-        else character
+        when {
+            character.isISOControl() || Character.getType(character) == Character.FORMAT.toInt() ||
+                character in "\\/:*?\"<>|" -> '_'
+            character.isWhitespace() || Character.isSpaceChar(character) -> ' '
+            else -> character
+        }
     }.joinToString("").trim().trim('.').trim()
 
     val name = clean(title).ifEmpty { "book" }

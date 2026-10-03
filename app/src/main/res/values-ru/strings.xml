@@ -923,7 +923,19 @@
     <string name="unarchive_book">Из архива</string>
     <string name="export_annotations">Экспорт</string>
     <string name="annotations_backup_title">Выделения и заметки</string>
-    <string name="annotations_backup_summary" formatted="true">%1$d отметок в %2$d книгах</string>
+    <string name="annotations_backup_summary" formatted="true">%1$s в %2$s</string>
+    <plurals name="annotations_backup_mark_count">
+        <item quantity="one">%d отметка</item>
+        <item quantity="few">%d отметки</item>
+        <item quantity="many">%d отметок</item>
+        <item quantity="other">%d отметки</item>
+    </plurals>
+    <plurals name="annotations_backup_book_count">
+        <item quantity="one">%d книге</item>
+        <item quantity="few">%d книгах</item>
+        <item quantity="many">%d книгах</item>
+        <item quantity="other">%d книги</item>
+    </plurals>
     <string name="annotations_backup_none">Пока ничего не отмечено</string>
     <string name="export_annotations_detail">Записать все отметки в файл, который можно сохранить или перенести на другое устройство.</string>
     <string name="import_annotations">Восстановить</string>

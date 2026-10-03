@@ -873,7 +873,15 @@
     <string name="unarchive_book">Aus dem Archiv holen</string>
     <string name="export_annotations">Exportieren</string>
     <string name="annotations_backup_title">Markierungen und Notizen</string>
-    <string name="annotations_backup_summary" formatted="true">%1$d Markierungen in %2$d Büchern</string>
+    <string name="annotations_backup_summary" formatted="true">%1$s in %2$s</string>
+    <plurals name="annotations_backup_mark_count">
+        <item quantity="one">%d Markierung</item>
+        <item quantity="other">%d Markierungen</item>
+    </plurals>
+    <plurals name="annotations_backup_book_count">
+        <item quantity="one">%d Buch</item>
+        <item quantity="other">%d Büchern</item>
+    </plurals>
     <string name="annotations_backup_none">Noch nichts markiert</string>
     <string name="export_annotations_detail">Schreibe jede Markierung in eine Datei, die du behalten oder auf ein anderes Gerät mitnehmen kannst.</string>
     <string name="import_annotations">Wiederherstellen</string>
