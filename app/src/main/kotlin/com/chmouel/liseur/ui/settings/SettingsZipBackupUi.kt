@@ -96,6 +96,10 @@ private class SettingsBackupViewModel(
         }
     }
 
+    fun discardExport(uri: Uri) {
+        viewModelScope.launch { repository.discardExport(uri) }
+    }
+
     fun exportBooks(uri: Uri) = runBusy {
         _state.update { it.copy(status = null, bookProgress = BookExportProgress(0)) }
         try {
@@ -211,7 +215,9 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         if (!active) model.close()
     }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) {
-        if (it != null && active) model.export(it)
+        if (it != null) {
+            if (active) model.export(it) else model.discardExport(it)
+        }
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
         if (it != null && active) model.inspect(it)

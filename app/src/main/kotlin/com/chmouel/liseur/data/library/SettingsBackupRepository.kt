@@ -211,15 +211,19 @@ class SettingsBackupRepository(
         } finally {
             annotationFile?.delete()
             positionFile?.delete()
-            if (!completed) withContext(NonCancellable) {
-                runCatching {
-                    if (target.scheme == "content") {
-                        DocumentsContract.deleteDocument(context.contentResolver, target)
-                    }
-                }.onFailure { Log.w(TAG, "Could not remove incomplete backup", it) }
+            if (!completed) discardExport(target)
+        }
+        }
+    }
+
+    /** Removes a newly created ZIP document when its export was abandoned. */
+    suspend fun discardExport(target: Uri) = withContext(NonCancellable + Dispatchers.IO) {
+        runCatching {
+            if (target.scheme == "content") {
+                DocumentsContract.deleteDocument(context.contentResolver, target)
             }
-        }
-        }
+        }.onFailure { Log.w(TAG, "Could not remove incomplete backup", it) }
+        Unit
     }
 
     suspend fun inspect(source: Uri): SettingsBackupInspection = withContext(Dispatchers.IO) {
