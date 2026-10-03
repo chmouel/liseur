@@ -774,7 +774,7 @@
     <string name="settings_library">Bibliothek</string>
     <string name="settings_remote_library">Externe Bibliotheken</string>
     <string name="settings_export_import">Export und Import</string>
-    <string name="books_export_title">Heruntergeladene Bücher exportieren</string>
+    <string name="books_export_title">Offline-Bücher exportieren</string>
     <string name="books_export_detail">Kopiere alle offline verfügbaren EPUBs in einen Ordner. Vorhandene Dateinamen werden übersprungen.</string>
     <string name="books_export_progress">Bücher werden exportiert: %1$d von %2$d</string>
     <string name="books_export_result">Exportiert: %1$d. Übersprungen: %2$d. Fehlgeschlagen: %3$d.</string>
@@ -887,12 +887,12 @@
     <string name="import_annotations">Wiederherstellen</string>
     <string name="import_annotations_detail">Lies Markierungen aus einer gespeicherten Datei zurück. Was schon hier ist, bleibt unangetastet.</string>
     <string name="import_preview_title">Diese Datei wiederherstellen?</string>
-    <string name="import_preview_body" formatted="true">Sie enthält %1$d Markierungen aus %2$d Büchern. %3$d davon sind in dieser Bibliothek — der Rest wartet auf sie.</string>
+    <string name="import_preview_body" formatted="true">%1$s. %2$s Die übrigen Markierungen warten auf ihre Bücher.</string>
     <string name="import_preview_none">Diese Datei enthält Markierungen für Bücher, die nicht in dieser Bibliothek sind. Es würde sich nichts ändern.</string>
     <string name="import_apply">Wiederherstellen</string>
     <string name="export_annotations_done">%1$d Markierungen aus %2$d Büchern exportiert.</string>
     <string name="export_annotations_empty">Noch nichts markiert.</string>
-    <string name="import_annotations_done">%1$d Markierungen wiederhergestellt.</string>
+    <string name="import_annotations_done">Wiederhergestellt: %1$s.</string>
     <string name="import_annotations_none">Jede Markierung in dieser Datei war schon hier.</string>
     <string name="annotations_backup_failed">Das hat nicht geklappt: %1$s</string>
     <string name="annotations_backup_failed_unknown">Das hat nicht geklappt.</string>
@@ -1066,5 +1066,9 @@
     <plurals name="settings_backup_positions_restored">
         <item quantity="one">%1$d Leseposition wiederhergestellt.</item>
         <item quantity="other">%1$d Lesepositionen wiederhergestellt.</item>
+    </plurals>
+    <plurals name="annotations_backup_matched_books">
+        <item quantity="one">%d Buch ist in dieser Bibliothek.</item>
+        <item quantity="other">%d Bücher sind in dieser Bibliothek.</item>
     </plurals>
 </resources>

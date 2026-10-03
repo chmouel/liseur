@@ -763,7 +763,7 @@
     <string name="settings_library">Libreria</string>
     <string name="settings_remote_library">Librerie remote</string>
     <string name="settings_export_import">Esporta e importa</string>
-    <string name="books_export_title">Esporta libri scaricati</string>
+    <string name="books_export_title">Esporta libri offline</string>
     <string name="books_export_detail">Copia tutti gli EPUB disponibili offline in una cartella. I nomi di file esistenti vengono saltati.</string>
     <string name="books_export_progress">Esportazione libri: %1$d di %2$d</string>
     <string name="books_export_result">Esportati: %1$d. Saltati: %2$d. Non riusciti: %3$d.</string>
@@ -875,12 +875,12 @@
     <string name="import_annotations">Ripristina</string>
     <string name="import_annotations_detail">Rileggi i segni da un file salvato. Ciò che è già qui resta intatto.</string>
     <string name="import_preview_title">Ripristinare questo file?</string>
-    <string name="import_preview_body" formatted="true">Contiene %1$d segni da %2$d libri. %3$d di quei libri sono in questa libreria — il resto aspetterà.</string>
+    <string name="import_preview_body" formatted="true">%1$s. %2$s Gli altri segni aspetteranno i loro libri.</string>
     <string name="import_preview_none">Questo file contiene segni per libri che non sono in questa libreria. Non cambierebbe nulla.</string>
     <string name="import_apply">Ripristina</string>
     <string name="export_annotations_done">Esportati %1$d segni da %2$d libri.</string>
     <string name="export_annotations_empty">Niente è ancora stato segnato.</string>
-    <string name="import_annotations_done">Ripristinati %1$d segni.</string>
+    <string name="import_annotations_done">Ripristino: %1$s.</string>
     <string name="import_annotations_none">Ogni segno in quel file era già qui.</string>
     <string name="annotations_backup_failed">Non ha funzionato: %1$s</string>
     <string name="annotations_backup_failed_unknown">Non ha funzionato.</string>
@@ -1054,5 +1054,9 @@
     <plurals name="settings_backup_positions_restored">
         <item quantity="one">Ripristinata %1$d posizione di lettura.</item>
         <item quantity="other">Ripristinate %1$d posizioni di lettura.</item>
+    </plurals>
+    <plurals name="annotations_backup_matched_books">
+        <item quantity="one">%d libro è in questa libreria.</item>
+        <item quantity="other">%d libri sono in questa libreria.</item>
     </plurals>
 </resources>

@@ -763,7 +763,7 @@
     <string name="settings_library">Biblioteca</string>
     <string name="settings_remote_library">Bibliotecas remotas</string>
     <string name="settings_export_import">Exportar e importar</string>
-    <string name="books_export_title">Exportar libros descargados</string>
+    <string name="books_export_title">Exportar libros sin conexión</string>
     <string name="books_export_detail">Copia todos los EPUB disponibles sin conexión a una carpeta. Se omiten los nombres de archivo existentes.</string>
     <string name="books_export_progress">Exportando libros: %1$d de %2$d</string>
     <string name="books_export_result">Exportados: %1$d. Omitidos: %2$d. Fallidos: %3$d.</string>
@@ -875,12 +875,12 @@
     <string name="import_annotations">Restaurar</string>
     <string name="import_annotations_detail">Vuelve a leer las marcas desde un archivo guardado. Lo que ya esté aquí se deja en paz.</string>
     <string name="import_preview_title">¿Restaurar este archivo?</string>
-    <string name="import_preview_body" formatted="true">Contiene %1$d marcas de %2$d libros. %3$d de esos libros están en esta biblioteca — el resto esperará por ellos.</string>
+    <string name="import_preview_body" formatted="true">%1$s. %2$s Las demás marcas esperarán a sus libros.</string>
     <string name="import_preview_none">Este archivo contiene marcas de libros que no están en esta biblioteca. No cambiaría nada.</string>
     <string name="import_apply">Restaurar</string>
     <string name="export_annotations_done">Exportadas %1$d marcas de %2$d libros.</string>
     <string name="export_annotations_empty">Aún no se ha marcado nada.</string>
-    <string name="import_annotations_done">Restauradas %1$d marcas.</string>
+    <string name="import_annotations_done">Restauración: %1$s.</string>
     <string name="import_annotations_none">Todas las marcas de ese archivo ya estaban aquí.</string>
     <string name="annotations_backup_failed">Eso no funcionó: %1$s</string>
     <string name="annotations_backup_failed_unknown">Eso no funcionó.</string>
@@ -1054,5 +1054,9 @@
     <plurals name="settings_backup_positions_restored">
         <item quantity="one">Se restauró %1$d posición de lectura.</item>
         <item quantity="other">Se restauraron %1$d posiciones de lectura.</item>
+    </plurals>
+    <plurals name="annotations_backup_matched_books">
+        <item quantity="one">%d libro está en esta biblioteca.</item>
+        <item quantity="other">%d libros están en esta biblioteca.</item>
     </plurals>
 </resources>

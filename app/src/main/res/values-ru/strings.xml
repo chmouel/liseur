@@ -813,7 +813,7 @@
     <string name="settings_library">Библиотека</string>
     <string name="settings_remote_library">Удалённые библиотеки</string>
     <string name="settings_export_import">Экспорт и импорт</string>
-    <string name="books_export_title">Экспортировать скачанные книги</string>
+    <string name="books_export_title">Экспортировать книги офлайн</string>
     <string name="books_export_detail">Скопируйте все EPUB, доступные офлайн, в папку. Имена существующих файлов будут пропущены.</string>
     <string name="books_export_progress">Экспорт книг: %1$d из %2$d</string>
     <string name="books_export_result">Экспортировано: %1$d. Пропущено: %2$d. Ошибок: %3$d.</string>
@@ -941,12 +941,12 @@
     <string name="import_annotations">Восстановить</string>
     <string name="import_annotations_detail">Прочитать отметки из сохранённого файла. Уже имеющиеся здесь не затрагиваются.</string>
     <string name="import_preview_title">Восстановить этот файл?</string>
-    <string name="import_preview_body" formatted="true">В нём %1$d отметок из %2$d книг. %3$d из этих книг есть в библиотеке — остальные будут ждать их.</string>
+    <string name="import_preview_body" formatted="true">%1$s. %2$s Остальные отметки будут ждать своих книг.</string>
     <string name="import_preview_none">В файле отметки для книг, которых нет в этой библиотеке. Ничего не изменится.</string>
     <string name="import_apply">Восстановить</string>
     <string name="export_annotations_done">Экспортировано %1$d отметок из %2$d книг.</string>
     <string name="export_annotations_empty">Пока ничего не отмечено.</string>
-    <string name="import_annotations_done">Восстановлено %1$d отметок.</string>
+    <string name="import_annotations_done">Восстановлено: %1$s.</string>
     <string name="import_annotations_none">Все отметки из этого файла уже были здесь.</string>
     <string name="annotations_backup_failed">Не получилось: %1$s</string>
     <string name="annotations_backup_failed_unknown">Не получилось.</string>
@@ -1138,5 +1138,11 @@
         <item quantity="few">Восстановлены %1$d позиции чтения.</item>
         <item quantity="many">Восстановлено %1$d позиций чтения.</item>
         <item quantity="other">Восстановлены %1$d позиции чтения.</item>
+    </plurals>
+    <plurals name="annotations_backup_matched_books">
+        <item quantity="one">%d книга есть в библиотеке.</item>
+        <item quantity="few">%d книги есть в библиотеке.</item>
+        <item quantity="many">%d книг есть в библиотеке.</item>
+        <item quantity="other">%d книги есть в библиотеке.</item>
     </plurals>
 </resources>

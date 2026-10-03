@@ -79,9 +79,12 @@ fun SettingsBackupScreen(
                     } else { "" }) + (if (ready.preview.annotationCount > 0) {
                         "\n\n" + stringResource(
                             R.string.import_preview_body,
-                            ready.preview.annotationCount,
-                            ready.preview.annotationBookCount,
-                            ready.preview.matchedAnnotationBooks,
+                            stringResource(
+                                R.string.annotations_backup_summary,
+                                pluralStringResource(R.plurals.annotations_backup_mark_count, ready.preview.annotationCount, ready.preview.annotationCount),
+                                pluralStringResource(R.plurals.annotations_backup_book_count, ready.preview.annotationBookCount, ready.preview.annotationBookCount),
+                            ),
+                            pluralStringResource(R.plurals.annotations_backup_matched_books, ready.preview.matchedAnnotationBooks, ready.preview.matchedAnnotationBooks),
                         )
                     } else {
                         ""
@@ -220,7 +223,7 @@ fun SettingsBackupScreen(
                                 alreadyInstalled,
                                 fontFailures,
                                 if (status.annotationsAdded > 0) {
-                                    stringResource(R.string.import_annotations_done, status.annotationsAdded)
+                                    stringResource(R.string.import_annotations_done, pluralStringResource(R.plurals.annotations_backup_mark_count, status.annotationsAdded, status.annotationsAdded))
                                 } else if (status.annotationsAlreadyPresent > 0) {
                                     stringResource(R.string.import_annotations_none)
                                 } else {

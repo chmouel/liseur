@@ -763,7 +763,7 @@
     <string name="settings_library">Bibliothèque</string>
     <string name="settings_remote_library">Bibliothèques distantes</string>
     <string name="settings_export_import">Exporter et importer</string>
-    <string name="books_export_title">Exporter les livres téléchargés</string>
+    <string name="books_export_title">Exporter les livres hors ligne</string>
     <string name="books_export_detail">Copiez tous les EPUB disponibles hors ligne dans un dossier. Les noms de fichiers existants sont ignorés.</string>
     <string name="books_export_progress">Export des livres : %1$d sur %2$d</string>
     <string name="books_export_result">Exportés : %1$d. Ignorés : %2$d. Échecs : %3$d.</string>
@@ -875,12 +875,12 @@
     <string name="import_annotations">Restaurer</string>
     <string name="import_annotations_detail">Relire les marques depuis un fichier enregistré. Tout ce qui est déjà ici est laissé tel quel.</string>
     <string name="import_preview_title">Restaurer ce fichier ?</string>
-    <string name="import_preview_body" formatted="true">Il contient %1$d marques de %2$d livres. %3$d de ces livres sont dans cette bibliothèque — le reste attendra.</string>
+    <string name="import_preview_body" formatted="true">%1$s. %2$s Les autres marques attendront leurs livres.</string>
     <string name="import_preview_none">Ce fichier contient des marques pour des livres qui ne sont pas dans cette bibliothèque. Rien ne changerait.</string>
     <string name="import_apply">Restaurer</string>
     <string name="export_annotations_done">%1$d marques exportées de %2$d livres.</string>
     <string name="export_annotations_empty">Rien n\'a encore été marqué.</string>
-    <string name="import_annotations_done">%1$d marques restaurées.</string>
+    <string name="import_annotations_done">Restauration : %1$s.</string>
     <string name="import_annotations_none">Chaque marque de ce fichier était déjà ici.</string>
     <string name="annotations_backup_failed">Ça n\'a pas marché : %1$s</string>
     <string name="annotations_backup_failed_unknown">Ça n\'a pas marché.</string>
@@ -1054,5 +1054,9 @@
     <plurals name="settings_backup_positions_restored">
         <item quantity="one">%1$d position de lecture restaurée.</item>
         <item quantity="other">%1$d positions de lecture restaurées.</item>
+    </plurals>
+    <plurals name="annotations_backup_matched_books">
+        <item quantity="one">%d livre est dans cette bibliothèque.</item>
+        <item quantity="other">%d livres sont dans cette bibliothèque.</item>
     </plurals>
 </resources>
