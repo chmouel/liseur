@@ -2,6 +2,7 @@ package com.chmouel.liseur.domain
 
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.AnnotationKind
+import org.readium.r2.shared.publication.Locator
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -132,6 +133,11 @@ fun decodeAnnotationBackup(json: String): BackupContents {
                     ((m.opt("progression") as? Number)?.toDouble()?.let { it.isFinite() } != true))
             ) {
                 return BackupContents.Unreadable("invalid annotation fields")
+            }
+            if (m.optString("kind") != AnnotationKind.BOOK_NOTE.name &&
+                runCatching { Locator.fromJSON(JSONObject(m.getString("locator"))) }.getOrNull() == null
+            ) {
+                return BackupContents.Unreadable("invalid annotation locator")
             }
             annotations += BookAnnotation(
                 id = id,

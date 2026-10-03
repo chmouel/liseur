@@ -74,6 +74,9 @@ interface BookAnnotationDao {
     @Query("SELECT * FROM annotations ORDER BY book_id, created_at")
     suspend fun all(): List<BookAnnotation>
 
+    @Query("SELECT * FROM annotations WHERE :lastBook IS NULL OR book_id > :lastBook OR (book_id = :lastBook AND id > :lastId) ORDER BY book_id, id LIMIT 1")
+    suspend fun nextForBackup(lastBook: String?, lastId: String?): BookAnnotation?
+
     /** One mark, or nothing; the sync pass asks about ids it was told. */
     @Query("SELECT * FROM annotations WHERE id = :id")
     suspend fun byId(id: String): BookAnnotation?

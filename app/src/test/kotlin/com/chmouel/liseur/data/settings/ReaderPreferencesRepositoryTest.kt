@@ -122,6 +122,16 @@ class ReaderPreferencesRepositoryTest {
     }
 
     @Test
+    fun `legacy backup overrides an existing modern page turn choice`() = runTest {
+        val repo = ReaderPreferencesRepository(store())
+        repo.setPageTurnStyle(PageTurnStyle.SLIDE)
+        repo.restoreBackupValues(org.json.JSONObject().put("page_turn_animation", false))
+        assertEquals(PageTurnStyle.NONE, repo.prefs.first().pageTurnStyle)
+        repo.restoreBackupValues(org.json.JSONObject().put("page_turn_animation", true))
+        assertEquals(PageTurnStyle.LIFT, repo.prefs.first().pageTurnStyle)
+    }
+
+    @Test
     fun `no two settings share a key`() = runTest {
         // Six new keys of two types, written one at a time and read back
         // raw: a swapped pair passes every test that goes through the

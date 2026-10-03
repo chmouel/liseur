@@ -25,7 +25,7 @@ class AnnotationBackupTest {
         id = "a1",
         bookId = "calibre:uuid-1",
         kind = "HIGHLIGHT",
-        locatorJson = """{"href":"/ch1.xhtml","locations":{"progression":0.25}}""",
+        locatorJson = """{"href":"/ch1.xhtml","type":"application/xhtml+xml","locations":{"progression":0.25}}""",
         text = "a passage worth keeping",
         note = "and what I thought of it",
         tint = "YELLOW",
@@ -39,7 +39,7 @@ class AnnotationBackupTest {
         id = "a2",
         bookId = "calibre:uuid-1",
         kind = "BOOKMARK",
-        locatorJson = """{"href":"/ch2.xhtml"}""",
+        locatorJson = """{"href":"/ch2.xhtml","type":"application/xhtml+xml"}""",
         createdAt = 1_700_000_001_000,
     )
 
@@ -56,6 +56,16 @@ class AnnotationBackupTest {
         val decoded = decodeAnnotationBackup(encodeAnnotationBackup(books))
         assertTrue("$decoded", decoded is BackupContents.Readable)
         return (decoded as BackupContents.Readable).books
+    }
+
+    @Test
+    fun `broken highlight and bookmark locators are rejected`() {
+        for (mark in listOf(full, bare)) {
+            val encoded = encodeAnnotationBackup(listOf(
+                BackedUpBook(mark.bookId, null, null, listOf(mark.copy(locatorJson = "broken"))),
+            ))
+            assertTrue(decodeAnnotationBackup(encoded) is BackupContents.Unreadable)
+        }
     }
 
     @Test

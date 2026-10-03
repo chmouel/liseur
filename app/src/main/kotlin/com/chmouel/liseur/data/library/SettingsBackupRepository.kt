@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.library
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.util.Log
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.APP_BACKUP_TYPES
@@ -18,7 +19,6 @@ import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
 import com.chmouel.liseur.domain.BackupContents
 import com.chmouel.liseur.domain.decodeAnnotationBackup
-import com.chmouel.liseur.domain.encodeAnnotationBackup
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.reader.annotations.HighlightTint
@@ -32,6 +32,7 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -95,6 +96,8 @@ class SettingsBackupRepository(
 
     suspend fun exportTo(target: Uri): SettingsBackupExportResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
+        var completed = false
+        var annotationFile: File? = null
         try {
             val settings = JSONObject()
                 .put("app", appSettings.backupValues())
@@ -105,12 +108,14 @@ class SettingsBackupRepository(
                 return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
             }
 
-            val annotationContents = annotations.exportContents()
-            val annotationCount = annotationContents.books.sumOf { it.annotations.size }
-            val annotationBytes = encodeAnnotationBackup(annotationContents.books).toByteArray(Charsets.UTF_8)
-            if (annotationBytes.size > MAX_ANNOTATIONS_BYTES) {
-                return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+            val stagedAnnotations = File.createTempFile("annotations-export-", ".json", context.cacheDir)
+            annotationFile = stagedAnnotations
+            val annotationCount = try {
+                annotations.writeContents(stagedAnnotations, MAX_ANNOTATIONS_BYTES)
+            } catch (e: AnnotationBackupTooLarge) {
+                throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
             }
+            val annotationMetadata = hashFile(ANNOTATIONS_PATH, stagedAnnotations)
 
             val fonts = userFonts.backupFonts()
             if (fonts.size > MAX_FONT_FILES) {
@@ -119,8 +124,8 @@ class SettingsBackupRepository(
 
             val listed = ArrayList<EntryMetadata>(fonts.size + 2)
             listed += EntryMetadata(SETTINGS_PATH, settingsBytes.size.toLong(), sha256(settingsBytes))
-            listed += EntryMetadata(ANNOTATIONS_PATH, annotationBytes.size.toLong(), sha256(annotationBytes))
-            var totalBytes = settingsBytes.size.toLong() + annotationBytes.size
+            listed += annotationMetadata
+            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size
             val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
             val fontNames = fonts.associate { "fonts/${it.fileName}" to it.displayName }
             for (font in fonts) {
@@ -167,7 +172,7 @@ class SettingsBackupRepository(
             ZipOutputStream(output).use { zip ->
                 writeEntry(zip, MANIFEST_PATH, manifestBytes)
                 writeEntry(zip, SETTINGS_PATH, settingsBytes)
-                writeEntry(zip, ANNOTATIONS_PATH, annotationBytes)
+                writeFileEntry(zip, ANNOTATIONS_PATH, stagedAnnotations)
                 fonts.zip(fontMetadata).forEach { (font, expected) ->
                     currentCoroutineContext().ensureActive()
                     val actual = writeFileEntry(zip, expected.path, font.file)
@@ -176,6 +181,7 @@ class SettingsBackupRepository(
                     }
                 }
             }
+            completed = true
             SettingsBackupExportResult.Exported(fonts.size, annotationCount)
         } catch (e: CancellationException) {
             throw e
@@ -185,6 +191,15 @@ class SettingsBackupRepository(
         } catch (e: Exception) {
             Log.w(TAG, "Settings export failed", e)
             SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
+        } finally {
+            annotationFile?.delete()
+            if (!completed) withContext(NonCancellable) {
+                runCatching {
+                    if (target.scheme == "content") {
+                        DocumentsContract.deleteDocument(context.contentResolver, target)
+                    }
+                }.onFailure { Log.w(TAG, "Could not remove incomplete backup", it) }
+            }
         }
         }
     }

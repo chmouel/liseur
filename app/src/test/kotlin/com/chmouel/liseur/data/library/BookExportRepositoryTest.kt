@@ -133,6 +133,15 @@ class BookExportRepositoryTest {
     }
 
     @Test
+    fun `a failed source does not reserve a duplicate filename`() = runTest {
+        db.bookDao().upsert(book("Duplicate", "calibre:a", Uri.fromFile(File(folder.root, "missing.epub")).toString()))
+        val source = source("source.epub")
+        db.bookDao().upsert(book("Duplicate", "calibre:b", Uri.fromFile(source).toString()))
+        assertEquals(BookExportResult.Completed(BookExportProgress(2, exported = 1, failed = 1)), repository().exportTo(tree) {})
+        assertEquals(source.readBytes().toList(), FakeDocs.fileNamed("Duplicate - Author.epub").readBytes().toList())
+    }
+
+    @Test
     fun `empty libraries and unavailable or incomplete folders are explicit results`() = runTest {
         assertEquals(BookExportResult.Empty, repository().exportTo(tree) {})
         db.bookDao().upsert(book("Book", Uri.fromFile(source("source.epub")).toString()))

@@ -58,7 +58,12 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
         // The complete payload is checked before the edit so malformed input cannot
         // leave half of a preference store restored.
         values.validateBackupJson(READER_BACKUP_TYPES)
-        store.edit { values.applyBackupJson(it, READER_BACKUP_TYPES) }
+        store.edit {
+            values.applyBackupJson(it, READER_BACKUP_TYPES)
+            if (!values.has("page_turn_style") && values.has("page_turn_animation")) {
+                it[Keys.PAGE_TURN_STYLE] = pageTurnStyleFrom(null, values.getBoolean("page_turn_animation")).id
+            }
+        }
     }
 
     private object Keys {

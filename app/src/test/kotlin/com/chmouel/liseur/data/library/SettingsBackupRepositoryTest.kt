@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.library
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -66,6 +67,27 @@ class SettingsBackupRepositoryTest {
     @After
     fun close() {
         db.close()
+    }
+
+    @Test
+    fun `failed ZIP writes delete the newly created document`() = runTest {
+        val docs = BookExportRepositoryTest.FakeDocs
+        docs.directory = folder.newFolder("failed-zip")
+        docs.names.clear()
+        docs.deleted.clear()
+        docs.failWrites.clear()
+        docs.names["backup"] = "backup.zip"
+        docs.failWrites += "backup.zip"
+        File(docs.directory, "backup").writeText("partial")
+        org.robolectric.Robolectric.buildContentProvider(BookExportRepositoryTest.FakeDocs::class.java)
+            .create("test.bookexport.documents")
+        val target = DocumentsContract.buildDocumentUri("test.bookexport.documents", "backup")
+        val app = AppSettingsRepository(store("failed-export-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("failed-export-reader.preferences_pb"))
+        assertEquals(SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS),
+            repository(app, reader, UserFontRepository(context, this, loadCheck = { true })).exportTo(target))
+        assertEquals(listOf("backup"), docs.deleted)
+        assertFalse(File(docs.directory, "backup").exists())
     }
 
     @Test
@@ -506,7 +528,7 @@ class SettingsBackupRepositoryTest {
                 id = kind.name,
                 bookId = "source-book",
                 kind = kind.name,
-                locatorJson = if (kind == AnnotationKind.BOOK_NOTE) "" else "{\"href\":\"chapter.xhtml\"}",
+                locatorJson = if (kind == AnnotationKind.BOOK_NOTE) "" else "{\"href\":\"chapter.xhtml\",\"type\":\"application/xhtml+xml\"}",
                 text = "A passage",
                 note = "A note",
                 tint = "YELLOW",

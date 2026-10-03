@@ -2,6 +2,12 @@ package com.chmouel.liseur.data.library
 
 import android.content.Context
 import android.net.Uri
+import android.util.JsonWriter
+import java.io.File
+import java.io.IOException
+import java.io.OutputStream
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.domain.BackedUpBook
@@ -13,6 +19,8 @@ import com.chmouel.liseur.domain.matchBackedUpBook
 import com.chmouel.liseur.domain.previewBackupMatch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+internal class AnnotationBackupTooLarge : IOException("Annotation backup exceeds limit")
 
 /** What an export would contain, before it is written anywhere. */
 data class BackupSummary(val marks: Int, val books: Int)
@@ -75,6 +83,62 @@ class AnnotationBackupRepository(
     private val bookDao: BookDao,
     private val requestBookSync: (String) -> Unit = {},
 ) {
+    /** Writes one row at a time so the archive limit also bounds export memory. */
+    suspend fun writeContents(file: File, maxBytes: Long): Int = withContext(Dispatchers.IO) {
+        var written = 0L
+        var count = 0
+        var lastBook: String? = null
+        var lastId: String? = null
+        file.outputStream().use { output ->
+            val bounded = object : OutputStream() {
+                override fun write(value: Int) {
+                    if (++written > maxBytes) throw AnnotationBackupTooLarge()
+                    output.write(value)
+                }
+                override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                    written += length
+                    if (written > maxBytes) throw AnnotationBackupTooLarge()
+                    output.write(bytes, offset, length)
+                }
+            }
+            JsonWriter(bounded.writer(Charsets.UTF_8)).use { writer ->
+                writer.beginObject().name("format").value(1).name("application").value("liseur")
+                    .name("books").beginArray()
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val mark = annotationDao.nextForBackup(lastBook, lastId) ?: break
+                    if (mark.bookId != lastBook) {
+                        if (lastBook != null) writer.endArray().endObject()
+                        val book = bookDao.getByUrl(mark.bookId)
+                        writer.beginObject().name("book_id").value(mark.bookId)
+                        book?.title?.let { writer.name("title").value(it) }
+                        book?.author?.let { writer.name("author").value(it) }
+                        writer.name("annotations").beginArray()
+                    }
+                    writer.beginObject().name("id").value(mark.id).name("kind").value(mark.kind)
+                        .name("locator").value(mark.locatorJson)
+                    mark.text?.let { writer.name("text").value(it) }
+                    mark.note?.let { writer.name("note").value(it) }
+                    mark.tint?.let { writer.name("tint").value(it) }
+                    mark.chapter?.let { writer.name("chapter").value(it) }
+                    mark.position?.let { writer.name("position").value(it) }
+                    mark.totalProgression?.let { writer.name("progression").value(it) }
+                    writer.name("created_at").value(mark.createdAt).name("updated_at").value(mark.updatedAt)
+                    mark.noteCreatedAt?.let { writer.name("note_created_at").value(it) }
+                    mark.noteUpdatedAt?.let { writer.name("note_updated_at").value(it) }
+                    writer.endObject()
+                    writer.flush()
+                    count++
+                    lastBook = mark.bookId
+                    lastId = mark.id
+                }
+                if (lastBook != null) writer.endArray().endObject()
+                writer.endArray().endObject()
+            }
+        }
+        count
+    }
+
     /** What an export would carry, for saying so before asking where. */
     suspend fun exportPreview(): BackupSummary = withContext(Dispatchers.IO) {
         val annotations = annotationDao.all()

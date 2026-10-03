@@ -11,6 +11,9 @@ import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.domain.BackedUpBook
 import com.chmouel.liseur.domain.encodeAnnotationBackup
+import com.chmouel.liseur.domain.decodeAnnotationBackup
+import com.chmouel.liseur.domain.BackupContents
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -69,6 +72,22 @@ class AnnotationBackupRepositoryTest {
             ByteArrayInputStream(text.toByteArray())
         }
         return uri
+    }
+
+    @Test
+    fun `staged export groups paged rows and stops at its byte limit`() = runTest {
+        val marks = listOf(mark("one"), mark("two"), mark("three", "book-two"))
+        marks.forEach { db.annotationDao().upsert(it) }
+        val file = File.createTempFile("annotation-test-", ".json", context.cacheDir)
+        try {
+            assertEquals(3, repository().writeContents(file, 4096))
+            val contents = decodeAnnotationBackup(file.readText()) as BackupContents.Readable
+            assertEquals(marks, contents.books.flatMap { it.annotations })
+            assertTrue(runCatching { repository().writeContents(file, 100) }.exceptionOrNull() is AnnotationBackupTooLarge)
+            assertTrue(file.length() <= 100)
+        } finally {
+            file.delete()
+        }
     }
 
     @Test

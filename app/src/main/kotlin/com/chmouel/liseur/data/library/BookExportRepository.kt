@@ -116,12 +116,14 @@ class BookExportRepository(private val context: Context, private val bookDao: Bo
                 counts = counts.copy(failed = counts.failed + 1)
             } finally {
                 if (!complete) {
-                    destination?.let { created ->
+                    val removed = destination?.let { created ->
                         withContext(NonCancellable) {
                             runCatching { DocumentsContract.deleteDocument(context.contentResolver, created) }
                                 .onFailure { Log.w(TAG, "Could not remove incomplete export", it) }
+                                .getOrDefault(false)
                         }
-                    }
+                    } ?: true
+                    if (removed) names.remove(name.lowercase(Locale.ROOT))
                 }
             }
             onProgress(counts)
