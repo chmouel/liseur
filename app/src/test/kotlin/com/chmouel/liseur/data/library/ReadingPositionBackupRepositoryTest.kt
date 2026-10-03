@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.library
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
@@ -30,7 +31,8 @@ class ReadingPositionBackupRepositoryTest {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), LiseurDatabase::class.java).build()
     }
     @After fun close() = db.close()
-    private fun repository() = ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao())
+    private fun repository() = ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(),
+        inTransaction = { work -> db.withTransaction { work() } })
 
     @Test
     fun `staged positions round trip while status-only rows are omitted and bytes are bounded`() = runTest {
@@ -100,6 +102,27 @@ class ReadingPositionBackupRepositoryTest {
         assertEquals(local, db.readingProgressDao().get("local"))
         assertEquals(0.3, db.readingProgressDao().get("old-one")?.totalProgression)
         assertEquals(0.5, db.readingProgressDao().get("old-two")?.totalProgression)
+    }
+
+    @Test
+    fun `restored positions refresh finished shelf state while preserving explicit overrides`() = runTest {
+        val url = "book"
+        db.bookDao().upsert(Book(url = url, title = "Book", author = null, coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null, finishedAt = 10))
+        db.readingProgressDao().upsert(ReadingProgress(url, locator, 1.0, updatedAt = 20))
+        val backedUp = BackedUpReadingPosition(url, null, null, locator, 0.4, 10)
+        repository().restore(listOf(backedUp))
+        assertEquals(null, db.bookDao().getByUrl(url)?.finishedAt)
+        repository().restore(listOf(backedUp.copy(progression = 1.0)))
+        assertTrue(db.bookDao().getByUrl(url)?.finishedAt != null)
+        FinishedState(db.bookDao(), db.readingProgressDao()).setFinished(url, true)
+        repository().restore(listOf(backedUp))
+        assertTrue(db.bookDao().getByUrl(url)?.finishedAt != null)
+        assertEquals("Finished", db.readingProgressDao().get(url)?.status)
+        FinishedState(db.bookDao(), db.readingProgressDao()).setFinished(url, false)
+        repository().restore(listOf(backedUp.copy(progression = 1.0)))
+        assertEquals(null, db.bookDao().getByUrl(url)?.finishedAt)
+        assertEquals("Reading", db.readingProgressDao().get(url)?.status)
     }
 
     @Test

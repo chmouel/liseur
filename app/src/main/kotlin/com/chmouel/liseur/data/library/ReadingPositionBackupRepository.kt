@@ -20,6 +20,8 @@ class ReadingPositionBackupRepository(
     private val progressDao: ReadingProgressDao,
     private val bookDao: BookDao,
     private val requestBookSync: (String) -> Unit = {},
+    private val finishedState: FinishedState = FinishedState(bookDao, progressDao),
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
     suspend fun writeContents(file: File, maxBytes: Long) {
         var written = 0L
@@ -74,8 +76,11 @@ class ReadingPositionBackupRepository(
                 currentCoroutineContext().ensureActive()
                 val url = if (counts.getValue(target) > 1) position.bookId else target
                 progressDao.openBooks.unlessOpen(url) {
-                    progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
-                        position.readAt, System.currentTimeMillis())
+                    inTransaction {
+                        progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
+                            position.readAt, System.currentTimeMillis())
+                        finishedState.refreshFromProgress(url)
+                    }
                 } ?: throw IOException("Cannot replace the position of an open book")
                 changed += url
             }

@@ -197,7 +197,11 @@ class AppContainer(context: Context) {
         readerPreferences = readerPreferences,
         userFonts = userFonts,
         annotations = annotationBackup,
-        positions = ReadingPositionBackupRepository(database.readingProgressDao(), database.bookDao(), ::requestBookSync),
+        positions = ReadingPositionBackupRepository(
+            database.readingProgressDao(), database.bookDao(), ::requestBookSync,
+            finishedState = finishedState,
+            inTransaction = { work -> database.withTransaction { work() } },
+        ),
     )
 
     val bookExport = BookExportRepository(context.applicationContext, database.bookDao())

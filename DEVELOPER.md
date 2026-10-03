@@ -143,7 +143,8 @@ preserves existing ones, and requests sync for books with newly added marks.
 Restoring reading positions replaces the saved Readium locator and progression
 (or just progression when sync supplied no exact locator),
 matching books by URL or an unambiguous title and author match. The original reading time is kept;
-this device records a new local revision without importing account baselines or
+this device refreshes the shelf’s finished flag in the same transaction and
+records a new local revision without importing account baselines or
 acknowledgements, then requests sync. Positions for missing books retain their
 original URL. Older backups leave reading positions unchanged; archives with payloads newer
 than their declared version are rejected. Ambiguous or duplicate target matches
