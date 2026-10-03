@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModel
@@ -203,17 +204,20 @@ private class SettingsBackupViewModel(
 }
 
 @Composable
-fun rememberSettingsZipBackup(): SettingsZipBackupUi {
+fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
     val model: SettingsBackupViewModel = viewModel(factory = SettingsBackupViewModel.Factory)
     val state by model.state.collectAsState()
+    LaunchedEffect(active) {
+        if (!active) model.close()
+    }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) {
-        if (it != null) model.export(it)
+        if (it != null && active) model.export(it)
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
-        if (it != null) model.inspect(it)
+        if (it != null && active) model.inspect(it)
     }
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
-        if (it != null) model.exportBooks(it)
+        if (it != null && active) model.exportBooks(it)
     }
     return SettingsZipBackupUi(
         preview = state.preview,

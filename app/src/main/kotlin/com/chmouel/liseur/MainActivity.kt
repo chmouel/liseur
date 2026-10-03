@@ -227,7 +227,7 @@ private fun LiseurApp(
     val readerPreferences = remember(context) { context.container.readerPreferences }
     val readerPrefs by readerPreferences.prefs.collectAsStateWithLifecycle(ReaderPrefs())
     val appIsDark = settings.themeMode.isDark()
-    val settingsZipBackup = rememberSettingsZipBackup()
+    val settingsZipBackup = rememberSettingsZipBackup(active = screen == Screen.SETTINGS_BACKUP)
 
     when (screen) {
         Screen.LIBRARY -> LibraryRoute(
