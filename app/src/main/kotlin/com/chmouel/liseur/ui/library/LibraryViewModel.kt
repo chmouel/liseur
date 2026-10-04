@@ -556,7 +556,8 @@ class LibraryViewModel(
             // off the shelf is off every part of it: not counted, not
             // filtered into anything, and not left inside a series pile
             // whose other volumes are still showing.
-            val books = (baseValues[0] as List<Book>).filterNot { it.hidden }
+            // The grid keys by id, and a repeated one would crash it.
+            val books = (baseValues[0] as List<Book>).filterNot { it.hidden }.distinctBy { it.id }
             val recent = baseValues[1] as ContinueReading?
             val catalogStatus = baseValues[2] as CatalogStatus
             @Suppress("UNCHECKED_CAST")

@@ -157,6 +157,16 @@ class BrowseLibrariesTest {
     }
 
     @Test
+    fun `a first page never shows the same entry twice`() {
+        val page = BrowseListing(
+            categories = listOf(BrowseCategory("c1", "One"), BrowseCategory("c1", "Again")),
+            books = listOf(remote("a"), remote("a"), remote("b")),
+        ).unique()
+        assertEquals(listOf("One"), page.categories.map { it.title })
+        assertEquals(listOf("a", "b"), page.books.map { it.remoteId })
+    }
+
+    @Test
     fun `a walked catalog is reused until asked fresh or the connection changes`() = runTest {
         val cache = BrowseWalkCache()
         var walks = 0

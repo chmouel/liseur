@@ -102,10 +102,16 @@ private fun shownQuery(raw: String): String = raw.split('&').filter { it.isNotEm
 }
 
 internal fun BrowseListing.append(page: BrowseListing): BrowseListing = BrowseListing(
-    categories = (categories + page.categories).distinctBy { it.id },
-    books = (books + page.books).distinctBy { it.remoteId },
+    categories = categories + page.categories,
+    books = books + page.books,
     complete = complete && page.complete,
     nextPage = page.nextPage,
+).unique()
+
+/** The grid keys every entry by its id; a repeated one would crash it. */
+internal fun BrowseListing.unique(): BrowseListing = copy(
+    categories = categories.distinctBy { it.id },
+    books = books.distinctBy { it.remoteId },
 )
 
 class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : ViewModel() {
@@ -337,7 +343,7 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
                 } else if (listing == null) {
                     current.copy(loading = false, loadFailed = true)
                 } else {
-                    current.copy(loading = false, listing = listing)
+                    current.copy(loading = false, listing = listing.unique())
                 }
             }
         }
