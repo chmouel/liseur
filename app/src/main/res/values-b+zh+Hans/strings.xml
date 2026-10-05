@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="reader_sync_furthest_known">已知最远的位置</string>
+    <string name="reader_sync_take_furthest">转到最远处</string>
     <plurals name="library_book_count">
         <item quantity="other">%d 本图书</item>
     </plurals>
