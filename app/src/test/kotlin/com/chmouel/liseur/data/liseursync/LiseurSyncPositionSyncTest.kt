@@ -1928,7 +1928,7 @@ class LiseurSyncPositionSyncTest {
         server.enqueue(json("""{"ops":[${op(1, 0.7, "self", LOCATOR, "edition")},
             ${op(2, 0.31, "self", LOCATOR, "edition")}],"high_water":2}"""))
         assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
-        assertEquals(0.7, db.furthestPositionDao().forWork(peer("self"), "w-1").single().progression, 0.0)
+        assertEquals(0.7, db.furthestPositionDao().forWork(peer("self"), "w-1").maxOf { it.progression }, 0.0)
         assertFalse(db.syncPeerStateDao().get(LOCAL, peer("self"))!!.hasPending)
         assertEquals(2, db.remoteServerDao().get()!!.syncCursorSeq)
         val known = (sync(online = false, furthest = true).previewBook(LOCAL) as PreviewOutcome.Ready).preview
@@ -2042,7 +2042,7 @@ class LiseurSyncPositionSyncTest {
         server.enqueue(json("""{"ops":[${op(30, 0.31)}],"furthest":[${op(2, 0.7, "self")}],"snapshot_seq":30}"""))
         assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
         assertEquals(0.31, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
-        assertEquals(0.7, db.furthestPositionDao().forWork(peer("self"), "w-1").single().progression, 0.0)
+        assertEquals(0.7, db.furthestPositionDao().forWork(peer("self"), "w-1").maxOf { it.progression }, 0.0)
         assertEquals(30, db.remoteServerDao().get()!!.syncCursorSeq)
     }
 
@@ -2145,7 +2145,61 @@ class LiseurSyncPositionSyncTest {
         assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
         assertEquals(0.31, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
         assertNull(db.readingProgressDao().get(LOCAL)!!.peakProgression)
-        assertEquals(0.7, db.furthestPositionDao().forWork(peer(), "w-1").single().progression, 0.0)
+        assertEquals(0.7, db.furthestPositionDao().forWork(peer(), "w-1").maxOf { it.progression }, 0.0)
+    }
+
+    @Test
+    fun `snapshots retain opaque ownership candidates and sparse old responses preserve them`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val syncing = sync(furthest = true)
+        server.enqueue(json("""{"furthest":[${op(3, 0.7)},${op(4, 0.7)},${op(2, 0.6)}]}"""))
+        val first = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview
+        assertEquals("o-3", first.furthest!!.candidateId)
+        assertEquals(3, db.furthestPositionDao().forWork(peer(), "w-1").size)
+        server.enqueue(json("{}"))
+        val old = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview
+        assertEquals(first.furthest, old.furthest)
+        assertEquals(3, db.furthestPositionDao().forWork(peer(), "w-1").size)
+        assertNull(old.remote)
+    }
+
+    @Test
+    fun `retrying an unacknowledged peak cannot finish on a duplicate already acknowledged current`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.7, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.31, null, "reading", NOW + 1)
+        val known = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+        val sent = java.util.Collections.synchronizedList(mutableListOf<JSONObject>())
+        var latest = 0.31
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) return json("""{"ops":[],"high_water":0}""")
+                val operation = JSONObject(request.body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+                sent += operation
+                if (sent.size == 1) return json("""{"results":[]}""")
+                val id = operation.getString("op_id")
+                val status = if (known.add(id)) {
+                    latest = operation.getDouble("progression")
+                    "applied"
+                } else "duplicate"
+                return json("""{"results":[{"op_id":"$id","status":"$status"}]}""")
+            }
+        }
+        assertTrue(sync(furthest = true).syncBook(LOCAL) is SyncOutcome.Failure)
+        val revision = db.readingProgressDao().get(LOCAL)!!.localRevision
+        val previouslyAccepted = SyncOps.opIdFor("device-a", "w-1", revision)
+        known.add(previouslyAccepted)
+        db.syncPeerStateDao().settle(LOCAL, peer(), revision, 0.31, "reading", NOW)
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(3, sent.size)
+        assertEquals(sent[0].toString(), sent[1].toString())
+        assertFalse(previouslyAccepted == sent[2].getString("op_id"))
+        assertEquals(0.31, latest, 0.0)
+        assertEquals(revision + 1, db.syncPeerStateDao().get(LOCAL, peer())!!.ackedRevision)
     }
 
     private fun sync(

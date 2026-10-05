@@ -15,6 +15,7 @@ data class FurthestPosition(
     @ColumnInfo(name = "peer_id") val peerId: String,
     @ColumnInfo(name = "work_id") val workId: String,
     val edition: String,
+    /** Local retention slot, not a wire origin alias: empty for changes, otherwise a retained op ID. */
     val origin: String,
     val progression: Double,
     val seq: Long,

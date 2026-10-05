@@ -1242,7 +1242,8 @@ class LiseurSyncPositionSync(
         inTransaction {
             if (!sameAccount(account)) return@inTransaction
             if (authoritative) furthestDao?.deleteObservations(account.peerId)
-            (ops + historical).forEach { observe(account, it) }
+            ops.forEach { observe(account, it) }
+            historical.forEach { observe(account, it, retained = true) }
             val byWork = identityDao.aliasesFor(account.peerId).filter { it.usable }.groupBy { it.workId }
             val newestByWork = ops
                 .filterNot { it.deviceId != null && it.deviceId == account.deviceId }
@@ -1567,8 +1568,6 @@ class LiseurSyncPositionSync(
         var delivery = dao.delivered(account.peerId, item.bookUrl, item.alias.workId)
         if (delivery?.revision != revision) {
             forAccount(account) {
-                val current = progressDao.get(item.bookUrl) ?: return@forAccount
-                progressDao.renameRevision(item.bookUrl, current.localRevision)
                 dao.acknowledge(PeakDelivery(
                     account.peerId, item.bookUrl, item.alias.workId, revision,
                 ))
@@ -1577,6 +1576,11 @@ class LiseurSyncPositionSync(
         }
         if (!sameAccount(account) || delivery?.revision != revision) return null
         if (!delivery.acknowledged) {
+            forAccount(account) {
+                val current = progressDao.get(item.bookUrl) ?: return@forAccount
+                progressDao.renameRevision(item.bookUrl, current.localRevision)
+            }
+            if (!sameAccount(account)) return null
             val answer = try {
                 http.post(
                     LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.OPS), account.credentials,
@@ -2204,17 +2208,21 @@ class LiseurSyncPositionSync(
                 if (workId == null) furthestDao?.deleteObservations(account.peerId)
                 else furthestDao?.deleteWork(account.peerId, workId)
             }
-            (feed(response.optJSONArray("ops")) + feed(response.optJSONArray("furthest")))
+            feed(response.optJSONArray("ops"))
                 .mapNotNull(SyncFeedItem::op).filter { workId == null || it.workId == workId }
                 .forEach { observe(account, it) }
+            feed(response.optJSONArray("furthest"))
+                .mapNotNull(SyncFeedItem::op).filter { workId == null || it.workId == workId }
+                .forEach { observe(account, it, retained = true) }
         }
     }
 
-    private suspend fun observe(account: Account, op: SyncOp) {
+    private suspend fun observe(account: Account, op: SyncOp, retained: Boolean = false) {
         val payload = op.originalJson ?: SyncOps.toJson(op).toString()
         furthestDao?.observe(FurthestPosition(
             peerId = account.peerId, workId = op.workId, edition = op.editionSha.orEmpty(),
-            origin = JSONObject(payload).opt("origin_alias")?.toString().orEmpty(),
+            // Ownership groups are private to the server. Keep every snapshot candidate.
+            origin = if (retained) "retained:${op.opId}" else "",
             progression = op.progression, seq = op.seq, payload = payload,
         ))
     }

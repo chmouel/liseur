@@ -1041,9 +1041,11 @@ reader behavior.
 
 - Historical furthest and current position are separate facts. Room 66 keeps
   locally authored peaks alongside `reading_progress` and complete remote
-  operations in `furthest_position`, partitioned by account, work, edition,
-  and origin alias. Compare valid fractions strictly, without the merge
-  tolerance; jumps count, and rereading or marking unread never resets them.
+  operations in `furthest_position`, partitioned by account, work, and edition.
+  Preserve each snapshot candidate by operation identity: the server does not
+  expose its legacy-alias ownership groups. Compare valid fractions strictly,
+  without the merge tolerance; jumps count, and rereading or marking unread
+  never resets them.
   Every changes-page operation, including this device's echoes, is observed
   before selecting the newest foreign operation for ordinary reconciliation.
 - Positions and heads snapshots supply a separate `furthest` array. Its
@@ -1056,8 +1058,8 @@ reader behavior.
 - Before sending a coalesced lower current position, deliver its stored local
   peak with a deterministic, separately namespaced operation. `peak_delivery`
   tracks only this peak's acknowledgement, not a general operation queue.
-  Make a fresh current revision owed before transmitting the peak, and do
-  not send current until the peak is acknowledged. A missing answer retries
+  Make a fresh current revision owed before every unacknowledged peak attempt,
+  and do not send current until the peak is acknowledged. A missing answer retries
   the same peak; a failed current request leaves current owed. Remote
   observations are never used as locally authored peak uploads.
 - Historical adoption checks the displayed candidate, account, work, edition,
