@@ -1094,7 +1094,10 @@ reader behavior.
   observations are never used as locally authored peak uploads.
 - Historical adoption checks the displayed candidate, account, work, edition,
   and local revision in one transaction. The reader captures its current
-  scrolled place before acting and uses the normal locator restoration and
+  scrolled place before acting. The action may use the one revision created by
+  that capture only if the offered row was still current and the captured
+  passage is unchanged; other writes or reader movement invalidate the choice.
+  Adoption still checks that captured revision atomically. It uses the normal locator restoration and
   way-back path. Existing automatic farther-current conflict resolution on
   opening remains unchanged. Other providers retain their existing protocols
   and do not advertise this historical action. An upgrade cannot recover
