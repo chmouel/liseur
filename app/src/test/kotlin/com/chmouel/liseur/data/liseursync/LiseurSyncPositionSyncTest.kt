@@ -1915,13 +1915,250 @@ class LiseurSyncPositionSyncTest {
         ))
     }
 
-    private fun sync(online: Boolean = true, withAnnotations: Boolean = false, measured: Boolean = false): LiseurSyncPositionSync {
+    @Test
+    fun `own historical echo survives newest collapse without becoming a conflict`() = runTest {
+        connect(deviceId = "self")
+        db.bookDao().upsert(local())
+        alias(deviceId = "self", editionSha = "edition")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.31, null, "reading", NOW)
+        db.syncPeerStateDao().settle(LOCAL, peer("self"), 1, 0.31, "reading", NOW)
+        db.furthestPositionDao().acknowledge(
+            com.chmouel.liseur.data.db.PeakDelivery(peer("self"), LOCAL, "w-1", 1, true),
+        )
+        server.enqueue(json("""{"ops":[${op(1, 0.7, "self", LOCATOR, "edition")},
+            ${op(2, 0.31, "self", LOCATOR, "edition")}],"high_water":2}"""))
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(0.7, db.furthestPositionDao().forWork(peer("self"), "w-1").single().progression, 0.0)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("self"))!!.hasPending)
+        assertEquals(2, db.remoteServerDao().get()!!.syncCursorSeq)
+        val known = (sync(online = false, furthest = true).previewBook(LOCAL) as PreviewOutcome.Ready).preview
+        assertEquals(0.7, known.furthest!!.progression, 0.0)
+        assertEquals(0.31, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+    }
+
+    @Test
+    fun `explicit history survives own latest and adoption refuses a changed local revision`() = runTest {
+        connect(deviceId = "self")
+        db.bookDao().upsert(local())
+        alias(deviceId = "self", editionSha = "edition")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.31, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[${op(10, 0.31, "self")}],
+            "furthest":[${op(1, 0.7, "other", LOCATOR, "edition")}]}"""))
+        val syncing = sync(furthest = true)
+        val preview = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview
+        assertFalse(preview.resolvable)
+        val target = preview.furthest!!
+        assertEquals("o-1", target.candidateId)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.32, null, "reading", NOW + 1)
+        assertEquals(ResolveOutcome.Superseded, syncing.takeFurthestPosition(LOCAL, 1, target))
+        assertEquals(0.32, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+        assertEquals(ResolveOutcome.Done, syncing.takeFurthestPosition(LOCAL, 2, target))
+        assertEquals(0.7, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+        assertEquals(0.32, db.readingProgressDao().get(LOCAL)!!.peakProgression!!, 0.0)
+        assertNull(db.syncPeerStateDao().get(LOCAL, peer("self")))
+    }
+
+    @Test
+    fun `historical adoption is bound to account work and edition`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "edition")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.31, null, "reading", NOW)
+        server.enqueue(json("""{"ops":[],"furthest":[${op(1, 0.7, locatorJson = LOCATOR, editionSha = "edition")}]}"""))
+        val syncing = sync(furthest = true)
+        val target = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview.furthest!!
+        alias(workId = "another", editionSha = "edition")
+        assertEquals(ResolveOutcome.Superseded, syncing.takeFurthestPosition(LOCAL, 1, target))
+        alias(editionSha = "changed")
+        assertEquals(ResolveOutcome.Superseded, syncing.takeFurthestPosition(LOCAL, 1, target))
+        alias(editionSha = "edition")
+        connect(stableAccountId = "someone-else")
+        assertEquals(ResolveOutcome.Superseded, syncing.takeFurthestPosition(LOCAL, 1, target))
+    }
+
+    @Test
+    fun `offline peak is delivered before current and current retries without resending peak`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.7, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, """{"href":"/earlier.xhtml"}""", 0.31, null, "reading", NOW + 1)
+        val sent = java.util.Collections.synchronizedList(mutableListOf<JSONObject>())
+        var failCurrent = true
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) return json("""{"ops":[],"high_water":0}""")
+                val body = request.body!!.utf8()
+                val operation = JSONObject(body).getJSONArray("ops").getJSONObject(0)
+                sent += operation
+                if (operation.getDouble("progression") == 0.31 && failCurrent) {
+                    failCurrent = false
+                    return MockResponse(code = 503)
+                }
+                return applied(request)
+            }
+        }
+        val syncing = sync(furthest = true)
+        assertTrue(syncing.syncBook(LOCAL) is SyncOutcome.Failure)
+        assertEquals(listOf(0.7, 0.31), sent.map { it.getDouble("progression") })
+        assertTrue(db.furthestPositionDao().delivered(peer(), LOCAL, "w-1")!!.acknowledged)
+        assertEquals(SyncOutcome.Success, syncing.syncBook(LOCAL))
+        assertEquals(listOf(0.7, 0.31, 0.31), sent.map { it.getDouble("progression") })
+        assertEquals(sent[1].toString(), sent[2].toString())
+        assertEquals(0.7, db.readingProgressDao().get(LOCAL)!!.peakProgression!!, 0.0)
+        assertEquals(db.readingProgressDao().get(LOCAL)!!.localRevision,
+            db.syncPeerStateDao().get(LOCAL, peer())!!.ackedRevision)
+    }
+
+    @Test
+    fun `a missing peak acknowledgement retries identical bytes before sending current`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.7, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.31, null, "reading", NOW + 1)
+        val sent = java.util.Collections.synchronizedList(mutableListOf<String>())
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) return json("""{"ops":[],"high_water":0}""")
+                sent += request.body!!.utf8()
+                return if (sent.size == 1) json("""{"results":[]}""") else applied(request)
+            }
+        }
+        assertTrue(sync(furthest = true).syncBook(LOCAL) is SyncOutcome.Failure)
+        assertEquals(1, sent.size)
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(3, sent.size)
+        assertEquals(sent[0], sent[1])
+        assertEquals(0.31, JSONObject(sent[2]).getJSONArray("ops").getJSONObject(0).getDouble("progression"), 0.0)
+    }
+
+    @Test
+    fun `cursor recovery seeds historical maxima but reconciles only latest heads`() = runTest {
+        connect(cursor = 1, deviceId = "self")
+        db.bookDao().upsert(local())
+        alias(deviceId = "self")
+        server.enqueue(MockResponse(code = 410, body = """{"error":"expired"}"""))
+        server.enqueue(json("""{"ops":[${op(30, 0.31)}],"furthest":[${op(2, 0.7, "self")}],"snapshot_seq":30}"""))
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(0.31, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+        assertEquals(0.7, db.furthestPositionDao().forWork(peer("self"), "w-1").single().progression, 0.0)
+        assertEquals(30, db.remoteServerDao().get()!!.syncCursorSeq)
+    }
+
+    @Test
+    fun `page turns during peak delivery keep the newest current position owed`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.7, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.31, null, "reading", NOW + 1)
+        val sent = java.util.Collections.synchronizedList(mutableListOf<Double>())
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) return json("""{"ops":[],"high_water":0}""")
+                sent += JSONObject(request.body!!.utf8()).getJSONArray("ops").getJSONObject(0).getDouble("progression")
+                if (sent.size == 1) runBlocking {
+                    db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.8, null, "reading", NOW + 2)
+                    db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.32, null, "reading", NOW + 3)
+                }
+                if (sent.size == 2) runBlocking {
+                    db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.33, null, "reading", NOW + 4)
+                }
+                return applied(request)
+            }
+        }
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(listOf(0.7, 0.32), sent)
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertTrue(row.localRevision > db.syncPeerStateDao().get(LOCAL, peer())!!.ackedRevision)
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(listOf(0.7, 0.32, 0.8, 0.33), sent)
+    }
+
+    @Test
+    fun `a fresh positions snapshot removes candidates that no longer belong to this work`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.enqueue(json("""{"ops":[],"furthest":[${op(1, 0.9, editionSha = "split-away")}]}"""))
+        val syncing = sync(furthest = true)
+        assertEquals(0.9, (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview.furthest!!.progression, 0.0)
+        server.enqueue(json("""{"ops":[],"furthest":[${op(2, 0.6, editionSha = "remaining")}]}"""))
+        assertEquals(0.6, (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview.furthest!!.progression, 0.0)
+        assertEquals("remaining", db.furthestPositionDao().forWork(peer(), "w-1").single().edition)
+    }
+
+    @Test
+    fun `offline local history restores its full original anchor without a server echo`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val peak = exactLocator("the original furthest passage", 0.7)
+        val earlier = exactLocator("the passage revisited", 0.31)
+        db.readingProgressDao().recordLocal(LOCAL, peak, 0.7, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, earlier, 0.31, null, "reading", NOW + 1)
+        val syncing = sync(online = false, furthest = true)
+        val preview = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview
+        assertEquals(ResumeConfidence.EXACT, preview.furthest!!.confidence)
+        assertEquals(peak, preview.furthest.locatorJson)
+        assertEquals(ResolveOutcome.Done, syncing.takeFurthestPosition(LOCAL, 2, preview.furthest))
+        assertEquals(peak, db.readingProgressDao().get(LOCAL)!!.locatorJson)
+        assertEquals(1L, db.readingProgressDao().get(LOCAL)!!.peakRevision)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `equal fractions do not hide a distinct exact historical anchor`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val peak = exactLocator("the first passage", 0.7)
+        db.readingProgressDao().recordLocal(LOCAL, peak, 0.7, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, exactLocator("a different passage", 0.7), 0.7, null, "reading", NOW + 1)
+        val preview = (sync(online = false, furthest = true).previewBook(LOCAL) as PreviewOutcome.Ready).preview
+        assertTrue(com.chmouel.liseur.reader.chrome.BookSyncChoice.offersFurthest(preview))
+        assertEquals(peak, preview.furthest!!.locatorJson)
+    }
+
+    @Test
+    fun `older servers and malformed historical arrays cannot erase an observed maximum`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val syncing = sync(furthest = true)
+        server.enqueue(json("""{"ops":[${op(1, 0.7)}]}"""))
+        assertEquals(0.7, (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview.furthest!!.progression, 0.0)
+        server.enqueue(json("""{"ops":[${op(2, 0.31)}],"furthest":[${spoiled(3)}]}"""))
+        val preview = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview
+        assertEquals(0.31, preview.remote!!, 0.0)
+        assertEquals(0.7, preview.furthest!!.progression, 0.0)
+    }
+
+    @Test
+    fun `newly resolved books seed history separately from their current position`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(seeded = false)
+        server.enqueue(json("""{"ops":[${op(10, 0.31)}],"furthest":[${op(1, 0.7)}]}"""))
+        server.enqueue(json("""{"ops":[],"high_water":10}"""))
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(0.31, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+        assertNull(db.readingProgressDao().get(LOCAL)!!.peakProgression)
+        assertEquals(0.7, db.furthestPositionDao().forWork(peer(), "w-1").single().progression, 0.0)
+    }
+
+    private fun sync(
+        online: Boolean = true, withAnnotations: Boolean = false, measured: Boolean = false,
+        furthest: Boolean = false,
+    ): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
             serverDao = db.remoteServerDao(),
             bookDao = db.bookDao(),
             progressDao = db.readingProgressDao(),
             peerStateDao = db.syncPeerStateDao(),
+            furthestDao = if (furthest) db.furthestPositionDao() else null,
             identityDao = db.workIdentityDao(),
             sessionDao = db.readingSessionDao(),
             sessionRefusalDao = db.sessionRefusalDao(),

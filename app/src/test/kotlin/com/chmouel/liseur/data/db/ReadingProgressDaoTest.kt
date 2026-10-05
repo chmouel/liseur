@@ -61,6 +61,31 @@ class ReadingProgressDaoTest {
 
     private suspend fun row() = requireNotNull(dao.get(book))
 
+    @Test
+    fun `local peak keeps its complete original position through rereading and settlement`() = runTest {
+        read(0.7, 1_000)
+        read(0.31, 2_000)
+        dao.ackPush(book, 2, 0.31, "Reading", account, now = 3_000)
+        val row = row()
+        assertEquals(0.31, row.totalProgression!!, 0.0)
+        assertEquals(0.7, row.peakProgression!!, 0.0)
+        assertEquals("""{"at":0.7}""", row.peakLocator)
+        assertEquals(1_000L, row.peakAt)
+        assertEquals(1L, row.peakRevision)
+    }
+
+    @Test
+    fun `local maxima include zero and tiny advances but never invalid fractions`() = runTest {
+        read(0.0)
+        assertEquals(0.0, row().peakProgression!!, 0.0)
+        read(0.00001)
+        read(2.0)
+        read(-1.0)
+        read(0.0)
+        assertEquals(0.00001, row().peakProgression!!, 0.0)
+        assertEquals(2L, row().peakRevision)
+    }
+
     // -- Revisions --------------------------------------------------------
 
     @Test

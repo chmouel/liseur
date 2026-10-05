@@ -18,6 +18,19 @@ import org.junit.Test
 class BookSyncChoiceTest {
 
     @Test
+    fun `manual history is offered when latest is our own echo or absent offline`() {
+        val target = com.chmouel.liseur.data.remote.FurthestDestination(
+            "account", "work", "edition", "op", 0.7, null, 1, ResumeConfidence.APPROXIMATE,
+        )
+        for (remote in listOf(0.31, null)) {
+            val preview = SyncPreview(0.31, remote, null, resolvable = false, furthest = target)
+            assertTrue(BookSyncChoice.decide(preview) is BookSyncVerdict.Ask)
+            assertTrue(BookSyncChoice.offersFurthest(preview))
+        }
+        assertFalse(BookSyncChoice.offersFurthest(SyncPreview(0.7, 0.7, null, furthest = target)))
+    }
+
+    @Test
     fun `no remote position is nothing to sync with`() {
         val verdict = BookSyncChoice.decide(SyncPreview(local = 0.4, remote = null, remoteAt = null))
 

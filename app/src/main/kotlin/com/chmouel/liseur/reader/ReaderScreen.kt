@@ -870,6 +870,8 @@ fun ReaderScreen(
         }
     }
 
+    onBookSyncAction.registerCapture(onProgressAction.prepareCatchUp)
+
     suspend fun settleLayout() {
         withFrameNanos { }
         withFrameNanos { }
@@ -3979,6 +3981,7 @@ class ReaderProgressActions(
  */
 class ReaderBookSyncActions(
     val start: () -> Unit,
+    val registerCapture: (suspend () -> Boolean) -> Unit = {},
 )
 
 /** Hides the status and navigation bars while the chrome is hidden. */

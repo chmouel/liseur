@@ -538,6 +538,7 @@ class ReaderViewModel(
             val relation: SyncRelation,
             /** The server's answer as it was shown, to act on or refuse. */
             val preview: SyncPreview,
+            val furthest: SyncPoint? = null,
         ) : BookSync
 
         data class BookOrbitChoice(
@@ -633,6 +634,8 @@ class ReaderViewModel(
      * other way round is the ordinary sync, which is exactly what has
      * already failed to help by the time this is pressed.
      */
+    var preparePositionAction: suspend () -> Boolean = { false }
+
     fun syncThisBook() {
         // A choice already on screen is the question being asked; a
         // second press behind it must not start a second one.
@@ -646,7 +649,7 @@ class ReaderViewModel(
             // position" offers a page no row holds — every provider reads
             // that row afresh — and the answer sends an older place, or
             // nothing at all.
-            if (!positionPublisher.flush(bookId)) {
+            if (!preparePositionAction() || !positionPublisher.flush(bookId)) {
                 _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
                 return@launch
             }
@@ -682,6 +685,9 @@ class ReaderViewModel(
                 ),
                 relation = verdict.relation,
                 preview = preview,
+                furthest = preview.furthest?.takeIf { BookSyncChoice.offersFurthest(preview) }?.let {
+                    point(it.progression, it.at, ExactLocatorAnchor.excerpt(it.locatorJson), it.confidence)
+                },
             )
         }
 
@@ -725,6 +731,7 @@ class ReaderViewModel(
                 declineBookOrbitChoice(R.string.reader_sync_book_moved)
                 return
             }
+
             applyBookOrbitChoice(bookOrbit.preview, takeRemote)
             return
         }
@@ -750,6 +757,40 @@ class ReaderViewModel(
                     BookSync.Idle
                 } else {
                     keptHere()
+                }
+            }
+        }
+    }
+
+    fun resolveFurthest() {
+        val preview = (_bookSync.value as? BookSync.Choice)?.preview ?: return
+        val target = preview.furthest ?: return
+        val generation = readingGeneration
+        _bookSync.value = BookSync.Asking
+        viewModelScope.launch {
+            if (!preparePositionAction() || !positionPublisher.flush(bookId)) {
+                _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
+                return@launch
+            }
+            if (readingGeneration != generation) {
+                _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
+                return@launch
+            }
+            _bookSync.value = when (val outcome = positionSync.takeFurthest(bookId, preview)) {
+                ResolveOutcome.Superseded -> BookSync.Note(R.string.reader_sync_book_moved)
+                is ResolveOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
+                ResolveOutcome.Done -> {
+                    if (readingGeneration != generation) {
+                        _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
+                        return@launch
+                    }
+                    goToRemotePosition(preview.copy(
+                        remote = target.progression, remoteAt = target.at,
+                        remoteLocatorJson = target.locatorJson, confidence = target.confidence,
+                        excerpt = ExactLocatorAnchor.excerpt(target.locatorJson),
+                    ))
+                    requestBookSync(bookId)
+                    BookSync.Idle
                 }
             }
         }

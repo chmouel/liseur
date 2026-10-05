@@ -1039,6 +1039,35 @@ reader behavior.
 
 ### liseur-sync positions and accounts
 
+- Historical furthest and current position are separate facts. Room 66 keeps
+  locally authored peaks alongside `reading_progress` and complete remote
+  operations in `furthest_position`, partitioned by account, work, edition,
+  and origin alias. Compare valid fractions strictly, without the merge
+  tolerance; jumps count, and rereading or marking unread never resets them.
+  Every changes-page operation, including this device's echoes, is observed
+  before selecting the newest foreign operation for ordinary reconciliation.
+- Positions and heads snapshots supply a separate `furthest` array. Its
+  historical entries never become pending conflicts or automatic opening
+  destinations. A present array replaces that snapshot's cached observations
+  so split-off editions do not remain attached to the old work. A missing
+  array is an older server: retain observed positions without claiming a
+  global lifetime maximum. The manual action says "Furthest known position"
+  and also works from durable observations while offline.
+- Before sending a coalesced lower current position, deliver its stored local
+  peak with a deterministic, separately namespaced operation. `peak_delivery`
+  tracks only this peak's acknowledgement, not a general operation queue.
+  Make a fresh current revision owed before transmitting the peak, and do
+  not send current until the peak is acknowledged. A missing answer retries
+  the same peak; a failed current request leaves current owed. Remote
+  observations are never used as locally authored peak uploads.
+- Historical adoption checks the displayed candidate, account, work, edition,
+  and local revision in one transaction. The reader captures its current
+  scrolled place before acting and uses the normal locator restoration and
+  way-back path. Existing automatic farther-current conflict resolution on
+  opening remains unchanged. Other providers retain their existing protocols
+  and do not advertise this historical action. An upgrade cannot recover
+  already discarded local positions or server history compacted before
+  lifetime retention was installed.
 - liseur-sync is an append-only log, not a current-position store. Apply a
   changes page and advance `remote_server.sync_cursor_seq` in the same
   transaction, never before applying the page.

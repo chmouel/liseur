@@ -19,6 +19,7 @@ data class SyncOp(
     val locatorJson: String?,
     val deviceId: String? = null,
     val seq: Long = 0,
+    val originalJson: String? = null,
 )
 
 /**
@@ -122,6 +123,7 @@ object SyncOps {
             locatorJson = locator?.toString(),
             deviceId = json.optString("device_id").takeIf { it.isNotEmpty() },
             seq = json.optLong("seq"),
+            originalJson = json.toString(),
         )
     }
 

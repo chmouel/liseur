@@ -34,13 +34,13 @@ position on its own.
 
 | Behaviour | Kindle | liseur-sync | calibre-web (Kobo) | Komga | kosync | Custom OPDS |
 |---|---|---|---|---|---|---|
-| What travels | last page, furthest page | full Readium locator and progression; the server keeps every op | percentage | full Readium locator, in Komga's spelling (`KomgaLocator`) | percentage | nothing |
+| What travels | last page, furthest page | full Readium locator and progression; retained historical maxima on supporting servers | percentage | full Readium locator, in Komga's spelling (`KomgaLocator`) | percentage | nothing |
 | Reopens at the exact place | yes | yes | the right page, near enough | yes | the right page, near enough | — |
 | Push while reading | on sleep or close | every persisted page turn, coalesced | same | same | same | — |
 | Push on leaving the book | yes | background backstop, expedited on API 31+ | same | same | same | — |
 | Background refresh | server push, and on wake | hourly, any network | same | same | same | — |
 | On open or resume | modal: go to the furthest page? | a pill offering the further place, one tap back, a decline remembered | same | same | same | — |
-| Conflict rule | furthest page wins | three-way merge against the last agreed baseline | same | same | same | — |
+| Conflict rule | furthest page wins | three-way merge against the last agreed baseline; historical furthest is an explicit action only | same | same | same | — |
 | Finished / unread | yes | yes, including a status set by hand | yes (Kobo `ReadingStatus`) | yes, including "mark read" in Komga's own UI | no; the percentage implies it | — |
 | Highlights, notes, bookmarks | yes | yes (ADR-0011) | no | no | no | no |
 | Reading statistics across devices | totals only | yes (ADR-0021) | no | no | no | no |

@@ -265,6 +265,7 @@ class AppContainer(context: Context) {
     )
 
     val remoteAccount = RemoteAccountRepository(
+        furthestDao = database.furthestPositionDao(),
         dao = database.remoteServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
@@ -405,6 +406,7 @@ class AppContainer(context: Context) {
     )
 
     val liseurSync = LiseurSyncPositionSync(
+        furthestDao = database.furthestPositionDao(),
         serverDao = database.remoteServerDao(),
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),

@@ -106,6 +106,10 @@ class RoutedPositionSync(
         if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) null
         else router.positionSync()?.preservedConflict(bookUrl)
 
+    override suspend fun previewKnownBook(bookUrl: String): PreviewOutcome =
+        if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) PreviewOutcome.NotSynced
+        else router.positionSync()?.previewKnownBook(bookUrl) ?: PreviewOutcome.NotSynced
+
     override suspend fun takeRemotePosition(
         bookUrl: String,
         atRevision: Long,
@@ -123,6 +127,13 @@ class RoutedPositionSync(
     override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
         if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) ResolveOutcome.Done
         else router.positionSync()?.keepLocalPosition(bookUrl) ?: ResolveOutcome.Done
+
+    override suspend fun takeFurthestPosition(
+        bookUrl: String, atRevision: Long, destination: FurthestDestination, peerId: String?,
+    ): ResolveOutcome =
+        if (isBrowseBook(bookUrl) && !router.maySyncBrowseBook()) ResolveOutcome.Superseded
+        else router.positionSync()?.takeFurthestPosition(bookUrl, atRevision, destination, peerId)
+            ?: ResolveOutcome.Superseded
 
     override suspend fun refreshUnresolved() {
         router.positionSync()?.refreshUnresolved()

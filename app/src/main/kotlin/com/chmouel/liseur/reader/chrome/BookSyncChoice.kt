@@ -2,6 +2,7 @@ package com.chmouel.liseur.reader.chrome
 
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.domain.EPSILON
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 
 /**
  * What syncing one book by hand should do about the two positions it
@@ -77,6 +78,14 @@ object BookSyncChoice {
      * be inventing a side; the server's answer is simply taken.
      */
     fun decide(preview: SyncPreview): BookSyncVerdict {
+        if (offersFurthest(preview)) return BookSyncVerdict.Ask(
+            when {
+                preview.remote == null || preview.local == null -> SyncRelation.AHEAD
+                preview.local - preview.remote >= EPSILON -> SyncRelation.BEHIND
+                preview.remote - preview.local >= EPSILON -> SyncRelation.AHEAD
+                else -> SyncRelation.SAME_PAGE
+            },
+        )
         val there = preview.remote ?: return BookSyncVerdict.NoRemote
         if (preview.agrees) return BookSyncVerdict.InStep
         // Asked before the sides are weighed: an answer that was never
@@ -91,5 +100,23 @@ object BookSyncChoice {
                 else -> SyncRelation.SAME_PAGE
             },
         )
+    }
+
+    fun offersFurthest(preview: SyncPreview): Boolean {
+        val target = preview.furthest ?: return false
+        val agreement = ExactLocatorAnchor.agreement(
+            preview.localLocatorJson, target.locatorJson,
+        )
+        if (agreement == true) return false
+        return preview.local == null || target.progression > preview.local ||
+            (target.progression == preview.local && agreement == false)
+    }
+
+    fun furthestMatchesRemote(preview: SyncPreview): Boolean {
+        val target = preview.furthest ?: return false
+        if (target.progression != preview.remote) return false
+        return ExactLocatorAnchor.agreement(
+            target.locatorJson, preview.remoteLocatorJson,
+        ) ?: (target.locatorJson == preview.remoteLocatorJson)
     }
 }
