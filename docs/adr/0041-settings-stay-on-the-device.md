@@ -31,8 +31,7 @@ this device last saw stored there.
 
 **A pass restores, then uploads.** For a key this device has never
 stored on the account, a value the server already holds is its own
-earlier copy, from before a reinstall or a cleared data directory, and
-it is applied, still held back while a book is open. After that,
+earlier copy, and it is applied, still held back while a book is open. After that,
 whatever differs from the server is uploaded, dated after the copy it
 replaces so a clock set back cannot get it refused.
 
@@ -51,10 +50,14 @@ Setting up a second device means choosing its settings on that device.
 That is the trade: what was convenient on day one turned into a font
 size overwritten on a reader who never touched it.
 
-A reinstall, or a disconnect followed by signing in again as the same
-device, restores what the server held for that device. Settings changed
-while disconnected are overwritten by that restore, because the record
-of what was stored there goes when the account is left.
+The server copy is keyed by the device id, so only a sign-in that keeps
+that id can restore it: signing in again while the account is still
+remembered on this device. A disconnect forgets the account and its id,
+and a clean reinstall never had them, so either one signs in as a new
+device. That device finds nothing on the server, keeps the settings it
+already has and uploads them. Carrying a device id across a reinstall
+was left out on purpose, because the same mechanism could hand one
+device's copy to another.
 
 Positions, annotations and statistics are unchanged. They are about the
 book, not the screen, and still sync across devices.

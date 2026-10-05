@@ -21,9 +21,12 @@ import java.time.format.DateTimeFormatter
  *
  * The one thing a pass has to tell apart is a key this device has never
  * stored on the account, which is when a value already on the server is
- * this device's own earlier copy (a reinstall, or cleared app data) and
- * is restored, from a key it has stored before, which is when any
- * difference is a change made here and is uploaded.
+ * this device's own earlier copy and is restored, from a key it has stored before, which is when any
+ * difference is a change made here and is uploaded. The copy is keyed by
+ * the device id, so only a sign-in that keeps that id reaches it: one
+ * made while the account is still remembered here. A disconnect or a
+ * clean reinstall signs in as a new device, which finds nothing to
+ * restore and uploads what it has.
  *
  * Only the keys in [settings] are sent or accepted.
  */
