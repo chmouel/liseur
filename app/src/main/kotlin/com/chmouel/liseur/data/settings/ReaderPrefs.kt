@@ -882,13 +882,6 @@ data class ReaderPrefs(
         const val DEFAULT_FONT_SIZE_POSITION = 7
         const val DEFAULT_FONT_SIZE = MIN_FONT_SIZE +
             DEFAULT_FONT_SIZE_POSITION * ((MAX_FONT_SIZE - MIN_FONT_SIZE) / (FONT_SIZE_POSITIONS - 1))
-
-        /**
-         * The default before [DEFAULT_FONT_SIZE]. Only the settings-sync
-         * bookkeeping still needs it, to recognise a value it recorded
-         * back then as a default rather than as a choice.
-         */
-        const val LEGACY_DEFAULT_FONT_SIZE = 1.0
     }
 }
 

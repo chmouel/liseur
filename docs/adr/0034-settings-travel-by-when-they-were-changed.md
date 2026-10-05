@@ -1,6 +1,6 @@
 # 34. Settings travel by when they were changed
 
-Status: accepted
+Status: superseded by [41. Settings stay on the device](0041-settings-stay-on-the-device.md)
 
 ## Context
 

@@ -62,8 +62,6 @@ import com.chmouel.liseur.data.remote.RoutedPositionSync
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.reader.ReaderPresence
-import com.chmouel.liseur.data.settings.FontSizeDefaultMigration
-import com.chmouel.liseur.data.settings.SettingsChangeTracker
 import com.chmouel.liseur.data.settings.SettingsSyncRepository
 import com.chmouel.liseur.data.settings.syncableSettings
 import com.chmouel.liseur.data.settings.SessionStateRepository
@@ -401,31 +399,10 @@ class AppContainer(context: Context) {
 
     private val syncableSettings = syncableSettings(appSettings, readerPreferences)
 
-    private val fontSizeDefaultMigration = FontSizeDefaultMigration(
-        syncState = settingsSyncState,
-        storedFontSize = readerPreferences::storedFontSize,
-        clearFontSize = readerPreferences::clearFontSize,
-    )
-
     private val liseurSyncSettings = LiseurSyncSettings(
         syncState = settingsSyncState,
         settings = syncableSettings,
-        ready = fontSizeDefaultMigration::ensure,
     )
-
-    /**
-     * Notes when the reader changes a setting, so a conflict is settled
-     * on when the edit was made rather than on which device reached the
-     * network first. Started from the container because it has to be
-     * watching whether or not anything is connected: a change made
-     * offline is exactly the one whose time cannot be recovered later.
-     */
-    private val settingsChangeTracker = SettingsChangeTracker(
-        syncState = settingsSyncState,
-        settings = syncableSettings,
-        sources = listOf(readerPreferences.prefs, appSettings.settings),
-        ready = fontSizeDefaultMigration::ensure,
-    ).also { it.start(applicationScope) }
 
     val liseurSync = LiseurSyncPositionSync(
         serverDao = database.remoteServerDao(),

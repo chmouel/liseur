@@ -50,31 +50,12 @@ class ReaderPreferencesRepositoryTest {
     }
 
     @Test
-    fun `a reader who never chose a size reads at the larger default`() = runTest {
+    fun `a reader who never chose a size reads at the default`() = runTest {
         val repo = ReaderPreferencesRepository(store())
         assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, repo.prefs.first().fontSize, 0.0)
-        assertNull(repo.storedFontSize())
 
         repo.setFontSize(1.0)
-        assertEquals(1.0, repo.storedFontSize()!!, 0.0)
         assertEquals(1.0, repo.prefs.first().fontSize, 0.0)
-
-        repo.clearFontSize()
-        assertNull(repo.storedFontSize())
-        assertEquals(ReaderPrefs.DEFAULT_FONT_SIZE, repo.prefs.first().fontSize, 0.0)
-    }
-
-    @Test
-    fun `a damaged stored size is not a size the reader chose`() = runTest {
-        val data = store()
-        val repo = ReaderPreferencesRepository(data)
-        for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0)) {
-            data.edit { it[doublePreferencesKey("font_size")] = bad }
-            assertNull(repo.storedFontSize())
-        }
-        // Too large is still a choice: it clamps to the largest size.
-        data.edit { it[doublePreferencesKey("font_size")] = 9.0 }
-        assertEquals(9.0, repo.storedFontSize()!!, 0.0)
     }
 
     @Test

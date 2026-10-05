@@ -2,8 +2,6 @@ package com.chmouel.liseur.data.liseursync
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.chmouel.liseur.data.remote.RemoteCredentials
-import com.chmouel.liseur.data.settings.FontSizeDefaultMigration
-import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.SettingsSyncRepository
 import com.chmouel.liseur.data.settings.SyncableSetting
 import kotlinx.coroutines.test.runTest
@@ -13,7 +11,6 @@ import okhttp3.Headers
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -23,17 +20,12 @@ import org.junit.rules.TemporaryFolder
 import java.net.InetAddress
 
 /**
- * Settings sync, which is last-writer-wins over a store that can refuse
- * a write and still answer `200`.
+ * The settings backup, which keeps one copy per device on the server.
  *
- * That combination is the whole difficulty, and every test here is some
- * shape of it. The server's upsert keeps whichever side is newer, so a
- * push that loses is indistinguishable from one that lands unless the
- * merged body is read; and because the two sides then decide what to do
- * next by comparing against what they think was agreed, a single wrong
- * note about an exchange is not a one-off mistake. It is a key that will
- * never move again, on a device whose reader can see it is wrong and has
- * no way to say so.
+ * This device is the only writer of its copy, so there is no conflict to
+ * settle: a value already on the server for a key this device never
+ * stored there is its own earlier copy and is restored; after that,
+ * whatever this device holds is what the server should hold.
  */
 class LiseurSyncSettingsTest {
 
@@ -65,150 +57,170 @@ class LiseurSyncSettingsTest {
     @After
     fun close() = server.close()
 
-    // -- The refused push -------------------------------------------------
+    // -- First connect ----------------------------------------------------
 
     @Test
-    fun `a push the server keeps its own value for is taken, not invented`() = runTest {
-        values["reader.font_size"] = "120"
+    fun `a configured phone uploads its settings to an empty server`() = runTest {
+        values["reader.font_size"] = "150"
+        values["app.theme_mode"] = "dark"
         enqueueGet()
-        // The server holds a newer value and says so in the merged body,
-        // which is the only place the refusal appears at all.
-        enqueuePut("reader.font_size" to Entry("140", LATER))
+        enqueuePut(
+            "reader.font_size" to Entry("150", NOW),
+            "app.theme_mode" to Entry("dark", NOW),
+        )
 
-        val exchanged = sync()
-
-        assertEquals(1, exchanged)
-        assertEquals("140", values["reader.font_size"])
-        val agreed = syncState.allLastSynced(ACCOUNT)["reader.font_size"]!!
-        assertEquals("140", agreed.value)
-        assertEquals(LATER, agreed.serverTimestamp)
+        assertEquals(2, sync())
+        assertEquals(setOf("reader.font_size", "app.theme_mode"), pushed().keys)
+        assertEquals(mapOf("reader.font_size" to "150", "app.theme_mode" to "dark"), stored())
     }
 
     @Test
-    fun `a refused push settles instead of asking again forever`() = runTest {
-        values["reader.font_size"] = "120"
-        enqueueGet()
-        enqueuePut("reader.font_size" to Entry("140", LATER))
+    fun `a reinstalled phone gets its own settings back`() = runTest {
+        values["reader.font_size"] = "100"
+        values["app.theme_mode"] = "light"
+        enqueueGet(
+            "reader.font_size" to Entry("140", LATER),
+            "app.theme_mode" to Entry("dark", LATER),
+        )
+
+        assertEquals(2, sync())
+        assertEquals("140", values["reader.font_size"])
+        assertEquals("dark", values["app.theme_mode"])
+        assertEquals(0, puts())
+        assertEquals(mapOf("reader.font_size" to "140", "app.theme_mode" to "dark"), stored())
+    }
+
+    @Test
+    fun `a value the server already holds is recorded without being sent`() = runTest {
+        values["reader.font"] = "bitter"
+        enqueueGet("reader.font" to Entry("bitter", NOW))
+
+        assertEquals(0, sync())
+        assertEquals(0, puts())
+        assertEquals("bitter", stored()["reader.font"])
+    }
+
+    // -- After that, this device decides -----------------------------------
+
+    @Test
+    fun `a change made here is uploaded`() = runTest {
+        record("reader.font", "literata")
+        values["reader.font"] = "bitter"
+        enqueueGet("reader.font" to Entry("literata", NOW))
+        enqueuePut("reader.font" to Entry("bitter", LATER))
+        clock = LATER
+
+        assertEquals(1, sync())
+        assertEquals("bitter", pushed()["reader.font"])
+        assertEquals("bitter", values["reader.font"])
+        assertEquals("bitter", stored()["reader.font"])
+    }
+
+    @Test
+    fun `the server's copy never overrides a setting this device has stored`() = runTest {
+        // Whatever the server holds, once this device has stored the key
+        // its own value is the one that counts.
+        record("reader.font", "bitter")
+        values["reader.font"] = "bitter"
+        enqueueGet("reader.font" to Entry("vollkorn", LATER))
+        enqueuePut("reader.font" to Entry("bitter", LATER + 1))
+        clock = LATER + 1
+
         sync()
 
-        // Second pass: both sides now hold the server's value, so there
-        // is nothing to say and nothing to send.
-        enqueueGet("reader.font_size" to Entry("140", LATER))
-        val exchanged = sync()
-
-        assertEquals(0, exchanged)
-        assertEquals(2, gets())
-        assertEquals(1, puts())
+        assertEquals("bitter", values["reader.font"])
+        assertEquals("bitter", pushed()["reader.font"])
     }
 
     @Test
-    fun `a key the server says nothing about is offered again`() = runTest {
+    fun `an upload is dated after the copy it replaces even on a slow clock`() = runTest {
+        record("reader.font", "literata")
+        values["reader.font"] = "bitter"
+        // The clock was set back since the last upload.
+        enqueueGet("reader.font" to Entry("literata", LATER))
+        enqueuePut("reader.font" to Entry("bitter", LATER + 1))
+        clock = NOW
+
+        sync()
+
+        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
+            .getJSONObject("settings").getJSONObject("reader.font")
+        assertEquals(iso(LATER + 1), sent.getString("updated_at"))
+    }
+
+    @Test
+    fun `a setting the server lost is uploaded again`() = runTest {
+        record("reader.font_size", "120")
         values["reader.font_size"] = "120"
         enqueueGet()
-        // A merged body that simply omits the key: nothing was agreed,
-        // so nothing may be written down as agreed.
+        enqueuePut("reader.font_size" to Entry("120", LATER))
+
+        sync()
+
+        assertEquals("120", pushed()["reader.font_size"])
+    }
+
+    @Test
+    fun `a key the server did not keep as sent is offered again`() = runTest {
+        values["reader.font_size"] = "120"
+        enqueueGet()
         enqueuePut()
         sync()
 
-        assertNull(syncState.allLastSynced(ACCOUNT)["reader.font_size"])
+        assertNull(stored()["reader.font_size"])
 
         enqueueGet()
         enqueuePut("reader.font_size" to Entry("120", NOW))
         sync()
         assertEquals(2, puts())
-    }
-
-    // -- Conflicts --------------------------------------------------------
-
-    @Test
-    fun `an edit made after the server's wins`() = runTest {
-        agree("reader.font_size", "120", NOW)
-        values["reader.font_size"] = "150"
-        // The reader changed it here at LATER + 1; the server's copy is
-        // from LATER. Arrival order would hand this to the server. The
-        // clock is moved past the edit, as it always is outside a test:
-        // the collector stamps a change with the same clock the pass
-        // reads, so a real change is never later than the pass.
-        changedAt("reader.font_size", LATER + 1)
-        clock = LATER + 2
-        enqueueGet("reader.font_size" to Entry("140", LATER))
-        enqueuePut("reader.font_size" to Entry("150", LATER + 1))
-
-        sync()
-
-        assertEquals("150", values["reader.font_size"])
-        assertEquals("150", pushed()["reader.font_size"])
+        assertEquals("120", stored()["reader.font_size"])
     }
 
     @Test
-    fun `an edit made before the server's loses`() = runTest {
-        agree("reader.font_size", "120", NOW)
-        values["reader.font_size"] = "150"
-        changedAt("reader.font_size", NOW + 1)
-        enqueueGet("reader.font_size" to Entry("140", LATER))
+    fun `nothing changed means nothing is sent`() = runTest {
+        record("reader.font", "bitter")
+        values["reader.font"] = "bitter"
+        enqueueGet("reader.font" to Entry("bitter", NOW))
 
-        sync()
-
-        assertEquals("140", values["reader.font_size"])
-        // Nothing to push: the local edit lost, so no PUT was made.
+        assertEquals(0, sync())
         assertEquals(0, puts())
-    }
-
-    @Test
-    fun `a local edit is dated when it was made, not when it is sent`() = runTest {
-        agree("reader.font_size", "120", NOW)
-        values["reader.font_size"] = "150"
-        changedAt("reader.font_size", NOW + 5)
-        clock = LATER + 9_000
-        enqueueGet()
-        enqueuePut("reader.font_size" to Entry("150", NOW + 5))
-
-        sync()
-
-        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
-            .getJSONObject("settings")
-            .getJSONObject("reader.font_size")
-        assertEquals("1970-01-01T00:01:40.005Z", sent.getString("updated_at"))
     }
 
     // -- Values this build cannot use -------------------------------------
 
     @Test
-    fun `a value this build does not understand is left alone`() = runTest {
+    fun `a stored value this build does not understand is replaced by this device's`() = runTest {
         values["reader.font"] = "literata"
         refused += "reader.font"
         enqueueGet("reader.font" to Entry("some-font-from-a-newer-build", LATER))
+        enqueuePut("reader.font" to Entry("literata", LATER + 1))
 
-        val exchanged = sync()
+        sync()
 
-        assertEquals(0, exchanged)
-        // Crucially, the local default was not pushed over the choice.
-        assertEquals(0, puts())
         assertEquals("literata", values["reader.font"])
-        assertNull(syncState.allLastSynced(ACCOUNT)["reader.font"])
+        assertEquals("literata", pushed()["reader.font"])
+        assertEquals("literata", stored()["reader.font"])
     }
-
-    // -- The account the baseline belongs to ------------------------------
 
     @Test
-    fun `settings arrive from a second account with older timestamps`() = runTest {
-        agree("reader.font_size", "120", LATER, account = ACCOUNT)
-        values["reader.font_size"] = "120"
-        // A different server, whose clock and history are its own. Its
-        // timestamp is older than the first account's, which is exactly
-        // the case that stalls if the two baselines are confused.
-        enqueueGet("reader.font_size" to Entry("140", NOW))
-        enqueuePut("reader.font_size" to Entry("140", NOW))
+    fun `a value the server could not store is dropped without taking the batch with it`() =
+        runTest {
+            values["app.dictionary_base_url"] = "https://example.com/" + "x".repeat(5000)
+            values["reader.font"] = "bitter"
+            enqueueGet()
+            enqueuePut("reader.font" to Entry("bitter", NOW))
 
-        sync(account = OTHER)
+            sync()
 
-        assertEquals("140", values["reader.font_size"])
-    }
+            val sent = pushed()
+            assertTrue("reader.font" in sent)
+            assertTrue("the oversized value was sent", "app.dictionary_base_url" !in sent)
+        }
 
     // -- A book on screen -------------------------------------------------
 
     @Test
-    fun `a reader setting is not applied under an open book`() = runTest {
+    fun `a restored reader setting is not applied under an open book`() = runTest {
         values["reader.font_size"] = "120"
         values["app.theme_mode"] = "light"
         enqueueGet(
@@ -220,12 +232,9 @@ class LiseurSyncSettingsTest {
 
         assertEquals("120", values["reader.font_size"])
         assertEquals("dark", values["app.theme_mode"])
-        // Held back, not pushed back: the open book must not be reflowed,
-        // and this device has nothing of its own to say about the key.
+        // Held back, not uploaded over the copy being restored.
         assertEquals(0, puts())
-        // Nothing recorded for the held-back key, so the next pass, with
-        // the book closed, still knows it is owed.
-        assertNull(syncState.allLastSynced(ACCOUNT)["reader.font_size"])
+        assertNull(stored()["reader.font_size"])
 
         enqueueGet(
             "reader.font_size" to Entry("140", LATER),
@@ -235,7 +244,43 @@ class LiseurSyncSettingsTest {
         assertEquals("140", values["reader.font_size"])
     }
 
-    // -- A server that does not have the route ----------------------------
+    @Test
+    fun `a setting that relays out the page is held back whatever its prefix`() = runTest {
+        values["app.scroll_mode"] = "false"
+        affectsPage += "app.scroll_mode"
+        enqueueGet("app.scroll_mode" to Entry("true", LATER))
+
+        sync(canApplyReaderSettings = false)
+
+        assertEquals("false", values["app.scroll_mode"])
+        assertNull(stored()["app.scroll_mode"])
+
+        enqueueGet("app.scroll_mode" to Entry("true", LATER))
+        sync()
+        assertEquals("true", values["app.scroll_mode"])
+    }
+
+    // -- Servers that do not keep settings per device -----------------------
+
+    @Test
+    fun `a server that shares settings across devices is left alone`() = runTest {
+        values["reader.font"] = "bitter"
+        // An older server: account-wide settings, no scope in the answer.
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = JSONObject().put("settings", settingsJson("reader.font" to Entry("vollkorn", LATER)))
+                    .toString(),
+            ),
+        )
+
+        assertEquals(-1, sync())
+        assertEquals(-1, sync())
+        assertEquals("bitter", values["reader.font"])
+        assertEquals(1, gets())
+        assertEquals(0, puts())
+        assertEquals(emptyMap<String, String>(), stored())
+    }
 
     @Test
     fun `a plain 404 means settings are not served and is asked once`() = runTest {
@@ -265,124 +310,7 @@ class LiseurSyncSettingsTest {
         assertTrue(threw)
     }
 
-    // -- First connect ----------------------------------------------------
-
-    @Test
-    fun `a configured phone offers its settings to an empty server`() = runTest {
-        values["reader.font_size"] = "150"
-        values["app.theme_mode"] = "dark"
-        enqueueGet()
-        enqueuePut(
-            "reader.font_size" to Entry("150", NOW),
-            "app.theme_mode" to Entry("dark", NOW),
-        )
-
-        assertEquals(2, sync())
-        assertEquals(setOf("reader.font_size", "app.theme_mode"), pushed().keys)
-    }
-
-    @Test
-    fun `a fresh phone takes the account's settings`() = runTest {
-        values["reader.font_size"] = "100"
-        values["app.theme_mode"] = "light"
-        enqueueGet(
-            "reader.font_size" to Entry("140", LATER),
-            "app.theme_mode" to Entry("dark", LATER),
-        )
-
-        assertEquals(2, sync())
-        assertEquals("140", values["reader.font_size"])
-        assertEquals("dark", values["app.theme_mode"])
-        assertEquals(0, puts())
-    }
-
-    @Test
-    fun `a setting the server lost is offered again`() = runTest {
-        agree("reader.font_size", "120", NOW)
-        values["reader.font_size"] = "120"
-        enqueueGet()
-        enqueuePut("reader.font_size" to Entry("120", LATER))
-
-        sync()
-
-        assertEquals("120", pushed()["reader.font_size"])
-    }
-
-    // -- Harness ----------------------------------------------------------
-
-    private class Entry(val value: String, val updatedAt: Long)
-
-    /**
-     * The settings this fake device has, which is exactly the keys the
-     * test declared in [values].
-     *
-     * Derived rather than fixed, because a key the server does not have
-     * is always offered to it — that is the point of the re-seed — so a
-     * registry with a spare key in it makes every "nothing was pushed"
-     * assertion in this file test the spare key instead of the subject.
-     */
-    // -- What the review found --------------------------------------------
-
-    @Test
-    fun `a setting that relays out the page is held back whatever its prefix`() = runTest {
-        values["app.scroll_mode"] = "false"
-        affectsPage += "app.scroll_mode"
-        enqueueGet("app.scroll_mode" to Entry("true", LATER))
-
-        sync(canApplyReaderSettings = false)
-
-        assertEquals("false", values["app.scroll_mode"])
-        assertNull(syncState.allLastSynced(ACCOUNT)["app.scroll_mode"])
-
-        // And it arrives once the book is closed.
-        enqueueGet("app.scroll_mode" to Entry("true", LATER))
-        sync()
-        assertEquals("true", values["app.scroll_mode"])
-    }
-
-    @Test
-    fun `an edit made while the push is in flight is not overwritten by the answer`() = runTest {
-        values["reader.font"] = "bitter"
-        enqueueGet()
-        // The server refuses and holds something else. Normally this
-        // device would take the server's value.
-        enqueuePut("reader.font" to Entry("literata", LATER))
-        // But the reader picks a third font while the request is away.
-        val sync = LiseurSyncSettings(
-            syncState = syncState,
-            settings = listOf(
-                SyncableSetting(
-                    key = "reader.font",
-                    read = { values.getValue("reader.font") },
-                    write = { v -> values["reader.font"] = v; true },
-                ),
-            ),
-            now = { clock },
-        )
-        server.dispatcher = object : mockwebserver3.Dispatcher() {
-            override fun dispatch(request: mockwebserver3.RecordedRequest): MockResponse {
-                if (request.method == "PUT") {
-                    values["reader.font"] = "vollkorn"
-                    return MockResponse(
-                        code = 200,
-                        body = body("reader.font" to Entry("literata", LATER)),
-                    )
-                }
-                return MockResponse(code = 200, body = body())
-            }
-        }
-
-        sync.sync(
-            accountKey = ACCOUNT,
-            baseUrl = server.url("/").toString().removeSuffix("/"),
-            credentials = RemoteCredentials.Bearer("token"),
-        )
-
-        assertEquals("vollkorn", values["reader.font"])
-        // Nothing is filed as agreed either, or the edit would never be
-        // offered again.
-        assertNull(syncState.allLastSynced(ACCOUNT)["reader.font"])
-    }
+    // -- Things that move while a pass runs --------------------------------
 
     @Test
     fun `an account switched away from mid-run neither writes here nor is recorded`() = runTest {
@@ -392,119 +320,12 @@ class LiseurSyncSettingsTest {
         sync(connected = false)
 
         assertEquals("bitter", values["reader.font"])
-        assertEquals(0, syncState.countForPeer(ACCOUNT))
-    }
-
-    @Test
-    fun `a divergence the tracker has not stamped yet beats an older server value`() = runTest {
-        values["reader.font"] = "bitter"
-        agree("reader.font", "literata", NOW)
-        // The reader has just changed it and no stamp exists yet, which
-        // is the window between a setter committing and the collector
-        // noticing. The server moved too, but longer ago.
-        enqueueGet("reader.font" to Entry("vollkorn", NOW + 1))
-        enqueuePut("reader.font" to Entry("bitter", LATER))
-        clock = LATER
-
-        sync()
-
-        assertEquals("bitter", values["reader.font"])
-        assertEquals("bitter", pushed()["reader.font"])
-    }
-
-    @Test
-    fun `a first connection takes the account's settings rather than offering its own`() =
-        runTest {
-            values["reader.font"] = "bitter"
-            // No baseline, no stamp: nothing was changed here, this is
-            // just what the device holds.
-            enqueueGet("reader.font" to Entry("literata", NOW))
-            clock = LATER
-
-            sync()
-
-            assertEquals("literata", values["reader.font"])
-        }
-
-    @Test
-    fun `a key the server lost is re-offered as what it was, not as a fresh edit`() = runTest {
-        values["reader.font"] = "bitter"
-        agree("reader.font", "bitter", NOW)
-        enqueueGet()
-        enqueuePut("reader.font" to Entry("bitter", NOW))
-        clock = LATER + 1
-
-        sync()
-
-        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
-            .getJSONObject("settings").getJSONObject("reader.font")
-        assertEquals(iso(NOW), sent.getString("updated_at"))
-    }
-
-    @Test
-    fun `a setting changed and changed back is still the reader's latest word`() = runTest {
-        values["reader.font"] = "bitter"
-        agree("reader.font", "bitter", NOW)
-        // Away and back again, which leaves the value where the account
-        // agreed it but is a choice made at LATER all the same.
-        syncState.observeLocal(mapOf("reader.font" to "bitter"), NOW)
-        syncState.observeLocal(mapOf("reader.font" to "vollkorn"), NOW + 1)
-        syncState.observeLocal(mapOf("reader.font" to "bitter"), LATER)
-        // Another device moved it in between, and was overruled here.
-        enqueueGet("reader.font" to Entry("literata", NOW + 2))
-        enqueuePut("reader.font" to Entry("bitter", LATER))
-        clock = LATER + 1
-
-        sync()
-
-        assertEquals("bitter", values["reader.font"])
-        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
-            .getJSONObject("settings").getJSONObject("reader.font")
-        assertEquals("bitter", sent.getString("value"))
-        assertEquals(iso(LATER), sent.getString("updated_at"))
-    }
-
-    @Test
-    fun `a value the server could not store is dropped without taking the batch with it`() =
-        runTest {
-            values["app.dictionary_base_url"] = "https://example.com/" + "x".repeat(5000)
-            values["reader.font"] = "bitter"
-            enqueueGet()
-            enqueuePut("reader.font" to Entry("bitter", NOW))
-
-            sync()
-
-            val sent = pushed()
-            assertTrue("reader.font" in sent)
-            assertTrue("the oversized value was sent", "app.dictionary_base_url" !in sent)
-        }
-
-    @Test
-    fun `a pulled value is marked even when the push that follows fails`() = runTest {
-        values["reader.font"] = "bitter"
-        values["reader.theme"] = "sepia"
-        agree("reader.theme", "dark", NOW)
-        // The account holds a newer font, which this pass applies, and
-        // this device holds a newer theme, which it tries to push.
-        enqueueGet("reader.font" to Entry("literata", LATER))
-        server.enqueue(MockResponse(code = 500))
-        clock = LATER
-
-        runCatching { sync() }
-
-        assertEquals("literata", values["reader.font"])
-        // The collector then sees the applied write. It must not read as
-        // an edit made here, or the next pass offers the server its own
-        // font back.
-        syncState.observeLocal(mapOf("reader.font" to "literata"), LATER + 1)
-        assertNull(syncState.localChanges()["reader.font"])
+        assertEquals(emptyMap<String, String>(), stored())
     }
 
     @Test
     fun `a setting changed while the pull is in flight is not overwritten`() = runTest {
         enqueueGet("reader.font" to Entry("literata", LATER))
-        // The reader picks a font in the window between this pass
-        // reading the value it will weigh and the write that follows.
         var reads = 0
         var written: String? = null
         val sync = LiseurSyncSettings(
@@ -526,124 +347,33 @@ class LiseurSyncSettingsTest {
         )
 
         assertNull("the newer choice was written over", written)
-        assertNull(syncState.allLastSynced(ACCOUNT)["reader.font"])
+        assertNull(stored()["reader.font"])
     }
 
     @Test
-    fun `a stamp from a clock that was wrong is not sent into the future`() = runTest {
-        values["reader.font"] = "bitter"
-        agree("reader.font", "literata", NOW)
-        // Recorded while the device's date was days ahead of the truth.
-        syncState.observeLocal(mapOf("reader.font" to "literata"), NOW)
-        syncState.observeLocal(mapOf("reader.font" to "bitter"), LATER * 1000)
-        enqueueGet()
-        enqueuePut("reader.font" to Entry("bitter", LATER))
-        clock = LATER
+    fun `each account has its own record`() = runTest {
+        record("reader.font_size", "120", account = ACCOUNT)
+        values["reader.font_size"] = "120"
+        // This device never stored anything on the other account, so
+        // what that server holds for it is restored there.
+        enqueueGet("reader.font_size" to Entry("140", NOW))
 
-        sync()
+        sync(account = OTHER)
 
-        // The server refuses a whole batch dated more than a day ahead,
-        // so one such stamp would block every setting for good.
-        val sent = JSONObject(requests().last { it.first == "PUT" }.second!!)
-            .getJSONObject("settings").getJSONObject("reader.font")
-        assertEquals(iso(LATER), sent.getString("updated_at"))
+        assertEquals("140", values["reader.font_size"])
+        assertEquals("120", stored(ACCOUNT)["reader.font_size"])
+        assertEquals("140", stored(OTHER)["reader.font_size"])
     }
 
-    @Test
-    fun `a change dated in the future does not outrank the account`() = runTest {
-        // Unchanged here since it was agreed, but carrying a stamp from
-        // a day when this device's date was wrong.
-        values["reader.font"] = "literata"
-        agree("reader.font", "literata", NOW)
-        changedAt("reader.font", LATER * 1000)
-        // Another device changed it, and the server's clock is a little
-        // ahead of this one — it allows a day of slack, so its copy can
-        // legitimately be dated after this device's now.
-        enqueueGet("reader.font" to Entry("vollkorn", LATER + 5))
-        enqueuePut("reader.font" to Entry("literata", LATER))
-        clock = LATER
+    // -- Harness ----------------------------------------------------------
 
-        sync()
+    private class Entry(val value: String, val updatedAt: Long)
 
-        // Compared as it is sent, the stamp cannot beat a copy it has no
-        // business outranking, so the newer choice arrives instead of
-        // being pushed over.
-        assertEquals("vollkorn", values["reader.font"])
-        assertFalse(requests().any { it.first == "PUT" })
-    }
-
-    // -- The default font size moved ----------------------------------------
-
-    @Test
-    fun `an account still at the old default takes the new one`() = runTest {
-        values["reader.font_size"] = "1.0"
-        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
-        agree("reader.font_size", "1.0", NOW)
-        movedDefault()
-        clock = LATER
-        enqueueGet("reader.font_size" to Entry("1.0", NOW))
-        enqueuePut("reader.font_size" to Entry(NEW_DEFAULT, NOW + 1))
-
-        sync()
-
-        assertEquals(NEW_DEFAULT, pushed()["reader.font_size"])
-        assertEquals(NEW_DEFAULT, values["reader.font_size"])
-    }
-
-    @Test
-    fun `a size chosen on another device survives the moved default`() = runTest {
-        values["reader.font_size"] = "1.0"
-        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
-        agree("reader.font_size", "1.0", NOW)
-        movedDefault()
-        clock = LATER + 10
-        enqueueGet("reader.font_size" to Entry("1.8", LATER))
-
-        sync()
-
-        assertEquals("1.8", values["reader.font_size"])
-        assertEquals(0, puts())
-    }
-
-    @Test
-    fun `a moved default is not offered over a new account's size`() = runTest {
-        values["reader.font_size"] = "1.0"
-        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
-        movedDefault()
-        clock = LATER + 10
-        enqueueGet("reader.font_size" to Entry("1.8", LATER))
-
-        sync()
-
-        assertEquals("1.8", values["reader.font_size"])
-        assertEquals(0, puts())
-    }
-
-    @Test
-    fun `another account's old agreement does not date the moved default here`() = runTest {
-        values["reader.font_size"] = "1.0"
-        syncState.observeLocal(mapOf("reader.font_size" to "1.0"), NOW)
-        agree("reader.font_size", "1.0", NOW)
-        agree("reader.font_size", "1.0", LATER, account = OTHER)
-        movedDefault()
-        clock = LATER + 10
-        // A real choice on this account, made after it agreed to the old
-        // default but before the other account did.
-        enqueueGet("reader.font_size" to Entry("1.8", NOW + 500))
-
-        sync()
-
-        assertEquals("1.8", values["reader.font_size"])
-        assertEquals(0, puts())
-    }
-
-    /** The update: the reader now reads at the new default, noticed by the collector. */
-    private suspend fun movedDefault() {
-        FontSizeDefaultMigration(syncState, storedFontSize = { null }, clearFontSize = {}).ensure()
-        values["reader.font_size"] = NEW_DEFAULT
-        syncState.observeLocal(mapOf("reader.font_size" to NEW_DEFAULT), LATER + 5)
-    }
-
+    /**
+     * The settings this fake device has, which is exactly the keys the
+     * test declared in [values], so a "nothing was sent" assertion is
+     * about the subject and not about a spare key.
+     */
     private fun settings(): List<SyncableSetting> =
         values.keys.toList().map { key ->
             SyncableSetting(
@@ -661,12 +391,7 @@ class LiseurSyncSettingsTest {
             )
         }
 
-    /**
-     * One instance across a test, as `AppContainer` holds one across a
-     * run. A fresh object per call would quietly lose everything the
-     * last pass learned — which is how a server found not to serve
-     * settings gets asked again anyway.
-     */
+    /** One instance across a test, as `AppContainer` holds one across a run. */
     private val sync by lazy {
         LiseurSyncSettings(
             syncState = syncState,
@@ -687,24 +412,12 @@ class LiseurSyncSettingsTest {
         stillConnected = { connected },
     )
 
-    private suspend fun agree(
-        key: String,
-        value: String,
-        at: Long,
-        account: String = ACCOUNT,
-    ) = syncState.recordSynced(
-        account,
-        mapOf(key to SettingsSyncRepository.SyncedEntry(value, at)),
-    )
+    private suspend fun record(key: String, value: String, account: String = ACCOUNT) =
+        syncState.recordStored(account, mapOf(key to value))
 
-    private suspend fun changedAt(key: String, at: Long) {
-        // Two looks: the first seeds the baseline, the second is the
-        // change, which is how the tracker stamps one.
-        syncState.observeLocal(mapOf(key to "seed"), at)
-        syncState.observeLocal(mapOf(key to values.getValue(key)), at)
-    }
+    private suspend fun stored(account: String = ACCOUNT) = syncState.allStored(account)
 
-    private fun body(vararg entries: Pair<String, Entry>): String {
+    private fun settingsJson(vararg entries: Pair<String, Entry>): JSONObject {
         val settings = JSONObject()
         for ((key, entry) in entries) {
             settings.put(
@@ -714,8 +427,14 @@ class LiseurSyncSettingsTest {
                     .put("updated_at", iso(entry.updatedAt)),
             )
         }
-        return JSONObject().put("settings", settings).toString()
+        return settings
     }
+
+    private fun body(vararg entries: Pair<String, Entry>): String =
+        JSONObject()
+            .put("settings", settingsJson(*entries))
+            .put("scope", "device")
+            .toString()
 
     private fun enqueueGet(vararg entries: Pair<String, Entry>) =
         server.enqueue(MockResponse(code = 200, body = body(*entries)))
@@ -724,11 +443,9 @@ class LiseurSyncSettingsTest {
         server.enqueue(MockResponse(code = 200, body = body(*entries)))
 
     /**
-     * Every request the server has been sent, drained once and kept.
-     *
-     * `takeRequest` consumes the queue, so counting GETs and then PUTs
-     * off the live queue would make the second count zero and every
-     * assertion about it vacuously wrong.
+     * Every request the server has been sent, drained once and kept, so
+     * counting GETs and then PUTs does not empty the queue under the
+     * second count.
      */
     private fun requests(): List<Pair<String, String?>> {
         while (true) {
@@ -756,7 +473,6 @@ class LiseurSyncSettingsTest {
         const val OTHER = "liseursync|https://other.example.com|account-2"
         const val NOW = 100_000L
         const val LATER = 200_000L
-        val NEW_DEFAULT = ReaderPrefs.DEFAULT_FONT_SIZE.toString()
 
         fun iso(millis: Long): String =
             java.time.format.DateTimeFormatter.ISO_INSTANT.format(

@@ -64,7 +64,7 @@ Reading position syncs across devices through [calibre-web](https://github.com/j
 down to the exact sentence on the last three. BookOrbit positions travel as EPUB CFIs.
 A Custom connection can be an [OPDS](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) address, a kosync address, or both, so a plain catalog and a sync server that know nothing about each other still add up to a library that follows you. What each server can and cannot do is in [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
-With liseur-sync you get extras, like settings sync, and better insights of your reading progress across devices.
+With liseur-sync you get extras, like a per-device settings backup, and better insights of your reading progress across devices.
 
 Home-screen widgets show the cover of the book you are reading, how long
 you have read today, this week or this month, or both side by side.

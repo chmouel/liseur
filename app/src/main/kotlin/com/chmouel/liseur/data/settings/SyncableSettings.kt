@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.first
 const val SETTING_UNSET = "__unset__"
 
 /**
- * One setting that travels between devices.
+ * One setting this device backs up to its liseur-sync account.
  *
  * The server stores opaque strings keyed by [key]; this type carries the
  * two directions of the translation between the string on the wire and
@@ -26,11 +26,9 @@ const val SETTING_UNSET = "__unset__"
  * [write] returns whether the string was understood. That answer is not
  * decoration: every `fromId` in this app falls back to the default for
  * an id it does not recognise, so a device running an older build that
- * silently accepted a newer build's font would store the fallback, read
- * back a different value, and push its own default over the choice that
- * was made — then keep doing it, in both directions, forever. A `false`
- * means the value is left alone and nothing is recorded as agreed, so
- * the newer device's answer stays the answer.
+ * silently accepted a newer build's font would store the fallback and
+ * report a restore that never happened. A `false` means the value is
+ * left alone and this device's own value is uploaded in its place.
  *
  * [affectsOpenBook] marks a setting that re-lays out a book already on
  * screen, and those are held back until the reader closes it. Most of
@@ -47,14 +45,15 @@ class SyncableSetting(
 )
 
 /**
- * The settings that roam across devices when a liseur-sync account is
- * connected.
+ * The settings this device backs up to a connected liseur-sync account.
+ * The server keeps them for this device alone (ADR-0041); they restore
+ * here and are never shown to another device.
  *
  * Each entry names a wire key (`reader.font`, `app.scroll_mode`, …) and
  * the two lambdas that read and write the local value as a string. The
  * server never interprets the value; both sides agree only on the key.
  *
- * Settings not listed here stay on the device, and the line is drawn at
+ * Settings not listed here are not backed up, and the line is drawn at
  * anything that is about *this* device rather than about the reader:
  * hardware-dependent choices (e-ink mode, brightness, tap zones, whether
  * the volume keys turn pages), anything that follows the screen
@@ -63,8 +62,8 @@ class SyncableSetting(
  *
  * The two dictionary settings are a deliberate exception, weighed rather
  * than overlooked: a server that sent both could turn lookups on and
- * point them at a host of its choosing, so they travel only because the
- * reader's own server is the one being trusted.
+ * point them at a host of its choosing, so they are restored only
+ * because the reader's own server is the one being trusted.
  */
 fun syncableSettings(
     app: AppSettingsRepository,

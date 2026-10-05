@@ -20,7 +20,7 @@ YOUR PLACE FOLLOWS YOU
 
 * Your reading position syncs across devices through calibre-web, Komga or liseur-sync, down to the exact sentence
 * Pair any OPDS catalog with any kosync server as a single Custom connection
-* Settings sync and reading statistics across devices when you connect liseur-sync
+* Settings backup for each device and reading statistics across devices when you connect liseur-sync
 * Close the book on your phone and pick it up on your tablet
 
 HIGHLIGHTS, NOTES, DICTIONARY

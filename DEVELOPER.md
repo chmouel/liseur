@@ -192,12 +192,7 @@ multiplier passed through `EpubPreferences`. Do not replace this with CSS
 integer percentage for `WebSettings.textZoom`.
 
 A reader who never chose a size gets `ReaderPrefs.DEFAULT_FONT_SIZE`, one
-of the Size slider's own positions (about 134%). It used to be `1.0`, and
-`FontSizeDefaultMigration` keeps settings sync from treating that move as a
-reader edit; see [Settings and statistics](#settings-and-statistics). A
-stored `1.0` that sync wrote from a server is handed back to the default
-too: no slider or pinch position is exactly `1.0`, so it can only be
-another device's old default.
+of the Size slider's own positions (about 134%).
 
 Build the diagnostic publication with:
 
@@ -1080,25 +1075,16 @@ reader behavior.
 
 ### Settings and statistics
 
-- A synced setting carries the time the reader changed it, not the push time.
-  `SettingsChangeTracker` records edits independently of connectivity; server
-  values are marked applied and are not re-counted as local edits. Preserve
-  the per-account baseline and avoid overwriting a change made after the
-  request was sent.
-- Changing a setting's default moves the value of every reader who never
-  chose one, which the tracker would stamp as a fresh edit and push over
-  other devices. Run `SettingsSyncRepository.adoptMovedDefault` before the
-  tracker's first note and the first pass, as `FontSizeDefaultMigration`
-  does for the font size: it moves the observed value without a stamp, and
-  dates the new default one millisecond after each account's agreement on
-  the old one, stored with that account's baseline, so an untouched account
-  follows and a real choice still wins.
-- Do not apply a setting that changes the open page while a book is open.
-  Decide this per write with `SyncableSetting.affectsOpenBook`. Device-shaped
-  settings never travel.
+- Settings stay on the device (ADR-0041). The server keeps a per-device
+  copy and this device is its only writer: a key never stored on the
+  account is restored from the server, anything else that differs is
+  uploaded. Never read settings from a server that does not answer
+  `scope: device`; it shares one copy across devices.
+- Do not apply a restored setting that changes the open page while a book
+  is open. Decide this per write with `SyncableSetting.affectsOpenBook`.
+  Device-shaped settings are never backed up.
 - Settings values must be validated before a batch request. Reject values the
-  server cannot store, cap future timestamps when they are read for sending,
-  and preserve the sentinel used for absence because the server has no delete.
+  server cannot store, and preserve the sentinel used for absence because the server has no delete.
 - Re-check the connected account before every network side effect and again
   before committing its response. A stale account must neither receive a
   request nor store its answer.

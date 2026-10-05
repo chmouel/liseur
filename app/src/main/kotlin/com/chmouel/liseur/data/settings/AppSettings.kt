@@ -480,8 +480,8 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
      * [AppSettings.highlightPalette] cannot answer this: it resolves an
      * absent set to the default three, so through it a reader who never
      * chose looks identical to one who chose exactly those three.
-     * Settings sync has to tell them apart, or "never chose" travels to
-     * the other device as a choice and outvotes a real one.
+     * The settings backup has to tell them apart, or "never chose" is
+     * stored as a choice and comes back as one on a restore.
      */
     suspend fun offeredHighlightTintNames(): Set<String>? =
         store.data.first()[Keys.HIGHLIGHT_TINTS]

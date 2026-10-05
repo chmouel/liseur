@@ -129,19 +129,6 @@ class ReaderPreferencesRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.FONT] = font.id }
     }
 
-    /**
-     * The size written down for the reader, or null while they read at
-     * the default. A stored number too damaged to use is null too, since
-     * it reads as the default.
-     */
-    suspend fun storedFontSize(): Double? =
-        store.data.first()[Keys.FONT_SIZE]?.takeIf { it.isFinite() && it >= 0.0 }
-
-    /** Hands the size back to the default. */
-    suspend fun clearFontSize() {
-        store.edit { it.remove(Keys.FONT_SIZE) }
-    }
-
     suspend fun setFontSize(size: Double) {
         store.edit { it[Keys.FONT_SIZE] = TypographyRange.FONT_SIZE.require(size) }
     }

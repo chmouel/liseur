@@ -467,8 +467,9 @@ class LiseurSyncPositionSync(
         // Settings first: lightweight and best-effort. A failure here
         // never blocks positions or annotations.
         //
-        // Only on a full sync. Settings are account-wide, so a
-        // book-scoped run has nothing of its own to say about them — and
+        // Only on a full sync. Settings belong to the device rather
+        // than to a book, so a book-scoped run has nothing to say about
+        // them — and
         // those runs fire from the reader on every annotation edit and
         // position disagreement, which is precisely when a book is on
         // screen to be reflowed.
