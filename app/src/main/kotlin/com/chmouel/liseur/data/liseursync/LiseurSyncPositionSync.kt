@@ -481,6 +481,7 @@ class LiseurSyncPositionSync(
                     credentials = account.credentials,
                     canApplyReaderSettings = { !readerIsOpen() },
                     stillConnected = { sameAccount(account) },
+                    deviceId = account.deviceId,
                 )
             } catch (e: CancellationException) {
                 throw e

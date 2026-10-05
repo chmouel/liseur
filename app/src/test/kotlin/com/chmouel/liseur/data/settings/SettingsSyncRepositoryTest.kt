@@ -93,6 +93,36 @@ class SettingsSyncRepositoryTest {
     }
 
     @Test
+    fun `a record is dropped when the account signs in as another device`() = runTest {
+        val repo = repo()
+        repo.claimDevice(A, "phone")
+        repo.recordStored(A, mapOf("reader.font_size" to "1.4"))
+        repo.recordStored(B, mapOf("reader.font_size" to "1.8"))
+
+        repo.claimDevice(A, "phone")
+        assertEquals(mapOf("reader.font_size" to "1.4"), repo.allStored(A))
+
+        repo.claimDevice(A, null)
+        assertEquals(mapOf("reader.font_size" to "1.4"), repo.allStored(A))
+
+        repo.claimDevice(A, "tablet")
+        assertEquals(emptyMap<String, String>(), repo.allStored(A))
+        assertEquals(mapOf("reader.font_size" to "1.8"), repo.allStored(B))
+    }
+
+    @Test
+    fun `the device a record was made as moves with the account`() = runTest {
+        val repo = repo()
+        repo.claimDevice(A, "phone")
+        repo.recordStored(A, mapOf("reader.font_size" to "1.4"))
+
+        repo.rekeyPeer(A, B)
+        repo.claimDevice(B, "phone")
+
+        assertEquals(mapOf("reader.font_size" to "1.4"), repo.allStored(B))
+    }
+
+    @Test
     fun `the cross-device bookkeeping is cleared on upgrade`() = runTest {
         // What the earlier version left: agreed values and their server
         // times, and change stamps this device made.

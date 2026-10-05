@@ -27,7 +27,11 @@ shared copy.
 settle, so the change collector (`SettingsChangeTracker`), the change
 stamps and the font-size default migration are gone.
 `SettingsSyncRepository` keeps one fact per account and key: the value
-this device last saw stored there.
+this device last saw stored there. It also notes the server device id
+that record was made as. An account can come back as another device,
+for instance through a pasted token, and that device's copy is not the
+one the record describes, so the record is dropped and the next pass
+restores instead of uploading over it.
 
 **A pass restores, then uploads.** For a key this device has never
 stored on the account, a value the server already holds is its own

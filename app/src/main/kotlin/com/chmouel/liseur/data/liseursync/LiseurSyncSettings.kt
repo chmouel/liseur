@@ -21,8 +21,8 @@ import java.time.format.DateTimeFormatter
  *
  * The one thing a pass has to tell apart is a key this device has never
  * stored on the account, which is when a value already on the server is
- * this device's own earlier copy and is restored, from a key it has stored before, which is when any
- * difference is a change made here and is uploaded. The copy is keyed by
+ * this device's own earlier copy and is restored, from a key it has
+ * stored before, which is when any difference is a change made here and is uploaded. The copy is keyed by
  * the device id, so only a sign-in that keeps that id reaches it: one
  * made while the account is still remembered here. A disconnect or a
  * clean reinstall signs in as a new device, which finds nothing to
@@ -59,6 +59,10 @@ class LiseurSyncSettings(
      * record must not be rebuilt after `forgetSyncPeer` has taken it
      * away.
      *
+     * [deviceId] is the server's name for this device. When it differs
+     * from the one the record was made as, the record is dropped first,
+     * because the server copy now being read belongs to that other id.
+     *
      * Returns the number of settings exchanged, or -1 if the server does
      * not keep settings per device.
      */
@@ -68,6 +72,7 @@ class LiseurSyncSettings(
         credentials: RemoteCredentials,
         canApplyReaderSettings: suspend () -> Boolean = { true },
         stillConnected: suspend () -> Boolean = { true },
+        deviceId: String? = null,
     ): Int {
         if (baseUrl in unsupported) return -1
         if (!stillConnected()) return 0
@@ -94,6 +99,7 @@ class LiseurSyncSettings(
 
         if (!stillConnected()) return 0
 
+        syncState.claimDevice(accountKey, deviceId)
         val stored = syncState.allStored(accountKey)
         val recorded = mutableMapOf<String, String>()
         val toPush = JSONObject()

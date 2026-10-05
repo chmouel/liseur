@@ -26,7 +26,9 @@ private val Context.settingsSyncStore: DataStore<Preferences> by preferencesData
  * from a setting changed here (to upload).
  *
  * The record is keyed by account because it describes that account's
- * copy, so it moves or goes with the account.
+ * copy, so it moves or goes with the account. The server keys its copy
+ * by device, so the record also notes which server device it was made
+ * as, and is dropped when the account comes back as another one.
  */
 class SettingsSyncRepository(private val store: DataStore<Preferences>) {
 
@@ -39,6 +41,30 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
 
     private fun valueKey(accountKey: String, settingKey: String) =
         stringPreferencesKey(valuePrefix(accountKey) + settingKey)
+
+    private fun deviceKey(accountKey: String) = stringPreferencesKey("d:$accountKey")
+
+    /**
+     * Ties the record for [accountKey] to the server's [deviceId] for this
+     * device. A pasted token can keep the account and still sign in as a
+     * different device, whose copy this record says nothing about: when
+     * the id changes, the record is dropped so the next pass restores
+     * that device's copy instead of uploading over it. A null id, from a
+     * server that never named the device, leaves the record alone.
+     */
+    suspend fun claimDevice(accountKey: String, deviceId: String?) {
+        if (deviceId == null) return
+        ensureFormat()
+        val marker = deviceKey(accountKey)
+        val prefix = valuePrefix(accountKey)
+        store.edit { prefs ->
+            if (prefs[marker] == deviceId) return@edit
+            for (key in prefs.asMap().keys.toList()) {
+                if (key.name.startsWith(prefix)) prefs.remove(key)
+            }
+            prefs[marker] = deviceId
+        }
+    }
 
     /** What this device last stored on [accountKey], keyed by setting name. */
     suspend fun allStored(accountKey: String): Map<String, String> {
@@ -84,6 +110,7 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
                 val settingKey = key.name.removePrefix(fromValues)
                 prefs[valueKey(to, settingKey)] = value as? String ?: continue
             }
+            prefs[deviceKey(from)]?.let { prefs[deviceKey(to)] = it }
         }
     }
 
@@ -95,6 +122,7 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
             for (key in prefs.asMap().keys.toList()) {
                 if (key.name.startsWith(prefix)) prefs.remove(key)
             }
+            prefs.remove(deviceKey(accountKey))
         }
     }
 

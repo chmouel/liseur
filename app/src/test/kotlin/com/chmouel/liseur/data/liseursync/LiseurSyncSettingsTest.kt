@@ -75,7 +75,7 @@ class LiseurSyncSettingsTest {
     }
 
     @Test
-    fun `a reinstalled phone gets its own settings back`() = runTest {
+    fun `a device with no record gets its own server copy back`() = runTest {
         values["reader.font_size"] = "100"
         values["app.theme_mode"] = "light"
         enqueueGet(
@@ -365,6 +365,24 @@ class LiseurSyncSettingsTest {
         assertEquals("140", stored(OTHER)["reader.font_size"])
     }
 
+    @Test
+    fun `signing in as another device restores that copy instead of overwriting it`() = runTest {
+        values["reader.font_size"] = "120"
+        enqueueGet("reader.font_size" to Entry("120", NOW))
+        sync(device = "phone")
+        assertEquals("120", stored()["reader.font_size"])
+
+        // Same account, but a pasted token signs in as another device,
+        // whose copy says 140. The record made as "phone" is not about
+        // that copy, so it is restored rather than uploaded over.
+        enqueueGet("reader.font_size" to Entry("140", NOW))
+        sync(device = "tablet")
+
+        assertEquals("140", values["reader.font_size"])
+        assertEquals(0, puts())
+        assertEquals("140", stored()["reader.font_size"])
+    }
+
     // -- Harness ----------------------------------------------------------
 
     private class Entry(val value: String, val updatedAt: Long)
@@ -404,12 +422,14 @@ class LiseurSyncSettingsTest {
         account: String = ACCOUNT,
         canApplyReaderSettings: Boolean = true,
         connected: Boolean = true,
+        device: String? = null,
     ): Int = sync.sync(
         accountKey = account,
         baseUrl = server.url("/").toString().removeSuffix("/"),
         credentials = RemoteCredentials.Bearer("token"),
         canApplyReaderSettings = { canApplyReaderSettings },
         stillConnected = { connected },
+        deviceId = device,
     )
 
     private suspend fun record(key: String, value: String, account: String = ACCOUNT) =
