@@ -279,12 +279,13 @@ class LiseurSyncPositionSync(
         val revision = stored.peakRevision ?: return null
         val at = stored.peakAt ?: return null
         if (stored.peakEdition != null && stored.peakEdition != alias.editionSha) return null
+        val edition = stored.peakEdition ?: alias.editionSha
         return SyncOp(
             opId = SyncOps.opIdFor(
-                "${account.deviceKey}|${account.deviceId}|peak|${stored.bookUrl}|${stored.peakEdition}",
+                "${account.deviceKey}|${account.deviceId}|peak|${stored.bookUrl}|$edition",
                 alias.workId, revision,
             ),
-            workId = alias.workId, editionSha = stored.peakEdition,
+            workId = alias.workId, editionSha = edition,
             clientTs = at, progression = progression, locatorJson = stored.peakLocator,
         )
     }
@@ -307,6 +308,7 @@ class LiseurSyncPositionSync(
             confidence = if ((local || sameEdition(peak.editionSha, alias)) &&
                 ExactLocatorAnchor.isExactJson(locator)
             ) ResumeConfidence.EXACT else ResumeConfidence.APPROXIMATE,
+            locallyAuthored = local,
         )
     }
 

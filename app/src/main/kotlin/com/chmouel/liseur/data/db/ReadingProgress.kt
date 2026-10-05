@@ -309,7 +309,11 @@ abstract class ReadingProgressDao {
                 THEN :updatedAt ELSE peak_at END,
             peak_edition = CASE WHEN :progression BETWEEN 0 AND 1 AND
                 (peak_progression IS NULL OR :progression > peak_progression)
-                THEN (SELECT sha256 FROM book_fingerprint WHERE book_url = :bookUrl)
+                THEN COALESCE(
+                    (SELECT sha256 FROM book_fingerprint WHERE book_url = :bookUrl),
+                    (SELECT MIN(edition_sha) FROM work_alias WHERE book_url = :bookUrl
+                        AND (confirmed = 1 OR confidence = 'high')
+                        GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1))
                 ELSE peak_edition END,
             peak_progression = CASE WHEN :progression BETWEEN 0 AND 1 AND
                 (peak_progression IS NULL OR :progression > peak_progression)
@@ -348,7 +352,11 @@ abstract class ReadingProgressDao {
                 CASE WHEN :progression BETWEEN 0 AND 1 THEN :locatorJson END,
                 CASE WHEN :progression BETWEEN 0 AND 1 THEN 1 END,
                 CASE WHEN :progression BETWEEN 0 AND 1 THEN :updatedAt END,
-                (SELECT sha256 FROM book_fingerprint WHERE book_url = :bookUrl))
+                COALESCE(
+                    (SELECT sha256 FROM book_fingerprint WHERE book_url = :bookUrl),
+                    (SELECT MIN(edition_sha) FROM work_alias WHERE book_url = :bookUrl
+                        AND (confirmed = 1 OR confidence = 'high')
+                        GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1)))
         """,
     )
     abstract suspend fun insertLocal(

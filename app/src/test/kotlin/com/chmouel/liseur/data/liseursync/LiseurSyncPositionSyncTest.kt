@@ -1980,7 +1980,7 @@ class LiseurSyncPositionSyncTest {
     fun `offline peak is delivered before current and current retries without resending peak`() = runTest {
         connect()
         db.bookDao().upsert(local())
-        alias()
+        alias(editionSha = "catalog-edition")
         db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.7, null, "reading", NOW)
         db.readingProgressDao().recordLocal(LOCAL, """{"href":"/earlier.xhtml"}""", 0.31, null, "reading", NOW + 1)
         val sent = java.util.Collections.synchronizedList(mutableListOf<JSONObject>())
@@ -2001,6 +2001,8 @@ class LiseurSyncPositionSyncTest {
         val syncing = sync(furthest = true)
         assertTrue(syncing.syncBook(LOCAL) is SyncOutcome.Failure)
         assertEquals(listOf(0.7, 0.31), sent.map { it.getDouble("progression") })
+        assertEquals("catalog-edition", sent.first().getString("edition_sha"))
+        assertEquals("catalog-edition", db.readingProgressDao().get(LOCAL)!!.peakEdition)
         assertTrue(db.furthestPositionDao().delivered(peer(), LOCAL, "w-1")!!.acknowledged)
         assertEquals(SyncOutcome.Success, syncing.syncBook(LOCAL))
         assertEquals(listOf(0.7, 0.31, 0.31), sent.map { it.getDouble("progression") })
@@ -2101,6 +2103,7 @@ class LiseurSyncPositionSyncTest {
         val syncing = sync(online = false, furthest = true)
         val preview = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview
         assertEquals(ResumeConfidence.EXACT, preview.furthest!!.confidence)
+        assertTrue(preview.furthest.locallyAuthored)
         assertEquals(peak, preview.furthest.locatorJson)
         assertEquals(ResolveOutcome.Done, syncing.takeFurthestPosition(LOCAL, 2, preview.furthest))
         assertEquals(peak, db.readingProgressDao().get(LOCAL)!!.locatorJson)
@@ -2200,6 +2203,27 @@ class LiseurSyncPositionSyncTest {
         assertFalse(previouslyAccepted == sent[2].getString("op_id"))
         assertEquals(0.31, latest, 0.0)
         assertEquals(revision + 1, db.syncPeerStateDao().get(LOCAL, peer())!!.ackedRevision)
+    }
+
+    @Test
+    fun `a peak read before resolution carries the subsequently verified edition`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.7, null, "reading", NOW)
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.31, null, "reading", NOW + 1)
+        assertNull(db.readingProgressDao().get(LOCAL)!!.peakEdition)
+        alias(editionSha = "resolved-edition")
+        val sent = java.util.Collections.synchronizedList(mutableListOf<JSONObject>())
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) return json("""{"ops":[],"high_water":0}""")
+                sent += JSONObject(request.body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+                return applied(request)
+            }
+        }
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(listOf(0.7, 0.31), sent.map { it.getDouble("progression") })
+        assertTrue(sent.all { it.getString("edition_sha") == "resolved-edition" })
     }
 
     private fun sync(

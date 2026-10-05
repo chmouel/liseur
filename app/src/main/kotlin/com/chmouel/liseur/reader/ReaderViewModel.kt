@@ -788,7 +788,7 @@ class ReaderViewModel(
                         remote = target.progression, remoteAt = target.at,
                         remoteLocatorJson = target.locatorJson, confidence = target.confidence,
                         excerpt = ExactLocatorAnchor.excerpt(target.locatorJson),
-                    ))
+                    ), fromSync = !target.locallyAuthored)
                     requestBookSync(bookId)
                     BookSync.Idle
                 }
@@ -1011,7 +1011,7 @@ class ReaderViewModel(
     }
 
     /** Navigates to the position that was offered, not a later database snapshot. */
-    private suspend fun goToRemotePosition(preview: SyncPreview) {
+    private suspend fun goToRemotePosition(preview: SyncPreview, fromSync: Boolean = true) {
         val positions = positionsFor(publication ?: return)
         val remoteLocator = preview.remoteLocatorJson
             ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
@@ -1026,7 +1026,7 @@ class ReaderViewModel(
             ?: return
         onJump()
         _jumpBack.value = _jumpBack.value?.copy(
-            fromSync = true,
+            fromSync = fromSync,
             excerpt = preview.excerpt,
             remoteAt = preview.remoteAt,
             confidence = if (exact != null) {

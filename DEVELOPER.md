@@ -182,6 +182,30 @@ There is no instrumented/emulator test suite. Reader interactions
 (gestures, immersive mode, process-death restore, rotation) are verified
 manually on a booted AVD.
 
+### Furthest-position emulator check
+
+Verified on 2026-10-05 with `liseur_phone_api36` (Android API 36),
+`emulator-5580`, the debug APK, a disposable liseur-sync instance, and
+a synthetic ten-chapter EPUB. A second device token posted Chapter 8's
+exact `#p1` anchor at 77.78%. Android declined it, turned a page in
+Chapter 4, and uploaded 35.19% as the latest position. After force-stop
+and reopening, Chapter 4 remained current. Manual sync still offered
+the historical destination despite the latest operation being Android's
+own echo. Choosing it displayed `CHAPTER 8 PASSAGE 1` and stored the
+original locator, not merely a matching percentage.
+
+With Wi-Fi and mobile data disabled, another run recorded a farther
+local chapter, returned to Chapter 4, and restarted. Offline manual
+recovery and the way-back action both worked. After reconnecting, the
+server accepted the edition-bound peak at sequence 7 and the lower
+current position at sequence 8; Android acknowledged current separately.
+The exercise also caught and fixed missing edition hashes on peaks from
+catalog downloads and a misleading other-device label on local recovery.
+
+The second client in this check used the real HTTP API, not a browser.
+API 26, rotation, cross-edition rendering, and server compaction were not
+exercised on the emulator in this run.
+
 ### EPUB font-size remediation
 
 Reflowable EPUB font size uses Readium 3.3.0's Android text-zoom path.
@@ -1046,6 +1070,8 @@ reader behavior.
   expose its legacy-alias ownership groups. Compare valid fractions strictly,
   without the merge tolerance; jumps count, and rereading or marking unread
   never resets them.
+  Catalog downloads can have a verified edition in `work_alias` without a
+  local fingerprint row; preserve that edition in locally authored peaks too.
   Every changes-page operation, including this device's echoes, is observed
   before selecting the newest foreign operation for ordinary reconciliation.
 - Positions and heads snapshots supply a separate `furthest` array. Its
