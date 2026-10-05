@@ -182,6 +182,30 @@ There is no instrumented/emulator test suite. Reader interactions
 (gestures, immersive mode, process-death restore, rotation) are verified
 manually on a booted AVD.
 
+### Furthest-position emulator check
+
+Verified on 2026-10-05 with `liseur_phone_api36` (Android API 36),
+`emulator-5580`, the debug APK, a disposable liseur-sync instance, and
+a synthetic ten-chapter EPUB. A second device token posted Chapter 8's
+exact `#p1` anchor at 77.78%. Android declined it, turned a page in
+Chapter 4, and uploaded 35.19% as the latest position. After force-stop
+and reopening, Chapter 4 remained current. Manual sync still offered
+the historical destination despite the latest operation being Android's
+own echo. Choosing it displayed `CHAPTER 8 PASSAGE 1` and stored the
+original locator, not merely a matching percentage.
+
+With Wi-Fi and mobile data disabled, another run recorded a farther
+local chapter, returned to Chapter 4, and restarted. Offline manual
+recovery and the way-back action both worked. After reconnecting, the
+server accepted the edition-bound peak at sequence 7 and the lower
+current position at sequence 8; Android acknowledged current separately.
+The exercise also caught and fixed missing edition hashes on peaks from
+catalog downloads and a misleading other-device label on local recovery.
+
+The second client in this check used the real HTTP API, not a browser.
+API 26, rotation, cross-edition rendering, and server compaction were not
+exercised on the emulator in this run.
+
 ### EPUB font-size remediation
 
 Reflowable EPUB font size uses Readium 3.3.0's Android text-zoom path.
@@ -1058,6 +1082,43 @@ reader behavior.
 
 ### liseur-sync positions and accounts
 
+- Historical furthest and current position are separate facts. Room 66 keeps
+  locally authored peaks alongside `reading_progress` and complete remote
+  operations in `furthest_position`, partitioned by account, work, and edition.
+  Preserve each snapshot candidate by operation identity, including optional
+  `origin_alias` provenance in its original JSON. Compare valid fractions strictly,
+  without the merge tolerance; jumps count, and rereading or marking unread
+  never resets them.
+  Migration 66 retains each valid pre-upgrade position with its original locator,
+  reading timestamp, and known edition. Its author is unknown, so a null
+  `peak_revision` keeps it available for explicit recovery without uploading it
+  as locally authored reading. A later strict increase records a local peak.
+  Catalog downloads can have a verified edition in `work_alias` without a
+  local fingerprint row; preserve that edition in locally authored peaks too.
+  Every changes-page operation, including this device's echoes, is observed
+  before selecting the newest foreign operation for ordinary reconciliation.
+- Positions and heads snapshots supply a separate `furthest` array. Its
+  historical entries never become pending conflicts or automatic opening
+  destinations. A present array replaces that snapshot's cached observations
+  so split-off editions do not remain attached to the old work. A missing
+  array is an older server: retain observed positions without claiming a
+  global lifetime maximum. The manual action says "Furthest known position"
+  and also works from durable observations while offline.
+- Before sending a coalesced lower current position, deliver its stored local
+  peak with a deterministic, separately namespaced operation. `peak_delivery`
+  tracks only this peak's acknowledgement, not a general operation queue.
+  Make a fresh current revision owed before every unacknowledged peak attempt,
+  and do not send current until the peak is acknowledged. A missing answer retries
+  the same peak; a failed current request leaves current owed. Remote
+  observations are never used as locally authored peak uploads.
+- Historical adoption checks the displayed candidate, account, work, edition,
+  and local revision in one transaction. The reader captures its current
+  scrolled place before acting and uses the normal locator restoration and
+  way-back path. Existing automatic farther-current conflict resolution on
+  opening remains unchanged. Other providers retain their existing protocols
+  and do not advertise this historical action. An upgrade cannot recover
+  already discarded local positions or server history compacted before
+  lifetime retention was installed.
 - liseur-sync is an append-only log, not a current-position store. Apply a
   changes page and advance `remote_server.sync_cursor_seq` in the same
   transaction, never before applying the page.

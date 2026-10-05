@@ -234,6 +234,7 @@ class ReaderActivity : FragmentActivity() {
                         state = bookSync,
                         onResolve = viewModel::resolveBookSync,
                         onDismiss = viewModel::dismissBookSync,
+                        onFurthest = viewModel::resolveFurthest,
                     )
                     // Only over a book that is actually on screen. Asked
                     // during the spinner it would be a question about a
@@ -572,6 +573,7 @@ class ReaderActivity : FragmentActivity() {
                                     onBookSyncAction = remember {
                                         ReaderBookSyncActions(
                                             start = viewModel::syncThisBook,
+                                            registerCapture = { viewModel.preparePositionAction = it },
                                         )
                                     },
                                     onBack = ::finish,

@@ -1,9 +1,13 @@
 package com.chmouel.liseur.data.db
 
+import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -63,6 +67,97 @@ class MigrationTest {
                     assertEquals("""{"at":0.42}""", cursor.getString(1))
                 }
             }
+    }
+
+    @Test
+    fun `upgrade retains the observed peak when the first local save goes backwards`() = runTest {
+        val locator = """{"href":"chapter7.xhtml","locations":{"cssSelector":"#original"}}"""
+        helper.createDatabase(TEST_DB, 65).use { old ->
+            old.execSQL(
+                """
+                INSERT INTO reading_progress (
+                    book_url, locator_json, total_progression, updated_at, read_at,
+                    local_revision, acked_revision, owner_account, remote_updated_at
+                ) VALUES ('book', ?, 0.7, 1000, 500, 7, 7, 'original-peer', 500)
+                """.trimIndent(),
+                arrayOf(locator),
+            )
+            old.execSQL("""
+                INSERT INTO book_fingerprint
+                    (book_url, sha256, partial_md5, file_size, computed_at)
+                VALUES ('book', 'original-edition', 'md5', 100, 900)
+            """.trimIndent())
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB).build()
+        try {
+            val dao = db.readingProgressDao()
+            val migrated = dao.get("book")!!
+            assertEquals(0.7, migrated.peakProgression!!, 0.0)
+            assertEquals(locator, migrated.peakLocator)
+            assertEquals(500L, migrated.peakAt)
+            assertEquals("original-edition", migrated.peakEdition)
+            assertNull(migrated.peakRevision)
+            assertEquals("original-peer", migrated.ownerAccount)
+            assertEquals(500L, migrated.remoteUpdatedAt)
+            assertEquals(7L, migrated.localRevision)
+
+            dao.recordLocal("book", """{"href":"chapter3.xhtml"}""", 0.31, null, "reading", 2000)
+            val lower = dao.get("book")!!
+            assertEquals(0.31, lower.totalProgression!!, 0.0)
+            assertEquals(0.7, lower.peakProgression!!, 0.0)
+            assertEquals(locator, lower.peakLocator)
+            assertEquals(500L, lower.peakAt)
+            assertNull(lower.peakRevision)
+
+            dao.recordLocal("book", """{"href":"chapter8.xhtml"}""", 0.8, null, "reading", 3000)
+            val higher = dao.get("book")!!
+            assertEquals(0.8, higher.peakProgression!!, 0.0)
+            assertEquals(higher.localRevision, higher.peakRevision)
+            assertEquals(3000L, higher.peakAt)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun `upgrade backfills only valid fractions including zero and one`() {
+        helper.createDatabase(TEST_DB, 65).use { old ->
+            for ((id, fraction) in listOf("zero" to "0", "one" to "1",
+                "missing" to "NULL", "negative" to "-0.1", "overflow" to "1.1")) {
+                old.execSQL("""
+                    INSERT INTO reading_progress (book_url, locator_json, total_progression, updated_at)
+                    VALUES ('$id', '{"href":"original.xhtml"}', $fraction, 1234)
+                """.trimIndent())
+            }
+            old.execSQL("""
+                INSERT INTO work_alias
+                    (book_url, peer_id, work_id, confidence, confirmed, edition_sha, resolved_at)
+                VALUES ('one', 'peer', 'work', 'high', 0, 'catalog-edition', 1200)
+            """.trimIndent())
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).use { db ->
+            db.query("""
+                SELECT book_url, peak_progression, peak_locator, peak_at, peak_revision, peak_edition
+                FROM reading_progress
+            """.trimIndent()).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val id = cursor.getString(0)
+                    if (id == "zero" || id == "one") {
+                        assertEquals(if (id == "zero") 0.0 else 1.0, cursor.getDouble(1), 0.0)
+                        assertEquals("""{"href":"original.xhtml"}""", cursor.getString(2))
+                        assertEquals(1234L, cursor.getLong(3))
+                        if (id == "one") assertEquals("catalog-edition", cursor.getString(5))
+                    } else {
+                        assertTrue(cursor.isNull(1))
+                        assertTrue(cursor.isNull(2))
+                        assertTrue(cursor.isNull(3))
+                    }
+                    assertTrue(cursor.isNull(4))
+                }
+            }
+        }
     }
 
     @Test
@@ -1595,6 +1690,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 65
+        const val LATEST = 66
     }
 }

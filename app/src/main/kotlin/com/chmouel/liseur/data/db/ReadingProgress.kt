@@ -103,6 +103,11 @@ data class ReadingProgress(
     /** Changes only when the saved passage changes, not when status changes. */
     @ColumnInfo(name = "position_revision", defaultValue = "0")
     val positionRevision: Long = 0,
+    @ColumnInfo(name = "peak_progression") val peakProgression: Double? = null,
+    @ColumnInfo(name = "peak_locator") val peakLocator: String? = null,
+    @ColumnInfo(name = "peak_revision") val peakRevision: Long? = null,
+    @ColumnInfo(name = "peak_at") val peakAt: Long? = null,
+    @ColumnInfo(name = "peak_edition") val peakEdition: String? = null,
 ) {
     /** True when this device has read on since the server last confirmed. */
     val isDirty: Boolean get() = localRevision > ackedRevision
@@ -293,6 +298,26 @@ abstract class ReadingProgressDao {
             updated_at = :updatedAt,
             read_at = :updatedAt,
             status = :status,
+            peak_locator = CASE WHEN :progression BETWEEN 0 AND 1 AND
+                (peak_progression IS NULL OR :progression > peak_progression)
+                THEN :locatorJson ELSE peak_locator END,
+            peak_revision = CASE WHEN :progression BETWEEN 0 AND 1 AND
+                (peak_progression IS NULL OR :progression > peak_progression)
+                THEN local_revision + 1 ELSE peak_revision END,
+            peak_at = CASE WHEN :progression BETWEEN 0 AND 1 AND
+                (peak_progression IS NULL OR :progression > peak_progression)
+                THEN :updatedAt ELSE peak_at END,
+            peak_edition = CASE WHEN :progression BETWEEN 0 AND 1 AND
+                (peak_progression IS NULL OR :progression > peak_progression)
+                THEN COALESCE(
+                    (SELECT sha256 FROM book_fingerprint WHERE book_url = :bookUrl),
+                    (SELECT MIN(edition_sha) FROM work_alias WHERE book_url = :bookUrl
+                        AND (confirmed = 1 OR confidence = 'high')
+                        GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1))
+                ELSE peak_edition END,
+            peak_progression = CASE WHEN :progression BETWEEN 0 AND 1 AND
+                (peak_progression IS NULL OR :progression > peak_progression)
+                THEN :progression ELSE peak_progression END,
             local_revision = local_revision + 1,
             position_revision = position_revision + 1
         WHERE book_url = :bookUrl
@@ -317,12 +342,21 @@ abstract class ReadingProgressDao {
             reading_seconds_per_position, reading_pace_samples,
             reading_pace_elapsed_ms, reading_pace_evidence,
             updated_at, read_at, status, synced_at, local_revision, acked_revision,
-            position_revision
+            position_revision, peak_progression, peak_locator, peak_revision, peak_at, peak_edition
         )
         VALUES (:bookUrl, :locatorJson, :progression, NULL,
                 :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
                 COALESCE(:readingPaceElapsedMs, 0), COALESCE(:readingPaceEvidence, 0),
-                :updatedAt, :updatedAt, :status, NULL, 1, 0, 1)
+                :updatedAt, :updatedAt, :status, NULL, 1, 0, 1,
+                CASE WHEN :progression BETWEEN 0 AND 1 THEN :progression END,
+                CASE WHEN :progression BETWEEN 0 AND 1 THEN :locatorJson END,
+                CASE WHEN :progression BETWEEN 0 AND 1 THEN 1 END,
+                CASE WHEN :progression BETWEEN 0 AND 1 THEN :updatedAt END,
+                COALESCE(
+                    (SELECT sha256 FROM book_fingerprint WHERE book_url = :bookUrl),
+                    (SELECT MIN(edition_sha) FROM work_alias WHERE book_url = :bookUrl
+                        AND (confirmed = 1 OR confidence = 'high')
+                        GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1)))
         """,
     )
     abstract suspend fun insertLocal(

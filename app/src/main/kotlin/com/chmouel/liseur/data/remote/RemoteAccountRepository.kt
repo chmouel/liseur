@@ -52,6 +52,7 @@ class RemoteAccountRepository(
      * a liseur-sync account.
      */
     private val peerStateDao: SyncPeerStateDao? = null,
+    private val furthestDao: com.chmouel.liseur.data.db.FurthestPositionDao? = null,
     private val identityDao: WorkIdentityDao? = null,
     /**
      * Sittings remember whether they reached a server, and that is only
@@ -922,6 +923,7 @@ class RemoteAccountRepository(
         val to = next.accountKey
         if (existing.kind != ServerKind.LISEUR_SYNC || from == to) return next
         val occupied = (peerStateDao?.countForPeer(to) ?: 0) +
+            (furthestDao?.countForPeer(to) ?: 0) +
             (identityDao?.countForPeer(to) ?: 0) +
             (annotationSyncDao?.countForPeer(to) ?: 0) +
             (sessionRefusalDao?.countForPeer(to) ?: 0) +
@@ -937,6 +939,7 @@ class RemoteAccountRepository(
             return next.copy(liseurAccountId = existing.liseurAccountId)
         }
         peerStateDao?.rekeyPeer(from, to)
+        furthestDao?.rekeyPeer(from, to)
         identityDao?.rekeyPeer(from, to)
         annotationSyncDao?.rekeyPeer(from, to)
         uploadRefusalDao?.rekeyAccount(from, to)
@@ -1137,6 +1140,7 @@ class RemoteAccountRepository(
         }
         if (server.kind != ServerKind.LISEUR_SYNC) return
         peerStateDao?.forgetPeer(server.accountKey)
+        furthestDao?.forgetPeer(server.accountKey)
         identityDao?.forgetPeerAliases(server.accountKey)
         identityDao?.forgetPeerAmbiguities(server.accountKey)
         identityDao?.forgetAnnotationReconciliation(server.accountKey)

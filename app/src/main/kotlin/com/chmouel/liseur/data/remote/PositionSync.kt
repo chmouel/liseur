@@ -146,6 +146,8 @@ data class SyncPreview(
      * true answer is to send it.
      */
     val resolvable: Boolean = true,
+    val furthest: FurthestDestination? = null,
+    val localLocatorJson: String? = null,
 ) {
     /** True when there is nothing to choose between. */
     val agrees: Boolean
@@ -180,6 +182,20 @@ data class SyncPreview(
         locatorJson = remoteLocatorJson,
     )
 }
+
+/** An explicit historical destination, bound to the account and file previewed. */
+data class FurthestDestination(
+    val accountKey: String,
+    val workId: String,
+    val localEdition: String?,
+    val candidateId: String,
+    val progression: Double,
+    val locatorJson: String?,
+    val at: Long,
+    val confidence: ResumeConfidence,
+    /** Null for pre-upgrade observations whose author is unknown. */
+    val locallyAuthored: Boolean? = false,
+)
 
 /** The identity of one server-side answer; see [SyncPreview.fingerprint]. */
 data class SyncFingerprint(
@@ -246,6 +262,10 @@ sealed interface PreviewOutcome {
  * a second set of rules.
  */
 interface PositionSync {
+    suspend fun takeFurthestPosition(
+        bookUrl: String, atRevision: Long, destination: FurthestDestination, peerId: String? = null,
+    ): ResolveOutcome = ResolveOutcome.Superseded
+
     /**
      * The address a run started now would dial, or null when it would
      * not dial at all.
@@ -286,6 +306,9 @@ interface PositionSync {
 
     /** Asks the server where it thinks the reader is, without acting on it. */
     suspend fun previewBook(bookUrl: String): PreviewOutcome
+
+    /** Historical destinations already on disk; never opens a connection. */
+    suspend fun previewKnownBook(bookUrl: String): PreviewOutcome = PreviewOutcome.NotSynced
 
     /**
      * A disagreement an earlier run preserved rather than resolved.

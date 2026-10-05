@@ -35,6 +35,7 @@ fun BookSyncDialog(
     state: ReaderViewModel.BookSync,
     onResolve: (takeRemote: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    onFurthest: () -> Unit = {},
 ) {
     when (state) {
         ReaderViewModel.BookSync.Idle, ReaderViewModel.BookSync.Asking -> Unit
@@ -51,8 +52,8 @@ fun BookSyncDialog(
             onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.reader_sync_book_title)) },
             text = {
-                Column {
-                    Text(
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (state.preview.remote != null && !state.preview.agrees) Text(
                         stringResource(
                             when (state.relation) {
                                 SyncRelation.AHEAD -> R.string.reader_sync_book_ahead
@@ -62,7 +63,10 @@ fun BookSyncDialog(
                         ),
                     )
                     Side(R.string.reader_sync_here, state.here)
-                    Side(R.string.reader_sync_there, state.there)
+                    if (state.preview.remote != null && !state.preview.agrees &&
+                        (state.furthest == null || !BookSyncChoice.furthestMatchesRemote(state.preview))
+                    ) Side(R.string.reader_sync_there, state.there)
+                    state.furthest?.let { Side(R.string.reader_sync_furthest_known, it) }
                 }
             },
             // Three answers and room for two, so they go in a column of
@@ -70,11 +74,22 @@ fun BookSyncDialog(
             // only by tapping away from the others.
             confirmButton = {
                 Column {
-                    TextButton(onClick = { onResolve(true) }) {
-                        Text(stringResource(R.string.reader_sync_take_theirs))
+                    if (state.furthest != null) {
+                        TextButton(onClick = onFurthest) {
+                            Text(stringResource(R.string.reader_sync_take_furthest))
+                        }
                     }
-                    TextButton(onClick = { onResolve(false) }) {
-                        Text(stringResource(R.string.reader_sync_keep_mine))
+                    if (state.preview.resolvable && !state.preview.agrees &&
+                        (state.furthest == null || !BookSyncChoice.furthestMatchesRemote(state.preview))
+                    ) {
+                        TextButton(onClick = { onResolve(true) }) {
+                            Text(stringResource(R.string.reader_sync_take_theirs))
+                        }
+                    }
+                    if (state.preview.resolvable && !state.preview.agrees) {
+                        TextButton(onClick = { onResolve(false) }) {
+                            Text(stringResource(R.string.reader_sync_keep_mine))
+                        }
                     }
                     TextButton(onClick = onDismiss) {
                         Text(stringResource(R.string.reader_sync_cancel))

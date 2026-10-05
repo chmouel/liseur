@@ -10,6 +10,8 @@ import androidx.sqlite.execSQL
 @Database(
     entities = [
         ReadingProgress::class,
+        FurthestPosition::class,
+        PeakDelivery::class,
         Book::class,
         LibraryFolder::class,
         RemoteServer::class,
@@ -39,7 +41,7 @@ import androidx.sqlite.execSQL
         RemoteStatsDay::class,
         RemoteStatsWindow::class,
     ],
-    version = 65,
+    version = 66,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -48,6 +50,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     internal val bookOrbitStatusMutex = kotlinx.coroutines.sync.Mutex()
 
     abstract fun readingProgressDao(): ReadingProgressDao
+    abstract fun furthestPositionDao(): FurthestPositionDao
     abstract fun readingSessionDao(): ReadingSessionDao
     abstract fun syncPeerStateDao(): SyncPeerStateDao
 
@@ -76,6 +79,48 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun remoteStatsDao(): RemoteStatsDao
 
     companion object {
+        val MIGRATION_65_66 = object : Migration(65, 66) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_progression REAL")
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_locator TEXT")
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_revision INTEGER")
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_at INTEGER")
+                connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_edition TEXT")
+                // Old rows do not prove which device authored the position. Keep
+                // the observation, but leave peak_revision null to prevent uploads.
+                connection.execSQL("""
+                    UPDATE reading_progress SET
+                        peak_progression = total_progression,
+                        peak_locator = locator_json,
+                        peak_at = COALESCE(read_at, updated_at),
+                        peak_edition = COALESCE(
+                            (SELECT sha256 FROM book_fingerprint
+                                WHERE book_fingerprint.book_url = reading_progress.book_url),
+                            (SELECT MIN(edition_sha) FROM work_alias
+                                WHERE work_alias.book_url = reading_progress.book_url
+                                    AND (confirmed = 1 OR confidence = 'high')
+                                GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1))
+                    WHERE total_progression BETWEEN 0 AND 1
+                """.trimIndent())
+                connection.execSQL("""
+                    CREATE TABLE IF NOT EXISTS furthest_position (
+                        peer_id TEXT NOT NULL, work_id TEXT NOT NULL,
+                        edition TEXT NOT NULL, origin TEXT NOT NULL,
+                        progression REAL NOT NULL, seq INTEGER NOT NULL, payload TEXT NOT NULL,
+                        PRIMARY KEY(peer_id, work_id, edition, origin)
+                    )
+                """.trimIndent())
+                connection.execSQL("""
+                    CREATE TABLE IF NOT EXISTS peak_delivery (
+                        peer_id TEXT NOT NULL, book_url TEXT NOT NULL, work_id TEXT NOT NULL,
+                        revision INTEGER NOT NULL, acknowledged INTEGER NOT NULL,
+                        PRIMARY KEY(peer_id, book_url, work_id),
+                        FOREIGN KEY(book_url) REFERENCES reading_progress(book_url) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                connection.execSQL("CREATE INDEX IF NOT EXISTS index_peak_delivery_book_url ON peak_delivery(book_url)")
+            }
+        }
         /** Adds the measured reading speed used for time-left estimates. */
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(connection: SQLiteConnection) {
@@ -1892,6 +1937,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_62_63,
             MIGRATION_63_64,
             MIGRATION_64_65,
+            MIGRATION_65_66,
         )
     }
 }

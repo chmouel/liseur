@@ -87,7 +87,7 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
             when (val outcome = peer.previewBook(bookUrl)) {
                 is PreviewOutcome.Ready -> {
                     val named = PreviewOutcome.Ready(outcome.preview.from(peer))
-                    if (named.preview.remote != null) return named
+                    if (named.preview.remote != null || named.preview.furthest != null) return named
                     empty = empty ?: named
                 }
 
@@ -112,6 +112,11 @@ class CompositePositionSync(private val peers: List<PeerPositionSync>) : Positio
         resolve(bookUrl, peerId, expectedAccountKey) {
             it.takeRemotePosition(bookUrl, atRevision, expectedAccountKey = expectedAccountKey)
         }
+
+    override suspend fun takeFurthestPosition(
+        bookUrl: String, atRevision: Long, destination: FurthestDestination, peerId: String?,
+    ): ResolveOutcome = peers.singleOrNull { it.peerId == peerId }
+        ?.takeFurthestPosition(bookUrl, atRevision, destination) ?: ResolveOutcome.Superseded
 
     override suspend fun keepLocalPosition(bookUrl: String, peerId: String?): ResolveOutcome =
         resolve(bookUrl, peerId) { it.keepLocalPosition(bookUrl) }

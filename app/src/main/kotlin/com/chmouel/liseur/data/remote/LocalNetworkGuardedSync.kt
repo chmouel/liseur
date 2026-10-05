@@ -56,7 +56,8 @@ class LocalNetworkGuardedSync(
      */
     override suspend fun previewBook(bookUrl: String): PreviewOutcome =
         if (blocked()) {
-            PreviewOutcome.Failed(SyncFailure.LocalNetworkBlocked)
+            val known = delegate.previewKnownBook(bookUrl)
+            if (known is PreviewOutcome.Ready) known else PreviewOutcome.Failed(SyncFailure.LocalNetworkBlocked)
         } else {
             delegate.previewBook(bookUrl)
         }
