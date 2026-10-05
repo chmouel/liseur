@@ -1264,8 +1264,8 @@ reader behavior.
 
 ### Home-screen widgets
 
-The four Glance widgets in `ui/widget/` show the current cover, reading
-stats, cover and stats, or a paged library grid. Rendering reads Room and
+The two Glance widgets in `ui/widget/` show the current cover or reading
+stats. Rendering reads Room and
 cached cover files; it never waits on a network request.
 
 - `RemoteStatsRefresh` saves proven liseur-sync snapshots through
@@ -1278,39 +1278,34 @@ cached cover files; it never waits on a network request.
   refresh. The worker checks
   that a stats widget is still placed and respects local-network access.
   Failed requests retain the last proven data.
+  Week, month and year are fetched without comparison data (an already
+  accepted dashboard range is skipped). Every cache write retains 366
+  days, including explicit zeros. Year snapshots add daily residuals only,
+  not unused session/book/streak windows.
 - The widget computes local sessions in the cached account timezone, so
   a different phone timezone does not drop other devices or mix calendar
   days. Without a cache it uses the phone timezone. Rows remain keyed by
   account and are rekeyed/cleared by `RemoteAccountRepository`.
-- Each cached day and window records its refresh time. Stats widgets show
-  “All devices” only when every day of the selected period is covered and
-  the oldest contributing day was refreshed within the last hour. A
-  streak taken from a week or month window counts that window's refresh
-  time too. Older
-  or partial data is labelled as including last synced reading; without
-  remote coverage the widget says “This device”. Missing days are distinct
-  from explicitly covered zero-activity days.
-- Stats widgets show reading time, a streak, and scope. Session/book counts
-  and charts are omitted. Compact layouts with larger system fonts omit
-  secondary details so reading time and scope remain visible. A stats tap
-  opens the dashboard, including on a
-  cold start with automatic reader resume enabled. Cover taps open the
-  book. Cover and stats falls back to stats when no local book exists.
-- The library widget excludes hidden/archived books, orders recently opened
-  books first, then titles and URLs for a stable order, and shows two to
-  four columns with one or two rows. Its Glance state stores a per-instance
-  page anchor. Paging and resizing clamp that anchor after books disappear.
-  Only the visible page's covers are decoded, capped at 160 px per edge
-  to keep an eight-cover RemoteViews payload within the binder budget.
-  Each cover opens its book. Once the library has loaded, a remote book
-  follows the same checks as a shelf tap: a download in progress or a
-  server that forbids downloads shows the shelf's snackbar instead of
-  starting a download. The header opens the library. Widget requests are consumed
-  so activity recreation cannot repeat a download or redirect navigation.
+- Each cached day records its refresh time. The stats widget has no footer
+  when every day in all three displayed periods has proven coverage from
+  within the last hour. Otherwise it says “Last synced reading” if remote
+  activity contributes. With only local activity, it shows no source footer.
+  Missing days are distinct from explicitly covered zero-activity days.
+- Stats shows the most recently opened title and real progress, plus
+  all-book calendar week/month/year time together. Hours never become
+  days; zero is explicit and sub-minute reading uses the compact duration
+  translation. Unknown progress says “Not available”; without a current
+  book, “No book opened yet” leaves the totals visible. There is no cover,
+  chart, streak, period selector or configuration activity. Narrow layouts
+  stack the totals rather than dropping a period.
+  The provider minimum is 220 by 220 dp; new placements request 4 by 4
+  cells. Use a taller placement at large font scales. Application
+  configuration changes schedule a redraw so font-scale changes also
+  switch the row/column layout, not just Android's text size.
 - Dashboard, library and remote-book taps go through the unexported
   `WidgetLaunchActivity`, which hands the request to `MainActivity` in
   process via `WidgetRequests`. `MainActivity` is exported, so it never
-  reads widget targets from intent extras. In cover and stats, the book
+  reads widget targets from intent extras. In stats, the book
   side opens the book and the figures open the dashboard.
 - One trigger redraws them: `AppContainer` collects
   `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
@@ -1324,19 +1319,20 @@ cached cover files; it never waits on a network request.
   reading. A request that lands during a redraw earns exactly one more.
 - Glance recomposes a running session on `update()` without calling
   `provideGlance` again, so anything loaded there would go stale.
-  `LiveSnapshot` reloads the snapshot whenever the updater's generation or
-  the widget's period changes. Each placed widget loads its own snapshot;
+  `LiveSnapshot` reloads the snapshot whenever the updater's generation
+  changes. Each placed widget loads its own snapshot;
   there is no shared cache. `WidgetContent` limits a load to what the
   widget draws: the cover widget reads no session history, and the stats
   widget decodes no cover.
-- The stats period (today, this week, this month) is per widget. It lives
-  in the widget's Glance preferences under `WidgetPeriodKey` and is set by
-  `WidgetConfigActivity`, which only accepts an id belonging to one of
-  Liseur's two stats providers. The streak always counts the full session
-  history, which is why the repository reads every session.
+- `CoverOnlyWidgetReceiver` and `WeekStatsWidgetReceiver` keep their
+  component identities across upgrades. Old period preferences are ignored.
+  Library and combined-cover providers were removed outright, including
+  their paging/configuration state helpers; their placements disappear.
 - The hourly `WidgetRefreshWorker` exists only while a widget is placed.
   `reconcilePeriodic` enqueues or cancels it from app start, the receivers'
-  `onEnabled`/`onDisabled`, and the worker itself. Manifest receivers do not
+  `onEnabled`/`onDisabled`, and the worker itself. The stats receiver handles
+  `MY_PACKAGE_REPLACED` even when no widget from a retired provider remains.
+  Manifest receivers do not
   get `DATE_CHANGED` on Android 8 and later, so this job is what rolls the
   day and week over. `TIME_SET`, `TIMEZONE_CHANGED` and `LOCALE_CHANGED`
   redraw at once, since the labels and the week start are drawn in.
@@ -1346,8 +1342,7 @@ cached cover files; it never waits on a network request.
   redraw is enqueued as unique one-off work (`requestRedraw`, which
   replaces a request still waiting). Do not start receiver work in a
   process-local scope and return.
-- Library covers expose book titles to TalkBack, and paging arrows have
-  translated descriptions.
+- Stats periods expose their labels and values together to TalkBack.
 - On a device without `FEATURE_APP_WIDGETS` the updater does nothing:
   there is no `AppWidgetManager`, and Glance's id lookup would throw.
 - Single covers are decoded at most 256 px on the long edge in `RGB_565`, which

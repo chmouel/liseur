@@ -72,8 +72,8 @@ class RemoteStatsCache(
     }
 
     companion object {
-        /** A month of daily totals, with a margin for rollover and streaks. */
-        const val KEPT_DAYS = 62L
+        /** A full leap year, also retaining the week that crosses New Year. */
+        const val KEPT_DAYS = 366L
 
         private val WINDOW_RANGES = setOf(StatsRange.THIS_WEEK, StatsRange.THIS_MONTH)
     }

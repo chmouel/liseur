@@ -1031,13 +1031,10 @@
     <string name="widget_cover_label">Текущая обложка</string>
     <string name="widget_cover_description">Обложка книги, которую вы читаете</string>
     <string name="widget_stats_label">Статистика чтения</string>
-    <string name="widget_stats_description">Сколько вы прочитали сегодня, на этой неделе или в этом месяце</string>
-    <string name="widget_cover_stats_label">Обложка и статистика</string>
-    <string name="widget_cover_stats_description">Текущая книга и недавнее чтение</string>
-    <string name="widget_period_today">Сегодня</string>
-    <string name="widget_total_today">%1$s сегодня</string>
-    <string name="widget_total_month">%1$s в этом месяце</string>
-    <string name="widget_config_title">Показывать чтение за</string>
+    <string name="widget_stats_description">Текущая книга и время чтения за эту неделю, месяц и год</string>
+    <string name="widget_currently_reading">Сейчас читаю</string>
+    <string name="widget_no_book">Вы ещё не открыли ни одной книги</string>
+    <string name="widget_progress_unavailable">Недоступно</string>
     <string name="widget_duration_under_minute">&lt;1 мин</string>
     <string name="widget_duration_minutes">%1$d мин</string>
     <string name="widget_duration_hours">%1$d ч</string>
@@ -1119,19 +1116,7 @@
     <string name="browse_load_more">Загрузить ещё</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_library_label">Ваши книги</string>
-    <string name="widget_library_description">Просмотр обложек книг в вашей библиотеке</string>
-    <string name="widget_previous_books">Предыдущие книги</string>
-    <string name="widget_next_books">Следующие книги</string>
-    <string name="widget_scope_all_devices">Все устройства</string>
-    <string name="widget_scope_last_sync">С последним синхронизированным чтением</string>
-    <string name="widget_scope_this_device">Это устройство</string>
-    <plurals name="widget_streak_days">
-        <item quantity="one">%1$d день подряд</item>
-        <item quantity="few">%1$d дня подряд</item>
-        <item quantity="many">%1$d дней подряд</item>
-        <item quantity="other">%1$d дней подряд</item>
-    </plurals>
+    <string name="widget_scope_last_sync">Последнее синхронизированное чтение</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d позиция чтения. Восстановление заменит текущие позиции сохранёнными.</item>
         <item quantity="few">%1$d позиции чтения. Восстановление заменит текущие позиции сохранёнными.</item>

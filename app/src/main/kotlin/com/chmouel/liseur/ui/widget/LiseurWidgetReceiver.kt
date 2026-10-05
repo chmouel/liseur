@@ -28,6 +28,13 @@ import kotlinx.coroutines.launch
 abstract class LiseurWidgetReceiver : GlanceAppWidgetReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                holdingBroadcast {
+                    WidgetUpdater.reconcilePeriodicNow(context)
+                    WidgetUpdater.requestRedraw(context)
+                }
+                return
+            }
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
             Intent.ACTION_LOCALE_CHANGED,

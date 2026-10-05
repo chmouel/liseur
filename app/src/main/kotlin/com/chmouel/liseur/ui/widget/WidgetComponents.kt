@@ -10,7 +10,6 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.action.actionStartActivity
@@ -43,11 +42,9 @@ import com.chmouel.liseur.ui.theme.PaperHighest
 internal val CoverSmall = DpSize(110.dp, 165.dp)
 internal val CoverLarge = DpSize(180.dp, 270.dp)
 // Larger breakpoints give the reading total more breathing room.
-internal val StatsCompact = DpSize(180.dp, 110.dp)
-internal val StatsMedium = DpSize(250.dp, 180.dp)
-internal val StatsRoomy = DpSize(250.dp, 230.dp)
-internal val CoverStatsCompact = DpSize(250.dp, 110.dp)
-internal val CoverStatsRoomy = DpSize(320.dp, 190.dp)
+internal val StatsCompact = DpSize(220.dp, 220.dp)
+internal val StatsMedium = DpSize(340.dp, 220.dp)
+internal val StatsRoomy = DpSize(340.dp, 360.dp)
 
 /** Glance's ColorProviders stop at surfaceVariant; paper card tint maps there. */
 internal val widgetCard = ColorProvider(day = PaperHighest, night = NightSurfaceHighest)
@@ -171,74 +168,17 @@ internal fun ProgressTrack(
 }
 
 @Composable
-internal fun HeroTime(
-    label: String,
-    value: String,
-    modifier: GlanceModifier = GlanceModifier,
-    compact: Boolean = false,
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = label,
-            style = TextStyle(
-                color = GlanceTheme.colors.primary,
-                fontSize = if (compact) 12.sp else 13.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-            maxLines = 1,
-        )
-        Spacer(GlanceModifier.height(if (compact) 4.dp else 6.dp))
-        Text(
-            text = value,
-            style = TextStyle(
-                color = GlanceTheme.colors.onSurface,
-                fontSize = if (compact) 22.sp else 36.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Serif,
-            ),
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-internal fun StatsScope(context: Context, stats: WidgetStats) {
-    val figures = stats.figures
-    val recent = figures.remoteUpdatedAt?.let { System.currentTimeMillis() - it in 0..3_600_000L } == true
-    val label = when {
-        figures.remoteCovered && recent -> R.string.widget_scope_all_devices
-        figures.remoteUpdatedAt != null -> R.string.widget_scope_last_sync
-        else -> R.string.widget_scope_this_device
-    }
+internal fun StatsScope(context: Context, stats: WidgetStats, compact: Boolean = false) {
+    val label = stats.scopeLabelResource(System.currentTimeMillis()) ?: return
     Text(
         text = context.getString(label),
-        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 11.sp),
-        maxLines = 1,
+        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = if (compact) 8.sp else 11.sp),
     )
 }
 
-/** "Today", "This week" or "This month". */
-internal val WidgetPeriod.headingRes: Int
-    get() = when (this) {
-        WidgetPeriod.DAY -> R.string.widget_period_today
-        WidgetPeriod.WEEK -> R.string.reading_stats_this_week_local
-        WidgetPeriod.MONTH -> R.string.reading_stats_this_month_local
-    }
-
-/** "1 h today", "3 h this week" or "12 h this month". */
-internal fun periodTotal(context: Context, stats: WidgetStats): String = context.getString(
-    when (stats.figures.period) {
-        WidgetPeriod.DAY -> R.string.widget_total_today
-        WidgetPeriod.WEEK -> R.string.reading_stats_week_total
-        WidgetPeriod.MONTH -> R.string.widget_total_month
-    },
-    stats.totalLabel,
-)
-
-@Composable
-internal fun sizeAtLeast(min: DpSize): Boolean {
-    val size = LocalSize.current
-    return size.width >= min.width && size.height >= min.height
+internal fun WidgetStats.scopeLabelResource(now: Long): Int? = when (scope(now)) {
+    null, WidgetScope.THIS_DEVICE -> null
+    WidgetScope.LAST_SYNC -> R.string.widget_scope_last_sync
 }
 
 private val trackColor = widgetEdge

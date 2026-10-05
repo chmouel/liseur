@@ -119,9 +119,6 @@
     <plurals name="browse_add_n">
         <item quantity="other">添加 %1$d 本书</item>
     </plurals>
-    <plurals name="widget_streak_days">
-        <item quantity="other">连续 %1$d 天</item>
-    </plurals>
     <plurals name="settings_backup_positions_preview">
         <item quantity="other">%1$d 个阅读位置。恢复会用已保存的位置替换当前位置。</item>
     </plurals>
@@ -951,13 +948,10 @@
     <string name="widget_cover_label">当前封面</string>
     <string name="widget_cover_description">您正在阅读的图书封面</string>
     <string name="widget_stats_label">阅读统计</string>
-    <string name="widget_stats_description">您今天、本周或本月的阅读时长</string>
-    <string name="widget_cover_stats_label">封面与统计</string>
-    <string name="widget_cover_stats_description">您当前的图书和最近的阅读情况</string>
-    <string name="widget_period_today">今天</string>
-    <string name="widget_total_today">今天 %1$s</string>
-    <string name="widget_total_month">本月 %1$s</string>
-    <string name="widget_config_title">显示阅读时段</string>
+    <string name="widget_stats_description">当前书籍及本周、本月和本年的阅读时长</string>
+    <string name="widget_currently_reading">正在阅读</string>
+    <string name="widget_no_book">尚未打开任何书籍</string>
+    <string name="widget_progress_unavailable">暂无数据</string>
     <string name="widget_duration_under_minute">&lt;1m</string>
     <string name="widget_duration_minutes">%1$dm</string>
     <string name="widget_duration_hours">%1$dh</string>
@@ -1013,11 +1007,5 @@
     <string name="browse_open_library">打开书库</string>
     <string name="browse_nothing_to_add">这里的内容都已在您书库中。</string>
     <string name="browse_load_more">加载更多</string>
-    <string name="widget_library_label">您的书</string>
-    <string name="widget_library_description">浏览书库中图书的封面</string>
-    <string name="widget_previous_books">上一批图书</string>
-    <string name="widget_next_books">下一批图书</string>
-    <string name="widget_scope_all_devices">所有设备</string>
-    <string name="widget_scope_last_sync">包含最近同步的阅读</string>
-    <string name="widget_scope_this_device">本设备</string>
+    <string name="widget_scope_last_sync">最近同步的阅读</string>
 </resources>

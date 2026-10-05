@@ -65,7 +65,7 @@ object WidgetUpdater {
     val generation: StateFlow<Long> = refreshes.asStateFlow()
 
     private fun widgets(): List<GlanceAppWidget> =
-        listOf(CoverOnlyWidget(), WeekStatsWidget(), CoverStatsWidget(), LibraryWidget())
+        listOf(CoverOnlyWidget(), WeekStatsWidget())
 
     private val statsRequests = Mutex()
 
@@ -100,7 +100,7 @@ object WidgetUpdater {
     internal suspend fun hasStatsWidgets(context: Context): Boolean {
         if (!supportsWidgets(context)) return false
         val manager = GlanceAppWidgetManager(context)
-        return listOf(WeekStatsWidget(), CoverStatsWidget()).any { manager.getGlanceIds(it.javaClass).isNotEmpty() }
+        return manager.getGlanceIds(WeekStatsWidget::class.java).isNotEmpty()
     }
 
     fun schedule(context: Context) {
@@ -182,7 +182,7 @@ object WidgetUpdater {
             PeriodicRefresh.Cancel -> work.cancelUniqueWork(PERIODIC_REFRESH)
         }
         operation.await()
-        if (hasStatsWidgets(context)) requestStatsRefresh(context)
+        if (hasStatsWidgets(context)) requestStatsRefresh(context) else work.cancelUniqueWork(STATS_REFRESH).await()
     }
 
     private const val TAG = "WidgetUpdater"

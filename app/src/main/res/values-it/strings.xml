@@ -961,13 +961,10 @@
     <string name="widget_cover_label">Copertina attuale</string>
     <string name="widget_cover_description">La copertina del libro che stai leggendo</string>
     <string name="widget_stats_label">Statistiche di lettura</string>
-    <string name="widget_stats_description">Quanto hai letto oggi, questa settimana o questo mese</string>
-    <string name="widget_cover_stats_label">Copertina e statistiche</string>
-    <string name="widget_cover_stats_description">Il libro in corso e le tue letture recenti</string>
-    <string name="widget_period_today">Oggi</string>
-    <string name="widget_total_today">%1$s oggi</string>
-    <string name="widget_total_month">%1$s questo mese</string>
-    <string name="widget_config_title">Mostra la lettura di</string>
+    <string name="widget_stats_description">Il libro attuale e il tempo di lettura di questa settimana, mese e anno</string>
+    <string name="widget_currently_reading">Lettura in corso</string>
+    <string name="widget_no_book">Nessun libro ancora aperto</string>
+    <string name="widget_progress_unavailable">Non disponibile</string>
     <string name="widget_duration_under_minute">&lt;1 min</string>
     <string name="widget_duration_minutes">%1$d min</string>
     <string name="widget_duration_hours">%1$d h</string>
@@ -1041,17 +1038,7 @@
     <string name="browse_load_more">Carica altri</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_library_label">I tuoi libri</string>
-    <string name="widget_library_description">Sfoglia le copertine dei libri nella tua biblioteca</string>
-    <string name="widget_previous_books">Libri precedenti</string>
-    <string name="widget_next_books">Libri successivi</string>
-    <string name="widget_scope_all_devices">Tutti i dispositivi</string>
-    <string name="widget_scope_last_sync">Include l’ultima lettura sincronizzata</string>
-    <string name="widget_scope_this_device">Questo dispositivo</string>
-    <plurals name="widget_streak_days">
-        <item quantity="one">%1$d giorno consecutivo</item>
-        <item quantity="other">%1$d giorni consecutivi</item>
-    </plurals>
+    <string name="widget_scope_last_sync">Ultima lettura sincronizzata</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d posizione di lettura. Il ripristino sostituisce le posizioni attuali con quelle salvate.</item>
         <item quantity="other">%1$d posizioni di lettura. Il ripristino sostituisce le posizioni attuali con quelle salvate.</item>

@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LibraryFolderDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.db.RemoteStatsDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
 
@@ -30,12 +31,16 @@ class BookRemoval(
     private val annotationSyncDao: AnnotationSyncDao,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     private val bookOrbitBindings: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
+    private val remoteStatsDao: RemoteStatsDao? = null,
+    private val onReadingHistoryRemoved: suspend () -> Unit = {},
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
+        var removedSessions = false
         inTransaction {
-            forget(bookUrls)
+            removedSessions = forget(bookUrls)
         }
+        if (removedSessions) onReadingHistoryRemoved()
     }
 
     /** Removes a watched folder and the books that only came from it. */
@@ -44,6 +49,7 @@ class BookRemoval(
         folderUrl: String,
         rehomedSources: Map<String, String?> = emptyMap(),
     ) {
+        var removedSessions = false
         inTransaction {
             val books = bookDao.booksForSource(folderUrl)
             val bookUrls = books.map { it.url }
@@ -75,7 +81,7 @@ class BookRemoval(
                     }
                 }
             folderDao.delete(folderUrl)
-            forget(
+            removedSessions = forget(
                 books
                     // Nothing but the folder's file stood behind these.
                     // A row with a private copy has been kept above,
@@ -90,14 +96,17 @@ class BookRemoval(
                     .map { it.url },
             )
         }
+        if (removedSessions) onReadingHistoryRemoved()
     }
 
     suspend fun deleteRemoteNotDownloaded() {
+        var removedSessions = false
         inTransaction {
             val bookUrls = bookDao.remoteNotDownloadedUrls()
             if (bookUrls.isEmpty()) return@inTransaction
-            forget(bookUrls)
+            removedSessions = forget(bookUrls)
         }
+        if (removedSessions) onReadingHistoryRemoved()
     }
 
     /**
@@ -129,10 +138,12 @@ class BookRemoval(
      * the next sync would delete it everywhere.
      */
     suspend fun contentReplaced(bookUrl: String) {
+        var removedSessions = false
         inTransaction {
             progressDao.forget(bookUrl)
             annotationDao.deleteForBook(bookUrl)
             annotationSyncDao.forgetBook(bookUrl)
+            removedSessions = sessionDao.countForBook(bookUrl) > 0
             sessionDao.deleteForBook(bookUrl)
             // What a server was told this path held goes too. The
             // fingerprints describe a file that is not there any more,
@@ -152,7 +163,9 @@ class BookRemoval(
             bookOrbitBindings?.clearBook(bookUrl)
             bookDao.forgetReadingHistory(bookUrl)
             bookDao.clearSeriesForReplacedWork(bookUrl)
+            if (removedSessions) remoteStatsDao?.clearAll()
         }
+        if (removedSessions) onReadingHistoryRemoved()
     }
 
     /**
@@ -176,13 +189,15 @@ class BookRemoval(
     suspend fun dropUntouchedDuplicates(bookUrls: List<String>): List<String> {
         if (bookUrls.isEmpty()) return emptyList()
         val removable = mutableListOf<String>()
+        var removedSessions = false
         inTransaction {
             for (url in bookUrls.distinct()) {
                 val book = bookDao.getByUrl(url) ?: continue
                 if (blank(book) && untouched(url)) removable += url
             }
-            if (removable.isNotEmpty()) forget(removable)
+            if (removable.isNotEmpty()) removedSessions = forget(removable)
         }
+        if (removedSessions) onReadingHistoryRemoved()
         return removable
     }
 
@@ -209,6 +224,7 @@ class BookRemoval(
     ): Boolean {
         if (bookUrls.isEmpty()) return true
         var clear = false
+        var removedSessions = false
         inTransaction {
             val rows = bookUrls.distinct().mapNotNull { bookDao.getByUrl(it) }
             val removable = rows.all { row ->
@@ -222,10 +238,11 @@ class BookRemoval(
             val urls = rows.map { it.url }
             if (urls.isNotEmpty()) {
                 forgetExtra(urls)
-                forget(urls)
+                removedSessions = forget(urls)
             }
             clear = true
         }
+        if (removedSessions) onReadingHistoryRemoved()
         return clear
     }
 
@@ -287,8 +304,10 @@ class BookRemoval(
      * worse than useless: the book coming back would push every mark
      * again as if it were new.
      */
-    private suspend fun forget(bookUrls: List<String>) {
+    private suspend fun forget(bookUrls: List<String>): Boolean {
+        var removedSessions = false
         bookUrls.distinct().chunked(SQLITE_URL_BATCH_SIZE).forEach { batch ->
+            if (batch.any { sessionDao.countForBook(it) > 0 }) removedSessions = true
             sessionDao.deleteForBooks(batch)
             peerStateDao.forgetBooks(batch)
             identityDao.forgetFingerprints(batch)
@@ -296,6 +315,8 @@ class BookRemoval(
             identityDao.forgetAmbiguities(batch)
             bookDao.deleteByUrls(batch)
         }
+        if (removedSessions) remoteStatsDao?.clearAll()
+        return removedSessions
     }
 
     private companion object {

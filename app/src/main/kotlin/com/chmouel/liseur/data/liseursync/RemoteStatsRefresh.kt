@@ -41,7 +41,7 @@ class RemoteStatsRefresh(
     ) {
         val today = now(context.capabilities.timezone).toLocalDate()
         val recorded = sessions.allOnce()
-        for (range in setOf(StatsRange.THIS_WEEK, StatsRange.THIS_MONTH) - setOfNotNull(savedRange)) {
+        for (range in setOf(StatsRange.THIS_WEEK, StatsRange.THIS_MONTH, StatsRange.THIS_YEAR) - setOfNotNull(savedRange)) {
             val snapshot = source.read(context, recorded, range, today, weekStart, compare = false) ?: continue
             if (!source.isCurrent(snapshot) || now(snapshot.zone).toLocalDate() != today) return
             cache.save(snapshot.peer, snapshot.zone, today, range, range.startDate(today, weekStart), snapshot.totals)

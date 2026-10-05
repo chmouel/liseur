@@ -104,6 +104,22 @@ class RemoteStatsCacheTest {
     }
 
     @Test
+    fun `week and month saves retain annual activity and proven zero days`() = runTest {
+        val january = today.withDayOfYear(1)
+        val yearly = week().copy(days = week().days.mapIndexed { index, day ->
+            if (index == 0) day.copy(date = january) else day
+        } + InsightDay(january.plusDays(1), 0.0))
+        cache.save(peer, paris, today, StatsRange.THIS_YEAR, january, yearly)
+        for (range in listOf(StatsRange.THIS_WEEK, StatsRange.THIS_MONTH)) {
+            cache.save(peer, paris, today, range, range.startDate(today, java.time.DayOfWeek.MONDAY), week())
+            val days = dao.days(peer, paris.id).associate { it.date to it.residualMs }
+            assertEquals(180 * 60_000L, days[january.toString()])
+            assertEquals(0L, days[january.plusDays(1).toString()])
+            assertNull(days[january.plusDays(2).toString()])
+        }
+    }
+
+    @Test
     fun `days saved alone name no window`() = runTest {
         cache.save(peer, paris, today, null, today.minusDays(6), week())
         assertTrue(dao.days(peer, paris.id).isNotEmpty())
@@ -124,12 +140,18 @@ class RemoteStatsCacheTest {
             listOf(
                 RemoteStatsDay(peer, "2026-09-20", "UTC", 1),
                 RemoteStatsDay(peer, "2026-06-01", paris.id, 1),
+                RemoteStatsDay(peer, today.minusDays(366).toString(), paris.id, 1),
+                RemoteStatsDay(peer, today.minusDays(365).toString(), paris.id, 2),
             ),
         )
         cache.save(peer, paris, today, StatsRange.THIS_WEEK, monday, week())
 
         assertTrue(dao.days(peer, "UTC").isEmpty())
-        assertTrue(dao.days(peer, paris.id).none { it.date == "2026-06-01" })
+        assertTrue(dao.days(peer, paris.id).any { it.date == "2026-06-01" })
+        assertTrue(dao.days(peer, paris.id).none { it.date == today.minusDays(366).toString() })
+        assertTrue(dao.days(peer, paris.id).any { it.date == today.minusDays(365).toString() })
+        cache.save(peer, paris, today, StatsRange.THIS_MONTH, today.withDayOfMonth(1), week())
+        assertTrue(dao.days(peer, paris.id).any { it.date == "2026-06-01" })
     }
 
     @Test

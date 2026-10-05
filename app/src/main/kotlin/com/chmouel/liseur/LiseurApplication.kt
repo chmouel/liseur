@@ -35,6 +35,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
         // Below Android 13 the platform has just reset the default locale
         // to the system's; put the chosen language back.
         AppLocales.applyProcessDefault(this)
+        WidgetUpdater.schedule(this)
     }
 
     override fun onCreate() {

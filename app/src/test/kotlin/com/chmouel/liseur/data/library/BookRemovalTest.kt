@@ -48,6 +48,7 @@ class BookRemovalTest {
     private lateinit var db: LiseurDatabase
     private lateinit var removal: BookRemoval
     private lateinit var library: LocalLibraryRepository
+    private var historyRefreshRequests = 0
 
     @Before
     fun open() {
@@ -66,6 +67,8 @@ class BookRemovalTest {
             annotationSyncDao = db.annotationSyncDao(),
             inTransaction = { work -> db.withTransaction { work() } },
             bookOrbitBindings = db.bookOrbitBindingDao(),
+            remoteStatsDao = db.remoteStatsDao(),
+            onReadingHistoryRemoved = { historyRefreshRequests++ },
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
@@ -144,6 +147,28 @@ class BookRemovalTest {
         assertNull(db.syncPeerStateDao().get("gone", "peer"))
         assertEquals("sha-kept", db.syncPeerStateDao().get("kept", "peer")?.pendingEditionSha)
         assertEquals(listOf("kept"), db.readingSessionDao().observeAll().first().map { it.bookUrl })
+    }
+
+    @Test
+    fun `deleting captured local reading clears remote residual proof and requests refresh`() = runTest {
+        val peer = "liseursync|https://sync|account"
+        val date = "2026-10-05"
+        db.bookDao().upsert(book("gone"))
+        db.readingSessionDao().insert(session("gone"))
+        db.remoteStatsDao().upsertDays(
+            listOf(com.chmouel.liseur.data.db.RemoteStatsDay(peer, date, "UTC", 0, refreshedAt = 9_000_000)),
+        )
+        db.remoteStatsDao().upsertWindow(
+            com.chmouel.liseur.data.db.RemoteStatsWindow(
+                peer, "7d", date, date, "UTC", 0, "", 0, refreshedAt = 9_000_000,
+            ),
+        )
+
+        removal.deleteByUrls(listOf("gone"))
+
+        assertTrue(db.remoteStatsDao().days(peer, "UTC").isEmpty())
+        assertTrue(db.remoteStatsDao().windows(peer, "UTC").isEmpty())
+        assertEquals(1, historyRefreshRequests)
     }
 
     @Test

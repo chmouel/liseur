@@ -1,5 +1,32 @@
 # 39. The widget borrows the dashboard's other devices
 
+## Amendment: fixed week, month and year (2026-10-05)
+
+There are now two providers: the unchanged current cover and a stats card.
+The stats card shows the current title and progress above all-book calendar
+week, month and year hours. Book and totals have separate tap targets.
+There is no configuration, cover, chart or streak in the stats card.
+The library and combined-cover providers are removed, not redirected.
+The surviving receiver identities stay unchanged.
+
+The shared refresher also fetches the year, using the existing snapshot
+chunking and revision/overlap proof. All cache saves retain 366 days;
+year data does not create an unused aggregate window. Account checks,
+timezone isolation, explicit zero days and residual-only accounting remain
+unchanged. A week or month refresh must not prune annual reading.
+
+Fresh complete coverage of every displayed range needs no source footer.
+Otherwise the footer is “Last synced reading” when remote activity
+contributes. With only local activity, the widget shows no source footer.
+Freshness still means one hour, and
+missing days are never treated as proven zeros.
+When book deletion or replacement removes sessions used to subtract overlap,
+the app clears cached residuals in the same database transaction and queues a
+new snapshot. An offline refresh leaves the widget on local totals without a
+source footer.
+
+The sections below record the earlier design.
+
 Status: accepted
 
 Builds on [21. Cross-device reading statistics](0021-cross-device-reading-statistics.md).

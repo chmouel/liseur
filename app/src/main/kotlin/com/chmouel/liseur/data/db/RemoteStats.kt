@@ -76,6 +76,12 @@ interface RemoteStatsDao {
     @Query("DELETE FROM remote_stats_window WHERE account_key = :accountKey")
     suspend fun clearWindows(accountKey: String)
 
+    @Query("DELETE FROM remote_stats_day")
+    suspend fun clearAllDays()
+
+    @Query("DELETE FROM remote_stats_window")
+    suspend fun clearAllWindows()
+
     /**
      * Stores one snapshot's residual. Rows from another timezone describe
      * other calendar days and go; days older than [oldest] are no longer
@@ -107,5 +113,11 @@ interface RemoteStatsDao {
     suspend fun clearPeer(accountKey: String) {
         clearDays(accountKey)
         clearWindows(accountKey)
+    }
+
+    @Transaction
+    suspend fun clearAll() {
+        clearAllDays()
+        clearAllWindows()
     }
 }

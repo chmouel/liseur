@@ -418,6 +418,50 @@ class LiseurSyncSnapshotsTest {
     }
 
     @Test
+    fun `annual proof refuses candidate and body limits while a week still fits`() = runTest {
+        val todaySession = sitting()
+        transmit(todaySession)
+        repeat(4) { index ->
+            val end = today.minusDays(90L + index).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+            val id = db.readingSessionDao().insert(
+                ReadingSession(
+                    bookUrl = "book",
+                    startedAt = end - 600_000,
+                    endedAt = end,
+                    lastCheckpointAt = end,
+                    durationMs = 1_800_000,
+                    startProgression = 0.1,
+                    endProgression = 0.2,
+                    idleMs = 0,
+                ),
+            )
+            transmit(id, deviceId = "archive-device-${"x".repeat(100)}-$index")
+        }
+
+        changeCapabilities = { it.put("max_candidates", 2) }
+        assertNull(read(StatsRange.THIS_YEAR))
+        assertTrue(requests.isEmpty())
+        assertNotNull(read(StatsRange.THIS_WEEK))
+        requests.clear()
+
+        changeCapabilities = { it.put("max_candidates", 10) }
+        assertNotNull(read(StatsRange.THIS_YEAR))
+        val yearBytes = requests.single().toString().toByteArray(Charsets.UTF_8).size
+        requests.clear()
+        assertNotNull(read(StatsRange.THIS_WEEK))
+        val weekBytes = requests.single().toString().toByteArray(Charsets.UTF_8).size
+        assertTrue(yearBytes > weekBytes)
+        requests.clear()
+
+        val limit = (yearBytes + weekBytes) / 2
+        changeCapabilities = { it.put("max_body_bytes", limit) }
+        assertNull(read(StatsRange.THIS_YEAR))
+        assertTrue(requests.isEmpty())
+        assertNotNull(read(StatsRange.THIS_WEEK))
+        assertEquals(1, requests.size)
+    }
+
+    @Test
     fun `final version-one capability contract supports all-time without optional refinements`() = runTest {
         changeCapabilities = {
             it.remove("all_time")
@@ -530,6 +574,51 @@ class LiseurSyncSnapshotsTest {
         spans.forEach { assertTrue(it.second.toEpochDay() - it.first.toEpochDay() < 4_000) }
         spans.zipWithNext().forEach { (a, b) -> assertEquals(a.second.plusDays(1), b.first) }
         assertEquals(1, requests.map { it.getString("snapshot_id") }.distinct().size)
+    }
+
+    @Test
+    fun `annual history is fetched in bounded calendar pages`() = runTest {
+        earliest = LocalDate.of(2026, 1, 1)
+        changeCapabilities = { it.put("max_calendar_days", 30) }
+
+        val result = read(StatsRange.THIS_YEAR)
+
+        assertNotNull(result)
+        val spans = requests.map {
+            LocalDate.parse(it.getString("calendar_from")) to LocalDate.parse(it.getString("calendar_to"))
+        }.sortedBy { it.first }
+        assertTrue(spans.size > 2)
+        spans.forEach { (start, end) -> assertTrue(end.toEpochDay() - start.toEpochDay() < 30) }
+        spans.zipWithNext().forEach { (a, b) -> assertEquals(a.second.plusDays(1), b.first) }
+        assertEquals(1, requests.map { it.getString("snapshot_id") }.distinct().size)
+    }
+
+    @Test
+    fun `a failed later annual calendar page does not replace cached proof`() = runTest {
+        earliest = LocalDate.of(2026, 1, 1)
+        changeCapabilities = { it.put("max_calendar_days", 30) }
+        val cached = com.chmouel.liseur.data.db.RemoteStatsDay(
+            account.accountKey, "2026-01-01", zone.id, 17 * 60_000L, refreshedAt = 1234,
+        )
+        db.remoteStatsDao().upsertDays(listOf(cached))
+        changeResponse = { response ->
+            val request = requests.last()
+            if (request.optString("from") == "2026-01-01") {
+                if (LocalDate.parse(request.getString("calendar_from")) < today.minusDays(29)) {
+                    response.remove("calendar_to")
+                }
+            } else {
+                response.put("first_activity_day", today.toString())
+            }
+        }
+        val refresh = RemoteStatsRefresh(
+            client(), db.readingSessionDao(), RemoteStatsCache(db.remoteStatsDao(), db.remoteServerDao()),
+            now = { today.atStartOfDay(it) },
+        )
+
+        refresh.refresh(DayOfWeek.MONDAY)
+        assertEquals(listOf(cached), db.remoteStatsDao().days(account.accountKey, zone.id)
+            .filter { it.date == cached.date })
     }
 
     @Test
@@ -740,7 +829,7 @@ class LiseurSyncSnapshotsTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun `a week on screen also saves the month for the widgets`() = runTest {
+    fun `a week on screen also saves month and year for the widgets`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val models = ViewModelStore()
         try {
@@ -758,10 +847,10 @@ class LiseurSyncSnapshotsTest {
             )
             models.put("widgets", model)
             model.refreshServerInsights()
-            // The shared refresher fetches the missing month without a comparison.
+            // Wait for the complete year, not just the first saved window.
             withContext(Dispatchers.IO) {
                 repeat(250) {
-                    if (db.remoteStatsDao().windows(account.accountKey, zone.id).size == 2) {
+                    if (db.remoteStatsDao().days(account.accountKey, zone.id).firstOrNull()?.date == today.withDayOfYear(1).toString()) {
                         return@withContext
                     }
                     Thread.sleep(20)
@@ -773,9 +862,10 @@ class LiseurSyncSnapshotsTest {
                 today.withDayOfMonth(1).toString(),
                 windows.single { it.rangeId == "this_month" }.fromDate,
             )
-            assertEquals(2, requests.size)
+            assertEquals(today.withDayOfYear(1).toString(), db.remoteStatsDao().days(account.accountKey, zone.id).first().date)
             assertTrue(requests[0].has("comparison"))
-            assertFalse(requests[1].has("comparison"))
+            assertTrue(requests.drop(1).none { it.has("comparison") })
+            assertTrue(requests.any { it.optString("from").startsWith("2026-01-01") })
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -828,15 +918,17 @@ class LiseurSyncSnapshotsTest {
         refresh.refresh(DayOfWeek.MONDAY)
         assertEquals(setOf("7d", "this_month"), db.remoteStatsDao().windows(account.accountKey, zone.id).map { it.rangeId }.toSet())
         assertEquals(80 * 60_000L, db.remoteStatsDao().days(account.accountKey, zone.id).last().residualMs)
-        assertEquals(2, requests.size)
+        assertEquals(today.withDayOfYear(1).toString(), db.remoteStatsDao().days(account.accountKey, zone.id).first().date)
+        assertTrue(requests.size >= 3)
         assertTrue(requests.none { it.has("comparison") })
         val widget = com.chmouel.liseur.ui.widget.WidgetRepository(
             db.bookDao(), db.readingProgressDao(), db.readingSessionDao(),
             zone = { ZoneId.of("UTC") }, today = { today }, weekStart = { DayOfWeek.MONDAY },
-            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(), identityDao = db.workIdentityDao(),
-        ).load(ApplicationProvider.getApplicationContext(), com.chmouel.liseur.ui.widget.WidgetPeriod.WEEK)
+            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(),
+        ).load(ApplicationProvider.getApplicationContext())
         val localMs = db.readingSessionDao().allOnce().sumOf { it.durationMs }
-        assertEquals(unionMinutes(90.0, localMs, 10.0), widget.stats!!.figures.totalMs)
+        assertTrue(widget.stats!!.periods.all { it.totalMs == unionMinutes(90.0, localMs, 10.0) })
+        assertNull(widget.stats!!.scope(System.currentTimeMillis()))
         val before = db.remoteStatsDao().days(account.accountKey, zone.id)
         capabilitiesCode = 503
         refresh.refresh(DayOfWeek.MONDAY)
@@ -852,6 +944,32 @@ class LiseurSyncSnapshotsTest {
         refresh.refresh(DayOfWeek.MONDAY)
         assertEquals(0, server.requestCount)
         assertTrue(db.remoteStatsDao().windows(account.accountKey, zone.id).isEmpty())
+    }
+
+    @Test
+    fun `failed annual proof never supplies complete widget coverage`() = runTest {
+        val cached = com.chmouel.liseur.data.db.RemoteStatsDay(
+            account.accountKey, "2026-01-01", zone.id, 17 * 60_000L, refreshedAt = 1234,
+        )
+        db.remoteStatsDao().upsertDays(listOf(cached))
+        changeResponse = { response ->
+            if (response.optString("from").startsWith("2026-01-01")) response.put("complete", false)
+        }
+        val refresh = RemoteStatsRefresh(
+            client(), db.readingSessionDao(), RemoteStatsCache(db.remoteStatsDao(), db.remoteServerDao()),
+            now = { today.atStartOfDay(it) },
+        )
+        refresh.refresh(DayOfWeek.MONDAY)
+        val days = db.remoteStatsDao().days(account.accountKey, zone.id)
+        assertTrue(days.any { it.date == "2026-01-01" })
+        assertEquals(1234L, days.first { it.date == cached.date }.refreshedAt)
+        assertTrue(days.isNotEmpty())
+        val stats = com.chmouel.liseur.ui.widget.WidgetRepository(
+            db.bookDao(), db.readingProgressDao(), db.readingSessionDao(),
+            today = { today }, weekStart = { DayOfWeek.MONDAY },
+            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(),
+        ).load(ApplicationProvider.getApplicationContext()).stats!!
+        assertEquals(com.chmouel.liseur.ui.widget.WidgetScope.LAST_SYNC, stats.scope(System.currentTimeMillis()))
     }
 
     private fun client() = LiseurSyncSnapshots(

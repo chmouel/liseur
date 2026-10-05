@@ -13,27 +13,18 @@ import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.RemoteStatsDao
 import com.chmouel.liseur.data.db.RemoteStatsDay
-import com.chmouel.liseur.data.db.RemoteStatsWindow
-import com.chmouel.liseur.data.db.WorkAlias
-import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.SessionSpan
-import com.chmouel.liseur.domain.StatsBook
-import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.reader.ReaderActivity
-import com.chmouel.liseur.ui.stats.DurationParts
-import com.chmouel.liseur.ui.stats.durationParts
 import java.time.DayOfWeek
 import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
-import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -56,7 +47,6 @@ data class WidgetSnapshot(
 enum class WidgetContent(val cover: Boolean, val stats: Boolean) {
     COVER(cover = true, stats = false),
     STATS(cover = false, stats = true),
-    COVER_AND_STATS(cover = true, stats = true),
 }
 
 data class WidgetBook(
@@ -67,15 +57,6 @@ data class WidgetBook(
     val cover: Bitmap?,
     val initials: String,
     val openIntent: Intent,
-)
-
-data class WidgetStats(
-    val figures: PeriodStats,
-    val totalLabel: String,
-    /** The tallest bar's time, drawn as the chart's scale; null when nothing was read. */
-    val peakLabel: String?,
-    /** What the bars say, read out by TalkBack; null when nothing was read. */
-    val chartDescription: String? = null,
 )
 
 /**
@@ -92,41 +73,22 @@ class WidgetRepository(
     private val decodeCover: (String) -> Bitmap? = ::decodeCoverBitmap,
     private val serverDao: RemoteServerDao? = null,
     private val remoteStatsDao: RemoteStatsDao? = null,
-    private val identityDao: WorkIdentityDao? = null,
 ) {
-    /**
-     * Every session is read, not just the period's: the streak is counted
-     * over the whole history before the window is applied.
-     */
     suspend fun load(
         context: Context,
-        period: WidgetPeriod = WidgetPeriod.Default,
-        content: WidgetContent = WidgetContent.COVER_AND_STATS,
+        content: WidgetContent = WidgetContent.STATS,
     ): WidgetSnapshot = withContext(Dispatchers.IO) {
         val book = bookDao.mostRecentlyOpened()
         val progress = book?.let { progressDao.get(it.url)?.totalProgression }
         WidgetSnapshot(
             book = book?.toWidgetBook(context, progress, withCover = content.cover),
-            stats = if (content.stats) loadStats(period).toWidgetStats(context) else null,
+            stats = if (content.stats) loadStats() else null,
         )
     }
 
-    private suspend fun loadStats(period: WidgetPeriod): PeriodStats {
+    private suspend fun loadStats(): WidgetStats {
         val remote = loadRemote()
         val zone = remote?.zone ?: zone()
-        val progressions = progressDao.getAll()
-            .associateBy({ it.bookUrl }, { it.totalProgression })
-        val statsBooks = bookDao.allOnce().associate { row ->
-            row.url to StatsBook(
-                bookUrl = row.url,
-                title = row.displayTitle,
-                author = row.displayAuthor,
-                progression = progressions[row.url],
-                finished = row.finished,
-                coverPath = row.coverPath,
-                coverUrl = row.coverUrl,
-            )
-        }
         val spans = sessionDao.allOnce().map { session ->
             SessionSpan(
                 bookUrl = session.bookUrl,
@@ -138,13 +100,11 @@ class WidgetRepository(
                 endProgression = session.endProgression,
             )
         }
-        return periodStats(
+        return widgetStats(
             sessions = spans,
-            books = statsBooks,
             zone = zone,
             today = today(zone),
             weekStart = weekStart(),
-            period = period,
             remote = remote,
         )
     }
@@ -160,11 +120,9 @@ class WidgetRepository(
             return null
         }
         val days = stats.days(key, zone.id)
-        val windows = stats.windows(key, zone.id)
-        if (days.isEmpty() && windows.isEmpty()) return null
-        val aliases = identityDao?.aliasesFor(key).orEmpty()
+        if (days.isEmpty()) return null
         if (serverDao.get()?.accountKey != key) return null
-        return widgetRemote(days, windows, aliases).copy(zone = zone)
+        return widgetRemote(days).copy(zone = zone)
     }
 
     internal fun Book.toWidgetBook(context: Context, progression: Double?, withCover: Boolean): WidgetBook {
@@ -187,26 +145,11 @@ class WidgetRepository(
     }
 }
 
-/** Maps stored rows to what [periodStats] adds; a row that no longer parses is skipped. */
+/** Maps proven daily residuals; a row that no longer parses is skipped. */
 internal fun widgetRemote(
     days: List<RemoteStatsDay>,
-    windows: List<RemoteStatsWindow>,
-    aliases: List<WorkAlias>,
 ): WidgetRemote = WidgetRemote(
     days = days.mapNotNull { row -> row.date.toDateOrNull()?.let { it to row.residualMs } }.toMap(),
-    windows = windows.mapNotNull { row ->
-        val range = StatsRange.entries.firstOrNull { it.id == row.rangeId } ?: return@mapNotNull null
-        WidgetRemoteWindow(
-            range = range,
-            from = row.fromDate.toDateOrNull() ?: return@mapNotNull null,
-            today = row.today.toDateOrNull() ?: return@mapNotNull null,
-            sessions = row.residualSessions,
-            workIds = row.workIds.split('\n').filter { it.isNotEmpty() }.toSet(),
-            combinedStreak = row.combinedStreak,
-            refreshedAt = row.refreshedAt,
-        )
-    },
-    workIdByUrl = aliases.filter { it.usable }.associate { it.bookUrl to it.workId },
     refreshedAtByDay = days.mapNotNull { row -> row.date.toDateOrNull()?.let { it to row.refreshedAt } }.toMap(),
 )
 
@@ -216,27 +159,6 @@ private fun String.toDateOrNull(): LocalDate? = try {
     null
 }
 
-fun PeriodStats.toWidgetStats(context: Context): WidgetStats = WidgetStats(
-    figures = this,
-    totalLabel = formatReadingDuration(context, totalMs),
-    peakLabel = peakMs.takeIf { it > 0 }?.let { formatCompactDuration(context, it) },
-    chartDescription = chartDescription(context),
-)
-
-/** The days read, in the words the in-app chart speaks for each bar. */
-private fun PeriodStats.chartDescription(context: Context): String? {
-    val format = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
-    return bars.filter { it.totalMs > 0 }
-        .takeIf { it.isNotEmpty() }
-        ?.joinToString("; ") { bar ->
-            context.getString(
-                R.string.reading_stats_period_read,
-                formatReadingDuration(context, bar.totalMs),
-                format.format(bar.date),
-            )
-        }
-}
-
 fun formatCompactDuration(context: Context, millis: Long): String = when (val parts = compactDuration(millis)) {
     CompactDuration.UnderMinute -> context.getString(R.string.widget_duration_under_minute)
     is CompactDuration.Minutes -> context.getString(R.string.widget_duration_minutes, parts.minutes)
@@ -244,22 +166,6 @@ fun formatCompactDuration(context: Context, millis: Long): String = when (val pa
         context.getString(R.string.widget_duration_hours, parts.hours)
     } else {
         context.getString(R.string.widget_duration_hours_minutes, parts.hours, parts.minutes)
-    }
-}
-
-fun formatReadingDuration(context: Context, millis: Long): String = when (val parts = durationParts(millis)) {
-    DurationParts.None -> context.getString(R.string.duration_none)
-    DurationParts.UnderMinute -> context.getString(R.string.duration_under_minute)
-    is DurationParts.Minutes -> context.getString(R.string.duration_minutes, parts.minutes)
-    is DurationParts.Hours -> if (parts.minutes == 0) {
-        context.getString(R.string.duration_hours, parts.hours)
-    } else {
-        context.getString(R.string.duration_hours_minutes, parts.hours, parts.minutes)
-    }
-    is DurationParts.Days -> if (parts.hours == 0) {
-        context.getString(R.string.duration_days, parts.days)
-    } else {
-        context.getString(R.string.duration_days_hours, parts.days, parts.hours)
     }
 }
 

@@ -141,6 +141,8 @@ class AppContainer(context: Context) {
         annotationSyncDao = database.annotationSyncDao(),
         inTransaction = { work -> database.withTransaction { work() } },
         bookOrbitBindings = database.bookOrbitBindingDao(),
+        remoteStatsDao = database.remoteStatsDao(),
+        onReadingHistoryRemoved = { WidgetUpdater.requestStatsRefresh(context.applicationContext) },
     )
 
     /**

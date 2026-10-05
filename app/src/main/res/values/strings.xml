@@ -1004,13 +1004,10 @@
     <string name="widget_cover_label">Current cover</string>
     <string name="widget_cover_description">The cover of the book you are reading</string>
     <string name="widget_stats_label">Reading stats</string>
-    <string name="widget_stats_description">How much you have read today, this week or this month</string>
-    <string name="widget_cover_stats_label">Cover and stats</string>
-    <string name="widget_cover_stats_description">Your current book and your recent reading</string>
-    <string name="widget_period_today">Today</string>
-    <string name="widget_total_today">%1$s today</string>
-    <string name="widget_total_month">%1$s this month</string>
-    <string name="widget_config_title">Show reading for</string>
+    <string name="widget_stats_description">Your current book and reading time this week, month and year</string>
+    <string name="widget_currently_reading">Currently reading</string>
+    <string name="widget_no_book">No book opened yet</string>
+    <string name="widget_progress_unavailable">Not available</string>
     <string name="widget_duration_under_minute">&lt;1m</string>
     <string name="widget_duration_minutes">%1$dm</string>
     <string name="widget_duration_hours">%1$dh</string>
@@ -1085,17 +1082,7 @@
     <string name="browse_load_more">Load more</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_library_label">Your books</string>
-    <string name="widget_library_description">Browse the covers of books in your library</string>
-    <string name="widget_previous_books">Previous books</string>
-    <string name="widget_next_books">Next books</string>
-    <string name="widget_scope_all_devices">All devices</string>
-    <string name="widget_scope_last_sync">Includes last synced reading</string>
-    <string name="widget_scope_this_device">This device</string>
-    <plurals name="widget_streak_days">
-        <item quantity="one">%1$d-day streak</item>
-        <item quantity="other">%1$d-day streak</item>
-    </plurals>
+    <string name="widget_scope_last_sync">Last synced reading</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d reading position. Restoring replaces current positions with the saved positions.</item>
         <item quantity="other">%1$d reading positions. Restoring replaces current positions with the saved positions.</item>

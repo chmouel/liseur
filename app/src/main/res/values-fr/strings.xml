@@ -961,13 +961,10 @@
     <string name="widget_cover_label">Couverture en cours</string>
     <string name="widget_cover_description">La couverture du livre que vous lisez</string>
     <string name="widget_stats_label">Statistiques de lecture</string>
-    <string name="widget_stats_description">Ce que vous avez lu aujourd’hui, cette semaine ou ce mois-ci</string>
-    <string name="widget_cover_stats_label">Couverture et statistiques</string>
-    <string name="widget_cover_stats_description">Votre livre en cours et vos lectures récentes</string>
-    <string name="widget_period_today">Aujourd’hui</string>
-    <string name="widget_total_today">%1$s aujourd’hui</string>
-    <string name="widget_total_month">%1$s ce mois-ci</string>
-    <string name="widget_config_title">Afficher la lecture pour</string>
+    <string name="widget_stats_description">Votre livre en cours et votre temps de lecture cette semaine, ce mois-ci et cette année</string>
+    <string name="widget_currently_reading">Lecture en cours</string>
+    <string name="widget_no_book">Aucun livre ouvert pour le moment</string>
+    <string name="widget_progress_unavailable">Non disponible</string>
     <string name="widget_duration_under_minute">&lt;1 min</string>
     <string name="widget_duration_minutes">%1$d min</string>
     <string name="widget_duration_hours">%1$d h</string>
@@ -1041,17 +1038,7 @@
     <string name="browse_load_more">Charger plus</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_library_label">Vos livres</string>
-    <string name="widget_library_description">Parcourir les couvertures des livres de votre bibliothèque</string>
-    <string name="widget_previous_books">Livres précédents</string>
-    <string name="widget_next_books">Livres suivants</string>
-    <string name="widget_scope_all_devices">Tous les appareils</string>
-    <string name="widget_scope_last_sync">Inclut la dernière lecture synchronisée</string>
-    <string name="widget_scope_this_device">Cet appareil</string>
-    <plurals name="widget_streak_days">
-        <item quantity="one">Série de %1$d jour</item>
-        <item quantity="other">Série de %1$d jours</item>
-    </plurals>
+    <string name="widget_scope_last_sync">Dernière lecture synchronisée</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d position de lecture. La restauration remplace les positions actuelles par les positions sauvegardées.</item>
         <item quantity="other">%1$d positions de lecture. La restauration remplace les positions actuelles par les positions sauvegardées.</item>
