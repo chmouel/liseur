@@ -2,6 +2,7 @@ package com.chmouel.liseur.ui.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -33,6 +34,7 @@ import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.lifecycle.lifecycleScope
 import com.chmouel.liseur.R
+import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.ui.theme.LiseurTheme
 import kotlinx.coroutines.launch
 
@@ -44,6 +46,11 @@ import kotlinx.coroutines.launch
  * acts on a widget id that belongs to one of Liseur's own stats widgets.
  */
 class WidgetConfigActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        AppLocales.overrideConfiguration(newBase)?.let(::applyOverrideConfiguration)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val appWidgetId = intent?.getIntExtra(

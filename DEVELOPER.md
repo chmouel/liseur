@@ -947,17 +947,36 @@ montage docs/screenshots/*.png -tile 6x2 -geometry 320x+6+6 /tmp/sheet.png
 ## Translations
 
 English UI copy lives in `app/src/main/res/values/strings.xml`. French,
-Spanish, Russian, Italian and German ship beside it as `values-fr`,
-`values-es`, `values-ru`, `values-it` and `values-de`.
+Spanish, Russian, Italian, German and Simplified Chinese ship beside it as
+`values-fr`, `values-es`, `values-ru`, `values-it`, `values-de` and
+`values-b+zh+Hans`.
 
 - New user-facing text goes in the English file first, then in each
   locale file, and is read with `stringResource` / `pluralStringResource`.
   Mark brand and product names `translatable="false"` — those keys are
   omitted from locale files.
-- Russian plurals need `one` / `few` / `many` / `other`.
+- Russian plurals need `one` / `few` / `many` / `other`; Chinese only
+  `other`.
 - The app follows the system language and falls back to English for
-  missing keys. There is no in-app language picker yet, and
-  `resourceConfigurations` must not freeze the APK to a language list.
+  missing keys. `resourceConfigurations` must not freeze the APK to a
+  language list.
+- The in-app language picker sits at the end of Reading appearance's
+  Advanced section, not in the reader's "Aa" sheet: changing it restarts
+  the activity. `ui/settings/AppLocales.kt` owns it. On Android 13+
+  `LocaleManager` is the only record, shared with the system's per-app
+  language screen (`generateLocaleConfig` lists the `values-*` folders;
+  `res/resources.properties` names English as the default). Below 13 the
+  choice is a `SharedPreferences` entry, read in each UI activity's
+  `attachBaseContext` and applied with `applyOverrideConfiguration`
+  carrying only the locale, so activities that handle their own
+  configuration changes keep following orientation and night mode. A new
+  UI activity needs the same override. Below 13, widget text keeps the
+  system language, while dates and week starts follow the process default
+  locale, which `LiseurApplication` points at the chosen language at
+  startup and after every configuration change (the platform resets it
+  there), as 13+ does. On 13+ the platform sends `LOCALE_CHANGED` to the
+  app on a per-app change, so the widget receivers redraw. A new
+  language also goes in `AppLanguage` and the Makefile `locale` lists.
 
 See [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
 
@@ -1172,7 +1191,7 @@ reader behavior.
 - New reading settings belong in the Advanced sheet unless they are changed
   frequently. Keep the Settings and reader surfaces consistent and use the
   existing appearance/navigation split.
-- UI strings must be added to English and the five shipped locale resources
+- UI strings must be added to English and the six shipped locale resources
   together. Russian plural resources require `one`, `few`, `many`, and
   `other`; escape apostrophes as required by Android resources.
 - All dependencies and bundled fonts must remain FOSS and reproducible.

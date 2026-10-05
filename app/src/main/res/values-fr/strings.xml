@@ -719,6 +719,9 @@
     <string name="settings_reading_navigation_scrolling">Lecture par défilement.</string>
     <string name="settings_screen">Écran</string>
     <string name="settings_advanced">Avancé</string>
+    <string name="app_language">Langue de l\'application</string>
+    <string name="app_language_system">Langue du système</string>
+    <string name="app_language_detail">Change la langue des menus et des boutons, pas celle de vos livres.</string>
     <string name="settings_section_expanded">Développé</string>
     <string name="settings_section_collapsed">Réduit</string>
     <string name="settings_volume_keys">Les touches de volume tournent les pages</string>

@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.ui.settings.AppLocales
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -64,6 +65,11 @@ import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.toAbsoluteUrl
 
 class ReaderActivity : FragmentActivity() {
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        AppLocales.overrideConfiguration(newBase)?.let(::applyOverrideConfiguration)
+    }
 
     private var navigator: EpubNavigatorFragment? = null
     private var pageTurner: PageTurner? = null

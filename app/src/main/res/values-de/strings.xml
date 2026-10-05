@@ -730,6 +730,9 @@
     <string name="settings_reading_navigation_scrolling">Durch Scrollen lesen.</string>
     <string name="settings_screen">Bildschirm</string>
     <string name="settings_advanced">Erweitert</string>
+    <string name="app_language">App-Sprache</string>
+    <string name="app_language_system">Systemsprache</string>
+    <string name="app_language_detail">Ändert die Sprache von Menüs und Schaltflächen, nicht die deiner Bücher.</string>
     <string name="settings_section_expanded">Ausgeklappt</string>
     <string name="settings_section_collapsed">Eingeklappt</string>
     <string name="settings_volume_keys">Lautstärketasten blättern</string>

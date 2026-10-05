@@ -44,7 +44,7 @@ help:
 		'make run               Start the emulator, install, launch, and show it with scrcpy' \
 		'make run-bg            Start the emulator, install, and launch without scrcpy' \
 		'make reset             Reinstall the app, wipe its storage, and reseed a demo library' \
-		'make locale            Show or set app locale with LOCALE=xx (e.g. fr, de, es, it, ru)' \
+		'make locale            Show or set app locale with LOCALE=xx (e.g. fr, de, es, it, ru, zh-Hans)' \
 		'make clean             Remove build outputs' \
 		'make dev               Build the side-by-side APK ($(DEV_PACKAGE))' \
 		'make dev-install       Build and install it beside the real app' \
@@ -141,6 +141,7 @@ locale:
 			"fr  (Français)" \
 			"it  (Italiano)" \
 			"ru  (Русский)" \
+			"zh-Hans  (简体中文)" \
 			"reset (System default)"); \
 		[ -n "$$choice" ] || exit 0; \
 		code=$$(printf '%s' "$$choice" | awk '{print $$1}'); \
@@ -184,6 +185,7 @@ dev-locale:
 			"fr  (Français)" \
 			"it  (Italiano)" \
 			"ru  (Русский)" \
+			"zh-Hans  (简体中文)" \
 			"reset (System default)"); \
 		[ -n "$$choice" ] || exit 0; \
 		code=$$(printf '%s' "$$choice" | awk '{print $$1}'); \

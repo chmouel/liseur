@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,6 +62,7 @@ import com.chmouel.liseur.ui.library.LibraryViewModel
 import com.chmouel.liseur.ui.settings.ServerAccountScreen
 import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.AboutScreen
+import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.SettingsBackupScreen
@@ -84,6 +86,11 @@ import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.ui.widget.WidgetRequests
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        AppLocales.overrideConfiguration(newBase)?.let(::applyOverrideConfiguration)
+    }
+
     /**
      * Whether we still have to decide between the library and the book you
      * were reading. The splash screen stays up while we do, which takes one
@@ -402,6 +409,7 @@ private fun LiseurApp(
         }
 
         Screen.READING_APPEARANCE -> {
+            val activity = LocalActivity.current
             val back = { screen = Screen.SETTINGS }
             BackHandler { back() }
             ReadingAppearanceScreen(
@@ -437,6 +445,8 @@ private fun LiseurApp(
                         scope.launch { readerPreferences.setParagraphSpacing(it) }
                     },
                 ),
+                appLanguage = remember { AppLocales.current(context) },
+                onAppLanguage = { language -> activity?.let { AppLocales.apply(it, language) } },
                 onBack = back,
             )
         }

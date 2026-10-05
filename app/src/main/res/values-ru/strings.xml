@@ -769,6 +769,9 @@
     <string name="settings_reading_navigation_scrolling">Чтение прокруткой.</string>
     <string name="settings_screen">Экран</string>
     <string name="settings_advanced">Дополнительно</string>
+    <string name="app_language">Язык приложения</string>
+    <string name="app_language_system">Язык системы</string>
+    <string name="app_language_detail">Меняет язык меню и кнопок, но не ваших книг.</string>
     <string name="settings_section_expanded">Развёрнуто</string>
     <string name="settings_section_collapsed">Свёрнуто</string>
     <string name="settings_volume_keys">Клавиши громкости листают страницы</string>

@@ -719,6 +719,9 @@
     <string name="settings_reading_navigation_scrolling">Lettura a scorrimento.</string>
     <string name="settings_screen">Schermo</string>
     <string name="settings_advanced">Avanzate</string>
+    <string name="app_language">Lingua dell\'app</string>
+    <string name="app_language_system">Lingua di sistema</string>
+    <string name="app_language_detail">Cambia la lingua di menu e pulsanti, non quella dei tuoi libri.</string>
     <string name="settings_section_expanded">Espanso</string>
     <string name="settings_section_collapsed">Compresso</string>
     <string name="settings_volume_keys">I tasti volume girano le pagine</string>

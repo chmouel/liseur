@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,6 +100,8 @@ fun ReadingAppearanceScreen(
     onHighlightTintToggled: (HighlightTint) -> Unit,
     onHighlightDefaultTint: (HighlightTint) -> Unit,
     fineTypography: FineTypographyActions,
+    appLanguage: AppLanguage,
+    onAppLanguage: (AppLanguage) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -167,7 +170,9 @@ fun ReadingAppearanceScreen(
                 // Last, and closed, the way the "Aa" sheet's Advanced row
                 // is: the same settings should not be everyday on one
                 // surface and buried on the other.
-                var advancedOpen by remember { mutableStateOf(false) }
+                // Saveable: picking an app language recreates the activity,
+                // and the reader should land back on the row they used.
+                var advancedOpen by rememberSaveable { mutableStateOf(false) }
                 SettingsExpandableSection(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,
@@ -207,6 +212,9 @@ fun ReadingAppearanceScreen(
                         onTintToggled = onHighlightTintToggled,
                         onDefaultChanged = onHighlightDefaultTint,
                     )
+                    // Here and not in the "Aa" sheet: changing it restarts
+                    // the screen, which mid-book would mean reopening it.
+                    AppLanguageControl(selected = appLanguage, onSelected = onAppLanguage)
                 }
             }
         }

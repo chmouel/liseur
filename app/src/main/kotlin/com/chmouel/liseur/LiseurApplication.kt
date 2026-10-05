@@ -1,6 +1,7 @@
 package com.chmouel.liseur
 
 import android.app.Application
+import android.content.res.Configuration
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -16,6 +17,7 @@ import com.chmouel.liseur.data.remote.matches
 import com.chmouel.liseur.domain.shouldSyncOnForeground
 import com.chmouel.liseur.sync.PositionSyncWorker
 import com.chmouel.liseur.sync.SyncScope
+import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.ui.widget.WidgetUpdater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,8 +30,17 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
     private val appScope = CoroutineScope(Dispatchers.IO)
     private var lastForegroundSyncAt = 0L
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Below Android 13 the platform has just reset the default locale
+        // to the system's; put the chosen language back.
+        AppLocales.applyProcessDefault(this)
+    }
+
     override fun onCreate() {
         super.onCreate()
+        AppLocales.adoptLegacyChoice(this)
+        AppLocales.applyProcessDefault(this)
         container = AppContainer(this)
         // A restored backup brings the account with it but not the key
         // that unlocks it, so check before anything tries to use it.

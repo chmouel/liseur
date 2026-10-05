@@ -65,7 +65,8 @@ installation on a real device and must be announced.
   `packaging.jniLibs.keepDebugSymbols` settings in
   `app/build.gradle.kts`; see [DEVELOPER.md](DEVELOPER.md#f-droid-readiness).
 - User-facing UI text belongs in the English resource file and in the French,
-  Spanish, Russian, Italian, and German resources in the same change. Use
+  Spanish, Russian, Italian, German, and Simplified Chinese
+  (`values-b+zh+Hans`) resources in the same change. Use
   `stringResource` or `pluralStringResource`, mark brand names
   `translatable="false"`, and preserve Russian plural categories. See
   [DEVELOPER.md](DEVELOPER.md#translations).

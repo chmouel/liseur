@@ -113,6 +113,13 @@ android {
         buildConfig = true
     }
 
+    // Lists the bundled UI languages (from the values-* folders) so Android
+    // 13+ offers Liseur in the system's per-app language settings. The
+    // default language is declared in res/resources.properties.
+    androidResources {
+        generateLocaleConfig = true
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"

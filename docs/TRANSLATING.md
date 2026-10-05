@@ -5,10 +5,18 @@ UI strings live in
 Locales ship in the tree as `app/src/main/res/values-*/strings.xml`.
 
 French (`values-fr`), Spanish (`values-es`), Russian (`values-ru`),
-Italian (`values-it`) and German (`values-de`) are maintained in the
-repository. At runtime, missing keys fall back to English and the system
-language picks which file Android loads. There is no in-app language
-switcher yet.
+Italian (`values-it`), German (`values-de`) and Simplified Chinese
+(`values-b+zh+Hans`) are maintained in the repository. At runtime,
+missing keys fall back to English. The phone's language picks which file
+Android loads unless the reader picks one under Settings ▸ Reading
+appearance ▸ Advanced ▸ App language (or, on Android 13 and up, in the
+phone's per-app language settings).
+
+Adding a language also means adding it to `AppLanguage` in
+`app/src/main/kotlin/com/chmouel/liseur/ui/settings/AppLanguage.kt`
+(its own name, written in that language) and to the `locale` /
+`dev-locale` lists in the `Makefile`. The list Android 13+ shows is
+generated from the `values-*` folders at build time.
 
 Lint treats `MissingTranslation` as an error: every translatable key
 in the English file must also be present in each of those locale files,
@@ -26,8 +34,8 @@ space at build time.
    and grammatical for the target language.
 3. For languages with richer plurals than English (Russian needs
    `one` / `few` / `many` / `other`), fill every quantity Android asks
-   for.
-4. Open a pull request that updates English and all five locales
+   for. Chinese has only `other`.
+4. Open a pull request that updates English and all six locales
    together.
 
 Brand and product names (`Liseur`, `calibre-web`, `Komga`,

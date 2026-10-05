@@ -749,6 +749,9 @@
     <string name="settings_reading_navigation_scrolling">滚动阅读。</string>
     <string name="settings_screen">屏幕</string>
     <string name="settings_advanced">高级</string>
+    <string name="app_language">应用语言</string>
+    <string name="app_language_system">跟随系统</string>
+    <string name="app_language_detail">更改菜单和按钮的语言，不会改变书籍本身的语言。</string>
     <string name="settings_section_expanded">已展开</string>
     <string name="settings_section_collapsed">已折叠</string>
     <string name="settings_volume_keys">音量键翻页</string>

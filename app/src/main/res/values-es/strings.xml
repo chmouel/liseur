@@ -719,6 +719,9 @@
     <string name="settings_reading_navigation_scrolling">Leer desplazando.</string>
     <string name="settings_screen">Pantalla</string>
     <string name="settings_advanced">Avanzado</string>
+    <string name="app_language">Idioma de la aplicación</string>
+    <string name="app_language_system">Idioma del sistema</string>
+    <string name="app_language_detail">Cambia el idioma de los menús y botones, no el de tus libros.</string>
     <string name="settings_section_expanded">Expandido</string>
     <string name="settings_section_collapsed">Plegado</string>
     <string name="settings_volume_keys">Las teclas de volumen pasan página</string>
