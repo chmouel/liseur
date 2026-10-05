@@ -788,7 +788,7 @@ class ReaderViewModel(
                         remote = target.progression, remoteAt = target.at,
                         remoteLocatorJson = target.locatorJson, confidence = target.confidence,
                         excerpt = ExactLocatorAnchor.excerpt(target.locatorJson),
-                    ), fromSync = !target.locallyAuthored)
+                    ), fromSync = target.locallyAuthored == false)
                     requestBookSync(bookId)
                     BookSync.Idle
                 }

@@ -193,7 +193,8 @@ data class FurthestDestination(
     val locatorJson: String?,
     val at: Long,
     val confidence: ResumeConfidence,
-    val locallyAuthored: Boolean = false,
+    /** Null for pre-upgrade observations whose author is unknown. */
+    val locallyAuthored: Boolean? = false,
 )
 
 /** The identity of one server-side answer; see [SyncPreview.fingerprint]. */

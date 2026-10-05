@@ -86,6 +86,22 @@ abstract class LiseurDatabase : RoomDatabase() {
                 connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_revision INTEGER")
                 connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_at INTEGER")
                 connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_edition TEXT")
+                // Old rows do not prove which device authored the position. Keep
+                // the observation, but leave peak_revision null to prevent uploads.
+                connection.execSQL("""
+                    UPDATE reading_progress SET
+                        peak_progression = total_progression,
+                        peak_locator = locator_json,
+                        peak_at = COALESCE(read_at, updated_at),
+                        peak_edition = COALESCE(
+                            (SELECT sha256 FROM book_fingerprint
+                                WHERE book_fingerprint.book_url = reading_progress.book_url),
+                            (SELECT MIN(edition_sha) FROM work_alias
+                                WHERE work_alias.book_url = reading_progress.book_url
+                                    AND (confirmed = 1 OR confidence = 'high')
+                                GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1))
+                    WHERE total_progression BETWEEN 0 AND 1
+                """.trimIndent())
                 connection.execSQL("""
                     CREATE TABLE IF NOT EXISTS furthest_position (
                         peer_id TEXT NOT NULL, work_id TEXT NOT NULL,

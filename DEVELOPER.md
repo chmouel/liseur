@@ -1066,10 +1066,14 @@ reader behavior.
 - Historical furthest and current position are separate facts. Room 66 keeps
   locally authored peaks alongside `reading_progress` and complete remote
   operations in `furthest_position`, partitioned by account, work, and edition.
-  Preserve each snapshot candidate by operation identity: the server does not
-  expose its legacy-alias ownership groups. Compare valid fractions strictly,
+  Preserve each snapshot candidate by operation identity, including optional
+  `origin_alias` provenance in its original JSON. Compare valid fractions strictly,
   without the merge tolerance; jumps count, and rereading or marking unread
   never resets them.
+  Migration 66 retains each valid pre-upgrade position with its original locator,
+  reading timestamp, and known edition. Its author is unknown, so a null
+  `peak_revision` keeps it available for explicit recovery without uploading it
+  as locally authored reading. A later strict increase records a local peak.
   Catalog downloads can have a verified edition in `work_alias` without a
   local fingerprint row; preserve that edition in locally authored peaks too.
   Every changes-page operation, including this device's echoes, is observed

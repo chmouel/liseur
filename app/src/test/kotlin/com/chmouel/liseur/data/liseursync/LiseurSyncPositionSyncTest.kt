@@ -1977,6 +1977,40 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `pre-upgrade observation is recoverable offline but never uploaded as local reading`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "edition")
+        val original = """{"href":"/c1.xhtml","type":"application/xhtml+xml","locations":{"liseurAnchor":1,"cssSelector":"#original","totalProgression":0.7},"text":{"highlight":"Original passage"}}"""
+        db.readingProgressDao().upsert(com.chmouel.liseur.data.db.ReadingProgress(
+            bookUrl = LOCAL, locatorJson = original, totalProgression = 0.7, updatedAt = NOW,
+            peakProgression = 0.7, peakLocator = original, peakAt = NOW - 1000,
+            peakEdition = "edition", peakRevision = null,
+        ))
+        db.readingProgressDao().recordLocal(LOCAL, """{"href":"/earlier.xhtml"}""", 0.31, null, "reading", NOW + 1)
+        val offline = sync(online = false, furthest = true)
+        val target = (offline.previewKnownBook(LOCAL) as PreviewOutcome.Ready).preview.furthest!!
+        assertEquals(0.7, target.progression, 0.0)
+        assertEquals(NOW - 1000, target.at)
+        assertEquals(original, target.locatorJson)
+        assertNull(target.locallyAuthored)
+        val sent = java.util.Collections.synchronizedList(mutableListOf<JSONObject>())
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) return json("""{"ops":[],"high_water":0}""")
+                sent += JSONObject(request.body!!.utf8()).getJSONArray("ops").getJSONObject(0)
+                return applied(request)
+            }
+        }
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+        assertEquals(listOf(0.31), sent.map { it.getDouble("progression") })
+        assertNull(db.furthestPositionDao().delivered(peer(), LOCAL, "w-1"))
+        val current = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(ResolveOutcome.Done, offline.takeFurthestPosition(LOCAL, current.localRevision, target))
+        assertEquals(original, db.readingProgressDao().get(LOCAL)!!.locatorJson)
+    }
+
+    @Test
     fun `offline peak is delivered before current and current retries without resending peak`() = runTest {
         connect()
         db.bookDao().upsert(local())
@@ -2103,7 +2137,7 @@ class LiseurSyncPositionSyncTest {
         val syncing = sync(online = false, furthest = true)
         val preview = (syncing.previewBook(LOCAL) as PreviewOutcome.Ready).preview
         assertEquals(ResumeConfidence.EXACT, preview.furthest!!.confidence)
-        assertTrue(preview.furthest.locallyAuthored)
+        assertEquals(true, preview.furthest.locallyAuthored)
         assertEquals(peak, preview.furthest.locatorJson)
         assertEquals(ResolveOutcome.Done, syncing.takeFurthestPosition(LOCAL, 2, preview.furthest))
         assertEquals(peak, db.readingProgressDao().get(LOCAL)!!.locatorJson)

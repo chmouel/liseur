@@ -274,9 +274,12 @@ class LiseurSyncPositionSync(
         ))
     }
 
-    private fun localPeak(account: Account, stored: ReadingProgress, alias: WorkAlias): SyncOp? {
+    private fun localPeak(
+        account: Account, stored: ReadingProgress, alias: WorkAlias,
+        includeObserved: Boolean = false,
+    ): SyncOp? {
         val progression = stored.peakProgression ?: return null
-        val revision = stored.peakRevision ?: return null
+        val revision = stored.peakRevision ?: if (includeObserved) 0L else return null
         val at = stored.peakAt ?: return null
         if (stored.peakEdition != null && stored.peakEdition != alias.editionSha) return null
         val edition = stored.peakEdition ?: alias.editionSha
@@ -295,7 +298,8 @@ class LiseurSyncPositionSync(
     ): FurthestDestination? {
         val candidates = furthestDao?.forWork(account.peerId, alias.workId).orEmpty()
             .mapNotNull { SyncOps.fromJson(JSONObject(it.payload)) }.toMutableList()
-        progressDao.get(bookUrl)?.let { localPeak(account, it, alias) }?.let(candidates::add)
+        val stored = progressDao.get(bookUrl)
+        stored?.let { localPeak(account, it, alias, includeObserved = true) }?.let(candidates::add)
         val peak = candidates.sortedWith(
             compareByDescending<SyncOp> { it.progression }.thenBy { it.seq }.thenBy { it.opId },
         ).firstOrNull() ?: return null
@@ -308,7 +312,7 @@ class LiseurSyncPositionSync(
             confidence = if ((local || sameEdition(peak.editionSha, alias)) &&
                 ExactLocatorAnchor.isExactJson(locator)
             ) ResumeConfidence.EXACT else ResumeConfidence.APPROXIMATE,
-            locallyAuthored = local,
+            locallyAuthored = if (local) stored?.peakRevision?.let { true } else false,
         )
     }
 
