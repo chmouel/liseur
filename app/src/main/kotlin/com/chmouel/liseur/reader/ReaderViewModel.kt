@@ -765,18 +765,27 @@ class ReaderViewModel(
     fun resolveFurthest() {
         val preview = (_bookSync.value as? BookSync.Choice)?.preview ?: return
         val target = preview.furthest ?: return
-        val generation = readingGeneration
+        val beforeGeneration = readingGeneration
         _bookSync.value = BookSync.Asking
         viewModelScope.launch {
+            if (!positionPublisher.flush(bookId)) {
+                _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
+                return@launch
+            }
+            val before = progressDao.get(bookId)
             if (!preparePositionAction() || !positionPublisher.flush(bookId)) {
                 _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
                 return@launch
             }
-            if (readingGeneration != generation) {
+            val captured = preview.afterFurthestCapture(
+                before, progressDao.get(bookId), readingGeneration - beforeGeneration, ::samePlaceAs,
+            )
+            if (captured == null) {
                 _bookSync.value = BookSync.Note(R.string.reader_sync_book_moved)
                 return@launch
             }
-            _bookSync.value = when (val outcome = positionSync.takeFurthest(bookId, preview)) {
+            val generation = readingGeneration
+            _bookSync.value = when (val outcome = positionSync.takeFurthest(bookId, captured)) {
                 ResolveOutcome.Superseded -> BookSync.Note(R.string.reader_sync_book_moved)
                 is ResolveOutcome.Failed -> BookSync.Note(outcome.reason.messageRes())
                 ResolveOutcome.Done -> {
