@@ -161,6 +161,13 @@ class GeminiTtsClientTest {
     }
 
     @Test
+    fun `a key that cannot be a header is an invalid key, without being repeated`(): Unit = runBlocking {
+        val error = expect<SpeechError.InvalidKey> { client().synthesize("secret\nkey", "t", "Kore") }
+        assertFalse(error.toString().contains("secret"))
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun `cancelling the caller cancels the request`() = runBlocking {
         server.enqueue(
             MockResponse.Builder()

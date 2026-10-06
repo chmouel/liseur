@@ -163,7 +163,8 @@ class ReadAloudPlaybackTest {
     /** Readium's player steps past a failed sentence unless it is paused first; make sure it has. */
     private fun movePastTheFailure() {
         val failed = playback.failure.value!!.anchor!!
-        runBlocking(main) { playback.skipToNext() }
+        // The navigator itself, as Readium's player does; the playback's own skips are the reader's.
+        runBlocking(main) { playback.navigator.value!!.skipToNextUtterance() }
         val deadline = System.currentTimeMillis() + 5_000
         while (failed.isAt(playback.navigator.value!!.location.value)) {
             check(System.currentTimeMillis() < deadline) { "never left the failed sentence" }
@@ -228,6 +229,46 @@ class ReadAloudPlaybackTest {
         assertEquals(listOf(ReadAloudPlayback.Landing.Sentence, ReadAloudPlayback.Landing.Sentence), landings)
         awaitPlayed(4)
         assertEquals(listOf(FIRST, SECOND, THIRD, FOURTH), played.take(4))
+    }
+
+    @Test
+    fun aPauseAfterTwoRetriesStopsTheOneStillWaiting() {
+        failures[THIRD] = 1
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitFailure()
+        movePastTheFailure()
+        val opening = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        beforeOpen = {
+            opening.complete(Unit)
+            release.await()
+        }
+
+        runBlocking(main) {
+            val first = async { playback.resume() }
+            val second = async { playback.resume() }
+            opening.await()
+            beforeOpen = {}
+            playback.pause()
+            release.complete(Unit)
+            first.await()
+            second.await()
+        }
+        assertFalse(playback.navigator.value!!.playback.value.playWhenReady)
+        assertEquals(listOf(FIRST, SECOND), played.toList())
+    }
+
+    @Test
+    fun skippingAfterAFailurePlaysOnFromTheSkip() {
+        failures[THIRD] = 1
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitFailure()
+
+        runBlocking(main) { playback.skipToNext() }
+        assertEquals(null, playback.failure.value)
+        runBlocking(main) { playback.resume() }
+        awaitPlayed(3)
+        assertTrue(played[2] != THIRD)
     }
 
     @Test

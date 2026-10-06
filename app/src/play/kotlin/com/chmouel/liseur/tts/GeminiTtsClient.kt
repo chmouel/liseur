@@ -27,7 +27,9 @@ class SpeechAudio(val pcm: ByteArray) {
 
 /** Why a sentence could not be turned into speech. Messages never carry the key or the text. */
 sealed class SpeechError(message: String, cause: Throwable? = null) : Exception(message, cause) {
-    class InvalidKey(code: Int) : SpeechError("Gemini rejected the API key (HTTP $code)")
+    /** [code] is null when the key could not even be sent. */
+    class InvalidKey(code: Int? = null) :
+        SpeechError(code?.let { "Gemini rejected the API key (HTTP $it)" } ?: "The Gemini API key cannot be sent")
     class RateLimited(code: Int) : SpeechError("Gemini quota or rate limit reached (HTTP $code)")
     class Network(cause: IOException) :
         SpeechError("Gemini could not be reached (${cause.javaClass.simpleName})", cause)
@@ -63,9 +65,15 @@ class GeminiTtsClient(
 ) : SpeechSynthesizer {
 
     override suspend fun synthesize(apiKey: String, text: String, voice: String): SpeechAudio {
-        val request = Request.Builder()
-            .url(endpoint)
-            .header("x-goog-api-key", apiKey)
+        val builder = Request.Builder().url(endpoint)
+        try {
+            builder.header("x-goog-api-key", apiKey)
+        } catch (_: IllegalArgumentException) {
+            // A pasted line break or non-ASCII character; OkHttp's message
+            // would repeat the key, so it is not kept as the cause.
+            throw SpeechError.InvalidKey()
+        }
+        val request = builder
             .header("User-Agent", USER_AGENT)
             .post(requestBody(text, voice).toRequestBody(JSON))
             .build()

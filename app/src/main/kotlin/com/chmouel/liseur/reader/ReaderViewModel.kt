@@ -1487,12 +1487,19 @@ class ReaderViewModel(
             sessions.onReaderReady()
             lastLocator?.let { _progress.value = progressAt(it) }
             viewModelScope.launch {
-                // Listening is not reading time, even with the reader in front.
+                // Listening is neither reading time nor reading pace, even
+                // with the reader in front: the page turn that ends it must
+                // not measure the distance listened from the page before.
                 readAloud.session
                     .map { it?.bookId == bookId && it.playing }
                     .distinctUntilChanged()
                     .collect { playing ->
-                        if (playing) sessions.suspendForListening() else sessions.resumeAfterListening()
+                        if (playing) {
+                            speed.forgetLastPosition()
+                            sessions.suspendForListening()
+                        } else {
+                            sessions.resumeAfterListening()
+                        }
                     }
             }
         }
@@ -1512,7 +1519,8 @@ class ReaderViewModel(
         approximateOpening = null
         approximateCatchUp?.let { bookOrbitDeclinedPending = it }
         approximateCatchUp = null
-        val declined = _catchUp.value?.bookOrbit ?: bookOrbitDeclinedPending
+        // A restart before the last session saved anything still owes its decline.
+        val declined = _catchUp.value?.bookOrbit ?: bookOrbitDeclinedPending ?: handle.listeningSettles?.declined
         bookOrbitDeclinedPending = null
         _catchUp.value = null
         handle.listeningSettles = ListeningSettlement(bookOrbitOpening.verifiedPull, declined)

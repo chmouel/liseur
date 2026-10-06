@@ -119,6 +119,24 @@ class UtterancePrefetcherTest {
     }
 
     @Test
+    fun skippingBackToAnEarlierRepeatedSentenceStartsAgainFromThere() = runTest {
+        val synth = FakeSynth()
+        val (_, prefetcher) = setUp(
+            synth,
+            mapOf("p" to { cursor("Again." to "a", "B." to "a Again.", "Again." to "b", "C." to "b Again.") }),
+        )
+        prefetcher.onUtterance("Again.", "a", "p")
+        advanceUntilIdle()
+        prefetcher.onUtterance("B.", "a Again.", "p")
+        advanceUntilIdle()
+        assertEquals(1, prefetcher.restarts)
+
+        prefetcher.onUtterance("Again.", "a", "p")
+        advanceUntilIdle()
+        assertEquals(2, prefetcher.restarts)
+    }
+
+    @Test
     fun takingAPrefetchedSentenceDoesNotAskAgain() = runTest {
         val synth = FakeSynth()
         val (cache, prefetcher) = setUp(synth, mapOf("p" to { cursor("A", "B") }))

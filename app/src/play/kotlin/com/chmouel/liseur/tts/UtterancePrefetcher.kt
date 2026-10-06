@@ -111,7 +111,11 @@ class SpeechCache(
 }
 
 /** A sentence as Readium will speak it, with the text leading up to it in its element. */
-data class UtteranceText(val text: String, val before: String?)
+data class UtteranceText(val text: String, val before: String?) {
+    /** Whether this is [text] with [before] leading up to it; a missing context matches any. */
+    fun isSentence(text: String, before: String?): Boolean =
+        this.text == text && (before == null || this.before == null || this.before == before)
+}
 
 /** Reads the book's sentences forward from a place, the way Readium's own iterator does. */
 fun interface UtteranceCursor {
@@ -133,7 +137,7 @@ class UtterancePrefetcher<L>(
     private val ahead: Int = AHEAD,
 ) {
     private var cursor: UtteranceCursor? = null
-    private val window = ArrayDeque<String>()
+    private val window = ArrayDeque<UtteranceText>()
     private var suspended = false
     private var job: Job? = null
 
@@ -144,7 +148,9 @@ class UtterancePrefetcher<L>(
     /** The voice moved on to [text], found in the element at [locator] with [before] leading up to it. */
     fun onUtterance(text: String, before: String?, locator: L) {
         if (suspended) return
-        val index = window.indexOf(text)
+        // The text before a sentence tells a repeated one apart, so a skip
+        // back to an earlier occurrence is not taken for reading on.
+        val index = window.indexOfFirst { it.isSentence(text, before) }
         if (index >= 0 && cursor != null) {
             repeat(index + 1) { window.removeFirst() }
             refill()
@@ -188,9 +194,7 @@ class UtterancePrefetcher<L>(
             // using the text before it to tell a repeated sentence apart.
             repeat(MAX_SEEK) {
                 val candidate = cursor.next() ?: return@launch
-                if (candidate.text == text &&
-                    (before == null || candidate.before == null || candidate.before == before)
-                ) {
+                if (candidate.isSentence(text, before)) {
                     this@UtterancePrefetcher.cursor = cursor
                     fill(cursor)
                     return@launch
@@ -214,7 +218,7 @@ class UtterancePrefetcher<L>(
             } catch (_: Exception) {
                 null
             } ?: return
-            window.addLast(next.text)
+            window.addLast(next)
             cache.prefetch(next.text)
         }
     }

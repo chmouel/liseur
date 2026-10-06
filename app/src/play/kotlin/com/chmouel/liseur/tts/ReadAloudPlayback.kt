@@ -127,12 +127,20 @@ class ReadAloudPlayback(
         mutableNavigator.value?.pause()
     }
 
-    /** Plays on; after a failure, from the sentence that failed. */
-    suspend fun resume(): Landing = landing.withLock {
-        val navigator = mutableNavigator.value ?: return Landing.Failed
+    /**
+     * Plays on; after a failure, from the sentence that failed. The wish to
+     * play is recorded before waiting for a landing under way, so a pause
+     * that comes in the meantime still wins.
+     */
+    suspend fun resume(): Landing {
         playRequested = true
+        return landing.withLock { resumeLanded() }
+    }
+
+    private suspend fun resumeLanded(): Landing {
+        val navigator = mutableNavigator.value ?: return Landing.Failed
         val failed = mutableFailure.value ?: run {
-            navigator.play()
+            if (playRequested) navigator.play()
             return Landing.Sentence
         }
         val anchor = failed.anchor ?: return Landing.Failed
@@ -143,11 +151,14 @@ class ReadAloudPlayback(
         return landed
     }
 
+    /** The reader's own skips: playing on starts from where they lead, not from a failed sentence. */
     fun skipToNext() {
+        mutableFailure.value = null
         mutableNavigator.value?.skipToNextUtterance()
     }
 
     fun skipToPrevious() {
+        mutableFailure.value = null
         mutableNavigator.value?.skipToPreviousUtterance()
     }
 
