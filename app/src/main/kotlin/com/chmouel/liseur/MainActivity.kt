@@ -963,8 +963,8 @@ private fun LibraryRoute(
         },
         notice = notice,
         onNoticeShown = viewModel::noticeShown,
-        widgetBook = widgetShelfBook?.takeIf {
-            widgetRequest?.let(LaunchRequests.shared::owns) == true
+        widgetBook = widgetShelfBook?.takeIf { book ->
+            widgetRequest?.let { it.bookUrl == book.url && LaunchRequests.shared.owns(it) } == true
         },
         onWidgetBookHandled = {
             widgetShelfBook = null
