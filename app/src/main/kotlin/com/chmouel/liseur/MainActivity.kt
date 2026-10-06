@@ -223,6 +223,7 @@ private enum class Screen {
     SETTINGS_BACKUP,
     READING_APPEARANCE,
     READING_NAVIGATION,
+    READ_ALOUD,
     HIDDEN_BOOKS,
     SERVER_ACCOUNT,
     BROWSE_LIBRARIES,
@@ -401,7 +402,16 @@ private fun LiseurApp(
                 server = context.container.remoteAccount.server,
                 onOpenAbout = { screen = Screen.ABOUT },
                 onBack = { screen = Screen.LIBRARY },
+                flavorReadingRows = {
+                    context.container.readAloud.SettingsEntry(onClick = { screen = Screen.READ_ALOUD })
+                },
             )
+        }
+
+        Screen.READ_ALOUD -> {
+            val back = { screen = Screen.SETTINGS }
+            BackHandler { back() }
+            context.container.readAloud.SettingsScreen(onBack = back)
         }
 
         Screen.SETTINGS_BACKUP -> {
@@ -455,7 +465,6 @@ private fun LiseurApp(
                     scope.launch { repository.setDictionaryBaseUrl(it) }
                 },
                 onBack = back,
-                flavorAdvancedRows = { context.container.readAloud.SettingsRows() },
             )
         }
 

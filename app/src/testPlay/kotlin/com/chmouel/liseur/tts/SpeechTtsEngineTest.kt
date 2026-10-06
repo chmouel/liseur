@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
  * network and the audio finish on.
  */
 @OptIn(ExperimentalReadiumApi::class)
-class GeminiTtsEngineTest {
+class SpeechTtsEngineTest {
     private val mainExecutor = Executors.newSingleThreadExecutor { Thread(it, "main") }
     private val main = mainExecutor.asCoroutineDispatcher()
     private val scope = CoroutineScope(SupervisorJob() + main)
@@ -59,22 +59,22 @@ class GeminiTtsEngineTest {
     }
 
     private val events = LinkedBlockingQueue<String>()
-    private val engine = GeminiTtsEngine(
+    private val engine = SpeechTtsEngine(
         scope = scope,
         cache = cache,
         output = output,
         voices = emptySet(),
         publicationLanguage = null,
-        initialPreferences = GeminiTtsPreferences(),
+        initialPreferences = SpeechTtsPreferences(),
     ).apply {
-        setListener(object : TtsEngine.Listener<GeminiTtsEngine.Error> {
+        setListener(object : TtsEngine.Listener<SpeechTtsEngine.Error> {
             fun record(event: String) = events.put("$event@${Thread.currentThread().name.substringBefore(" @")}")
             override fun onStart(requestId: TtsEngine.RequestId) = record("start ${requestId.value}")
             override fun onRange(requestId: TtsEngine.RequestId, range: IntRange) = record("range")
             override fun onInterrupted(requestId: TtsEngine.RequestId) = record("interrupted ${requestId.value}")
             override fun onFlushed(requestId: TtsEngine.RequestId) = record("flushed ${requestId.value}")
             override fun onDone(requestId: TtsEngine.RequestId) = record("done ${requestId.value}")
-            override fun onError(requestId: TtsEngine.RequestId, error: GeminiTtsEngine.Error) =
+            override fun onError(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) =
                 record("error ${requestId.value} ${error::class.simpleName}")
         })
     }

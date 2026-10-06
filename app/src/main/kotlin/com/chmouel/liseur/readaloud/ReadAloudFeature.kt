@@ -24,20 +24,26 @@ data class ReadAloudUi(
 
 /** Something the reader should tell the listener about, once. */
 enum class ReadAloudNotice {
-    /** Gemini could not be reached; paused on the sentence that failed. */
+    /** The speech service could not be reached; paused on the sentence that failed. */
     Network,
 
     /** The key's quota is used up; paused on the sentence that failed. */
     RateLimited,
 
-    /** Gemini failed or answered without audio; paused on the sentence that failed. */
+    /** The speech service failed or answered without audio; paused on the sentence that failed. */
     Service,
 
     /** The device could not play the audio; paused. */
     Output,
 
-    /** Gemini rejected the key; reading aloud stopped. */
+    /** The speech service rejected the key; reading aloud stopped. */
     InvalidKey,
+
+    /** The speech service has no such voice; reading aloud stopped. */
+    InvalidVoice,
+
+    /** The chosen service has no key, server or voice yet; nothing was read. */
+    NotSetUp,
 
     /** The selected sentence was not found; reading from the start of its paragraph. */
     SelectionNotFound,
@@ -51,13 +57,13 @@ data class ReadAloudBookNotice(val bookId: String, val notice: ReadAloudNotice)
 
 /**
  * Reading aloud, as the flavor-neutral reader sees it. The Play build
- * provides the Gemini voice; the F-Droid build provides [None], which is
- * never available and draws nothing.
+ * provides Gemini and Kokoro voices; the F-Droid build provides [None],
+ * which is never available and draws nothing.
  */
 interface ReadAloudFeature {
     val isAvailable: Boolean
 
-    /** Whether a key is set, so a book can be read aloud at all. */
+    /** Whether the chosen voice is set up, so a book can be read aloud at all. */
     val configured: StateFlow<Boolean>
 
     /** The session in progress, whichever book it is reading. */
@@ -85,9 +91,13 @@ interface ReadAloudFeature {
     fun skipForward()
     fun skipBackward()
 
-    /** The rows this feature adds to Reading navigation → Advanced. */
+    /** The row on the main settings screen that opens [SettingsScreen]. */
     @Composable
-    fun SettingsRows()
+    fun SettingsEntry(onClick: () -> Unit)
+
+    /** Read aloud's own settings screen. */
+    @Composable
+    fun SettingsScreen(onBack: () -> Unit)
 
     /**
      * The player laid over [bookId]'s page while it is being read aloud,
@@ -115,7 +125,10 @@ interface ReadAloudFeature {
         override fun skipBackward() = Unit
 
         @Composable
-        override fun SettingsRows() = Unit
+        override fun SettingsEntry(onClick: () -> Unit) = Unit
+
+        @Composable
+        override fun SettingsScreen(onBack: () -> Unit) = Unit
 
         @Composable
         override fun Player(bookId: String, theme: ReaderTheme, modifier: Modifier) = Unit

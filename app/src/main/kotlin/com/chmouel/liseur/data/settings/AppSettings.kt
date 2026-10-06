@@ -183,8 +183,14 @@ enum class DefinitionTarget(val id: String) {
  *   offers, and the configured default for a plain highlight. A passage note
  *   uses the first colour in that bar's stable order, or the default when
  *   the bar is empty.
- * @param readAloudVoice The voice reading aloud uses, by name, or null for
- *   the engine's default. Only builds that can read aloud offer it.
+ * @param readAloudVoice The Gemini voice reading aloud uses, by name, or
+ *   null for the engine's default. Only builds that can read aloud offer it.
+ * @param readAloudProvider Which speech service reads aloud, by id, or null
+ *   for the build's default.
+ * @param kokoroUrl The Kokoro server reading aloud uses, as typed, or null
+ *   for none.
+ * @param kokoroVoice The Kokoro voice reading aloud uses, by name, or null
+ *   for none chosen yet.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -208,6 +214,9 @@ data class AppSettings(
     val statsRange: StatsRange = StatsRange.Default,
     val highlightPalette: HighlightPalette = HighlightPalette(),
     val readAloudVoice: String? = null,
+    val readAloudProvider: String? = null,
+    val kokoroUrl: String? = null,
+    val kokoroVoice: String? = null,
 )
 
 /**
@@ -266,6 +275,9 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
         val CATALOG_PARTIAL_DISMISSED = stringPreferencesKey("catalog_partial_dismissed")
         val READ_ALOUD_VOICE = stringPreferencesKey("read_aloud_voice")
+        val READ_ALOUD_PROVIDER = stringPreferencesKey("read_aloud_provider")
+        val KOKORO_URL = stringPreferencesKey("kokoro_url")
+        val KOKORO_VOICE = stringPreferencesKey("kokoro_voice")
     }
 
     /**
@@ -334,6 +346,9 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
                 defaultName = p[Keys.HIGHLIGHT_TINT_DEFAULT],
             ),
             readAloudVoice = p[Keys.READ_ALOUD_VOICE],
+            readAloudProvider = p[Keys.READ_ALOUD_PROVIDER],
+            kokoroUrl = p[Keys.KOKORO_URL],
+            kokoroVoice = p[Keys.KOKORO_VOICE],
         )
     }
 
@@ -482,6 +497,20 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.READ_ALOUD_VOICE] = name }
     }
 
+    suspend fun setReadAloudProvider(id: String) {
+        store.edit { it[Keys.READ_ALOUD_PROVIDER] = id }
+    }
+
+    /** Stores the Kokoro server as typed, or forgets it when [url] is blank. */
+    suspend fun setKokoroUrl(url: String) {
+        val trimmed = url.trim()
+        store.edit { p -> if (trimmed.isEmpty()) p.remove(Keys.KOKORO_URL) else p[Keys.KOKORO_URL] = trimmed }
+    }
+
+    suspend fun setKokoroVoice(name: String) {
+        store.edit { it[Keys.KOKORO_VOICE] = name }
+    }
+
     /**
      * The offered set exactly as stored, with null for a reader who
      * never chose one.
@@ -526,4 +555,6 @@ internal val APP_BACKUP_TYPES = mapOf(
     "highlight_tints_offered" to BackupValueType.STRING_SET,
     "highlight_tint_default" to BackupValueType.STRING,
     "read_aloud_voice" to BackupValueType.STRING,
+    "read_aloud_provider" to BackupValueType.STRING,
+    "kokoro_url" to BackupValueType.STRING, "kokoro_voice" to BackupValueType.STRING,
 )

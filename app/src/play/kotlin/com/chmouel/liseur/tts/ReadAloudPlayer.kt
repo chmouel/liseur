@@ -50,7 +50,7 @@ import kotlinx.coroutines.delay
  */
 @Composable
 internal fun ReadAloudPlayer(
-    feature: GeminiReadAloud,
+    feature: SpeechReadAloud,
     bookId: String,
     theme: ReaderTheme,
     modifier: Modifier,
@@ -76,7 +76,7 @@ internal fun ReadAloudPlayer(
         ) {
             ChromePill(theme = theme) {
                 Text(
-                    text = notice?.let { stringResource(it.message()) }.orEmpty(),
+                    text = notice?.let { stringResource(it.message(), stringResource(feature.noticeProvider.label)) }.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )
@@ -150,6 +150,8 @@ private fun ReadAloudNotice.message(): Int = when (this) {
     ReadAloudNotice.Service -> R.string.read_aloud_notice_service
     ReadAloudNotice.Output -> R.string.read_aloud_notice_output
     ReadAloudNotice.InvalidKey -> R.string.read_aloud_notice_invalid_key
+    ReadAloudNotice.InvalidVoice -> R.string.read_aloud_notice_invalid_voice
+    ReadAloudNotice.NotSetUp -> R.string.read_aloud_notice_not_set_up
     ReadAloudNotice.SelectionNotFound -> R.string.read_aloud_notice_selection_not_found
     ReadAloudNotice.Unavailable -> R.string.read_aloud_notice_unavailable
 }

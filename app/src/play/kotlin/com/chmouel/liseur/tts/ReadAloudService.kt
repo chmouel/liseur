@@ -32,7 +32,7 @@ import org.readium.r2.shared.ExperimentalReadiumApi
  * the lock screen and headset controls, and the foreground state that
  * keeps the process and its network alive with the screen off.
  *
- * It only shows the session [GeminiReadAloud] holds, and stops itself
+ * It only shows the session [SpeechReadAloud] holds, and stops itself
  * once there is none.
  */
 @OptIn(UnstableApi::class)
@@ -41,14 +41,14 @@ class ReadAloudService : MediaSessionService() {
 
     private val scope = MainScope()
     private var mediaSession: MediaSession? = null
-    private var feature: GeminiReadAloud? = null
+    private var feature: SpeechReadAloud? = null
 
     /** The session this service shows; a replacement starting meanwhile is not this one's to pause. */
     private var shown: ReadAloudSession? = null
 
     override fun onCreate() {
         super.onCreate()
-        val feature = application.container.readAloud as? GeminiReadAloud
+        val feature = application.container.readAloud as? SpeechReadAloud
         this.feature = feature
         if (feature == null) {
             stopSelf()

@@ -15,11 +15,11 @@
     <string name="read_aloud_pause">Vorlesen pausieren</string>
     <string name="read_aloud_resume">Vorlesen fortsetzen</string>
     <string name="read_aloud_stop">Vorlesen beenden</string>
-    <string name="read_aloud_notice_network">Gemini ist nicht erreichbar. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
-    <string name="read_aloud_notice_rate_limited">Dieser Schlüssel hat sein Gemini-Kontingent vorerst aufgebraucht. Pausiert; versuche es später erneut.</string>
-    <string name="read_aloud_notice_service">Gemini konnte diesen Satz nicht vorlesen. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
+    <string name="read_aloud_notice_network">%1$s ist nicht erreichbar. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
+    <string name="read_aloud_notice_rate_limited">%1$s nimmt vorerst keine weiteren Anfragen an. Pausiert; versuche es später erneut.</string>
+    <string name="read_aloud_notice_service">%1$s konnte diesen Satz nicht vorlesen. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
     <string name="read_aloud_notice_output">Dieses Gerät konnte die Stimme nicht abspielen. Pausiert.</string>
-    <string name="read_aloud_notice_invalid_key">Gemini hat den API-Schlüssel abgelehnt. Prüfe ihn unter Einstellungen, Lesen &amp; Navigation.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s hat den API-Schlüssel abgelehnt. Prüfe ihn unter Einstellungen, Vorlesen.</string>
     <string name="read_aloud_notice_selection_not_found">Vorlesen ab dem Anfang des Absatzes.</string>
     <string name="read_aloud_notice_unavailable">Dieses Buch kann ab hier nicht vorgelesen werden.</string>
 
@@ -35,4 +35,24 @@
     <string name="read_aloud_voice_mature">Reif</string>
     <string name="read_aloud_voice_gentle">Sanft</string>
     <string name="read_aloud_voice_even">Ausgeglichen</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s hat die gewählte Stimme nicht. Wähle unter Einstellungen, Vorlesen eine andere.</string>
+    <string name="read_aloud_notice_not_set_up">Vorlesen ist noch nicht eingerichtet. Richte es unter Einstellungen, Vorlesen ein.</string>
+    <string name="read_aloud_settings_title">Vorlesen</string>
+    <string name="read_aloud_settings_entry_missing">Nicht eingerichtet</string>
+    <string name="read_aloud_settings_provider">Sprachdienst</string>
+    <string name="read_aloud_settings_provider_choose">Vorlesen mit</string>
+    <string name="read_aloud_settings_provider_detail">Gemini ist ein Online-Dienst von Google, der über deinen Schlüssel abgerechnet wird. Kokoro läuft auf einem eigenen Server.</string>
+    <string name="read_aloud_settings_kokoro_url">Kokoro-Server</string>
+    <string name="read_aloud_settings_kokoro_url_detail">Die Adresse deines Kokoro-Servers. Tippe auf Fertig, um sie zu speichern.</string>
+    <string name="read_aloud_settings_kokoro_url_invalid">Das ist keine Serveradresse.</string>
+    <string name="read_aloud_settings_kokoro_key">Kokoro-API-Schlüssel</string>
+    <string name="read_aloud_settings_kokoro_key_missing">Optional. Nur nötig, wenn dein Server einen verlangt.</string>
+    <string name="read_aloud_settings_kokoro_voice_choose">Stimme wählen</string>
+    <string name="read_aloud_settings_kokoro_voices_loading">Stimmen werden beim Server abgefragt…</string>
+    <string name="read_aloud_settings_kokoro_voices_none">Der Server bietet keine Stimmen an.</string>
+    <string name="read_aloud_settings_kokoro_voices_failed">Der Server hat seine Stimmen nicht aufgelistet.</string>
+    <string name="read_aloud_settings_kokoro_voices_unreachable">Der Server ist nicht erreichbar.</string>
+    <string name="read_aloud_settings_kokoro_voices_refused">Der Server hat den API-Schlüssel abgelehnt.</string>
+    <string name="read_aloud_settings_kokoro_voices_retry">Erneut versuchen</string>
+    <string name="read_aloud_settings_kokoro_privacy">Der vorgelesene Text wird an den angegebenen Server gesendet, um die Stimme zu erzeugen.</string>
 </resources>

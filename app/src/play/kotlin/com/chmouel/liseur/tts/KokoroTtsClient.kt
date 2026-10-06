@@ -1,0 +1,196 @@
+package com.chmouel.liseur.tts
+
+import com.chmouel.liseur.BuildConfig
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
+
+object KokoroTts {
+    const val MODEL = "kokoro"
+
+    /**
+     * The server's base address from what the reader typed: a bare
+     * `host:port` is taken as http, and a trailing `/v1` or slash is
+     * dropped, so the API paths can be added to it. Null when it is no
+     * http(s) address.
+     */
+    fun baseUrl(input: String): HttpUrl? {
+        var text = input.trim()
+        if (text.isEmpty()) return null
+        if (!text.contains("://")) text = "http://$text"
+        val url = text.toHttpUrlOrNull() ?: return null
+        val segments = url.pathSegments.filter { it.isNotEmpty() }.toMutableList()
+        if (segments.lastOrNull() == "v1") segments.removeAt(segments.lastIndex)
+        return url.newBuilder()
+            .encodedPath("/")
+            .apply { segments.forEach { addPathSegment(it) } }
+            .query(null)
+            .fragment(null)
+            .build()
+    }
+}
+
+/**
+ * A Kokoro server's OpenAI-style speech API, asked for raw PCM: 24 kHz mono
+ * 16-bit little-endian, as Gemini's, so it plays through the same output.
+ *
+ * There is no logging interceptor on purpose: the request may carry a key
+ * in a header and carries the book's text in the body.
+ */
+class KokoroTtsClient(private val client: OkHttpClient = default()) {
+
+    /** Throws [SpeechError]; cancelling the caller cancels the request. */
+    suspend fun synthesize(base: HttpUrl, apiKey: String?, text: String, voice: String): SpeechAudio {
+        val body = JSONObject()
+            .put("model", KokoroTts.MODEL)
+            .put("input", text)
+            .put("voice", voice)
+            .put("response_format", "pcm")
+            .toString()
+        val request = request(base, "v1/audio/speech", apiKey).post(body.toRequestBody(JSON)).build()
+        return execute(request, ::speech)
+    }
+
+    /** The voices the server offers, in its order. Throws [SpeechError]. */
+    suspend fun voices(base: HttpUrl, apiKey: String?): List<String> =
+        execute(request(base, "v1/audio/voices", apiKey).get().build(), ::voiceList)
+
+    private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder {
+        val builder = Request.Builder()
+            .url(base.newBuilder().addPathSegments(path).build())
+            .header("User-Agent", USER_AGENT)
+        if (apiKey.isNullOrBlank()) return builder
+        try {
+            builder.header("Authorization", "Bearer $apiKey")
+        } catch (_: IllegalArgumentException) {
+            // A pasted line break or non-ASCII character; OkHttp's message
+            // would repeat the key, so it is not kept as the cause.
+            throw SpeechError.InvalidKey()
+        }
+        return builder
+    }
+
+    private suspend fun <T> execute(request: Request, parse: (Response) -> T): T {
+        val call = client.newCall(request)
+        // A blocking execute() would carry on after its coroutine was
+        // cancelled; an enqueued call is cancelled with it.
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(
+                object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        if (continuation.isActive) continuation.resumeWithException(SpeechError.Network(e))
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        val outcome = try {
+                            Result.success(response.use(parse))
+                        } catch (e: SpeechError) {
+                            Result.failure(e)
+                        } catch (e: IOException) {
+                            Result.failure(SpeechError.Network(e))
+                        }
+                        if (!continuation.isActive) return
+                        outcome.fold(continuation::resume, continuation::resumeWithException)
+                    }
+                },
+            )
+        }
+    }
+
+    private fun speech(response: Response): SpeechAudio {
+        if (!response.isSuccessful) throw errorFor(response)
+        val type = response.body.contentType()
+        if (type != null && "${type.type}/${type.subtype}".lowercase() !in AUDIO_TYPES) {
+            throw SpeechError.InvalidResponse("unexpected format")
+        }
+        val source = response.body.source()
+        if (source.request(SpeechAudio.MAX_PCM_BYTES + 1L)) throw SpeechError.InvalidResponse("audio too long")
+        val pcm = source.buffer.readByteArray()
+        when {
+            pcm.isEmpty() -> throw SpeechError.InvalidResponse("empty audio")
+            pcm.size % 2 != 0 -> throw SpeechError.InvalidResponse("odd byte count")
+        }
+        return SpeechAudio(pcm)
+    }
+
+    private fun voiceList(response: Response): List<String> {
+        if (!response.isSuccessful) throw errorFor(response)
+        val text = boundedText(response, MAX_VOICES_BYTES) ?: throw SpeechError.InvalidResponse("response too large")
+        val voices = try {
+            val trimmed = text.trimStart()
+            if (trimmed.startsWith("[")) JSONArray(trimmed) else JSONObject(trimmed).optJSONArray("voices")
+        } catch (_: JSONException) {
+            null
+        } ?: throw SpeechError.InvalidResponse("no voices")
+        return (0 until voices.length()).mapNotNull { i ->
+            voices.optJSONObject(i)?.let { it.optString("id").ifEmpty { it.optString("name") } }
+                ?: voices.optString(i)
+        }.filter { it.isNotBlank() }.distinct()
+    }
+
+    private fun errorFor(response: Response): SpeechError {
+        val code = response.code
+        return when {
+            code == 401 || code == 403 -> SpeechError.InvalidKey(code)
+            code == 429 -> SpeechError.RateLimited(code)
+            (code == 400 || code == 404) && detail(response).contains("voice", ignoreCase = true) ->
+                SpeechError.InvalidVoice(code)
+            else -> SpeechError.Service(code)
+        }
+    }
+
+    /** The FastAPI `detail` of an error, when it is a plain message. */
+    private fun detail(response: Response): String {
+        val text = try {
+            boundedText(response, MAX_ERROR_BYTES)
+        } catch (_: IOException) {
+            null
+        } ?: return ""
+        return try {
+            JSONObject(text).optString("detail")
+        } catch (_: JSONException) {
+            ""
+        }
+    }
+
+    private fun boundedText(response: Response, limit: Long): String? {
+        val source = response.body.source()
+        if (source.request(limit + 1)) return null
+        return source.buffer.readUtf8()
+    }
+
+    companion object {
+        private val JSON = "application/json; charset=utf-8".toMediaType()
+        private val AUDIO_TYPES = setOf("audio/pcm", "audio/l16", "application/octet-stream")
+        private const val MAX_ERROR_BYTES = 64 * 1024L
+        private const val MAX_VOICES_BYTES = 1024 * 1024L
+        private val USER_AGENT =
+            "Liseur/${BuildConfig.VERSION_NAME} (+https://github.com/chmouel/liseur)"
+
+        // A small server, a Raspberry Pi say, can take longer than the
+        // sentence lasts to make it.
+        fun default(): OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(180, TimeUnit.SECONDS)
+            // A redirect could carry the key header and the book text elsewhere.
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+    }
+}

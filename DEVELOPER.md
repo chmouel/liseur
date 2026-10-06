@@ -13,16 +13,16 @@ enough; `compileSdk`/`targetSdk` 37 requires a reasonably recent SDK
 Manager package list).
 
 ```bash
-./gradlew assemblePlayDebug    # debug APK with Gemini read-aloud
+./gradlew assemblePlayDebug    # debug APK with read-aloud
 ./gradlew assembleFossDebug    # debug APK of the F-Droid build
 ./gradlew assembleFossRelease  # minified release APK (F-Droid, GitHub)
 ./gradlew bundlePlayRelease    # minified release AAB, for Google Play only
 ```
 
 There are two product flavors. `foss` is the build F-Droid reproduces
-and the GitHub release carries. `play` adds Gemini read-aloud, which
-sends book text to a non-free Google service, and ships only on Google
-Play. Everything for that feature lives under `app/src/play/` and
+and the GitHub release carries. `play` adds read-aloud, which sends
+book text to a non-free Google service (Gemini) or to the reader's own
+Kokoro server, and ships only on Google Play. Everything for that feature lives under `app/src/play/` and
 `app/src/testPlay/`; the `foss` APK has none of its code, dependencies or
 endpoints. Both flavors share the application id, version and signing
 key. Plain `assembleRelease` or `assembleDebug` builds both flavors.
@@ -1318,9 +1318,9 @@ reader behavior.
 
 ### Read-aloud (`play` flavor)
 
-- Gemini read-aloud lives under `app/src/play/`. `main` sees only the
+- Read-aloud lives under `app/src/play/`. `main` sees only the
   `ReadAloudFeature` interface and `OpenBookHandle`; the `foss` factory
-  returns `ReadAloudFeature.None`. Do not reference anything under `tts/`
+  returns `ReadAloudFeature.None`, which draws no Settings row or screen. Do not reference anything under `tts/`
   from `main`, and keep Readium's TTS module out of the `foss` dependency
   graph. Readium's existing navigator already brings in media3 for both
   flavors; its presence alone does not indicate read-aloud code.
@@ -1339,11 +1339,22 @@ reader behavior.
   drop that capture as an unchanged position. On opening, the wide-content
   fit restores to the gate's non-exact target instead of capturing the
   page, which Readium has not scrolled yet.
+- Two providers, chosen on the Read aloud settings screen
+  (`ReadAloudProvider`): Gemini and a self-hosted Kokoro server
+  (OpenAI-style `/v1/audio/speech`). Both return 24 kHz mono 16-bit PCM,
+  so the engine, cache and `AudioTrack` output are shared; only the
+  `SpeechSynthesizer` a session is built with differs. Kokoro runs one
+  request at a time with long timeouts, since a small server can be
+  slower than real time. See `docs/adr/0043-kokoro-read-aloud.md`.
 - Engine callbacks arrive on the main thread. A failed sentence pauses on
   that sentence with a notice; play retries it. Nothing is ever skipped.
-- The key lives in `noBackupFilesDir`, encrypted by `SecretCipher`, and is
-  never logged; neither are request bodies or audio. Listening is not
-  counted as reading time.
+  A refused key or a voice the server does not have stops the session.
+- Keys (Gemini, optional Kokoro) live in `noBackupFilesDir`, encrypted by
+  `SecretCipher`, each in its own file, and are never logged; neither are
+  request bodies or audio. The provider, Kokoro URL and voice are app
+  settings in the settings backup but not in liseur-sync settings sync,
+  since a server address is per device. Listening is not counted as
+  reading time.
 
 ### Covers, UI, and dependencies
 
@@ -1939,14 +1950,14 @@ what lets it sync a book that came off an SD card.
   TetheredNet anti-feature. Together those justify `INTERNET`;
   `ACCESS_NETWORK_STATE` is there for the `NetworkType.CONNECTED`
   constraint on the sync workers.
-- Gemini read-aloud, which sends book text to Google, is in the `play`
-  flavor only. F-Droid builds `foss`, which has none of its code,
+- Read-aloud, which sends book text to Google or to a Kokoro server the
+  user enters, is in the `play` flavor only. F-Droid builds `foss`, which has none of its code,
   dependencies or endpoint, so the NonFreeNet anti-feature does not apply.
   Before changing that boundary, check the `foss` release APK for
   `org.readium.navigator.media.tts`, `com.chmouel.liseur.tts` and
   `generativelanguage` strings, and its merged manifest for
   `ReadAloudService`. Readium's existing navigator brings in media3 in both
-  flavors, so media3 alone is not evidence of Gemini read-aloud.
+  flavors, so media3 alone is not evidence of read-aloud.
 - No non-free assets. The bundled fonts (Literata, Vollkorn, Atkinson
   Hyperlegible, Inter) are all OFL; the icon is drawn in-repo as vector
   drawables.
