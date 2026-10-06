@@ -5,7 +5,14 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * Keeps the start handle of a selection on the word that was selected.
+ * Keeps selection handles on the passage being selected.
+ *
+ * Near the top of a paginated column, Chromium tries to auto-scroll the
+ * document horizontally while a handle is dragged. Readium refuses native
+ * scrolling during selection, so the browser and the view repeatedly
+ * disagree about the offset and the range flashes between different words.
+ * Keep the document on its selected page too, until the selection clears.
+ * Scrolled and vertical-text books retain their normal selection scrolling.
  *
  * Long-pressing the *first* word of a paragraph selects it correctly, but
  * the WebView paints the start handle on the paragraph's last automatic
@@ -85,6 +92,31 @@ internal object SelectionHandleFix {
     const val SCRIPT: String = """
         (function () {
           var state = window.__liseurLead || (window.__liseurLead = {});
+          if (!state.scrollGuardInstalled) {
+            state.scrollGuardInstalled = true;
+            state.selectionX = null;
+            document.addEventListener("selectionchange", function () {
+              var selection = window.getSelection();
+              if (!selection || selection.isCollapsed) {
+                state.selectionX = null;
+                return;
+              }
+              var root = document.documentElement;
+              var view = root.style.getPropertyValue("--USER__view").trim();
+              var scroll = root.style.getPropertyValue("--USER__scroll").trim();
+              if (view === "readium-scroll-on" || scroll === "readium-scroll-on" ||
+                  getComputedStyle(root).writingMode.indexOf("vertical") === 0) {
+                state.selectionX = null;
+                return;
+              }
+              if (state.selectionX === null) state.selectionX = window.scrollX;
+            }, true);
+            window.addEventListener("scroll", function () {
+              if (state.selectionX !== null && window.scrollX !== state.selectionX) {
+                document.scrollingElement.scrollLeft = state.selectionX;
+              }
+            });
+          }
           var installed = false;
           var tok = state.token ||
                     (state.token = "l" + Math.random().toString(36).slice(2, 10));
