@@ -968,7 +968,10 @@ private fun LibraryRoute(
         },
         onWidgetBookHandled = {
             widgetShelfBook = null
-            onWidgetHandled()
+            // A newer tap may have arrived after this book was composed; only the current one may open.
+            val current = widgetRequest?.let(LaunchRequests.shared::owns) == true
+            if (current) onWidgetHandled()
+            current
         },
     )
 }

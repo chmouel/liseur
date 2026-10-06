@@ -44,6 +44,7 @@ import com.chmouel.liseur.ui.reading.FineTypographyActions
 import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
 import com.chmouel.liseur.ui.UploadBookOfferDialog
+import com.chmouel.liseur.ui.launch.LaunchRequests
 import com.chmouel.liseur.ui.library.UploadDecision
 import com.chmouel.liseur.ui.library.canUploadTo
 import com.chmouel.liseur.ui.library.uploadOnOpen
@@ -118,6 +119,7 @@ class ReaderActivity : FragmentActivity() {
         // the persisted locator instead. Rotation is handled without
         // recreation via android:configChanges.
         super.onCreate(null)
+        if (savedInstanceState == null) LaunchRequests.shared.supersede()
 
         val fromLibrary = intent.getStringExtra(EXTRA_URL)
         val incoming = fromLibrary?.toUri() ?: intent.data

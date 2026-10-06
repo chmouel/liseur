@@ -183,6 +183,26 @@ class LaunchViewModelTest {
     }
 
     @Test
+    fun `a reader opened directly supersedes a continuation waiting for persistence`() = runTest {
+        val held = CompletableDeferred<Boolean>()
+        var queries = 0
+        val model = model(flush = { held.await() }, candidate = { queries++; book })
+        val continuation = requests.shortcut(LaunchTarget.CONTINUE)
+        runCurrent()
+        val generation = requests.latestId
+        requests.supersede()
+        runCurrent()
+        held.complete(true)
+        runCurrent()
+        assertEquals(0, queries)
+        assertNull(model.ready.value)
+        assertFalse(model.resolving.value)
+        assertFalse(requests.owns(continuation))
+        assertNull(saved.get<String>(LaunchViewModel.PENDING_ACTION))
+        assertEquals(generation, requests.latestId)
+    }
+
+    @Test
     fun `lookup errors are reported explicitly with no reader target`() = runTest {
         var reported: Throwable? = null
         val model = model(candidate = { throw IllegalStateException("database") }, errors = { reported = it })

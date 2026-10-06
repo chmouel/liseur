@@ -209,7 +209,7 @@ fun LibraryScreen(
     notice: Notice? = null,
     onNoticeShown: (Long) -> Unit = {},
     widgetBook: Book? = null,
-    onWidgetBookHandled: () -> Unit = {},
+    onWidgetBookHandled: () -> Boolean = { true },
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -254,8 +254,7 @@ fun LibraryScreen(
     LaunchedEffect(widgetBook, state.loading) {
         val book = widgetBook ?: return@LaunchedEffect
         if (state.loading) return@LaunchedEffect
-        onWidgetBookHandled()
-        openShelfBook(book)
+        if (onWidgetBookHandled()) openShelfBook(book)
     }
 
     val downloadFailed = stringResource(R.string.download_failed_open)

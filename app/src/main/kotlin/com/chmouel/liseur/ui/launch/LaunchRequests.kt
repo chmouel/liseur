@@ -47,6 +47,14 @@ class LaunchRequests {
     fun restore(target: LaunchTarget): LaunchRequest? =
         if (state.value == null) post(target, shortcut = true) else null
 
+    /**
+     * A reader opened outside this queue, such as a downloaded widget book, is the newest navigation.
+     * The generation is left alone so the visible library can keep opening books.
+     */
+    fun supersede() {
+        state.value = null
+    }
+
     fun owns(request: LaunchRequest): Boolean = state.value == request
 
     fun consume(request: LaunchRequest) {

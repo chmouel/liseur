@@ -89,6 +89,14 @@ class ContinuationBookTest {
     }
 
     @Test
+    fun `a newer placeholder row does not outrank a more recently opened book`() = runTest {
+        db.bookDao().upsert(book("older", 50))
+        db.bookDao().upsert(book("newer", 100))
+        db.readingProgressDao().insertPending("older", 0.5, null, null, "account", now = 900)
+        assertEquals("newer", selected())
+    }
+
+    @Test
     fun `a restored document URI remains available even for a remote row`() = runTest {
         db.bookDao().upsert(book("restored").copy(
             downloadState = DownloadState.REMOTE, localUri = "content://restored/document",

@@ -1015,7 +1015,8 @@ Continue reading ignores the automatic-resume preference and last-screen flag.
 It chooses the latest eligible local book using the later of its opening time
 and its reading time, including synced reading. Hidden, archived, unavailable,
 marked-finished books and progress at or above `FINISHED_PROGRESSION` (97%) are
-excluded. A saved locator counts as reading even when progression is unknown.
+excluded. A saved locator counts as reading even when progression is unknown;
+an empty placeholder progress row does not, and its timestamp is not ranked.
 If the latest book is ineligible, the next eligible book is chosen. With no
 candidate, the Library opens.
 
@@ -1031,7 +1032,9 @@ state.
 request wins; older asynchronous results cannot navigate. Only the three fixed
 shortcut actions are accepted from exported `MainActivity`. Widget book targets
 still enter through unexported `WidgetLaunchActivity`, never public intent
-extras. An unfinished shortcut is saved across activity/process recreation;
+extras. A downloaded-book widget tap opens the reader directly, and any fresh
+reader start clears a request that is still pending. An unfinished shortcut is
+saved across activity/process recreation;
 handled requests do not replay.
 
 Labels are translated in all bundled languages. Android/the launcher resolves
