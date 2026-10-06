@@ -19,7 +19,8 @@ send book text to Google without having chosen to.
 
 Read-aloud ships only in a new `play` product flavor. The `foss` flavor,
 which F-Droid rebuilds and the GitHub release carries, has none of its
-code, none of Readium's TTS module or media3, and no Gemini endpoint.
+code, none of Readium's TTS module, and no Gemini endpoint. Readium's
+existing navigator already includes media3 in both flavors.
 `main` knows the feature only through the `ReadAloudFeature` interface and
 `OpenBookHandle`; the `foss` factory returns `ReadAloudFeature.None`.
 

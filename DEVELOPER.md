@@ -1321,8 +1321,9 @@ reader behavior.
 - Gemini read-aloud lives under `app/src/play/`. `main` sees only the
   `ReadAloudFeature` interface and `OpenBookHandle`; the `foss` factory
   returns `ReadAloudFeature.None`. Do not reference anything under `tts/`
-  from `main`, and keep Readium's TTS module and media3 out of the `foss`
-  dependency graph.
+  from `main`, and keep Readium's TTS module out of the `foss` dependency
+  graph. Readium's existing navigator already brings in media3 for both
+  flavors; its presence alone does not indicate read-aloud code.
 - A listening session owns the reading place only while it plays. Any page
   move the reader makes pauses it and saves the reader's place, so two
   owners never write the same row. Auto-scroll and the voice exclude each
@@ -1942,8 +1943,10 @@ what lets it sync a book that came off an SD card.
   flavor only. F-Droid builds `foss`, which has none of its code,
   dependencies or endpoint, so the NonFreeNet anti-feature does not apply.
   Before changing that boundary, check the `foss` release APK for
-  `org.readium.navigator.media.tts`, `androidx.media3` and
-  `generativelanguage` strings, and its merged manifest for a service.
+  `org.readium.navigator.media.tts`, `com.chmouel.liseur.tts` and
+  `generativelanguage` strings, and its merged manifest for
+  `ReadAloudService`. Readium's existing navigator brings in media3 in both
+  flavors, so media3 alone is not evidence of Gemini read-aloud.
 - No non-free assets. The bundled fonts (Literata, Vollkorn, Atkinson
   Hyperlegible, Inter) are all OFL; the icon is drawn in-repo as vector
   drawables.
