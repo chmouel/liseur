@@ -7,7 +7,7 @@ import org.readium.r2.shared.util.tokenizer.TextTokenizer
 import org.readium.r2.shared.util.tokenizer.TextUnit
 
 /**
- * Sentences sized for one Gemini request each.
+ * Sentences sized for one speech request each.
  *
  * Every request costs a round trip, so very short sentences ride along with
  * the next one; a very long one would make the listener wait for the whole

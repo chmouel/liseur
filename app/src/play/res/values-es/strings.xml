@@ -15,11 +15,11 @@
     <string name="read_aloud_pause">Pausar la lectura en voz alta</string>
     <string name="read_aloud_resume">Reanudar la lectura en voz alta</string>
     <string name="read_aloud_stop">Detener la lectura en voz alta</string>
-    <string name="read_aloud_notice_network">No se pudo contactar con Gemini. En pausa; pulsa reproducir para intentarlo de nuevo.</string>
-    <string name="read_aloud_notice_rate_limited">Esta clave ha agotado su cuota de Gemini por ahora. En pausa; inténtalo más tarde.</string>
-    <string name="read_aloud_notice_service">Gemini no pudo leer esta frase. En pausa; pulsa reproducir para intentarlo de nuevo.</string>
+    <string name="read_aloud_notice_network">No se pudo contactar con %1$s. En pausa; pulsa reproducir para intentarlo de nuevo.</string>
+    <string name="read_aloud_notice_rate_limited">%1$s no acepta más solicitudes por ahora. En pausa; inténtalo más tarde.</string>
+    <string name="read_aloud_notice_service">%1$s no pudo leer esta frase. En pausa; pulsa reproducir para intentarlo de nuevo.</string>
     <string name="read_aloud_notice_output">Este dispositivo no pudo reproducir la voz. En pausa.</string>
-    <string name="read_aloud_notice_invalid_key">Gemini rechazó la clave de API. Revísala en Ajustes, Lectura y navegación.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s rechazó la clave de API. Revísala en Ajustes, Leer en voz alta.</string>
     <string name="read_aloud_notice_selection_not_found">Leyendo desde el principio del párrafo.</string>
     <string name="read_aloud_notice_unavailable">Este libro no se puede leer en voz alta desde aquí.</string>
 
@@ -35,4 +35,24 @@
     <string name="read_aloud_voice_mature">Madura</string>
     <string name="read_aloud_voice_gentle">Amable</string>
     <string name="read_aloud_voice_even">Serena</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s no tiene la voz elegida. Elige otra en Ajustes, Leer en voz alta.</string>
+    <string name="read_aloud_notice_not_set_up">La lectura en voz alta aún no está configurada. Configúrala en Ajustes, Leer en voz alta.</string>
+    <string name="read_aloud_settings_title">Leer en voz alta</string>
+    <string name="read_aloud_settings_entry_missing">Sin configurar</string>
+    <string name="read_aloud_settings_provider">Servicio de voz</string>
+    <string name="read_aloud_settings_provider_choose">Leer con</string>
+    <string name="read_aloud_settings_provider_detail">Gemini es un servicio en línea de Google que se factura a tu clave. Kokoro funciona en un servidor propio.</string>
+    <string name="read_aloud_settings_kokoro_url">Servidor Kokoro</string>
+    <string name="read_aloud_settings_kokoro_url_detail">La dirección de tu servidor Kokoro. Pulsa Listo para guardarla.</string>
+    <string name="read_aloud_settings_kokoro_url_invalid">No es una dirección de servidor.</string>
+    <string name="read_aloud_settings_kokoro_key">Clave de API de Kokoro</string>
+    <string name="read_aloud_settings_kokoro_key_missing">Opcional. Solo hace falta si tu servidor la pide.</string>
+    <string name="read_aloud_settings_kokoro_voice_choose">Elige una voz</string>
+    <string name="read_aloud_settings_kokoro_voices_loading">Pidiendo las voces al servidor…</string>
+    <string name="read_aloud_settings_kokoro_voices_none">El servidor no ofrece ninguna voz.</string>
+    <string name="read_aloud_settings_kokoro_voices_failed">El servidor no dio la lista de sus voces.</string>
+    <string name="read_aloud_settings_kokoro_voices_unreachable">No se pudo contactar con el servidor.</string>
+    <string name="read_aloud_settings_kokoro_voices_refused">El servidor rechazó la clave de API.</string>
+    <string name="read_aloud_settings_kokoro_voices_retry">Reintentar</string>
+    <string name="read_aloud_settings_kokoro_privacy">El texto que se lee en voz alta se envía al servidor que indicaste para generar la voz.</string>
 </resources>

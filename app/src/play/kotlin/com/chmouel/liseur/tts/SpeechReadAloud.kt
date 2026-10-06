@@ -4,11 +4,12 @@ import android.app.Application
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.readaloud.ListeningCheckpoints
-import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.readaloud.ReadAloudBookNotice
+import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.readaloud.ReadAloudNotice
 import com.chmouel.liseur.readaloud.ReadAloudUi
 import com.chmouel.liseur.reader.OpenBookHandle
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -34,19 +36,24 @@ import kotlinx.coroutines.launch
 import org.readium.r2.shared.publication.Locator
 
 /**
- * Reading aloud with a Gemini voice, one book at a time.
+ * Reading aloud, one book at a time, with the voice of the chosen
+ * [ReadAloudProvider]: Gemini on the reader's key, or their own Kokoro
+ * server.
  *
  * Holds the session in progress and keeps [ReadAloudService] running for
  * it, so playback carries on with the reader gone and the screen off.
- * Changing or clearing the key ends the session. Main thread only.
+ * Changing the provider or a key ends the session; a new server or voice
+ * applies from the next one. Main thread only.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-internal class GeminiReadAloud(
+internal class SpeechReadAloud(
     private val application: Application,
-    private val keys: GeminiKeyStore,
+    private val geminiKeys: ApiKeyStore,
+    private val kokoroKeys: ApiKeyStore,
     private val settings: AppSettingsRepository,
     private val checkpoints: ListeningCheckpoints,
-    private val client: GeminiTtsClient = GeminiTtsClient(),
+    private val gemini: GeminiTtsClient = GeminiTtsClient(),
+    private val kokoro: KokoroTtsClient = KokoroTtsClient(),
 ) : ReadAloudFeature {
 
     private val scope = MainScope()
@@ -58,7 +65,26 @@ internal class GeminiReadAloud(
     private var starting: Job? = null
 
     override val isAvailable = true
-    override val configured: StateFlow<Boolean> = keys.configured
+
+    val provider: Flow<ReadAloudProvider> =
+        settings.settings.map { ReadAloudProvider.of(it.readAloudProvider) }.distinctUntilChanged()
+
+    /** Gemini needs a key; Kokoro a server and a voice, its key being optional. */
+    override val configured: StateFlow<Boolean> =
+        combine(settings.settings, geminiKeys.configured) { s, geminiKey ->
+            when (ReadAloudProvider.of(s.readAloudProvider)) {
+                ReadAloudProvider.GEMINI -> geminiKey
+                ReadAloudProvider.KOKORO ->
+                    KokoroTts.baseUrl(s.kokoroUrl.orEmpty()) != null && !s.kokoroVoice.isNullOrBlank()
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, false)
+
+    val geminiKeyConfigured: StateFlow<Boolean> = geminiKeys.configured
+    val kokoroKeyConfigured: StateFlow<Boolean> = kokoroKeys.configured
+
+    /** The provider the last session read with, for naming it in a notice. */
+    var noticeProvider: ReadAloudProvider = ReadAloudProvider.Default
+        private set
 
     override val session: StateFlow<ReadAloudUi?> =
         mutableCurrent.flatMapLatest { it?.ui ?: flowOf(null) }
@@ -75,18 +101,12 @@ internal class GeminiReadAloud(
             if (!handle.acquire()) return@launch
             var held = true
             try {
-                val key = keys.get() ?: run {
-                    mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, ReadAloudNotice.InvalidKey))
-                    return@launch
-                }
-                val voice = GeminiVoice.of(settings.settings.first().readAloudVoice)
+                val voice = voiceFor(settings.settings.first(), handle.bookId) ?: return@launch
                 val session = ReadAloudSession(
                     application = application,
                     handle = handle,
                     reader = reader,
-                    key = key,
                     voice = voice,
-                    client = client,
                     checkpoints = checkpoints,
                     onNotice = { mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, it)) },
                     onEnded = { ended -> if (mutableCurrent.value === ended) mutableCurrent.value = null },
@@ -141,26 +161,85 @@ internal class GeminiReadAloud(
         mutableCurrent.value?.skipBackward()
     }
 
-    /** Saves [key], ending the session read with the old one. */
-    suspend fun setKey(key: String) {
-        stop()
-        keys.set(key)
+    /** The voice the next session reads with, or null, with the reason told, when there is none. */
+    private suspend fun voiceFor(s: AppSettings, bookId: String): SessionVoice? {
+        val provider = ReadAloudProvider.of(s.readAloudProvider)
+        noticeProvider = provider
+        val notSetUp = ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp)
+        return when (provider) {
+            ReadAloudProvider.GEMINI -> {
+                val key = geminiKeys.get() ?: return null.also { mutableNotices.tryEmit(notSetUp) }
+                val voice = GeminiVoice.of(s.readAloudVoice).id
+                SessionVoice(voice, provider.maxConcurrent) { text -> gemini.synthesize(key, text, voice) }
+            }
+            ReadAloudProvider.KOKORO -> {
+                val base = KokoroTts.baseUrl(s.kokoroUrl.orEmpty())
+                val voice = s.kokoroVoice?.takeIf { it.isNotBlank() }
+                if (base == null || voice == null) return null.also { mutableNotices.tryEmit(notSetUp) }
+                val key = kokoroKeys.get()
+                SessionVoice(voice, provider.maxConcurrent) { text -> kokoro.synthesize(base, key, text, voice) }
+            }
+        }
     }
 
-    suspend fun clearKey() {
-        stop()
-        keys.clear()
+    /** Switches provider, ending a session read with the other one. */
+    suspend fun setProvider(provider: ReadAloudProvider) {
+        if (ReadAloudProvider.of(settings.settings.first().readAloudProvider) != provider) stop()
+        settings.setReadAloudProvider(provider.id)
     }
 
-    suspend fun setVoice(voice: GeminiVoice) {
+    /** Saves the Gemini [key], ending the session read with the old one. */
+    suspend fun setGeminiKey(key: String) {
+        stop()
+        geminiKeys.set(key)
+    }
+
+    suspend fun clearGeminiKey() {
+        stop()
+        geminiKeys.clear()
+    }
+
+    suspend fun setGeminiVoice(voice: GeminiVoice) {
         settings.setReadAloudVoice(voice.id)
     }
 
-    val voice: Flow<GeminiVoice> =
+    val geminiVoice: Flow<GeminiVoice> =
         settings.settings.map { GeminiVoice.of(it.readAloudVoice) }.distinctUntilChanged()
 
+    val kokoroUrl: Flow<String> = settings.settings.map { it.kokoroUrl.orEmpty() }.distinctUntilChanged()
+
+    val kokoroVoice: Flow<String?> = settings.settings.map { it.kokoroVoice }.distinctUntilChanged()
+
+    suspend fun setKokoroUrl(url: String) = settings.setKokoroUrl(url)
+
+    suspend fun setKokoroVoice(voice: String) = settings.setKokoroVoice(voice)
+
+    /** Saves the Kokoro server's [key], ending the session read with the old one. */
+    suspend fun setKokoroKey(key: String) {
+        stop()
+        kokoroKeys.set(key)
+    }
+
+    suspend fun clearKokoroKey() {
+        stop()
+        kokoroKeys.clear()
+    }
+
+    /** The voices the Kokoro server at [url] offers, asked with the saved key. */
+    suspend fun kokoroVoices(url: String): Result<List<String>> {
+        val base = KokoroTts.baseUrl(url) ?: return Result.failure(IllegalArgumentException("Not a server address"))
+        return try {
+            Result.success(kokoro.voices(base, kokoroKeys.get()))
+        } catch (e: SpeechError) {
+            Result.failure(e)
+        }
+    }
+
     @Composable
-    override fun SettingsRows() = ReadAloudSettingsRows(this)
+    override fun SettingsEntry(onClick: () -> Unit) = ReadAloudSettingsEntry(this, onClick)
+
+    @Composable
+    override fun SettingsScreen(onBack: () -> Unit) = ReadAloudSettingsScreen(this, onBack)
 
     @Composable
     override fun Player(bookId: String, theme: ReaderTheme, modifier: Modifier) =

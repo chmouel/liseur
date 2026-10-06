@@ -13,19 +13,21 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * The reader's Gemini API key, encrypted with a Keystore key in a file
- * under no_backup: outside Auto Backup, device transfer and the settings
- * export, so it never leaves the device. A key that can no longer be
- * decrypted (the Keystore was reset) counts as no key. Reads, saves and
- * removals take turns, so a removal cannot be undone by a save that was
- * still being written.
+ * One API key a speech service is used with (Gemini's, or a Kokoro
+ * server's), encrypted with a Keystore key in a file under no_backup:
+ * outside Auto Backup, device transfer and the settings export, so it
+ * never leaves the device. A key that can no longer be decrypted (the
+ * Keystore was reset) counts as no key. Reads, saves and removals take
+ * turns, so a removal cannot be undone by a save that was still being
+ * written.
  */
-class GeminiKeyStore(
+class ApiKeyStore(
     private val file: File,
-    private val cipher: SecretCipher = SecretCipher(KEY_ALIAS),
+    private val cipher: SecretCipher,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    constructor(context: Context) : this(File(context.noBackupFilesDir, FILE_NAME))
+    private constructor(context: Context, fileName: String, keyAlias: String) :
+        this(File(context.noBackupFilesDir, fileName), SecretCipher(keyAlias))
 
     private val mutableConfigured = MutableStateFlow(file.exists())
 
@@ -52,7 +54,7 @@ class GeminiKeyStore(
             temp.writeText(cipher.encrypt(trimmed))
             if (!temp.renameTo(file)) {
                 temp.delete()
-                error("Could not save the Gemini key")
+                error("Could not save the API key")
             }
             mutableConfigured.value = true
         }
@@ -65,8 +67,9 @@ class GeminiKeyStore(
 
     private suspend fun <T> locked(block: () -> T): T = lock.withLock { withContext(io) { block() } }
 
-    private companion object {
-        const val FILE_NAME = "gemini-key"
-        const val KEY_ALIAS = "liseur.gemini.key"
+    companion object {
+        fun gemini(context: Context) = ApiKeyStore(context, "gemini-key", "liseur.gemini.key")
+
+        fun kokoro(context: Context) = ApiKeyStore(context, "kokoro-key", "liseur.kokoro.key")
     }
 }

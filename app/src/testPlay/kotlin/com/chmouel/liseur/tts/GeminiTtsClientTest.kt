@@ -135,7 +135,7 @@ class GeminiTtsClientTest {
     fun `an answer over the size cap is refused`(): Unit = runBlocking {
         val buffer = Buffer().writeUtf8("""{"steps":[{"content":[{"type":"audio","mime_type":"audio/l16","data":"""")
         val chunk = "A".repeat(1 shl 16)
-        repeat((GeminiTts.MAX_PCM_BYTES / 3 * 4) / chunk.length + 4) { buffer.writeUtf8(chunk) }
+        repeat((SpeechAudio.MAX_PCM_BYTES / 3 * 4) / chunk.length + 4) { buffer.writeUtf8(chunk) }
         buffer.writeUtf8("\"}]}]}")
         server.enqueue(MockResponse.Builder().code(200).body(buffer).build())
 

@@ -20,7 +20,7 @@ import javax.crypto.KeyGenerator
 
 @Config(sdk = [35], application = Application::class)
 @RunWith(RobolectricTestRunner::class)
-class GeminiKeyStoreTest {
+class ApiKeyStoreTest {
     @get:Rule
     val folder = TemporaryFolder()
 
@@ -29,7 +29,7 @@ class GeminiKeyStoreTest {
     }
 
     private fun keyStore(file: File, cipher: SecretCipher = cipher()) =
-        GeminiKeyStore(file, cipher, UnconfinedTestDispatcher())
+        ApiKeyStore(file, cipher, UnconfinedTestDispatcher())
 
     @Test
     fun keepsTheKeyEncryptedAndReadsItBack() = runTest {
@@ -70,11 +70,12 @@ class GeminiKeyStoreTest {
     }
 
     @Test
-    fun livesUnderNoBackup() {
+    fun eachServiceKeepsItsOwnKeyUnderNoBackup() {
         val context = ApplicationProvider.getApplicationContext<Application>()
-        val store = GeminiKeyStore(context)
-        val field = GeminiKeyStore::class.java.getDeclaredField("file").apply { isAccessible = true }
-        val file = field.get(store) as File
-        assertEquals(context.noBackupFilesDir.canonicalFile, file.parentFile!!.canonicalFile)
+        val field = ApiKeyStore::class.java.getDeclaredField("file").apply { isAccessible = true }
+        val files = listOf(ApiKeyStore.gemini(context), ApiKeyStore.kokoro(context)).map { field.get(it) as File }
+        files.forEach { assertEquals(context.noBackupFilesDir.canonicalFile, it.parentFile!!.canonicalFile) }
+        assertEquals("gemini-key", files[0].name)
+        assertEquals(2, files.toSet().size)
     }
 }

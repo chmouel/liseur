@@ -85,8 +85,6 @@ fun ReadingNavigationScreen(
     onDictionaryBaseUrl: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Rows a build flavor adds at the end of Advanced: reading aloud, in the Play build. */
-    flavorAdvancedRows: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -248,7 +246,6 @@ fun ReadingNavigationScreen(
                         onCheckedChange = onPinchToResize,
                         enabled = !pinchOffForEInk,
                     )
-                    flavorAdvancedRows()
                 }
             }
         }

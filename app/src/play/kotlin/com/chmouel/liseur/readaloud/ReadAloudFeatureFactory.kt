@@ -3,14 +3,15 @@ package com.chmouel.liseur.readaloud
 import android.app.Application
 import android.content.Context
 import com.chmouel.liseur.AppContainer
-import com.chmouel.liseur.tts.GeminiKeyStore
-import com.chmouel.liseur.tts.GeminiReadAloud
+import com.chmouel.liseur.tts.ApiKeyStore
+import com.chmouel.liseur.tts.SpeechReadAloud
 
-/** The Play build reads aloud with a Gemini voice, on the reader's own key. */
+/** The Play build reads aloud with a Gemini voice on the reader's own key, or a Kokoro server of theirs. */
 object ReadAloudFeatureFactory {
-    fun create(context: Context, container: AppContainer): ReadAloudFeature = GeminiReadAloud(
+    fun create(context: Context, container: AppContainer): ReadAloudFeature = SpeechReadAloud(
         application = context.applicationContext as Application,
-        keys = GeminiKeyStore(context),
+        geminiKeys = ApiKeyStore.gemini(context),
+        kokoroKeys = ApiKeyStore.kokoro(context),
         settings = container.appSettings,
         checkpoints = container.listeningCheckpoints,
     )

@@ -19,13 +19,13 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 
 @OptIn(ExperimentalReadiumApi::class)
-typealias GeminiNavigator =
-    TtsNavigator<GeminiTtsSettings, GeminiTtsPreferences, GeminiTtsEngine.Error, GeminiTtsEngine.Voice>
+typealias SpeechNavigator =
+    TtsNavigator<SpeechTtsSettings, SpeechTtsPreferences, SpeechTtsEngine.Error, SpeechTtsEngine.Voice>
 
 /** Opens a paused navigator at [initial], its engine reporting to [observer]. Null when the book cannot be read aloud. */
 @OptIn(ExperimentalReadiumApi::class)
 fun interface NavigatorOpener {
-    suspend fun open(initial: Locator?, observer: SpeechObserver, listener: TtsNavigator.Listener): GeminiNavigator?
+    suspend fun open(initial: Locator?, observer: SpeechObserver, listener: TtsNavigator.Listener): SpeechNavigator?
 }
 
 /**
@@ -49,7 +49,7 @@ class ReadAloudPlayback(
 ) : SpeechObserver {
 
     /** A sentence that could not be spoken; [anchor] is where resuming starts. */
-    data class Failure(val error: GeminiTtsEngine.Error, val anchor: UtteranceAnchor?)
+    data class Failure(val error: SpeechTtsEngine.Error, val anchor: UtteranceAnchor?)
 
     enum class Landing {
         /** On the sentence asked for. */
@@ -62,10 +62,10 @@ class ReadAloudPlayback(
         Failed,
     }
 
-    private val mutableNavigator = MutableStateFlow<GeminiNavigator?>(null)
+    private val mutableNavigator = MutableStateFlow<SpeechNavigator?>(null)
 
     /** The live navigator; it is replaced when the voice is re-placed, so follow this rather than keep one. */
-    val navigator: StateFlow<GeminiNavigator?> = mutableNavigator.asStateFlow()
+    val navigator: StateFlow<SpeechNavigator?> = mutableNavigator.asStateFlow()
 
     private val mutableFailure = MutableStateFlow<Failure?>(null)
     val failure: StateFlow<Failure?> = mutableFailure.asStateFlow()
@@ -181,7 +181,7 @@ class ReadAloudPlayback(
         looser: ((TtsNavigator.Location) -> Boolean)? = null,
     ): Landing {
         var fresh = replace(element) ?: return Landing.Failed
-        suspend fun align(on: GeminiNavigator, matches: (TtsNavigator.Location) -> Boolean) = alignUtterance(
+        suspend fun align(on: SpeechNavigator, matches: (TtsNavigator.Location) -> Boolean) = alignUtterance(
             location = on.location,
             hasNext = on::hasNextUtterance,
             skipToNext = on::skipToNextUtterance,
@@ -205,7 +205,7 @@ class ReadAloudPlayback(
         return if (found) Landing.Sentence else Landing.ElementStart
     }
 
-    private suspend fun replace(initial: Locator): GeminiNavigator? {
+    private suspend fun replace(initial: Locator): SpeechNavigator? {
         if (closed) return null
         prefetcher?.suspend()
         val fresh = opener.open(initial, this, listener) ?: return null
@@ -225,7 +225,7 @@ class ReadAloudPlayback(
         if (spoken.size > SPOKEN_KEPT) spoken.remove(spoken.keys.first())
     }
 
-    override fun onFailure(requestId: TtsEngine.RequestId, error: GeminiTtsEngine.Error) {
+    override fun onFailure(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) {
         // Only this navigator's requests; a closed one's are long gone.
         if (requestId !in spoken) return
         val navigator = mutableNavigator.value ?: return

@@ -13,7 +13,7 @@ import kotlin.coroutines.coroutineContext
 /** Where decoded speech is heard. */
 interface PcmOutput {
     /**
-     * Plays [pcm] (16-bit mono at [GeminiTts.SAMPLE_RATE]) and returns once
+     * Plays [pcm] (16-bit mono at [SpeechAudio.SAMPLE_RATE]) and returns once
      * the last frame has been heard, not merely written. Cancellable.
      */
     suspend fun play(pcm: ByteArray)
@@ -43,7 +43,7 @@ class AudioTrackPcmOutput(
     private fun trackLocked(): AudioTrack =
         track ?: run {
             val minimum = AudioTrack.getMinBufferSize(
-                GeminiTts.SAMPLE_RATE,
+                SpeechAudio.SAMPLE_RATE,
                 AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
             )
@@ -57,7 +57,7 @@ class AudioTrackPcmOutput(
                 )
                 .setAudioFormat(
                     AudioFormat.Builder()
-                        .setSampleRate(GeminiTts.SAMPLE_RATE)
+                        .setSampleRate(SpeechAudio.SAMPLE_RATE)
                         .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                         .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                         .build(),
@@ -84,7 +84,7 @@ class AudioTrackPcmOutput(
             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
             Quad(turn, track, track.playbackHeadPosition.toLong() and 0xffffffffL, padded)
         }
-        val frameMs = 1000.0 / GeminiTts.SAMPLE_RATE
+        val frameMs = 1000.0 / SpeechAudio.SAMPLE_RATE
         // How long a track that stops moving is given: its whole buffer plus slack.
         val stallNanos = ((track.bufferSizeInFrames * frameMs).toLong() + STALL_SLACK_MS) * 1_000_000
         var offset = 0

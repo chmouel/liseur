@@ -118,11 +118,11 @@ class ReadAloudPlaybackTest {
                 scope = scope,
                 opener = { initial, observer, listener ->
                     beforeOpen()
-                    val provider = GeminiTtsEngineProvider(
+                    val provider = SpeechTtsEngineProvider(
                         scope = scope,
                         cache = cache,
                         output = { output },
-                        voices = setOf(GeminiTtsEngine.Voice("Kore", Language("en"))),
+                        voices = setOf(SpeechTtsEngine.Voice("Kore", Language("en"))),
                         observer = observer,
                     )
                     TtsNavigatorFactory(context, publication, provider, tokenizerFactory)

@@ -34,6 +34,9 @@ import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.tokenizer.DefaultTextContentTokenizer
 import org.readium.r2.shared.util.tokenizer.TextUnit
 
+/** What a session speaks with: the voice's name, how many sentences to fetch at once, and the service. */
+internal class SessionVoice(val name: String, val maxConcurrent: Int, val synthesizer: SpeechSynthesizer)
+
 /**
  * One book being read aloud: the voice, the sentences fetched ahead of
  * it, and the hold on the open book that keeps the book open after the
@@ -50,9 +53,7 @@ internal class ReadAloudSession(
     val handle: OpenBookHandle,
     /** Brings the reader back to this book, for the notification. */
     val reader: Intent,
-    key: String,
-    voice: GeminiVoice,
-    client: GeminiTtsClient,
+    voice: SessionVoice,
     private val checkpoints: ListeningCheckpoints,
     private val onNotice: (ReadAloudNotice) -> Unit,
     private val onEnded: (ReadAloudSession) -> Unit,
@@ -60,9 +61,9 @@ internal class ReadAloudSession(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val publication = handle.publication
-    private val cache = SpeechCache(scope, { text -> client.synthesize(key, text, voice.id) })
+    private val cache = SpeechCache(scope, voice.synthesizer::synthesize, voice.maxConcurrent)
     private val language = publication.metadata.language ?: Language("en")
-    private val voices = setOf(GeminiTtsEngine.Voice(voice.id, language))
+    private val voices = setOf(SpeechTtsEngine.Voice(voice.name, language))
 
     private val prefetcher = UtterancePrefetcher<Locator>(scope, cache, { locator ->
         val settings = playback.navigator.value?.settings?.value
@@ -78,7 +79,7 @@ internal class ReadAloudSession(
     val playback: ReadAloudPlayback = ReadAloudPlayback(
         scope = scope,
         opener = { initial, observer, listener ->
-            val provider = GeminiTtsEngineProvider(scope, cache, { AudioTrackPcmOutput() }, voices, observer)
+            val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput() }, voices, observer)
             TtsNavigatorFactory(application, publication, provider, BoundedSentenceTokenizer.factory)
                 ?.createNavigator(listener, initial)
                 ?.getOrNull()
@@ -130,7 +131,7 @@ internal class ReadAloudSession(
         scope.launch {
             playback.failure.filterNotNull().collect { failure ->
                 onNotice(failure.error.notice())
-                if (failure.error is GeminiTtsEngine.Error.InvalidKey) stop()
+                if (!failure.error.recoverable) stop()
             }
         }
     }
@@ -218,12 +219,13 @@ internal class ReadAloudSession(
         checkpoints.save(handle, held, heard, spokenAt, share)
     }
 
-    private fun GeminiTtsEngine.Error.notice(): ReadAloudNotice = when (this) {
-        is GeminiTtsEngine.Error.InvalidKey -> ReadAloudNotice.InvalidKey
-        is GeminiTtsEngine.Error.RateLimited -> ReadAloudNotice.RateLimited
-        is GeminiTtsEngine.Error.Network -> ReadAloudNotice.Network
-        is GeminiTtsEngine.Error.Service, is GeminiTtsEngine.Error.InvalidResponse -> ReadAloudNotice.Service
-        is GeminiTtsEngine.Error.Output -> ReadAloudNotice.Output
+    private fun SpeechTtsEngine.Error.notice(): ReadAloudNotice = when (this) {
+        is SpeechTtsEngine.Error.InvalidKey -> ReadAloudNotice.InvalidKey
+        is SpeechTtsEngine.Error.InvalidVoice -> ReadAloudNotice.InvalidVoice
+        is SpeechTtsEngine.Error.RateLimited -> ReadAloudNotice.RateLimited
+        is SpeechTtsEngine.Error.Network -> ReadAloudNotice.Network
+        is SpeechTtsEngine.Error.Service, is SpeechTtsEngine.Error.InvalidResponse -> ReadAloudNotice.Service
+        is SpeechTtsEngine.Error.Output -> ReadAloudNotice.Output
     }
 
     companion object {

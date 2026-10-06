@@ -20,36 +20,9 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-/** Mono 16-bit little-endian PCM at [GeminiTts.SAMPLE_RATE]. */
-class SpeechAudio(val pcm: ByteArray) {
-    val frames: Int get() = pcm.size / 2
-}
-
-/** Why a sentence could not be turned into speech. Messages never carry the key or the text. */
-sealed class SpeechError(message: String, cause: Throwable? = null) : Exception(message, cause) {
-    /** [code] is null when the key could not even be sent. */
-    class InvalidKey(code: Int? = null) :
-        SpeechError(code?.let { "Gemini rejected the API key (HTTP $it)" } ?: "The Gemini API key cannot be sent")
-    class RateLimited(code: Int) : SpeechError("Gemini quota or rate limit reached (HTTP $code)")
-    class Network(cause: IOException) :
-        SpeechError("Gemini could not be reached (${cause.javaClass.simpleName})", cause)
-    class Service(val code: Int) : SpeechError("Gemini answered HTTP $code")
-    class InvalidResponse(reason: String) : SpeechError("Gemini sent no usable audio: $reason")
-}
-
-/** Turns one sentence into audio. An interface so the engine can be tested without a network. */
-fun interface SpeechSynthesizer {
-    /** Throws [SpeechError]; cancelling the caller cancels the request. */
-    suspend fun synthesize(apiKey: String, text: String, voice: String): SpeechAudio
-}
-
 object GeminiTts {
     const val MODEL = "gemini-3.8-flash-tts"
     const val ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
-    const val SAMPLE_RATE = 24_000
-
-    /** About three minutes of speech, far beyond any one bounded sentence. */
-    const val MAX_PCM_BYTES = 8 * 1024 * 1024
 }
 
 /**
@@ -62,9 +35,10 @@ class GeminiTtsClient(
     private val client: OkHttpClient = default(),
     private val endpoint: HttpUrl = GeminiTts.ENDPOINT.toHttpUrl(),
     private val model: String = GeminiTts.MODEL,
-) : SpeechSynthesizer {
+) {
 
-    override suspend fun synthesize(apiKey: String, text: String, voice: String): SpeechAudio {
+    /** Throws [SpeechError]; cancelling the caller cancels the request. */
+    suspend fun synthesize(apiKey: String, text: String, voice: String): SpeechAudio {
         val builder = Request.Builder().url(endpoint)
         try {
             builder.header("x-goog-api-key", apiKey)
@@ -115,7 +89,7 @@ class GeminiTtsClient(
             JSONObject()
                 .put("type", "audio")
                 .put("mime_type", "audio/l16")
-                .put("sample_rate", GeminiTts.SAMPLE_RATE),
+                .put("sample_rate", SpeechAudio.SAMPLE_RATE),
         )
         .put(
             "generation_config",
@@ -126,7 +100,7 @@ class GeminiTtsClient(
     private fun parse(response: Response): SpeechAudio {
         val source = response.body.source()
         // Base64 is four bytes for every three, plus room for the envelope.
-        val limit = GeminiTts.MAX_PCM_BYTES.toLong() / 3 * 4 + ENVELOPE_BYTES
+        val limit = SpeechAudio.MAX_PCM_BYTES.toLong() / 3 * 4 + ENVELOPE_BYTES
         if (source.request(limit + 1)) {
             if (!response.isSuccessful) throw errorFor(response.code, "")
             throw SpeechError.InvalidResponse("response too large")
@@ -155,9 +129,9 @@ class GeminiTtsClient(
         if (!audio.optString("mime_type").lowercase().startsWith("audio/l16")) {
             throw SpeechError.InvalidResponse("unexpected format")
         }
-        val rate = audio.optInt("sample_rate", GeminiTts.SAMPLE_RATE)
+        val rate = audio.optInt("sample_rate", SpeechAudio.SAMPLE_RATE)
         val channels = audio.optInt("channels", 1)
-        if (rate != GeminiTts.SAMPLE_RATE || channels != 1) {
+        if (rate != SpeechAudio.SAMPLE_RATE || channels != 1) {
             throw SpeechError.InvalidResponse("unexpected sample rate or channels")
         }
         // Labelled L16, which RFC 2586 makes big-endian, but what arrives
@@ -170,7 +144,7 @@ class GeminiTtsClient(
         when {
             pcm.isEmpty() -> throw SpeechError.InvalidResponse("empty audio")
             pcm.size % 2 != 0 -> throw SpeechError.InvalidResponse("odd byte count")
-            pcm.size > GeminiTts.MAX_PCM_BYTES -> throw SpeechError.InvalidResponse("audio too long")
+            pcm.size > SpeechAudio.MAX_PCM_BYTES -> throw SpeechError.InvalidResponse("audio too long")
         }
         return SpeechAudio(pcm)
     }

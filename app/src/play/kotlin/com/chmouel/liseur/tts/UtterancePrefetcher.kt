@@ -34,7 +34,7 @@ class SpeechCache(
     var generation = 0L
         private set
 
-    /** Set by an invalid key or a quota error: speculative requests stop until the next restart. */
+    /** Set by an invalid key or voice, or a quota error: speculative requests stop until the next restart. */
     var halted = false
         private set
 
@@ -104,6 +104,9 @@ class SpeechCache(
                 halted = true
                 throw e
             } catch (e: SpeechError.InvalidKey) {
+                halted = true
+                throw e
+            } catch (e: SpeechError.InvalidVoice) {
                 halted = true
                 throw e
             }
