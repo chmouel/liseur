@@ -68,8 +68,10 @@ internal class GeminiReadAloud(
 
     override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent) {
         stop()
-        if (!handle.acquire()) return
         starting = scope.launch {
+            // Taken here rather than before launching: a start cancelled
+            // before it runs never reaches the finally that gives it back.
+            if (!handle.acquire()) return@launch
             var held = true
             try {
                 val key = keys.get() ?: run {
@@ -90,9 +92,7 @@ internal class GeminiReadAloud(
                 )
                 held = false
                 mutableCurrent.value = session
-                // Started from the reader, so in the foreground; the
-                // service turns foreground itself once the voice plays.
-                application.startService(Intent(application, ReadAloudService::class.java))
+                startService()
                 session.start(selection)
             } catch (e: CancellationException) {
                 throw e
@@ -107,7 +107,16 @@ internal class GeminiReadAloud(
     }
 
     override fun resume() {
-        mutableCurrent.value?.resume()
+        val session = mutableCurrent.value ?: return
+        // The service may have been destroyed under a paused session.
+        startService()
+        session.resume()
+    }
+
+    // Called from the reader, so in the foreground; the service turns
+    // foreground itself once the voice plays.
+    private fun startService() {
+        application.startService(Intent(application, ReadAloudService::class.java))
     }
 
     override fun stop() {

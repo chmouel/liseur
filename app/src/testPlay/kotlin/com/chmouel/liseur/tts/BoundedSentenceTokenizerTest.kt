@@ -60,6 +60,12 @@ class BoundedSentenceTokenizerTest {
     }
 
     @Test
+    fun aCutAnywhereNeverSplitsACharacterInTwo() {
+        val emoji = "\uD83D\uDE00"
+        assertEquals(listOf("x".repeat(19), emoji + "x".repeat(5)), tokenize("x".repeat(19) + emoji + "x".repeat(5), min = 5, max = 20))
+    }
+
+    @Test
     fun keepsEveryLetterInOrder() {
         val text = "Short. " + List(80) { "and the time traveller spoke again, slowly" }.joinToString(" ") + ". Fine. Done."
         val pieces = BoundedSentenceTokenizer(sentences).tokenize(text)

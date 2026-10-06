@@ -50,7 +50,7 @@ class BoundedSentenceTokenizer(
             val window = (start + minLength) until (start + maxLength)
             val cut = window.reversed().firstOrNull { data[it] in CLAUSE_BREAKS }?.plus(1)
                 ?: window.reversed().firstOrNull { data[it].isWhitespace() }
-                ?: (start + maxLength)
+                ?: (start + maxLength).let { if (data[it - 1].isHighSurrogate()) it - 1 else it }
             trimmed(data, start until cut)?.let(pieces::add)
             start = cut
         }
