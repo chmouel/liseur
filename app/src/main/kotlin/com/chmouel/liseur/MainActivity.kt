@@ -83,7 +83,13 @@ import androidx.core.net.toUri
 import androidx.compose.runtime.collectAsState
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.domain.SeriesShelf
-import com.chmouel.liseur.ui.widget.WidgetRequests
+import com.chmouel.liseur.ui.launch.LaunchRequests
+import com.chmouel.liseur.ui.launch.LaunchTarget
+import com.chmouel.liseur.ui.launch.LaunchResolution
+import com.chmouel.liseur.ui.launch.LaunchRequest
+import com.chmouel.liseur.ui.launch.LaunchViewModel
+import androidx.activity.viewModels
+import kotlinx.coroutines.Job
 
 class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
@@ -97,17 +103,22 @@ class MainActivity : ComponentActivity() {
      * small database read, so nobody sees the library flash past.
      */
     private var deciding = true
+    private var resumeJob: Job? = null
+    private val launchModel: LaunchViewModel by viewModels { LaunchViewModel.Factory(container) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
-        splash.setKeepOnScreenCondition { deciding }
+        splash.setKeepOnScreenCondition { deciding || launchModel.resolving.value }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) acceptShortcut(intent)
+        // Restore an unfinished shortcut before deciding whether ordinary startup may resume.
+        launchModel
 
         // Only a genuinely cold start resumes a book: coming back from the
         // reader must land on the library, not bounce straight back in.
         if (savedInstanceState != null) deciding = false
-        if (WidgetRequests.pending.value != null) deciding = false
+        if (LaunchRequests.shared.pending.value != null) deciding = false
 
         setContent {
             val settings by container.appSettings.settings
@@ -128,22 +139,46 @@ class MainActivity : ComponentActivity() {
                     eInk = LocalEInk.current,
                     colorEInk = settings.colorEInk,
                 ) {
-                    val request = WidgetRequests.pending.collectAsState().value
+                    val resolution by launchModel.ready.collectAsStateWithLifecycle()
                     LiseurApp(
                         settings,
-                        widgetTarget = request?.let { if (it.stats) "stats" else "library" },
-                        widgetBook = request?.bookUrl,
-                        onWidgetHandled = { request?.let(WidgetRequests::consume) },
+                        launch = resolution,
+                        onLaunchHandled = launchModel::handled,
                     )
                 }
             }
         }
 
         if (deciding) {
-            lifecycleScope.launch {
-                resumeLastBook()
-                deciding = false
+            resumeJob = lifecycleScope.launch {
+                try {
+                    resumeLastBook()
+                } finally {
+                    deciding = false
+                }
             }
+        }
+        lifecycleScope.launch {
+            LaunchRequests.shared.pending.collect { request ->
+                if (request != null) {
+                    resumeJob?.cancel()
+                    deciding = false
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptShortcut(intent)
+    }
+
+    private fun acceptShortcut(intent: Intent) {
+        LaunchTarget.fromAction(intent.action)?.let {
+            resumeJob?.cancel()
+            deciding = false
+            LaunchRequests.shared.shortcut(it)
         }
     }
 
@@ -168,7 +203,9 @@ class MainActivity : ComponentActivity() {
                 finished = book.finished,
             )
         }
-        if (!shouldResume(candidate, leftFromReader) || candidate == null) return
+        if (!shouldResume(candidate, leftFromReader) || candidate == null ||
+            LaunchRequests.shared.pending.value != null
+        ) return
         // No animation: as far as the reader is concerned the app simply
         // opened on their book, and a cross-fade from a library they never
         // asked for would give the game away.
@@ -209,17 +246,11 @@ private const val SPONSOR_URL = "https://github.com/sponsors/chmouel"
 @Composable
 private fun LiseurApp(
     settings: AppSettings,
-    widgetTarget: String? = null,
-    widgetBook: String? = null,
-    onWidgetHandled: () -> Unit = {},
+    launch: LaunchResolution? = null,
+    onLaunchHandled: (LaunchRequest) -> Unit = {},
 ) {
     var screen by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
-    LaunchedEffect(widgetTarget, widgetBook) {
-        if (widgetTarget != null) {
-            screen = if (widgetTarget == "stats") Screen.STATS else Screen.LIBRARY
-            if (widgetBook == null) onWidgetHandled()
-        }
-    }
+    var libraryLaunchId by rememberSaveable { mutableStateOf(0L) }
     // The server screen is reached from two places now, and Back has to
     // go back to whichever one it was, not to the one it usually is.
     var accountReturnsTo by rememberSaveable { mutableStateOf(Screen.SETTINGS) }
@@ -229,6 +260,22 @@ private fun LiseurApp(
     var bookStatsReturnsTo by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
     var openGutenberg by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    LaunchedEffect(launch?.request?.id) {
+        val resolved = launch ?: return@LaunchedEffect
+        val request = resolved.request
+        if (!LaunchRequests.shared.owns(request)) return@LaunchedEffect
+        screen = if (request.target == LaunchTarget.STATS) Screen.STATS else Screen.LIBRARY
+        libraryLaunchId++
+        statsBook = null
+        openGutenberg = false
+        if (resolved.error != null) {
+            android.widget.Toast.makeText(context, resolved.error, android.widget.Toast.LENGTH_LONG).show()
+        }
+        if (resolved.fileUrl != null && resolved.book != null) {
+            context.startActivity(ReaderActivity.intent(context, resolved.fileUrl, resolved.book.url))
+        }
+        if (request.bookUrl == null) onLaunchHandled(request)
+    }
     val scope = rememberCoroutineScope()
     val repository = remember(context) { context.container.appSettings }
     val readerPreferences = remember(context) { context.container.readerPreferences }
@@ -237,26 +284,28 @@ private fun LiseurApp(
     val settingsZipBackup = rememberSettingsZipBackup(active = screen == Screen.SETTINGS_BACKUP)
 
     when (screen) {
-        Screen.LIBRARY -> LibraryRoute(
-            widgetBook = widgetBook,
-            onWidgetHandled = onWidgetHandled,
-            onOpenSettings = { screen = Screen.SETTINGS },
-            onOpenStats = { screen = Screen.STATS },
-            onOpenBookStats = { book ->
-                statsBook = StatsTarget(book.url, book.displayTitle)
-                bookStatsReturnsTo = Screen.LIBRARY
-                screen = Screen.BOOK_STATS
-            },
-            onConnectServer = {
-                accountReturnsTo = Screen.LIBRARY
-                screen = Screen.SERVER_ACCOUNT
-            },
-            onBrowseLibraries = { screen = Screen.BROWSE_LIBRARIES },
-            onStartWithFreeBooks = {
-                openGutenberg = true
-                screen = Screen.BROWSE_LIBRARIES
-            },
-        )
+        Screen.LIBRARY -> androidx.compose.runtime.key(libraryLaunchId) {
+            LibraryRoute(
+                widgetRequest = launch?.request?.takeIf { !it.shortcut && it.bookUrl != null },
+                onWidgetHandled = { launch?.request?.let(onLaunchHandled) },
+                onOpenSettings = { screen = Screen.SETTINGS },
+                onOpenStats = { screen = Screen.STATS },
+                onOpenBookStats = { book ->
+                    statsBook = StatsTarget(book.url, book.displayTitle)
+                    bookStatsReturnsTo = Screen.LIBRARY
+                    screen = Screen.BOOK_STATS
+                },
+                onConnectServer = {
+                    accountReturnsTo = Screen.LIBRARY
+                    screen = Screen.SERVER_ACCOUNT
+                },
+                onBrowseLibraries = { screen = Screen.BROWSE_LIBRARIES },
+                onStartWithFreeBooks = {
+                    openGutenberg = true
+                    screen = Screen.BROWSE_LIBRARIES
+                },
+            )
+        }
 
         Screen.BROWSE_LIBRARIES -> BrowseLibrariesRoute(
             onExit = { screen = Screen.LIBRARY },
@@ -556,18 +605,21 @@ private fun LibraryRoute(
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
     onStartWithFreeBooks: () -> Unit,
-    widgetBook: String? = null,
+    widgetRequest: LaunchRequest? = null,
     onWidgetHandled: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val navigationGeneration = remember { LaunchRequests.shared.latestId }
     var widgetShelfBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
-    LaunchedEffect(widgetBook) {
+    LaunchedEffect(widgetRequest?.id) {
         // Drop the previous tap's book so only this request can reach the shelf.
         widgetShelfBook = null
-        val url = widgetBook ?: return@LaunchedEffect
+        val request = widgetRequest ?: return@LaunchedEffect
+        val url = request.bookUrl ?: return@LaunchedEffect
         val book = context.container.database.bookDao().getByUrl(url)
+        if (!LaunchRequests.shared.owns(request)) return@LaunchedEffect
         if (book != null && !book.hidden && !book.archived) {
             widgetShelfBook = book
         } else {
@@ -587,7 +639,10 @@ private fun LibraryRoute(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.forgetPendingOpen()
+        }
     }
 
     val openBook = rememberLauncherForActivityResult(
@@ -654,6 +709,7 @@ private fun LibraryRoute(
     LaunchedEffect(viewModel) {
         viewModel.openRequests.collect { book ->
             viewModel.forgetPendingOpen()
+            if (LaunchRequests.shared.latestId != navigationGeneration) return@collect
             book.openableUri()?.let {
                 context.startActivity(ReaderActivity.intent(context, it, book.url))
             }
@@ -907,7 +963,9 @@ private fun LibraryRoute(
         },
         notice = notice,
         onNoticeShown = viewModel::noticeShown,
-        widgetBook = widgetShelfBook,
+        widgetBook = widgetShelfBook?.takeIf {
+            widgetRequest?.let(LaunchRequests.shared::owns) == true
+        },
         onWidgetBookHandled = {
             widgetShelfBook = null
             onWidgetHandled()

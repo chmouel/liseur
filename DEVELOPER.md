@@ -1004,6 +1004,52 @@ Spanish, Russian, Italian, German and Simplified Chinese ship beside it as
 
 See [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
 
+## Launcher shortcuts
+
+Long-pressing the launcher icon offers Continue reading, Library, and Reading
+stats. These are static shortcuts, available before the first app launch.
+`res/xml/shortcuts.xml` defines their order and icons; the dev resource overlay
+targets `com.chmouel.liseur.dev` so it cannot open the production app.
+
+Continue reading ignores the automatic-resume preference and last-screen flag.
+It chooses the latest eligible local book using the later of its opening time
+and its reading time, including synced reading. Hidden, archived, unavailable,
+marked-finished books and progress at or above `FINISHED_PROGRESSION` (97%) are
+excluded. A saved locator counts as reading even when progression is unknown.
+If the latest book is ineligible, the next eligible book is chosen. With no
+candidate, the Library opens.
+
+Android starts the first static shortcut intent with `NEW_TASK | CLEAR_TASK`.
+Each shortcut replaces the existing app task; Back from a continued book or
+statistics returns to Library. Accepted reader writes survive task destruction.
+Continue waits for `ReadingPositionPublisher.flushLastReader()` to succeed
+before querying candidates, since a pending completion can change eligibility.
+A failed save opens Library with an explicit error instead of reopening stale
+state.
+
+`ui/launch/` owns a shared request stream for shortcuts and widgets. The latest
+request wins; older asynchronous results cannot navigate. Only the three fixed
+shortcut actions are accepted from exported `MainActivity`. Widget book targets
+still enter through unexported `WidgetLaunchActivity`, never public intent
+extras. An unfinished shortcut is saved across activity/process recreation;
+handled requests do not replay.
+
+Labels are translated in all bundled languages. Android/the launcher resolves
+static labels, which may follow the system language rather than the in-app
+language. The API 36 Pixel launcher also kept system-language shortcut labels
+when only the app language was changed.
+
+For manual checks, use a disposable emulator and the actual launcher menu.
+Verify the menu before first opening the app; all three actions from a cold app,
+Library, Settings and the reader; repeated taps and Back; and dev/production
+package isolation. Continue must work with automatic resume disabled, skip an
+ineligible newest book, and fall back on an empty shelf. In paginated and
+scrolled reading, move immediately before leaving for Home and verify the
+shortcut reopens the saved locator and ends the old session once. Also check
+rotation, a widget tap superseding a pending continuation, ordinary startup
+and translated labels. Flag-less `adb` action dispatch does not exercise
+static-shortcut task replacement.
+
 ## Architecture
 
 `AGENTS.md` contains the short, immediately actionable agent rules. This
@@ -1304,7 +1350,7 @@ cached cover files; it never waits on a network request.
   switch the row/column layout, not just Android's text size.
 - Dashboard, library and remote-book taps go through the unexported
   `WidgetLaunchActivity`, which hands the request to `MainActivity` in
-  process via `WidgetRequests`. `MainActivity` is exported, so it never
+  process via `LaunchRequests`. `MainActivity` is exported, so it never
   reads widget targets from intent extras. In stats, the book
   side opens the book and the figures open the dashboard.
 - One trigger redraws them: `AppContainer` collects

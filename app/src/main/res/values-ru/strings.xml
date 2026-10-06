@@ -1135,4 +1135,8 @@
         <item quantity="many">%d книг есть в библиотеке.</item>
         <item quantity="other">%d книги есть в библиотеке.</item>
     </plurals>
+    <string name="shortcut_library">Библиотека</string>
+    <string name="shortcut_continue">Продолжить</string>
+    <string name="shortcut_stats">Статистика</string>
+    <string name="shortcut_open_failed">Не удалось открыть этот ярлык. Попробуйте ещё раз.</string>
 </resources>
