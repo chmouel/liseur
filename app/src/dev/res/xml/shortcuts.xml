@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="continue_reading"
+        android:icon="@drawable/ic_shortcut_continue"
+        android:shortcutShortLabel="@string/shortcut_continue"
+        android:shortcutLongLabel="@string/continue_reading">
+        <intent
+            android:action="com.chmouel.liseur.action.CONTINUE_READING"
+            android:targetPackage="com.chmouel.liseur.dev"
+            android:targetClass="com.chmouel.liseur.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="library"
+        android:icon="@drawable/ic_shortcut_library"
+        android:shortcutShortLabel="@string/shortcut_library">
+        <intent
+            android:action="com.chmouel.liseur.action.LIBRARY"
+            android:targetPackage="com.chmouel.liseur.dev"
+            android:targetClass="com.chmouel.liseur.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="reading_statistics"
+        android:icon="@drawable/ic_shortcut_stats"
+        android:shortcutShortLabel="@string/shortcut_stats"
+        android:shortcutLongLabel="@string/reading_stats">
+        <intent
+            android:action="com.chmouel.liseur.action.READING_STATISTICS"
+            android:targetPackage="com.chmouel.liseur.dev"
+            android:targetClass="com.chmouel.liseur.MainActivity" />
+    </shortcut>
+</shortcuts>

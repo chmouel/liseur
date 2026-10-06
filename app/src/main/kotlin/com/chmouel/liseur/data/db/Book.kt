@@ -263,6 +263,29 @@ interface BookDao {
     @Query(MOST_RECENT)
     suspend fun mostRecentlyOpened(): Book?
 
+    /** A placeholder progress row's timestamp records its creation, not reading, so it is not ranked. */
+    @Query("""
+        SELECT books.* FROM books
+        LEFT JOIN reading_progress ON reading_progress.book_url = books.url
+        WHERE books.archived_at IS NULL AND books.hidden_at IS NULL
+          AND books.finished_at IS NULL
+          AND (books.local_uri IS NOT NULL OR books.download_state = 'DOWNLOADED')
+          AND (reading_progress.total_progression IS NULL
+               OR reading_progress.total_progression < :finishedProgression)
+          AND (books.last_opened_at IS NOT NULL
+               OR reading_progress.total_progression IS NOT NULL
+               OR reading_progress.locator_json != '{}')
+        ORDER BY MAX(
+            COALESCE(books.last_opened_at, 0),
+            CASE WHEN reading_progress.total_progression IS NOT NULL
+                      OR reading_progress.locator_json != '{}'
+                 THEN COALESCE(reading_progress.read_at, reading_progress.updated_at, 0)
+                 ELSE 0 END
+        ) DESC, books.url
+        LIMIT 1
+    """)
+    suspend fun continuationBook(finishedProgression: Double): Book?
+
     @Query("SELECT * FROM books WHERE url = :url")
     suspend fun getByUrl(url: String): Book?
 

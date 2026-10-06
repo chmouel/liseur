@@ -1063,4 +1063,8 @@
         <item quantity="one">%d Buch ist in dieser Bibliothek.</item>
         <item quantity="other">%d Bücher sind in dieser Bibliothek.</item>
     </plurals>
+    <string name="shortcut_library">Bibliothek</string>
+    <string name="shortcut_continue">Weiterlesen</string>
+    <string name="shortcut_stats">Statistik</string>
+    <string name="shortcut_open_failed">Diese Verknüpfung konnte nicht geöffnet werden. Bitte versuche es erneut.</string>
 </resources>

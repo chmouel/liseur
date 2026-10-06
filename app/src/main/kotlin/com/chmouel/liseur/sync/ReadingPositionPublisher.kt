@@ -76,6 +76,9 @@ class ReadingPositionPublisher(
      */
     private val outstanding = mutableMapOf<String, MutableSet<Injury>>()
 
+    @Volatile
+    private var lastReaderBook: String? = null
+
     init {
         scope.launch {
             try {
@@ -104,8 +107,10 @@ class ReadingPositionPublisher(
         }
     }
 
-    fun publish(update: PositionUpdate): Boolean =
-        events.trySend(Event.Position(update)).isSuccess
+    fun publish(update: PositionUpdate): Boolean {
+        lastReaderBook = update.bookUrl
+        return events.trySend(Event.Position(update)).isSuccess
+    }
 
     /**
      * The reader turned past the last page. Queued behind any position
@@ -113,11 +118,18 @@ class ReadingPositionPublisher(
      * disk before the finished flag is. A second visit is the same
      * event and does not need a second write.
      */
-    fun completeBook(bookUrl: String): Boolean =
-        events.trySend(Event.Complete(bookUrl)).isSuccess
+    fun completeBook(bookUrl: String): Boolean {
+        lastReaderBook = bookUrl
+        return events.trySend(Event.Complete(bookUrl)).isSuccess
+    }
 
-    fun closeBook(bookUrl: String): Boolean =
-        events.trySend(Event.Close(bookUrl)).isSuccess
+    fun closeBook(bookUrl: String): Boolean {
+        lastReaderBook = bookUrl
+        return events.trySend(Event.Close(bookUrl)).isSuccess
+    }
+
+    /** Continuation selection must see completion and recency writes, not just the old locator. */
+    suspend fun flushLastReader(): Boolean = lastReaderBook?.let { flush(it) } ?: true
 
     /**
      * Runs [action] once every write accepted before this call has

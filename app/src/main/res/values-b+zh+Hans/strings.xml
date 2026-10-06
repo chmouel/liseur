@@ -1008,4 +1008,8 @@
     <string name="browse_nothing_to_add">这里的内容都已在您书库中。</string>
     <string name="browse_load_more">加载更多</string>
     <string name="widget_scope_last_sync">最近同步的阅读</string>
+    <string name="shortcut_library">书库</string>
+    <string name="shortcut_continue">继续阅读</string>
+    <string name="shortcut_stats">统计</string>
+    <string name="shortcut_open_failed">无法打开此快捷方式，请重试。</string>
 </resources>

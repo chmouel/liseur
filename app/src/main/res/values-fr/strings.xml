@@ -1051,4 +1051,8 @@
         <item quantity="one">%d livre est dans cette bibliothèque.</item>
         <item quantity="other">%d livres sont dans cette bibliothèque.</item>
     </plurals>
+    <string name="shortcut_library">Bibliothèque</string>
+    <string name="shortcut_continue">Reprendre</string>
+    <string name="shortcut_stats">Statistiques</string>
+    <string name="shortcut_open_failed">Impossible d\'ouvrir ce raccourci. Veuillez réessayer.</string>
 </resources>
