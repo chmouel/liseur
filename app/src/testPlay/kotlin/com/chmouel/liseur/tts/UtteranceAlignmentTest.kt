@@ -77,6 +77,33 @@ class UtteranceAlignmentTest {
         assertTrue(target.matches("x aa b aa", textBefore = null))
     }
 
+    @Test
+    fun aRepeatedSentenceAtTheStartIsNotTakenForTheOneSelectedLater() {
+        val sentence = "The rain fell all night over the quiet harbour town."
+        val target = SelectionTarget(HREF, prefix = squash(sentence), before = squash(sentence))
+        // The first occurrence opens the chapter: nothing before it, while
+        // the selection had the first occurrence before it.
+        assertFalse(target.matches(sentence, textBefore = null))
+        assertTrue(target.matches(sentence, textBefore = "$sentence "))
+    }
+
+    @Test
+    fun aSelectionRunningOverASplitIsFoundInThePieceItStartsIn() {
+        val opening = "Earlier text. "
+        val first = "It was a long and winding sentence that went on and on, "
+        val second = "until at last the reader chose to stop it somewhere around here."
+        val selected = "on, until at last the reader chose to stop it somewhere around here."
+        val target = SelectionTarget(
+            HREF,
+            prefix = squash(selected).take(SelectionTarget.PREFIX),
+            before = squash(opening + first.removeSuffix("on, ")),
+        )
+        assertTrue(target.matches(first, textBefore = opening))
+        assertFalse(target.matches(second, textBefore = opening + first))
+    }
+
+    private fun squash(text: String) = text.filterNot(Char::isWhitespace)
+
     private companion object {
         val HREF = Url("one.xhtml")!!
     }

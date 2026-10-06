@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.readium.navigator.media.tts.TtsEngine
 import org.readium.navigator.media.tts.TtsNavigator
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -34,7 +36,8 @@ fun interface NavigatorOpener {
  * Readium's player moves on to the next sentence after an engine error and
  * seeks only to whole elements, so landing on a sentence is done by opening
  * a fresh, paused navigator at the element and stepping through it
- * ([alignUtterance]). Runs on the main thread, like the navigator.
+ * ([alignUtterance]). Runs on the main thread, like the navigator. One
+ * landing runs at a time: another would replace its navigator under it.
  */
 @OptIn(ExperimentalReadiumApi::class, ExperimentalCoroutinesApi::class)
 class ReadAloudPlayback(
@@ -70,6 +73,7 @@ class ReadAloudPlayback(
     private val spoken = LinkedHashMap<TtsEngine.RequestId, String>()
     private var closed = false
     private var playRequested = false
+    private val landing = Mutex()
 
     private val listener = object : TtsNavigator.Listener {
         override fun onStopRequested() = this@ReadAloudPlayback.onStopRequested()
@@ -115,7 +119,7 @@ class ReadAloudPlayback(
     ): Landing {
         playRequested = true
         mutableFailure.value = null
-        return land(locator.copy(text = Locator.Text()), target, maxSteps)
+        return landing.withLock { land(locator.copy(text = Locator.Text()), target, maxSteps) }
     }
 
     fun pause() {
@@ -124,7 +128,7 @@ class ReadAloudPlayback(
     }
 
     /** Plays on; after a failure, from the sentence that failed. */
-    suspend fun resume(): Landing {
+    suspend fun resume(): Landing = landing.withLock {
         val navigator = mutableNavigator.value ?: return Landing.Failed
         playRequested = true
         val failed = mutableFailure.value ?: run {
@@ -134,9 +138,9 @@ class ReadAloudPlayback(
         val anchor = failed.anchor ?: return Landing.Failed
         // The player has moved past the failed sentence, possibly not yet
         // visibly; a fresh navigator at its element is the only sure way back.
-        val landing = land(anchor.elementLocator, anchor::isAt, Int.MAX_VALUE, fallbackToElement = false)
-        if (landing == Landing.Sentence && playRequested) mutableFailure.value = null
-        return landing
+        val landed = land(anchor.elementLocator, anchor::isAt, Int.MAX_VALUE, fallbackToElement = false)
+        if (landed == Landing.Sentence && playRequested) mutableFailure.value = null
+        return landed
     }
 
     fun skipToNext() {

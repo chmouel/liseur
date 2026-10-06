@@ -54,7 +54,10 @@ class SpeechCache(
         entry = Entry(
             request(text) { audio ->
                 if (generation == this.generation && entries[text] === entry) {
-                    entry.bytes = audio.pcm.size.toLong()
+                    val bytes = audio.pcm.size.toLong()
+                    // Requests in flight weigh nothing until they arrive, so
+                    // the budget is held here; [take] asks again if needed.
+                    if (cachedBytes + bytes > maxBytes) entries.remove(text) else entry.bytes = bytes
                 }
             },
         )

@@ -131,6 +131,23 @@ class UtterancePrefetcherTest {
     }
 
     @Test
+    fun audioArrivingOverTheBudgetIsDroppedAndAskedForAgain() = runTest {
+        val synth = FakeSynth()
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler) + SupervisorJob())
+        scopes += scope
+        val cache = SpeechCache(scope, synth::synthesize, maxBytes = 6)
+        cache.prefetch("A")
+        cache.prefetch("B")
+        synth.reply("A").complete(audio())
+        synth.reply("B").complete(audio())
+        advanceUntilIdle()
+        assertEquals(4L, cache.cachedBytes)
+
+        cache.take("B")
+        assertEquals(listOf("A", "B", "B"), synth.calls)
+    }
+
+    @Test
     fun abandoningATakeCancelsItsRequest() = runTest {
         val synth = FakeSynth()
         val (cache, _) = setUp(synth, emptyMap())

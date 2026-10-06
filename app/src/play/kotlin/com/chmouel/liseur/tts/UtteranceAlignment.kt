@@ -37,7 +37,9 @@ data class UtteranceAnchor(val locator: Locator, val text: String) {
  * the target is the start of the selection's first sentence (at most
  * [PREFIX] characters, never past that sentence), and an utterance matches
  * when it contains it and the text before agrees with the selection's,
- * so a phrase that repeats is found where it was selected.
+ * so a phrase that repeats is found where it was selected. A long sentence
+ * is spoken in pieces, so the target may also begin at the end of one
+ * utterance and run on into the next.
  */
 class SelectionTarget(private val href: Url, private val prefix: String, private val before: String) {
 
@@ -48,15 +50,35 @@ class SelectionTarget(private val href: Url, private val prefix: String, private
     fun matches(utterance: String, textBefore: String?): Boolean {
         val spoken = squash(utterance)
         val leading = squash(textBefore.orEmpty())
+        return starts(spoken).any { at -> agrees(leading + spoken.substring(0, at)) }
+    }
+
+    /** Where in [spoken] the target can begin: where it is, or where a tail of [spoken] begins it. */
+    private fun starts(spoken: String): Sequence<Int> = sequence {
         var from = 0
         while (true) {
             val at = spoken.indexOf(prefix, from)
-            if (at < 0) return false
-            val context = leading + spoken.substring(0, at)
-            val compared = minOf(CONTEXT, context.length, before.length)
-            if (context.takeLast(compared) == before.takeLast(compared)) return true
+            if (at < 0) break
+            yield(at)
             from = at + 1
         }
+        // Only told apart by the text before it: a selection with none
+        // starts its resource, so it cannot begin inside a sentence.
+        if (before.isEmpty()) return@sequence
+        for (at in maxOf(spoken.length - prefix.length + 1, 0) until spoken.length) {
+            if (prefix.startsWith(spoken.substring(at))) yield(at)
+        }
+    }
+
+    /**
+     * Whether [context], the text before a candidate, agrees with the
+     * selection's. No context on either side agrees with nothing on the
+     * other, except a selection that has none itself.
+     */
+    private fun agrees(context: String): Boolean {
+        val compared = minOf(CONTEXT, context.length, before.length)
+        if (compared == 0) return before.isEmpty()
+        return context.takeLast(compared) == before.takeLast(compared)
     }
 
     companion object {

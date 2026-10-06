@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -14,7 +16,9 @@ import java.io.File
  * The reader's Gemini API key, encrypted with a Keystore key in a file
  * under no_backup: outside Auto Backup, device transfer and the settings
  * export, so it never leaves the device. A key that can no longer be
- * decrypted (the Keystore was reset) counts as no key.
+ * decrypted (the Keystore was reset) counts as no key. Reads, saves and
+ * removals take turns, so a removal cannot be undone by a save that was
+ * still being written.
  */
 class GeminiKeyStore(
     private val file: File,
@@ -28,7 +32,9 @@ class GeminiKeyStore(
     /** Whether a key is saved; it is never read back for display. */
     val configured: StateFlow<Boolean> = mutableConfigured.asStateFlow()
 
-    suspend fun get(): String? = withContext(io) {
+    private val lock = Mutex()
+
+    suspend fun get(): String? = locked {
         val key = file.takeIf { it.exists() }?.readText()?.let(cipher::decrypt)?.takeIf { it.isNotBlank() }
         if (key == null && file.exists()) {
             file.delete()
@@ -40,7 +46,7 @@ class GeminiKeyStore(
     suspend fun set(key: String) {
         val trimmed = key.trim()
         if (trimmed.isEmpty()) return clear()
-        withContext(io) {
+        locked {
             file.parentFile?.mkdirs()
             val temp = File(file.parentFile, "${file.name}.tmp")
             temp.writeText(cipher.encrypt(trimmed))
@@ -52,10 +58,12 @@ class GeminiKeyStore(
         }
     }
 
-    suspend fun clear() = withContext(io) {
+    suspend fun clear() = locked {
         file.delete()
         mutableConfigured.value = false
     }
+
+    private suspend fun <T> locked(block: () -> T): T = lock.withLock { withContext(io) { block() } }
 
     private companion object {
         const val FILE_NAME = "gemini-key"

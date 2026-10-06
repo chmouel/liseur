@@ -84,7 +84,11 @@ class AudioTrackPcmOutput(
             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
             Quad(turn, track, track.playbackHeadPosition.toLong() and 0xffffffffL, padded)
         }
+        val frameMs = 1000.0 / GeminiTts.SAMPLE_RATE
+        // How long a track that stops moving is given: its whole buffer plus slack.
+        val stallNanos = ((track.bufferSizeInFrames * frameMs).toLong() + STALL_SLACK_MS) * 1_000_000
         var offset = 0
+        var progressAt = System.nanoTime()
         while (offset < padded.size) {
             coroutineContext.ensureActive()
             val written = synchronized(lock) {
@@ -93,19 +97,24 @@ class AudioTrackPcmOutput(
             }
             if (written < 0) throw PcmOutputException("PCM write failed: $written")
             offset += written
-            if (written == 0) delay(WRITE_WAIT_MS)
+            if (written > 0) {
+                progressAt = System.nanoTime()
+            } else {
+                if (System.nanoTime() - progressAt > stallNanos) throw PcmOutputException("PCM output stalled")
+                delay(WRITE_WAIT_MS)
+            }
         }
         val target = base + padded.size / 2
-        val frameMs = 1000.0 / GeminiTts.SAMPLE_RATE
-        // Safety net for a track that stops moving: the remaining buffer plus slack.
-        val deadline = System.nanoTime() + ((track.bufferSizeInFrames * frameMs).toLong() + STALL_SLACK_MS) * 1_000_000
+        val deadline = System.nanoTime() + stallNanos
         while (true) {
             coroutineContext.ensureActive()
             val head = synchronized(lock) {
                 if (turn != myTurn) return@withContext
                 track.playbackHeadPosition.toLong() and 0xffffffffL
             }
-            if (head >= target || System.nanoTime() > deadline) return@withContext
+            if (head >= target) return@withContext
+            // Not heard to the end: the sentence fails rather than being skipped.
+            if (System.nanoTime() > deadline) throw PcmOutputException("PCM output stalled")
             delay(((target - head) * frameMs).toLong().coerceIn(1, POLL_MS))
         }
     }

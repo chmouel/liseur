@@ -214,6 +214,23 @@ class ReadAloudPlaybackTest {
     }
 
     @Test
+    fun retriesAskedForTogetherTakeTurns() {
+        failures[THIRD] = 1
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitFailure()
+        movePastTheFailure()
+
+        val landings = runBlocking(main) {
+            val first = async { playback.resume() }
+            val second = async { playback.resume() }
+            listOf(first.await(), second.await())
+        }
+        assertEquals(listOf(ReadAloudPlayback.Landing.Sentence, ReadAloudPlayback.Landing.Sentence), landings)
+        awaitPlayed(4)
+        assertEquals(listOf(FIRST, SECOND, THIRD, FOURTH), played.take(4))
+    }
+
+    @Test
     fun aRetryThatCannotFindTheFailedSentenceStaysPaused() {
         failures[THIRD] = 1
         runBlocking(main) { playback.start(chapterStart) }

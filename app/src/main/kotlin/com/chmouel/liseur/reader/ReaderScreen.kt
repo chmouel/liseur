@@ -523,6 +523,7 @@ fun ReaderScreen(
     val listening = readAloudSession?.takeIf { it.bookId == readAloud?.bookId }
     val listeningPlaying = listening?.playing == true
     val listeningPlayingNow by rememberUpdatedState(listeningPlaying)
+    val readAloudFeatureNow by rememberUpdatedState(readAloudFeature)
     val readAloudConfigured by readAloudFeature.configured.collectAsStateWithLifecycle()
     // When the page last went after the voice. Readium can report a move
     // more than once, and only the first report carries the marker, so
@@ -1077,6 +1078,12 @@ fun ReaderScreen(
                 onLeftEndpaper()
             },
             onMoveIssued = { from, to ->
+                // A turn of the reader's own, even one just after the
+                // page followed the voice, is theirs: the voice stops
+                // rather than pulling the page back, and the move is
+                // not taken for following it.
+                followedAt = Long.MIN_VALUE
+                if (listeningPlayingNow) readAloudFeatureNow.pause()
                 moves.issue(
                     from = from?.restorePoint(),
                     to = to?.destination(),
