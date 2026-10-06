@@ -199,10 +199,12 @@ private sealed interface KokoroVoices {
 private fun KokoroRows(feature: SpeechReadAloud) {
     val storedUrl by feature.kokoroUrl.collectAsState(initial = "")
     val voice by feature.kokoroVoice.collectAsState(initial = null)
+    val storedModel by feature.kokoroModel.collectAsState(initial = "")
     val keyConfigured by feature.kokoroKeyConfigured.collectAsState()
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     var typed by remember(storedUrl) { mutableStateOf(storedUrl) }
+    var typedModel by remember(storedModel) { mutableStateOf(storedModel) }
     val invalid = typed.isNotBlank() && KokoroTts.baseUrl(typed) == null
     var voices by remember { mutableStateOf<KokoroVoices?>(null) }
     var voicesOpen by remember { mutableStateOf(false) }
@@ -263,6 +265,54 @@ private fun KokoroRows(feature: SpeechReadAloud) {
                         scope.launch { feature.setKokoroUrl(url) }
                         loadVoices(url)
                     }
+                },
+            ),
+        )
+        TextButton(
+            onClick = {
+                focus.clearFocus()
+                scope.launch {
+                    feature.setKokoroUrl(KokoroTts.DEEPINFRA_URL)
+                    feature.setKokoroModel(KokoroTts.DEEPINFRA_MODEL)
+                }
+                loadVoices(KokoroTts.DEEPINFRA_URL)
+            },
+        ) {
+            Text(
+                stringResource(
+                    R.string.read_aloud_settings_kokoro_use_preset,
+                    stringResource(R.string.read_aloud_kokoro_deepinfra),
+                ),
+            )
+        }
+    }
+    RowDivider()
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(
+            text = stringResource(R.string.read_aloud_settings_kokoro_model),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            text = stringResource(R.string.read_aloud_settings_kokoro_model_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = typedModel,
+            onValueChange = { typedModel = it },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            singleLine = true,
+            placeholder = { Text(KokoroTts.MODEL) },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                autoCorrectEnabled = false,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    val model = typedModel.trim()
+                    focus.clearFocus()
+                    scope.launch { feature.setKokoroModel(model) }
                 },
             ),
         )

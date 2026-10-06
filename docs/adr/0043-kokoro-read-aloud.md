@@ -41,6 +41,18 @@ encrypted file under `noBackupFilesDir`. The address and voice are app
 settings: in the settings backup, but not in liseur-sync settings sync,
 because a LAN address means nothing on another device.
 
+The address is read as an OpenAI-style API root: when its path has no
+`v1` segment, `/v1` is added, and `audio/speech` and `audio/voices` go
+after it. A Kokoro server's own address works as typed, and so does a
+hosted service's root such as DeepInfra's
+`https://api.deepinfra.com/v1/openai`. Hosted services name the model
+differently, so the model is an optional setting, `kokoro` when left
+empty. A "Use DeepInfra" button fills in DeepInfra's root and
+`hexgrad/Kokoro-82M`; DeepInfra is only contacted once the reader picks
+it. DeepInfra returns the same 24 kHz mono 16-bit PCM. It has no voice
+list, so when `audio/voices` answers 404 or 405 the menu offers
+Kokoro-82M's own 54 voices instead.
+
 Kokoro runs one request at a time with a 120-second read timeout. On a
 Raspberry Pi 5 a sentence takes about three times its length to make, and
 parallel requests only slowed each other down. Gaps between sentences are
@@ -55,6 +67,8 @@ succeed. Other failures pause on the sentence, as with Gemini.
 - The speech pipeline in `app/src/play/` is named for speech, not Gemini.
 - No speed, language or per-book voice settings for Kokoro; they can be
   added to the request later without touching the engine.
+- A wrong address can also answer 404 on `audio/voices` and so show the
+  built-in voices; reading then stops on the first sentence with a notice.
 - A plain `http://` address sends book text unencrypted on the reader's
   network. That is the reader's choice of server, and the privacy policy
   says so.

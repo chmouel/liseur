@@ -191,6 +191,8 @@ enum class DefinitionTarget(val id: String) {
  *   for none.
  * @param kokoroVoice The Kokoro voice reading aloud uses, by name, or null
  *   for none chosen yet.
+ * @param kokoroModel The model asked of the Kokoro server, or null for
+ *   Kokoro's own name; hosted services name it differently.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -217,6 +219,7 @@ data class AppSettings(
     val readAloudProvider: String? = null,
     val kokoroUrl: String? = null,
     val kokoroVoice: String? = null,
+    val kokoroModel: String? = null,
 )
 
 /**
@@ -278,6 +281,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val READ_ALOUD_PROVIDER = stringPreferencesKey("read_aloud_provider")
         val KOKORO_URL = stringPreferencesKey("kokoro_url")
         val KOKORO_VOICE = stringPreferencesKey("kokoro_voice")
+        val KOKORO_MODEL = stringPreferencesKey("kokoro_model")
     }
 
     /**
@@ -349,6 +353,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             readAloudProvider = p[Keys.READ_ALOUD_PROVIDER],
             kokoroUrl = p[Keys.KOKORO_URL],
             kokoroVoice = p[Keys.KOKORO_VOICE],
+            kokoroModel = p[Keys.KOKORO_MODEL],
         )
     }
 
@@ -511,6 +516,12 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.KOKORO_VOICE] = name }
     }
 
+    /** Stores the Kokoro model, or forgets it when [model] is blank. */
+    suspend fun setKokoroModel(model: String) {
+        val trimmed = model.trim()
+        store.edit { p -> if (trimmed.isEmpty()) p.remove(Keys.KOKORO_MODEL) else p[Keys.KOKORO_MODEL] = trimmed }
+    }
+
     /**
      * The offered set exactly as stored, with null for a reader who
      * never chose one.
@@ -557,4 +568,5 @@ internal val APP_BACKUP_TYPES = mapOf(
     "read_aloud_voice" to BackupValueType.STRING,
     "read_aloud_provider" to BackupValueType.STRING,
     "kokoro_url" to BackupValueType.STRING, "kokoro_voice" to BackupValueType.STRING,
+    "kokoro_model" to BackupValueType.STRING,
 )

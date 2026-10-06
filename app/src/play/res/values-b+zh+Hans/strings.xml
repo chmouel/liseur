@@ -41,9 +41,9 @@
     <string name="read_aloud_settings_entry_missing">未设置</string>
     <string name="read_aloud_settings_provider">语音服务</string>
     <string name="read_aloud_settings_provider_choose">选择服务</string>
-    <string name="read_aloud_settings_provider_detail">Gemini 是 Google 的在线服务，费用记在你的密钥上。Kokoro 运行在你自己的服务器上。</string>
+    <string name="read_aloud_settings_provider_detail">Gemini 是 Google 的在线服务，费用记在你的密钥上。Kokoro 运行在你自己的服务器或托管服务上。</string>
     <string name="read_aloud_settings_kokoro_url">Kokoro 服务器</string>
-    <string name="read_aloud_settings_kokoro_url_detail">你的 Kokoro 服务器地址。按“完成”保存。</string>
+    <string name="read_aloud_settings_kokoro_url_detail">你的 Kokoro 服务器地址，或托管服务的 API 地址。按“完成”保存。</string>
     <string name="read_aloud_settings_kokoro_url_invalid">这不是服务器地址。</string>
     <string name="read_aloud_settings_kokoro_key">Kokoro API 密钥</string>
     <string name="read_aloud_settings_kokoro_key_missing">可选。仅在服务器要求时需要。</string>
@@ -55,4 +55,7 @@
     <string name="read_aloud_settings_kokoro_voices_refused">服务器拒绝了该 API 密钥。</string>
     <string name="read_aloud_settings_kokoro_voices_retry">重试</string>
     <string name="read_aloud_settings_kokoro_privacy">朗读的文字会发送到你填写的服务器以生成语音。</string>
+    <string name="read_aloud_settings_kokoro_use_preset">使用 %1$s</string>
+    <string name="read_aloud_settings_kokoro_model">模型</string>
+    <string name="read_aloud_settings_kokoro_model_detail">使用自己的 Kokoro 服务器时留空。托管服务有自己的模型名称。按“完成”保存。</string>
 </resources>
