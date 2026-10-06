@@ -33,8 +33,8 @@ All of this stays in the app's own private storage:
 - If you connect a book server, its address and the credentials or token
   it issued. Those are encrypted with a key held in the Android Keystore,
   which cannot be exported from the device.
-- In the Google Play build, the Gemini API key you paste for reading
-  aloud, encrypted the same way.
+- In the Google Play build, the Gemini or Kokoro API key you paste for
+  reading aloud, encrypted the same way.
 
 Uninstalling the app removes all of it.
 
@@ -74,8 +74,8 @@ The Google Play build can read a book aloud with a voice made by Google's
 Gemini service. The F-Droid and GitHub builds do not contain this feature
 at all.
 
-It does nothing until you paste a Gemini API key of your own from Google
-AI Studio in Settings. Once you press play, Liseur sends the text being
+It does nothing until you choose Gemini in Settings, Read aloud, and paste
+a Gemini API key of your own from Google AI Studio. Once you press play, Liseur sends the text being
 read, one sentence or short passage at a time and a few sentences ahead of
 the voice, to `generativelanguage.googleapis.com` over HTTPS, together
 with your key and the voice you picked. Nothing else goes with it: no book
@@ -91,6 +91,19 @@ and is never written to storage.
 Stopping the voice stops the requests. Remove the key in Settings and no
 more are made.
 
+### Your own Kokoro server, for reading aloud (Google Play build only)
+
+The Google Play build can also read aloud with Kokoro, a speech model you
+run on a server of your own. Nothing is sent until you choose Kokoro in
+Settings, Read aloud, and enter that server's address. Liseur then asks
+the server for its list of voices when you open the voice menu, and once
+you press play it sends the text being read, one sentence at a time and a
+few sentences ahead of the voice, to that address together with the voice
+you picked and, if you entered one, your API key. As with Gemini, no book
+title, file, identifier or reading position goes with it. Who else can see
+that text depends on the server and the network you chose; a plain
+`http://` address is not encrypted.
+
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
 else.
@@ -104,8 +117,9 @@ under Google's terms, not the developer's. Liseur has no access to it.
 Downloaded book files and generated covers are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices
-this and asks you to sign in again. A Gemini API key is not backed up at
-all; you paste it again on a new device.
+this and asks you to sign in again. A Gemini or Kokoro API key is not
+backed up at all; you paste it again on a new device. The Kokoro server
+address and voice are backed up with your other settings.
 
 You can turn this off in your device's backup settings.
 

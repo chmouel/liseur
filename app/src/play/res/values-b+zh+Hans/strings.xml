@@ -15,11 +15,11 @@
     <string name="read_aloud_pause">暂停朗读</string>
     <string name="read_aloud_resume">继续朗读</string>
     <string name="read_aloud_stop">停止朗读</string>
-    <string name="read_aloud_notice_network">无法连接 Gemini。已暂停；按播放重试。</string>
-    <string name="read_aloud_notice_rate_limited">此密钥暂时用完了 Gemini 配额。已暂停；请稍后再试。</string>
-    <string name="read_aloud_notice_service">Gemini 无法朗读这一句。已暂停；按播放重试。</string>
+    <string name="read_aloud_notice_network">无法连接 %1$s。已暂停；按播放重试。</string>
+    <string name="read_aloud_notice_rate_limited">%1$s 暂时不接受更多请求。已暂停；请稍后再试。</string>
+    <string name="read_aloud_notice_service">%1$s 无法朗读这一句。已暂停；按播放重试。</string>
     <string name="read_aloud_notice_output">此设备无法播放语音。已暂停。</string>
-    <string name="read_aloud_notice_invalid_key">Gemini 拒绝了该 API 密钥。请在“设置 &gt; 阅读与导航”中检查。</string>
+    <string name="read_aloud_notice_invalid_key">%1$s 拒绝了该 API 密钥。请在“设置 &gt; 朗读”中检查。</string>
     <string name="read_aloud_notice_selection_not_found">从段落开头开始朗读。</string>
     <string name="read_aloud_notice_unavailable">本书无法从这里开始朗读。</string>
 
@@ -35,4 +35,24 @@
     <string name="read_aloud_voice_mature">成熟</string>
     <string name="read_aloud_voice_gentle">温柔</string>
     <string name="read_aloud_voice_even">平稳</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s 没有所选的声音。请在“设置 &gt; 朗读”中另选一个。</string>
+    <string name="read_aloud_notice_not_set_up">朗读尚未设置。请在“设置 &gt; 朗读”中设置。</string>
+    <string name="read_aloud_settings_title">朗读</string>
+    <string name="read_aloud_settings_entry_missing">未设置</string>
+    <string name="read_aloud_settings_provider">语音服务</string>
+    <string name="read_aloud_settings_provider_choose">选择服务</string>
+    <string name="read_aloud_settings_provider_detail">Gemini 是 Google 的在线服务，费用记在你的密钥上。Kokoro 运行在你自己的服务器上。</string>
+    <string name="read_aloud_settings_kokoro_url">Kokoro 服务器</string>
+    <string name="read_aloud_settings_kokoro_url_detail">你的 Kokoro 服务器地址。按“完成”保存。</string>
+    <string name="read_aloud_settings_kokoro_url_invalid">这不是服务器地址。</string>
+    <string name="read_aloud_settings_kokoro_key">Kokoro API 密钥</string>
+    <string name="read_aloud_settings_kokoro_key_missing">可选。仅在服务器要求时需要。</string>
+    <string name="read_aloud_settings_kokoro_voice_choose">选择声音</string>
+    <string name="read_aloud_settings_kokoro_voices_loading">正在向服务器获取声音列表…</string>
+    <string name="read_aloud_settings_kokoro_voices_none">服务器没有提供任何声音。</string>
+    <string name="read_aloud_settings_kokoro_voices_failed">服务器没有列出它的声音。</string>
+    <string name="read_aloud_settings_kokoro_voices_unreachable">无法连接服务器。</string>
+    <string name="read_aloud_settings_kokoro_voices_refused">服务器拒绝了该 API 密钥。</string>
+    <string name="read_aloud_settings_kokoro_voices_retry">重试</string>
+    <string name="read_aloud_settings_kokoro_privacy">朗读的文字会发送到你填写的服务器以生成语音。</string>
 </resources>

@@ -16,11 +16,11 @@
     <string name="read_aloud_pause">Pause reading aloud</string>
     <string name="read_aloud_resume">Resume reading aloud</string>
     <string name="read_aloud_stop">Stop reading aloud</string>
-    <string name="read_aloud_notice_network">Gemini could not be reached. Paused; press play to try again.</string>
-    <string name="read_aloud_notice_rate_limited">This key has used up its Gemini quota for now. Paused; try again later.</string>
-    <string name="read_aloud_notice_service">Gemini could not read this sentence. Paused; press play to try again.</string>
+    <string name="read_aloud_notice_network">%1$s could not be reached. Paused; press play to try again.</string>
+    <string name="read_aloud_notice_rate_limited">%1$s is not taking more requests for now. Paused; try again later.</string>
+    <string name="read_aloud_notice_service">%1$s could not read this sentence. Paused; press play to try again.</string>
     <string name="read_aloud_notice_output">This device could not play the voice. Paused.</string>
-    <string name="read_aloud_notice_invalid_key">Gemini refused the API key. Check it in Settings, Reading &amp; navigation.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s refused the API key. Check it in Settings, Read aloud.</string>
     <string name="read_aloud_notice_selection_not_found">Reading from the start of the paragraph.</string>
     <string name="read_aloud_notice_unavailable">This book cannot be read aloud from here.</string>
 
@@ -37,4 +37,28 @@
     <string name="read_aloud_voice_mature">Mature</string>
     <string name="read_aloud_voice_gentle">Gentle</string>
     <string name="read_aloud_voice_even">Even</string>
+    <string name="read_aloud_provider_gemini" translatable="false">Gemini</string>
+    <string name="read_aloud_provider_kokoro" translatable="false">Kokoro</string>
+    <string name="read_aloud_settings_entry_summary" translatable="false">%1$s · %2$s</string>
+    <string name="read_aloud_settings_kokoro_url_hint" translatable="false">http://192.168.1.10:8880</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s does not have the chosen voice. Pick another in Settings, Read aloud.</string>
+    <string name="read_aloud_notice_not_set_up">Read aloud is not set up yet. Set it up in Settings, Read aloud.</string>
+    <string name="read_aloud_settings_title">Read aloud</string>
+    <string name="read_aloud_settings_entry_missing">Not set up</string>
+    <string name="read_aloud_settings_provider">Voice service</string>
+    <string name="read_aloud_settings_provider_choose">Speak with</string>
+    <string name="read_aloud_settings_provider_detail">Gemini is an online Google service billed to your key. Kokoro runs on a server of your own.</string>
+    <string name="read_aloud_settings_kokoro_url">Kokoro server</string>
+    <string name="read_aloud_settings_kokoro_url_detail">The address of your Kokoro server. Press Done to save it.</string>
+    <string name="read_aloud_settings_kokoro_url_invalid">This is not a server address.</string>
+    <string name="read_aloud_settings_kokoro_key">Kokoro API key</string>
+    <string name="read_aloud_settings_kokoro_key_missing">Optional. Only needed if your server asks for one.</string>
+    <string name="read_aloud_settings_kokoro_voice_choose">Choose a voice</string>
+    <string name="read_aloud_settings_kokoro_voices_loading">Asking the server for its voices…</string>
+    <string name="read_aloud_settings_kokoro_voices_none">The server offers no voices.</string>
+    <string name="read_aloud_settings_kokoro_voices_failed">The server did not list its voices.</string>
+    <string name="read_aloud_settings_kokoro_voices_unreachable">The server could not be reached.</string>
+    <string name="read_aloud_settings_kokoro_voices_refused">The server refused the API key.</string>
+    <string name="read_aloud_settings_kokoro_voices_retry">Try again</string>
+    <string name="read_aloud_settings_kokoro_privacy">The text being read aloud is sent to the server you entered to make the voice.</string>
 </resources>

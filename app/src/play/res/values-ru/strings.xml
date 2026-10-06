@@ -15,11 +15,11 @@
     <string name="read_aloud_pause">Приостановить чтение вслух</string>
     <string name="read_aloud_resume">Продолжить чтение вслух</string>
     <string name="read_aloud_stop">Остановить чтение вслух</string>
-    <string name="read_aloud_notice_network">Не удалось связаться с Gemini. Пауза; нажмите воспроизведение, чтобы повторить.</string>
-    <string name="read_aloud_notice_rate_limited">Квота Gemini для этого ключа пока исчерпана. Пауза; повторите позже.</string>
-    <string name="read_aloud_notice_service">Gemini не смог прочитать это предложение. Пауза; нажмите воспроизведение, чтобы повторить.</string>
+    <string name="read_aloud_notice_network">Не удалось связаться с %1$s. Пауза; нажмите воспроизведение, чтобы повторить.</string>
+    <string name="read_aloud_notice_rate_limited">%1$s пока не принимает новые запросы. Пауза; повторите позже.</string>
+    <string name="read_aloud_notice_service">Сервису %1$s не удалось прочитать это предложение. Пауза; нажмите воспроизведение, чтобы повторить.</string>
     <string name="read_aloud_notice_output">Это устройство не смогло воспроизвести голос. Пауза.</string>
-    <string name="read_aloud_notice_invalid_key">Gemini отклонил ключ API. Проверьте его в разделе Настройки, Чтение и навигация.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s отклонил ключ API. Проверьте его в разделе Настройки, Чтение вслух.</string>
     <string name="read_aloud_notice_selection_not_found">Чтение с начала абзаца.</string>
     <string name="read_aloud_notice_unavailable">Эту книгу нельзя прочитать вслух с этого места.</string>
 
@@ -35,4 +35,24 @@
     <string name="read_aloud_voice_mature">Зрелый</string>
     <string name="read_aloud_voice_gentle">Нежный</string>
     <string name="read_aloud_voice_even">Ровный</string>
+    <string name="read_aloud_notice_invalid_voice">У сервиса %1$s нет выбранного голоса. Выберите другой в разделе Настройки, Чтение вслух.</string>
+    <string name="read_aloud_notice_not_set_up">Чтение вслух ещё не настроено. Настройте его в разделе Настройки, Чтение вслух.</string>
+    <string name="read_aloud_settings_title">Чтение вслух</string>
+    <string name="read_aloud_settings_entry_missing">Не настроено</string>
+    <string name="read_aloud_settings_provider">Голосовой сервис</string>
+    <string name="read_aloud_settings_provider_choose">Читать с помощью</string>
+    <string name="read_aloud_settings_provider_detail">Gemini — онлайн-сервис Google, оплачиваемый по вашему ключу. Kokoro работает на вашем собственном сервере.</string>
+    <string name="read_aloud_settings_kokoro_url">Сервер Kokoro</string>
+    <string name="read_aloud_settings_kokoro_url_detail">Адрес вашего сервера Kokoro. Нажмите «Готово», чтобы сохранить.</string>
+    <string name="read_aloud_settings_kokoro_url_invalid">Это не адрес сервера.</string>
+    <string name="read_aloud_settings_kokoro_key">Ключ API Kokoro</string>
+    <string name="read_aloud_settings_kokoro_key_missing">Необязательно. Нужен, только если сервер его требует.</string>
+    <string name="read_aloud_settings_kokoro_voice_choose">Выберите голос</string>
+    <string name="read_aloud_settings_kokoro_voices_loading">Запрашиваем голоса у сервера…</string>
+    <string name="read_aloud_settings_kokoro_voices_none">Сервер не предлагает ни одного голоса.</string>
+    <string name="read_aloud_settings_kokoro_voices_failed">Сервер не прислал список голосов.</string>
+    <string name="read_aloud_settings_kokoro_voices_unreachable">Не удалось связаться с сервером.</string>
+    <string name="read_aloud_settings_kokoro_voices_refused">Сервер отклонил ключ API.</string>
+    <string name="read_aloud_settings_kokoro_voices_retry">Повторить</string>
+    <string name="read_aloud_settings_kokoro_privacy">Читаемый вслух текст отправляется на указанный вами сервер для создания голоса.</string>
 </resources>
