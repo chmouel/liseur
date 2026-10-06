@@ -1033,8 +1033,9 @@ request wins; older asynchronous results cannot navigate. Only the three fixed
 shortcut actions are accepted from exported `MainActivity`. Widget book targets
 still enter through unexported `WidgetLaunchActivity`, never public intent
 extras. A downloaded-book widget tap opens the reader directly, and any fresh
-reader start clears a request that is still pending. An unfinished shortcut is
-saved across activity/process recreation;
+reader start clears a request that is still pending. It also stops the library
+from opening a server book whose download finishes after that reader started.
+An unfinished shortcut is saved across activity/process recreation;
 handled requests do not replay.
 
 Labels are translated in all bundled languages. Android/the launcher resolves

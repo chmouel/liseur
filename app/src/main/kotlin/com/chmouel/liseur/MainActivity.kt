@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -612,6 +613,7 @@ private fun LibraryRoute(
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigationGeneration = remember { LaunchRequests.shared.latestId }
+    var readerStartsSeen by remember { mutableLongStateOf(LaunchRequests.shared.readerStarts) }
     var widgetShelfBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     LaunchedEffect(widgetRequest?.id) {
         // Drop the previous tap's book so only this request can reach the shelf.
@@ -633,6 +635,7 @@ private fun LibraryRoute(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
+                Lifecycle.Event.ON_START -> readerStartsSeen = LaunchRequests.shared.readerStarts
                 Lifecycle.Event.ON_RESUME -> viewModel.refreshIfStale()
                 Lifecycle.Event.ON_STOP -> viewModel.forgetPendingOpen()
                 else -> Unit
@@ -710,6 +713,8 @@ private fun LibraryRoute(
         viewModel.openRequests.collect { book ->
             viewModel.forgetPendingOpen()
             if (LaunchRequests.shared.latestId != navigationGeneration) return@collect
+            // A reader opened from a widget while the library waited covers it; don't open over it.
+            if (LaunchRequests.shared.readerStarts != readerStartsSeen) return@collect
             book.openableUri()?.let {
                 context.startActivity(ReaderActivity.intent(context, it, book.url))
             }

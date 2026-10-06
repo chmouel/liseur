@@ -47,11 +47,19 @@ class LaunchRequests {
     fun restore(target: LaunchTarget): LaunchRequest? =
         if (state.value == null) post(target, shortcut = true) else null
 
+    /** Counts readers started since launch; the library compares it before opening a finished download. */
+    val readerStarts: Long
+        @Synchronized get() = starts
+
+    private var starts = 0L
+
     /**
      * A reader opened outside this queue, such as a downloaded widget book, is the newest navigation.
      * The generation is left alone so the visible library can keep opening books.
      */
+    @Synchronized
     fun supersede() {
+        starts++
         state.value = null
     }
 

@@ -190,6 +190,7 @@ class LaunchViewModelTest {
         val continuation = requests.shortcut(LaunchTarget.CONTINUE)
         runCurrent()
         val generation = requests.latestId
+        val readerStarts = requests.readerStarts
         requests.supersede()
         runCurrent()
         held.complete(true)
@@ -200,6 +201,8 @@ class LaunchViewModelTest {
         assertFalse(requests.owns(continuation))
         assertNull(saved.get<String>(LaunchViewModel.PENDING_ACTION))
         assertEquals(generation, requests.latestId)
+        // A library waiting on a download sees the reader and won't open over it.
+        assertEquals(readerStarts + 1, requests.readerStarts)
     }
 
     @Test
