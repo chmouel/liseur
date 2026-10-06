@@ -177,7 +177,8 @@ internal class SpeechReadAloud(
                 val voice = s.kokoroVoice?.takeIf { it.isNotBlank() }
                 if (base == null || voice == null) return null.also { mutableNotices.tryEmit(notSetUp) }
                 val key = kokoroKeys.get()
-                SessionVoice(voice, provider.maxConcurrent) { text -> kokoro.synthesize(base, key, text, voice) }
+                val model = KokoroTts.model(s.kokoroModel)
+                SessionVoice(voice, provider.maxConcurrent) { text -> kokoro.synthesize(base, key, text, voice, model) }
             }
         }
     }
@@ -213,6 +214,10 @@ internal class SpeechReadAloud(
     suspend fun setKokoroUrl(url: String) = settings.setKokoroUrl(url)
 
     suspend fun setKokoroVoice(voice: String) = settings.setKokoroVoice(voice)
+
+    val kokoroModel: Flow<String> = settings.settings.map { it.kokoroModel.orEmpty() }.distinctUntilChanged()
+
+    suspend fun setKokoroModel(model: String) = settings.setKokoroModel(model)
 
     /** Saves the Kokoro server's [key], ending the session read with the old one. */
     suspend fun setKokoroKey(key: String) {

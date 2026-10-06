@@ -1340,8 +1340,11 @@ reader behavior.
   fit restores to the gate's non-exact target instead of capturing the
   page, which Readium has not scrolled yet.
 - Two providers, chosen on the Read aloud settings screen
-  (`ReadAloudProvider`): Gemini and a self-hosted Kokoro server
-  (OpenAI-style `/v1/audio/speech`). Both return 24 kHz mono 16-bit PCM,
+  (`ReadAloudProvider`): Gemini and a Kokoro server, self-hosted or a
+  hosted OpenAI-style API such as DeepInfra (`<root>/audio/speech`, where
+  `/v1` is added to an address whose path has none; the model is a
+  setting, `kokoro` by default). A missing `audio/voices` (404/405) falls
+  back to Kokoro-82M's built-in voices. Both return 24 kHz mono 16-bit PCM,
   so the engine, cache and `AudioTrack` output are shared; only the
   `SpeechSynthesizer` a session is built with differs. Kokoro runs one
   request at a time with long timeouts, since a small server can be
@@ -1351,7 +1354,7 @@ reader behavior.
   A refused key or a voice the server does not have stops the session.
 - Keys (Gemini, optional Kokoro) live in `noBackupFilesDir`, encrypted by
   `SecretCipher`, each in its own file, and are never logged; neither are
-  request bodies or audio. The provider, Kokoro URL and voice are app
+  request bodies or audio. The provider, Kokoro URL, model and voice are app
   settings in the settings backup but not in liseur-sync settings sync,
   since a server address is per device. Listening is not counted as
   reading time.

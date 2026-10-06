@@ -41,9 +41,9 @@
     <string name="read_aloud_settings_entry_missing">Sin configurar</string>
     <string name="read_aloud_settings_provider">Servicio de voz</string>
     <string name="read_aloud_settings_provider_choose">Leer con</string>
-    <string name="read_aloud_settings_provider_detail">Gemini es un servicio en línea de Google que se factura a tu clave. Kokoro funciona en un servidor propio.</string>
+    <string name="read_aloud_settings_provider_detail">Gemini es un servicio en línea de Google que se factura a tu clave. Kokoro funciona en un servidor propio o en un servicio alojado.</string>
     <string name="read_aloud_settings_kokoro_url">Servidor Kokoro</string>
-    <string name="read_aloud_settings_kokoro_url_detail">La dirección de tu servidor Kokoro. Pulsa Listo para guardarla.</string>
+    <string name="read_aloud_settings_kokoro_url_detail">La dirección de tu servidor Kokoro, o la dirección de la API de un servicio alojado. Pulsa Listo para guardarla.</string>
     <string name="read_aloud_settings_kokoro_url_invalid">No es una dirección de servidor.</string>
     <string name="read_aloud_settings_kokoro_key">Clave de API de Kokoro</string>
     <string name="read_aloud_settings_kokoro_key_missing">Opcional. Solo hace falta si tu servidor la pide.</string>
@@ -55,4 +55,7 @@
     <string name="read_aloud_settings_kokoro_voices_refused">El servidor rechazó la clave de API.</string>
     <string name="read_aloud_settings_kokoro_voices_retry">Reintentar</string>
     <string name="read_aloud_settings_kokoro_privacy">El texto que se lee en voz alta se envía al servidor que indicaste para generar la voz.</string>
+    <string name="read_aloud_settings_kokoro_use_preset">Usar %1$s</string>
+    <string name="read_aloud_settings_kokoro_model">Modelo</string>
+    <string name="read_aloud_settings_kokoro_model_detail">Déjalo vacío para tu propio servidor Kokoro. Un servicio alojado usa su propio nombre de modelo. Pulsa Listo para guardarlo.</string>
 </resources>

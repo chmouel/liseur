@@ -20,13 +20,33 @@ import org.json.JSONException
 import org.json.JSONObject
 
 object KokoroTts {
+    /** The model a Kokoro server answers to; a hosted service names its own. */
     const val MODEL = "kokoro"
 
+    /** DeepInfra's OpenAI-compatible API and its name for Kokoro, offered as a preset. */
+    const val DEEPINFRA_URL = "https://api.deepinfra.com/v1/openai"
+    const val DEEPINFRA_MODEL = "hexgrad/Kokoro-82M"
+
     /**
-     * The server's base address from what the reader typed: a bare
-     * `host:port` is taken as http, and a trailing `/v1` or slash is
-     * dropped, so the API paths can be added to it. Null when it is no
-     * http(s) address.
+     * Kokoro-82M's own voices, offered when a service does not list its
+     * voices, as DeepInfra does not.
+     */
+    val BUILT_IN_VOICES = listOf(
+        "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore", "af_nicole", "af_nova",
+        "af_river", "af_sarah", "af_sky", "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam",
+        "am_michael", "am_onyx", "am_puck", "am_santa", "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
+        "bm_daniel", "bm_fable", "bm_george", "bm_lewis", "ef_dora", "em_alex", "em_santa", "ff_siwis",
+        "hf_alpha", "hf_beta", "hm_omega", "hm_psi", "if_sara", "im_nicola", "jf_alpha", "jf_gongitsune",
+        "jf_nezumi", "jf_tebukuro", "jm_kumo", "pf_dora", "pm_alex", "pm_santa", "zf_xiaobei", "zf_xiaoni",
+        "zf_xiaoxiao", "zf_xiaoyi", "zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang",
+    )
+
+    /**
+     * The OpenAI-style API root from what the reader typed, which the
+     * `audio/...` paths are added to. A bare `host:port` is taken as http,
+     * and an address with no `v1` in its path gets one, so a Kokoro
+     * server's own address works as well as a hosted service's API root
+     * such as DeepInfra's `/v1/openai`. Null when it is no http(s) address.
      */
     fun baseUrl(input: String): HttpUrl? {
         var text = input.trim()
@@ -34,7 +54,7 @@ object KokoroTts {
         if (!text.contains("://")) text = "http://$text"
         val url = text.toHttpUrlOrNull() ?: return null
         val segments = url.pathSegments.filter { it.isNotEmpty() }.toMutableList()
-        if (segments.lastOrNull() == "v1") segments.removeAt(segments.lastIndex)
+        if ("v1" !in segments) segments.add("v1")
         return url.newBuilder()
             .encodedPath("/")
             .apply { segments.forEach { addPathSegment(it) } }
@@ -42,10 +62,13 @@ object KokoroTts {
             .fragment(null)
             .build()
     }
+
+    /** The model to ask for: the one the reader set, else Kokoro's. */
+    fun model(input: String?): String = input?.trim()?.takeIf { it.isNotEmpty() } ?: MODEL
 }
 
 /**
- * A Kokoro server's OpenAI-style speech API, asked for raw PCM: 24 kHz mono
+ * A Kokoro server's, or a hosted Kokoro's, OpenAI-style speech API, asked for raw PCM: 24 kHz mono
  * 16-bit little-endian, as Gemini's, so it plays through the same output.
  *
  * There is no logging interceptor on purpose: the request may carry a key
@@ -54,20 +77,29 @@ object KokoroTts {
 class KokoroTtsClient(private val client: OkHttpClient = default()) {
 
     /** Throws [SpeechError]; cancelling the caller cancels the request. */
-    suspend fun synthesize(base: HttpUrl, apiKey: String?, text: String, voice: String): SpeechAudio {
+    suspend fun synthesize(
+        base: HttpUrl,
+        apiKey: String?,
+        text: String,
+        voice: String,
+        model: String = KokoroTts.MODEL,
+    ): SpeechAudio {
         val body = JSONObject()
-            .put("model", KokoroTts.MODEL)
+            .put("model", model)
             .put("input", text)
             .put("voice", voice)
             .put("response_format", "pcm")
             .toString()
-        val request = request(base, "v1/audio/speech", apiKey).post(body.toRequestBody(JSON)).build()
+        val request = request(base, "audio/speech", apiKey).post(body.toRequestBody(JSON)).build()
         return execute(request, ::speech)
     }
 
-    /** The voices the server offers, in its order. Throws [SpeechError]. */
+    /**
+     * The voices the server offers, in its order, or Kokoro's own when it
+     * has no voice list. Throws [SpeechError].
+     */
     suspend fun voices(base: HttpUrl, apiKey: String?): List<String> =
-        execute(request(base, "v1/audio/voices", apiKey).get().build(), ::voiceList)
+        execute(request(base, "audio/voices", apiKey).get().build(), ::voiceList)
 
     private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder {
         val builder = Request.Builder()
@@ -129,6 +161,7 @@ class KokoroTtsClient(private val client: OkHttpClient = default()) {
     }
 
     private fun voiceList(response: Response): List<String> {
+        if (response.code == 404 || response.code == 405) return KokoroTts.BUILT_IN_VOICES
         if (!response.isSuccessful) throw errorFor(response)
         val text = boundedText(response, MAX_VOICES_BYTES) ?: throw SpeechError.InvalidResponse("response too large")
         val voices = try {

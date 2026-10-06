@@ -36,7 +36,7 @@ class KokoroTtsClientTest {
         server.close()
     }
 
-    private val base: HttpUrl get() = server.url("/")
+    private val base: HttpUrl get() = KokoroTts.baseUrl(server.url("/").toString())!!
 
     private fun pcm(bytes: ByteArray, type: String? = "audio/pcm") = MockResponse.Builder()
         .code(200)
@@ -199,10 +199,11 @@ class KokoroTtsClientTest {
 
     @Test
     fun `server addresses are read the way people type them`() {
-        assertEquals("http://192.168.1.18:8880/", KokoroTts.baseUrl(" 192.168.1.18:8880 ").toString())
-        assertEquals("http://pi.lan:8880/", KokoroTts.baseUrl("http://pi.lan:8880/").toString())
-        assertEquals("https://tts.example.com/", KokoroTts.baseUrl("https://tts.example.com/v1/").toString())
-        assertEquals("https://example.com/kokoro", KokoroTts.baseUrl("https://example.com/kokoro").toString())
+        assertEquals("http://192.168.1.18:8880/v1", KokoroTts.baseUrl(" 192.168.1.18:8880 ").toString())
+        assertEquals("http://pi.lan:8880/v1", KokoroTts.baseUrl("http://pi.lan:8880/").toString())
+        assertEquals("https://tts.example.com/v1", KokoroTts.baseUrl("https://tts.example.com/v1/").toString())
+        assertEquals("https://example.com/kokoro/v1", KokoroTts.baseUrl("https://example.com/kokoro").toString())
+        assertEquals("https://api.deepinfra.com/v1/openai", KokoroTts.baseUrl(KokoroTts.DEEPINFRA_URL).toString())
         assertNull(KokoroTts.baseUrl(""))
         assertNull(KokoroTts.baseUrl("   "))
         assertNull(KokoroTts.baseUrl("ftp://pi.lan"))
@@ -214,6 +215,30 @@ class KokoroTtsClientTest {
         server.enqueue(pcm(byteArrayOf(1, 0)))
         KokoroTtsClient().synthesize(KokoroTts.baseUrl(server.url("/kokoro/v1").toString())!!, null, "t", "v")
         assertEquals("/kokoro/v1/audio/speech", server.takeRequest().url.encodedPath)
+    }
+
+    @Test
+    fun `a hosted API root is used as is, with the model it names`(): Unit = runBlocking {
+        server.enqueue(pcm(byteArrayOf(1, 0)))
+        val root = KokoroTts.baseUrl(server.url("/v1/openai").toString())!!
+
+        KokoroTtsClient().synthesize(root, "k", "t", "af_heart", KokoroTts.model(" ${KokoroTts.DEEPINFRA_MODEL} "))
+
+        val request = server.takeRequest()
+        assertEquals("/v1/openai/audio/speech", request.url.encodedPath)
+        assertEquals(KokoroTts.DEEPINFRA_MODEL, JSONObject(request.body!!.utf8()).getString("model"))
+        assertEquals(KokoroTts.MODEL, KokoroTts.model(null))
+        assertEquals(KokoroTts.MODEL, KokoroTts.model("  "))
+    }
+
+    @Test
+    fun `a service with no voice list offers Kokoro's own voices`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 404, body = """{"detail":"Not Found"}"""))
+        server.enqueue(MockResponse(code = 405))
+
+        assertEquals(KokoroTts.BUILT_IN_VOICES, KokoroTtsClient().voices(base, "k"))
+        assertEquals(KokoroTts.BUILT_IN_VOICES, KokoroTtsClient().voices(base, "k"))
+        assertEquals(54, KokoroTts.BUILT_IN_VOICES.distinct().size)
     }
 
     @Test

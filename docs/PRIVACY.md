@@ -91,18 +91,21 @@ and is never written to storage.
 Stopping the voice stops the requests. Remove the key in Settings and no
 more are made.
 
-### Your own Kokoro server, for reading aloud (Google Play build only)
+### Kokoro, for reading aloud (Google Play build only)
 
 The Google Play build can also read aloud with Kokoro, a speech model you
-run on a server of your own. Nothing is sent until you choose Kokoro in
-Settings, Read aloud, and enter that server's address. Liseur then asks
+run on a server of your own or use through a hosted service such as
+DeepInfra. Nothing is sent until you choose Kokoro in Settings, Read
+aloud, and enter that server's address or press Use DeepInfra. Liseur then asks
 the server for its list of voices when you open the voice menu, and once
 you press play it sends the text being read, one sentence at a time and a
 few sentences ahead of the voice, to that address together with the voice
 you picked and, if you entered one, your API key. As with Gemini, no book
 title, file, identifier or reading position goes with it. Who else can see
 that text depends on the server and the network you chose; a plain
-`http://` address is not encrypted.
+`http://` address is not encrypted. With DeepInfra, the text goes to
+DeepInfra under its own terms and privacy policy, billed to your
+DeepInfra key.
 
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
@@ -119,7 +122,7 @@ Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices
 this and asks you to sign in again. A Gemini or Kokoro API key is not
 backed up at all; you paste it again on a new device. The Kokoro server
-address and voice are backed up with your other settings.
+address, model and voice are backed up with your other settings.
 
 You can turn this off in your device's backup settings.
 

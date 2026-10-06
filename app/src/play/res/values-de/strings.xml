@@ -41,9 +41,9 @@
     <string name="read_aloud_settings_entry_missing">Nicht eingerichtet</string>
     <string name="read_aloud_settings_provider">Sprachdienst</string>
     <string name="read_aloud_settings_provider_choose">Vorlesen mit</string>
-    <string name="read_aloud_settings_provider_detail">Gemini ist ein Online-Dienst von Google, der über deinen Schlüssel abgerechnet wird. Kokoro läuft auf einem eigenen Server.</string>
+    <string name="read_aloud_settings_provider_detail">Gemini ist ein Online-Dienst von Google, der über deinen Schlüssel abgerechnet wird. Kokoro läuft auf einem eigenen Server oder bei einem gehosteten Dienst.</string>
     <string name="read_aloud_settings_kokoro_url">Kokoro-Server</string>
-    <string name="read_aloud_settings_kokoro_url_detail">Die Adresse deines Kokoro-Servers. Tippe auf Fertig, um sie zu speichern.</string>
+    <string name="read_aloud_settings_kokoro_url_detail">Die Adresse deines Kokoro-Servers oder die API-Adresse eines gehosteten Dienstes. Tippe auf Fertig, um sie zu speichern.</string>
     <string name="read_aloud_settings_kokoro_url_invalid">Das ist keine Serveradresse.</string>
     <string name="read_aloud_settings_kokoro_key">Kokoro-API-Schlüssel</string>
     <string name="read_aloud_settings_kokoro_key_missing">Optional. Nur nötig, wenn dein Server einen verlangt.</string>
@@ -55,4 +55,7 @@
     <string name="read_aloud_settings_kokoro_voices_refused">Der Server hat den API-Schlüssel abgelehnt.</string>
     <string name="read_aloud_settings_kokoro_voices_retry">Erneut versuchen</string>
     <string name="read_aloud_settings_kokoro_privacy">Der vorgelesene Text wird an den angegebenen Server gesendet, um die Stimme zu erzeugen.</string>
+    <string name="read_aloud_settings_kokoro_use_preset">%1$s verwenden</string>
+    <string name="read_aloud_settings_kokoro_model">Modell</string>
+    <string name="read_aloud_settings_kokoro_model_detail">Für einen eigenen Kokoro-Server leer lassen. Ein gehosteter Dienst hat einen eigenen Modellnamen. Tippe auf Fertig, um ihn zu speichern.</string>
 </resources>
