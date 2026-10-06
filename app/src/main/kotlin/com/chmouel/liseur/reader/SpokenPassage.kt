@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader
 
+import com.chmouel.liseur.reader.chrome.visibleWebView
 import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
@@ -42,13 +43,27 @@ internal object SpokenPassage {
     suspend fun isShowing(navigator: EpubNavigatorFragment, locator: Locator): Boolean {
         val here = ResourceAddress.canonicalPath(navigator.currentLocator.value.href.toString())
         if (here == null || here != ResourceAddress.canonicalPath(locator.href.toString())) return false
+        // Readium can put the next resource on screen before it says so,
+        // so the view itself must show this resource, before the question
+        // and after it.
+        val web = visibleWebView(navigator.publicationView)
+        fun stillShown() = web != null && web === visibleWebView(navigator.publicationView) &&
+            ResourceAddress.shows(web.url, locator.href.toString())
+        if (!stillShown()) return false
         val highlight = locator.text.highlight?.takeIf { it.isNotBlank() } ?: return false
         val script = script(
             selector = locator.locations.otherLocations[CSS_SELECTOR] as? String,
             before = locator.text.before.orEmpty().takeLast(BEFORE_CHARS),
             highlight = highlight,
         )
-        return runCatching { navigator.evaluateJavascript(script)?.trim() == "true" }.getOrDefault(false)
+        val shown = try {
+            navigator.evaluateJavascript(script)?.trim() == "true"
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+        return shown && stillShown()
     }
 
     // Readium extracts the sentence with its whitespace collapsed, so the

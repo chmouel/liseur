@@ -11,8 +11,6 @@
 
 set -euo pipefail
 
-# F-Droid rebuilds the foss flavor; the play one never reaches it.
-readonly APK_DIR="app/build/outputs/apk/foss/release"
 
 workdir=""
 keep=false
@@ -59,8 +57,19 @@ build_once() {
         cp local.properties "$dest/local.properties"
     fi
 
-    (cd "$dest" && ./gradlew --quiet --no-daemon assembleFossRelease) ||
+    (cd "$dest" && ./gradlew --quiet --no-daemon "$(release_task "$dest")") ||
         die "the build in $dest failed"
+}
+
+# F-Droid rebuilds the foss flavor; the play one never reaches it. Tags
+# from before the two flavors build one release with no flavor in its
+# task or file name.
+flavored() {
+    grep -q 'productFlavors' "$1/app/build.gradle.kts"
+}
+
+release_task() {
+    if flavored "$1"; then echo assembleFossRelease; else echo assembleRelease; fi
 }
 
 # F-Droid builds and signs the APK itself, so the unsigned one is what
@@ -68,10 +77,16 @@ build_once() {
 # instead, which is not what is being checked.
 apk_in() {
     local dest=$1
-    local apk="$dest/$APK_DIR/app-foss-release-unsigned.apk"
+    local dir="$dest/app/build/outputs/apk/release" apk
+    if flavored "$dest"; then
+        dir="$dest/app/build/outputs/apk/foss/release"
+        apk="$dir/app-foss-release-unsigned.apk"
+    else
+        apk="$dir/app-release-unsigned.apk"
+    fi
 
     [[ -f "$apk" ]] ||
-        die "no unsigned APK in $dest/$APK_DIR: move keystore.properties aside"
+        die "no unsigned APK in $dir: move keystore.properties aside"
     printf '%s' "$apk"
 }
 
