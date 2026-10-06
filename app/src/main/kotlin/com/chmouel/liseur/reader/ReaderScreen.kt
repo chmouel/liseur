@@ -2309,7 +2309,18 @@ fun ReaderScreen(
         }
     }
 
+    val wayBack = jumpBack?.takeIf { !showingEnd }
+    val goBack: (ReaderViewModel.JumpBack) -> Unit = { target ->
+        if (onProgressAction.takeJumpBack(target)) {
+            navigateLater(target.locator, NavigatorPositionEvent.LOCAL_JUMP)
+        }
+    }
     ImmersiveMode(hideSystemBars = !chromeVisible)
+    // While the way-back pill shows, Back takes it (#275). This must be
+    // registered before the overlays' handlers: the last one registered
+    // wins, so search, the contents, a footnote or an image still close
+    // first.
+    BackHandler(enabled = wayBack != null) { wayBack?.let(goBack) }
     ScreenBrightness(brightness = prefs.brightness)
     // Auto-scroll implies it: a page that carries itself past a screen
     // timeout is a page nobody is reading. The reader's own switch still
@@ -2984,11 +2995,7 @@ fun ReaderScreen(
                         confidence = target.confidence,
                         resumePosition = target.resumePosition,
                         theme = readingTheme,
-                        onJumpBack = {
-                            if (onProgressAction.takeJumpBack(target)) {
-                                navigateLater(target.locator, NavigatorPositionEvent.LOCAL_JUMP)
-                            }
-                        },
+                        onJumpBack = { goBack(target) },
                         onDismiss = onProgressAction.dismissJumpBack,
                     )
                 }

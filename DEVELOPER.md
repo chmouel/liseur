@@ -1230,6 +1230,12 @@ reader behavior.
 - Reader chrome reaches the screen edge. Keep navigation-bar insets inside
   `ReadingScrubber`, use its spacer when the panel is absent, and skip edge
   fades on e-ink.
+- While the way-back pill shows, system Back takes it, through the same
+  `takeJumpBack` path as a tap (#275). The bars keep their sticky
+  behaviour, so with the chrome hidden the first edge swipe only reveals
+  them and the second goes back rather than leaving the book. The jump
+  `BackHandler` is registered before the overlays' handlers so they still
+  close first.
 - Runtime page repair must write only token-owned attributes. Keep
   `WideContentFit`, `FootnoteLayout`, and `SelectionHandleFix` idempotent and
   preserve authored classes and markup.
