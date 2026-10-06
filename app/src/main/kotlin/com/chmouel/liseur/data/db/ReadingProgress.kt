@@ -296,7 +296,7 @@ abstract class ReadingProgressDao {
             reading_pace_evidence =
                 COALESCE(:readingPaceEvidence, reading_pace_evidence),
             updated_at = :updatedAt,
-            read_at = :updatedAt,
+            read_at = :readAt,
             status = :status,
             peak_locator = CASE WHEN :progression BETWEEN 0 AND 1 AND
                 (peak_progression IS NULL OR :progression > peak_progression)
@@ -333,6 +333,7 @@ abstract class ReadingProgressDao {
         readingPaceEvidence: Double?,
         status: String?,
         updatedAt: Long,
+        readAt: Long,
     ): Int
 
     @Query(
@@ -347,7 +348,7 @@ abstract class ReadingProgressDao {
         VALUES (:bookUrl, :locatorJson, :progression, NULL,
                 :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
                 COALESCE(:readingPaceElapsedMs, 0), COALESCE(:readingPaceEvidence, 0),
-                :updatedAt, :updatedAt, :status, NULL, 1, 0, 1,
+                :updatedAt, :readAt, :status, NULL, 1, 0, 1,
                 CASE WHEN :progression BETWEEN 0 AND 1 THEN :progression END,
                 CASE WHEN :progression BETWEEN 0 AND 1 THEN :locatorJson END,
                 CASE WHEN :progression BETWEEN 0 AND 1 THEN 1 END,
@@ -369,6 +370,7 @@ abstract class ReadingProgressDao {
         readingPaceEvidence: Double?,
         status: String?,
         updatedAt: Long,
+        readAt: Long,
     )
 
     @Transaction
@@ -382,6 +384,8 @@ abstract class ReadingProgressDao {
         readingPaceEvidence: Double?,
         status: String?,
         updatedAt: Long,
+        // When the reading happened, if not when it is written.
+        readAt: Long = updatedAt,
     ) {
         val updated = updateLocal(
             bookUrl = bookUrl,
@@ -393,6 +397,7 @@ abstract class ReadingProgressDao {
             readingPaceEvidence = readingPaceEvidence,
             status = status,
             updatedAt = updatedAt,
+            readAt = readAt,
         )
         if (updated == 0) {
             insertLocal(
@@ -405,6 +410,7 @@ abstract class ReadingProgressDao {
                 readingPaceEvidence = readingPaceEvidence,
                 status = status,
                 updatedAt = updatedAt,
+                readAt = readAt,
             )
         }
     }

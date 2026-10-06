@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="read_aloud_settings_key">Gemini-API-Schlüssel zum Vorlesen</string>
+    <string name="read_aloud_settings_key_missing">Füge einen Schlüssel aus Google AI Studio ein, um Bücher vorlesen zu lassen. Anfragen werden über diesen Schlüssel abgerechnet.</string>
+    <string name="read_aloud_settings_key_saved">Auf diesem Gerät ist ein Schlüssel gespeichert.</string>
+    <string name="read_aloud_settings_key_hint">Schlüssel einfügen</string>
+    <string name="read_aloud_settings_key_replace">Neuen Schlüssel einfügen, um ihn zu ersetzen</string>
+    <string name="read_aloud_settings_key_clear">Schlüssel entfernen</string>
+    <string name="read_aloud_settings_privacy">Der vorgelesene Text wird an Google gesendet, um die Stimme zu erzeugen.</string>
+    <string name="read_aloud_settings_voice">Stimme</string>
+    <string name="read_aloud_settings_voice_choice">%1$s (%2$s)</string>
+    <string name="read_aloud_previous_sentence">Vorheriger Satz</string>
+    <string name="read_aloud_next_sentence">Nächster Satz</string>
+    <string name="read_aloud_from_here">Ab hier vorlesen</string>
+    <string name="read_aloud_pause">Vorlesen pausieren</string>
+    <string name="read_aloud_resume">Vorlesen fortsetzen</string>
+    <string name="read_aloud_stop">Vorlesen beenden</string>
+    <string name="read_aloud_notice_network">Gemini ist nicht erreichbar. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
+    <string name="read_aloud_notice_rate_limited">Dieser Schlüssel hat sein Gemini-Kontingent vorerst aufgebraucht. Pausiert; versuche es später erneut.</string>
+    <string name="read_aloud_notice_service">Gemini konnte diesen Satz nicht vorlesen. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
+    <string name="read_aloud_notice_output">Dieses Gerät konnte die Stimme nicht abspielen. Pausiert.</string>
+    <string name="read_aloud_notice_invalid_key">Gemini hat den API-Schlüssel abgelehnt. Prüfe ihn unter Einstellungen, Lesen &amp; Navigation.</string>
+    <string name="read_aloud_notice_selection_not_found">Vorlesen ab dem Anfang des Absatzes.</string>
+    <string name="read_aloud_notice_unavailable">Dieses Buch kann ab hier nicht vorgelesen werden.</string>
+
+    <string name="read_aloud_voice_firm">Bestimmt</string>
+    <string name="read_aloud_voice_informative">Informativ</string>
+    <string name="read_aloud_voice_upbeat">Fröhlich</string>
+    <string name="read_aloud_voice_breezy">Locker</string>
+    <string name="read_aloud_voice_youthful">Jugendlich</string>
+    <string name="read_aloud_voice_excitable">Begeistert</string>
+    <string name="read_aloud_voice_warm">Warm</string>
+    <string name="read_aloud_voice_soft">Weich</string>
+    <string name="read_aloud_voice_clear">Klar</string>
+    <string name="read_aloud_voice_mature">Reif</string>
+    <string name="read_aloud_voice_gentle">Sanft</string>
+    <string name="read_aloud_voice_even">Ausgeglichen</string>
+</resources>

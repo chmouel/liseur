@@ -9,6 +9,8 @@ activityCompose = "1.13.0"
 fragmentCompose = "1.9.1"
 composeBom = "2026.09.00"
 readium = "3.4.0"
+# Pinned to what readium-navigator-media-tts was built against.
+media3 = "1.11.0"
 room = "2.8.5"
 coil = "3.6.3"
 androidsvg = "1.4"
@@ -45,6 +47,8 @@ reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reo
 readium-shared = { module = "org.readium.kotlin-toolkit:readium-shared", version.ref = "readium" }
 readium-streamer = { module = "org.readium.kotlin-toolkit:readium-streamer", version.ref = "readium" }
 readium-navigator = { module = "org.readium.kotlin-toolkit:readium-navigator", version.ref = "readium" }
+readium-navigator-media-tts = { module = "org.readium.kotlin-toolkit:readium-navigator-media-tts", version.ref = "readium" }
+media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }

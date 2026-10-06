@@ -13,16 +13,25 @@ enough; `compileSdk`/`targetSdk` 37 requires a reasonably recent SDK
 Manager package list).
 
 ```bash
-./gradlew assembleDebug    # unsigned debug APK, installable as-is
-./gradlew assembleRelease  # minified release APK
-./gradlew bundleRelease    # minified release AAB, for Google Play only
+./gradlew assemblePlayDebug    # debug APK with Gemini read-aloud
+./gradlew assembleFossDebug    # debug APK of the F-Droid build
+./gradlew assembleFossRelease  # minified release APK (F-Droid, GitHub)
+./gradlew bundlePlayRelease    # minified release AAB, for Google Play only
 ```
 
-Output APKs land in `app/build/outputs/apk/{debug,dev,release}/`, and the
-bundle in `app/build/outputs/bundle/release/`.
+There are two product flavors. `foss` is the build F-Droid reproduces
+and the GitHub release carries. `play` adds Gemini read-aloud, which
+sends book text to a non-free Google service, and ships only on Google
+Play. Everything for that feature lives under `app/src/play/` and
+`app/src/testPlay/`; the `foss` APK has none of its code, dependencies or
+endpoints. Both flavors share the application id, version and signing
+key. Plain `assembleRelease` or `assembleDebug` builds both flavors.
+
+Output APKs land in `app/build/outputs/apk/{foss,play}/{debug,dev,release}/`,
+and the bundle in `app/build/outputs/bundle/playRelease/`.
 
 The debug build is signed with the standard Android debug key, so
-`app-debug.apk` can be installed directly with `adb install` or by
+`app-play-debug.apk` can be installed directly with `adb install` or by
 sideloading. The release build is unsigned by default so the project
 builds out of the box on any machine/CI; see below if you want a signed
 release build.
@@ -37,7 +46,7 @@ does not come back.
 The `dev` build type exists so that does not have to happen:
 
 ```bash
-make dev             # ./gradlew assembleDev
+make dev             # ./gradlew assemblePlayDev (FLAVOR=foss for assembleFossDev)
 make dev-install     # adb install -r, beside the real app
 make dev-run         # install and launch
 make dev-uninstall
@@ -56,8 +65,10 @@ It is the debug build with two differences, both deliberate:
   the two are told apart before either is opened. That is the whole of
   `app/src/dev/res/`.
 
-The APK lands in `app/build/outputs/apk/dev/app-dev.apk`, debug-signed
-like `app-debug.apk`.
+The APK lands in `app/build/outputs/apk/play/dev/app-play-dev.apk`,
+debug-signed like `app-play-debug.apk`. The device-facing make targets
+(`install`, `run`, `reset`, `dev-*`) and `hack/install*` use the `play`
+flavor unless `FLAVOR=foss` is given.
 
 `release` is not involved anywhere in this, which is the point: F-Droid
 rebuilds that build type byte for byte from the tag, and nothing here
@@ -119,7 +130,7 @@ keytool -genkeypair -v -keystore /path/to/your.p12 -storetype PKCS12 \
   -alias liseur -keyalg RSA -keysize 4096 -validity 10950
 ```
 
-Either way `./gradlew assembleRelease` picks the file up automatically;
+Either way `./gradlew assembleFossRelease` picks the file up automatically;
 without it the release build is simply unsigned.
 
 ## Settings backup archive
@@ -174,8 +185,8 @@ running export. This action does not modify the library or download remote books
 ## Testing
 
 ```bash
-./gradlew testDebugUnitTest   # JVM unit tests
-./gradlew lintDebug           # Android Lint (0 errors required)
+./gradlew testFossDebugUnitTest testPlayDebugUnitTest   # JVM unit tests
+./gradlew lintFossDebug lintPlayDebug                   # Android Lint (0 errors required)
 ```
 
 There is no instrumented/emulator test suite. Reader interactions
@@ -586,7 +597,7 @@ publishes the release also builds an app bundle and pushes it to the
 **closed** track named `Testing`:
 
 ```bash
-make bundle     # ./gradlew bundleRelease, for Play only
+make bundle     # ./gradlew bundlePlayRelease, for Play only
 ```
 
 The second track is not decoration. Internal testing holds a hundred
@@ -602,7 +613,7 @@ back). `hack/store-status` now says so in a line when the closed track
 falls behind internal, because nothing else did.
 
 Nothing about the APK path changes. F-Droid's recipe builds
-`assembleRelease` and never sees `fastlane/Fastfile`, no Gradle
+the `foss` flavor (`gradle: [foss]`, so `assembleFossRelease`) and never sees `fastlane/Fastfile`, no Gradle
 publishing plugin is applied, and the bundle is an extra output rather
 than a replacement, which is also why the Play step in
 `.github/workflows/release.yml` is `continue-on-error` and skips itself
@@ -974,6 +985,8 @@ English UI copy lives in `app/src/main/res/values/strings.xml`. French,
 Spanish, Russian, Italian, German and Simplified Chinese ship beside it as
 `values-fr`, `values-es`, `values-ru`, `values-it`, `values-de` and
 `values-b+zh+Hans`.
+Strings that only the `play` flavor uses live in `app/src/play/res` with
+the same locale set.
 
 - New user-facing text goes in the English file first, then in each
   locale file, and is read with `stringResource` / `pluralStringResource`.
@@ -1302,6 +1315,34 @@ reader behavior.
   screen, which repaints them without a reload. Standard Ebooks inverts
   its line art under that query (#256). The attribute exists from API 29;
   below it, pages still follow the system.
+
+### Read-aloud (`play` flavor)
+
+- Gemini read-aloud lives under `app/src/play/`. `main` sees only the
+  `ReadAloudFeature` interface and `OpenBookHandle`; the `foss` factory
+  returns `ReadAloudFeature.None`. Do not reference anything under `tts/`
+  from `main`, and keep Readium's TTS module and media3 out of the `foss`
+  dependency graph.
+- A listening session owns the reading place only while it plays. Any page
+  move the reader makes pauses it and saves the reader's place, so two
+  owners never write the same row. Auto-scroll and the voice exclude each
+  other: starting one pauses or disarms the other.
+- Checkpoints go through the handle's `prepareLocator`, so a heard sentence
+  stores the same `total_progression` a page turn to it would. Checkpoints
+  while playing are local (`signalSync = false`); the one written on pause
+  or stop syncs.
+- A heard sentence's progression counts paragraphs, not screens, so the
+  place it saves is not an exact anchor. While `awaitingPageCapture` is set,
+  the reader re-captures the page on screen once the voice stops and saves
+  that as the exact anchor (and the BookOrbit CFI). The ViewModel must not
+  drop that capture as an unchanged position. On opening, the wide-content
+  fit restores to the gate's non-exact target instead of capturing the
+  page, which Readium has not scrolled yet.
+- Engine callbacks arrive on the main thread. A failed sentence pauses on
+  that sentence with a notice; play retries it. Nothing is ever skipped.
+- The key lives in `noBackupFilesDir`, encrypted by `SecretCipher`, and is
+  never logged; neither are request bodies or audio. Listening is not
+  counted as reading time.
 
 ### Covers, UI, and dependencies
 
@@ -1897,6 +1938,12 @@ what lets it sync a book that came off an SD card.
   TetheredNet anti-feature. Together those justify `INTERNET`;
   `ACCESS_NETWORK_STATE` is there for the `NetworkType.CONNECTED`
   constraint on the sync workers.
+- Gemini read-aloud, which sends book text to Google, is in the `play`
+  flavor only. F-Droid builds `foss`, which has none of its code,
+  dependencies or endpoint, so the NonFreeNet anti-feature does not apply.
+  Before changing that boundary, check the `foss` release APK for
+  `org.readium.navigator.media.tts`, `androidx.media3` and
+  `generativelanguage` strings, and its merged manifest for a service.
 - No non-free assets. The bundled fonts (Literata, Vollkorn, Atkinson
   Hyperlegible, Inter) are all OFL; the icon is drawn in-repo as vector
   drawables.
@@ -1920,7 +1967,7 @@ what lets it sync a book that came off an SD card.
   `en-US` when translated; app UI locales are documented in
   [`docs/TRANSLATING.md`](docs/TRANSLATING.md).
 - The build needs no network beyond Gradle dependencies and no
-  signing config: `assembleRelease` on a clean checkout produces an
+  signing config: `assembleFossRelease` on a clean checkout produces an
   unsigned APK, which is what F-Droid builds and signs itself.
 - The build is reproducible. F-Droid rebuilds from source and will
   not publish a build it cannot reproduce, so `hack/verify-reproducible`

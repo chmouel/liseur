@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="read_aloud_settings_key">Chiave API Gemini per la lettura ad alta voce</string>
+    <string name="read_aloud_settings_key_missing">Incolla una chiave di Google AI Studio per far leggere i libri ad alta voce. Le richieste sono addebitate a quella chiave.</string>
+    <string name="read_aloud_settings_key_saved">Su questo dispositivo è salvata una chiave.</string>
+    <string name="read_aloud_settings_key_hint">Incolla la tua chiave</string>
+    <string name="read_aloud_settings_key_replace">Incolla una nuova chiave per sostituirla</string>
+    <string name="read_aloud_settings_key_clear">Rimuovi la chiave</string>
+    <string name="read_aloud_settings_privacy">Il testo letto ad alta voce viene inviato a Google per creare la voce.</string>
+    <string name="read_aloud_settings_voice">Voce</string>
+    <string name="read_aloud_settings_voice_choice">%1$s (%2$s)</string>
+    <string name="read_aloud_previous_sentence">Frase precedente</string>
+    <string name="read_aloud_next_sentence">Frase successiva</string>
+    <string name="read_aloud_from_here">Leggi ad alta voce da qui</string>
+    <string name="read_aloud_pause">Metti in pausa la lettura ad alta voce</string>
+    <string name="read_aloud_resume">Riprendi la lettura ad alta voce</string>
+    <string name="read_aloud_stop">Interrompi la lettura ad alta voce</string>
+    <string name="read_aloud_notice_network">Impossibile raggiungere Gemini. In pausa; premi riproduci per riprovare.</string>
+    <string name="read_aloud_notice_rate_limited">Questa chiave ha esaurito per ora la sua quota Gemini. In pausa; riprova più tardi.</string>
+    <string name="read_aloud_notice_service">Gemini non è riuscito a leggere questa frase. In pausa; premi riproduci per riprovare.</string>
+    <string name="read_aloud_notice_output">Questo dispositivo non è riuscito a riprodurre la voce. In pausa.</string>
+    <string name="read_aloud_notice_invalid_key">Gemini ha rifiutato la chiave API. Controllala in Impostazioni, Lettura e navigazione.</string>
+    <string name="read_aloud_notice_selection_not_found">Lettura dall\'inizio del paragrafo.</string>
+    <string name="read_aloud_notice_unavailable">Questo libro non può essere letto ad alta voce da qui.</string>
+
+    <string name="read_aloud_voice_firm">Decisa</string>
+    <string name="read_aloud_voice_informative">Informativa</string>
+    <string name="read_aloud_voice_upbeat">Allegra</string>
+    <string name="read_aloud_voice_breezy">Disinvolta</string>
+    <string name="read_aloud_voice_youthful">Giovanile</string>
+    <string name="read_aloud_voice_excitable">Entusiasta</string>
+    <string name="read_aloud_voice_warm">Calda</string>
+    <string name="read_aloud_voice_soft">Morbida</string>
+    <string name="read_aloud_voice_clear">Chiara</string>
+    <string name="read_aloud_voice_mature">Matura</string>
+    <string name="read_aloud_voice_gentle">Gentile</string>
+    <string name="read_aloud_voice_even">Pacata</string>
+</resources>

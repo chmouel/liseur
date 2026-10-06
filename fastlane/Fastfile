@@ -66,8 +66,8 @@ platform :android do
     # Anchored to this file rather than the working directory: fastlane
     # runs lanes from inside fastlane/, so a bare relative path would
     # look for the bundle one directory too deep and never find it.
-    bundle = File.expand_path("../app/build/outputs/bundle/release/app-release.aab", __dir__)
-    UI.user_error!("no bundle at #{bundle} — run ./gradlew bundleRelease") unless File.exist?(bundle)
+    bundle = File.expand_path("../app/build/outputs/bundle/playRelease/app-play-release.aab", __dir__)
+    UI.user_error!("no bundle at #{bundle} — run ./gradlew bundlePlayRelease") unless File.exist?(bundle)
 
     version_code = liseur_version_code
 

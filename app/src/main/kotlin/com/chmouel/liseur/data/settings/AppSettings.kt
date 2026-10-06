@@ -183,6 +183,8 @@ enum class DefinitionTarget(val id: String) {
  *   offers, and the configured default for a plain highlight. A passage note
  *   uses the first colour in that bar's stable order, or the default when
  *   the bar is empty.
+ * @param readAloudVoice The voice reading aloud uses, by name, or null for
+ *   the engine's default. Only builds that can read aloud offer it.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -205,6 +207,7 @@ data class AppSettings(
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
     val statsRange: StatsRange = StatsRange.Default,
     val highlightPalette: HighlightPalette = HighlightPalette(),
+    val readAloudVoice: String? = null,
 )
 
 /**
@@ -262,6 +265,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val HIGHLIGHT_TINTS = stringSetPreferencesKey("highlight_tints_offered")
         val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
         val CATALOG_PARTIAL_DISMISSED = stringPreferencesKey("catalog_partial_dismissed")
+        val READ_ALOUD_VOICE = stringPreferencesKey("read_aloud_voice")
     }
 
     /**
@@ -329,6 +333,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
                 offeredNames = p[Keys.HIGHLIGHT_TINTS],
                 defaultName = p[Keys.HIGHLIGHT_TINT_DEFAULT],
             ),
+            readAloudVoice = p[Keys.READ_ALOUD_VOICE],
         )
     }
 
@@ -473,6 +478,10 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.HIGHLIGHT_TINT_DEFAULT] = tint.name }
     }
 
+    suspend fun setReadAloudVoice(name: String) {
+        store.edit { it[Keys.READ_ALOUD_VOICE] = name }
+    }
+
     /**
      * The offered set exactly as stored, with null for a reader who
      * never chose one.
@@ -516,4 +525,5 @@ internal val APP_BACKUP_TYPES = mapOf(
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
     "highlight_tints_offered" to BackupValueType.STRING_SET,
     "highlight_tint_default" to BackupValueType.STRING,
+    "read_aloud_voice" to BackupValueType.STRING,
 )

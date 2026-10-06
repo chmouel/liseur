@@ -113,6 +113,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
+import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.settings.DefinitionTarget
@@ -440,6 +441,7 @@ fun ReaderScreen(
     onBookOrbitCatchUpArrived: (Locator, Boolean) -> Unit,
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
+    readAloud: ReaderReadAloud? = null,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
@@ -513,6 +515,20 @@ fun ReaderScreen(
     var autoScrollControlsPoke by remember { mutableIntStateOf(0) }
     var autoScrollControlsLinger by remember { mutableStateOf(false) }
     val columnMode = prefs.columnMode.effectiveFor(widthClass())
+
+    // This book being read aloud, if it is. The session outlives the
+    // screen, so everything here is read back from it rather than kept.
+    val readAloudFeature = readAloud?.feature ?: ReadAloudFeature.None
+    val readAloudSession by readAloudFeature.session.collectAsStateWithLifecycle()
+    val listening = readAloudSession?.takeIf { it.bookId == readAloud?.bookId }
+    val listeningPlaying = listening?.playing == true
+    val listeningPlayingNow by rememberUpdatedState(listeningPlaying)
+    val readAloudConfigured by readAloudFeature.configured.collectAsStateWithLifecycle()
+    // When the page last went after the voice. Readium can report a move
+    // more than once, and only the first report carries the marker, so
+    // the rest are recognised by arriving just after it: taken for the
+    // reader's own, they would pause the voice the page was following.
+    var followedAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
 
     // The activity decides what a keyboard's arrows mean, and the
     // answer depends on whether there is any chrome to move focus
@@ -1202,7 +1218,10 @@ fun ReaderScreen(
             // must not look like this device turned a page and turn a
             // one-sided remote update into a conflict.
             nav.currentLocator.drop(1).collect { native ->
-                val requested = pendingPositionEvent
+                val requested = pendingPositionEvent ?: NavigatorPositionEvent.TTS_FOLLOW.takeIf {
+                    listeningPlayingNow && followedAt != Long.MIN_VALUE &&
+                        SystemClock.elapsedRealtime() - followedAt < FOLLOW_SETTLE_MS
+                }
                 // Only paid for while the gate is closed, which is a
                 // handful of emissions at the start of a session.
                 val wasGated = gate.isGated
@@ -1252,7 +1271,11 @@ fun ReaderScreen(
                 // the way out. Its arrival still retires what was held,
                 // which was measured against a page that no longer
                 // exists in that shape.
-                if (event == NavigatorPositionEvent.PREFERENCE_REFLOW) {
+                // Following the voice is not the reader's place either:
+                // listening saves the place it reached itself.
+                if (event == NavigatorPositionEvent.PREFERENCE_REFLOW ||
+                    event == NavigatorPositionEvent.TTS_FOLLOW
+                ) {
                     heldPlace.retire()
                 } else {
                     heldPlace.hold(captured, since)
@@ -1699,8 +1722,19 @@ fun ReaderScreen(
                 web === visibleWebView(root) &&
                     ResourceAddress.shows(web.url, nav.currentLocator.value.href.toString()) &&
                     moves.unchangedSince(since)
+            // While an approximate opening is still landing, Readium has
+            // named the resource but may not have scrolled to the place
+            // yet, so a capture reads the chapter's first screen and the
+            // restore below would send the reader there. Come back to
+            // where the opening is heading instead. An exact opening
+            // scrolls by its quote before this runs and is checked on
+            // its own, so it keeps the capture.
+            val opening = gateAnchor?.takeIf {
+                gate.isGated && !ExactLocatorAnchor.isExact(it) &&
+                    ResourceAddress.shows(web.url, it.href.toString())
+            }
             reflow.within {
-                val anchor = here?.takeIf { stillFitting() }?.let { capture(nav, it) }
+                val anchor = here?.takeIf { stillFitting() }?.let { opening ?: capture(nav, it) }
                 val before = ExactLocatorAnchor.layoutSignature(nav)
                 if (repairPage(nav)) {
                     // Settled before the scope closes whether or not
@@ -1824,6 +1858,88 @@ fun ReaderScreen(
             ),
             SEARCH_DECORATION_GROUP,
         )
+    }
+
+    // The sentence being read aloud, marked for as long as the session
+    // lasts, paused or not, so the listener can find where the voice is.
+    val spoken = listening?.utterance
+    LaunchedEffect(navigator, spoken) {
+        val nav = navigator ?: return@LaunchedEffect
+        nav.applyDecorations(
+            listOfNotNull(
+                spoken?.let {
+                    Decoration(
+                        id = "read-aloud",
+                        locator = it,
+                        style = Decoration.Style.Highlight(tint = READ_ALOUD_TINT.toArgb(), isActive = false),
+                    )
+                },
+            ),
+            READ_ALOUD_DECORATION_GROUP,
+        )
+    }
+
+    // The page follows the voice, but only once it has read past what
+    // is on screen. A reader selecting text, or a page being rebuilt,
+    // is left alone until they are done.
+    val followBlocked = selection != null || tappedSelection != null
+    LaunchedEffect(navigator, spoken, listeningPlaying, followBlocked, lifecycle) {
+        val nav = navigator ?: return@LaunchedEffect
+        val utterance = spoken ?: return@LaunchedEffect
+        if (!listeningPlaying || followBlocked) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            if (gate.isGated || reflow.active || SpokenPassage.isShowing(nav, utterance)) {
+                return@repeatOnLifecycle
+            }
+            followedAt = SystemClock.elapsedRealtime()
+            navigate(nav, utterance, NavigatorPositionEvent.TTS_FOLLOW)
+        }
+    }
+
+    // While the voice plays its place is listening's, so a place held
+    // from before would be saved over it when the reader leaves. Two
+    // things moving the page at once is one too many: the voice stops
+    // the page carrying itself, and the page carrying itself stops the
+    // voice.
+    LaunchedEffect(listeningPlaying) {
+        if (listeningPlaying) {
+            heldPlace.retire()
+            autoScrollArmed = false
+        }
+    }
+    LaunchedEffect(autoScrollArmed) {
+        if (autoScrollArmed && listeningPlayingNow) readAloudFeature.pause()
+    }
+
+    // Listening saves the sentence it reached, measured off no page: its
+    // progression counts paragraphs rather than screens, so reopening
+    // lands near it but not on it, and it carries no BookOrbit CFI. Once
+    // the voice has stopped and that page is in front of the reader, it
+    // is shown and saved again as an exact anchor.
+    LaunchedEffect(navigator, listeningPlaying, listening == null, lifecycle) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (listeningPlaying || readAloud == null) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (gate.isGated) delay(READ_ALOUD_CAPTURE_WAIT_MS)
+            val heard = readAloud.awaitingCapture() ?: return@repeatOnLifecycle
+            if (!SpokenPassage.isShowing(nav, heard)) {
+                navigate(nav, heard, NavigatorPositionEvent.TTS_FOLLOW)
+                delay(READ_ALOUD_CAPTURE_WAIT_MS)
+                settleLayout()
+            }
+            if (readAloud.awaitingCapture() !== heard || !SpokenPassage.isShowing(nav, heard)) {
+                return@repeatOnLifecycle
+            }
+            val native = nav.currentLocator.value
+            val captured = if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, native)
+            captured ?: return@repeatOnLifecycle
+            publishCaptured(
+                nav,
+                captured,
+                NavigatorPositionEvent.LOCAL_JUMP,
+                expectedNative = native.takeUnless { effectiveScrollingNow },
+            )
+        }
     }
 
     // Draw the marks the reader has made over the page.
@@ -2186,7 +2302,9 @@ fun ReaderScreen(
                 // two round trips for one answer. The offset is still
                 // read, so that whatever it has reached while the loop
                 // ran is the baseline the moment it stops.
-                if (moved && !autoScrollRunning) {
+                // Nor while the page follows the voice reading it aloud,
+                // whose place is listening's to save.
+                if (moved && !autoScrollRunning && !listeningPlayingNow) {
                     // A finger on a scrolled page moves the reader
                     // without a `go` for anything to count, so the one
                     // place that notices says so. Held open for as long
@@ -3020,6 +3138,13 @@ fun ReaderScreen(
                         )
                     }
                 }
+                readAloud?.let {
+                    readAloudFeature.Player(
+                        bookId = it.bookId,
+                        theme = readingTheme,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
                 // Above the scrubber, so a reader who stopped the page by
                 // raising the chrome finds play right there. The offers
                 // above hold the page still on their own, and two pills
@@ -3512,6 +3637,22 @@ fun ReaderScreen(
                                 dismissSelection()
                             }
                         },
+                        readAloudButton = readAloud
+                            ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
+                            ?.let { reading ->
+                                {
+                                    readAloudFeature.SelectionButton {
+                                        dismissSelection()
+                                        val nav = navigator
+                                        effectScope.launch {
+                                            reading.start(
+                                                nav?.let { SpokenPassage.startingPoint(it, active.locator) }
+                                                    ?: active.locator,
+                                            )
+                                        }
+                                    }
+                                }
+                            },
                     )
                 },
                 onDismiss = {
@@ -3816,6 +3957,19 @@ private data class BookNoteEditor(val existing: BookAnnotation?)
 
 /** Decorations for search hits live apart from the reader's own marks. */
 private const val SEARCH_DECORATION_GROUP = "search"
+
+/** The sentence being read aloud is marked apart from everything else. */
+private const val READ_ALOUD_DECORATION_GROUP = "read-aloud"
+private val READ_ALOUD_TINT = Color(0xFFFFD54F)
+
+/**
+ * How long after the page went after the voice a report of its move
+ * is still that move rather than the reader's.
+ */
+private const val FOLLOW_SETTLE_MS = 1_500L
+
+/** How long a listened place waits for the page before it is measured. */
+private const val READ_ALOUD_CAPTURE_WAIT_MS = 300L
 private val SEARCH_HIT_TINT = Color(0xFF80CBC4)
 
 private const val POPUP_HEIGHT_PX = 160f

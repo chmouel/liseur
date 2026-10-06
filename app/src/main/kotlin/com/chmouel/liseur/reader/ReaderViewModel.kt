@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader
 
+import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -10,6 +11,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
+import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.reader.chrome.BookSyncChoice
 import com.chmouel.liseur.reader.chrome.BookSyncVerdict
 import com.chmouel.liseur.reader.chrome.SyncRelation
@@ -173,6 +175,8 @@ class ReaderViewModel(
     private val userFonts: UserFontRepository,
     sessionManager: ReadingSessionManager,
     private val requestBookSync: (String) -> Unit = {},
+    private val openBookHandles: OpenBookHandles = OpenBookHandles(),
+    val readAloud: ReadAloudFeature = ReadAloudFeature.None,
 ) : ViewModel() {
 
     /**
@@ -1241,32 +1245,37 @@ class ReaderViewModel(
             // and rebuild its navigator the moment the scan landed — a
             // reflow nobody asked for, on the page they were reading.
             userFonts.awaitReady()
-            val asset = assetRetriever.retrieve(bookUrl).getOrElse {
-                _state.value = UiState.Failure(it.message)
-                return@launch
-            }
-            val publication = publicationOpener.open(
-                asset,
-                allowUserInteraction = false,
-                onCreatePublication = {
-                    // Imported fonts are served as publication resources:
-                    // Readium's asset host only ever reads the APK, so a
-                    // font in private storage has to arrive this way. Ours
-                    // goes first because it is registry-strict — it can
-                    // only answer for a digest it holds, so it cannot
-                    // shadow anything the book carries, whereas the book
-                    // could otherwise shadow a font.
-                    container = CompositeContainer(
-                        UserFontsContainer { userFonts.fonts.value },
-                        container,
-                    )
-                },
-            )
-                .getOrElse {
-                    asset.close()
+            // A book still being read aloud is already open; reading it
+            // again shares that publication rather than opening a second.
+            val opened = openBookHandles.open(bookId, keep = ::holdOpened) {
+                val asset = assetRetriever.retrieve(bookUrl).getOrElse {
                     _state.value = UiState.Failure(it.message)
-                    return@launch
+                    return@open null
                 }
+                publicationOpener.open(
+                    asset,
+                    allowUserInteraction = false,
+                    onCreatePublication = {
+                        // Imported fonts are served as publication resources:
+                        // Readium's asset host only ever reads the APK, so a
+                        // font in private storage has to arrive this way. Ours
+                        // goes first because it is registry-strict — it can
+                        // only answer for a digest it holds, so it cannot
+                        // shadow anything the book carries, whereas the book
+                        // could otherwise shadow a font.
+                        container = CompositeContainer(
+                            UserFontsContainer { userFonts.fonts.value },
+                            container,
+                        )
+                    },
+                )
+                    .getOrElse {
+                        asset.close()
+                        _state.value = UiState.Failure(it.message)
+                        return@open null
+                    }
+            } ?: return@launch
+            val publication = opened.publication
             val openedBookOrbit = try {
                 bookOrbitCfis?.openedIfConnected(bookId, bookUrl.toString(), downloads::fileFor, ::ownEpub)
             } catch (error: IOException) {
@@ -1477,14 +1486,51 @@ class ReaderViewModel(
             // opened. Only now can foreground time be reading time.
             sessions.onReaderReady()
             lastLocator?.let { _progress.value = progressAt(it) }
+            viewModelScope.launch {
+                // Listening is not reading time, even with the reader in front.
+                readAloud.session
+                    .map { it?.bookId == bookId && it.playing }
+                    .distinctUntilChanged()
+                    .collect { playing ->
+                        if (playing) sessions.suspendForListening() else sessions.resumeAfterListening()
+                    }
+            }
         }
     }
 
-    /** Adds the layout-independent whole-book progression to a captured locator. */
-    fun prepareLocator(locator: Locator): Locator {
-        val stable = bookPositions?.resolve(locator) ?: return locator
-        return ExactLocatorAnchor.withStableProgression(locator, stable.progression)
+    /**
+     * Reads the book aloud from the sentence [selection] starts in.
+     *
+     * Listening from here settles a BookOrbit opening the way a jump
+     * here would: an approximate opening and a catch-up offer are
+     * declined, and a verified opening is accepted, by the first place
+     * the session saves.
+     */
+    fun startReadAloud(selection: Locator, reader: Intent) {
+        val handle = bookHandle ?: return
+        if (bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null) return
+        approximateOpening = null
+        approximateCatchUp?.let { bookOrbitDeclinedPending = it }
+        approximateCatchUp = null
+        val declined = _catchUp.value?.bookOrbit ?: bookOrbitDeclinedPending
+        bookOrbitDeclinedPending = null
+        _catchUp.value = null
+        handle.listeningSettles = ListeningSettlement(bookOrbitOpening.verifiedPull, declined)
+        readAloud.start(handle, selection, reader)
     }
+
+    /**
+     * The place listening saved last, while it is not yet an exact
+     * anchor and has no BookOrbit CFI: both are only measured from the
+     * page on screen, so the reader shows that place and saves it again
+     * once listening has let go.
+     */
+    fun listenedPlaceAwaitingCapture(): Locator? = bookHandle
+        ?.takeIf { it.awaitingPageCapture && !it.listeningOwnsPlace }
+        ?.lastHeard
+
+    /** Adds the layout-independent whole-book progression to a captured locator. */
+    fun prepareLocator(locator: Locator): Locator = bookHandle?.prepareLocator(locator) ?: locator
 
     /**
      * Where a BookOrbit CFI points in this book, checked against the
@@ -1530,7 +1576,10 @@ class ReaderViewModel(
         // position arrives, manufacturing a sync conflict.
         if (!readerActive && effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT) return
         val prepared = prepareLocator(locator)
-        val samePosition = lastLocator?.sameReadingPositionAs(prepared) == true
+        // After listening, the saved place is the sentence heard rather
+        // than the page last reported, so the page is not yet saved.
+        val samePosition = lastLocator?.sameReadingPositionAs(prepared) == true &&
+            bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } != true
         lastLocator = prepared
         val stable = bookPositions?.resolve(prepared)
         _progress.value = progressAt(prepared, stable)
@@ -1547,6 +1596,19 @@ class ReaderViewModel(
         if (samePosition || !effectiveEvent.persists || bookOrbitOpening.choice != null ||
             bookOrbitCatchUpApplying != null
         ) return
+        bookHandle?.let { handle ->
+            if (handle.listeningOwnsPlace) {
+                // Read-aloud saves the place while it plays. A move of the
+                // reader's own pauses it, which saves what was heard and
+                // hands the place back, so this move is saved after it.
+                // Anything else, like the place left when the reader
+                // goes to the background, is the past and is dropped.
+                if (!readerActive) return
+                readAloud.pause()
+                if (handle.listeningOwnsPlace) return
+            }
+            handle.awaitingPageCapture = false
+        }
         readingGeneration++
         // Reading on past a BookOrbit offer keeps this device's place.
         val declinedBookOrbit = _catchUp.value?.bookOrbit ?: bookOrbitDeclinedPending
@@ -2132,7 +2194,7 @@ class ReaderViewModel(
     /** Builds the synthetic and printed-page indexes together, once per book. */
     private suspend fun positionsFor(publication: Publication): BookPositions {
         bookPositions?.let { return it }
-        return BookPositions.of(publication).also { positions ->
+        return (bookHandle?.positions() ?: BookPositions.of(publication)).also { positions ->
             bookPositions = positions
             goToPageResolver = GoToPageResolver(
                 pageList = publication.pageList,
@@ -2641,6 +2703,13 @@ class ReaderViewModel(
     private val epubOwnership = Any()
     private var ownedEpub: BookOrbitOpenedEpub? = null
     private var epubsReleased = false
+    private var bookHandle: OpenBookHandle? = null
+
+    /** Keeps the opened book unless this ViewModel was cleared meanwhile. */
+    private fun holdOpened(handle: OpenBookHandle): Boolean = synchronized(epubOwnership) {
+        if (!epubsReleased) bookHandle = handle
+        !epubsReleased
+    }
 
     /**
      * Takes the opened EPUB as soon as it exists, on whichever thread
@@ -2663,37 +2732,52 @@ class ReaderViewModel(
         val closingEpub = bookOrbitOpening.verifiedEpub
         // An uploaded book read from a document was parsed from a private
         // copy, which goes once nothing left here can still read it.
-        val owned = synchronized(epubOwnership) {
+        val (owned, handle) = synchronized(epubOwnership) {
             epubsReleased = true
-            ownedEpub
+            ownedEpub to bookHandle
         }
-        val openedEpubs = listOfNotNull(
-            (_state.value as? UiState.Ready)?.openedBookOrbit, closingEpub, owned,
-        ).distinct()
+        val openedBookOrbit = (_state.value as? UiState.Ready)?.openedBookOrbit
+        val openedEpubs = listOfNotNull(openedBookOrbit, closingEpub, owned).distinct()
+        // What closing does may wait for a read-aloud session to end, so
+        // it captures what it needs rather than this ViewModel.
+        val cfis = bookOrbitCfis
+        val agreement = bookOrbitAgreement
+        val files = downloads
+        val fence = progressDao.openBooks
+        val publisher = positionPublisher
+        val bookId = bookId
+        val requestBookSync = requestBookSync
+        val readingDeclared = readingDeclared
+        val choicePending = bookOrbitOpening.choice != null
         val releaseEpubs = {
             if (openedEpubs.isNotEmpty()) CoroutineScope(Dispatchers.IO).launch {
-                openedEpubs.forEach { bookOrbitCfis?.release(it) }
+                openedEpubs.forEach { cfis?.release(it) }
             }
         }
         sessions.close()
-        (_state.value as? UiState.Ready)?.publication?.close()
-        if (readingDeclared) {
+        val close = close@{
+            // Listening moved the place on from the opening, as reading on
+            // would have.
+            val closingPull = closingPull?.takeIf { handle?.listened != true }
+            if (!readingDeclared) {
+                releaseEpubs()
+                return@close
+            }
             // Through the position queue, not a scope of its own: a page
             // turned moments ago may still be in line to be written, and
             // dropping the fence ahead of it would let a background pull
             // land between that write and this — the very interleaving
             // the fence exists to prevent. The queue survives this
             // ViewModel, and the fallback covers a queue already closed.
-            val queued = positionPublisher.afterQueuedWrites {
-                progressDao.openBooks.leave(bookId)
+            val queued = publisher.afterQueuedWrites {
+                fence.leave(bookId)
                 if (com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED &&
-                    (_state.value as? UiState.Ready)?.openedBookOrbit != null &&
-                    closingPull == null && bookOrbitOpening.choice == null
+                    openedBookOrbit != null && closingPull == null && !choicePending
                 ) requestBookSync(bookId)
                 if (closingPull != null && closingEpub != null) {
                     CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            adoptClosedBookOrbit(closingPull, closingEpub)
+                            adoptClosedBookOrbit(closingPull, closingEpub, cfis, agreement, files)
                         } finally {
                             releaseEpubs()
                         }
@@ -2703,30 +2787,13 @@ class ReaderViewModel(
                 }
             }
             if (!queued) {
-                CoroutineScope(Dispatchers.Default).launch { progressDao.openBooks.leave(bookId) }
+                CoroutineScope(Dispatchers.Default).launch { fence.leave(bookId) }
                 releaseEpubs()
             }
-        } else {
-            releaseEpubs()
         }
-    }
-
-    private suspend fun adoptClosedBookOrbit(offer: BookOrbitPullOffer, opened: BookOrbitOpenedEpub) {
-        try {
-            if (withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
-                if (bookOrbitCfis?.originalDocument(opened, offer.href, downloads::fileFor) == null) {
-                    Log.w("bookorbit-position", "The verified original EPUB is no longer available")
-                    return@withTimeoutOrNull false
-                }
-                bookOrbitAgreement?.adoptVerifiedClosed(offer)
-            } == null) Log.w("bookorbit-position", "Timed out adopting the verified closed-book place")
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: IOException) {
-            Log.w("bookorbit-position", "Could not adopt the verified closed-book place", error)
-        } catch (error: BookOrbitEpubPackage.ParseException) {
-            Log.w("bookorbit-position", "The original EPUB changed before adoption", error)
-        }
+        // The publication and the closing work outlast this ViewModel
+        // while the book is still being read aloud.
+        if (handle != null) handle.release(close) else close()
     }
 
     /** A place to return to after a jump, and the page it was on. */
@@ -2742,6 +2809,30 @@ class ReaderViewModel(
 
     companion object {
         private const val JUMP_BACK_TIMEOUT_MS = 30_000L
+
+        private suspend fun adoptClosedBookOrbit(
+            offer: BookOrbitPullOffer,
+            opened: BookOrbitOpenedEpub,
+            cfis: BookOrbitCfiRepository?,
+            agreement: BookOrbitPositionAgreementRepository?,
+            downloads: BookDownloadRepository,
+        ) {
+            try {
+                if (withTimeoutOrNull(OPEN_SYNC_TIMEOUT_MS) {
+                    if (cfis?.originalDocument(opened, offer.href, downloads::fileFor) == null) {
+                        Log.w("bookorbit-position", "The verified original EPUB is no longer available")
+                        return@withTimeoutOrNull false
+                    }
+                    agreement?.adoptVerifiedClosed(offer)
+                } == null) Log.w("bookorbit-position", "Timed out adopting the verified closed-book place")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IOException) {
+                Log.w("bookorbit-position", "Could not adopt the verified closed-book place", error)
+            } catch (error: BookOrbitEpubPackage.ParseException) {
+                Log.w("bookorbit-position", "The original EPUB changed before adoption", error)
+            }
+        }
 
         /**
          * How long opening a book will wait to hear where it was left
@@ -2789,6 +2880,8 @@ class ReaderViewModel(
                     userFonts = container.userFonts,
                     sessionManager = container.readingSessions,
                     requestBookSync = container::requestBookSync,
+                    openBookHandles = container.openBookHandles,
+                    readAloud = container.readAloud,
                 )
             }
         }

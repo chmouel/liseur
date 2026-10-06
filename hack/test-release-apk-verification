@@ -38,8 +38,8 @@ other_digest=802fa08765ec04b3b2bb2d2665fb853582ff2d57888a10fa0aa413c87fe9586b
 verify_case() {
     local name=$1 expected=$2
     local case_dir="$workdir/$name"
-    mkdir -p "$case_dir/app/build/outputs/apk/release"
-    touch "$case_dir/app/build/outputs/apk/release/app-release.apk"
+    mkdir -p "$case_dir/app/build/outputs/apk/foss/release"
+    touch "$case_dir/app/build/outputs/apk/foss/release/app-foss-release.apk"
     cat > "$MOCK_VERIFICATION"
     : > "$GITHUB_ENV"
     if (cd "$case_dir" && bash "$workdir/verify.sh") > "$workdir/output" 2>&1; then
@@ -48,9 +48,9 @@ verify_case() {
             exit 1
         }
         grep -Fxq "RELEASE_CERTIFICATE_SHA256=$digest" "$GITHUB_ENV"
-        grep -Fxq 'RELEASE_APK=app/build/outputs/apk/release/liseur-v0.20.0.apk' "$GITHUB_ENV"
-        test -f "$case_dir/app/build/outputs/apk/release/liseur-v0.20.0.apk"
-        test ! -f "$case_dir/app/build/outputs/apk/release/app-release.apk"
+        grep -Fxq 'RELEASE_APK=app/build/outputs/apk/foss/release/liseur-v0.20.0.apk' "$GITHUB_ENV"
+        test -f "$case_dir/app/build/outputs/apk/foss/release/liseur-v0.20.0.apk"
+        test ! -f "$case_dir/app/build/outputs/apk/foss/release/app-foss-release.apk"
     else
         [[ "$expected" == fail ]] || {
             cat "$workdir/output" >&2
@@ -58,7 +58,7 @@ verify_case() {
             exit 1
         }
         test ! -s "$GITHUB_ENV"
-        test -f "$case_dir/app/build/outputs/apk/release/app-release.apk"
+        test -f "$case_dir/app/build/outputs/apk/foss/release/app-foss-release.apk"
     fi
 }
 
@@ -96,5 +96,17 @@ EOF
 MOCK_VERIFY_STATUS=1 verify_case invalid-signature fail <<EOF
 V3.0 Signer: certificate SHA-256 digest: $digest
 EOF
+
+# F-Droid builds whatever flavor the fdroiddata entry names; a bare `yes`
+# would run assembleRelease and build the play flavor along with it.
+entry=$(awk '/function entry\(\)/,/^        }$/' "$here/release")
+grep -Fq 'print "      - foss"' <<<"$entry" || {
+    printf 'hack/release must emit gradle: [foss] for the fdroiddata entry.\n' >&2
+    exit 1
+}
+if grep -Eq 'print "      - yes"' <<<"$entry"; then
+    printf 'hack/release still emits gradle: [yes].\n' >&2
+    exit 1
+fi
 
 printf 'Release APK verification tests passed.\n'

@@ -14,7 +14,10 @@ set -euo pipefail
 readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
 readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
-readonly APK="app/build/outputs/apk/release/app-release.apk"
+# play carries Gemini read-aloud; FLAVOR=foss installs the F-Droid build.
+# Both share the application id and the key, so either updates the other.
+readonly FLAVOR="${FLAVOR:-play}"
+readonly APK="app/build/outputs/apk/$FLAVOR/release/app-$FLAVOR-release.apk"
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -34,6 +37,6 @@ keyAlias=$alias
 keyPassword=$password
 EOF
 
-./gradlew assembleRelease
+./gradlew "assemble${FLAVOR^}Release"
 
 adb install -r "$@" "$APK"

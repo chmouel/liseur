@@ -656,7 +656,7 @@ write_rc_commit() {
         [[ $(read_version_code) == "$version_code" ]] || exit 1
         git add "$BUILD_FILE"
         git commit --quiet -m "chore: release candidate v$version"
-        ./gradlew testDebugUnitTest lintDebug assembleRelease --console=plain
+        ./gradlew testFossDebugUnitTest testPlayDebugUnitTest lintFossDebug lintPlayDebug assembleFossRelease --console=plain
     ) >&2; then
         git worktree remove --force "$worktree" >/dev/null 2>&1 || true
         rm -rf "$workdir"
@@ -1007,7 +1007,7 @@ PY
                 print "    commit: " commit
                 print "    subdir: app"
                 print "    gradle:"
-                print "      - yes"
+                print "      - foss"
             }
             print ""
             inb = 0
@@ -1379,7 +1379,7 @@ if [[ "$current_version" != "$version" ]]; then
     [[ $(read_version_name) == "$version" ]] || die "versionName update failed"
     [[ $(read_version_code) == "$new_version_code" ]] || die "versionCode update failed"
 
-    ./gradlew testDebugUnitTest lintDebug assembleRelease --console=plain
+    ./gradlew testFossDebugUnitTest testPlayDebugUnitTest lintFossDebug lintPlayDebug assembleFossRelease --console=plain
 
     git add "${release_files[@]}"
     git commit -m "chore: release $tag"

@@ -112,6 +112,41 @@ class ReadingSessionDaoTest {
     }
 
     @Test
+    fun `listening in front of the reader is not reading time`() = runTest {
+        val recorder = recorder()
+        recorder.resumed()
+        now += minute
+        recorder.suspendForListening()
+        recorder.awaitIdle()
+        now += 30 * minute
+        // Rotation or coming back while the voice plays opens nothing.
+        recorder.paused()
+        recorder.resumed()
+        now += 10 * minute
+        recorder.resumeAfterListening()
+        recorder.awaitIdle()
+        now += 2 * minute
+        recorder.paused()
+
+        assertEquals(3 * minute, totalFor(book))
+    }
+
+    @Test
+    fun `listening that stops in the background starts nothing`() = runTest {
+        val recorder = recorder()
+        recorder.resumed()
+        recorder.suspendForListening()
+        recorder.paused()
+        now += 10 * minute
+        recorder.resumeAfterListening()
+        recorder.awaitIdle()
+        now += 10 * minute
+
+        assertTrue(dao.openSessions().isEmpty())
+        assertEquals(0L, totalFor(book))
+    }
+
+    @Test
     fun `coming back is a new segment`() = runTest {
         val recorder = recorder()
         recorder.resumed()

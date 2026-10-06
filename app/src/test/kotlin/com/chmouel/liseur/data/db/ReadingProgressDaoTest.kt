@@ -106,6 +106,30 @@ class ReadingProgressDaoTest {
     }
 
     @Test
+    fun `a place heard earlier keeps when it was heard, not when it was written`() = runTest {
+        suspend fun heard(at: Double, heardAt: Long, writtenAt: Long) = dao.recordLocal(
+            bookUrl = book,
+            locatorJson = """{"at":$at}""",
+            progression = at,
+            readingSecondsPerPosition = null,
+            readingPaceSamples = null,
+            readingPaceElapsedMs = null,
+            readingPaceEvidence = null,
+            status = "Reading",
+            updatedAt = writtenAt,
+            readAt = heardAt,
+        )
+
+        heard(0.1, heardAt = 1_000, writtenAt = 4_000)
+        assertEquals(1_000L, row().readAt)
+        assertEquals(4_000L, row().updatedAt)
+
+        heard(0.2, heardAt = 5_000, writtenAt = 9_000)
+        assertEquals(5_000L, row().readAt)
+        assertEquals(9_000L, row().updatedAt)
+    }
+
+    @Test
     fun `v2 pace is stored without rewriting sync state`() = runTest {
         read(0.1)
         dao.ackPush(book, 1, 0.1, "Reading", account, now = 2_000)

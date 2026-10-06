@@ -11,7 +11,8 @@
 
 set -euo pipefail
 
-readonly APK_DIR="app/build/outputs/apk/release"
+# F-Droid rebuilds the foss flavor; the play one never reaches it.
+readonly APK_DIR="app/build/outputs/apk/foss/release"
 
 workdir=""
 keep=false
@@ -58,7 +59,7 @@ build_once() {
         cp local.properties "$dest/local.properties"
     fi
 
-    (cd "$dest" && ./gradlew --quiet --no-daemon assembleRelease) ||
+    (cd "$dest" && ./gradlew --quiet --no-daemon assembleFossRelease) ||
         die "the build in $dest failed"
 }
 
@@ -67,7 +68,7 @@ build_once() {
 # instead, which is not what is being checked.
 apk_in() {
     local dest=$1
-    local apk="$dest/$APK_DIR/app-release-unsigned.apk"
+    local apk="$dest/$APK_DIR/app-foss-release-unsigned.apk"
 
     [[ -f "$apk" ]] ||
         die "no unsigned APK in $dest/$APK_DIR: move keystore.properties aside"

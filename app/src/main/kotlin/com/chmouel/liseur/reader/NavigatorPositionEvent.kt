@@ -13,6 +13,9 @@ enum class NavigatorPositionEvent(
     FRAGMENT_RECREATION(persists = false, teachesPace = false, recordsReadingTime = false),
     LIFECYCLE_REPLAY(persists = false, teachesPace = false, recordsReadingTime = false),
 
+    /** The page following read-aloud's voice; the session saves that place itself. */
+    TTS_FOLLOW(persists = false, teachesPace = false, recordsReadingTime = false),
+
     /**
      * The navigator reporting itself while a book is still being
      * reopened, before restoration has landed.

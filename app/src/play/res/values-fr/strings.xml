@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="read_aloud_settings_key">Clé API Gemini pour la lecture à voix haute</string>
+    <string name="read_aloud_settings_key_missing">Collez une clé de Google AI Studio pour que les livres soient lus à voix haute. Les requêtes sont facturées sur cette clé.</string>
+    <string name="read_aloud_settings_key_saved">Une clé est enregistrée sur cet appareil.</string>
+    <string name="read_aloud_settings_key_hint">Collez votre clé</string>
+    <string name="read_aloud_settings_key_replace">Collez une nouvelle clé pour la remplacer</string>
+    <string name="read_aloud_settings_key_clear">Supprimer la clé</string>
+    <string name="read_aloud_settings_privacy">Le texte lu à voix haute est envoyé à Google pour produire la voix.</string>
+    <string name="read_aloud_settings_voice">Voix</string>
+    <string name="read_aloud_settings_voice_choice">%1$s (%2$s)</string>
+    <string name="read_aloud_previous_sentence">Phrase précédente</string>
+    <string name="read_aloud_next_sentence">Phrase suivante</string>
+    <string name="read_aloud_from_here">Lire à voix haute à partir d\'ici</string>
+    <string name="read_aloud_pause">Mettre la lecture à voix haute en pause</string>
+    <string name="read_aloud_resume">Reprendre la lecture à voix haute</string>
+    <string name="read_aloud_stop">Arrêter la lecture à voix haute</string>
+    <string name="read_aloud_notice_network">Impossible de joindre Gemini. En pause ; appuyez sur lecture pour réessayer.</string>
+    <string name="read_aloud_notice_rate_limited">Cette clé a épuisé son quota Gemini pour le moment. En pause ; réessayez plus tard.</string>
+    <string name="read_aloud_notice_service">Gemini n\'a pas pu lire cette phrase. En pause ; appuyez sur lecture pour réessayer.</string>
+    <string name="read_aloud_notice_output">Cet appareil n\'a pas pu jouer la voix. En pause.</string>
+    <string name="read_aloud_notice_invalid_key">Gemini a refusé la clé API. Vérifiez-la dans Paramètres, Lecture et navigation.</string>
+    <string name="read_aloud_notice_selection_not_found">Lecture depuis le début du paragraphe.</string>
+    <string name="read_aloud_notice_unavailable">Ce livre ne peut pas être lu à voix haute à partir d\'ici.</string>
+
+    <string name="read_aloud_voice_firm">Ferme</string>
+    <string name="read_aloud_voice_informative">Informative</string>
+    <string name="read_aloud_voice_upbeat">Enjouée</string>
+    <string name="read_aloud_voice_breezy">Décontractée</string>
+    <string name="read_aloud_voice_youthful">Juvénile</string>
+    <string name="read_aloud_voice_excitable">Enthousiaste</string>
+    <string name="read_aloud_voice_warm">Chaleureuse</string>
+    <string name="read_aloud_voice_soft">Douce</string>
+    <string name="read_aloud_voice_clear">Claire</string>
+    <string name="read_aloud_voice_mature">Mûre</string>
+    <string name="read_aloud_voice_gentle">Tendre</string>
+    <string name="read_aloud_voice_even">Posée</string>
+</resources>

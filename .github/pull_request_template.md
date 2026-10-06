@@ -8,9 +8,9 @@
 
 ## Testing
 
-- [ ] `./gradlew testDebugUnitTest`
-- [ ] `./gradlew lintDebug`
-- [ ] `./gradlew assembleDebug`
+- [ ] `./gradlew testFossDebugUnitTest testPlayDebugUnitTest`
+- [ ] `./gradlew lintFossDebug lintPlayDebug`
+- [ ] `./gradlew assembleFossDebug assemblePlayDebug`
 - [ ] Manually tested on a device or emulator, if applicable
 
 ## Screenshots or recordings

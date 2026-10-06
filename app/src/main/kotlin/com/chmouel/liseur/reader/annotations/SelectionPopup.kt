@@ -42,6 +42,8 @@ class SelectionActions(
     val onLookUp: () -> Unit,
     val onShare: () -> Unit,
     val onDelete: (() -> Unit)? = null,
+    /** Reads aloud from here, where the build can. */
+    val readAloudButton: (@Composable () -> Unit)? = null,
 )
 
 /**
@@ -136,6 +138,7 @@ fun SelectionPopup(
                         contentDescription = stringResource(R.string.annotation_share),
                     )
                 }
+                actions.readAloudButton?.invoke()
                 actions.onDelete?.let { delete ->
                     IconButton(onClick = delete, modifier = Modifier.size(36.dp)) {
                         Icon(

@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 19 August 2026
+**Last updated:** 6 October 2026
 
 Liseur is an open-source ebook reader. It has no account, no advertising,
 no analytics and no trackers, and it collects nothing about you. Its
@@ -33,6 +33,8 @@ All of this stays in the app's own private storage:
 - If you connect a book server, its address and the credentials or token
   it issued. Those are encrypted with a key held in the Android Keystore,
   which cannot be exported from the device.
+- In the Google Play build, the Gemini API key you paste for reading
+  aloud, encrypted the same way.
 
 Uninstalling the app removes all of it.
 
@@ -42,7 +44,9 @@ not copy your books anywhere.
 
 ## Network access
 
-Liseur talks to exactly two kinds of address, both chosen by you.
+Liseur talks only to addresses you choose. The F-Droid and GitHub builds
+know two kinds; the Google Play build adds a third, used only if you set
+it up.
 
 ### Your book server
 
@@ -64,9 +68,32 @@ installed on your device instead. When you pick or type a dictionary site in
 Settings, Liseur checks it once with a fixed word ("book"). A dead address
 fails then, and opening the screen makes no request.
 
+### Google Gemini, for reading aloud (Google Play build only)
+
+The Google Play build can read a book aloud with a voice made by Google's
+Gemini service. The F-Droid and GitHub builds do not contain this feature
+at all.
+
+It does nothing until you paste a Gemini API key of your own from Google
+AI Studio in Settings. Once you press play, Liseur sends the text being
+read, one sentence or short passage at a time and a few sentences ahead of
+the voice, to `generativelanguage.googleapis.com` over HTTPS, together
+with your key and the voice you picked. Nothing else goes with it: no book
+title, no file, no identifier, no reading position. Requests are billed to
+your key under Google's terms.
+
+Each request asks Google not to store it (`store: false`). That turns off
+the optional storage of the request on Google's side; it does not change
+Google's own retention policy for the Gemini API, which this policy does
+not cover. The audio that comes back is kept in memory while you listen
+and is never written to storage.
+
+Stopping the voice stops the requests. Remove the key in Settings and no
+more are made.
+
 Liseur never contacts any other host. It requests the `INTERNET` and
-`ACCESS_NETWORK_STATE` permissions for the two purposes above and for
-nothing else.
+`ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
+else.
 
 ## Android backup
 
@@ -77,7 +104,8 @@ under Google's terms, not the developer's. Liseur has no access to it.
 Downloaded book files and generated covers are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices
-this and asks you to sign in again.
+this and asks you to sign in again. A Gemini API key is not backed up at
+all; you paste it again on a new device.
 
 You can turn this off in your device's backup settings.
 

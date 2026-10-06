@@ -3,6 +3,8 @@
 UI strings live in
 [`app/src/main/res/values/strings.xml`](../app/src/main/res/values/strings.xml).
 Locales ship in the tree as `app/src/main/res/values-*/strings.xml`.
+Strings used only by the Google Play build (reading aloud) live in
+`app/src/play/res/values*/strings.xml` and need the same locales.
 
 French (`values-fr`), Spanish (`values-es`), Russian (`values-ru`),
 Italian (`values-it`), German (`values-de`) and Simplified Chinese
@@ -20,7 +22,7 @@ generated from the `values-*` folders at build time.
 
 Lint treats `MissingTranslation` as an error: every translatable key
 in the English file must also be present in each of those locale files,
-or `./gradlew lintDebug` (and CI / `make check`) fails. Do not leave an
+or `./gradlew lintFossDebug lintPlayDebug` (and CI / `make check`) fails. Do not leave an
 empty `values-xx/` directory — that registers the locale with no strings
 and fails the same check. Paragraph breaks inside a string must be the
 literal escape `\n\n` on one line; a raw XML newline collapses to a

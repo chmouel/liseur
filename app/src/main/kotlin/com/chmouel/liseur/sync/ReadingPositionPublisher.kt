@@ -32,6 +32,10 @@ data class PositionUpdate(
     val bookOrbitPull: BookOrbitPullOffer? = null,
     /** A BookOrbit catch-up offer this move reads on past, which keeps this device's place. */
     val bookOrbitDeclined: BookOrbitPullOffer? = null,
+    /** When the reading happened; a listening checkpoint is written after the sentence was heard. */
+    val readAt: Long = updatedAt,
+    /** False for a local-only save that should not ask for a sync of its own. */
+    val signalSync: Boolean = true,
 )
 
 /**
@@ -180,7 +184,7 @@ class ReadingPositionPublisher(
         }
         healed(update.bookUrl, Injury.POSITION)
 
-        latestSync.signal(update.bookUrl)
+        if (update.signalSync) latestSync.signal(update.bookUrl)
 
         retry {
             refreshFinished(update.bookUrl)

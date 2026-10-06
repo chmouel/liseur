@@ -13,7 +13,11 @@ ADB_TARGET := -s $(SERIAL)
 ADB_PHONE_TARGET := -s $(PHONE)
 PACKAGE := com.chmouel.liseur
 ACTIVITY := $(PACKAGE)/.MainActivity
-DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
+# Which build the device targets install. `play` carries Gemini read-aloud
+# and is what the developer runs; FLAVOR=foss installs the F-Droid build.
+FLAVOR ?= play
+FLAVOR_TASK := $(shell printf '%s' '$(FLAVOR)' | awk '{ print toupper(substr($$0, 1, 1)) substr($$0, 2) }')
+DEBUG_APK := app/build/outputs/apk/$(FLAVOR)/debug/app-$(FLAVOR)-debug.apk
 
 # The side-by-side build, for trying a change on a phone that already has
 # the real app on it. The component name is spelled out rather than
@@ -22,18 +26,18 @@ DEBUG_APK := app/build/outputs/apk/debug/app-debug.apk
 # the class lives in.
 DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
-DEV_APK := app/build/outputs/apk/dev/app-dev.apk
+DEV_APK := app/build/outputs/apk/$(FLAVOR)/dev/app-$(FLAVOR)-dev.apk
 
-.PHONY: help build debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
+.PHONY: help build build-all debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
-		'make build             Build the debug APK' \
-		'make release           Build the release APK' \
+		'make build             Build the debug APK of FLAVOR' \
+		'make release           Build the F-Droid/GitHub release APK (foss)' \
 		'make bundle            Build the release AAB for Google Play' \
 		'make test              Run JVM unit tests' \
 		'make lint              Run Android Lint' \
-		'make check             Run tests, lint, and debug build' \
+		'make check             Run tests, lint, and debug builds of both flavors' \
 		'make verify-release-tools Check release tag and retention policies' \
 		'make verify-fdroid-tags Check the F-Droid release-tag policy' \
 		'make e2e               Run the device scenarios in tests/' \
@@ -58,26 +62,29 @@ help:
 		'make feature-graphic   Generate the store feature graphic' \
 		'make store-status      Show what each store is publishing' \
 		'' \
-		'Variables: AVD=liseur_phone_api36 SERIAL=... LOCALE=...'
+		'Variables: AVD=liseur_phone_api36 SERIAL=... LOCALE=... FLAVOR=play|foss'
 
 build debug:
-	$(GRADLE) assembleDebug
+	$(GRADLE) assemble$(FLAVOR_TASK)Debug
+
+build-all:
+	$(GRADLE) assembleFossDebug assemblePlayDebug
 
 release:
-	$(GRADLE) assembleRelease
+	$(GRADLE) assembleFossRelease
 
-# Google Play only. F-Droid and the GitHub release both build the APK
-# above, so this target is additive and nothing else depends on it.
+# Google Play only. F-Droid and the GitHub release both build the foss
+# APK above, so this target is additive and nothing else depends on it.
 bundle:
-	$(GRADLE) bundleRelease
+	$(GRADLE) bundlePlayRelease
 
 test:
-	$(GRADLE) testDebugUnitTest
+	$(GRADLE) testFossDebugUnitTest testPlayDebugUnitTest
 
 lint:
-	$(GRADLE) lintDebug
+	$(GRADLE) lintFossDebug lintPlayDebug
 
-check: test lint build verify-release-tools
+check: test lint build-all verify-release-tools
 
 verify-release-tools: verify-fdroid-tags
 	hack/test-prune-prereleases
@@ -160,7 +167,7 @@ locale:
 # device is chosen with PHONE=, which falls back to SERIAL= like
 # everywhere else, and so defaults to the emulator.
 dev:
-	$(GRADLE) assembleDev
+	$(GRADLE) assemble$(FLAVOR_TASK)Dev
 
 dev-install: dev
 	$(ADB) $(ADB_PHONE_TARGET) install -r '$(DEV_APK)'

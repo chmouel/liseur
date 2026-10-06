@@ -579,6 +579,20 @@ class ReaderActivity : FragmentActivity() {
                                         )
                                     },
                                     onBack = ::finish,
+                                    readAloud = remember(viewModel) {
+                                        val open = checkNotNull(target)
+                                        ReaderReadAloud(
+                                            feature = container.readAloud,
+                                            bookId = open.id,
+                                            start = { locator ->
+                                                viewModel.startReadAloud(
+                                                    locator,
+                                                    intent(this@ReaderActivity, open.url.toString(), open.id),
+                                                )
+                                            },
+                                            awaitingCapture = viewModel::listenedPlaceAwaitingCapture,
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -681,6 +695,16 @@ class ReaderActivity : FragmentActivity() {
     override fun onStop() {
         ReaderPresence.closed()
         super.onStop()
+    }
+
+    // Only the read-aloud notification reaches a reader already in front.
+    // Its own book is this one, shown as it is; another book opens in a
+    // reader of its own.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val url = intent.getStringExtra(EXTRA_URL) ?: return
+        val id = intent.getStringExtra(EXTRA_ID) ?: url
+        if (target?.id != id) startActivity(intent(this, url, id))
     }
 
     override fun onResume() {

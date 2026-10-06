@@ -8,8 +8,10 @@
 
 set -euo pipefail
 
-readonly APK_DIR="app/build/outputs/apk/release"
-readonly UNSIGNED_APK="$APK_DIR/app-release-unsigned.apk"
+# play carries Gemini read-aloud; FLAVOR=foss installs the F-Droid build.
+readonly FLAVOR="${FLAVOR:-play}"
+readonly APK_DIR="app/build/outputs/apk/$FLAVOR/release"
+readonly UNSIGNED_APK="$APK_DIR/app-$FLAVOR-release-unsigned.apk"
 readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
 readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
@@ -67,7 +69,7 @@ serial=$(pick_device)
 printf 'Installing to %s.\n' "$serial"
 
 printf 'Building the release APK.\n'
-./gradlew assembleRelease --console=plain
+./gradlew "assemble${FLAVOR^}Release" --console=plain
 
 [[ -f "$UNSIGNED_APK" ]] || die "$UNSIGNED_APK not found after build"
 

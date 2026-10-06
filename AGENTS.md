@@ -16,12 +16,16 @@ section when a rule is not self-contained.
 Use the Gradle wrapper, never a system Gradle:
 
 ```bash
-./gradlew testDebugUnitTest
-./gradlew lintDebug
-./gradlew assembleDebug
+./gradlew testFossDebugUnitTest testPlayDebugUnitTest
+./gradlew lintFossDebug lintPlayDebug
+./gradlew assembleFossDebug assemblePlayDebug
 ```
 
 Use `make check` when the change crosses tests, lint, and the debug build.
+There are two flavors: `foss` (F-Droid, GitHub) and `play` (Google Play,
+adds Gemini read-aloud). Code that calls Gemini or uses Readium TTS
+belongs only in `app/src/play/`; see
+[DEVELOPER.md](DEVELOPER.md#building).
 See [DEVELOPER.md](DEVELOPER.md#testing) for emulator and end-to-end checks.
 
 The project uses JDK 17, AGP 9.x, compile/target SDK 37, and min SDK 26.

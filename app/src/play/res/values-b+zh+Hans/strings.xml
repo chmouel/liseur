@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="read_aloud_settings_key">用于朗读的 Gemini API 密钥</string>
+    <string name="read_aloud_settings_key_missing">粘贴 Google AI Studio 的密钥即可朗读图书。请求费用由该密钥承担。</string>
+    <string name="read_aloud_settings_key_saved">此设备上已保存密钥。</string>
+    <string name="read_aloud_settings_key_hint">粘贴你的密钥</string>
+    <string name="read_aloud_settings_key_replace">粘贴新密钥以替换</string>
+    <string name="read_aloud_settings_key_clear">移除密钥</string>
+    <string name="read_aloud_settings_privacy">朗读的文字会发送给 Google 以生成语音。</string>
+    <string name="read_aloud_settings_voice">声音</string>
+    <string name="read_aloud_settings_voice_choice">%1$s（%2$s）</string>
+    <string name="read_aloud_previous_sentence">上一句</string>
+    <string name="read_aloud_next_sentence">下一句</string>
+    <string name="read_aloud_from_here">从这里开始朗读</string>
+    <string name="read_aloud_pause">暂停朗读</string>
+    <string name="read_aloud_resume">继续朗读</string>
+    <string name="read_aloud_stop">停止朗读</string>
+    <string name="read_aloud_notice_network">无法连接 Gemini。已暂停；按播放重试。</string>
+    <string name="read_aloud_notice_rate_limited">此密钥暂时用完了 Gemini 配额。已暂停；请稍后再试。</string>
+    <string name="read_aloud_notice_service">Gemini 无法朗读这一句。已暂停；按播放重试。</string>
+    <string name="read_aloud_notice_output">此设备无法播放语音。已暂停。</string>
+    <string name="read_aloud_notice_invalid_key">Gemini 拒绝了该 API 密钥。请在“设置 &gt; 阅读与导航”中检查。</string>
+    <string name="read_aloud_notice_selection_not_found">从段落开头开始朗读。</string>
+    <string name="read_aloud_notice_unavailable">本书无法从这里开始朗读。</string>
+
+    <string name="read_aloud_voice_firm">坚定</string>
+    <string name="read_aloud_voice_informative">知性</string>
+    <string name="read_aloud_voice_upbeat">欢快</string>
+    <string name="read_aloud_voice_breezy">轻快</string>
+    <string name="read_aloud_voice_youthful">年轻</string>
+    <string name="read_aloud_voice_excitable">兴奋</string>
+    <string name="read_aloud_voice_warm">温暖</string>
+    <string name="read_aloud_voice_soft">柔和</string>
+    <string name="read_aloud_voice_clear">清晰</string>
+    <string name="read_aloud_voice_mature">成熟</string>
+    <string name="read_aloud_voice_gentle">温柔</string>
+    <string name="read_aloud_voice_even">平稳</string>
+</resources>

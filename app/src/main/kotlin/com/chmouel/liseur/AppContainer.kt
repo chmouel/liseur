@@ -61,6 +61,10 @@ import com.chmouel.liseur.data.remote.RemoteRouter
 import com.chmouel.liseur.data.remote.RoutedPositionSync
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncReporting
+import com.chmouel.liseur.readaloud.ListeningCheckpoints
+import com.chmouel.liseur.readaloud.ReadAloudFeature
+import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
+import com.chmouel.liseur.reader.OpenBookHandles
 import com.chmouel.liseur.reader.ReaderPresence
 import com.chmouel.liseur.data.settings.SettingsSyncRepository
 import com.chmouel.liseur.data.settings.syncableSettings
@@ -593,6 +597,9 @@ class AppContainer(context: Context) {
 
     fun requestBookSync(bookId: String) = latestPositionSync.signal(bookId)
 
+    /** Books open in the reader or being read aloud, shared between them. */
+    val openBookHandles = OpenBookHandles()
+
     private val _insightInvalidations = MutableStateFlow(0L)
     val insightInvalidations = _insightInvalidations.asStateFlow()
 
@@ -630,6 +637,13 @@ class AppContainer(context: Context) {
         scheduleClose = { PositionSyncWorker.pushBook(context.applicationContext, it) },
         onError = { message, error -> Log.e("reading-position", message, error) },
     )
+
+    val listeningCheckpoints = ListeningCheckpoints(readingPositions)
+
+    /** Reading aloud: a Gemini voice in the Play build, nothing in the F-Droid one. */
+    val readAloud: ReadAloudFeature by lazy {
+        ReadAloudFeatureFactory.create(context.applicationContext, this)
+    }
 
     /** Reading added up across every device, when a server keeps it. */
     val syncInsights = LiseurSyncInsights(

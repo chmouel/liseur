@@ -39,6 +39,7 @@ class ReadingSessionRecorder(
         data class Ready(override val at: Moment) : Event
         data class Resumed(override val at: Moment) : Event
         data class Paused(override val at: Moment) : Event
+        data class Listening(override val at: Moment, val playing: Boolean) : Event
         data class Checkpoint(
             override val at: Moment,
             /** Null for the periodic tick, which turned no page. */
@@ -60,6 +61,7 @@ class ReadingSessionRecorder(
 
     private var ready = false
     private var foreground = false
+    private var listening = false
     private var sessionId: Long? = null
 
     /**
@@ -99,6 +101,20 @@ class ReadingSessionRecorder(
     /** The reader activity left the foreground. */
     fun onPaused() {
         enqueue(Event.Paused(moment()))
+    }
+
+    /**
+     * Read-aloud started playing this book. Listening is not reading
+     * time, so the session closes until [resumeAfterListening], even if
+     * the reader is in front the whole while.
+     */
+    fun suspendForListening() {
+        enqueue(Event.Listening(moment(), playing = true))
+    }
+
+    /** Read-aloud paused or stopped; time counts again once the reader is in front. */
+    fun resumeAfterListening() {
+        enqueue(Event.Listening(moment(), playing = false))
     }
 
     /**
@@ -179,6 +195,12 @@ class ReadingSessionRecorder(
                 true
             }
 
+            is Event.Listening -> {
+                listening = event.playing
+                if (listening) finish(event.at) else startIfNeeded(event.at)
+                true
+            }
+
             is Event.Checkpoint -> {
                 checkpoint(event.at, event.progression)
                 true
@@ -199,7 +221,7 @@ class ReadingSessionRecorder(
 
     /** Starts only when both Android and publication opening agree it is readable. */
     private suspend fun startIfNeeded(at: Moment) {
-        if (!ready || !foreground || sessionId != null) return
+        if (!ready || !foreground || listening || sessionId != null) return
         clock.resume(at.elapsed)
         sessionId = dao.insert(
             ReadingSession(

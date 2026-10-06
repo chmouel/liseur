@@ -3,22 +3,22 @@ repos:
   - repo: local
     hooks:
       - id: unit-tests
-        name: Unit tests (testDebugUnitTest)
-        entry: ./gradlew testDebugUnitTest --console=plain --daemon
+        name: Unit tests (testFossDebugUnitTest testPlayDebugUnitTest)
+        entry: ./gradlew testFossDebugUnitTest testPlayDebugUnitTest --console=plain --daemon
         language: system
         pass_filenames: false
         stages: [pre-push]
         files: '^(app/|gradle/|gradlew$|gradlew\.bat$|.*\.gradle\.kts$|gradle\.properties$)'
       - id: lint
-        name: Android Lint (lintDebug)
-        entry: ./gradlew lintDebug --console=plain --daemon
+        name: Android Lint (lintFossDebug lintPlayDebug)
+        entry: ./gradlew lintFossDebug lintPlayDebug --console=plain --daemon
         language: system
         pass_filenames: false
         stages: [pre-push]
         files: '^(app/|gradle/|gradlew$|gradlew\.bat$|.*\.gradle\.kts$|gradle\.properties$)'
       # - id: assemble-release
-      #   name: Release build (assembleRelease)
-      #   entry: ./gradlew assembleRelease --console=plain --daemon
+      #   name: Release build (assembleFossRelease)
+      #   entry: ./gradlew assembleFossRelease --console=plain --daemon
       #   language: system
       #   pass_filenames: false
       #   stages: [pre-push]

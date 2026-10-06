@@ -52,31 +52,31 @@ jobs:
 
       - name: Unit tests
         if: steps.changes.outputs.android == 'true'
-        run: ./gradlew testDebugUnitTest --console=plain
+        run: ./gradlew testFossDebugUnitTest testPlayDebugUnitTest --console=plain
 
       - name: Lint
         if: steps.changes.outputs.android == 'true'
-        run: ./gradlew lintDebug --console=plain
+        run: ./gradlew lintFossDebug lintPlayDebug --console=plain
 
-      - name: Assemble debug APK
+      - name: Assemble debug APKs
         if: steps.changes.outputs.android == 'true'
-        run: ./gradlew assembleDebug --console=plain
+        run: ./gradlew assembleFossDebug assemblePlayDebug --console=plain
 
       # The release build is the one people install, and it is the only
       # one that runs R8. Building it on main means a rule that strips
       # something Readium reflects on is caught before the evening a tag
       # is cut. Unsigned without a keystore, which is fine: the point is
       # that it builds and shrinks.
-      - name: Assemble release APK
+      - name: Assemble release APKs
         if: steps.changes.outputs.android == 'true'
-        run: ./gradlew assembleRelease --console=plain
+        run: ./gradlew assembleFossRelease assemblePlayRelease --console=plain
 
       - name: Upload debug APK
         if: steps.changes.outputs.android == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: liseur-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/*/debug/*.apk
 
       - name: Upload test/lint reports
         if: always() && steps.changes.outputs.android == 'true'
@@ -85,5 +85,6 @@ jobs:
           name: reports
           path: |
             app/build/reports/tests
-            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-fossDebug.html
+            app/build/reports/lint-results-playDebug.html
           if-no-files-found: ignore

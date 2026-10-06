@@ -93,13 +93,15 @@ jobs:
             printf 'keyPassword=%s\n' "$KEY_PASSWORD"
           } > keystore.properties
 
+      # The foss flavor: F-Droid rebuilds this exact APK and publishes our
+      # signature over it, so it must carry nothing but free code.
       - name: Build signed release APK
-        run: ./gradlew assembleRelease --console=plain
+        run: ./gradlew assembleFossRelease --console=plain
 
       - name: Verify release APK
         run: |
           set -euo pipefail
-          apk="app/build/outputs/apk/release/app-release.apk"
+          apk="app/build/outputs/apk/foss/release/app-foss-release.apk"
           test -f "$apk"
           apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$apksigner"
@@ -113,7 +115,7 @@ jobs:
             exit 1
           fi
           printf 'RELEASE_CERTIFICATE_SHA256=%s\n' "$certificate_sha256" >> "$GITHUB_ENV"
-          release_apk="app/build/outputs/apk/release/liseur-${RELEASE_TAG}.apk"
+          release_apk="app/build/outputs/apk/foss/release/liseur-${RELEASE_TAG}.apk"
           mv "$apk" "$release_apk"
           printf 'RELEASE_APK=%s\n' "$release_apk" >> "$GITHUB_ENV"
 
@@ -234,7 +236,7 @@ jobs:
 
       - name: Build the release bundle
         if: steps.play.outputs.enabled == 'true'
-        run: ./gradlew bundleRelease --console=plain
+        run: ./gradlew bundlePlayRelease --console=plain
 
       - name: Set up Ruby
         if: steps.play.outputs.enabled == 'true'

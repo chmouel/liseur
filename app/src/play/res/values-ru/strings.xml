@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="read_aloud_settings_key">Ключ API Gemini для чтения вслух</string>
+    <string name="read_aloud_settings_key_missing">Вставьте ключ из Google AI Studio, чтобы книги читались вслух. Запросы оплачиваются с этого ключа.</string>
+    <string name="read_aloud_settings_key_saved">На этом устройстве сохранён ключ.</string>
+    <string name="read_aloud_settings_key_hint">Вставьте ключ</string>
+    <string name="read_aloud_settings_key_replace">Вставьте новый ключ, чтобы заменить его</string>
+    <string name="read_aloud_settings_key_clear">Удалить ключ</string>
+    <string name="read_aloud_settings_privacy">Читаемый вслух текст отправляется в Google для создания голоса.</string>
+    <string name="read_aloud_settings_voice">Голос</string>
+    <string name="read_aloud_settings_voice_choice">%1$s (%2$s)</string>
+    <string name="read_aloud_previous_sentence">Предыдущее предложение</string>
+    <string name="read_aloud_next_sentence">Следующее предложение</string>
+    <string name="read_aloud_from_here">Читать вслух отсюда</string>
+    <string name="read_aloud_pause">Приостановить чтение вслух</string>
+    <string name="read_aloud_resume">Продолжить чтение вслух</string>
+    <string name="read_aloud_stop">Остановить чтение вслух</string>
+    <string name="read_aloud_notice_network">Не удалось связаться с Gemini. Пауза; нажмите воспроизведение, чтобы повторить.</string>
+    <string name="read_aloud_notice_rate_limited">Квота Gemini для этого ключа пока исчерпана. Пауза; повторите позже.</string>
+    <string name="read_aloud_notice_service">Gemini не смог прочитать это предложение. Пауза; нажмите воспроизведение, чтобы повторить.</string>
+    <string name="read_aloud_notice_output">Это устройство не смогло воспроизвести голос. Пауза.</string>
+    <string name="read_aloud_notice_invalid_key">Gemini отклонил ключ API. Проверьте его в разделе Настройки, Чтение и навигация.</string>
+    <string name="read_aloud_notice_selection_not_found">Чтение с начала абзаца.</string>
+    <string name="read_aloud_notice_unavailable">Эту книгу нельзя прочитать вслух с этого места.</string>
+
+    <string name="read_aloud_voice_firm">Твёрдый</string>
+    <string name="read_aloud_voice_informative">Информативный</string>
+    <string name="read_aloud_voice_upbeat">Бодрый</string>
+    <string name="read_aloud_voice_breezy">Непринуждённый</string>
+    <string name="read_aloud_voice_youthful">Молодой</string>
+    <string name="read_aloud_voice_excitable">Восторженный</string>
+    <string name="read_aloud_voice_warm">Тёплый</string>
+    <string name="read_aloud_voice_soft">Мягкий</string>
+    <string name="read_aloud_voice_clear">Чёткий</string>
+    <string name="read_aloud_voice_mature">Зрелый</string>
+    <string name="read_aloud_voice_gentle">Нежный</string>
+    <string name="read_aloud_voice_even">Ровный</string>
+</resources>

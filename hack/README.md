@@ -99,7 +99,7 @@ target wrapping them. Run `make help` for the short list. See
   JVM. The script is lifted straight out of `WideContentFit.kt`, never a
   copy, and run against Readium's own stylesheets in headless Chrome, in a
   frame the size of a phone. Needs Chrome or Chromium and a prior
-  `./gradlew assembleDebug` (Readium's CSS is unpacked from the AAR by the
+  `./gradlew assembleFossDebug` (Readium's CSS is unpacked from the AAR by the
   build), so it is a check to run by hand when that script
   changes, not part of `make check`. `PORT=` picks another port.
 - `verify-footnotes`: The same kind of check for the notes in issue #152:

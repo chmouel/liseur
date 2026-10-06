@@ -20,7 +20,7 @@
 set -euo pipefail
 
 readonly SOURCE="app/src/main/kotlin/com/chmouel/liseur/reader/WideContentFit.kt"
-readonly ASSETS="app/build/intermediates/assets/debug/mergeDebugAssets/readium/readium-css"
+readonly ASSETS="app/build/intermediates/assets/fossDebug/mergeFossDebugAssets/readium/readium-css"
 readonly PORT="${PORT:-8791}"
 
 die() {
@@ -43,7 +43,7 @@ command -v python3 >/dev/null 2>&1 || die "python3 is needed to serve the harnes
 
 # Readium's stylesheets arrive from the navigator AAR and are only unpacked
 # once something has been built.
-[[ -d $ASSETS ]] || die "$ASSETS is missing — run ./gradlew assembleDebug first"
+[[ -d $ASSETS ]] || die "$ASSETS is missing — run ./gradlew assembleFossDebug first"
 
 work=$(mktemp -d)
 server=""

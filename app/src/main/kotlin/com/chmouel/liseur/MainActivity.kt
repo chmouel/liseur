@@ -455,6 +455,7 @@ private fun LiseurApp(
                     scope.launch { repository.setDictionaryBaseUrl(it) }
                 },
                 onBack = back,
+                flavorAdvancedRows = { context.container.readAloud.SettingsRows() },
             )
         }
 

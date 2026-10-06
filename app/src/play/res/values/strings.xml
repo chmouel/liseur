@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="read_aloud_settings_key">Gemini API key for reading aloud</string>
+    <string name="read_aloud_settings_key_missing">Paste a key from Google AI Studio to have books read aloud. Requests are billed to that key.</string>
+    <string name="read_aloud_settings_key_saved">A key is saved on this device.</string>
+    <string name="read_aloud_settings_key_hint">Paste your key</string>
+    <string name="read_aloud_settings_key_replace">Paste a new key to replace it</string>
+    <string name="read_aloud_settings_key_clear">Remove key</string>
+    <string name="read_aloud_settings_privacy">The text being read aloud is sent to Google to make the voice.</string>
+    <string name="read_aloud_settings_voice">Voice</string>
+    <!-- A Gemini voice name, then how Google describes it: "Kore (Firm)". -->
+    <string name="read_aloud_settings_voice_choice">%1$s (%2$s)</string>
+    <string name="read_aloud_previous_sentence">Previous sentence</string>
+    <string name="read_aloud_next_sentence">Next sentence</string>
+    <string name="read_aloud_from_here">Read aloud from here</string>
+    <string name="read_aloud_pause">Pause reading aloud</string>
+    <string name="read_aloud_resume">Resume reading aloud</string>
+    <string name="read_aloud_stop">Stop reading aloud</string>
+    <string name="read_aloud_notice_network">Gemini could not be reached. Paused; press play to try again.</string>
+    <string name="read_aloud_notice_rate_limited">This key has used up its Gemini quota for now. Paused; try again later.</string>
+    <string name="read_aloud_notice_service">Gemini could not read this sentence. Paused; press play to try again.</string>
+    <string name="read_aloud_notice_output">This device could not play the voice. Paused.</string>
+    <string name="read_aloud_notice_invalid_key">Gemini refused the API key. Check it in Settings, Reading &amp; navigation.</string>
+    <string name="read_aloud_notice_selection_not_found">Reading from the start of the paragraph.</string>
+    <string name="read_aloud_notice_unavailable">This book cannot be read aloud from here.</string>
+
+    <!-- Gemini voice styles, as Google describes each prebuilt voice. -->
+    <string name="read_aloud_voice_firm">Firm</string>
+    <string name="read_aloud_voice_informative">Informative</string>
+    <string name="read_aloud_voice_upbeat">Upbeat</string>
+    <string name="read_aloud_voice_breezy">Breezy</string>
+    <string name="read_aloud_voice_youthful">Youthful</string>
+    <string name="read_aloud_voice_excitable">Excitable</string>
+    <string name="read_aloud_voice_warm">Warm</string>
+    <string name="read_aloud_voice_soft">Soft</string>
+    <string name="read_aloud_voice_clear">Clear</string>
+    <string name="read_aloud_voice_mature">Mature</string>
+    <string name="read_aloud_voice_gentle">Gentle</string>
+    <string name="read_aloud_voice_even">Even</string>
+</resources>
