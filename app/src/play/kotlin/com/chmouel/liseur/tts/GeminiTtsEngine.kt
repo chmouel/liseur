@@ -146,7 +146,8 @@ class GeminiTtsEngine(
                 output.play(audio.pcm)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: PcmOutputException) {
+            } catch (e: Exception) {
+                // AudioTrack throws its own exceptions besides ours.
                 fail(request, Error.Output(e.message ?: "PCM output failed"))
                 return@launch
             }

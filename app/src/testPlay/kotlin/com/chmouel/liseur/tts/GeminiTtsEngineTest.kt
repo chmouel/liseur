@@ -144,6 +144,16 @@ class GeminiTtsEngineTest {
     }
 
     @Test
+    fun anAudioTrackExceptionIsAnOutputFailure() {
+        speak("1", "Hello.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(8)))
+        assertEquals("start 1@main", nextEvent())
+        nextPlay().completeExceptionally(IllegalStateException("play() called on uninitialized AudioTrack"))
+        assertEquals("error 1 Output@main", nextEvent())
+        noMoreEvents()
+    }
+
+    @Test
     fun aNewSpeakInterruptsThePreviousOne() {
         speak("1", "One.")
         nextRequest()

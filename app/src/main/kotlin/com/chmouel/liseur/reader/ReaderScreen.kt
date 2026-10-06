@@ -523,7 +523,6 @@ fun ReaderScreen(
     val listening = readAloudSession?.takeIf { it.bookId == readAloud?.bookId }
     val listeningPlaying = listening?.playing == true
     val listeningPlayingNow by rememberUpdatedState(listeningPlaying)
-    val readAloudFeatureNow by rememberUpdatedState(readAloudFeature)
     val readAloudConfigured by readAloudFeature.configured.collectAsStateWithLifecycle()
     // When the page last went after the voice. Readium can report a move
     // more than once, and only the first report carries the marker, so
@@ -1079,11 +1078,10 @@ fun ReaderScreen(
             },
             onMoveIssued = { from, to ->
                 // A turn of the reader's own, even one just after the
-                // page followed the voice, is theirs: the voice stops
-                // rather than pulling the page back, and the move is
-                // not taken for following it.
+                // page followed the voice, is theirs: its arrival must
+                // not be taken for following, so that it pauses the
+                // voice and is saved.
                 followedAt = Long.MIN_VALUE
-                if (listeningPlayingNow) readAloudFeatureNow.pause()
                 moves.issue(
                     from = from?.restorePoint(),
                     to = to?.destination(),
@@ -1895,7 +1893,13 @@ fun ReaderScreen(
         val utterance = spoken ?: return@LaunchedEffect
         if (!listeningPlaying || followBlocked) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            if (gate.isGated || reflow.active || SpokenPassage.isShowing(nav, utterance)) {
+            // A move still in the air is the reader's, or the last
+            // follow: going after the voice now would undo the one or
+            // repeat the other.
+            if (gate.isGated || reflow.active ||
+                moves.mark(SystemClock.elapsedRealtime()) == IssuedMoves.NONE ||
+                SpokenPassage.isShowing(nav, utterance)
+            ) {
                 return@repeatOnLifecycle
             }
             followedAt = SystemClock.elapsedRealtime()
@@ -1927,19 +1931,36 @@ fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         if (listeningPlaying || readAloud == null) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // A move still in the air lands first: the reader's own is
+            // saved over the place heard, and showing the heard page
+            // now would undo it.
+            suspend fun settledMark(): Int {
+                while (true) {
+                    val mark = moves.mark(SystemClock.elapsedRealtime())
+                    if (mark != IssuedMoves.NONE) return mark
+                    delay(READ_ALOUD_CAPTURE_WAIT_MS)
+                }
+            }
             while (gate.isGated) delay(READ_ALOUD_CAPTURE_WAIT_MS)
+            settledMark()
             val heard = readAloud.awaitingCapture() ?: return@repeatOnLifecycle
             if (!SpokenPassage.isShowing(nav, heard)) {
                 navigate(nav, heard, NavigatorPositionEvent.TTS_FOLLOW)
                 delay(READ_ALOUD_CAPTURE_WAIT_MS)
                 settleLayout()
             }
+            // Taken after this effect's own move, so only a later one,
+            // the reader's, stops the capture.
+            val since = settledMark()
             if (readAloud.awaitingCapture() !== heard || !SpokenPassage.isShowing(nav, heard)) {
                 return@repeatOnLifecycle
             }
             val native = nav.currentLocator.value
             val captured = if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, native)
             captured ?: return@repeatOnLifecycle
+            if (readAloud.awaitingCapture() !== heard || !moves.unchangedSince(since)) {
+                return@repeatOnLifecycle
+            }
             publishCaptured(
                 nav,
                 captured,
