@@ -1,6 +1,7 @@
 package com.chmouel.liseur.tts
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +14,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,6 +23,8 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
@@ -49,14 +53,13 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ChipRow
-import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Read aloud's row on the main settings screen: which service and voice, or that none is set up. */
+/** Read aloud's row in Reading & navigation, Advanced: which service and voice, or that none is set up. */
 @Composable
 internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Unit) {
     val configured by feature.configured.collectAsState()
@@ -67,15 +70,23 @@ internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Uni
         ReadAloudProvider.GEMINI -> geminiVoice.id
         ReadAloudProvider.OPENAI -> openAiVoice
     }
-    ConnectionRow(
-        icon = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
-        title = stringResource(R.string.read_aloud_settings_title),
-        subtitle = if (configured) {
-            stringResource(R.string.read_aloud_settings_entry_summary, stringResource(provider.label), voice)
-        } else {
-            stringResource(R.string.read_aloud_settings_entry_missing)
+    RowDivider()
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.read_aloud_settings_title)) },
+        supportingContent = {
+            Text(
+                if (configured) {
+                    stringResource(R.string.read_aloud_settings_entry_summary, stringResource(provider.label), voice)
+                } else {
+                    stringResource(R.string.read_aloud_settings_entry_missing)
+                },
+            )
         },
-        onClick = onClick,
+        trailingContent = {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick),
     )
 }
 
