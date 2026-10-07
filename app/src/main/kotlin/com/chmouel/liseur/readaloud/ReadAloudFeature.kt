@@ -102,10 +102,12 @@ interface ReadAloudFeature {
     /**
      * The player laid over [bookId]'s page while it is being read aloud,
      * painted in the reading [theme], with whatever the listener should
-     * be told. Draws nothing for another book or no session.
+     * be told. Draws nothing for another book or no session. The controls
+     * show only while [controls] is set, which is when the reader has
+     * raised the chrome; otherwise the page shows just the highlight.
      */
     @Composable
-    fun Player(bookId: String, theme: ReaderTheme, modifier: Modifier)
+    fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier)
 
     /** The selection bar's button that reads aloud from the selected passage. */
     @Composable
@@ -131,7 +133,7 @@ interface ReadAloudFeature {
         override fun SettingsScreen(onBack: () -> Unit) = Unit
 
         @Composable
-        override fun Player(bookId: String, theme: ReaderTheme, modifier: Modifier) = Unit
+        override fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier) = Unit
 
         @Composable
         override fun SelectionButton(onClick: () -> Unit) = Unit
