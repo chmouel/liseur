@@ -98,5 +98,12 @@
     </plurals>
     <string name="read_aloud_change_voice">Change voice</string>
     <string name="read_aloud_speed">Reading speed</string>
+    <string name="read_aloud_sleep_timer">Sleep timer</string>
+    <string name="read_aloud_sleep_off">Off</string>
+    <string name="read_aloud_sleep_left">%1$d min</string>
+    <plurals name="read_aloud_sleep_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
     <string name="read_aloud_speed_value" translatable="false">%1$s×</string>
 </resources>

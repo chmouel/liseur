@@ -1,10 +1,12 @@
 package com.chmouel.liseur.tts
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Check
@@ -20,6 +24,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -32,14 +37,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -131,6 +140,7 @@ internal fun ReadAloudPlayer(
                         Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
                     }
                     SpeedButton(feature)
+                    SleepButton(feature)
                     VoiceButton(feature)
                     ControlButton(feature::stop) {
                         Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
@@ -150,11 +160,7 @@ private fun SpeedButton(feature: SpeechReadAloud) {
     val description = stringResource(R.string.read_aloud_speed)
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(
-            onClick = { open = true },
-            colors = IconButtonDefaults.iconButtonColors(contentColor = LocalContentColor.current),
-            modifier = Modifier.semantics { contentDescription = description },
-        ) {
+        TextControlButton(description, { open = true }) {
             Text(
                 stringResource(R.string.read_aloud_speed_value, ReadAloudSpeed.number(speed, locale)),
                 style = MaterialTheme.typography.labelLarge,
@@ -168,6 +174,44 @@ private fun SpeedButton(feature: SpeechReadAloud) {
                 ) {
                     open = false
                     scope.launch { feature.setSpeed(step) }
+                }
+            }
+        }
+    }
+}
+
+/** Sets when reading aloud pauses by itself, showing the minutes left once set. */
+@Composable
+private fun SleepButton(feature: SpeechReadAloud) {
+    val timer by feature.sleepTimer.collectAsStateWithLifecycle()
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(timer) {
+        while (timer != null) {
+            now = SystemClock.elapsedRealtime()
+            delay(1_000)
+        }
+    }
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextControlButton(stringResource(R.string.read_aloud_sleep_timer), { open = true }) {
+            when (val set = timer) {
+                null -> Icon(Icons.Outlined.Bedtime, contentDescription = null)
+                else -> Text(
+                    stringResource(R.string.read_aloud_sleep_left, set.minutesLeft(now)),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                )
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            MenuItem(stringResource(R.string.read_aloud_sleep_off), timer == null) {
+                open = false
+                feature.setSleepTimer(null)
+            }
+            SleepTimer.CHOICES.forEach { minutes ->
+                MenuItem(pluralStringResource(R.plurals.read_aloud_sleep_minutes, minutes, minutes), timer?.minutes == minutes) {
+                    open = false
+                    feature.setSleepTimer(minutes)
                 }
             }
         }
@@ -258,6 +302,23 @@ internal fun ReadAloudSelectionButton(onClick: () -> Unit) {
             Icons.AutoMirrored.Outlined.VolumeUp,
             contentDescription = stringResource(R.string.read_aloud_from_here),
         )
+    }
+}
+
+/** A control showing text, which an icon-sized button would clip. */
+@Composable
+private fun TextControlButton(description: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description }
+            .padding(horizontal = 8.dp),
+    ) {
+        content()
     }
 }
 

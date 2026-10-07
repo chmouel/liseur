@@ -1387,6 +1387,11 @@ reader behavior.
   write and poll: it keeps the pitch, applies mid-sentence, works for both
   providers and leaves cached audio valid. The output's stall deadline
   allows for the slowest speed.
+- The sleep timer (`SpeechReadAloud.setSleepTimer`, 5 to 60 minutes) lives
+  with the session rather than the reader, so it runs with the screen
+  off. It counts on `SystemClock.elapsedRealtime`, which keeps time while
+  the device sleeps, pauses the session when it fires, and is dropped
+  when the session ends.
 
 ### Covers, UI, and dependencies
 

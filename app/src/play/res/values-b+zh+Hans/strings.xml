@@ -91,4 +91,10 @@
     </plurals>
     <string name="read_aloud_change_voice">更换声音</string>
     <string name="read_aloud_speed">朗读速度</string>
+    <string name="read_aloud_sleep_timer">睡眠定时器</string>
+    <string name="read_aloud_sleep_off">关闭</string>
+    <string name="read_aloud_sleep_left">%1$d 分钟</string>
+    <plurals name="read_aloud_sleep_minutes">
+        <item quantity="other">%d 分钟</item>
+    </plurals>
 </resources>
