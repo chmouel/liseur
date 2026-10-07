@@ -61,6 +61,9 @@
     <string name="read_aloud_settings_server_models_loading">正在向服务器获取模型列表…</string>
     <string name="read_aloud_settings_server_models_none">服务器没有列出任何模型。请手动输入。</string>
     <string name="read_aloud_settings_server_models_failed">服务器没有列出它的模型。</string>
+    <string name="read_aloud_settings_gemini_models_loading">正在向 Gemini 查询语音模型…</string>
+    <string name="read_aloud_settings_gemini_models_none">此密钥没有可用的语音模型。请手动输入一个。</string>
+    <string name="read_aloud_settings_gemini_models_failed">Gemini 没有列出它的模型。</string>
     <string name="read_aloud_settings_voice_pick_detail">点按某个声音即可选择并试听。</string>
     <string name="read_aloud_settings_voice_type_detail">输入服务支持的声音名称。</string>
     <string name="read_aloud_settings_voice_other">其他声音</string>

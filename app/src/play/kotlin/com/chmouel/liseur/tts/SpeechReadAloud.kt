@@ -219,7 +219,8 @@ internal class SpeechReadAloud(
             ReadAloudProvider.GEMINI -> {
                 val key = geminiKeys.get() ?: return null
                 val name = GeminiVoice.of(voice ?: s.readAloudVoice).id
-                SessionVoice(name, provider.maxConcurrent) { text -> gemini.synthesize(key, text, name) }
+                val model = GeminiTts.modelOf(s.readAloudModel)
+                SessionVoice(name, provider.maxConcurrent) { text -> gemini.synthesize(key, text, name, model) }
             }
             ReadAloudProvider.OPENAI -> {
                 val base = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) ?: return null
@@ -281,6 +282,26 @@ internal class SpeechReadAloud(
 
     val geminiVoice: Flow<GeminiVoice> =
         settings.settings.map { GeminiVoice.of(it.readAloudVoice) }.distinctUntilChanged()
+
+    /** The Gemini speech model in use, the default when none is saved. */
+    val geminiModel: Flow<String> =
+        settings.settings.map { GeminiTts.modelOf(it.readAloudModel) }.distinctUntilChanged()
+
+    suspend fun setGeminiModel(model: String) {
+        val before = GeminiTts.modelOf(settings.settings.first().readAloudModel)
+        settings.setReadAloudModel(model.trim())
+        if (GeminiTts.modelOf(model) != before) switchVoice()
+    }
+
+    /** The speech models the saved Gemini key can use. */
+    suspend fun geminiModels(): Result<List<String>> {
+        val key = geminiKeys.get() ?: return Result.failure(IllegalStateException("No Gemini key"))
+        return try {
+            Result.success(gemini.models(key))
+        } catch (e: SpeechError) {
+            Result.failure(e)
+        }
+    }
 
     val openAiUrl: Flow<String> = settings.settings.map { it.speechServerUrl.orEmpty() }.distinctUntilChanged()
 

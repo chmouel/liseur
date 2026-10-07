@@ -61,6 +61,9 @@
     <string name="read_aloud_settings_server_models_loading">Demande des modèles au serveur…</string>
     <string name="read_aloud_settings_server_models_none">Le serveur ne liste aucun modèle. Saisissez-en un.</string>
     <string name="read_aloud_settings_server_models_failed">Le serveur n\'a pas donné la liste de ses modèles.</string>
+    <string name="read_aloud_settings_gemini_models_loading">Demande à Gemini de ses modèles vocaux…</string>
+    <string name="read_aloud_settings_gemini_models_none">Aucun modèle vocal n\'est proposé pour cette clé. Saisissez-en un.</string>
+    <string name="read_aloud_settings_gemini_models_failed">Gemini n\'a pas donné la liste de ses modèles.</string>
     <string name="read_aloud_settings_voice_pick_detail">Touchez une voix pour la choisir et l\'écouter.</string>
     <string name="read_aloud_settings_voice_type_detail">Saisissez le nom d\'une voix connue du service.</string>
     <string name="read_aloud_settings_voice_other">Autre voix</string>

@@ -61,6 +61,9 @@
     <string name="read_aloud_settings_server_models_loading">Modelle werden beim Server abgefragt…</string>
     <string name="read_aloud_settings_server_models_none">Der Server listet keine Modelle auf. Gib einen Namen ein.</string>
     <string name="read_aloud_settings_server_models_failed">Der Server hat seine Modelle nicht aufgelistet.</string>
+    <string name="read_aloud_settings_gemini_models_loading">Gemini wird nach seinen Sprachmodellen gefragt…</string>
+    <string name="read_aloud_settings_gemini_models_none">Für diesen Schlüssel sind keine Sprachmodelle aufgeführt. Gib eines ein.</string>
+    <string name="read_aloud_settings_gemini_models_failed">Gemini hat seine Modelle nicht aufgelistet.</string>
     <string name="read_aloud_settings_voice_pick_detail">Tippe auf eine Stimme, um sie auszuwählen und anzuhören.</string>
     <string name="read_aloud_settings_voice_type_detail">Gib den Namen einer Stimme ein, die der Dienst kennt.</string>
     <string name="read_aloud_settings_voice_other">Andere Stimme</string>

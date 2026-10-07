@@ -171,17 +171,49 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
 private fun GeminiRows(feature: SpeechReadAloud) {
     val configured by feature.geminiKeyConfigured.collectAsState()
     val voice by feature.geminiVoice.collectAsState(initial = GeminiVoice.Default)
+    val model by feature.geminiModel.collectAsState(initial = GeminiTts.DEFAULT_MODEL)
     val scope = rememberCoroutineScope()
     var voicesOpen by remember { mutableStateOf(false) }
+    var models by remember { mutableStateOf<Listing?>(null) }
     val preview = rememberVoicePreview(feature)
+
+    val loadModels = {
+        models = Listing.Loading(GEMINI_LISTING)
+        scope.launch {
+            models = feature.geminiModels().toListing(
+                GEMINI_LISTING,
+                none = R.string.read_aloud_settings_gemini_models_none,
+                failed = R.string.read_aloud_settings_gemini_models_failed,
+            )
+        }
+    }
+    LaunchedEffect(configured) {
+        if (configured) loadModels() else models = null
+    }
 
     KeyRow(
         title = stringResource(R.string.read_aloud_settings_key),
         missing = stringResource(R.string.read_aloud_settings_key_missing),
         privacy = stringResource(R.string.read_aloud_settings_privacy),
         configured = configured,
-        onKey = { scope.launch { feature.setGeminiKey(it) } },
+        onKey = {
+            scope.launch {
+                feature.setGeminiKey(it)
+                loadModels()
+            }
+        },
         onClear = { scope.launch { feature.clearGeminiKey() } },
+    )
+    RowDivider()
+    ListedField(
+        title = stringResource(R.string.read_aloud_settings_server_model),
+        placeholder = GeminiTts.DEFAULT_MODEL,
+        loading = stringResource(R.string.read_aloud_settings_gemini_models_loading),
+        stored = model,
+        enabled = configured,
+        listing = models,
+        onSave = { scope.launch { feature.setGeminiModel(it) } },
+        onRetry = { loadModels() },
     )
     RowDivider()
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -236,6 +268,9 @@ private fun GeminiRows(feature: SpeechReadAloud) {
         }
     }
 }
+
+/** Gemini's lists have one address, so they are all kept under this one. */
+private const val GEMINI_LISTING = "gemini"
 
 /** What a menu knows of one of the service's lists, for [url]. */
 private sealed interface Listing {

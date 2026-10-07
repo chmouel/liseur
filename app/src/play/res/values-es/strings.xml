@@ -61,6 +61,9 @@
     <string name="read_aloud_settings_server_models_loading">Pidiendo los modelos al servidor…</string>
     <string name="read_aloud_settings_server_models_none">El servidor no lista ningún modelo. Escribe uno.</string>
     <string name="read_aloud_settings_server_models_failed">El servidor no dio la lista de sus modelos.</string>
+    <string name="read_aloud_settings_gemini_models_loading">Pidiendo a Gemini sus modelos de voz…</string>
+    <string name="read_aloud_settings_gemini_models_none">Esta clave no tiene modelos de voz en la lista. Escribe uno.</string>
+    <string name="read_aloud_settings_gemini_models_failed">Gemini no dio la lista de sus modelos.</string>
     <string name="read_aloud_settings_voice_pick_detail">Toca una voz para elegirla y escucharla.</string>
     <string name="read_aloud_settings_voice_type_detail">Escribe el nombre de una voz que conozca el servicio.</string>
     <string name="read_aloud_settings_voice_other">Otra voz</string>

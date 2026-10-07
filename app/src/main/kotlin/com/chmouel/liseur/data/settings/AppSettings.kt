@@ -186,6 +186,8 @@ enum class DefinitionTarget(val id: String) {
  *   the bar is empty.
  * @param readAloudVoice The Gemini voice reading aloud uses, by name, or
  *   null for the engine's default. Only builds that can read aloud offer it.
+ * @param readAloudModel The Gemini speech model reading aloud uses, by name,
+ *   or null for the engine's default.
  * @param readAloudProvider Which speech service reads aloud, by id, or null
  *   for the build's default.
  * @param speechServerUrl The OpenAI-compatible speech service reading aloud
@@ -221,6 +223,7 @@ data class AppSettings(
     val statsRange: StatsRange = StatsRange.Default,
     val highlightPalette: HighlightPalette = HighlightPalette(),
     val readAloudVoice: String? = null,
+    val readAloudModel: String? = null,
     val readAloudProvider: String? = null,
     val speechServerUrl: String? = null,
     val speechServerVoice: String? = null,
@@ -285,6 +288,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
         val CATALOG_PARTIAL_DISMISSED = stringPreferencesKey("catalog_partial_dismissed")
         val READ_ALOUD_VOICE = stringPreferencesKey("read_aloud_voice")
+        val READ_ALOUD_MODEL = stringPreferencesKey("read_aloud_model")
         val READ_ALOUD_PROVIDER = stringPreferencesKey("read_aloud_provider")
         val SPEECH_SERVER_URL = stringPreferencesKey("speech_server_url")
         val SPEECH_SERVER_VOICE = stringPreferencesKey("speech_server_voice")
@@ -359,6 +363,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
                 defaultName = p[Keys.HIGHLIGHT_TINT_DEFAULT],
             ),
             readAloudVoice = p[Keys.READ_ALOUD_VOICE],
+            readAloudModel = p[Keys.READ_ALOUD_MODEL],
             readAloudProvider = p[Keys.READ_ALOUD_PROVIDER],
             speechServerUrl = p[Keys.SPEECH_SERVER_URL],
             speechServerVoice = p[Keys.SPEECH_SERVER_VOICE],
@@ -513,6 +518,11 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.READ_ALOUD_VOICE] = name }
     }
 
+    /** Saves the Gemini speech model; blank goes back to the default. */
+    suspend fun setReadAloudModel(name: String) {
+        store.edit { if (name.isBlank()) it.remove(Keys.READ_ALOUD_MODEL) else it[Keys.READ_ALOUD_MODEL] = name }
+    }
+
     suspend fun setReadAloudProvider(id: String) {
         store.edit { it[Keys.READ_ALOUD_PROVIDER] = id }
     }
@@ -583,7 +593,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
     "highlight_tints_offered" to BackupValueType.STRING_SET,
     "highlight_tint_default" to BackupValueType.STRING,
-    "read_aloud_voice" to BackupValueType.STRING,
+    "read_aloud_voice" to BackupValueType.STRING, "read_aloud_model" to BackupValueType.STRING,
     "read_aloud_provider" to BackupValueType.STRING,
     "speech_server_url" to BackupValueType.STRING, "speech_server_voice" to BackupValueType.STRING,
     "speech_server_model" to BackupValueType.STRING,

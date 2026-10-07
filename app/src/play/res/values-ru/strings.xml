@@ -61,6 +61,9 @@
     <string name="read_aloud_settings_server_models_loading">Запрашиваем модели у сервера…</string>
     <string name="read_aloud_settings_server_models_none">Сервер не перечисляет модели. Введите название сами.</string>
     <string name="read_aloud_settings_server_models_failed">Сервер не прислал список моделей.</string>
+    <string name="read_aloud_settings_gemini_models_loading">Запрашиваем у Gemini модели озвучивания…</string>
+    <string name="read_aloud_settings_gemini_models_none">Для этого ключа нет моделей озвучивания. Введите название вручную.</string>
+    <string name="read_aloud_settings_gemini_models_failed">Gemini не прислал список моделей.</string>
     <string name="read_aloud_settings_voice_pick_detail">Нажмите на голос, чтобы выбрать и прослушать его.</string>
     <string name="read_aloud_settings_voice_type_detail">Введите название голоса, известного сервису.</string>
     <string name="read_aloud_settings_voice_other">Другой голос</string>

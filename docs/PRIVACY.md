@@ -92,6 +92,10 @@ and is never written to storage.
 Pressing "Hear this voice" on that screen sends one fixed sample
 sentence, not text from a book, the same way and billed the same way.
 
+With a key saved, opening that screen also asks the same address which
+speech models the key can use, so you can pick one. That request carries
+only your key.
+
 Stopping the voice stops the requests. Remove the key in Settings and no
 more are made.
 
