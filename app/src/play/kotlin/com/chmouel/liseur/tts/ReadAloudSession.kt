@@ -141,7 +141,7 @@ internal class ReadAloudSession(
         scope.launch {
             val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, language)
             val target = SelectionTarget.of(selection, sentences)
-            val landing = playback.start(selection, target?.let { it::matches })
+            val landing = playback.start(selection, target?.let { it::matchesClosely }, looser = target?.let { it::matches })
             mutableStarting.value = false
             when (landing) {
                 ReadAloudPlayback.Landing.Sentence -> Unit

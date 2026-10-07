@@ -40,6 +40,12 @@ data class UtteranceAnchor(val locator: Locator, val text: String) {
  * so a phrase that repeats is found where it was selected. A long sentence
  * is spoken in pieces, so the target may also begin at the end of one
  * utterance and run on into the next.
+ *
+ * Readium gives an utterance only the text before it in its own element,
+ * so near an element start there is little to compare. [matchesClosely]
+ * requires all of the selection's context and is tried first; [matches]
+ * settles for what there is, so a repeated sentence earlier in the same
+ * element is not taken for the one selected.
  */
 class SelectionTarget(private val href: Url, private val prefix: String, private val before: String) {
 
@@ -47,10 +53,14 @@ class SelectionTarget(private val href: Url, private val prefix: String, private
     fun matches(location: TtsNavigator.Location): Boolean =
         location.href == href && matches(location.utterance, location.textBefore)
 
-    fun matches(utterance: String, textBefore: String?): Boolean {
+    @OptIn(ExperimentalReadiumApi::class)
+    fun matchesClosely(location: TtsNavigator.Location): Boolean =
+        location.href == href && matches(location.utterance, location.textBefore, closely = true)
+
+    fun matches(utterance: String, textBefore: String?, closely: Boolean = false): Boolean {
         val spoken = squash(utterance)
         val leading = squash(textBefore.orEmpty())
-        return starts(spoken).any { at -> agrees(leading + spoken.substring(0, at)) }
+        return starts(spoken).any { at -> agrees(leading + spoken.substring(0, at), closely) }
     }
 
     /** Where in [spoken] the target can begin: where it is, or where a tail of [spoken] begins it. */
@@ -73,10 +83,13 @@ class SelectionTarget(private val href: Url, private val prefix: String, private
     /**
      * Whether [context], the text before a candidate, agrees with the
      * selection's. No context on either side agrees with nothing on the
-     * other, except a selection that has none itself.
+     * other, except a selection that has none itself. [closely] requires
+     * the candidate to have as much context as the selection compares.
      */
-    private fun agrees(context: String): Boolean {
-        val compared = minOf(CONTEXT, context.length, before.length)
+    private fun agrees(context: String, closely: Boolean): Boolean {
+        val wanted = minOf(CONTEXT, before.length)
+        if (closely && context.length < wanted) return false
+        val compared = minOf(wanted, context.length)
         if (compared == 0) return before.isEmpty()
         return context.takeLast(compared) == before.takeLast(compared)
     }

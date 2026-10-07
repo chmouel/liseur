@@ -88,6 +88,21 @@ class UtteranceAlignmentTest {
     }
 
     @Test
+    fun aSelectionInsideARepeatedOpeningSentenceMatchesCloselyOnlyWhereItWasSelected() {
+        val sentence = "The rain fell all night over the quiet harbour town."
+        // Both in one paragraph; the selection starts at "rain" in the second.
+        val target = SelectionTarget(
+            HREF,
+            prefix = squash("rain fell all night over the quiet harbour town."),
+            before = squash("$sentence The"),
+        )
+        // Readium gives the first nothing before it: "The" is all there is to compare.
+        assertTrue(target.matches(sentence, textBefore = null))
+        assertFalse(target.matches(sentence, textBefore = null, closely = true))
+        assertTrue(target.matches(sentence, textBefore = "$sentence ".takeLast(50), closely = true))
+    }
+
+    @Test
     fun aSelectionRunningOverASplitIsFoundInThePieceItStartsIn() {
         val opening = "Earlier text. "
         val first = "It was a long and winding sentence that went on and on, "

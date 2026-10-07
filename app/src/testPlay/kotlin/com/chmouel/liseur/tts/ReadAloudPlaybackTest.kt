@@ -375,6 +375,26 @@ class ReadAloudPlaybackTest {
     }
 
     @Test
+    fun aCloseMatchLaterWinsOverALooseOneEarlier() {
+        val landing = runBlocking(main) {
+            playback.start(chapterStart, target = { it.utterance == FOURTH }, looser = { it.utterance == SECOND })
+        }
+        assertEquals(ReadAloudPlayback.Landing.Sentence, landing)
+        awaitPlayed(1)
+        assertEquals(FOURTH, played.first())
+    }
+
+    @Test
+    fun aLooseMatchIsUsedWhenNoCloseOneIsFound() {
+        val landing = runBlocking(main) {
+            playback.start(chapterStart, target = { false }, maxSteps = 10, looser = { it.utterance == THIRD })
+        }
+        assertEquals(ReadAloudPlayback.Landing.Sentence, landing)
+        awaitPlayed(1)
+        assertEquals(THIRD, played.first())
+    }
+
+    @Test
     fun aSelectionThatIsNotFoundPlaysFromTheElementStart() {
         val selection = chapterStart.copy(text = Locator.Text(highlight = "Words nowhere in this book"))
         val target = SelectionTarget.of(selection, DefaultTextContentTokenizer(TextUnit.Sentence, Language("en")))!!

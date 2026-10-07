@@ -108,18 +108,20 @@ class ReadAloudPlayback(
 
     /**
      * Plays from [locator]: from the sentence [target] picks out in its
-     * element, or from the element start when there is no target or it is
-     * not found within [maxSteps] sentences. The element is the first one
-     * on screen, so the search may cross a whole page of short sentences.
+     * element, else the one [looser] picks out, or from the element start
+     * when there is no target or neither is found within [maxSteps]
+     * sentences. The element is the first one on screen, so the search may
+     * cross a whole page of short sentences.
      */
     suspend fun start(
         locator: Locator,
         target: ((TtsNavigator.Location) -> Boolean)? = null,
         maxSteps: Int = START_STEPS,
+        looser: ((TtsNavigator.Location) -> Boolean)? = null,
     ): Landing {
         playRequested = true
         mutableFailure.value = null
-        return landing.withLock { land(locator.copy(text = Locator.Text()), target, maxSteps) }
+        return landing.withLock { land(locator.copy(text = Locator.Text()), target, maxSteps, looser = looser) }
     }
 
     fun pause() {
@@ -176,13 +178,14 @@ class ReadAloudPlayback(
         target: ((TtsNavigator.Location) -> Boolean)?,
         maxSteps: Int,
         fallbackToElement: Boolean = true,
+        looser: ((TtsNavigator.Location) -> Boolean)? = null,
     ): Landing {
-        val fresh = replace(element) ?: return Landing.Failed
-        val found = target == null || alignUtterance(
-            location = fresh.location,
-            hasNext = fresh::hasNextUtterance,
-            skipToNext = fresh::skipToNextUtterance,
-            matches = target,
+        var fresh = replace(element) ?: return Landing.Failed
+        suspend fun align(on: GeminiNavigator, matches: (TtsNavigator.Location) -> Boolean) = alignUtterance(
+            location = on.location,
+            hasNext = on::hasNextUtterance,
+            skipToNext = on::skipToNextUtterance,
+            matches = matches,
             inScope = {
                 it.href == element.href &&
                     (fallbackToElement || it.utteranceLocator.locations == element.locations)
@@ -190,6 +193,11 @@ class ReadAloudPlayback(
             stepTimeoutMillis = stepTimeoutMillis,
             maxSteps = maxSteps,
         )
+        var found = target == null || align(fresh, target)
+        if (!found && looser != null && !closed && mutableNavigator.value === fresh) {
+            fresh = replace(element) ?: return Landing.Failed
+            found = align(fresh, looser)
+        }
         if (closed || mutableNavigator.value !== fresh) return Landing.Failed
         if (!found && !fallbackToElement) return Landing.Failed
         val playing = if (found) fresh else replace(element) ?: return Landing.Failed
