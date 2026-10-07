@@ -393,8 +393,8 @@ internal class SpeechReadAloud(
     override fun SettingsScreen(onBack: () -> Unit) = ReadAloudSettingsScreen(this, onBack)
 
     @Composable
-    override fun Player(bookId: String, theme: ReaderTheme, modifier: Modifier) =
-        ReadAloudPlayer(this, bookId, theme, modifier)
+    override fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier) =
+        ReadAloudPlayer(this, bookId, theme, controls, modifier)
 
     @Composable
     override fun SelectionButton(onClick: () -> Unit) = ReadAloudSelectionButton(onClick)

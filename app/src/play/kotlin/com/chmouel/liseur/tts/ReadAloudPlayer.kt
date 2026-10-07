@@ -65,15 +65,16 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
- * The controls laid over the page while its book is read aloud, painted
- * like the other pills in the reading theme, and above them whatever the
- * listener has to be told.
+ * The controls laid over the page while its book is read aloud, shown
+ * with the rest of the chrome and painted like the other pills in the
+ * reading theme, and above them whatever the listener has to be told.
  */
 @Composable
 internal fun ReadAloudPlayer(
     feature: SpeechReadAloud,
     bookId: String,
     theme: ReaderTheme,
+    controls: Boolean,
     modifier: Modifier,
 ) {
     val eInk = LocalEInk.current
@@ -109,7 +110,7 @@ internal fun ReadAloudPlayer(
             }
         }
         AnimatedVisibility(
-            visible = here != null,
+            visible = here != null && controls,
             enter = if (eInk) EnterTransition.None else fadeIn(),
             exit = if (eInk) ExitTransition.None else fadeOut(),
         ) {

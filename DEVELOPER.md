@@ -1381,6 +1381,10 @@ reader behavior.
 - While a session exists, playing or paused, `ReaderActivity` hands the
   volume keys to the system with `STREAM_MUSIC` as its volume stream, so
   they set how loud it reads instead of turning pages.
+- While reading aloud the page shows only the spoken sentence's highlight.
+  The player controls appear with the rest of the chrome when the reader
+  taps the page (`ReadAloudFeature.Player`'s `controls`), and go with it;
+  notices such as a failed request still show on their own.
 - The player's voice menu lists the offered voices (Gemini's, or the
   service's narrowed by "Choose voices") and saves the pick as the
   setting. A running session hears it at once: `SpeechCache.swap` drops
@@ -1398,8 +1402,7 @@ reader behavior.
   when the session ends.
 - A status line under the player controls names the voice reading (and,
   for an OpenAI-compatible voice whose id carries one, its language). The
-  speed is left out because the speed button already shows it. The
-  page footer is not drawn while the player is up, like the other pills.
+  speed is left out because the speed button already shows it.
 
 ### Covers, UI, and dependencies
 
